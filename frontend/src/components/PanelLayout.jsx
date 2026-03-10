@@ -24,9 +24,13 @@ export const PanelLayout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const navItems = user?.role === "admin" ? [...adminOnlyItems, ...userNavItems] : userNavItems;
+  const isAdmin = user?.role === "admin";
 
   return (
-    <div className="h-screen overflow-hidden bg-slate-950 text-slate-100" data-testid="panel-layout-wrapper">
+    <div
+      className={`h-screen overflow-hidden bg-slate-950 text-slate-100 ${isAdmin ? "admin-theme" : ""}`}
+      data-testid="panel-layout-wrapper"
+    >
       <div className="grid h-full grid-cols-1 md:grid-cols-[240px_1fr]">
         <aside className="border-r border-slate-800 bg-slate-900 p-4" data-testid="sidebar-panel">
           <div className="mb-6">
