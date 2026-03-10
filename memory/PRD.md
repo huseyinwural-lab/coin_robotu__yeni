@@ -53,27 +53,40 @@
   - Frontend route ve panel akışları Playwright screenshot ile doğrulandı
   - Testing agent raporu: `/app/test_reports/iteration_1.json`
 
+### 2026-03-10 (Faz-2 Sprint b — Omurga)
+- **Market Universe Engine**: Admin kontrol API/ekranı (`/api/admin-control`) + effective universe preview
+- **Market Data Engine**: Binance WebSocket denemesi + reconnect/heartbeat; erişim engelinde synthetic fallback ile candle event üretimi
+- **Signal Orchestration + Strategy Engine**: Trend Following, Mean Reversion, Breakout, Volatility Expansion modülleri ile sinyal üretimi
+- **Risk Engine**: merkezi onay/reddet katmanı (spread, open position, leverage cap, volatility, emergency mode)
+- **Paper Trading Pipeline**: signal -> risk -> paper execution -> position ledger akışı
+- **Position Engine**: open / stop_hit / tp_hit / manual_close ve unrealized-realized PnL takibi
+- **Monitoring Core**: websocket status, signal rate, paper trade sayısı, queue depth, latency
+- **Audit Genişletme**: bot_start, bot_stop, signal_generated, risk_rejection, trade_open, trade_close eventleri
+- **Socket Gateway**: `/api/socket.io` endpointi eklendi (404 sorunu giderildi)
+- Faz-2 test raporu: `/app/test_reports/iteration_2.json` (backend+frontend doğrulandı)
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülü (listeleme, disable/enable)
-- Market universe yönetim ekranı + API
+- Execution state machine’i daha granular hale getirme (created/submitted/ack/partial/filled/rejected/failed)
 
 ### P1
-- Strategy engine signal interface ve paper-trading loop
-- Risk engine runtime validasyonları (spread/slippage/liquidity kontrol zinciri)
-- Execution lifecycle state machine (queued/sent/filled/rejected)
-- Monitoring kartları + daha detaylı sistem health endpointleri
+- Strategy param validasyonları ve Basic/Advanced user modları
+- Correlation/cluster exposure kontrolü (BTC-ETH-SOL benzer risk kümeleri)
+- Session protection: cooldown + frequency limit + günlük PnL gate
+- Monitoring detayları: per-symbol latency, dead-letter benzeri failed-event kuyruğu
 
 ### P2
 - Bybit/OKX adapter stubları
 - Gelişmiş raporlama ve zaman serisi chartları
+- Strategy backtest sonuç kartları (onaylandı)
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. User management + admin operatör araçlarını tamamla
-2. Market universe + strategy template param doğrulama katmanını ekle
-3. Paper trading döngüsünü başlat (signal -> risk -> mock execution pipeline)
-4. Audit ve monitoring metriklerini genişlet
-5. Faz-2 canlı borsa entegrasyon hazırlık kontrol listesini netleştir
+1. Risk engine’i cluster exposure + session protection ile güçlendir
+2. Execution policy katmanını strateji bazlı (aggressive/passive) kur
+3. Paper position analytics ve PnL breakdown endpointlerini ekle
+4. Dead-letter/failure queue + restart sonrası state rebuild akışını ekle
+5. Faz-3 için gerçek emir açmadan önce integration hardening checklist’ini tamamla

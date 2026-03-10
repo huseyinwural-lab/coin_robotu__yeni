@@ -19,6 +19,7 @@ from routers import (
 )
 from services.bootstrap import seed_default_admin
 from services.pipeline.runtime import pipeline_runtime
+from services.realtime.socket_gateway import create_socket_app
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,7 +27,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Algorithmic Trading Platform API", version="0.1.0")
+fastapi_app = FastAPI(title="Algorithmic Trading Platform API", version="0.2.0")
 api_router = APIRouter(prefix="/api")
 
 
@@ -50,9 +51,9 @@ api_router.include_router(admin_control.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(paper_positions.router)
 
-app.include_router(api_router)
+fastapi_app.include_router(api_router)
 
-app.add_middleware(
+fastapi_app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=settings.cors_origins,
@@ -61,7 +62,7 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
+@fastapi_app.on_event("startup")
 async def startup_event():
     Base.metadata.create_all(bind=engine)
     run_auto_migrations()
@@ -70,6 +71,9 @@ async def startup_event():
     logger.info("Platform startup complete with Phase-2 pipeline runtime")
 
 
-@app.on_event("shutdown")
+@fastapi_app.on_event("shutdown")
 async def shutdown_event():
     await pipeline_runtime.stop()
+
+
+app = create_socket_app(fastapi_app)

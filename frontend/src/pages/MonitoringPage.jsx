@@ -6,6 +6,7 @@ import { apiClient } from "@/lib/api";
 
 export const MonitoringPage = () => {
   const [metrics, setMetrics] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const fetchMonitoring = useCallback(async () => {
     try {
@@ -13,6 +14,8 @@ export const MonitoringPage = () => {
       setMetrics(data);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Monitoring verisi alınamadı");
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -30,11 +33,11 @@ export const MonitoringPage = () => {
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="monitoring-metrics-grid">
-        <MetricCard label="WS Status" value={metrics?.websocket_status || "-"} tone="blue" testId="monitoring-ws-status" />
-        <MetricCard label="Signal / 5m" value={metrics?.signal_rate_last_5m ?? "-"} testId="monitoring-signal-rate" />
-        <MetricCard label="Paper Trade / 5m" value={metrics?.paper_trades_last_5m ?? "-"} tone="orange" testId="monitoring-paper-trades" />
-        <MetricCard label="Open Positions" value={metrics?.open_positions ?? "-"} testId="monitoring-open-positions" />
-        <MetricCard label="Latency ms" value={metrics?.latency_ms ?? "-"} tone="blue" testId="monitoring-latency" />
+        <MetricCard label="WS Status" value={isLoading ? "loading" : (metrics?.websocket_status || "-")} tone="blue" testId="monitoring-ws-status" />
+        <MetricCard label="Signal / 5m" value={isLoading ? "loading" : (metrics?.signal_rate_last_5m ?? "-")} testId="monitoring-signal-rate" />
+        <MetricCard label="Paper Trade / 5m" value={isLoading ? "loading" : (metrics?.paper_trades_last_5m ?? "-")} tone="orange" testId="monitoring-paper-trades" />
+        <MetricCard label="Open Positions" value={isLoading ? "loading" : (metrics?.open_positions ?? "-")} testId="monitoring-open-positions" />
+        <MetricCard label="Latency ms" value={isLoading ? "loading" : (metrics?.latency_ms ?? "-")} tone="blue" testId="monitoring-latency" />
       </div>
 
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-details-panel">
