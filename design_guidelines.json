@@ -1,0 +1,126 @@
+{
+  "identity": {
+    "persona": "E1: The Anti-AI Designer",
+    "theme_name": "The Industrial Cockpit",
+    "core_philosophy": "Precision over Decoration. Data over Fluff.",
+    "visual_metaphor": "High-Frequency Trading Engine Room"
+  },
+  "typography": {
+    "font_family_heading": "Chivo, sans-serif",
+    "font_family_body": "Manrope, sans-serif",
+    "font_family_code": "JetBrains Mono, monospace",
+    "import_url": "https://fonts.googleapis.com/css2?family=Chivo:wght@400;700;900&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;700&display=swap",
+    "rules": {
+      "headings": "Uppercase, Tracking-tight, High Contrast",
+      "body": "High legibility, especially for numerals",
+      "data": "Monospace for all financial figures and logs"
+    }
+  },
+  "colors": {
+    "primary": {
+      "name": "Safety Orange",
+      "hex": "#FF5F00",
+      "usage": "CTAs, Active States, Live Indicators, Warnings"
+    },
+    "secondary": {
+      "name": "Deep Slate",
+      "hex": "#020617",
+      "usage": "Global Background (Dark Mode)"
+    },
+    "surface": {
+      "name": "Panel Slate",
+      "hex": "#0F172A",
+      "usage": "Cards, Sidebars"
+    },
+    "text": {
+      "primary": "#F8FAFC",
+      "secondary": "#94A3B8",
+      "muted": "#475569"
+    },
+    "border": {
+      "default": "#1E293B",
+      "active": "#FF5F00"
+    },
+    "status": {
+      "critical": "#DC2626",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "info": "#3B82F6"
+    },
+    "admin_specific": {
+      "base": "#1E293B",
+      "accent_critical": "#EF4444",
+      "accent_normal": "#3B82F6"
+    }
+  },
+  "layout_strategies": {
+    "landing_page": {
+      "grid_system": "Bento Grid (Asymmetric)",
+      "spacing": "Generous (p-12 to p-24)",
+      "alignment": "Left aligned text, Grid aligned visuals",
+      "hero_style": "Split screen or Heavy Typography with abstract background"
+    },
+    "dashboard": {
+      "grid_system": "High Density 12-col Grid",
+      "spacing": "Tight (p-3 to p-4)",
+      "container_style": "Full height (h-screen), Scrollable panes",
+      "visual_style": "Cardless or Border-only cards. No shadows."
+    }
+  },
+  "components": {
+    "buttons": {
+      "style": "Sharp or Rounded-sm (2px)",
+      "animation": "Instant snap or slight lift",
+      "primary": "bg-[#FF5F00] text-white hover:bg-[#CC4C00]",
+      "secondary": "border border-slate-700 hover:border-[#FF5F00] hover:text-[#FF5F00]"
+    },
+    "cards": {
+      "style": "Flat, Border-only (border-slate-800)",
+      "radius": "rounded-sm"
+    },
+    "inputs": {
+      "style": "bg-slate-900 border-slate-700 focus:border-[#FF5F00] focus:ring-0",
+      "radius": "rounded-sm"
+    },
+    "tables": {
+      "style": "Dense, Sticky Header, Row Hover (bg-white/5)",
+      "font": "font-mono for data cells"
+    }
+  },
+  "image_assets": {
+    "hero_background": {
+      "url": "https://images.unsplash.com/photo-1762278805112-a0f50365845e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMGdlb21ldHJpYyUyMG9yYW5nZSUyMGJsYWNrJTIwZGlnaXRhbHxlbnwwfHx8fDE3NzMxODM1Njh8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Abstract Orange Data Flow",
+      "usage": "Hero Section Background (Low opacity overlay)"
+    },
+    "auth_background": {
+      "url": "https://images.unsplash.com/photo-1634549709262-508c47d4c229?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMGdlb21ldHJpYyUyMG9yYW5nZSUyMGJsYWNrJTIwZGlnaXRhbHxlbnwwfHx8fDE3NzMxODM1Njh8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Geometric Dark Curve",
+      "usage": "Login/Register Split Screen Image"
+    },
+    "feature_tech": {
+      "url": "https://images.unsplash.com/photo-1744113439895-14529bb2f6e6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwzfHx0ZWNobm9sb2d5JTIwY2lyY3VpdCUyMGJvYXJkJTIwb3JhbmdlfGVufDB8fHx8MTc3MzE4MzU3MXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Industrial Control Panel",
+      "usage": "Strategy Engine Feature Section"
+    },
+    "infrastructure": {
+      "url": "https://images.unsplash.com/photo-1680992046626-418f7e910589?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHw0fHxzZXJ2ZXIlMjByb29tJTIwbGlnaHRzJTIwZGFyayUyMG9yYW5nZXxlbnwwfHx8fDE3NzMxODM1NzB8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Dark Server Rack",
+      "usage": "Infrastructure/Low Latency Section"
+    }
+  },
+  "universal_guidelines": [
+    "Do NOT use gradients for backgrounds. Use solid colors or noise textures.",
+    "Do NOT use rounded-xl or rounded-2xl. Keep it sharp (rounded-none or rounded-sm).",
+    "Always use 'Inter' or 'Manrope' for UI text, but 'JetBrains Mono' for ANY number or code.",
+    "Dashboard must be high density. No wasted whitespace in the trading panel.",
+    "Use 'Safety Orange' (#FF5F00) sparingly but boldly (Primary Buttons, Active Tabs, Alerts).",
+    "Ensure 100% viewport height layouts for dashboard (no scroll on body, scroll inside panels).",
+    "Use 'sonner' for toast notifications.",
+    "Use 'recharts' for data visualization.",
+    "All interactive elements must have data-testid attributes.",
+    "Dark Mode is the default for User Dashboard. Admin Dashboard can use a 'Navy/Blue' theme to differentiate.",
+    "Login/Auth pages should be split-screen (Image Left/Right, Form Opposite)."
+  ],
+  "instructions_to_main_agent": "Initialize the Shadcn configuration with Slate as base color. Install 'recharts' and 'lucide-react'. Set up the font imports in index.css immediately. Configure Tailwind colors to match the 'colors' section exactly."
+}
