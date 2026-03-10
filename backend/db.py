@@ -20,6 +20,19 @@ class InMemoryRedis:
     def get(self, key: str):
         return self._store.get(key)
 
+    def ping(self):
+        return True
+
+    def delete(self, key: str):
+        if key in self._store:
+            del self._store[key]
+
+    def incr(self, key: str, amount: int = 1):
+        current = int(self._store.get(key, "0"))
+        current += amount
+        self._store[key] = str(current)
+        return current
+
 
 def _build_engine():
     primary_engine = create_engine(settings.database_url, pool_pre_ping=True)
@@ -54,3 +67,14 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def run_auto_migrations():
+    with engine.begin() as connection:
+        if engine.dialect.name == "sqlite":
+            columns = connection.execute(text("PRAGMA table_info(bot_profiles)")).fetchall()
+            existing_columns = {column[1] for column in columns}
+            if "is_running" not in existing_columns:
+                connection.execute(text("ALTER TABLE bot_profiles ADD COLUMN is_running BOOLEAN DEFAULT 0"))
+        else:
+            connection.execute(text("ALTER TABLE bot_profiles ADD COLUMN IF NOT EXISTS is_running BOOLEAN DEFAULT FALSE"))

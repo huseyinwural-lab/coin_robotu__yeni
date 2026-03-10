@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.security import hash_password
 from db import SessionLocal
-from models import User, UserRole
+from models import AdminControl, User, UserRole
 from services.audit_service import create_audit_log
 
 
@@ -35,9 +35,32 @@ def _seed_admin(db: Session):
     )
 
 
+def _seed_admin_control(db: Session):
+    control = db.query(AdminControl).filter(AdminControl.id == "global").first()
+    if control:
+        return
+
+    default_control = AdminControl(
+        id="global",
+        max_leverage_cap=5,
+        max_open_positions_cap=10,
+        minimum_volume_usd=1000000,
+        max_spread_bps=40,
+        spot_universe=["BTCUSDT", "ETHUSDT", "BNBUSDT"],
+        futures_universe=["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        whitelist=[],
+        blacklist=[],
+        emergency_mode=False,
+        disable_futures=False,
+    )
+    db.add(default_control)
+    db.commit()
+
+
 def seed_default_admin():
     db = SessionLocal()
     try:
         _seed_admin(db)
+        _seed_admin_control(db)
     finally:
         db.close()

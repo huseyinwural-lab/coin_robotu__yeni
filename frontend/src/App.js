@@ -11,6 +11,9 @@ import { BotProfilesPage } from "@/pages/BotProfilesPage";
 import { ExchangeMockPage } from "@/pages/ExchangeMockPage";
 import { LandingPage } from "@/pages/LandingPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { MarketUniversePage } from "@/pages/MarketUniversePage";
+import { MonitoringPage } from "@/pages/MonitoringPage";
+import { PaperPositionsPage } from "@/pages/PaperPositionsPage";
 import { RiskPoliciesPage } from "@/pages/RiskPoliciesPage";
 import { StrategyTemplatesPage } from "@/pages/StrategyTemplatesPage";
 import { UserDashboardPage } from "@/pages/UserDashboardPage";
@@ -45,9 +48,12 @@ function App() {
           >
             <Route path="user" element={<UserDashboardPage />} />
             <Route path="admin" element={<ProtectedRoute role="admin"><AdminDashboardPage /></ProtectedRoute>} />
+            <Route path="market-universe" element={<ProtectedRoute role="admin"><MarketUniversePage /></ProtectedRoute>} />
+            <Route path="monitoring" element={<ProtectedRoute role="admin"><MonitoringPage /></ProtectedRoute>} />
             <Route path="bots" element={<BotProfilesPage />} />
             <Route path="risk-policies" element={<RiskPoliciesPage />} />
             <Route path="strategies" element={<StrategyTemplatesPage />} />
+            <Route path="positions" element={<PaperPositionsPage />} />
             <Route path="audit-logs" element={<ProtectedRoute role="admin"><AuditLogsPage /></ProtectedRoute>} />
             <Route path="exchange-mock" element={<ExchangeMockPage />} />
           </Route>

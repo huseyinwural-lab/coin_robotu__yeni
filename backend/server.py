@@ -4,17 +4,21 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from core.config import settings
-from db import Base, engine
+from db import Base, engine, run_auto_migrations
 from routers import (
+    admin_control,
     audit_logs,
     auth,
     bot_profiles,
     dashboard,
     exchange,
+    paper_positions,
+    pipeline,
     risk_policies,
     strategy_templates,
 )
 from services.bootstrap import seed_default_admin
+from services.pipeline.runtime import pipeline_runtime
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,9 +33,9 @@ api_router = APIRouter(prefix="/api")
 @api_router.get("/")
 def api_root():
     return {
-        "message": "Algorithmic trading platform skeleton is running",
-        "phase": "1-b",
-        "execution_mode": "mock",
+        "message": "Algorithmic trading platform phase-2 pipeline is running",
+        "phase": "2-b",
+        "execution_mode": "paper",
     }
 
 
@@ -42,6 +46,9 @@ api_router.include_router(risk_policies.router)
 api_router.include_router(strategy_templates.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(exchange.router)
+api_router.include_router(admin_control.router)
+api_router.include_router(pipeline.router)
+api_router.include_router(paper_positions.router)
 
 app.include_router(api_router)
 
@@ -55,7 +62,14 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     Base.metadata.create_all(bind=engine)
+    run_auto_migrations()
     seed_default_admin()
-    logger.info("Platform startup complete with PostgreSQL + Redis config")
+    await pipeline_runtime.start()
+    logger.info("Platform startup complete with Phase-2 pipeline runtime")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await pipeline_runtime.stop()

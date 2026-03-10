@@ -61,6 +61,17 @@ export const BotProfilesPage = () => {
     setForm({ ...item, symbols: item.symbols.join(",") });
   };
 
+  const toggleRunning = async (item) => {
+    try {
+      const endpoint = item.is_running ? "stop" : "start";
+      await apiClient.post(`/pipeline/bots/${item.id}/${endpoint}`);
+      toast.success(item.is_running ? "Bot durduruldu" : "Bot başlatıldı");
+      fetchItems();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bot durumu değiştirilemedi");
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="bot-profiles-page">
       <header className="border border-slate-800 bg-slate-900 p-4" data-testid="bot-profiles-header">
@@ -105,6 +116,7 @@ export const BotProfilesPage = () => {
               <TableHead data-testid="bot-table-head-market">Market</TableHead>
               <TableHead data-testid="bot-table-head-strategy">Strateji</TableHead>
               <TableHead data-testid="bot-table-head-symbols">Semboller</TableHead>
+              <TableHead data-testid="bot-table-head-runtime">Runtime</TableHead>
               <TableHead data-testid="bot-table-head-action">Aksiyon</TableHead>
             </TableRow>
           </TableHeader>
@@ -115,10 +127,22 @@ export const BotProfilesPage = () => {
                 <TableCell data-testid={`bot-table-market-${item.id}`}>{item.market_type}</TableCell>
                 <TableCell data-testid={`bot-table-strategy-${item.id}`}>{item.strategy_type}</TableCell>
                 <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbols.join(", ")}</TableCell>
+                <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.is_running ? "running" : "stopped"}</TableCell>
                 <TableCell>
-                  <Button size="sm" variant="outline" className="border-slate-600 bg-transparent" onClick={() => onEdit(item)} data-testid={`bot-table-edit-${item.id}`}>
-                    Düzenle
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" className="border-slate-600 bg-transparent" onClick={() => onEdit(item)} data-testid={`bot-table-edit-${item.id}`}>
+                      Düzenle
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={`bg-transparent ${item.is_running ? "border-red-400 text-red-300" : "border-green-400 text-green-300"}`}
+                      onClick={() => toggleRunning(item)}
+                      data-testid={`bot-table-toggle-running-${item.id}`}
+                    >
+                      {item.is_running ? "Stop" : "Start"}
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

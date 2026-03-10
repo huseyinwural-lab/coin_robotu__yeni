@@ -1,4 +1,4 @@
-import { BarChart3, ClipboardList, ShieldAlert, TestTube2, TrendingUp, UserCog } from "lucide-react";
+import { Activity, BarChart3, ClipboardList, Globe, ShieldAlert, TestTube2, TrendingUp, UserCog } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,14 @@ const userNavItems = [
   { to: "/app/bots", label: "Bot Profilleri", icon: TrendingUp, testId: "nav-bot-profiles-link" },
   { to: "/app/risk-policies", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
   { to: "/app/strategies", label: "Strategy Template", icon: ClipboardList, testId: "nav-strategy-templates-link" },
+  { to: "/app/positions", label: "Paper Positions", icon: Activity, testId: "nav-paper-positions-link" },
   { to: "/app/exchange-mock", label: "Exchange Mock", icon: TestTube2, testId: "nav-exchange-mock-link" },
 ];
 
 const adminOnlyItems = [
   { to: "/app/admin", label: "Admin Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
+  { to: "/app/market-universe", label: "Market Universe", icon: Globe, testId: "nav-market-universe-link" },
+  { to: "/app/monitoring", label: "Monitoring", icon: Activity, testId: "nav-monitoring-link" },
   { to: "/app/audit-logs", label: "Audit Logs", icon: ClipboardList, testId: "nav-audit-logs-link" },
 ];
 

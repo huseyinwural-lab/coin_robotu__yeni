@@ -41,11 +41,15 @@ export const AdminDashboardPage = () => {
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="admin-dashboard-metrics-grid">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-8" data-testid="admin-dashboard-metrics-grid">
         <MetricCard label="Kullanıcı" value={summary?.metrics?.users ?? "-"} tone="blue" testId="admin-metric-users" />
-        <MetricCard label="Aktif Bot" value={summary?.metrics?.active_bots ?? "-"} tone="blue" testId="admin-metric-active-bots" />
+        <MetricCard label="Running Bot" value={summary?.metrics?.running_bots ?? "-"} tone="blue" testId="admin-metric-active-bots" />
         <MetricCard label="Risk Policy" value={summary?.metrics?.risk_policies ?? "-"} tone="blue" testId="admin-metric-risk-policies" />
         <MetricCard label="Template" value={summary?.metrics?.strategy_templates ?? "-"} tone="blue" testId="admin-metric-strategies" />
+        <MetricCard label="WS Status" value={summary?.metrics?.websocket_status ?? "-"} tone="blue" testId="admin-metric-ws-status" />
+        <MetricCard label="Signal / 5m" value={summary?.metrics?.signals_5m ?? "-"} tone="orange" testId="admin-metric-signals" />
+        <MetricCard label="Paper Trade / 5m" value={summary?.metrics?.paper_trades_5m ?? "-"} tone="orange" testId="admin-metric-paper-trades" />
+        <MetricCard label="Open Positions" value={summary?.metrics?.open_positions ?? "-"} tone="blue" testId="admin-metric-open-positions" />
         <MetricCard label="Critical Audit" value={summary?.metrics?.critical_audits ?? "-"} tone="red" testId="admin-metric-critical-audits" />
       </div>
 

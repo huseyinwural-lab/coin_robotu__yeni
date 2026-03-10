@@ -42,7 +42,25 @@ class BotProfile(Base):
     trend_timeframe: Mapped[str] = mapped_column(String(10), default="1h")
     leverage: Mapped[int] = mapped_column(Integer, default=3)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_running: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class AdminControl(Base):
+    __tablename__ = "admin_control"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default="global")
+    max_leverage_cap: Mapped[int] = mapped_column(Integer, default=5)
+    max_open_positions_cap: Mapped[int] = mapped_column(Integer, default=10)
+    minimum_volume_usd: Mapped[float] = mapped_column(Float, default=1000000)
+    max_spread_bps: Mapped[int] = mapped_column(Integer, default=40)
+    spot_universe: Mapped[list[str]] = mapped_column(JSON, default=list)
+    futures_universe: Mapped[list[str]] = mapped_column(JSON, default=list)
+    whitelist: Mapped[list[str]] = mapped_column(JSON, default=list)
+    blacklist: Mapped[list[str]] = mapped_column(JSON, default=list)
+    emergency_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    disable_futures: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
@@ -105,4 +123,53 @@ class ExecutionEvent(Base):
     execution_status: Mapped[str] = mapped_column(String(30), default="filled")
     response_payload: Mapped[dict] = mapped_column(JSON, default=dict)
     note: Mapped[str] = mapped_column(Text, default="MOCK execution only")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SignalEvent(Base):
+    __tablename__ = "signal_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    bot_profile_id: Mapped[str] = mapped_column(String, ForeignKey("bot_profiles.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(30))
+    market_type: Mapped[str] = mapped_column(String(20))
+    timeframe: Mapped[str] = mapped_column(String(10))
+    strategy_id: Mapped[str] = mapped_column(String(50))
+    signal: Mapped[str] = mapped_column(String(20))
+    direction: Mapped[str] = mapped_column(String(10))
+    confidence: Mapped[float] = mapped_column(Float)
+    reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PaperPosition(Base):
+    __tablename__ = "paper_positions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    bot_profile_id: Mapped[str] = mapped_column(String, ForeignKey("bot_profiles.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    market_type: Mapped[str] = mapped_column(String(20), default="spot")
+    side: Mapped[str] = mapped_column(String(10))
+    quantity: Mapped[float] = mapped_column(Float)
+    leverage: Mapped[int] = mapped_column(Integer, default=3)
+    entry_price: Mapped[float] = mapped_column(Float)
+    stop_loss: Mapped[float] = mapped_column(Float)
+    take_profit: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    unrealized_pnl: Mapped[float] = mapped_column(Float, default=0)
+    realized_pnl: Mapped[float] = mapped_column(Float, default=0)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class PositionLedgerEvent(Base):
+    __tablename__ = "position_ledger_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    position_id: Mapped[str] = mapped_column(String, ForeignKey("paper_positions.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(30))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

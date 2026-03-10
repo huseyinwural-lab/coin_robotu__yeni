@@ -5,20 +5,27 @@ from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
 from deps import get_current_user
-from models import AuditLog, BotProfile, RiskPolicy, StrategyTemplate, User, UserRole
+from models import AuditLog, BotProfile, PaperPosition, RiskPolicy, StrategyTemplate, User, UserRole
+from services.pipeline.runtime import pipeline_runtime
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 @router.get("/summary")
 def dashboard_summary(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    monitoring = pipeline_runtime.monitoring_snapshot(db)
     if current_user.role == UserRole.ADMIN:
         data = {
             "users": db.query(User).count(),
             "active_bots": db.query(BotProfile).filter(BotProfile.is_enabled.is_(True)).count(),
+            "running_bots": db.query(BotProfile).filter(BotProfile.is_running.is_(True)).count(),
             "risk_policies": db.query(RiskPolicy).count(),
             "strategy_templates": db.query(StrategyTemplate).count(),
             "critical_audits": db.query(AuditLog).filter(AuditLog.severity == "critical").count(),
+            "open_positions": monitoring["open_positions"],
+            "signals_5m": monitoring["signal_rate_last_5m"],
+            "paper_trades_5m": monitoring["paper_trades_last_5m"],
+            "websocket_status": monitoring["websocket_status"],
         }
     else:
         data = {
@@ -26,9 +33,15 @@ def dashboard_summary(current_user: User = Depends(get_current_user), db: Sessio
             "active_bots": db.query(BotProfile)
             .filter(BotProfile.user_id == current_user.id, BotProfile.is_enabled.is_(True))
             .count(),
+            "running_bots": db.query(BotProfile)
+            .filter(BotProfile.user_id == current_user.id, BotProfile.is_running.is_(True))
+            .count(),
             "risk_policies": db.query(RiskPolicy).filter(RiskPolicy.user_id == current_user.id).count(),
             "strategy_templates": db.query(StrategyTemplate).filter(StrategyTemplate.is_active.is_(True)).count(),
-            "mode": "mock_execution",
+            "open_positions": db.query(PaperPosition)
+            .filter(PaperPosition.user_id == current_user.id, PaperPosition.status == "open")
+            .count(),
+            "mode": "paper_execution",
         }
 
     heartbeat = datetime.now(timezone.utc).isoformat()

@@ -25,9 +25,9 @@ export const UserDashboardPage = () => {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="user-dashboard-metrics-grid">
         <MetricCard label="Bot Sayısı" value={summary?.metrics?.bots ?? "-"} testId="user-metric-bots" />
-        <MetricCard label="Aktif Bot" value={summary?.metrics?.active_bots ?? "-"} testId="user-metric-active-bots" />
+        <MetricCard label="Aktif Bot" value={summary?.metrics?.running_bots ?? "-"} testId="user-metric-active-bots" />
         <MetricCard label="Risk Policy" value={summary?.metrics?.risk_policies ?? "-"} testId="user-metric-risk-policies" />
-        <MetricCard label="Template" value={summary?.metrics?.strategy_templates ?? "-"} tone="orange" testId="user-metric-templates" />
+        <MetricCard label="Open Positions" value={summary?.metrics?.open_positions ?? "-"} tone="orange" testId="user-metric-templates" />
       </div>
 
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-dashboard-heartbeat-panel">
