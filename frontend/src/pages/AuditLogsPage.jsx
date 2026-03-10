@@ -1,18 +1,28 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiClient } from "@/lib/api";
 
 export const AuditLogsPage = () => {
   const [logs, setLogs] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
+    setIsLoading(true);
+    try {
       const { data } = await apiClient.get("/audit-logs");
       setLogs(data);
-    };
-    fetchLogs();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Audit loglar yüklenemedi");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
 
   return (
     <section className="space-y-4" data-testid="audit-logs-page">
@@ -22,6 +32,8 @@ export const AuditLogsPage = () => {
       </header>
 
       <div className="border border-slate-800 bg-slate-900" data-testid="audit-logs-table-wrapper">
+        {isLoading && <p className="p-3 text-sm text-slate-400" data-testid="audit-logs-loading-state">Yükleniyor...</p>}
+        {!isLoading && logs.length === 0 && <p className="p-3 text-sm text-slate-500" data-testid="audit-logs-empty-state">Henüz audit kaydı yok.</p>}
         <Table data-testid="audit-logs-table">
           <TableHeader>
             <TableRow>

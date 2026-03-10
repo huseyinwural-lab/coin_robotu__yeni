@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -10,34 +10,47 @@ export const ExchangeMockPage = () => {
   const [botProfiles, setBotProfiles] = useState([]);
   const [events, setEvents] = useState([]);
   const [state, setState] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState({ bot_profile_id: "", symbol: "BTCUSDT", side: "buy", quantity: 0.01 });
 
-  const fetchAll = async () => {
-    const [{ data: profiles }, { data: nextEvents }, { data: nextState }] = await Promise.all([
-      apiClient.get("/bot-profiles"),
-      apiClient.get("/exchange/mock/events"),
-      apiClient.get("/exchange/mock/state"),
-    ]);
-    setBotProfiles(profiles);
-    setEvents(nextEvents);
-    setState(nextState);
-    if (profiles.length && !form.bot_profile_id) {
-      setForm((prev) => ({ ...prev, bot_profile_id: profiles[0].id }));
+  const fetchAll = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [{ data: profiles }, { data: nextEvents }, { data: nextState }] = await Promise.all([
+        apiClient.get("/bot-profiles"),
+        apiClient.get("/exchange/mock/events"),
+        apiClient.get("/exchange/mock/state"),
+      ]);
+      setBotProfiles(profiles);
+      setEvents(nextEvents);
+      setState(nextState);
+      setForm((prev) => ({
+        ...prev,
+        bot_profile_id: prev.bot_profile_id || (profiles[0]?.id ?? ""),
+      }));
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Exchange mock verileri yüklenemedi");
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchAll();
-  }, []);
+  }, [fetchAll]);
 
   const submitMockOrder = async (event) => {
     event.preventDefault();
+    setIsSubmitting(true);
     try {
       await apiClient.post("/exchange/mock/execute", { ...form, quantity: Number(form.quantity) });
-      toast.success("MOCK emir işlendi");
-      fetchAll();
+      await fetchAll();
+      toast.success("MOCK emir işlendi ve tablo yenilendi");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "MOCK emir başarısız");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -62,7 +75,7 @@ export const ExchangeMockPage = () => {
           <Input type="number" step="0.001" placeholder="Quantity" value={form.quantity} onChange={(event) => setForm((prev) => ({ ...prev, quantity: event.target.value }))} data-testid="exchange-form-quantity-input" required />
 
           <Button type="submit" className="w-full bg-orange-500 text-black hover:bg-orange-600" data-testid="exchange-form-submit-button">
-            MOCK Execute
+            {isSubmitting ? "İşleniyor..." : "MOCK Execute"}
           </Button>
 
           <div className="border border-slate-700 p-3" data-testid="exchange-state-panel">
@@ -73,6 +86,10 @@ export const ExchangeMockPage = () => {
         </form>
 
         <div className="border border-slate-800 bg-slate-900" data-testid="exchange-events-table-wrapper">
+          {isLoading && <p className="p-3 text-sm text-slate-400" data-testid="exchange-events-loading-state">Yükleniyor...</p>}
+          {!isLoading && events.length === 0 && (
+            <p className="p-3 text-sm text-slate-500" data-testid="exchange-events-empty-state">Henüz mock event oluşmadı.</p>
+          )}
           <Table data-testid="exchange-events-table">
             <TableHeader>
               <TableRow>
