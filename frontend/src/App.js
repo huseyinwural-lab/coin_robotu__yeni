@@ -1,53 +1,60 @@
-import { useEffect } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { Toaster } from "sonner";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { PanelLayout } from "@/components/PanelLayout";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
+import { AuditLogsPage } from "@/pages/AuditLogsPage";
+import { BotProfilesPage } from "@/pages/BotProfilesPage";
+import { ExchangeMockPage } from "@/pages/ExchangeMockPage";
+import { LandingPage } from "@/pages/LandingPage";
+import { LoginPage } from "@/pages/LoginPage";
+import { RiskPoliciesPage } from "@/pages/RiskPoliciesPage";
+import { StrategyTemplatesPage } from "@/pages/StrategyTemplatesPage";
+import { UserDashboardPage } from "@/pages/UserDashboardPage";
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
+const HomeRedirect = () => {
+  const { user } = useAuth();
 
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
+  if (!user) {
+    return <LandingPage />;
+  }
+  if (user.role === "admin") {
+    return <Navigate to="/app/admin" replace />;
+  }
+  return <Navigate to="/app/user" replace />;
 };
 
 function App() {
   return (
-    <div className="App">
+    <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
+          <Route path="/" element={<HomeRedirect />} />
+          <Route path="/login" element={<LoginPage />} />
+
+          <Route
+            path="/app"
+            element={
+              <ProtectedRoute>
+                <PanelLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="user" element={<UserDashboardPage />} />
+            <Route path="admin" element={<ProtectedRoute role="admin"><AdminDashboardPage /></ProtectedRoute>} />
+            <Route path="bots" element={<BotProfilesPage />} />
+            <Route path="risk-policies" element={<RiskPoliciesPage />} />
+            <Route path="strategies" element={<StrategyTemplatesPage />} />
+            <Route path="audit-logs" element={<ProtectedRoute role="admin"><AuditLogsPage /></ProtectedRoute>} />
+            <Route path="exchange-mock" element={<ExchangeMockPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
-    </div>
+      <Toaster position="top-right" richColors closeButton />
+    </AuthProvider>
   );
 }
 
