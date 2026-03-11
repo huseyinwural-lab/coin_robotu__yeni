@@ -31,14 +31,32 @@ export const FailedEventsPage = () => {
     }
   };
 
+  const seedEvent = async () => {
+    try {
+      await apiClient.post("/admin-phase3/failed-events/seed");
+      toast.success("Test failed event oluşturuldu");
+      loadEvents();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Seed event oluşturulamadı");
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="failed-events-page">
       <header className="border border-red-600/40 bg-slate-900 p-4" data-testid="failed-events-header">
         <h2 className="text-4xl font-black uppercase tracking-tight text-red-300" data-testid="failed-events-title">Failed Event Queue</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="failed-events-description">Risk/execution zincirinde düşen eventler bu panelden yönetilir.</p>
+        <Button className="mt-3 bg-red-700 text-white hover:bg-red-800" onClick={seedEvent} data-testid="failed-events-seed-button">
+          Test Event Oluştur
+        </Button>
       </header>
 
       <div className="border border-slate-800 bg-slate-900" data-testid="failed-events-table-wrapper">
+        {events.length === 0 && (
+          <p className="p-3 text-sm text-slate-500" data-testid="failed-events-empty-state">
+            Event yok. "Test Event Oluştur" ile retry/resolve akışını test edebilirsin.
+          </p>
+        )}
         <Table data-testid="failed-events-table">
           <TableHeader>
             <TableRow>

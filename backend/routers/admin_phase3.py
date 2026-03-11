@@ -18,7 +18,7 @@ from schemas import (
     StateRebuildLogResponse,
 )
 from services.audit_service import create_audit_log
-from services.failed_event_service import mark_failed_event_resolved, mark_failed_event_retry
+from services.failed_event_service import create_failed_event, mark_failed_event_resolved, mark_failed_event_retry
 from services.state_rebuild_service import run_state_rebuild
 
 router = APIRouter(prefix="/admin-phase3", tags=["admin_phase3"])
@@ -159,6 +159,33 @@ def resolve_failed_event(event_id: str, _: User = Depends(require_admin), db: Se
     if failed_event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Failed event not found")
     return mark_failed_event_resolved(db, failed_event)
+
+
+@router.post("/failed-events/seed", response_model=FailedEventResponse)
+def seed_failed_event(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    existing = db.query(FailedEvent).filter(FailedEvent.status.in_(["pending", "retrying"]))
+    latest = existing.order_by(FailedEvent.created_at.desc()).first()
+    if latest:
+        return latest
+
+    seeded = create_failed_event(
+        db,
+        event_type="seeded_failed_event",
+        entity_type="phase3_admin",
+        entity_id="seed",
+        payload={"source": "manual_seed_button", "hint": "for retry/resolve UI validation"},
+        error_message="Seeded failed event for deterministic admin UI testing",
+    )
+    create_audit_log(
+        db,
+        action="failed_event_seeded",
+        entity_type="failed_event",
+        entity_id=seeded.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"event_type": seeded.event_type},
+    )
+    return seeded
 
 
 @router.get("/state-rebuild-logs", response_model=list[StateRebuildLogResponse])

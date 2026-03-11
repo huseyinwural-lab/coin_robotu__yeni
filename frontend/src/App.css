@@ -9,7 +9,7 @@
 
 .admin-theme * {
   color: #111111 !important;
-  border-color: #11111155 !important;
+  border-color: #6b3f00 !important;
 }
 
 .admin-theme .bg-slate-950,
@@ -19,26 +19,35 @@
 .admin-theme .bg-blue-600,
 .admin-theme .bg-blue-700,
 .admin-theme .bg-transparent {
-  background: #ff9f2e !important;
+  background: #ffd6a1 !important;
 }
 
 .admin-theme .hover\:bg-red-900\/40:hover,
 .admin-theme .hover\:bg-blue-700:hover,
 .admin-theme .hover\:bg-orange-600:hover,
 .admin-theme .hover\:bg-zinc-900:hover {
-  background: #ffb24d !important;
+  background: #ffc67d !important;
 }
 
 .admin-theme input,
 .admin-theme textarea,
 .admin-theme select {
-  background: #ffb95e !important;
+  background: #fff1dc !important;
   color: #111111 !important;
 }
 
 .admin-theme input::placeholder,
 .admin-theme textarea::placeholder {
   color: #111111aa !important;
+}
+
+.admin-theme .text-slate-400,
+.admin-theme .text-slate-500,
+.admin-theme .text-blue-300,
+.admin-theme .text-red-300,
+.admin-theme .text-orange-500,
+.admin-theme .text-orange-400 {
+  color: #3b2500 !important;
 }
 
 @keyframes fade-in {

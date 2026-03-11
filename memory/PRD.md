@@ -65,18 +65,39 @@
 - **Socket Gateway**: `/api/socket.io` endpointi eklendi (404 sorunu giderildi)
 - Faz-2 test raporu: `/app/test_reports/iteration_2.json` (backend+frontend doğrulandı)
 
+### 2026-03-11 (Faz-3 İterasyon-1 — Güçlendirme Başlangıcı)
+- Seçim setine göre uygulandı: **1-b, 2-b, 3-a, 4-c, 5-a**
+- **Alembic versiyonlu migration altyapısı** kuruldu (`/app/backend/migrations/*`, revision: `20260311_0001`)
+- Yeni çekirdek tablolar eklendi: `execution_policies`, `risk_exposure_groups`, `failed_events`, `state_rebuild_logs`, `backtest_result_cards`
+- Execution policy layer ilk çalışan versiyonu devrede (Breakout=aggressive, MeanReversion=passive, TrendFollowing=balanced, VolatilityExpansion=balanced)
+- Risk engine exposure kontrolü tek-grup başlangıç modeli ile genişletildi (`all_symbols` unified exposure pool)
+- Failed event queue/retry/resolve altyapısı eklendi ve recovery loop çalışır hale getirildi
+- Restart sonrası state rebuild log mekanizması eklendi (startup + manual tetikleme)
+- Admin minimum yönetim ekranları eklendi:
+  - Execution Policies
+  - Exposure Groups
+  - Failed Events
+  - State Rebuild Logs
+  - Backtest Cards
+- Failed-events UI için deterministik test akışı eklendi (`seed` endpoint + panel butonu)
+- Testler:
+  - `/app/test_reports/iteration_3.json`
+  - `/app/backend/tests/test_phase3_admin_policy_engine.py`
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülü (listeleme, disable/enable)
 - Execution state machine’i daha granular hale getirme (created/submitted/ack/partial/filled/rejected/failed)
+- Alembic migration’larda rollback senaryolarının staging doğrulaması
 
 ### P1
 - Strategy param validasyonları ve Basic/Advanced user modları
 - Correlation/cluster exposure kontrolü (BTC-ETH-SOL benzer risk kümeleri)
 - Session protection: cooldown + frequency limit + günlük PnL gate
 - Monitoring detayları: per-symbol latency, dead-letter benzeri failed-event kuyruğu
+- Unified exposure modelinden çoklu exposure group modeline geçiş (majors/high-beta/mid-cap)
 
 ### P2
 - Bybit/OKX adapter stubları
@@ -85,8 +106,8 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Risk engine’i cluster exposure + session protection ile güçlendir
-2. Execution policy katmanını strateji bazlı (aggressive/passive) kur
-3. Paper position analytics ve PnL breakdown endpointlerini ekle
-4. Dead-letter/failure queue + restart sonrası state rebuild akışını ekle
-5. Faz-3 için gerçek emir açmadan önce integration hardening checklist’ini tamamla
+1. Risk engine’i tek-gruptan çoklu exposure gruplarına genişlet (majors/high-beta/mid-cap)
+2. Execution engine state machine adımlarını policy’ye bağlı granular hale getir
+3. Hardening checklist endpoint/rapor ekranını ekle (idempotency, duplicate-protection, reconnect test sonuçları)
+4. Backtest card’ları kullanıcı tarafında read-only karar destek ekranına taşı
+5. Canlı emir öncesi dry-run senaryoları için otomatik test paketini artır
