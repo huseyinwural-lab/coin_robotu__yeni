@@ -707,6 +707,12 @@
 - Testnet live proof tekrar koşuldu: validate ✅, test-order ✅ (NEW → FILLED).
 - Testnet readiness artık release gate BLOCKED olsa bile test-order’a izin veriyor.
 
+### 2026-03-11 (Admin Bulk Approvals + Alert Ops Simulate)
+- /admin/user-approvals list + bulk approve/reject endpoints (reject reason zorunlu) + audit log (USER_APPROVAL_BULK_APPROVED/REJECTED).
+- Admin User Approvals UI: arama/sıralama, checkbox seçim, bulk approve/reject + reject reason.
+- Ops alert simulate endpoint (/api/ops-alerts/simulate) + POST /admin/system-alerts/config (config refresh).
+- Role set güncellendi: super_admin/admin/ops/user; require_admin ops’u kabul ediyor.
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Resend/Slack secrets sağlanınca Alert Pipeline v2 kanal aktivasyonu + uçtan uca test
@@ -731,5 +737,9 @@
 
 ## 7) Next Tasks List
 1. Resend/Slack secrets sağlanınca Alert Pipeline v2 kanal aktivasyonu + uçtan uca test
-2. User approval paneline arama/sıralama + toplu onay (bulk action)
-3. Replay-native analytics (param sweep) için ilk UI/deney seti
+2. Admin user-management paneli (/admin/users)
+3. System Alerts panel upgrade (severity/entity filter, timeline, bulk acknowledge)
+4. CSV diff analizi (report A/B)
+5. Legacy endpoint cleanup
+6. Adapter stubs (Bybit/OKX)
+7. User platform başlangıcı (dashboard/portfolio)
