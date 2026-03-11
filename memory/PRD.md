@@ -774,8 +774,20 @@
 ### Güncel Kapanış Durumu (Admin Domain)
 - [x] Admin user management
 - [x] System alerts panel upgrade
-- [ ] Alert delivery **gerçek kanal başarı doğrulaması** (Resend/Slack gerçek secret ile son mile test)
+- [x] Alert delivery **email-only gerçek kanal başarı doğrulaması** (Option C)
 
 ### Kalan P0
-1. Admin panel `/admin/system-alerts` üzerinden gerçek secret’ları girip `CONFIG_MISSING -> READY` geçişini doğrulamak
-2. `POST /api/ops-alerts/simulate` sonrası email/slack için gerçek `SENT` sonuçlarını doğrulamak ve kapanış kanıtını almak
+1. (Opsiyonel) `ALERT_FROM=admin@platform.dev` kullanımı için Resend domain verify (`platform.dev`) tamamlamak
+2. (Opsiyonel) Slack webhook ekleyip ikinci kanal aktivasyonunu tamamlamak
+
+## 9) 2026-03-11 — Admin Domain Final Step (Option C: Email-only Activation)
+- Kullanıcı talebine göre Slack bekletildi, email kanalı aktive edildi.
+- `/api/admin/system-alerts/config` ile email-only config akışı doğrulandı.
+- `/api/ops-alerts/simulate` ile gerçek provider çağrısı doğrulandı; email tarafında `SENT` + `provider_id` alındı.
+- Audit doğrulaması: `ALERT_DELIVERY_SUCCESS` (channel=`email`) kaydı oluştu.
+- Panel doğrulaması: `/admin/system-alerts` üst satırda `channel_status=READY · email_channel=active · slack_channel=disabled`.
+- Testing agent raporu: `/app/test_reports/iteration_24.json` (backend 9/9, frontend 100%).
+
+### Not (Provider Constraint)
+- `ALERT_FROM=admin@platform.dev` değeri Resend domain doğrulaması yapılmadığı için doğrudan gönderimde `domain not verified` hatası üretir.
+- `ALERT_TO` alanında yazım düzeltmesi (`huseyinwural@gmail.com`) ile hesap sahibi test alıcısına başarılı gönderim doğrulandı.
