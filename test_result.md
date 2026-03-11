@@ -192,6 +192,18 @@ frontend:
         agent: "testing"
         comment: "Smoke Test: Page loads correctly at /admin/proofs without UI regressions. All components render properly: header (data-testid='admin-proofs-header'), batch verification panel (data-testid='admin-proofs-batch-panel'), proofs list wrapper (data-testid='admin-proofs-list-wrapper'). Page displays multiple proof artifacts with Verify and Download buttons. No console errors specific to this page."
 
+  - task: "Phase4 Live Control Page - Release Gate Widget"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/Phase4LiveControlPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Regression Test PASSED: Phase4 Live Control page loads correctly at /admin/phase4-live. Release Gate widget fully functional: 1) Release Gate metric card displays status 'WARNING' (data-testid='phase4-metric-release-gate'). 2) Live Activation metric card displays 'guarded' (data-testid='phase4-metric-live-activation'). 3) Dry-Run Release Gate panel (data-testid='phase4-release-gate-panel') renders with status 'WARNING' and 2 reasons: 'execution_quality_score_warning' and 'live_mode_disabled'. 4) All other components verified: Metrics grid, Live Readiness Factor panel (all factors true), Permission Status panel (overall=pass, live_activation=ready), Testnet Connectivity panel (REST and WS URLs displayed). 5) No console errors or API failures detected."
+
   - task: "Navigation Sidebar - Admin Panel"
     implemented: true
     working: true
@@ -315,27 +327,30 @@ backend:
 
   - task: "Phase-4 API - Release Gate Endpoint"
     implemented: true
-    working: false
+    working: true
     file: "backend/routers/phase4.py"
     stuck_count: 0
-    priority: "low"
+    priority: "high"
     needs_retesting: false
     status_history:
       - working: false
         agent: "testing"
         comment: "Smoke Test: API endpoint GET /phase4/admin/release-gate?environment=prod returns 500 status during admin dashboard load. This is a non-critical feature for displaying release gate badge in sidebar. Frontend handles error gracefully (catches exception and sets gateBadge to null). No UI breakage observed. This does not affect Alert Pipeline v2 functionality."
+      - working: true
+        agent: "testing"
+        comment: "Regression Test PASSED after test-order fix: API endpoint GET /phase4/admin/release-gate now returns correct data (status: WARNING, live_activation: guarded). Tested via /admin/phase4-live page. Release Gate widget displays correctly with metric cards showing status and reasons (execution_quality_score_warning, live_mode_disabled). No 500 errors detected. Backend fix verified successful."
 
 metadata:
   created_by: "testing_agent"
-  version: "1.3"
-  test_sequence: 4
+  version: "1.4"
+  test_sequence: 5
   run_ui: true
   last_updated: "2026-03-11"
-  test_phase: "Weekly Report Archive UI Test"
+  test_phase: "Phase4 Live Control - Release Gate Widget Regression Test"
 
 test_plan:
   current_focus:
-    - "Weekly Report Archive UI test completed successfully"
+    - "Phase4 Live Control - Release Gate Widget regression test completed successfully"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -347,3 +362,5 @@ agent_communication:
     message: "Alert Pipeline v2 Smoke Test PASSED. Tested: 1) Admin login (admin@platform.dev) - WORKING. 2) Dashboard loads without critical errors - WORKING. Alert banner displays correctly with 2 alerts showing. Both Ack buttons visible and functional (data-testid verified). 3) /admin/proofs page loads without UI regressions - WORKING. All components render (header, batch panel, list wrapper). 4) Navigation sidebar working correctly - WORKING. Successfully navigated between dashboard and proofs. Minor Issue: 2 non-critical 500 errors for /api/phase4/admin/release-gate endpoint (release gate badge feature). Error is caught and handled gracefully in frontend - no UI breakage. Alert Pipeline v2 backend changes verified working correctly."
   - agent: "testing"
     message: "Weekly Report Archive UI Test COMPLETED - ALL TESTS PASSED. Comprehensive testing performed on /admin/reports/archive page. Results: 1) Admin authentication working perfectly (admin@platform.dev). 2) Navigation: 'Reports Archive' link visible in sidebar, navigation to /admin/reports/archive successful. 3) UI Components: Page header renders with title 'WEEKLY REPORT ARCHIVE' and description. All 5 filters render correctly (report_type, date_from, date_to, status dropdown, trigger_source dropdown) with functional Refresh button. 4) Data Display: Reports list shows 1 report with complete details - filename (weekly_ops_report_20260311175728.csv), status (generated), period (3/1/2026 – 3/11/2026), size (387 bytes), SHA256 checksum (1c32aa8524dfc49d8cf5927de376c986d9f4acfd46f87d4bcd1c...), trigger source (manual), generated timestamp (3/11/2026, 5:57:28 PM). 5) Download Functionality: Download button enabled for 'generated' status reports. Successfully triggered file download - verified by browser download handler. File received: weekly_ops_report_20260311175728.csv. 6) Filter Testing: Status filter functional - selected 'generated', clicked refresh, page reloaded correctly. 7) Error Monitoring: NO critical console errors detected, NO failed API requests. Backend endpoints working correctly: GET /api/admin/reports/archive returns proper JSON, GET /api/admin/reports/archive/{report_id}/download triggers file download with correct headers. All data-testid attributes present and functional for automated testing. Weekly Report Archive feature is production-ready."
+  - agent: "testing"
+    message: "Phase4 Live Control - Release Gate Widget Regression Test COMPLETED - ALL TESTS PASSED. Regression testing after test-order backend fix. Results: 1) Admin login successful (admin@platform.dev / Admin12345!) - redirected to dashboard. 2) Navigation to /admin/phase4-live successful - page loads without errors. 3) Release Gate Widget VERIFIED WORKING: a) Release Gate metric card displays 'WARNING' status correctly. b) Live Activation metric card displays 'guarded' status correctly. c) Dry-Run Release Gate panel renders with 'Status: WARNING' and 2 reasons displayed: 'execution_quality_score_warning', 'live_mode_disabled'. 4) Additional components verified: Metrics grid (8 metrics: Mode, Exchange, Market, Whitelist, Testnet, Live Readiness, Release Gate, Live Activation), Live Readiness Factor panel (all 5 factors showing true values), Permission Status panel (overall=pass, live_activation=ready, 5 control checks displayed), Testnet Connectivity panel (REST and WS URLs visible). 5) Dashboard navigation successful - no UI errors detected. 6) Console Monitoring: ZERO console errors detected throughout entire test flow. 7) Network Monitoring: ZERO release-gate API errors (previously returned 500 status). ZERO 5xx server errors. Total network errors: 0. Backend fix confirmed successful - /api/phase4/admin/release-gate endpoint now returns proper data. Frontend Release Gate widget displays correctly with all expected UI components."

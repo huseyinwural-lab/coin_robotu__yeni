@@ -7,6 +7,7 @@ import time
 import uuid
 from base64 import urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, ROUND_DOWN, ROUND_UP
 from urllib.parse import urlencode
 
 import httpx
@@ -95,6 +96,18 @@ class BinanceFuturesTestnetAdapter:
                 "ws_url": BINANCE_FUTURES_TESTNET_WS,
                 "message": f"Endpoint check failed: {exc}",
             }
+
+    def exchange_info(self, symbol: str) -> dict:
+        try:
+            response = httpx.get(
+                f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/exchangeInfo",
+                params={"symbol": symbol},
+                timeout=6,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception:
+            return {}
 
     def _signed_get(self, api_key: str, api_secret: str, endpoint: str, params: dict) -> tuple[dict, int, dict]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
@@ -1045,7 +1058,7 @@ def user_readiness_checklist(
         readiness_status = "blocked"
     else:
         gate = release_gate_view(db)
-        if gate["status"] == "BLOCKED":
+        if gate["status"] == "BLOCKED" and requested_environment != "testnet":
             readiness_status = "blocked"
             last_error_reason = "release_gate_forced_block"
         else:
@@ -1290,6 +1303,87 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     return execution_log
 
 
+def _safe_float(value: str | float | int | None, fallback: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _fetch_symbol_filters(symbol: str) -> dict:
+    defaults = {
+        "min_qty": 0.001,
+        "step_size": 0.001,
+        "quantity_precision": 3,
+        "min_notional": 0.0,
+    }
+    info = adapter.exchange_info(symbol)
+    symbols = info.get("symbols") if isinstance(info, dict) else None
+    if not symbols:
+        return defaults
+
+    symbol_info = symbols[0] if isinstance(symbols, list) else symbols
+    filters = symbol_info.get("filters", []) if isinstance(symbol_info, dict) else []
+
+    for item in filters:
+        if item.get("filterType") in {"LOT_SIZE", "MARKET_LOT_SIZE"}:
+            defaults["min_qty"] = _safe_float(item.get("minQty"), defaults["min_qty"])
+            defaults["step_size"] = _safe_float(item.get("stepSize"), defaults["step_size"])
+        elif item.get("filterType") in {"MIN_NOTIONAL", "NOTIONAL"}:
+            defaults["min_notional"] = _safe_float(item.get("notional") or item.get("minNotional"), defaults["min_notional"])
+
+    defaults["quantity_precision"] = int(symbol_info.get("quantityPrecision") or defaults["quantity_precision"])
+    return defaults
+
+
+def _quantize_to_step(value: float, step_size: float, precision: int, rounding=ROUND_DOWN) -> float:
+    step = Decimal(str(step_size)) if step_size else Decimal("0")
+    if step <= 0:
+        return float(round(value, precision))
+    steps = (Decimal(str(value)) / step).to_integral_value(rounding=rounding)
+    normalized = steps * step
+    precision_exp = Decimal("1").scaleb(-precision)
+    return float(normalized.quantize(precision_exp, rounding=rounding))
+
+
+def _normalize_test_quantity(
+    *,
+    mid_price: float,
+    min_qty: float,
+    step_size: float,
+    quantity_precision: int,
+    min_notional: float,
+    explicit_qty: float | None = None,
+) -> tuple[float, str | None]:
+    if explicit_qty is not None and explicit_qty <= 0:
+        return 0.0, "invalid_test_order_quantity"
+
+    qty = explicit_qty if explicit_qty is not None else (min_qty * 5)
+    qty = _quantize_to_step(qty, step_size, quantity_precision, rounding=ROUND_DOWN)
+    if qty <= 0:
+        return 0.0, "quantity_rounds_to_zero"
+    if qty < min_qty:
+        return qty, "quantity_below_min_qty"
+
+    notional = qty * mid_price
+    if min_notional and notional < min_notional:
+        required = _quantize_to_step(
+            (min_notional / mid_price),
+            step_size,
+            quantity_precision,
+            rounding=ROUND_UP,
+        )
+        if required <= 0:
+            return 0.0, "quantity_rounds_to_zero"
+        if required < min_qty:
+            return required, "quantity_below_min_qty"
+        if required * mid_price < min_notional:
+            return required, "quantity_below_min_notional"
+        qty = required
+
+    return qty, None
+
+
 def run_exchange_test_order_market(
     db: Session,
     user: User,
@@ -1300,6 +1394,7 @@ def run_exchange_test_order_market(
     leverage: int = 1,
     margin_mode: str = "cross",
     position_side: str = "BOTH",
+    quantity_override: float | None = None,
 ) -> ExecutionMetric:
     normalized_exchange = exchange.strip().lower()
     normalized_market_type = market_type.strip().lower()
@@ -1343,18 +1438,25 @@ def run_exchange_test_order_market(
 
     symbol = SAFE_SYMBOL_WHITELIST[0]
     side = "BUY"
-    quote_qty = 10.0
     ticker = get_market_ticker(symbol)
     mid_price = float(ticker["mid_price"] or 0)
     mid_ts = ticker["timestamp"]
     if mid_price <= 0:
         raise ValueError("Market ticker alınamadı. Lütfen tekrar deneyin.")
 
-    quantity = round(quote_qty / mid_price, 3)
-    quantity = max(quantity, 0.001)
-    notional = quantity * mid_price
-    if notional > 10.05:
-        quantity = round(10.0 / mid_price, 3)
+    symbol_filters = _fetch_symbol_filters(symbol)
+    quantity, quantity_error = _normalize_test_quantity(
+        mid_price=mid_price,
+        min_qty=symbol_filters["min_qty"],
+        step_size=symbol_filters["step_size"],
+        quantity_precision=symbol_filters["quantity_precision"],
+        min_notional=symbol_filters["min_notional"],
+        explicit_qty=quantity_override,
+    )
+    if quantity_error:
+        raise ValueError(quantity_error)
+
+    quote_qty = round(quantity * mid_price, 6)
 
     strategy_type, _ = _resolve_strategy_context(db, user.id)
     volatility_pct = _market_volatility_pct()

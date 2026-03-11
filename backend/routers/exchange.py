@@ -73,6 +73,7 @@ def exchange_test_order(
     leverage: int = Query(default=1),
     margin_mode: str = Query(default="cross"),
     position_side: str = Query(default="BOTH"),
+    quantity: float | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -126,6 +127,7 @@ def exchange_test_order(
             leverage=leverage,
             margin_mode=margin_mode,
             position_side=position_side,
+            quantity_override=quantity,
         )
     except ValueError as exc:
         known_codes = {
@@ -137,9 +139,30 @@ def exchange_test_order(
             "testnet_unreachable",
             "stale_validation",
             "unknown_exchange_error",
+            "invalid_test_order_quantity",
+            "quantity_below_min_qty",
+            "quantity_rounds_to_zero",
+            "quantity_below_min_notional",
         }
         message = str(exc)
         failure_code = next((code for code in known_codes if code in message), "unknown_exchange_error")
+        create_audit_log(
+            db,
+            action="exchange_test_order_rejected",
+            entity_type="exchange_test_order",
+            entity_id=current_user.id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            severity="warning",
+            details={
+                "failure_code": failure_code,
+                "message": message,
+                "exchange": readiness.get("exchange"),
+                "market_type": readiness.get("market_type"),
+                "environment": readiness.get("environment"),
+                "quantity": quantity,
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -331,6 +354,7 @@ def run_lifecycle_proof_pipeline(
                 leverage=3,
                 margin_mode="cross",
                 position_side="BOTH",
+                quantity_override=None,
             )
         except ValueError as exc:
             reason_codes = [str(exc)]

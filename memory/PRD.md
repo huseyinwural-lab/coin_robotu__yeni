@@ -701,10 +701,15 @@
 - Admin Reports Archive UI (liste, filtre, checksum, download).
 - Weekly report manual run artık archive kaydı oluşturuyor; download audit log yazılıyor.
 
+### 2026-03-11 (Test-order Quantity Fix + Live Proof)
+- Test-order quantity normalization: minQty*5 fallback + stepSize/precision + minNotional guard + typed reject codes.
+- Exchange test-order artık quantity<=0 göndermiyor; invalid quantity exchange’e gitmeden reject ediliyor.
+- Testnet live proof tekrar koşuldu: validate ✅, test-order ✅ (NEW → FILLED).
+- Testnet readiness artık release gate BLOCKED olsa bile test-order’a izin veriyor.
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Resend/Slack secrets sağlanınca Alert Pipeline v2 kanal aktivasyonu + uçtan uca test
-- Geçerli Binance Testnet key ile live order lifecycle proof (BLOCKED: key bekleniyor)
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
 - Alembic migration’larda rollback senaryolarının staging doğrulaması
@@ -726,6 +731,5 @@
 
 ## 7) Next Tasks List
 1. Resend/Slack secrets sağlanınca Alert Pipeline v2 kanal aktivasyonu + uçtan uca test
-2. Live testnet key ile order lifecycle proof (validate → test-order)
-3. User approval paneline arama/sıralama + toplu onay (bulk action)
-4. Replay-native analytics (param sweep) için ilk UI/deney seti
+2. User approval paneline arama/sıralama + toplu onay (bulk action)
+3. Replay-native analytics (param sweep) için ilk UI/deney seti
