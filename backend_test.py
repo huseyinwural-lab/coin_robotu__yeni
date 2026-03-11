@@ -14,7 +14,7 @@ API_BASE = f"{BACKEND_URL}/api"
 ADMIN_EMAIL = "admin@platform.dev"
 ADMIN_PASSWORD = "Admin12345!"
 
-class AdminDomainRegressionTest:
+class SpotStrategyFaz1Test:
     def __init__(self):
         self.session = requests.Session()
         self.admin_token = None
@@ -61,21 +61,52 @@ class AdminDomainRegressionTest:
             self.log_result("Admin Login", False, f"Exception: {str(e)}")
             return False
             
-    def test_admin_users_flow(self):
-        """Test /admin/users endpoints: listing, filters, PATCH role, PATCH status"""
+    def test_spot_strategy_universe(self):
+        """Test GET /api/spot-strategy/universe and POST /api/spot-strategy/universe/refresh"""
         
-        # Test 1: List users - basic functionality
+        # Test 1: GET universe - basic functionality
         try:
-            response = self.session.get(f"{API_BASE}/admin/users")
+            response = self.session.get(f"{API_BASE}/spot-strategy/universe")
             if response.status_code == 200:
-                users = response.json()
-                self.log_result("Admin Users - List", True, f"Retrieved {len(users)} users")
+                universe = response.json()
+                symbols = universe.get("symbols", [])
+                self.log_result("Spot Strategy - GET Universe", True, f"Retrieved {len(symbols)} symbols")
+                
+                # Verify BTCUSDT is present
+                if "BTCUSDT" in symbols:
+                    self.log_result("Spot Strategy - Universe BTCUSDT Check", True, "BTCUSDT found in universe")
+                else:
+                    self.log_result("Spot Strategy - Universe BTCUSDT Check", False, "BTCUSDT missing from universe")
             else:
-                self.log_result("Admin Users - List", False, f"Status {response.status_code}: {response.text}")
+                self.log_result("Spot Strategy - GET Universe", False, f"Status {response.status_code}: {response.text}")
                 return False
         except Exception as e:
-            self.log_result("Admin Users - List", False, f"Exception: {str(e)}")
+            self.log_result("Spot Strategy - GET Universe", False, f"Exception: {str(e)}")
             return False
+            
+        # Test 2: POST universe refresh - admin only
+        try:
+            response = self.session.post(f"{API_BASE}/spot-strategy/universe/refresh")
+            if response.status_code == 200:
+                refresh_data = response.json()
+                universe_data = refresh_data.get("universe", {})
+                bootstrap_data = refresh_data.get("bootstrap", {})
+                symbol_count = universe_data.get("count", 0)
+                
+                self.log_result("Spot Strategy - POST Universe Refresh", True, 
+                               f"Refreshed {symbol_count} symbols, bootstrap: {bootstrap_data}")
+                
+                # Verify expected structure
+                if "universe" in refresh_data and "bootstrap" in refresh_data:
+                    self.log_result("Spot Strategy - Refresh Response Structure", True, "Valid response structure")
+                else:
+                    self.log_result("Spot Strategy - Refresh Response Structure", False, "Missing universe or bootstrap data")
+            else:
+                self.log_result("Spot Strategy - POST Universe Refresh", False, f"Status {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_result("Spot Strategy - POST Universe Refresh", False, f"Exception: {str(e)}")
+            
+        return True
             
         # Test 2: List with filters
         try:
@@ -174,222 +205,208 @@ class AdminDomainRegressionTest:
             self.log_result("Admin Users - User Modifications", False, "No suitable test user found for modifications")
             
         return True
+
+    def test_spot_strategy_market_data(self):
+        """Test GET /api/spot-strategy/market-data/BTCUSDT?limit=50"""
         
-    def test_system_alerts_flow(self):
-        """Test /admin/system-alerts endpoints: listing, filters, timeline, bulk-ack, single ack/resolve"""
-        
-        # Test 1: List system alerts
         try:
-            response = self.session.get(f"{API_BASE}/admin/system-alerts")
+            response = self.session.get(f"{API_BASE}/spot-strategy/market-data/BTCUSDT?limit=50")
             if response.status_code == 200:
-                alerts = response.json()
-                self.log_result("System Alerts - List", True, f"Retrieved {len(alerts)} alerts")
-            else:
-                self.log_result("System Alerts - List", False, f"Status {response.status_code}: {response.text}")
-                return False
-        except Exception as e:
-            self.log_result("System Alerts - List", False, f"Exception: {str(e)}")
-            return False
-            
-        # Test 2: List with filters
-        try:
-            filters = {
-                "status_filter": "open",
-                "severity": "CRITICAL",
-                "limit": 10
-            }
-            response = self.session.get(f"{API_BASE}/admin/system-alerts", params=filters)
-            if response.status_code == 200:
-                filtered_alerts = response.json()
-                self.log_result("System Alerts - Filters", True, f"Filtered results: {len(filtered_alerts)} alerts")
-            else:
-                self.log_result("System Alerts - Filters", False, f"Status {response.status_code}: {response.text}")
-        except Exception as e:
-            self.log_result("System Alerts - Filters", False, f"Exception: {str(e)}")
-            
-        # Test 3: Timeline
-        try:
-            response = self.session.get(f"{API_BASE}/admin/system-alerts/timeline", params={"days": 7})
-            if response.status_code == 200:
-                timeline_data = response.json()
-                points = timeline_data.get("points", [])
-                self.log_result("System Alerts - Timeline", True, f"Retrieved timeline with {len(points)} data points")
-            else:
-                self.log_result("System Alerts - Timeline", False, f"Status {response.status_code}: {response.text}")
-        except Exception as e:
-            self.log_result("System Alerts - Timeline", False, f"Exception: {str(e)}")
-            
-        # Create test alert for acknowledgment tests
-        test_alert_id = None
-        try:
-            # First simulate an alert to have something to ack/resolve
-            response = self.session.post(f"{API_BASE}/ops-alerts/simulate")
-            if response.status_code == 200:
-                sim_data = response.json()
-                test_alert_id = sim_data.get("alert_id")
-                self.log_result("System Alerts - Create Test Alert", True, f"Created test alert: {test_alert_id}")
-            else:
-                self.log_result("System Alerts - Create Test Alert", False, f"Status {response.status_code}: {response.text}")
-        except Exception as e:
-            self.log_result("System Alerts - Create Test Alert", False, f"Exception: {str(e)}")
-            
-        # Test 4: Single acknowledge
-        if test_alert_id:
-            try:
-                response = self.session.post(f"{API_BASE}/admin/system-alerts/{test_alert_id}/ack")
-                if response.status_code == 200:
-                    self.log_result("System Alerts - Single Ack", True, "Successfully acknowledged alert")
-                else:
-                    self.log_result("System Alerts - Single Ack", False, f"Status {response.status_code}: {response.text}")
-            except Exception as e:
-                self.log_result("System Alerts - Single Ack", False, f"Exception: {str(e)}")
+                market_data = response.json()
                 
-            # Test 5: Single resolve
-            try:
-                response = self.session.post(f"{API_BASE}/admin/system-alerts/{test_alert_id}/resolve")
-                if response.status_code == 200:
-                    self.log_result("System Alerts - Single Resolve", True, "Successfully resolved alert")
-                else:
-                    self.log_result("System Alerts - Single Resolve", False, f"Status {response.status_code}: {response.text}")
-            except Exception as e:
-                self.log_result("System Alerts - Single Resolve", False, f"Exception: {str(e)}")
-        
-        # Test 6: Bulk acknowledge
-        if alerts:
-            alert_ids = [alert["id"] for alert in alerts[:2]]  # Use first 2 alerts
-            try:
-                response = self.session.post(
-                    f"{API_BASE}/admin/system-alerts/bulk-ack",
-                    json={"ids": alert_ids}
-                )
-                if response.status_code == 200:
-                    bulk_result = response.json()
-                    count = bulk_result.get("count", 0)
-                    self.log_result("System Alerts - Bulk Ack", True, f"Bulk acknowledged {count} alerts")
-                else:
-                    self.log_result("System Alerts - Bulk Ack", False, f"Status {response.status_code}: {response.text}")
-            except Exception as e:
-                self.log_result("System Alerts - Bulk Ack", False, f"Exception: {str(e)}")
+                # Verify response structure
+                required_fields = ["symbol", "timeframe", "count", "candles"]
+                missing_fields = [field for field in required_fields if field not in market_data]
                 
-        # Test 7: Bulk acknowledge with empty IDs (should fail)
-        try:
-            response = self.session.post(
-                f"{API_BASE}/admin/system-alerts/bulk-ack",
-                json={"ids": []}
-            )
-            if response.status_code == 400:
-                self.log_result("System Alerts - Bulk Ack (empty)", True, "Correctly rejected empty IDs")
+                if not missing_fields:
+                    symbol = market_data.get("symbol")
+                    timeframe = market_data.get("timeframe")
+                    count = market_data.get("count")
+                    candles = market_data.get("candles", [])
+                    
+                    self.log_result("Spot Strategy - Market Data BTCUSDT", True, 
+                                   f"Symbol: {symbol}, Timeframe: {timeframe}, Count: {count}, Returned candles: {len(candles)}")
+                    
+                    # Verify candle structure if candles exist
+                    if candles:
+                        candle = candles[0]
+                        candle_fields = ["open", "high", "low", "close", "volume"]
+                        missing_candle_fields = [field for field in candle_fields if field not in candle]
+                        
+                        if not missing_candle_fields:
+                            self.log_result("Spot Strategy - Candle Structure", True, "Valid candle structure")
+                        else:
+                            self.log_result("Spot Strategy - Candle Structure", False, f"Missing fields: {missing_candle_fields}")
+                else:
+                    self.log_result("Spot Strategy - Market Data BTCUSDT", False, f"Missing fields: {missing_fields}")
+            elif response.status_code == 404:
+                self.log_result("Spot Strategy - Market Data BTCUSDT", False, "Market data not found - may need universe refresh first")
             else:
-                self.log_result("System Alerts - Bulk Ack (empty)", False, f"Expected 400, got {response.status_code}")
+                self.log_result("Spot Strategy - Market Data BTCUSDT", False, f"Status {response.status_code}: {response.text}")
         except Exception as e:
-            self.log_result("System Alerts - Bulk Ack (empty)", False, f"Exception: {str(e)}")
+            self.log_result("Spot Strategy - Market Data BTCUSDT", False, f"Exception: {str(e)}")
             
         return True
+
+    def test_spot_strategy_indicators(self):
+        """Test GET /api/spot-strategy/indicators/BTCUSDT"""
         
-    def test_system_alerts_config(self):
-        """Test /admin/system-alerts/config: GET + POST payload saving, response channel status/config"""
-        
-        # Test 1: GET config
         try:
-            response = self.session.get(f"{API_BASE}/admin/system-alerts/config")
+            response = self.session.get(f"{API_BASE}/spot-strategy/indicators/BTCUSDT")
             if response.status_code == 200:
-                config_data = response.json()
-                channels = config_data.get("channels", {})
-                config = config_data.get("config", {})
-                self.log_result("System Alerts Config - GET", True, 
-                               f"Retrieved config with channels: {list(channels.keys())}")
-            else:
-                self.log_result("System Alerts Config - GET", False, f"Status {response.status_code}: {response.text}")
-                return False
-        except Exception as e:
-            self.log_result("System Alerts Config - GET", False, f"Exception: {str(e)}")
-            return False
-            
-        # Test 2: POST config update
-        try:
-            test_config = {
-                "resend_api_key": "test_key_123",
-                "alert_from": "test@example.com",
-                "alert_to": "admin@example.com",
-                "slack_webhook_url": "https://hooks.slack.com/test"
-            }
-            response = self.session.post(
-                f"{API_BASE}/admin/system-alerts/config",
-                json=test_config
-            )
-            if response.status_code == 200:
-                updated_config = response.json()
-                self.log_result("System Alerts Config - POST", True, 
-                               "Successfully updated configuration")
+                indicators = response.json()
                 
-                # Verify the structure includes channels and config
-                if "channels" in updated_config and "config" in updated_config:
-                    self.log_result("System Alerts Config - Response Structure", True,
-                                   "Response includes channels and config sections")
+                # Verify required indicator fields
+                required_indicators = ["ema50", "ema200", "rsi14", "atr14", "vwap", "close", "updated_at"]
+                missing_indicators = [field for field in required_indicators if field not in indicators]
+                
+                if not missing_indicators:
+                    ema50 = indicators.get("ema50")
+                    ema200 = indicators.get("ema200") 
+                    rsi14 = indicators.get("rsi14")
+                    atr14 = indicators.get("atr14")
+                    vwap = indicators.get("vwap")
+                    
+                    self.log_result("Spot Strategy - Indicators BTCUSDT", True, 
+                                   f"EMA50: {ema50:.2f}, EMA200: {ema200:.2f}, RSI: {rsi14:.2f}, ATR: {atr14:.6f}, VWAP: {vwap:.2f}")
+                    
+                    # Validate indicator ranges
+                    if 0 <= rsi14 <= 100:
+                        self.log_result("Spot Strategy - RSI Range", True, f"RSI in valid range: {rsi14:.2f}")
+                    else:
+                        self.log_result("Spot Strategy - RSI Range", False, f"RSI out of range: {rsi14:.2f}")
+                        
+                    if atr14 >= 0:
+                        self.log_result("Spot Strategy - ATR Positive", True, f"ATR is positive: {atr14:.6f}")
+                    else:
+                        self.log_result("Spot Strategy - ATR Positive", False, f"ATR is negative: {atr14:.6f}")
                 else:
-                    self.log_result("System Alerts Config - Response Structure", False,
-                                   "Missing channels or config in response")
+                    self.log_result("Spot Strategy - Indicators BTCUSDT", False, f"Missing indicators: {missing_indicators}")
+            elif response.status_code == 404:
+                self.log_result("Spot Strategy - Indicators BTCUSDT", False, "Indicators not found - may need universe refresh first")
             else:
-                self.log_result("System Alerts Config - POST", False, f"Status {response.status_code}: {response.text}")
+                self.log_result("Spot Strategy - Indicators BTCUSDT", False, f"Status {response.status_code}: {response.text}")
         except Exception as e:
-            self.log_result("System Alerts Config - POST", False, f"Exception: {str(e)}")
+            self.log_result("Spot Strategy - Indicators BTCUSDT", False, f"Exception: {str(e)}")
             
         return True
-        
-    def test_ops_alerts_simulate(self):
-        """Test /ops-alerts/simulate: delivery_status return check"""
+
+    def test_spot_strategy_scan_run(self):
+        """Test POST /api/spot-strategy/scan/run"""
         
         try:
-            response = self.session.post(f"{API_BASE}/ops-alerts/simulate")
+            response = self.session.post(f"{API_BASE}/spot-strategy/scan/run")
             if response.status_code == 200:
-                sim_data = response.json()
-                alert_id = sim_data.get("alert_id")
-                delivery_status = sim_data.get("delivery_status")
+                scan_result = response.json()
                 
-                if alert_id and delivery_status is not None:
-                    self.log_result("Ops Alerts - Simulate", True, 
-                                   f"Alert created: {alert_id}, delivery_status: {delivery_status}")
+                # Verify required scan fields
+                required_fields = ["symbol_count", "executable_count", "top_ranked", "generated_at"]
+                missing_fields = [field for field in required_fields if field not in scan_result]
+                
+                if not missing_fields:
+                    symbol_count = scan_result.get("symbol_count")
+                    executable_count = scan_result.get("executable_count")
+                    top_ranked = scan_result.get("top_ranked", [])
+                    
+                    self.log_result("Spot Strategy - Scan Run", True, 
+                                   f"Scanned {symbol_count} symbols, {executable_count} executable, {len(top_ranked)} top ranked")
+                    
+                    # Verify top_ranked structure if present
+                    if top_ranked:
+                        first_ranked = top_ranked[0]
+                        ranked_fields = ["symbol", "signal", "signal_score"]
+                        missing_ranked_fields = [field for field in ranked_fields if field not in first_ranked]
+                        
+                        if not missing_ranked_fields:
+                            self.log_result("Spot Strategy - Top Ranked Structure", True, 
+                                           f"Valid structure: {first_ranked.get('symbol')} - {first_ranked.get('signal')} (score: {first_ranked.get('signal_score')})")
+                        else:
+                            self.log_result("Spot Strategy - Top Ranked Structure", False, f"Missing fields in top_ranked: {missing_ranked_fields}")
                 else:
-                    self.log_result("Ops Alerts - Simulate", False, 
-                                   "Missing alert_id or delivery_status in response")
+                    self.log_result("Spot Strategy - Scan Run", False, f"Missing fields: {missing_fields}")
             else:
-                self.log_result("Ops Alerts - Simulate", False, f"Status {response.status_code}: {response.text}")
+                self.log_result("Spot Strategy - Scan Run", False, f"Status {response.status_code}: {response.text}")
         except Exception as e:
-            self.log_result("Ops Alerts - Simulate", False, f"Exception: {str(e)}")
+            self.log_result("Spot Strategy - Scan Run", False, f"Exception: {str(e)}")
             
         return True
+
+    def test_spot_strategy_daily_report(self):
+        """Test POST /api/spot-strategy/report/daily/generate"""
         
-    def test_frontend_smoke(self):
-        """Frontend smoke test: Check if /admin/users and /admin/system-alerts pages are accessible"""
-        
-        # This is a backend test, but we can test if the API endpoints that power
-        # these frontend pages are working correctly
-        
-        endpoints_to_test = [
-            ("/admin/users", "Admin Users Page API"),
-            ("/admin/system-alerts", "System Alerts Page API"),
-            ("/admin/system-alerts/config", "System Alerts Config API"),
-            ("/admin/system-alerts/timeline", "System Alerts Timeline API")
-        ]
-        
-        for endpoint, name in endpoints_to_test:
-            try:
-                response = self.session.get(f"{API_BASE}{endpoint}")
-                if response.status_code == 200:
-                    self.log_result(f"Frontend Smoke - {name}", True, 
-                                   f"API endpoint accessible")
-                else:
-                    self.log_result(f"Frontend Smoke - {name}", False, 
-                                   f"Status {response.status_code}: {response.text}")
-            except Exception as e:
-                self.log_result(f"Frontend Smoke - {name}", False, f"Exception: {str(e)}")
+        try:
+            response = self.session.post(f"{API_BASE}/spot-strategy/report/daily/generate")
+            if response.status_code == 200:
+                report = response.json()
                 
+                # Verify required report fields
+                required_fields = ["date", "strategy", "win_rate", "profit_factor", "avg_trade_return", "max_drawdown", "daily_trades"]
+                missing_fields = [field for field in required_fields if field not in report]
+                
+                if not missing_fields:
+                    date = report.get("date")
+                    strategy = report.get("strategy")
+                    win_rate = report.get("win_rate")
+                    profit_factor = report.get("profit_factor")
+                    daily_trades = report.get("daily_trades")
+                    max_drawdown = report.get("max_drawdown")
+                    
+                    self.log_result("Spot Strategy - Daily Report", True, 
+                                   f"Date: {date}, Strategy: {strategy}, Trades: {daily_trades}, Win Rate: {win_rate}%, Max DD: {max_drawdown}")
+                    
+                    # Validate report ranges
+                    if 0 <= win_rate <= 100:
+                        self.log_result("Spot Strategy - Win Rate Range", True, f"Win rate in valid range: {win_rate}%")
+                    else:
+                        self.log_result("Spot Strategy - Win Rate Range", False, f"Win rate out of range: {win_rate}%")
+                        
+                    if max_drawdown >= 0:
+                        self.log_result("Spot Strategy - Max Drawdown", True, f"Max drawdown is valid: {max_drawdown}")
+                    else:
+                        self.log_result("Spot Strategy - Max Drawdown", False, f"Max drawdown is negative: {max_drawdown}")
+                else:
+                    self.log_result("Spot Strategy - Daily Report", False, f"Missing fields: {missing_fields}")
+            else:
+                self.log_result("Spot Strategy - Daily Report", False, f"Status {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_result("Spot Strategy - Daily Report", False, f"Exception: {str(e)}")
+            
+        return True
+
+    def test_pipeline_monitoring_regression(self):
+        """Test GET /api/pipeline/monitoring regression"""
+        
+        try:
+            response = self.session.get(f"{API_BASE}/pipeline/monitoring")
+            if response.status_code == 200:
+                monitoring = response.json()
+                
+                # Verify key monitoring fields
+                expected_fields = ["websocket_status", "heartbeat", "signal_rate_last_5m", "paper_trades_last_5m", 
+                                 "open_positions", "latency_ms", "queue_depth"]
+                missing_fields = [field for field in expected_fields if field not in monitoring]
+                
+                if not missing_fields:
+                    ws_status = monitoring.get("websocket_status")
+                    heartbeat = monitoring.get("heartbeat")
+                    queue_depth = monitoring.get("queue_depth")
+                    latency = monitoring.get("latency_ms")
+                    
+                    self.log_result("Pipeline Monitoring - Regression", True, 
+                                   f"WS Status: {ws_status}, Queue: {queue_depth}, Latency: {latency}ms, Heartbeat: {heartbeat}")
+                else:
+                    self.log_result("Pipeline Monitoring - Regression", False, f"Missing fields: {missing_fields}")
+            else:
+                self.log_result("Pipeline Monitoring - Regression", False, f"Status {response.status_code}: {response.text}")
+        except Exception as e:
+            self.log_result("Pipeline Monitoring - Regression", False, f"Exception: {str(e)}")
+            
         return True
         
     def run_all_tests(self):
-        """Run all regression tests"""
+        """Run all Spot Strategy Faz-1 tests"""
         print("=" * 80)
-        print("ADMIN DOMAIN REGRESSION TEST SUITE")
+        print("SPOT STRATEGY FAZ-1 BACKEND VALIDATION")
         print("=" * 80)
         print(f"Backend URL: {BACKEND_URL}")
         print(f"Admin Credentials: {ADMIN_EMAIL}")
@@ -400,25 +417,28 @@ class AdminDomainRegressionTest:
             print("\n❌ CRITICAL: Admin login failed - cannot continue with tests")
             return False
             
-        # Run test suites
-        print("\n🔄 Running admin/users flow tests...")
-        self.test_admin_users_flow()
+        # Run Spot Strategy test suites
+        print("\n🔄 Testing GET/POST /api/spot-strategy/universe...")
+        self.test_spot_strategy_universe()
         
-        print("\n🔄 Running system-alerts flow tests...")  
-        self.test_system_alerts_flow()
+        print("\n🔄 Testing GET /api/spot-strategy/market-data/BTCUSDT?limit=50...")  
+        self.test_spot_strategy_market_data()
         
-        print("\n🔄 Running system-alerts config tests...")
-        self.test_system_alerts_config()
+        print("\n🔄 Testing GET /api/spot-strategy/indicators/BTCUSDT...")
+        self.test_spot_strategy_indicators()
         
-        print("\n🔄 Running ops-alerts simulate tests...")
-        self.test_ops_alerts_simulate()
+        print("\n🔄 Testing POST /api/spot-strategy/scan/run...")
+        self.test_spot_strategy_scan_run()
         
-        print("\n🔄 Running frontend smoke tests...")
-        self.test_frontend_smoke()
+        print("\n🔄 Testing POST /api/spot-strategy/report/daily/generate...")
+        self.test_spot_strategy_daily_report()
+        
+        print("\n🔄 Testing GET /api/pipeline/monitoring regression...")
+        self.test_pipeline_monitoring_regression()
         
         # Summary
         print("\n" + "=" * 80)
-        print("TEST RESULTS SUMMARY")
+        print("SPOT STRATEGY FAZ-1 TEST RESULTS")
         print("=" * 80)
         
         passed = sum(1 for result in self.test_results if result["status"] == "PASS")
@@ -435,6 +455,8 @@ class AdminDomainRegressionTest:
             for result in self.test_results:
                 if result["status"] == "FAIL":
                     print(f"  - {result['test']}: {result['details']}")
+        else:
+            print("\n✅ ALL TESTS PASSED!")
         
         print("\n" + "=" * 80)
         
@@ -443,7 +465,7 @@ class AdminDomainRegressionTest:
 
 def main():
     """Main test runner"""
-    tester = AdminDomainRegressionTest()
+    tester = SpotStrategyFaz1Test()
     success = tester.run_all_tests()
     
     # Exit with appropriate code
