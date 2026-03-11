@@ -101,6 +101,23 @@ def _ensure_sqlite_phase4_columns():
             connection.execute(
                 text(
                     """
+                    CREATE TABLE IF NOT EXISTS execution_correction_events (
+                        id VARCHAR PRIMARY KEY,
+                        execution_metric_id VARCHAR NOT NULL,
+                        user_id VARCHAR NOT NULL,
+                        correction_type VARCHAR(40) NOT NULL DEFAULT 'annotation',
+                        reason_code VARCHAR(40) NOT NULL DEFAULT 'manual_correction',
+                        note TEXT NOT NULL DEFAULT '',
+                        patch_payload JSON NOT NULL DEFAULT '{}',
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
                     CREATE TABLE IF NOT EXISTS user_risk_settings (
                         id VARCHAR PRIMARY KEY,
                         user_id VARCHAR NOT NULL UNIQUE,
@@ -255,6 +272,23 @@ def _ensure_sqlite_phase4_columns():
                         status VARCHAR(20) NOT NULL DEFAULT 'SIM_CANCELED',
                         risk_tags JSON NOT NULL DEFAULT '[]',
                         candle_timestamp VARCHAR(40) NOT NULL DEFAULT '',
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS replay_equity_points (
+                        id VARCHAR PRIMARY KEY,
+                        replay_run_id VARCHAR NOT NULL,
+                        user_id VARCHAR NOT NULL,
+                        point_timestamp VARCHAR(40) NOT NULL DEFAULT '',
+                        equity FLOAT NOT NULL DEFAULT 0,
+                        pnl_delta FLOAT NOT NULL DEFAULT 0,
+                        drawdown_pct FLOAT NOT NULL DEFAULT 0,
                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                     )
                     """

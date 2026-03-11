@@ -1,0 +1,25 @@
+{
+  "schema_version": "execution-lifecycle-proof-v1",
+  "evidence_type": "fallback_replay",
+  "non_live_evidence": true,
+  "lifecycle_proof_status": "fallback_generated",
+  "exchange": "binance",
+  "market_type": "futures",
+  "environment": "testnet",
+  "replay_run": {
+    "run_id": "3b0a2656-04de-4380-9113-06e400918216",
+    "candles_processed": 180,
+    "executions_count": 133,
+    "filled_count": 46,
+    "canceled_count": 87,
+    "avg_simulated_latency_ms": 190.5454,
+    "avg_simulated_slippage_pct": 0.184209,
+    "status": "completed"
+  },
+  "lifecycle_distribution": {
+    "SIM_NEW": 133,
+    "SIM_FILLED": 46,
+    "SIM_CANCELED": 87
+  },
+  "generated_at": "2026-03-11T11:01:14.861057+00:00"
+}

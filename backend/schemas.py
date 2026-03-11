@@ -690,6 +690,58 @@ class ReplayRunDetailResponse(ReplayRunResponse):
     executions: list[ReplayExecutionItemResponse]
 
 
+class ReplayRiskSummaryResponse(BaseModel):
+    schema_version: str
+    run_id: str
+    strategy_version: str
+    max_drawdown: float
+    sharpe: float
+    win_rate: float
+    profit_factor: float
+    avg_slippage_bps: float
+    volatility_bucket: str
+    regime_bucket_distribution: dict[str, int]
+    exposure_breach_count: int
+    risk_reject_count: int
+    evidence_type: str
+    export_file: str
+    generated_at: datetime
+
+
+class ExecutionCorrectionCreate(BaseModel):
+    correction_type: str = "annotation"
+    reason_code: str = "manual_correction"
+    note: str = ""
+    patch_payload: dict = Field(default_factory=dict)
+
+
+class ExecutionCorrectionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    execution_metric_id: str
+    user_id: str
+    correction_type: str
+    reason_code: str
+    note: str
+    patch_payload: dict
+    created_at: datetime
+
+
+class LifecycleProofResponse(BaseModel):
+    lifecycle_proof_status: str
+    evidence_type: str
+    exchange: str
+    market_type: str
+    environment: str
+    reason_codes: list[str]
+    exchange_evidence_file: str
+    fallback_replay_evidence_file: str | None
+    replay_run_id: str | None
+    message: str
+    generated_at: datetime
+
+
 class UserPortfolioOverviewResponse(BaseModel):
     current_capital: float
     available_balance: float

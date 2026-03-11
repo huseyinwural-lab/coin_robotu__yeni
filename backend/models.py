@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
@@ -378,6 +378,19 @@ class ExecutionMetric(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ExecutionCorrectionEvent(Base):
+    __tablename__ = "execution_correction_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    execution_metric_id: Mapped[str] = mapped_column(String, ForeignKey("execution_metrics.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    correction_type: Mapped[str] = mapped_column(String(40), default="annotation")
+    reason_code: Mapped[str] = mapped_column(String(40), default="manual_correction")
+    note: Mapped[str] = mapped_column(Text, default="")
+    patch_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class ExecutionLifecycleEvent(Base):
     __tablename__ = "execution_lifecycle_events"
 
@@ -547,3 +560,21 @@ class ReplayExecution(Base):
     risk_tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     candle_timestamp: Mapped[str] = mapped_column(String(40), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ReplayEquityPoint(Base):
+    __tablename__ = "replay_equity_points"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    replay_run_id: Mapped[str] = mapped_column(String, ForeignKey("replay_runs.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    point_timestamp: Mapped[str] = mapped_column(String(40), default="")
+    equity: Mapped[float] = mapped_column(Float, default=0)
+    pnl_delta: Mapped[float] = mapped_column(Float, default=0)
+    drawdown_pct: Mapped[float] = mapped_column(Float, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+@event.listens_for(ExecutionMetric, "before_update", propagate=True)
+def _block_execution_metric_update(_, __, ___):
+    raise ValueError("execution_metric_immutable")

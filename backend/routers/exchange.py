@@ -1,12 +1,20 @@
+import json
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
 from deps import get_current_user
 from exchange.binance_mock import BinanceMockAdapter
-from models import BotProfile, ExecutionEvent, User, UserRole
+from models import BotProfile, ExecutionCorrectionEvent, ExecutionEvent, ExecutionMetric, User, UserRole
 from schemas import (
+    ExecutionCorrectionCreate,
+    ExecutionCorrectionResponse,
     ExchangeLifecycleEvidenceResponse,
+    LifecycleProofResponse,
     ExchangeTestOrderResponse,
     ExchangeValidateResponse,
     ExecutionLifecycleEventResponse,
@@ -22,9 +30,11 @@ from services.live_mode_service import (
     user_readiness_checklist,
     validate_exchange_credentials_for_user,
 )
+from services.replay_service import get_replay_run_detail, run_replay_pipeline
 
 router = APIRouter(prefix="/exchange", tags=["exchange"])
 adapter = BinanceMockAdapter(redis_client)
+EXPORT_DIR = Path("/app/backend/exports")
 
 
 @router.get("/validate", response_model=ExchangeValidateResponse)
@@ -186,6 +196,29 @@ def exchange_test_order(
     )
 
 
+@router.post("/execution/order", response_model=ExchangeTestOrderResponse)
+def exchange_execution_order(
+    exchange: str | None = Query(default=None),
+    market_type: str = Query(default="futures"),
+    environment: str | None = Query(default=None),
+    leverage: int = Query(default=1),
+    margin_mode: str = Query(default="cross"),
+    position_side: str = Query(default="BOTH"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return exchange_test_order(
+        exchange=exchange,
+        market_type=market_type,
+        environment=environment,
+        leverage=leverage,
+        margin_mode=margin_mode,
+        position_side=position_side,
+        current_user=current_user,
+        db=db,
+    )
+
+
 @router.get("/readiness-checklist", response_model=UserReadinessChecklistResponse)
 def exchange_readiness_checklist(
     exchange: str | None = Query(default=None),
@@ -227,6 +260,242 @@ def latest_lifecycle_evidence(current_user: User = Depends(get_current_user), db
             )
             for item in events
         ],
+    )
+
+
+@router.post("/execution/{execution_id}/corrections", response_model=ExecutionCorrectionResponse, status_code=status.HTTP_201_CREATED)
+def append_execution_correction(
+    execution_id: str,
+    payload: ExecutionCorrectionCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    metric = db.query(ExecutionMetric).filter(ExecutionMetric.id == execution_id, ExecutionMetric.user_id == current_user.id).first()
+    if metric is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="execution_not_found")
+
+    row = ExecutionCorrectionEvent(
+        id=str(uuid.uuid4()),
+        execution_metric_id=execution_id,
+        user_id=current_user.id,
+        correction_type=payload.correction_type,
+        reason_code=payload.reason_code,
+        note=payload.note,
+        patch_payload=payload.patch_payload,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.get("/execution/{execution_id}/corrections", response_model=list[ExecutionCorrectionResponse])
+def list_execution_corrections(
+    execution_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(ExecutionCorrectionEvent)
+        .filter(ExecutionCorrectionEvent.execution_metric_id == execution_id, ExecutionCorrectionEvent.user_id == current_user.id)
+        .order_by(ExecutionCorrectionEvent.created_at.asc())
+        .all()
+    )
+
+
+@router.post("/lifecycle-proof", response_model=LifecycleProofResponse)
+def run_lifecycle_proof_pipeline(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    exchange = "binance"
+    market_type = "futures"
+    environment = "testnet"
+    timestamp = datetime.now(timezone.utc)
+
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    proof_id = f"{current_user.id}_{timestamp.strftime('%Y%m%d%H%M%S')}"
+    exchange_file = EXPORT_DIR / f"exchange_evidence_{proof_id}.json"
+    fallback_file = EXPORT_DIR / f"fallback_replay_evidence_{proof_id}.json"
+
+    readiness = user_readiness_checklist(
+        db,
+        current_user.id,
+        exchange=exchange,
+        market_type=market_type,
+        environment=environment,
+    )
+
+    if readiness.get("readiness_status") == "ready_for_test_order":
+        try:
+            metric = run_exchange_test_order_market(
+                db,
+                current_user,
+                exchange=exchange,
+                market_type=market_type,
+                environment=environment,
+                leverage=3,
+                margin_mode="cross",
+                position_side="BOTH",
+            )
+        except ValueError as exc:
+            reason_codes = [str(exc)]
+            blocker_payload = {
+                "schema_version": "execution-lifecycle-proof-v1",
+                "evidence_type": "blocked",
+                "lifecycle_proof_status": "blocked",
+                "exchange": exchange,
+                "market_type": market_type,
+                "environment": environment,
+                "reason_codes": reason_codes,
+                "generated_at": timestamp.isoformat(),
+            }
+            with exchange_file.open("w", encoding="utf-8") as fh:
+                json.dump(blocker_payload, fh, ensure_ascii=False, indent=2, default=str)
+            return LifecycleProofResponse(
+                lifecycle_proof_status="blocked",
+                evidence_type="blocked",
+                exchange=exchange,
+                market_type=market_type,
+                environment=environment,
+                reason_codes=reason_codes,
+                exchange_evidence_file=str(exchange_file),
+                fallback_replay_evidence_file=None,
+                replay_run_id=None,
+                message="Live lifecycle proof denemesi başarısız",
+                generated_at=timestamp,
+            )
+        timeline = lifecycle_evidence_for_metric(db, metric.id)
+        payload = {
+            "schema_version": "execution-lifecycle-proof-v1",
+            "evidence_type": "live_exchange",
+            "lifecycle_proof_status": "completed",
+            "exchange": exchange,
+            "market_type": market_type,
+            "environment": environment,
+            "execution": {
+                "execution_id": metric.id,
+                "exchange_order_id": metric.exchange_order_id,
+                "client_order_id": metric.client_order_id,
+                "submitted_at": metric.submitted_at.isoformat() if metric.submitted_at else None,
+                "ack_at": metric.ack_at.isoformat() if metric.ack_at else None,
+                "final_at": metric.final_at.isoformat() if metric.final_at else None,
+                "avg_fill_price": metric.price_avg,
+                "executed_qty": metric.executed_qty,
+                "execution_time_ms": metric.execution_time_ms,
+                "slippage_pct": metric.slippage_pct,
+                "validation_snapshot_id": metric.validation_snapshot_id,
+                "state_machine_path": metric.state_machine_path,
+            },
+            "timeline": [
+                {
+                    "event_name": item.event_name,
+                    "event_timestamp": item.event_timestamp.isoformat(),
+                    "payload": item.payload,
+                }
+                for item in timeline
+            ],
+            "generated_at": timestamp.isoformat(),
+        }
+        with exchange_file.open("w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=2, default=str)
+
+        return LifecycleProofResponse(
+            lifecycle_proof_status="completed",
+            evidence_type="live_exchange",
+            exchange=exchange,
+            market_type=market_type,
+            environment=environment,
+            reason_codes=[],
+            exchange_evidence_file=str(exchange_file),
+            fallback_replay_evidence_file=None,
+            replay_run_id=None,
+            message="Gerçek Binance Futures Testnet lifecycle proof tamamlandı",
+            generated_at=timestamp,
+        )
+
+    reason_codes = [readiness.get("last_error_reason") or "awaiting_valid_key"]
+    blocker_payload = {
+        "schema_version": "execution-lifecycle-proof-v1",
+        "evidence_type": "blocked",
+        "lifecycle_proof_status": "blocked",
+        "exchange": exchange,
+        "market_type": market_type,
+        "environment": environment,
+        "reason_codes": reason_codes,
+        "readiness": readiness,
+        "generated_at": timestamp.isoformat(),
+    }
+    with exchange_file.open("w", encoding="utf-8") as fh:
+        json.dump(blocker_payload, fh, ensure_ascii=False, indent=2, default=str)
+
+    try:
+        replay_run = run_replay_pipeline(
+            db,
+            current_user.id,
+            exchange=exchange,
+            market_type=market_type,
+            environment=environment,
+            symbol="BTCUSDT",
+            timeframe="15m",
+            strategy_type="trend_following",
+            limit=180,
+        )
+        run, executions = get_replay_run_detail(db, current_user.id, replay_run.id)
+    except ValueError as exc:
+        return LifecycleProofResponse(
+            lifecycle_proof_status="blocked",
+            evidence_type="blocked",
+            exchange=exchange,
+            market_type=market_type,
+            environment=environment,
+            reason_codes=reason_codes + [str(exc)],
+            exchange_evidence_file=str(exchange_file),
+            fallback_replay_evidence_file=None,
+            replay_run_id=None,
+            message="Live proof bloklu; fallback replay üretimi de başarısız",
+            generated_at=timestamp,
+        )
+    fallback_payload = {
+        "schema_version": "execution-lifecycle-proof-v1",
+        "evidence_type": "fallback_replay",
+        "non_live_evidence": True,
+        "lifecycle_proof_status": "fallback_generated",
+        "exchange": exchange,
+        "market_type": market_type,
+        "environment": environment,
+        "replay_run": {
+            "run_id": run.id,
+            "candles_processed": run.candles_processed,
+            "executions_count": run.executions_count,
+            "filled_count": run.filled_count,
+            "canceled_count": run.canceled_count,
+            "avg_simulated_latency_ms": run.avg_simulated_latency_ms,
+            "avg_simulated_slippage_pct": run.avg_simulated_slippage_pct,
+            "status": run.status,
+        },
+        "lifecycle_distribution": {
+            "SIM_NEW": len(executions),
+            "SIM_FILLED": sum(1 for item in executions if item.status == "SIM_FILLED"),
+            "SIM_CANCELED": sum(1 for item in executions if item.status == "SIM_CANCELED"),
+        },
+        "generated_at": timestamp.isoformat(),
+    }
+    with fallback_file.open("w", encoding="utf-8") as fh:
+        json.dump(fallback_payload, fh, ensure_ascii=False, indent=2, default=str)
+
+    return LifecycleProofResponse(
+        lifecycle_proof_status="fallback_generated",
+        evidence_type="blocked",
+        exchange=exchange,
+        market_type=market_type,
+        environment=environment,
+        reason_codes=reason_codes,
+        exchange_evidence_file=str(exchange_file),
+        fallback_replay_evidence_file=str(fallback_file),
+        replay_run_id=run.id,
+        message="Live proof bloklu; fallback replay evidence üretildi",
+        generated_at=timestamp,
     )
 
 

@@ -1,0 +1,20 @@
+{
+  "schema_version": "replay-risk-summary-v1",
+  "run_id": "12f5fc96-23ce-49d5-80ef-0123597f12e0",
+  "strategy_version": "trend_following-v1",
+  "max_drawdown": 1.918143,
+  "sharpe": -4.140358,
+  "win_rate": 21.7391,
+  "profit_factor": 0.280151,
+  "avg_slippage_bps": 18.420909,
+  "volatility_bucket": "low",
+  "regime_bucket_distribution": {
+    "high_volatility": 44,
+    "low_confidence": 64,
+    "normal": 26
+  },
+  "exposure_breach_count": 44,
+  "risk_reject_count": 88,
+  "evidence_type": "fallback_replay",
+  "generated_at": "2026-03-11T10:57:31.245774+00:00"
+}

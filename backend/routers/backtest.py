@@ -7,11 +7,17 @@ from models import BacktestResultCard, User
 from schemas import (
     BacktestResultCardResponse,
     ReplayExecutionItemResponse,
+    ReplayRiskSummaryResponse,
     ReplayRunDetailResponse,
     ReplayRunRequest,
     ReplayRunResponse,
 )
-from services.replay_service import get_replay_run_detail, run_replay_pipeline
+from services.replay_service import (
+    compute_replay_risk_summary,
+    export_replay_risk_summary,
+    get_replay_run_detail,
+    run_replay_pipeline,
+)
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
@@ -106,4 +112,31 @@ def get_replay_run(run_id: str, current_user: User = Depends(get_current_user), 
             )
             for item in executions
         ],
+    )
+
+
+@router.get("/replay/{run_id}/risk-summary", response_model=ReplayRiskSummaryResponse)
+def replay_risk_summary(run_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        summary = compute_replay_risk_summary(db, current_user.id, run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    export_file = export_replay_risk_summary(summary)
+    return ReplayRiskSummaryResponse(
+        schema_version=summary["schema_version"],
+        run_id=summary["run_id"],
+        strategy_version=summary["strategy_version"],
+        max_drawdown=summary["max_drawdown"],
+        sharpe=summary["sharpe"],
+        win_rate=summary["win_rate"],
+        profit_factor=summary["profit_factor"],
+        avg_slippage_bps=summary["avg_slippage_bps"],
+        volatility_bucket=summary["volatility_bucket"],
+        regime_bucket_distribution=summary["regime_bucket_distribution"],
+        exposure_breach_count=summary["exposure_breach_count"],
+        risk_reject_count=summary["risk_reject_count"],
+        evidence_type=summary["evidence_type"],
+        export_file=export_file,
+        generated_at=summary["generated_at"],
     )
