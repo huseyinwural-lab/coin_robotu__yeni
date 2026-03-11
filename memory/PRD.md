@@ -677,12 +677,18 @@
 - Release gate CLI ve admin UI statü renkleri güncellendi.
 - Testler: curl batch verify + release gate; Playwright: proofs + phase4 live control.
 
+### 2026-03-11 (Faz-7.3/7.4/7.6/7.7 — Hardening Blok-2)
+- Runtime DLQ/Quarantine eklendi: retry queue + dead letter + quarantine; max_retry=3 ve exponential backoff.
+- Quarantine admin ekranı (/admin/runtime/quarantine) + replay/dismiss/mark_failed aksiyonları.
+- Stuck intent recovery servisi + admin ekranı (/admin/runtime/recovery) + sync/replay/cancel/mark_failed aksiyonları.
+- System alerts tablosu + admin dashboard banner + ack endpointleri (internal alert pipeline).
+- Risk orchestrator analytics endpointi + UI (/admin/risk-orchestrator/analytics), audit tabanlı trend ve dağılımlar.
+- Release gate chain/risk alertleri + kill-switch audit + günlük loss uyarıları.
+- Testler: curl stuck-intents + analytics + system-alerts, Playwright runtime quarantine/recovery/analytics.
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
-- Faz-7.3: DLQ + poison message quarantine (retry limit, quarantine reason, admin list + reprocess/dismiss)
-- Faz-7.4: Stuck intent recovery (timeout policy, resync/mark_failed/replay_from_last_safe_event)
-- Faz-7.6: Kritik breach alert pipeline (admin internal alert + duplicate suppression)
-- Faz-7.7: Breach trend / operasyon görünürlüğü (breach count, reject dağılımı, backlog metrikleri)
+- Slack/Email webhook entegrasyonu (system alert pipeline v2)
 - Geçerli Binance Testnet key ile live order lifecycle proof (BLOCKED: key bekleniyor)
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
@@ -704,10 +710,7 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Faz-7.3 DLQ + poison message quarantine
-2. Faz-7.4 Stuck intent recovery
-3. Faz-7.6 Kritik breach alert pipeline
-4. Faz-7.7 Breach trend görünürlüğü
-5. Geçerli Binance Testnet key geldiğinde live order lifecycle proof
-6. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
-7. Replay-native analytics (param sweep) için ilk UI/deney seti
+1. Slack/Email webhook entegrasyonu (system alerts v2)
+2. Live testnet key ile order lifecycle proof (validate → test-order)
+3. User approval paneline arama/sıralama + toplu onay (bulk action)
+4. Replay-native analytics (param sweep) için ilk UI/deney seti

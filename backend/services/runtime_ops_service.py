@@ -75,6 +75,8 @@ def list_stuck_intents(
     intents = db.query(ExecutionIntent).order_by(ExecutionIntent.created_at.desc()).limit(200).all()
 
     for intent in intents:
+        if _has_terminal_event(db, intent.intent_id):
+            continue
         latest = _latest_intent_event(db, intent.intent_id)
         status = latest.event_status if latest else intent.status or "pending"
         last_event_at = latest.created_at if latest else intent.created_at
