@@ -8,6 +8,7 @@ import {
   Cpu,
   Globe,
   History,
+  KeyRound,
   LineChart,
   ListChecks,
   Radio,
@@ -29,6 +30,7 @@ const userNavItems = [
   { to: "/user/risk-policies", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
   { to: "/user/strategies", label: "Strategy Template", icon: ClipboardList, testId: "nav-strategy-templates-link" },
   { to: "/user/backtest-insights", label: "Backtest Insights", icon: LineChart, testId: "nav-backtest-insights-link" },
+  { to: "/user/exchange-settings", label: "Exchange Settings", icon: KeyRound, testId: "nav-user-exchange-settings-link" },
   { to: "/user/positions", label: "Paper Positions", icon: Activity, testId: "nav-paper-positions-link" },
   { to: "/user/exchange-mock", label: "Exchange Mock", icon: TestTube2, testId: "nav-exchange-mock-link" },
 ];

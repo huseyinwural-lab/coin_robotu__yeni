@@ -144,7 +144,7 @@ class TestUserRegistrationAndApprovalFlow:
         assert data["email"] == test_email
         assert data["role"] == "user"
         assert data["approval_status"] == "pending"
-        assert data["is_active"] == False
+        assert not data["is_active"]
         print(f"User registered: {test_email}, status={data['approval_status']}, active={data['is_active']}")
 
     def test_pending_user_cannot_login(self):
@@ -225,7 +225,7 @@ class TestUserRegistrationAndApprovalFlow:
         assert approve_response.status_code == 200
         approved_user = approve_response.json()
         assert approved_user["approval_status"] == "approved"
-        assert approved_user["is_active"] == True
+        assert approved_user["is_active"]
         print(f"Step 4: User approved, status={approved_user['approval_status']}, active={approved_user['is_active']}")
 
         # Step 5: User can now login
@@ -266,7 +266,7 @@ class TestUserRegistrationAndApprovalFlow:
         assert reject_response.status_code == 200
         rejected_user = reject_response.json()
         assert rejected_user["approval_status"] == "rejected"
-        assert rejected_user["is_active"] == False
+        assert not rejected_user["is_active"]
         print(f"User rejected: status={rejected_user['approval_status']}")
 
         # Rejected user cannot login

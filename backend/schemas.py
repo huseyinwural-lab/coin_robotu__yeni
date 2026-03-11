@@ -459,6 +459,7 @@ class PermissionCheckResponse(BaseModel):
     credential_fingerprint: str
     status: str
     message: str
+    controls: list[dict] = Field(default_factory=list)
 
 
 class TestnetConnectivityResponse(BaseModel):
@@ -467,3 +468,78 @@ class TestnetConnectivityResponse(BaseModel):
     rest_url: str
     ws_url: str
     message: str
+
+
+class ExchangeSettingsUpdateRequest(BaseModel):
+    exchange: str = "binance"
+    mode: str = "testnet"
+    api_key: str
+    api_secret: str
+
+
+class ExchangeSettingsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    exchange: str
+    mode: str
+    has_api_key: bool
+    has_api_secret: bool
+    updated_at: datetime | None
+
+
+class PermissionControlResult(BaseModel):
+    key: str
+    status: str
+    reason: str
+    timestamp: str
+
+
+class PermissionStatusResponse(BaseModel):
+    overall_status: str
+    live_activation: str
+    controls: list[PermissionControlResult]
+
+
+class TestOrderResponse(BaseModel):
+    execution_id: str
+    symbol: str
+    strategy_direction: str
+    status: str
+    state_machine_path: list[str]
+    expected_price: float
+    fill_price: float | None
+    slippage: float | None
+    execution_latency: float | None
+    execution_quality_score: float
+    release_gate_status: str
+    timestamp: str
+
+
+class ExecutionQualitySummaryResponse(BaseModel):
+    execution_id: str
+    symbol: str
+    status: str
+    expected_price: float
+    fill_price: float | None
+    slippage: float | None
+    execution_latency: float | None
+    execution_quality_score: float
+    timestamp: datetime
+
+
+class ReleaseGateStatusResponse(BaseModel):
+    status: str
+    reasons: list[str]
+    live_activation: str
+
+
+class LiveReadinessScoreResponse(BaseModel):
+    readiness_score: float
+    permission_ready: bool
+    risk_engine_pass: bool
+    execution_simulation_pass: bool
+    correlation_model_pass: bool
+    hardening_checklist_pass: bool
+    release_gate_status: str
+    live_activation: str
+    critical_blockers: list[str]

@@ -27,19 +27,39 @@ export const Phase4LiveControlPage = () => {
   const [config, setConfig] = useState(initialConfig);
   const [readiness, setReadiness] = useState(null);
   const [connectivity, setConnectivity] = useState(null);
+  const [readinessScore, setReadinessScore] = useState(null);
+  const [releaseGate, setReleaseGate] = useState(null);
+  const [qualityRows, setQualityRows] = useState([]);
+  const [permissionStatus, setPermissionStatus] = useState(null);
   const [permissionResult, setPermissionResult] = useState(null);
   const [permissionForm, setPermissionForm] = useState({ api_key: "", api_secret: "" });
 
   const loadAll = useCallback(async () => {
     try {
-      const [{ data: configData }, { data: readinessData }, { data: connectivityData }] = await Promise.all([
+      const [
+        { data: configData },
+        { data: readinessData },
+        { data: connectivityData },
+        { data: readinessScoreData },
+        { data: releaseGateData },
+        { data: qualityData },
+        { data: permissionStatusData },
+      ] = await Promise.all([
         apiClient.get("/phase4/live-config"),
         apiClient.get("/phase4/readiness-check"),
         apiClient.get("/phase4/testnet-connectivity"),
+        apiClient.get("/phase4/admin/live-readiness-score"),
+        apiClient.get("/phase4/admin/release-gate"),
+        apiClient.get("/phase4/admin/execution-quality?limit=20"),
+        apiClient.get("/phase4/admin/permission-status"),
       ]);
       setConfig(configData);
       setReadiness(readinessData);
       setConnectivity(connectivityData);
+      setReadinessScore(readinessScoreData);
+      setReleaseGate(releaseGateData);
+      setQualityRows(qualityData);
+      setPermissionStatus(permissionStatusData);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Phase-4 panel verisi alınamadı");
     }
@@ -103,6 +123,42 @@ export const Phase4LiveControlPage = () => {
         <MetricCard label="Market" value={readiness?.market_type || "-"} tone="blue" testId="phase4-metric-market" />
         <MetricCard label="Whitelist" value={config?.symbol_whitelist?.join(",") || "-"} tone="orange" testId="phase4-metric-whitelist" />
         <MetricCard label="Testnet" value={connectivity?.status || "-"} tone={connectivity?.status === "reachable" ? "blue" : "red"} testId="phase4-metric-testnet" />
+        <MetricCard label="Live Readiness" value={readinessScore?.readiness_score ?? "-"} tone={Number(readinessScore?.readiness_score || 0) >= 80 ? "blue" : "red"} testId="phase4-metric-live-readiness-score" />
+        <MetricCard label="Release Gate" value={releaseGate?.status || "-"} tone={releaseGate?.status === "PASS" ? "blue" : releaseGate?.status === "WARNING" ? "orange" : "red"} testId="phase4-metric-release-gate" />
+        <MetricCard label="Live Activation" value={releaseGate?.live_activation || "disabled"} tone={releaseGate?.live_activation === "guarded" ? "orange" : "red"} testId="phase4-metric-live-activation" />
+      </div>
+
+      <div className="border border-red-500/30 bg-red-950/10 p-4" data-testid="phase4-release-gate-panel">
+        <p className="text-xs uppercase tracking-widest text-red-300" data-testid="phase4-release-gate-title">Dry-Run Release Gate</p>
+        <p className="mt-2 text-sm text-slate-300" data-testid="phase4-release-gate-status">Status: {releaseGate?.status || "-"}</p>
+        <div className="mt-2 space-y-1" data-testid="phase4-release-gate-reasons-list">
+          {(releaseGate?.reasons || []).map((item, index) => (
+            <p key={`${item}-${index}`} className="text-xs font-mono text-red-200" data-testid={`phase4-release-gate-reason-${index}`}>{item}</p>
+          ))}
+        </div>
+      </div>
+
+      <div className="border border-blue-900 bg-slate-900 p-4" data-testid="phase4-live-readiness-factor-panel">
+        <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="phase4-live-readiness-factor-title">Live Readiness Factors</p>
+        <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="phase4-live-readiness-factor-grid">
+          <p data-testid="phase4-factor-permission">permission_ready: {String(readinessScore?.permission_ready || false)}</p>
+          <p data-testid="phase4-factor-risk">risk_engine_pass: {String(readinessScore?.risk_engine_pass || false)}</p>
+          <p data-testid="phase4-factor-execution">execution_simulation_pass: {String(readinessScore?.execution_simulation_pass || false)}</p>
+          <p data-testid="phase4-factor-correlation">correlation_model_pass: {String(readinessScore?.correlation_model_pass || false)}</p>
+          <p data-testid="phase4-factor-hardening">hardening_checklist_pass: {String(readinessScore?.hardening_checklist_pass || false)}</p>
+        </div>
+      </div>
+
+      <div className="border border-slate-800 bg-slate-900 p-4" data-testid="phase4-permission-status-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="phase4-permission-status-title">Permission Status</p>
+        <p className="mt-2 text-sm text-slate-300" data-testid="phase4-permission-status-overall">overall={permissionStatus?.overall_status || "-"} | live_activation={permissionStatus?.live_activation || "-"}</p>
+        <div className="mt-2 space-y-1" data-testid="phase4-permission-status-controls-list">
+          {(permissionStatus?.controls || []).map((item) => (
+            <p key={item.key} className="font-mono text-xs text-slate-300" data-testid={`phase4-permission-status-control-${item.key}`}>
+              {item.key}: {item.status} ({item.reason})
+            </p>
+          ))}
+        </div>
       </div>
 
       <div className="border border-blue-900 bg-slate-900 p-4" data-testid="phase4-testnet-connectivity-panel">
@@ -182,6 +238,42 @@ export const Phase4LiveControlPage = () => {
                 <TableCell data-testid={`phase4-readiness-status-${item.key}`}>{item.status}</TableCell>
               </TableRow>
             ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="border border-slate-800 bg-slate-900" data-testid="phase4-execution-quality-table-wrapper">
+        <Table data-testid="phase4-execution-quality-table">
+          <TableHeader>
+            <TableRow>
+              <TableHead data-testid="phase4-exec-quality-head-time">Timestamp</TableHead>
+              <TableHead data-testid="phase4-exec-quality-head-symbol">Symbol</TableHead>
+              <TableHead data-testid="phase4-exec-quality-head-expected">Expected</TableHead>
+              <TableHead data-testid="phase4-exec-quality-head-fill">Fill</TableHead>
+              <TableHead data-testid="phase4-exec-quality-head-slippage">Slippage</TableHead>
+              <TableHead data-testid="phase4-exec-quality-head-latency">Latency</TableHead>
+              <TableHead data-testid="phase4-exec-quality-head-score">Quality Score</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {qualityRows.map((item) => (
+              <TableRow key={item.execution_id} data-testid={`phase4-exec-quality-row-${item.execution_id}`}>
+                <TableCell className="font-mono text-xs" data-testid={`phase4-exec-quality-time-${item.execution_id}`}>{new Date(item.timestamp).toLocaleString()}</TableCell>
+                <TableCell data-testid={`phase4-exec-quality-symbol-${item.execution_id}`}>{item.symbol}</TableCell>
+                <TableCell data-testid={`phase4-exec-quality-expected-${item.execution_id}`}>{item.expected_price}</TableCell>
+                <TableCell data-testid={`phase4-exec-quality-fill-${item.execution_id}`}>{item.fill_price ?? "-"}</TableCell>
+                <TableCell data-testid={`phase4-exec-quality-slippage-${item.execution_id}`}>{item.slippage ?? "-"}</TableCell>
+                <TableCell data-testid={`phase4-exec-quality-latency-${item.execution_id}`}>{item.execution_latency ?? "-"}</TableCell>
+                <TableCell data-testid={`phase4-exec-quality-score-${item.execution_id}`}>{item.execution_quality_score}</TableCell>
+              </TableRow>
+            ))}
+            {qualityRows.length === 0 && (
+              <TableRow data-testid="phase4-exec-quality-empty-row">
+                <TableCell colSpan={7} className="text-center text-sm text-slate-400" data-testid="phase4-exec-quality-empty-text">
+                  Henüz test order execution kaydı yok.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>

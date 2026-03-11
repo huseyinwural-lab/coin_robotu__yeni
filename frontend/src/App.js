@@ -28,6 +28,7 @@ import { RiskPoliciesPage } from "@/pages/RiskPoliciesPage";
 import { StateRebuildLogsPage } from "@/pages/StateRebuildLogsPage";
 import { StrategyTemplatesPage } from "@/pages/StrategyTemplatesPage";
 import { UserLoginPage } from "@/pages/UserLoginPage";
+import { UserExchangeSettingsPage } from "@/pages/UserExchangeSettingsPage";
 import { UserDashboardPage } from "@/pages/UserDashboardPage";
 
 const HomeRedirect = () => {
@@ -89,6 +90,7 @@ function App() {
             <Route path="risk-policies" element={<RiskPoliciesPage />} />
             <Route path="strategies" element={<StrategyTemplatesPage />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
+            <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />
             <Route path="positions" element={<PaperPositionsPage />} />
             <Route path="exchange-mock" element={<ExchangeMockPage />} />
           </Route>
