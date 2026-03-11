@@ -5,6 +5,7 @@ from db import get_db
 from deps import get_current_user, require_admin
 from models import User
 from services.audit_service import create_audit_log
+from services.pipeline.spot_dynamic_score_engine import run_dynamic_selection_cycle
 from services.pipeline.runtime import pipeline_runtime
 from services.pipeline.spot_strategy_service import (
     MIN_15M_CANDLES,
@@ -12,7 +13,6 @@ from services.pipeline.spot_strategy_service import (
     generate_daily_strategy_report,
     get_spot_tradable_universe,
     refresh_spot_tradable_universe,
-    scan_spot_universe_for_signals,
 )
 
 router = APIRouter(prefix="/spot-strategy", tags=["spot_strategy"])
@@ -92,22 +92,49 @@ def get_daily_report(_: User = Depends(get_current_user)):
 
 
 @router.post("/scan/run")
-def run_spot_scan(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    payload = scan_spot_universe_for_signals(pipeline_runtime.cache)
+def run_spot_scan(current_admin: User = Depends(require_admin), db: Session = Depends(get_db), top_n: int = Query(default=10, ge=1, le=30)):
+    universe = get_spot_tradable_universe(pipeline_runtime.cache)
+    symbols = [symbol.upper() for symbol in universe.get("symbols", [])]
+    payload = run_dynamic_selection_cycle(
+        pipeline_runtime.cache,
+        symbols=symbols,
+        open_symbols=set(),
+        available_slots=top_n,
+    )
+    top_ranked = payload.get("ranked", [])[:20]
+    selected = payload.get("selected", [])
+    response_payload = {
+        **payload,
+        "symbol_count": payload.get("symbol_count", len(top_ranked)),
+        "executable_count": len(selected),
+        "top_ranked": [
+            {
+                "symbol": item.get("symbol"),
+                "signal": item.get("signal"),
+                "signal_score": item.get("adjusted_score", 0),
+                "base_score": item.get("base_score", 0),
+                "adjusted_score": item.get("adjusted_score", 0),
+                "reason_codes": item.get("reason_codes", []),
+            }
+            for item in top_ranked
+        ],
+    }
     create_audit_log(
         db,
         action="SPOT_SCAN_COMPLETED",
         entity_type="spot_strategy_scan",
-        entity_id=payload.get("generated_at", "-"),
+        entity_id=response_payload.get("generated_at", "-"),
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
         severity="info",
         details={
-            "symbol_count": payload.get("symbol_count", 0),
-            "executable_count": payload.get("executable_count", 0),
+            "symbol_count": response_payload.get("symbol_count", 0),
+            "executable_count": response_payload.get("executable_count", 0),
+            "market_regime": response_payload.get("market_regime"),
+            "multiplier_version": response_payload.get("multiplier_version"),
         },
     )
-    return payload
+    return response_payload
 
 
 @router.get("/scan/latest")
@@ -117,4 +144,18 @@ def get_latest_scan(_: User = Depends(get_current_user)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="scan_not_found")
     import json
 
-    return json.loads(payload)
+    data = json.loads(payload)
+    if "top_ranked" not in data and "ranked" in data:
+        data["top_ranked"] = [
+            {
+                "symbol": item.get("symbol"),
+                "signal": item.get("signal"),
+                "signal_score": item.get("adjusted_score", 0),
+                "base_score": item.get("base_score", 0),
+                "adjusted_score": item.get("adjusted_score", 0),
+                "reason_codes": item.get("reason_codes", []),
+            }
+            for item in data.get("ranked", [])[:20]
+        ]
+        data["executable_count"] = len(data.get("selected", []))
+    return data

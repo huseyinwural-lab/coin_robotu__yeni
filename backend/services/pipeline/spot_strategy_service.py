@@ -548,12 +548,18 @@ def generate_daily_strategy_report(db: Session, cache, report_day: date | None =
     avg_trade_return = fmean(returns) if returns else 0.0
     daily_trades = len(closed_today)
 
+    multiplier_contract = get_json(cache, "spot_strategy:multiplier_contract") or {}
+    last_scan = get_json(cache, "spot_strategy:last_scan") or {}
+
     metrics = {
         "signals_total": int(cache.get("spot_strategy:signals_total:day") or 0),
+        "signals_after_hard_gate": int(cache.get("spot_strategy:signals_after_hard_gate:day") or 0),
+        "signals_above_threshold": int(cache.get("spot_strategy:signals_above_threshold:day") or 0),
+        "signals_selected": int(cache.get("spot_strategy:signals_selected:day") or 0),
+        "signals_selected_for_execution": int(cache.get("spot_strategy:signals_selected:day") or 0),
         "signals_rejected_trend_strength": int(cache.get("spot_strategy:rejected:trend_strength_weak") or 0),
-        "signals_rejected_volume": int(cache.get("spot_strategy:rejected:relative_volume_low") or 0),
         "signals_rejected_btc_regime": int(cache.get("spot_strategy:rejected:btc_regime_hostile") or 0),
-        "signals_rejected_pullback_quality": int(cache.get("spot_strategy:rejected:pullback_quality_low") or 0),
+        "signals_rejected_freeze_guard": int(cache.get("spot_strategy:rejected:freeze_guard") or 0),
         "executed_signals": int(cache.get("spot_strategy:executed_signals:day") or 0),
         "avg_signal_score": _safe_float(cache.get("spot_strategy:avg_signal_score:day"), 0.0),
     }
@@ -561,6 +567,12 @@ def generate_daily_strategy_report(db: Session, cache, report_day: date | None =
     report = {
         "date": target_day.isoformat(),
         "strategy": "spot_pullback_v1",
+        "market_regime": last_scan.get("market_regime", "RANGING"),
+        "multiplier_version": multiplier_contract.get("multiplier_version", "v1"),
+        "multiplier_set": multiplier_contract.get("multiplier_set", {}),
+        "base_score": round(_safe_float((last_scan.get("selected") or [{}])[0].get("base_score"), 0.0), 4) if last_scan.get("selected") else 0.0,
+        "adjusted_score": round(_safe_float((last_scan.get("selected") or [{}])[0].get("adjusted_score"), 0.0), 4) if last_scan.get("selected") else 0.0,
+        "score_delta": round(_safe_float((last_scan.get("selected") or [{}])[0].get("score_delta"), 0.0), 4) if last_scan.get("selected") else 0.0,
         "win_rate": round(win_rate, 4),
         "profit_factor": round(profit_factor, 6),
         "avg_trade_return": round(avg_trade_return, 6),

@@ -204,6 +204,13 @@ def open_paper_position(
                 "execution_event_id": execution_event.id,
                 "execution_policy": execution_policy,
                 "strategy_id": response_payload.get("strategy_id"),
+                "strategy_name": response_payload.get("strategy_name"),
+                "market_regime": response_payload.get("market_regime"),
+                "multiplier_version": response_payload.get("multiplier_version"),
+                "base_score": response_payload.get("base_score"),
+                "adjusted_score": response_payload.get("adjusted_score"),
+                "score_delta": response_payload.get("score_delta"),
+                "selection_rank": response_payload.get("selection_rank"),
                 "lifecycle_state": "OPEN",
             },
         )

@@ -1,6 +1,18 @@
 {
   "date": "2026-03-11",
   "strategy": "spot_pullback_v1",
+  "market_regime": "RANGING",
+  "multiplier_version": "v1",
+  "multiplier_set": {
+    "trend_quality_multiplier": 0.9,
+    "pullback_quality_multiplier": 1.05,
+    "relative_volume_multiplier": 1.1,
+    "volatility_quality_multiplier": 1.0,
+    "structure_quality_multiplier": 1.0
+  },
+  "base_score": 0.0,
+  "adjusted_score": 0.0,
+  "score_delta": 0.0,
   "win_rate": 0.0,
   "profit_factor": 0.0,
   "avg_trade_return": 0.0,
@@ -8,13 +20,16 @@
   "daily_trades": 0,
   "positions_closed": 0,
   "metrics": {
-    "signals_total": 0,
-    "signals_rejected_trend_strength": 0,
-    "signals_rejected_volume": 0,
+    "signals_total": 30,
+    "signals_after_hard_gate": 27,
+    "signals_above_threshold": 27,
+    "signals_selected": 0,
+    "signals_selected_for_execution": 0,
+    "signals_rejected_trend_strength": 3,
     "signals_rejected_btc_regime": 0,
-    "signals_rejected_pullback_quality": 0,
+    "signals_rejected_freeze_guard": 0,
     "executed_signals": 0,
     "avg_signal_score": 0.0
   },
-  "generated_at": "2026-03-11T20:35:26.629184+00:00"
+  "generated_at": "2026-03-11T21:03:28.816058+00:00"
 }

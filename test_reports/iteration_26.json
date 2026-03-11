@@ -1,0 +1,106 @@
+{
+  "summary": "Faz-2 (P1) Dynamic Score Engine testing completed. All 18 backend tests passed. Frontend admin smoke test (System/Users pages) passed. New features verified: market_regime (RANGING|TRENDING|VOLATILE), multiplier_version=v1, multiplier_set (5 bounded multipliers 0.75-1.25), threshold=55, freeze_guard, metrics (signals_total/after_hard_gate/above_threshold/selected/rejected_*). Daily report includes new fields. Regression endpoints all working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_spot_strategy_faz2_dynamic_score.py",
+    "/app/test_reports/pytest/pytest_results_iter26_faz2_dynamic_score.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Dynamic score engine correctly implements TRENDING/RANGING/VOLATILE market regime classification",
+    "Multiplier version v1 with 5 component multipliers: trend_quality, pullback_quality, relative_volume, volatility_quality, structure_quality",
+    "All multipliers correctly bounded within [0.75, 1.25] range per config",
+    "Threshold (min_adjusted_score) configurable, default 55",
+    "BTC hostile freeze guard (2 candle) implemented in scan response",
+    "Selection ordering deterministic: top_ranked sorted by adjusted_score descending",
+    "Daily report includes all new fields: market_regime, multiplier_version, multiplier_set, base_score, adjusted_score, score_delta, metrics",
+    "Metrics include: signals_total, signals_after_hard_gate, signals_above_threshold, signals_selected, signals_rejected_trend_strength, signals_rejected_btc_regime, signals_rejected_freeze_guard"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_spot_strategy_faz2_dynamic_score.py"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 tests passed)",
+    "frontend": "100% (Admin System/Users smoke test passed)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!"
+  },
+  "seed_data_creation": "None - used existing universe data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Faz-2 P1 Dynamic Score Engine fully verified. Scan returns market_regime (currently RANGING based on BTC indicators), multiplier_version=v1, multiplier_set with 5 bounded multipliers, threshold=55, freeze_guard status, and comprehensive metrics. Selection produces 0 executable signals currently (market conditions not meeting all pullback criteria - expected). Daily report has all new score and metrics fields. Pipeline monitoring shows ws_status=reconnecting (synthetic data mode), kill_switch active. Top N widget intentionally not implemented per P2 scope.",
+  "features_verified": {
+    "scan_run_endpoint": {
+      "endpoint": "POST /api/spot-strategy/scan/run",
+      "status": "PASS",
+      "new_fields_verified": [
+        "market_regime (TRENDING|RANGING|VOLATILE)",
+        "multiplier_version=v1",
+        "multiplier_set (5 multipliers)",
+        "threshold (min_adjusted_score)",
+        "freeze_guard (active, reason)",
+        "metrics (7 signal counters)",
+        "top_ranked (sorted by adjusted_score desc)",
+        "executable_count"
+      ],
+      "sample_response": {
+        "market_regime": "RANGING",
+        "multiplier_version": "v1",
+        "threshold": 55.0,
+        "freeze_guard": {"active": false, "reason": null},
+        "metrics": {
+          "signals_total": 30,
+          "signals_after_hard_gate": 27,
+          "signals_above_threshold": 27,
+          "signals_selected": 0,
+          "signals_rejected_trend_strength": 3,
+          "signals_rejected_btc_regime": 0,
+          "signals_rejected_freeze_guard": 0
+        }
+      }
+    },
+    "daily_report_endpoint": {
+      "endpoint": "POST /api/spot-strategy/report/daily/generate",
+      "status": "PASS",
+      "new_fields_verified": [
+        "market_regime",
+        "multiplier_version",
+        "multiplier_set",
+        "base_score",
+        "adjusted_score",
+        "score_delta",
+        "metrics (signal counters)"
+      ]
+    },
+    "selection_ordering": {
+      "description": "top_ranked sorted by adjusted_score descending",
+      "status": "PASS",
+      "deterministic": true
+    },
+    "freeze_guard": {
+      "description": "BTC hostile freeze guard (2 candle)",
+      "status": "PASS",
+      "currently_active": false
+    },
+    "regression_endpoints": {
+      "universe_get": "PASS",
+      "market_data": "PASS (500 candles)",
+      "indicators": "PASS (EMA50/200, RSI14, ATR14, VWAP)",
+      "pipeline_monitoring": "PASS"
+    },
+    "frontend_admin_smoke": {
+      "system_alerts_page": "PASS",
+      "users_management_page": "PASS",
+      "dashboard": "PASS"
+    }
+  }
+}

@@ -58,8 +58,8 @@ class TestSpotUniverseRefresh:
         assert "bootstrap" in data, f"Missing 'bootstrap' in response: {data.keys()}"
         
         universe = data["universe"]
-        assert "symbols" in universe, f"Missing 'symbols' in universe"
-        assert "count" in universe, f"Missing 'count' in universe"
+        assert "symbols" in universe, "Missing 'symbols' in universe"
+        assert "count" in universe, "Missing 'count' in universe"
         
         symbol_count = universe.get("count", 0)
         assert 30 <= symbol_count <= 50, f"Expected 30-50 symbols, got {symbol_count}"
@@ -87,16 +87,16 @@ class TestSpotUniverseRead:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         
         data = response.json()
-        assert "symbols" in data, f"Missing 'symbols' in response"
+        assert "symbols" in data, "Missing 'symbols' in response"
         
         # Check rows if present
         rows = data.get("rows", [])
         if rows:
             first_row = rows[0]
-            assert "symbol" in first_row, f"Missing 'symbol' in row"
-            assert "24h_volume" in first_row, f"Missing '24h_volume' in row"
-            assert "spread" in first_row, f"Missing 'spread' in row"
-            assert "status" in first_row, f"Missing 'status' in row"
+            assert "symbol" in first_row, "Missing 'symbol' in row"
+            assert "24h_volume" in first_row, "Missing '24h_volume' in row"
+            assert "spread" in first_row, "Missing 'spread' in row"
+            assert "status" in first_row, "Missing 'status' in row"
             
             # Status should be active, filtered_out, or fallback
             valid_statuses = {"active", "filtered_out", "fallback"}
@@ -124,12 +124,12 @@ class TestMarketData:
         
         data = response.json()
         assert "count" in data, f"Missing 'count' in response: {data.keys()}"
-        assert "candles" in data, f"Missing 'candles' in response"
-        assert "timeframe" in data, f"Missing 'timeframe' in response"
+        assert "candles" in data, "Missing 'candles' in response"
+        assert "timeframe" in data, "Missing 'timeframe' in response"
         
         count = data.get("count", 0)
         assert count >= 500, f"Expected >= 500 candles, got {count}"
-        assert data.get("timeframe") == "15m", f"Expected 15m timeframe"
+        assert data.get("timeframe") == "15m", "Expected 15m timeframe"
         
         # Validate candle structure
         candles = data.get("candles", [])
@@ -230,9 +230,9 @@ class TestScanRun:
         data = response.json()
         
         # Required fields
-        assert "symbol_count" in data, f"Missing 'symbol_count' in scan response"
-        assert "executable_count" in data, f"Missing 'executable_count' in scan response"
-        assert "top_ranked" in data, f"Missing 'top_ranked' in scan response"
+        assert "symbol_count" in data, "Missing 'symbol_count' in scan response"
+        assert "executable_count" in data, "Missing 'executable_count' in scan response"
+        assert "top_ranked" in data, "Missing 'top_ranked' in scan response"
         
         symbol_count = data.get("symbol_count", 0)
         executable_count = data.get("executable_count", 0)
@@ -245,9 +245,9 @@ class TestScanRun:
         # Verify top_ranked structure if present
         if top_ranked:
             first = top_ranked[0]
-            assert "symbol" in first, f"Missing 'symbol' in top_ranked item"
-            assert "signal" in first, f"Missing 'signal' in top_ranked item"
-            assert "signal_score" in first, f"Missing 'signal_score' in top_ranked item"
+            assert "symbol" in first, "Missing 'symbol' in top_ranked item"
+            assert "signal" in first, "Missing 'signal' in top_ranked item"
+            assert "signal_score" in first, "Missing 'signal_score' in top_ranked item"
         
         print(f"Scan result: {symbol_count} symbols, {executable_count} executable, {len(top_ranked)} top ranked")
     

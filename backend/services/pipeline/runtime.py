@@ -26,6 +26,7 @@ from services.pipeline.kill_switch_service import (
 )
 from services.pipeline.market_data_engine import MarketDataEngine
 from services.pipeline.risk_engine import evaluate_risk
+from services.pipeline.spot_dynamic_score_engine import run_dynamic_selection_cycle
 from services.pipeline.spot_strategy_service import (
     bootstrap_market_data_store,
     generate_daily_strategy_report,
@@ -197,10 +198,12 @@ class PipelineRuntime:
                 )
                 for key in [
                     "spot_strategy:signals_total:day",
+                    "spot_strategy:signals_after_hard_gate:day",
+                    "spot_strategy:signals_above_threshold:day",
+                    "spot_strategy:signals_selected:day",
                     "spot_strategy:rejected:trend_strength_weak",
-                    "spot_strategy:rejected:relative_volume_low",
                     "spot_strategy:rejected:btc_regime_hostile",
-                    "spot_strategy:rejected:pullback_quality_low",
+                    "spot_strategy:rejected:freeze_guard",
                     "spot_strategy:executed_signals:day",
                     "spot_strategy:signal_score_sum:day",
                     "spot_strategy:avg_signal_score:day",
@@ -210,6 +213,279 @@ class PipelineRuntime:
                 logger.exception("Daily strategy report loop error: %s", exc)
             finally:
                 db.close()
+
+    def _apply_spot_metrics_counters(self, metrics: dict):
+        counter_map = {
+            "signals_total": "spot_strategy:signals_total:day",
+            "signals_after_hard_gate": "spot_strategy:signals_after_hard_gate:day",
+            "signals_above_threshold": "spot_strategy:signals_above_threshold:day",
+            "signals_selected": "spot_strategy:signals_selected:day",
+            "signals_rejected_trend_strength": "spot_strategy:rejected:trend_strength_weak",
+            "signals_rejected_btc_regime": "spot_strategy:rejected:btc_regime_hostile",
+            "signals_rejected_freeze_guard": "spot_strategy:rejected:freeze_guard",
+        }
+        for metric_key, cache_key in counter_map.items():
+            value = int(metrics.get(metric_key, 0))
+            if value > 0:
+                incr_counter(self.cache, cache_key, value)
+
+    def _process_spot_pullback_selection(self, db, *, bot: BotProfile, user: User, event, universe: dict, params: dict):
+        if event.timeframe != "15m" or event.symbol != "BTCUSDT":
+            return
+
+        idempotency_key = f"idempotency:spot-pullback-cycle:{bot.id}:{event.timestamp.strftime('%Y%m%d%H%M')}"
+        if self.cache.get(idempotency_key):
+            incr_counter(self.cache, "metrics:duplicates_blocked:5m", 1)
+            return
+        self.cache.set(idempotency_key, utc_now_iso())
+
+        open_positions = (
+            db.query(PaperPosition)
+            .filter(PaperPosition.user_id == user.id, PaperPosition.market_type == "spot", PaperPosition.status == "open")
+            .all()
+        )
+        open_symbols = {position.symbol.upper() for position in open_positions}
+        max_open_positions = int(params.get("max_open_positions", 3))
+        available_slots = max(max_open_positions - len(open_positions), 0)
+
+        symbols = [symbol.upper() for symbol in universe.get("spot_symbols", [])]
+        selection = run_dynamic_selection_cycle(
+            self.cache,
+            symbols=symbols,
+            open_symbols=open_symbols,
+            available_slots=available_slots,
+            params=params,
+        )
+        metrics = selection.get("metrics", {})
+        self._apply_spot_metrics_counters(metrics)
+
+        create_audit_log(
+            db,
+            action="SPOT_SELECTION_CYCLE_COMPLETED",
+            entity_type="spot_selection_cycle",
+            entity_id=f"{bot.id}:{event.timestamp.strftime('%Y%m%d%H%M')}",
+            actor_user_id=user.id,
+            actor_role=user.role.value,
+            severity="info",
+            details={
+                "symbol_count": selection.get("symbol_count", 0),
+                "signals_selected": metrics.get("signals_selected", 0),
+                "market_regime": selection.get("market_regime"),
+                "btc_regime": selection.get("btc_regime"),
+                "threshold": selection.get("threshold"),
+                "freeze_guard": selection.get("freeze_guard"),
+            },
+        )
+
+        regime_state = selection.get("regime_state", {})
+        if regime_state.get("changed"):
+            create_audit_log(
+                db,
+                action="SPOT_MARKET_REGIME_CHANGED",
+                entity_type="spot_market_regime",
+                entity_id=f"{bot.id}:{event.timestamp.strftime('%Y%m%d%H%M')}",
+                actor_user_id=user.id,
+                actor_role=user.role.value,
+                severity="info",
+                details={
+                    "active_regime": regime_state.get("active_regime"),
+                    "raw_regime": regime_state.get("raw_regime"),
+                    "pending_count": regime_state.get("pending_count"),
+                    "confirmation_candles": 2,
+                },
+            )
+
+        clamp_events = selection.get("multiplier_clamp_events", [])
+        if clamp_events:
+            create_audit_log(
+                db,
+                action="SPOT_MULTIPLIER_CLAMP_APPLIED",
+                entity_type="spot_selection_cycle",
+                entity_id=f"{bot.id}:{event.timestamp.strftime('%Y%m%d%H%M')}",
+                actor_user_id=user.id,
+                actor_role=user.role.value,
+                severity="warning",
+                details={"events": clamp_events},
+            )
+
+        selected_candidates = selection.get("selected", [])
+        for candidate in selected_candidates:
+            signal_event = SignalEvent(
+                bot_profile_id=bot.id,
+                user_id=user.id,
+                symbol=candidate["symbol"],
+                market_type=bot.market_type,
+                timeframe=bot.timeframe,
+                strategy_id="spot_pullback_v1",
+                signal="long",
+                direction="long",
+                confidence=round(candidate.get("adjusted_score", 0.0) / 100, 4),
+                reason_codes=["selected_dynamic_score_engine"],
+            )
+            db.add(signal_event)
+            db.flush()
+
+            create_audit_log(
+                db,
+                action="signal_generated",
+                entity_type="signal_event",
+                entity_id=signal_event.id,
+                actor_user_id=user.id,
+                actor_role=user.role.value,
+                details={
+                    "symbol": candidate["symbol"],
+                    "direction": "long",
+                    "strategy": "spot_pullback_v1",
+                    "selection_rank": candidate.get("selection_rank"),
+                },
+            )
+            incr_counter(self.cache, "metrics:signals:5m", 1)
+
+            signal = evaluate_strategy(
+                strategy_type="spot_pullback_v1",
+                symbol=candidate["symbol"],
+                primary_candles=get_json(self.cache, f"market:candles:{candidate['symbol']}:15m") or [],
+                secondary_candles=get_json(self.cache, f"market:candles:{candidate['symbol']}:1h") or [],
+                spread_bps=float((get_json(self.cache, f"market:spread:{candidate['symbol']}") or {}).get("spread_bps", 9999)),
+                params=params,
+                context={"btc_candles": get_json(self.cache, "market:candles:BTCUSDT:15m") or []},
+            )
+            signal.proposed_entry = float(candidate.get("entry", signal.proposed_entry))
+            signal.proposed_stop = float(candidate.get("stop", signal.proposed_stop))
+            signal.proposed_take_profit = float(candidate.get("take_profit", signal.proposed_take_profit))
+            signal.signal_strength = round(candidate.get("adjusted_score", 0.0) / 100, 4)
+            signal.signal_score = float(candidate.get("adjusted_score", 0.0))
+            signal.metadata = {
+                **(signal.metadata or {}),
+                "strategy_name": "SPOT_TREND_PULLBACK",
+                "market_regime": candidate.get("market_regime"),
+                "multiplier_version": candidate.get("multiplier_version"),
+                "multiplier_set": candidate.get("multiplier_set"),
+                "base_score": candidate.get("base_score"),
+                "adjusted_score": candidate.get("adjusted_score"),
+                "score_delta": candidate.get("score_delta"),
+                "selection_rank": candidate.get("selection_rank"),
+            }
+
+            ticker_payload = get_json(self.cache, f"market:ticker:{candidate['symbol']}") or {}
+            market_price = float(ticker_payload.get("last_price", candidate.get("entry", signal.proposed_entry)))
+            atr_pct = abs(signal.proposed_entry - signal.proposed_stop) / signal.proposed_entry if signal.proposed_entry else 1
+            risk_decision = evaluate_risk(
+                db,
+                current_user=user,
+                cache=self.cache,
+                signal=signal,
+                market_type=bot.market_type,
+                market_price=market_price,
+                spread_bps=float((get_json(self.cache, f"market:spread:{candidate['symbol']}") or {}).get("spread_bps", 9999)),
+                atr_pct=atr_pct,
+            )
+
+            if not risk_decision.approved:
+                create_audit_log(
+                    db,
+                    action="risk_rejection",
+                    entity_type="signal_event",
+                    entity_id=signal_event.id,
+                    actor_user_id=user.id,
+                    actor_role=user.role.value,
+                    severity="warning",
+                    details={"tags": risk_decision.risk_tags},
+                )
+                continue
+
+            policy = get_policy_for_strategy(db, bot.strategy_type)
+            execution_policy_payload = {
+                "style": policy.execution_style,
+                "order_preference": policy.order_preference,
+                "timeout_seconds": policy.timeout_seconds,
+                "fallback_behavior": policy.fallback_behavior,
+                "partial_fill_tolerance_pct": policy.partial_fill_tolerance_pct,
+                "execution_urgency": policy.execution_urgency,
+                "retry_limit": policy.retry_limit,
+            }
+
+            execution_result = open_paper_position(
+                db,
+                user=user,
+                bot=bot,
+                symbol=signal.symbol,
+                direction=signal.direction,
+                market_price=market_price,
+                quantity=risk_decision.size,
+                leverage=risk_decision.leverage,
+                stop_loss=risk_decision.stop,
+                take_profit=risk_decision.take_profit,
+                execution_policy=execution_policy_payload,
+                response_payload={
+                    "state": "filled",
+                    "mode": "paper",
+                    "strategy_id": signal.strategy_id,
+                    "risk_tags": risk_decision.risk_tags,
+                    "strategy_name": "SPOT_TREND_PULLBACK",
+                    "market_regime": candidate.get("market_regime"),
+                    "multiplier_version": candidate.get("multiplier_version"),
+                    "multiplier_set": candidate.get("multiplier_set"),
+                    "base_score": candidate.get("base_score"),
+                    "adjusted_score": candidate.get("adjusted_score"),
+                    "score_delta": candidate.get("score_delta"),
+                    "selection_rank": candidate.get("selection_rank"),
+                },
+                execution_context={
+                    "spread_bps": float((get_json(self.cache, f"market:spread:{candidate['symbol']}") or {}).get("spread_bps", 9999)),
+                    "latency_ms": self.market_data_engine.latency_ms,
+                },
+            )
+            incr_counter(self.cache, "metrics:state_transitions:5m", execution_result["transition_count"])
+
+            if execution_result["position"] is None:
+                incr_counter(self.cache, "metrics:execution_errors:5m", 1)
+                continue
+
+            position = execution_result["position"]
+            create_audit_log(
+                db,
+                action="trade_open",
+                entity_type="paper_position",
+                entity_id=position.id,
+                actor_user_id=user.id,
+                actor_role=user.role.value,
+                details={
+                    "symbol": position.symbol,
+                    "side": position.side,
+                    "quantity": position.quantity,
+                    "execution_style": policy.execution_style,
+                    "selection_rank": candidate.get("selection_rank"),
+                },
+            )
+            create_audit_log(
+                db,
+                action="TRADE_OPENED",
+                entity_type="paper_position",
+                entity_id=position.id,
+                actor_user_id=user.id,
+                actor_role=user.role.value,
+                severity="info",
+                details={
+                    "symbol": position.symbol,
+                    "strategy_id": "spot_pullback_v1",
+                    "strategy_name": "SPOT_TREND_PULLBACK",
+                    "market_regime": candidate.get("market_regime"),
+                    "multiplier_version": candidate.get("multiplier_version"),
+                    "base_score": candidate.get("base_score"),
+                    "adjusted_score": candidate.get("adjusted_score"),
+                    "score_delta": candidate.get("score_delta"),
+                    "selection_rank": candidate.get("selection_rank"),
+                    "lifecycle_state": "OPEN",
+                },
+            )
+            incr_counter(self.cache, "spot_strategy:executed_signals:day", 1)
+            total_score = float(self.cache.get("spot_strategy:signal_score_sum:day") or 0)
+            executed = int(self.cache.get("spot_strategy:executed_signals:day") or 1)
+            total_score += float(candidate.get("adjusted_score", 0.0))
+            self.cache.set("spot_strategy:signal_score_sum:day", str(total_score))
+            self.cache.set("spot_strategy:avg_signal_score:day", str(round(total_score / max(executed, 1), 4)))
+            incr_counter(self.cache, "metrics:paper_trades:5m", 1)
 
     async def _orchestrate(self):
         while self._running:
@@ -252,6 +528,18 @@ class PipelineRuntime:
                             .first()
                         )
                         params = strategy_template.parameters if strategy_template else {}
+
+                        if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+                            self._process_spot_pullback_selection(
+                                db,
+                                bot=bot,
+                                user=user,
+                                event=event,
+                                universe=universe,
+                                params=params,
+                            )
+                            continue
+
                         primary_candles = get_json(self.cache, f"market:candles:{event.symbol}:15m") or []
                         secondary_candles = get_json(self.cache, f"market:candles:{event.symbol}:1h") or []
                         spread_payload = get_json(self.cache, f"market:spread:{event.symbol}") or {}
