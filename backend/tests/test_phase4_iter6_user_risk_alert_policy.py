@@ -324,7 +324,7 @@ class TestUserRiskSettingsValidation:
         assert data["allocation_pct"] == 25
         assert data["trade_risk_pct"] == 15
         assert data["daily_loss_limit_pct"] == 5
-        assert data["compounding_enabled"] == False
+        assert not data["compounding_enabled"]
 
     def test_allocation_pct_too_high_blocked(self, user_token):
         """allocation_pct > 50 should be rejected"""

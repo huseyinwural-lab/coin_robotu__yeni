@@ -361,6 +361,53 @@
   - `/app/test_reports/pytest/pytest_results_iter14_phase4_iter5.xml`
   - Not: valid Binance testnet key olmadığı için gerçek fill doğrulaması bu turda da **MOCKED/BLOCKED** akışla test edildi.
 
+### 2026-03-11 (Faz-4 İterasyon-6 — CI Kapanışı + User Ürünleşme + Alarm Yönlendirme)
+- **A (Admin/Deploy)**
+  - CI wrapper entegrasyonu tamamlandı:
+    - `.github/workflows/stage-gate.yml` → `scripts/ci_stage_gate.sh`
+    - `.github/workflows/prod-gate.yml` → `scripts/ci_prod_gate.sh`
+  - `run_release_gate_check.sh` `--env` olmadan hard fail (explicit env zorunlu)
+  - stage/prod policy matrix davranışı korunarak parse edilebilir çıktı standardı devam ettirildi
+  - Monitoring’e **Active Alerts** + **Alert Policy** blokları eklendi
+  - Alert policy backend’i eklendi:
+    - `GET/PUT /api/phase4/admin/alert-policy`
+    - `GET /api/phase4/admin/active-alerts`
+  - Permission drift için routing hattı eklendi (admin notification + ops webhook + monitoring audit log)
+
+- **B (User/Execution)**
+  - User tarafı 3 sekmeli ürünleşmiş yapıya alındı:
+    - `Overview`
+    - `Risk Settings`
+    - `Test & Validation`
+  - Yeni user risk backend’i:
+    - `GET/PUT /api/user-risk/settings`
+    - `GET /api/user-risk/preview`
+    - `GET /api/user-risk/overview`
+  - Risk modeli yüzde bazlı kısıtlarla uygulandı:
+    - allocation `%1-%50`, trade risk `%1-%25`, daily loss `%1-%10`
+    - soft warning alanları (high_allocation/high_trade_risk/high_daily_loss)
+  - Test & Validation tarafında awaiting_valid_key davranışı korunarak evidence panel hazır bırakıldı
+  - Lifecycle evidence endpointi kullanılarak timeline UI beslemesi aktif
+
+- **C (Operability/UI)**
+  - Admin navbar’da aktif override countdown badge eklendi
+  - Monitoring operability bar + override countdown/progress görselleştirmesi sürdürüldü
+  - User panelde risk önizleme ve execution evidence görünümü ayrıştırıldı
+
+- Ek düzeltmeler:
+  - `/api/health` endpointi eklendi (404 minor issue giderildi)
+  - User exchange page ilk yüklemede gereksiz validate çağrısı kaldırıldı (konsol 400/404 gürültüsü azaltıldı)
+
+- Migrationlar:
+  - `20260311_0010_user_risk_and_alert_policy.py`
+  - SQLite fallback uyumluluğu için `db.py` bootstrap genişletildi
+
+- Testler:
+  - `/app/test_reports/iteration_15.json` (backend 28/28 pass, frontend 100%)
+  - `/app/backend/tests/test_phase4_iter6_user_risk_alert_policy.py`
+  - `/app/test_reports/pytest/pytest_results_iter15_phase4_iter6.xml`
+  - Not: valid testnet key paylaşılmadığı için gerçek fill lifecycle bu turda da **MOCKED/BLOCKED** (awaiting_valid_key) modunda bırakıldı.
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
@@ -388,5 +435,5 @@
 1. Geçerli testnet key ile ilk order sonucu (filled/partial/cancelled) ve slippage doğrulamasını canlı testte tamamla
 2. Hardening checklist trendini alarm geçmişiyle operasyonel eşiklere bağla
 3. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
-4. Permission drift için kritik alarm eşikleri + bildirim yönlendirmesi ekle
+4. Ops webhook teslimatını retry/backoff + dead-letter mantığıyla sertleştir
 5. Valid key sonrası lifecycle evidence panelinde gerçek NEW/PARTIAL/FILLED kanıtını finalize et

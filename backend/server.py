@@ -38,6 +38,11 @@ fastapi_app = FastAPI(title="Algorithmic Trading Platform API", version="0.2.0")
 api_router = APIRouter(prefix="/api")
 
 
+@api_router.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
 @api_router.get("/")
 def api_root():
     return {

@@ -55,14 +55,6 @@ export const UserExchangeSettingsPage = () => {
     }
 
     try {
-      const { data } = await apiClient.get("/exchange/validate");
-      setValidateResult(data);
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      setValidateResult(typeof detail === "object" ? detail : null);
-    }
-
-    try {
       const { data } = await apiClient.get("/phase4/execution-quality/latest");
       setLatestQuality(data);
     } catch (_) {
