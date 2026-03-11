@@ -171,7 +171,7 @@ export const MonitoringPage = () => {
         </span>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-8" data-testid="monitoring-metrics-grid">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-10" data-testid="monitoring-metrics-grid">
         <MetricCard label="WS Status" value={isLoading ? "loading" : (metrics?.websocket_status || "-")} tone="blue" testId="monitoring-ws-status" />
         <MetricCard label="Signal / 5m" value={isLoading ? "loading" : (metrics?.signal_rate_last_5m ?? "-")} testId="monitoring-signal-rate" />
         <MetricCard label="Paper Trade / 5m" value={isLoading ? "loading" : (metrics?.paper_trades_last_5m ?? "-")} tone="orange" testId="monitoring-paper-trades" />
@@ -180,6 +180,8 @@ export const MonitoringPage = () => {
         <MetricCard label="Transitions / 5m" value={isLoading ? "loading" : (metrics?.execution_transitions_5m ?? "-")} tone="orange" testId="monitoring-transitions" />
         <MetricCard label="Release Gate" value={isLoading ? "loading" : (metrics?.release_gate_status ?? "-")} tone={metrics?.release_gate_status === "PASS" ? "blue" : metrics?.release_gate_status === "WARNING" ? "orange" : "red"} testId="monitoring-release-gate" />
         <MetricCard label="Gate Checked" value={isLoading ? "loading" : (metrics?.release_gate_last_checked ?? "-")} tone="blue" testId="monitoring-release-gate-checked" />
+        <MetricCard label="Kill Switch" value={isLoading ? "loading" : String(metrics?.global_trading_pause ?? false)} tone={metrics?.global_trading_pause ? "red" : "blue"} testId="monitoring-kill-switch" />
+        <MetricCard label="Exec Errors/5m" value={isLoading ? "loading" : (metrics?.execution_errors_5m ?? "-")} tone="red" testId="monitoring-execution-errors-5m" />
       </div>
 
       <div className="border border-orange-700 bg-orange-200 p-4" data-testid="monitoring-release-gate-override-status-panel">
@@ -243,6 +245,7 @@ export const MonitoringPage = () => {
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-correlation-rejections">Correlation Rejections /5m: {metrics?.correlation_rejections_5m ?? "-"}</p>
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-failed-pending">Failed Events Pending: {metrics?.failed_events_pending ?? "-"}</p>
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-failed-dead">Failed Events Dead: {metrics?.failed_events_dead ?? "-"}</p>
+        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-kill-switch-reasons">Kill Switch Reasons: {(metrics?.kill_switch_reasons || []).join(",") || "-"}</p>
       </div>
 
       <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-permission-drift-panel">

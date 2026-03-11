@@ -249,6 +249,17 @@ class PipelineMonitoringResponse(BaseModel):
     correlation_rejections_5m: int
     release_gate_status: str
     release_gate_last_checked: str
+    execution_errors_5m: int
+    risk_anomalies_5m: int
+    global_trading_pause: bool
+    kill_switch_reasons: list[str]
+
+
+class KillSwitchStatusResponse(BaseModel):
+    triggered: bool
+    active: bool
+    reasons: list[str]
+    triggered_at: str | None = None
 
 
 class ExecutionPolicyBase(BaseModel):

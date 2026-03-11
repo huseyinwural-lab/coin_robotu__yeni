@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 from models import AdminControl, PaperPosition, RiskExposureGroup, RiskPolicy, User
 from services.pipeline.events import RiskDecision, SignalDecision
 from services.pipeline.correlation_service import pair_correlation
+from services.pipeline.position_sizing_engine import compute_position_sizing, consecutive_losses, daily_loss_usage
+
+MAX_CONSECUTIVE_LOSS_LIMIT = 3
 
 
 def _symbol_in_group(symbol: str, group: RiskExposureGroup) -> bool:
@@ -42,7 +45,14 @@ def evaluate_risk(
     )
 
     if control is None or policy is None:
-        return RiskDecision(approved=False, size=0, leverage=1, stop=0, take_profit=0, risk_tags=["missing_policy"])
+        return RiskDecision(
+            approved=False,
+            size=0,
+            leverage=1,
+            stop=0,
+            take_profit=0,
+            risk_tags=["missing_policy"],
+        )
 
     risk_tags: list[str] = []
     open_positions_list = (
@@ -51,6 +61,10 @@ def evaluate_risk(
         .all()
     )
     open_positions = len(open_positions_list)
+
+    sizing = compute_position_sizing(db, current_user.id, market_price)
+    daily_loss = daily_loss_usage(db, current_user.id)
+    loss_streak = consecutive_losses(db, current_user.id)
 
     if control.emergency_mode:
         risk_tags.append("emergency_mode_enabled")
@@ -62,6 +76,10 @@ def evaluate_risk(
         risk_tags.append("volatility_rejection")
     if open_positions >= min(control.max_open_positions_cap, policy.max_open_positions):
         risk_tags.append("max_open_positions_reached")
+    if daily_loss["limit_exceeded"]:
+        risk_tags.append("daily_loss_limit_exceeded")
+    if loss_streak >= MAX_CONSECUTIVE_LOSS_LIMIT:
+        risk_tags.append("consecutive_loss_limit_exceeded")
 
     groups = db.query(RiskExposureGroup).all()
     target_group = _resolve_group_from_list(signal.symbol, groups)
@@ -118,6 +136,17 @@ def evaluate_risk(
     if signal.signal in {"long", "short"} and allowed_leverage < 1:
         risk_tags.append("invalid_leverage_cap")
 
+    projected_total_notional = sum(float(position.entry_price) * float(position.quantity) for position in open_positions_list)
+    projected_total_notional += float(sizing["trade_allocation_usdt"])
+    max_portfolio_exposure_pct = min(90.0, float(policy.position_size_pct) * float(policy.max_open_positions))
+    max_portfolio_notional = float(sizing["equity"]) * (max_portfolio_exposure_pct / 100)
+    if projected_total_notional > max_portfolio_notional:
+        risk_tags.append("max_portfolio_exposure_exceeded")
+
+    account_risk_pct = (float(sizing["risk_amount_usdt"]) / max(float(sizing["equity"]), 0.01)) * 100
+    if account_risk_pct > min(float(policy.daily_loss_cutoff_pct), 5.0):
+        risk_tags.append("max_risk_per_trade_exceeded")
+
     if risk_tags:
         return RiskDecision(
             approved=False,
@@ -126,19 +155,27 @@ def evaluate_risk(
             stop=signal.proposed_stop,
             take_profit=signal.proposed_take_profit,
             risk_tags=risk_tags,
+            equity=float(sizing["equity"]),
+            trade_allocation_usdt=float(sizing["trade_allocation_usdt"]),
+            risk_amount_usdt=float(sizing["risk_amount_usdt"]),
         )
 
-    notional_risk = max(policy.position_size_pct, 0.1) / 100
+    quantity = float(sizing["quantity"])
     if atr_pct > 0.04:
-        notional_risk *= 0.7
+        quantity = round(quantity * 0.7, 6)
     if atr_pct > 0.06:
-        notional_risk *= 0.5
-    quantity = round(max((1000 * notional_risk) / max(market_price, 0.0001), 0.0001), 6)
+        quantity = round(quantity * 0.5, 6)
+    quantity = max(quantity, 0.0001)
+
+    effective_leverage = 1 if market_type == "spot" else allowed_leverage
     return RiskDecision(
         approved=True,
         size=quantity,
-        leverage=allowed_leverage,
+        leverage=effective_leverage,
         stop=signal.proposed_stop,
         take_profit=signal.proposed_take_profit,
-        risk_tags=["approved", "cluster_checked"],
+        risk_tags=["approved", "cluster_checked", "hard_veto_compliant", "position_sizing_engine"],
+        equity=float(sizing["equity"]),
+        trade_allocation_usdt=float(sizing["trade_allocation_usdt"]),
+        risk_amount_usdt=float(sizing["risk_amount_usdt"]),
     )

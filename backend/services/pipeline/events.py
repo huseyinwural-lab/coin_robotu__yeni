@@ -29,3 +29,6 @@ class RiskDecision(BaseModel):
     stop: float
     take_profit: float
     risk_tags: list[str]
+    equity: float = 0
+    trade_allocation_usdt: float = 0
+    risk_amount_usdt: float = 0

@@ -1,0 +1,77 @@
+{
+  "summary": "Phase-5 Iteration-1 complete testing: Risk Engine Hard Veto, Position Sizing Engine, Kill Switch (3A behavior - block_new_orders_only), CI/Deploy scripts, Monitoring new fields. All 22 backend tests passed. Frontend verified with all new fields displayed correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "User Exchange Settings page load", "issue": "Console shows 404 errors during page load - likely favicon/static assets, not API failures", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase5_iter1_risk_killswitch.py",
+    "/app/test_reports/pytest/pytest_results_iter16_phase5_iter1.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Kill switch 3A behavior confirmed: runtime.py uses mode='block_new_orders_only' and does NOT call liquidate_open_positions_for_kill_switch - open positions are preserved when kill switch activates",
+    "Position sizing formula verified: equity × allocation% for trade_allocation_amount, and allocation_amount × trade_risk% for risk_amount"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase5_iter1_risk_killswitch.py"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 tests passed)",
+    "frontend": "100% (all new monitoring fields and user risk tabs verified)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!",
+    "user": "TEST_phase4iter4@example.com / TestPassword123!"
+  },
+  "seed_data_creation": "None - used existing test user",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase-5 Iteration-1 features fully tested. Kill switch 3A behavior (block_new_orders_only) confirmed - open positions are NOT automatically closed. Position sizing engine formulas verified via /api/user-risk/preview endpoint. Monitoring page displays new fields: execution_errors_5m, risk_anomalies_5m, global_trading_pause, kill_switch_reasons. CI scripts require --env argument and exit code 2 when missing.",
+  "features_verified": {
+    "risk_engine_hard_veto": {
+      "block_reasons_recorded": "risk_tags array contains rejection reasons (e.g., spread_too_wide, max_open_positions_reached)",
+      "correlation_rejections_tracked": "metrics:correlation_rejections:5m counter incremented on cluster rejections",
+      "risk_anomalies_tracked": "metrics:risk_anomalies:5m counter incremented on invalid_leverage_cap, missing_policy"
+    },
+    "position_sizing_engine": {
+      "equity_allocation_formula": "trade_allocation_usdt = equity × (allocation_pct / 100)",
+      "risk_amount_formula": "risk_amount_usdt = trade_allocation_usdt × (trade_risk_pct / 100)",
+      "quantity_formula": "quantity = trade_allocation_usdt / market_price (capped to 0.0001 minimum)"
+    },
+    "kill_switch_3A_behavior": {
+      "mode": "block_new_orders_only",
+      "new_orders_blocked": "orchestrator skips pipeline when kill_switch_state.active=true",
+      "open_positions_preserved": "liquidate_open_positions_for_kill_switch NOT called in _kill_switch_guard_loop",
+      "bots_paused": "pause_all_bots_for_kill_switch called to stop is_running flag"
+    },
+    "kill_switch_endpoints": {
+      "GET /api/admin-control/kill-switch/status": "returns triggered, active, reasons, triggered_at",
+      "POST /api/admin-control/kill-switch/reset": "resets emergency_mode and clears redis cache"
+    },
+    "monitoring_new_fields": {
+      "execution_errors_5m": "displayed in monitoring page metrics grid",
+      "risk_anomalies_5m": "available in monitoring_snapshot",
+      "global_trading_pause": "displayed as 'Kill Switch' boolean metric",
+      "kill_switch_reasons": "displayed in heartbeat details panel"
+    },
+    "ci_deploy_scripts": {
+      "run_release_gate_check.sh": "exits code 2 when --env missing, requires --env=stage|prod",
+      "ci_stage_gate.sh": "wrapper that passes --env=stage",
+      "ci_prod_gate.sh": "wrapper that passes --env=prod"
+    },
+    "user_risk_endpoints_regression": {
+      "GET /api/user-risk/settings": "returns allocation_pct, trade_risk_pct, daily_loss_limit_pct, compounding_enabled, base_capital",
+      "GET /api/user-risk/preview": "returns calculated fields with warnings",
+      "GET /api/user-risk/overview": "returns current_capital, available_balance, open_position_balance, closed_pnl"
+    }
+  },
+  "mocked_api_note": "Real Binance fill confirmation without valid key - intentionally returns awaiting_valid_key status"
+}

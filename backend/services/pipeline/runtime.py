@@ -9,6 +9,11 @@ from services.execution_policy_service import get_policy_for_strategy
 from services.failed_event_service import create_failed_event, mark_failed_event_resolved, mark_failed_event_retry
 from services.pipeline.cache_store import get_counter, get_json, incr_counter, set_json, utc_now_iso
 from services.pipeline.execution_engine import open_paper_position, refresh_open_positions
+from services.pipeline.kill_switch_service import (
+    evaluate_kill_switch,
+    kill_switch_state,
+    pause_all_bots_for_kill_switch,
+)
 from services.pipeline.market_data_engine import MarketDataEngine
 from services.pipeline.risk_engine import evaluate_risk
 from services.pipeline.strategy_engine import evaluate_strategy
@@ -28,7 +33,9 @@ class PipelineRuntime:
         self._metrics_window_task: asyncio.Task | None = None
         self._failed_event_task: asyncio.Task | None = None
         self._release_gate_task: asyncio.Task | None = None
+        self._kill_switch_task: asyncio.Task | None = None
         self._last_release_gate_status: str | None = None
+        self._last_kill_switch_active: bool = False
         self._running = False
 
     async def start(self):
@@ -41,6 +48,7 @@ class PipelineRuntime:
         self._metrics_window_task = asyncio.create_task(self._rolling_metrics_reset(), name="metrics-window")
         self._failed_event_task = asyncio.create_task(self._failed_event_recovery_loop(), name="failed-event-recovery")
         self._release_gate_task = asyncio.create_task(self._release_gate_guard_loop(), name="release-gate-guard")
+        self._kill_switch_task = asyncio.create_task(self._kill_switch_guard_loop(), name="kill-switch-guard")
         logger.info("Phase-3 runtime started")
 
     async def stop(self):
@@ -52,6 +60,7 @@ class PipelineRuntime:
             self._metrics_window_task,
             self._failed_event_task,
             self._release_gate_task,
+            self._kill_switch_task,
         ]:
             if task:
                 task.cancel()
@@ -83,12 +92,42 @@ class PipelineRuntime:
             finally:
                 db.close()
 
+    async def _kill_switch_guard_loop(self):
+        while self._running:
+            await asyncio.sleep(10)
+            db = SessionLocal()
+            try:
+                state = evaluate_kill_switch(db, self.cache, self.market_data_engine)
+                if state["active"] and not self._last_kill_switch_active:
+                    stopped_bots = pause_all_bots_for_kill_switch(db)
+                    create_audit_log(
+                        db,
+                        action="kill_switch_triggered",
+                        entity_type="kill_switch",
+                        entity_id="global",
+                        actor_user_id=None,
+                        actor_role="system",
+                        severity="critical",
+                        details={
+                            "reasons": state["reasons"],
+                            "stopped_bots": stopped_bots,
+                            "mode": "block_new_orders_only",
+                        },
+                    )
+                self._last_kill_switch_active = state["active"]
+            except Exception as exc:
+                logger.exception("Kill switch guard loop error: %s", exc)
+            finally:
+                db.close()
+
     async def _orchestrate(self):
         while self._running:
             event = await self.candle_queue.get()
             started = asyncio.get_event_loop().time()
             db = SessionLocal()
             try:
+                if kill_switch_state(self.cache).get("active", False):
+                    continue
                 universe = build_effective_universe(db, self.cache)
                 bots = (
                     db.query(BotProfile)
@@ -188,6 +227,8 @@ class PipelineRuntime:
                         )
 
                         if not risk_decision.approved:
+                            if any(tag in {"missing_policy", "invalid_leverage_cap", "max_risk_per_trade_exceeded"} for tag in risk_decision.risk_tags):
+                                incr_counter(self.cache, "metrics:risk_anomalies:5m", 1)
                             if any(
                                 tag in {"correlated_cluster_overload", "high_pair_correlation"}
                                 for tag in risk_decision.risk_tags
@@ -242,6 +283,7 @@ class PipelineRuntime:
                         incr_counter(self.cache, "metrics:state_transitions:5m", execution_result["transition_count"])
 
                         if execution_result["position"] is None:
+                            incr_counter(self.cache, "metrics:execution_errors:5m", 1)
                             create_failed_event(
                                 db,
                                 event_type="execution_not_filled",
@@ -286,6 +328,7 @@ class PipelineRuntime:
                         incr_counter(self.cache, "metrics:paper_trades:5m", 1)
                     except Exception as bot_exc:
                         logger.exception("Pipeline bot processing failure (%s): %s", bot.id, bot_exc)
+                        incr_counter(self.cache, "metrics:execution_errors:5m", 1)
                         create_failed_event(
                             db,
                             event_type="pipeline_chain_failure",
@@ -363,6 +406,8 @@ class PipelineRuntime:
             self.cache.set("metrics:state_transitions:5m", "0")
             self.cache.set("metrics:websocket_reconnects:5m", "0")
             self.cache.set("metrics:correlation_rejections:5m", "0")
+            self.cache.set("metrics:execution_errors:5m", "0")
+            self.cache.set("metrics:risk_anomalies:5m", "0")
 
     async def _failed_event_recovery_loop(self):
         while self._running:
@@ -397,6 +442,7 @@ class PipelineRuntime:
         dead_failed = db.query(FailedEvent).filter(FailedEvent.status == "dead").count()
         release_gate_status = self.cache.get("phase4:release_gate:status") or "UNKNOWN"
         release_gate_last_checked = self.cache.get("phase4:release_gate:last_checked") or "-"
+        kill_state = kill_switch_state(self.cache)
         return {
             "websocket_status": ws.get("status", self.market_data_engine.websocket_status),
             "heartbeat": ws.get("heartbeat", self.market_data_engine.last_heartbeat),
@@ -415,6 +461,10 @@ class PipelineRuntime:
             "correlation_rejections_5m": get_counter(self.cache, "metrics:correlation_rejections:5m"),
             "release_gate_status": release_gate_status,
             "release_gate_last_checked": release_gate_last_checked,
+            "execution_errors_5m": get_counter(self.cache, "metrics:execution_errors:5m"),
+            "risk_anomalies_5m": get_counter(self.cache, "metrics:risk_anomalies:5m"),
+            "global_trading_pause": bool(kill_state.get("active", False)),
+            "kill_switch_reasons": kill_state.get("reasons", []),
         }
 
     def hardening_summary(self, db):
