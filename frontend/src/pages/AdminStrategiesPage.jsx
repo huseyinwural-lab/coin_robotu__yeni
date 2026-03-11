@@ -14,6 +14,7 @@ const versionSeed = {
 
 const kernelContextSeed = (versionId = "", versionHash = "") => ({
   context_id: `ctx-${Date.now()}`,
+  account_id: "acct-demo",
   timestamp_utc: new Date().toISOString(),
   symbol: "BTCUSDT",
   timeframe: "1m",
@@ -21,12 +22,28 @@ const kernelContextSeed = (versionId = "", versionHash = "") => ({
   market_snapshot_hash: "snapshot-hash-v1",
   position_state: { side: "flat", qty: 0 },
   risk_state: { blocked: false },
-  account_state_projection: { equity: 1000, free_margin: 900 },
+  account_state_projection: { equity: 1000, free_margin: 900, daily_loss_pct: 1.2, daily_loss_usd: 12 },
   strategy_version_id: versionId,
   strategy_version_hash: versionHash,
   input_features: { momentum: 0.12, volatility: 0.2, base_size: 0.001 },
   correlation_id: `corr-${Date.now()}`,
 });
+
+const buildRegimeContext = (versionId = "", versionHash = "", variant = "allowed") => {
+  const base = kernelContextSeed(versionId, versionHash);
+  if (variant === "allowed") {
+    return {
+      ...base,
+      input_features: { momentum: 0.2, volatility: 0.18, base_size: 0.001 },
+      market_snapshot: { last_price: 100000, bid: 99995, ask: 100005 },
+    };
+  }
+  return {
+    ...base,
+    input_features: { momentum: 0.01, volatility: 0.92, base_size: 0.001 },
+    market_snapshot: { last_price: 100000, bid: 96000, ask: 104000 },
+  };
+};
 
 export const AdminStrategiesPage = () => {
   const [loading, setLoading] = useState(true);
@@ -43,6 +60,15 @@ export const AdminStrategiesPage = () => {
   const [runtimeIntents, setRuntimeIntents] = useState([]);
   const [hotTraces, setHotTraces] = useState([]);
   const [coldTraces, setColdTraces] = useState([]);
+  const [regimeBindings, setRegimeBindings] = useState([]);
+  const [regimeOverview, setRegimeOverview] = useState(null);
+  const [regimeDemoResult, setRegimeDemoResult] = useState(null);
+  const [bindingForm, setBindingForm] = useState({
+    allowed_regimes: "trend_up,range_low_vol",
+    blocked_regimes: "panic_dislocation",
+    priority: 100,
+    gating_policy_version: "1.0",
+  });
 
   const selectedActiveVersion = useMemo(
     () => detail?.versions?.find((item) => item.version_id === detail?.strategy?.active_version_id) || detail?.versions?.[0],
@@ -167,9 +193,29 @@ export const AdminStrategiesPage = () => {
     }
   }, []);
 
+  const loadRegimeData = useCallback(async () => {
+    if (!selectedStrategyId) return;
+    try {
+      const [overviewRes, bindingsRes] = await Promise.all([
+        apiClient.get(`/strategy-domain/admin/regime/overview/${selectedStrategyId}`),
+        selectedActiveVersion
+          ? apiClient.get(`/strategy-domain/admin/regime/bindings/${selectedActiveVersion.version_id}`)
+          : Promise.resolve({ data: [] }),
+      ]);
+      setRegimeOverview(overviewRes.data || null);
+      setRegimeBindings(bindingsRes.data || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Regime verisi yüklenemedi");
+    }
+  }, [selectedStrategyId, selectedActiveVersion]);
+
   useEffect(() => {
     loadRuntimeViews();
   }, [loadRuntimeViews]);
+
+  useEffect(() => {
+    loadRegimeData();
+  }, [loadRegimeData]);
 
   const dispatchRuntime = async () => {
     if (!selectedStrategyId) {
@@ -198,6 +244,78 @@ export const AdminStrategiesPage = () => {
       await loadRuntimeViews();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Worker run-once başarısız");
+    }
+  };
+
+  const createRegimeBinding = async () => {
+    if (!selectedActiveVersion) {
+      toast.error("Aktif strategy version seçilmedi");
+      return;
+    }
+    const normalize = (value) =>
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    try {
+      const payload = {
+        strategy_version_id: selectedActiveVersion.version_id,
+        allowed_regimes: normalize(bindingForm.allowed_regimes || ""),
+        blocked_regimes: normalize(bindingForm.blocked_regimes || ""),
+        priority: Number(bindingForm.priority || 100),
+        gating_policy_version: bindingForm.gating_policy_version || "1.0",
+      };
+      await apiClient.post("/strategy-domain/admin/regime/bindings", payload);
+      toast.success("Regime binding oluşturuldu");
+      await loadRegimeData();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Regime binding oluşturulamadı");
+    }
+  };
+
+  const seedDemoBinding = async () => {
+    if (!selectedActiveVersion) {
+      toast.error("Aktif strategy version seçilmedi");
+      return;
+    }
+    const payload = {
+      strategy_version_id: selectedActiveVersion.version_id,
+      allowed_regimes: ["trend_up", "range_low_vol"],
+      blocked_regimes: ["panic_dislocation"],
+      priority: 100,
+      gating_policy_version: "1.0",
+    };
+    try {
+      setBindingForm((prev) => ({
+        ...prev,
+        allowed_regimes: "trend_up,range_low_vol",
+        blocked_regimes: "panic_dislocation",
+      }));
+      await apiClient.post("/strategy-domain/admin/regime/bindings", payload);
+      toast.success("Demo binding eklendi");
+      await loadRegimeData();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Demo binding oluşturulamadı");
+    }
+  };
+
+  const runRegimeDemo = async (variant) => {
+    if (!selectedActiveVersion) {
+      toast.error("Aktif strategy version seçilmedi");
+      return;
+    }
+    try {
+      const contextPayload = buildRegimeContext(
+        selectedActiveVersion.version_id,
+        selectedActiveVersion.version_hash,
+        variant,
+      );
+      const { data } = await apiClient.post("/strategy-domain/admin/regime/evaluate", contextPayload);
+      setRegimeDemoResult({ variant, ...data });
+      toast.success("Regime gating demo çalıştı");
+      await loadRegimeData();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Regime demo başarısız");
     }
   };
 
@@ -303,6 +421,111 @@ export const AdminStrategiesPage = () => {
             <p className="text-xs text-slate-400" data-testid="admin-runtime-worker-result-event-id">event_id: {workerResult.event_id || "-"}</p>
           </div>
         )}
+      </div>
+
+      <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-regime-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-regime-title">Regime Gating Demo</p>
+        <div className="grid gap-4 lg:grid-cols-2" data-testid="admin-regime-top-grid">
+          <div className="space-y-2 border border-slate-700 p-3" data-testid="admin-regime-binding-panel">
+            <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-regime-binding-title">Binding Editor</p>
+            <Input
+              placeholder="allowed regimes (comma)"
+              value={bindingForm.allowed_regimes}
+              onChange={(e) => setBindingForm((prev) => ({ ...prev, allowed_regimes: e.target.value }))}
+              data-testid="admin-regime-binding-allowed-input"
+            />
+            <Input
+              placeholder="blocked regimes (comma)"
+              value={bindingForm.blocked_regimes}
+              onChange={(e) => setBindingForm((prev) => ({ ...prev, blocked_regimes: e.target.value }))}
+              data-testid="admin-regime-binding-blocked-input"
+            />
+            <div className="grid gap-2 md:grid-cols-2" data-testid="admin-regime-binding-meta-grid">
+              <Input
+                placeholder="priority"
+                value={bindingForm.priority}
+                onChange={(e) => setBindingForm((prev) => ({ ...prev, priority: e.target.value }))}
+                data-testid="admin-regime-binding-priority-input"
+              />
+              <Input
+                placeholder="policy version"
+                value={bindingForm.gating_policy_version}
+                onChange={(e) => setBindingForm((prev) => ({ ...prev, gating_policy_version: e.target.value }))}
+                data-testid="admin-regime-binding-policy-input"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2" data-testid="admin-regime-binding-actions">
+              <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={createRegimeBinding} data-testid="admin-regime-binding-create-button">
+                Create Binding
+              </Button>
+              <Button variant="outline" className="border-slate-600 text-slate-200" onClick={seedDemoBinding} data-testid="admin-regime-binding-seed-button">
+                Seed Demo Binding
+              </Button>
+            </div>
+            <div className="space-y-1 text-xs text-slate-300" data-testid="admin-regime-binding-list">
+              {regimeBindings.map((item) => (
+                <div key={item.binding_id} className="border border-slate-700 p-2" data-testid={`admin-regime-binding-row-${item.binding_id}`}>
+                  <p data-testid={`admin-regime-binding-regimes-${item.binding_id}`}>allowed: {(item.allowed_regimes || []).join(", ") || "*"}</p>
+                  <p className="text-slate-400" data-testid={`admin-regime-binding-blocked-${item.binding_id}`}>blocked: {(item.blocked_regimes || []).join(", ") || "-"}</p>
+                </div>
+              ))}
+              {regimeBindings.length === 0 && (
+                <p className="text-slate-400" data-testid="admin-regime-binding-empty">No bindings yet</p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2 border border-slate-700 p-3" data-testid="admin-regime-demo-panel">
+            <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-regime-demo-title">Deterministic Demo</p>
+            <div className="flex flex-wrap gap-2" data-testid="admin-regime-demo-actions">
+              <Button className="bg-emerald-500 text-black hover:bg-emerald-600" onClick={() => runRegimeDemo("allowed")} data-testid="admin-regime-demo-allowed-button">
+                Run Allowed Demo
+              </Button>
+              <Button variant="outline" className="border-red-500 text-red-200" onClick={() => runRegimeDemo("blocked")} data-testid="admin-regime-demo-blocked-button">
+                Run Blocked Demo
+              </Button>
+            </div>
+            {regimeDemoResult && (
+              <div className="border border-slate-700 p-2 text-xs" data-testid="admin-regime-demo-result">
+                <p data-testid="admin-regime-demo-variant">variant: {regimeDemoResult.variant}</p>
+                <p data-testid="admin-regime-demo-label">regime_label: {regimeDemoResult.snapshot?.regime_label}</p>
+                <p data-testid="admin-regime-demo-allowed">allowed: {String(regimeDemoResult.allowed)}</p>
+                <p className="text-slate-400" data-testid="admin-regime-demo-reason">reason: {regimeDemoResult.reason_code || "-"}</p>
+              </div>
+            )}
+            {!regimeDemoResult && (
+              <p className="text-xs text-slate-400" data-testid="admin-regime-demo-empty">Demo sonucu bekleniyor.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2" data-testid="admin-regime-bottom-grid">
+          <div className="space-y-2 border border-slate-700 p-3" data-testid="admin-regime-snapshots-panel">
+            <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-regime-snapshots-title">Latest Snapshots</p>
+            {(regimeOverview?.snapshots || []).map((item) => (
+              <div key={item.regime_snapshot_id} className="border border-slate-700 p-2 text-xs" data-testid={`admin-regime-snapshot-row-${item.regime_snapshot_id}`}>
+                <p data-testid={`admin-regime-snapshot-label-${item.regime_snapshot_id}`}>{item.regime_label} · {item.symbol}</p>
+                <p className="text-slate-400" data-testid={`admin-regime-snapshot-score-${item.regime_snapshot_id}`}>score: {item.regime_score}</p>
+              </div>
+            ))}
+            {(!regimeOverview?.snapshots || regimeOverview.snapshots.length === 0) && (
+              <p className="text-xs text-slate-400" data-testid="admin-regime-snapshots-empty">Snapshot yok.</p>
+            )}
+          </div>
+          <div className="space-y-2 border border-slate-700 p-3" data-testid="admin-regime-rejects-panel">
+            <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-regime-rejects-title">Reject Distribution</p>
+            {regimeOverview?.reject_distribution && Object.keys(regimeOverview.reject_distribution).length === 0 && (
+              <p className="text-xs text-slate-400" data-testid="admin-regime-rejects-empty">Reject kaydı yok.</p>
+            )}
+            {regimeOverview?.reject_distribution &&
+              Object.entries(regimeOverview.reject_distribution).map(([key, value]) => (
+                <div key={key} className="flex items-center justify-between text-xs" data-testid={`admin-regime-reject-row-${key}`}>
+                  <span>{key}</span>
+                  <span>{value}</span>
+                </div>
+              ))}
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3" data-testid="admin-runtime-views-grid">

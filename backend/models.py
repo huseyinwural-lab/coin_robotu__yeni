@@ -67,6 +67,22 @@ class AdminControl(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class RiskOrchestratorPolicy(Base):
+    __tablename__ = "risk_orchestrator_policies"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default="global")
+    reference_equity_usd: Mapped[float] = mapped_column(Float, default=10000)
+    account_max_notional_pct: Mapped[float] = mapped_column(Float, default=60)
+    symbol_max_notional_pct: Mapped[float] = mapped_column(Float, default=25)
+    strategy_max_concurrent_positions: Mapped[int] = mapped_column(Integer, default=3)
+    strategy_cooldown_seconds: Mapped[int] = mapped_column(Integer, default=60)
+    max_order_frequency_per_min: Mapped[int] = mapped_column(Integer, default=6)
+    max_order_burst_per_10s: Mapped[int] = mapped_column(Integer, default=3)
+    daily_loss_limit_pct: Mapped[float] = mapped_column(Float, default=5)
+    duplicate_suppression_window_seconds: Mapped[int] = mapped_column(Integer, default=300)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class RiskPolicy(Base):
     __tablename__ = "risk_policies"
 
@@ -656,6 +672,7 @@ class ExecutionIntent(Base):
     intent_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     strategy_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_definitions.strategy_id"), index=True)
     strategy_version_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_versions.version_id"), index=True)
+    account_id: Mapped[str | None] = mapped_column(String(120), index=True, nullable=True)
     symbol: Mapped[str] = mapped_column(String(20), default="BTCUSDT")
     side: Mapped[str] = mapped_column(String(20), default="BUY")
     order_type: Mapped[str] = mapped_column(String(20), default="MARKET")

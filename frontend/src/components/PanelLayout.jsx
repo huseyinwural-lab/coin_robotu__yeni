@@ -43,6 +43,7 @@ const adminOnlyItems = [
   { to: "/admin/exchanges", label: "Exchanges", icon: Globe, testId: "nav-admin-exchanges-link" },
   { to: "/admin/proofs", label: "Proof Panel", icon: ShieldCheck, testId: "nav-admin-proofs-link" },
   { to: "/admin/strategies", label: "Strategies", icon: ClipboardList, testId: "nav-admin-strategies-link" },
+  { to: "/admin/risk-orchestrator", label: "Risk Orchestrator", icon: ShieldAlert, testId: "nav-risk-orchestrator-link" },
   { to: "/admin/market-universe", label: "Market Universe", icon: Globe, testId: "nav-market-universe-link" },
   { to: "/admin/execution-policies", label: "Execution Policies", icon: Settings2, testId: "nav-execution-policies-link" },
   { to: "/admin/exposure-groups", label: "Exposure Groups", icon: ShieldAlert, testId: "nav-exposure-groups-link" },

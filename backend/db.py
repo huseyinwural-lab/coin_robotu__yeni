@@ -129,6 +129,12 @@ def _ensure_sqlite_phase4_columns():
             if "validation_snapshot_id" not in user_exchange_columns:
                 connection.execute(text("ALTER TABLE user_exchange_settings ADD COLUMN validation_snapshot_id VARCHAR(120)"))
 
+            execution_intent_columns = {
+                row[1] for row in connection.execute(text("PRAGMA table_info(execution_intents)"))
+            }
+            if "account_id" not in execution_intent_columns:
+                connection.execute(text("ALTER TABLE execution_intents ADD COLUMN account_id VARCHAR(120)"))
+
             connection.execute(
                 text(
                     """
@@ -362,6 +368,26 @@ def _ensure_sqlite_phase4_columns():
             connection.execute(
                 text(
                     """
+                    CREATE TABLE IF NOT EXISTS risk_orchestrator_policies (
+                        id VARCHAR PRIMARY KEY,
+                        reference_equity_usd FLOAT NOT NULL DEFAULT 10000,
+                        account_max_notional_pct FLOAT NOT NULL DEFAULT 60,
+                        symbol_max_notional_pct FLOAT NOT NULL DEFAULT 25,
+                        strategy_max_concurrent_positions INTEGER NOT NULL DEFAULT 3,
+                        strategy_cooldown_seconds INTEGER NOT NULL DEFAULT 60,
+                        max_order_frequency_per_min INTEGER NOT NULL DEFAULT 6,
+                        max_order_burst_per_10s INTEGER NOT NULL DEFAULT 3,
+                        daily_loss_limit_pct FLOAT NOT NULL DEFAULT 5,
+                        duplicate_suppression_window_seconds INTEGER NOT NULL DEFAULT 300,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
                     CREATE TABLE IF NOT EXISTS strategy_definitions (
                         strategy_id VARCHAR PRIMARY KEY,
                         name VARCHAR(120) NOT NULL,
@@ -443,6 +469,7 @@ def _ensure_sqlite_phase4_columns():
                         intent_id VARCHAR PRIMARY KEY,
                         strategy_id VARCHAR NOT NULL,
                         strategy_version_id VARCHAR NOT NULL,
+                        account_id VARCHAR(120),
                         symbol VARCHAR(20) NOT NULL DEFAULT 'BTCUSDT',
                         side VARCHAR(20) NOT NULL DEFAULT 'BUY',
                         order_type VARCHAR(20) NOT NULL DEFAULT 'MARKET',

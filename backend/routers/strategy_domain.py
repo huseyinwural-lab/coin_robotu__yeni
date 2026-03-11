@@ -6,36 +6,125 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
-from models import DecisionTraceCold, DecisionTraceHot, ExecutionIntent, ExecutionIntentEvent, StrategyDefinition, StrategyVersion, User
+from models import (
+    AuditLog,
+    DecisionTraceCold,
+    DecisionTraceHot,
+    ExecutionIntent,
+    ExecutionIntentEvent,
+    StrategyDefinition,
+    StrategyVersion,
+    User,
+)
 from schemas import (
     DecisionContextInput,
     DecisionResultResponse,
     ExecutionIntentEventResponse,
     ExecutionIntentResponse,
+    RegimeEvaluationResponse,
+    RegimeSnapshotResponse,
+    RiskOrchestratorPolicyResponse,
+    RiskOrchestratorPolicyUpdate,
+    RiskOrchestratorRejectResponse,
+    RiskOrchestratorStatusResponse,
+    RiskOrchestratorSupervisorResponse,
     RuntimeDispatchRequest,
     RuntimeDispatchResponse,
     RuntimeEventEnvelopeResponse,
     StrategyDefinitionCreate,
     StrategyDefinitionResponse,
     StrategyDetailResponse,
+    StrategyRegimeBindingCreate,
+    StrategyRegimeBindingResponse,
+    StrategyRegimeOverviewResponse,
     StrategyVersionCreate,
     StrategyVersionResponse,
 )
 from services.audit_service import create_audit_log
 from services.decision_kernel_service import build_context_hash, build_decision_hash, evaluate_decision_context
+from services.regime_classifier_service import classify_regime, is_regime_allowed, persist_regime_snapshot
+from services.risk_orchestrator_service import (
+    build_status_snapshot,
+    evaluate_pre_trade,
+    get_or_create_policy,
+    run_in_trade_supervisor,
+    update_policy,
+)
 from services.runtime_execution_service import dispatch_decision_result, process_submission_event_once
 from services.strategy_domain_service import (
     activate_strategy_version,
     archive_strategy,
     create_strategy_definition,
+    create_strategy_regime_binding,
     create_strategy_version,
     get_active_strategy_set,
+    get_latest_regime_binding,
     get_strategy,
+    get_strategy_regime_bindings,
+    get_strategy_regime_overview,
     get_version,
 )
 
 
 router = APIRouter(prefix="/strategy-domain", tags=["strategy_domain"])
+
+
+def _build_reject_payload(context_payload: dict, *, strategy_version_id: str, reason_codes: list[str]) -> dict:
+    payload = {
+        "action": "REJECT",
+        "order_intent": {"intent_type": "REJECT", "symbol": context_payload.get("symbol")},
+        "size": 0.0,
+        "price_reference": {
+            "source": "market_snapshot",
+            "value": context_payload.get("market_snapshot", {}).get("last_price"),
+        },
+        "confidence": 0.0,
+        "risk_score": 1.0,
+        "reason_codes": reason_codes,
+        "strategy_version_id": strategy_version_id,
+        "context_hash": build_context_hash(context_payload),
+    }
+    payload["decision_hash"] = build_decision_hash(payload)
+    return payload
+
+
+def _evaluate_regime_gate(
+    *,
+    db: Session,
+    context_payload: dict,
+    strategy_id: str,
+    strategy_version_id: str,
+    actor: User,
+) -> tuple[RegimeSnapshotResponse, bool, str | None, str | None]:
+    snapshot_payload = classify_regime(context_payload)
+    snapshot_row = persist_regime_snapshot(strategy_version_id=strategy_version_id, snapshot_payload=snapshot_payload)
+    db.add(snapshot_row)
+    db.commit()
+    db.refresh(snapshot_row)
+
+    binding = get_latest_regime_binding(db, strategy_version_id)
+    allowed = is_regime_allowed(binding, snapshot_payload["regime_label"])
+    reason_code = None
+    if not allowed:
+        reason_code = "regime_not_allowed"
+        create_audit_log(
+            db,
+            action="strategy_regime_gated_reject",
+            entity_type="strategy_definition",
+            entity_id=strategy_id,
+            actor_user_id=actor.id,
+            actor_role=actor.role.value,
+            severity="warning",
+            details={
+                "strategy_id": strategy_id,
+                "strategy_version_id": strategy_version_id,
+                "regime_snapshot_id": snapshot_row.regime_snapshot_id,
+                "regime_label": snapshot_row.regime_label,
+                "reason_code": reason_code,
+            },
+        )
+
+    return RegimeSnapshotResponse.model_validate(snapshot_row), allowed, reason_code, binding.binding_id if binding else None
 
 
 @router.get("/admin/strategies", response_model=list[StrategyDefinitionResponse])
@@ -219,6 +308,188 @@ def admin_evaluate_kernel(
     return DecisionResultResponse(decision_id=str(uuid.uuid4()), **decision)
 
 
+@router.get("/admin/regime/overview/{strategy_id}", response_model=StrategyRegimeOverviewResponse)
+def admin_regime_overview(strategy_id: str, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    overview = get_strategy_regime_overview(db, strategy_id)
+    return StrategyRegimeOverviewResponse(
+        bindings=[StrategyRegimeBindingResponse.model_validate(item) for item in overview.get("bindings", [])],
+        snapshots=[RegimeSnapshotResponse.model_validate(item) for item in overview.get("snapshots", [])],
+        reject_distribution=overview.get("reject_distribution", {}),
+    )
+
+
+@router.get("/admin/regime/bindings/{strategy_version_id}", response_model=list[StrategyRegimeBindingResponse])
+def admin_regime_bindings(
+    strategy_version_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return [
+        StrategyRegimeBindingResponse.model_validate(item)
+        for item in get_strategy_regime_bindings(db, strategy_version_id)
+    ]
+
+
+@router.post("/admin/regime/bindings", response_model=StrategyRegimeBindingResponse, status_code=status.HTTP_201_CREATED)
+def admin_create_regime_binding(
+    payload: StrategyRegimeBindingCreate,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = create_strategy_regime_binding(
+        db,
+        strategy_version_id=payload.strategy_version_id,
+        allowed_regimes=payload.allowed_regimes,
+        blocked_regimes=payload.blocked_regimes,
+        priority=payload.priority,
+        gating_policy_version=payload.gating_policy_version,
+        created_by=current_admin.id,
+    )
+    create_audit_log(
+        db,
+        action="strategy_regime_binding_created",
+        entity_type="strategy_regime_binding",
+        entity_id=row.binding_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "strategy_version_id": row.strategy_version_id,
+            "allowed_regimes": row.allowed_regimes,
+            "blocked_regimes": row.blocked_regimes,
+        },
+    )
+    return StrategyRegimeBindingResponse.model_validate(row)
+
+
+@router.post("/admin/regime/evaluate", response_model=RegimeEvaluationResponse)
+def admin_regime_evaluate(
+    payload: DecisionContextInput,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    version = get_version(db, payload.strategy_version_id)
+    if version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_version_not_found")
+    if version.version_hash != payload.strategy_version_hash:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="strategy_version_hash_mismatch")
+
+    snapshot, allowed, reason_code, binding_id = _evaluate_regime_gate(
+        db=db,
+        context_payload=payload.model_dump(),
+        strategy_id=version.strategy_id,
+        strategy_version_id=payload.strategy_version_id,
+        actor=current_admin,
+    )
+    return RegimeEvaluationResponse(allowed=allowed, reason_code=reason_code, snapshot=snapshot, binding_id=binding_id)
+
+
+@router.get("/admin/risk-orchestrator/policy", response_model=RiskOrchestratorPolicyResponse)
+def admin_risk_policy(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    policy = get_or_create_policy(db)
+    return RiskOrchestratorPolicyResponse(
+        reference_equity_usd=policy.reference_equity_usd,
+        account_max_notional_pct=policy.account_max_notional_pct,
+        symbol_max_notional_pct=policy.symbol_max_notional_pct,
+        strategy_max_concurrent_positions=policy.strategy_max_concurrent_positions,
+        strategy_cooldown_seconds=policy.strategy_cooldown_seconds,
+        max_order_frequency_per_min=policy.max_order_frequency_per_min,
+        max_order_burst_per_10s=policy.max_order_burst_per_10s,
+        daily_loss_limit_pct=policy.daily_loss_limit_pct,
+        duplicate_suppression_window_seconds=policy.duplicate_suppression_window_seconds,
+        updated_at=policy.updated_at,
+    )
+
+
+@router.put("/admin/risk-orchestrator/policy", response_model=RiskOrchestratorPolicyResponse)
+def admin_update_risk_policy(
+    payload: RiskOrchestratorPolicyUpdate,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    policy = update_policy(db, payload=payload.model_dump())
+    return RiskOrchestratorPolicyResponse(
+        reference_equity_usd=policy.reference_equity_usd,
+        account_max_notional_pct=policy.account_max_notional_pct,
+        symbol_max_notional_pct=policy.symbol_max_notional_pct,
+        strategy_max_concurrent_positions=policy.strategy_max_concurrent_positions,
+        strategy_cooldown_seconds=policy.strategy_cooldown_seconds,
+        max_order_frequency_per_min=policy.max_order_frequency_per_min,
+        max_order_burst_per_10s=policy.max_order_burst_per_10s,
+        daily_loss_limit_pct=policy.daily_loss_limit_pct,
+        duplicate_suppression_window_seconds=policy.duplicate_suppression_window_seconds,
+        updated_at=policy.updated_at,
+    )
+
+
+@router.get("/admin/risk-orchestrator/status", response_model=RiskOrchestratorStatusResponse)
+def admin_risk_status(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    snapshot = build_status_snapshot(db)
+    policy = snapshot["policy"]
+    return RiskOrchestratorStatusResponse(
+        policy=RiskOrchestratorPolicyResponse(
+            reference_equity_usd=policy.reference_equity_usd,
+            account_max_notional_pct=policy.account_max_notional_pct,
+            symbol_max_notional_pct=policy.symbol_max_notional_pct,
+            strategy_max_concurrent_positions=policy.strategy_max_concurrent_positions,
+            strategy_cooldown_seconds=policy.strategy_cooldown_seconds,
+            max_order_frequency_per_min=policy.max_order_frequency_per_min,
+            max_order_burst_per_10s=policy.max_order_burst_per_10s,
+            daily_loss_limit_pct=policy.daily_loss_limit_pct,
+            duplicate_suppression_window_seconds=policy.duplicate_suppression_window_seconds,
+            updated_at=policy.updated_at,
+        ),
+        kill_switch_active=snapshot["kill_switch_active"],
+        kill_switch_reasons=snapshot["kill_switch_reasons"],
+        open_intents=snapshot["open_intents"],
+        open_intents_by_symbol=snapshot["open_intents_by_symbol"],
+        open_intents_by_strategy=snapshot["open_intents_by_strategy"],
+    )
+
+
+@router.get("/admin/risk-orchestrator/rejects", response_model=list[RiskOrchestratorRejectResponse])
+def admin_risk_rejects(
+    limit: int = 50,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "risk_orchestrator_reject")
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    results: list[RiskOrchestratorRejectResponse] = []
+    for row in rows:
+        details = row.details or {}
+        results.append(
+            RiskOrchestratorRejectResponse(
+                id=row.id,
+                created_at=row.created_at,
+                strategy_id=details.get("strategy_id"),
+                strategy_version_id=details.get("strategy_version_id"),
+                symbol=details.get("symbol"),
+                reason_codes=details.get("reason_codes", []),
+                details=details,
+            )
+        )
+    return results
+
+
+@router.post("/admin/risk-orchestrator/supervisor/run", response_model=RiskOrchestratorSupervisorResponse)
+def admin_risk_supervisor_run(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    result = run_in_trade_supervisor(db)
+    return RiskOrchestratorSupervisorResponse(**result)
+
+
 @router.post("/admin/runtime/dispatch", response_model=RuntimeDispatchResponse)
 def admin_dispatch_runtime(
     payload: RuntimeDispatchRequest,
@@ -230,6 +501,51 @@ def admin_dispatch_runtime(
     decision = admin_evaluate_kernel(context, current_admin=current_admin, db=db)
 
     decision_dict = decision.model_dump()
+    if decision_dict.get("action") not in {"REJECT", "HOLD"}:
+        _, allowed, reason_code, _ = _evaluate_regime_gate(
+            db=db,
+            context_payload=context,
+            strategy_id=payload.strategy_id,
+            strategy_version_id=context.get("strategy_version_id"),
+            actor=current_admin,
+        )
+        if not allowed:
+            decision_dict = _build_reject_payload(
+                context,
+                strategy_version_id=context.get("strategy_version_id"),
+                reason_codes=[reason_code or "regime_not_allowed"],
+            )
+
+    if decision_dict.get("action") not in {"REJECT", "HOLD"}:
+        risk_result = evaluate_pre_trade(
+            db,
+            strategy_id=payload.strategy_id,
+            decision_result=decision_dict,
+            context_payload=context,
+        )
+        if not risk_result.get("approved", True):
+            decision_dict = _build_reject_payload(
+                context,
+                strategy_version_id=context.get("strategy_version_id"),
+                reason_codes=risk_result.get("reason_codes", ["risk_orchestrator_reject"]),
+            )
+            create_audit_log(
+                db,
+                action="risk_orchestrator_reject",
+                entity_type="strategy_definition",
+                entity_id=payload.strategy_id,
+                actor_user_id=current_admin.id,
+                actor_role=current_admin.role.value,
+                severity="warning",
+                details={
+                    "strategy_id": payload.strategy_id,
+                    "strategy_version_id": context.get("strategy_version_id"),
+                    "symbol": context.get("symbol"),
+                    "reason_codes": risk_result.get("reason_codes", []),
+                    "metrics": risk_result.get("metrics", {}),
+                },
+            )
+
     correlation_id = payload.decision_context.correlation_id
     decision_result, execution_intent, emitted = dispatch_decision_result(
         db,

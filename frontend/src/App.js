@@ -9,6 +9,7 @@ import { AdminLoginPage } from "@/pages/AdminLoginPage";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { AdminExchangesPage } from "@/pages/AdminExchangesPage";
 import { AdminProofsPage } from "@/pages/AdminProofsPage";
+import { AdminRiskOrchestratorPage } from "@/pages/AdminRiskOrchestratorPage";
 import { AdminStrategiesPage } from "@/pages/AdminStrategiesPage";
 import { AdminUserApprovalsPage } from "@/pages/AdminUserApprovalsPage";
 import { AuditLogsPage } from "@/pages/AuditLogsPage";
@@ -69,6 +70,7 @@ function App() {
             <Route path="exchanges" element={<AdminExchangesPage />} />
             <Route path="proofs" element={<AdminProofsPage />} />
             <Route path="strategies" element={<AdminStrategiesPage />} />
+            <Route path="risk-orchestrator" element={<AdminRiskOrchestratorPage />} />
             <Route path="market-universe" element={<MarketUniversePage />} />
             <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />

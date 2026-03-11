@@ -32,6 +32,7 @@ def map_decision_to_intent(*, strategy_id: str, correlation_id: str, decision_re
     payload = {
         "strategy_id": strategy_id,
         "strategy_version_id": decision_result.get("strategy_version_id"),
+        "account_id": context_payload.get("account_id") or context_payload.get("user_id"),
         "symbol": context_payload.get("symbol"),
         "side": action,
         "order_type": "MARKET",
@@ -126,6 +127,7 @@ def dispatch_decision_result(
         intent_id=str(uuid.uuid4()),
         strategy_id=strategy_id,
         strategy_version_id=intent_payload["strategy_version_id"],
+        account_id=intent_payload.get("account_id"),
         symbol=intent_payload["symbol"],
         side=intent_payload["side"],
         order_type=intent_payload["order_type"],

@@ -811,6 +811,7 @@ class StrategyDetailResponse(BaseModel):
 
 class DecisionContextInput(BaseModel):
     context_id: str
+    account_id: str | None = None
     timestamp_utc: str
     symbol: str
     timeframe: str
@@ -863,6 +864,7 @@ class ExecutionIntentResponse(BaseModel):
     intent_id: str
     strategy_id: str
     strategy_version_id: str
+    account_id: str | None = None
     symbol: str
     side: str
     order_type: str
@@ -892,6 +894,122 @@ class RuntimeDispatchResponse(BaseModel):
     decision_result: DecisionResultResponse
     execution_intent: dict | None
     emitted_events: list[RuntimeEventEnvelopeResponse]
+
+
+class StrategyRegimeBindingCreate(BaseModel):
+    strategy_version_id: str
+    allowed_regimes: list[str] = Field(default_factory=list)
+    blocked_regimes: list[str] = Field(default_factory=list)
+    priority: int = 100
+    gating_policy_version: str = "1.0"
+
+
+class StrategyRegimeBindingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    binding_id: str
+    strategy_version_id: str
+    allowed_regimes: list[str]
+    blocked_regimes: list[str]
+    priority: int
+    gating_policy_version: str
+    created_by: str
+    created_at: datetime
+
+
+class RegimeSnapshotResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    regime_snapshot_id: str
+    timestamp_utc: str
+    symbol: str
+    timeframe: str
+    strategy_version_id: str
+    volatility_regime: str
+    trend_regime: str
+    liquidity_regime: str
+    market_state_features: dict
+    feature_set_version: str
+    regime_score: float
+    regime_label: str
+    regime_hash: str
+    created_at: datetime
+
+
+class RegimeEvaluationResponse(BaseModel):
+    allowed: bool
+    reason_code: str | None = None
+    snapshot: RegimeSnapshotResponse
+    binding_id: str | None = None
+
+
+class StrategyRegimeOverviewResponse(BaseModel):
+    bindings: list[StrategyRegimeBindingResponse]
+    snapshots: list[RegimeSnapshotResponse]
+    reject_distribution: dict[str, int]
+
+
+class RiskOrchestratorPolicyResponse(BaseModel):
+    reference_equity_usd: float
+    account_max_notional_pct: float
+    symbol_max_notional_pct: float
+    strategy_max_concurrent_positions: int
+    strategy_cooldown_seconds: int
+    max_order_frequency_per_min: int
+    max_order_burst_per_10s: int
+    daily_loss_limit_pct: float
+    duplicate_suppression_window_seconds: int
+    updated_at: datetime | None = None
+
+
+class RiskOrchestratorPolicyUpdate(BaseModel):
+    reference_equity_usd: float
+    account_max_notional_pct: float
+    symbol_max_notional_pct: float
+    strategy_max_concurrent_positions: int
+    strategy_cooldown_seconds: int
+    max_order_frequency_per_min: int
+    max_order_burst_per_10s: int
+    daily_loss_limit_pct: float
+    duplicate_suppression_window_seconds: int
+
+
+class RiskOrchestratorExposureResponse(BaseModel):
+    key: str
+    open_count: int
+    notional: float
+
+
+class RiskOrchestratorStatusResponse(BaseModel):
+    policy: RiskOrchestratorPolicyResponse
+    kill_switch_active: bool
+    kill_switch_reasons: list[str]
+    open_intents: int
+    open_intents_by_symbol: list[RiskOrchestratorExposureResponse]
+    open_intents_by_strategy: list[RiskOrchestratorExposureResponse]
+
+
+class RiskOrchestratorRejectResponse(BaseModel):
+    id: str
+    created_at: datetime
+    strategy_id: str | None = None
+    strategy_version_id: str | None = None
+    symbol: str | None = None
+    reason_codes: list[str]
+    details: dict
+
+
+class RiskOrchestratorSupervisorBreach(BaseModel):
+    breach_type: str
+    key: str
+    open_count: int
+    notional: float
+    limit_pct: float | None = None
+
+
+class RiskOrchestratorSupervisorResponse(BaseModel):
+    evaluated_at: datetime
+    breaches: list[RiskOrchestratorSupervisorBreach]
 
 
 class UserPortfolioOverviewResponse(BaseModel):

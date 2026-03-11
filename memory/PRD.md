@@ -657,11 +657,21 @@
   - `test_faz63_runtime_skeleton.py` (testing agent suite)
   - Lokal regresyon: `test_phase6_iter3_runtime_skeleton.py` + `test_phase6_iter1_strategy_domain_kernel.py` + iter5 toplam 6/6 pass
 
+### 2026-03-11 (Faz-6.4/6.5 — Regime Gating + Risk Orchestrator)
+- Regime gating admin endpointleri tamamlandı: bindings/evaluate/overview, regime snapshot persistence, reject audit log.
+- Admin Strategies UI: regime binding editor + deterministic allowed/blocked demo + snapshot/reject dağılımı paneli.
+- Risk Orchestrator policy modeli + migration (`20260311_0018_risk_orchestrator_core.py`) + SQLite fallback.
+- Pre-trade risk gate runtime dispatch’e bağlandı (account/symbol exposure, strategy concurrency, cooldown, frequency, duplicate suppression, daily loss, kill-switch).
+- In-trade supervisor endpointi + status snapshot + risk reject audit log’u eklendi.
+- Admin Risk Orchestrator sayfası (/admin/risk-orchestrator) eklendi (policy editor, status, supervisor run, reject list).
+- Decision context’e `account_id` eklendi; execution intent’ler account bazlı takip ediyor.
+- PostgreSQL-only sweep tekrarlandı: mongo/pymongo/ObjectId kalıntısı yok.
+- Testler: curl risk-orchestrator + regime evaluate, Playwright screenshot (risk orchestrator + strategies).
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
 - Gerçek execution evidence’de immutable alanları canlı order üzerinden finalize et (exchange_order_id/client_order_id/submitted/ack/fill/slippage/validation_snapshot)
-- Faz-6.4 Regime classifier contract + regime-gated decision flow
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
 - Alembic migration’larda rollback senaryolarının staging doğrulaması
@@ -683,7 +693,6 @@
 
 ## 7) Next Tasks List
 1. Geçerli testnet key ile gerçek order evidence (NEW/PARTIAL/FILLED/CANCELED) finalize et
-2. Faz-6.4: Regime classifier contract + regime-gated karar akışı
-3. Faz-6.5: Risk orchestrator (pre-trade gate + in-trade supervisor + kill-switch)
-4. Hardening+: manifest_chain_hash (append chain integrity)
-5. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
+2. Hardening+: manifest_chain_hash (append chain integrity)
+3. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
+4. Replay-native analytics (param sweep) için ilk UI/deney seti

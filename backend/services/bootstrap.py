@@ -10,6 +10,7 @@ from models import (
     ExecutionPolicy,
     LiveActivationConfig,
     RiskExposureGroup,
+    RiskOrchestratorPolicy,
     User,
     UserRole,
 )
@@ -73,6 +74,15 @@ def _seed_admin_control(db: Session):
     )
     db.add(default_control)
     db.commit()
+
+
+def _seed_risk_orchestrator_policy(db: Session):
+    policy = db.query(RiskOrchestratorPolicy).filter(RiskOrchestratorPolicy.id == "global").first()
+    if policy:
+        return
+    db.add(RiskOrchestratorPolicy(id="global"))
+    db.commit()
+
 
 
 def _seed_execution_policies(db: Session):
@@ -245,6 +255,7 @@ def seed_default_admin():
         _seed_exposure_groups(db)
         _seed_backtest_cards(db)
         _seed_live_activation_config(db)
+        _seed_risk_orchestrator_policy(db)
         seed_binance_venue_registry(db)
     finally:
         db.close()
