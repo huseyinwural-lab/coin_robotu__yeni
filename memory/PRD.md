@@ -888,3 +888,48 @@
 1. Top N executable signals admin widget
 2. Dynamic multiplier set versiyon yönetimi (`v2+`) ve A/B karşılaştırmalı tuning
 3. Spot dışında ek strateji aktivasyonu (range/breakout) — sadece P1 davranışı stabilize olduktan sonra
+
+## 12) 2026-03-11 — Faz-3 (P2) Observability & Strategy Tuning Uygulandı
+
+### Uygulanan kullanıcı kararları
+- Tek route: `/admin/strategy-observability`
+- Zaman filtresi: `24h / 7d / 30d` (default `24h`)
+- Top-N limiti: default `10`, max `50` (backend+UI enforce)
+- Ayrı tablo: `strategy_observability_events` (analytics/reporting bu tablo üzerinden)
+
+### Backend implementasyonları
+- Yeni model + migration:
+  - `StrategyObservabilityEvent` (model)
+  - `20260311_0024_strategy_observability_events.py`
+- Yeni servis:
+  - `services/strategy_observability_service.py`
+  - Window parsing (`24h/7d/30d`), top signals, rejection analytics, score metrics, observability report
+  - Selection/rejection event logging (`log_strategy_observability_events`)
+- Yeni admin endpointleri:
+  - `GET /api/admin/strategy/top-signals`
+  - `GET /api/admin/strategy/rejection-analytics`
+  - `GET /api/admin/strategy/score-metrics`
+  - `GET /api/admin/strategy/report`
+- `POST /api/spot-strategy/scan/run` observability tablosuna event yazacak şekilde genişletildi.
+- Runtime selection cycle audit + observability entegrasyonu korundu.
+
+### Frontend implementasyonları
+- Yeni sayfa: `frontend/src/pages/AdminStrategyObservabilityPage.jsx`
+- Yeni route: `/admin/strategy-observability`
+- Sol menü linki eklendi: `Strategy Observability`
+- Tek ekranda:
+  1. Top N Executable Signals tablosu
+  2. Signal Rejection Analytics kartları
+  3. Score Tuning Dashboard (base/adjusted/delta + regime dağılımı)
+  4. Strategy Observability Report paneli
+
+### Faz-3 doğrulama sonucu
+- Testing agent raporu: `/app/test_reports/iteration_27.json`
+  - Backend: **28/28 PASS**
+  - Frontend: **100% PASS** (strategy-observability + admin regression)
+
+### Kalan / Sonraki Faz
+1. **Faz-4** Spot Strategy Expansion:
+   - `SPOT_RANGE_REVERSION`
+   - `SPOT_VOLATILITY_BREAKOUT`
+2. Futures strategy engine ve capital allocation modeli
