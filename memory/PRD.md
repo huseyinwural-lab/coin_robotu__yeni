@@ -149,12 +149,33 @@
   - `/app/test_reports/iteration_7.json` (backend+frontend doğrulandı)
   - belirtilen UI eksikliği (simulate failed butonu) giderildi
 
+### 2026-03-11 (Faz-4 İterasyon-1 — Controlled Live Activation Hazırlığı)
+- Admin panel teması operasyonel mavi/kırmızı çizgide kesinleştirildi (user turuncu/black ayrımı korunarak)
+- Admin sidebar’a **Phase-4 Live Control** eklendi ve route aktif edildi (`/app/phase4-live`)
+- Binance Futures Testnet hazırlık katmanı güçlendirildi:
+  - Testnet connectivity probe (`/api/phase4/testnet-connectivity`)
+  - Permission check artık missing/invalid/exchange error senaryolarını 500 atmadan yönetiyor
+  - API key/secret için request+environment çözümleme ve mask/fingerprint güvenli gösterim
+- Safety layer sıkılaştırıldı (safe mode):
+  - yalnızca `BTCUSDT`
+  - leverage cap `<=1`
+  - max position `%0.1`
+  - max notional exposure `<=150`
+  - kill-switch / disable-futures / kritik readiness fail durumlarında live mode otomatik kapatma
+- Readiness raporu genişletildi:
+  - `testnet_endpoint_reachable`
+  - `safe_limits_locked`
+  - no-key fail-safe ve docs referansları
+- Testler:
+  - `/app/test_reports/iteration_8.json` (backend 22/22 pass, frontend 100%)
+  - `/app/backend/tests/test_phase4_live_activation.py`
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
+- Binance Testnet API key’leri ile ilk kontrollü canlı test emri (yalnız BTCUSDT, 1x, düşük notional)
 - Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülü (listeleme, disable/enable)
-- Execution state machine’i daha granular hale getirme (created/submitted/ack/partial/filled/rejected/failed)
 - Alembic migration’larda rollback senaryolarının staging doğrulaması
 
 ### P1
@@ -173,8 +194,8 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Korelasyon modeline sektör/tema tabanlı ikinci seviye cluster sınıflandırma ekle
-2. Hardening checklist trendini grafik + alarm geçmişi ile zenginleştir
-3. Execution simülasyonunda retry budget tüketimini PnL etkisiyle bağla
+1. Kullanıcıdan Binance Futures Testnet key’lerini alıp permission=ready + ilk canlı test emrini doğrula
+2. Slippage metriğini (beklenen fiyat vs gerçekleşen fiyat) pipeline + admin/user görünümüne ekle
+3. Hardening checklist trendini grafik + alarm geçmişi ile zenginleştir
 4. Backtest insights sayfasına filtre/sıralama ve karşılaştırma ekle
 5. Canlı emir öncesi dry-run otomasyon senaryolarını release-gate pipeline’a bağla
