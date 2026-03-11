@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://exchange-hub-78.preview.emergentagent.com").rstrip("/")
 EXPORT_DIR = Path("/app/backend/exports")
 MANIFEST_PATH = EXPORT_DIR / "artifact_manifest.json"
 
@@ -215,7 +215,7 @@ class TestArtifactVerifyEndpoint:
         assert data["verified"] is True, f"Expected verified=True but got {data['verified']}"
         assert data["sha256_expected"] == data["sha256_actual"], "Hash mismatch on fresh artifact"
         
-        print(f"✓ Verify endpoint returns expected schema")
+        print("✓ Verify endpoint returns expected schema")
         print(f"  - artifact_id: {data['artifact_id']}")
         print(f"  - sha256_expected: {data['sha256_expected'][:16]}...")
         print(f"  - sha256_actual: {data['sha256_actual'][:16]}...")
@@ -298,7 +298,7 @@ class TestArtifactDownloadEndpoint:
             artifact_data = response.json()
             assert "sha256" in artifact_data or "metadata" in artifact_data, "Downloaded content not valid artifact"
             print(f"✓ Download returned valid artifact JSON ({len(response.content)} bytes)")
-        except:
+        except Exception:
             # May be raw bytes, that's ok
             print(f"✓ Download returned artifact data ({len(response.content)} bytes)")
 
@@ -358,7 +358,7 @@ class TestTamperDetection:
                     assert tampered_result["verified"] is False, f"Tampered artifact should fail verification, got: {tampered_result}"
                     assert tampered_result["sha256_expected"] != tampered_result["sha256_actual"], "Hashes should differ after tamper"
                     
-                    print(f"✓ Tamper detection working!")
+                    print("✓ Tamper detection working!")
                     print(f"  - Expected: {tampered_result['sha256_expected'][:16]}...")
                     print(f"  - Actual: {tampered_result['sha256_actual'][:16]}...")
                     print(f"  - Verified: {tampered_result['verified']}")
@@ -409,7 +409,7 @@ class TestRiskPolicyAuditEventsSingleWrite:
         assert summary1.json()["run_id"] == run_id
         assert summary2.json()["run_id"] == run_id
         
-        print(f"✓ Risk summary returned twice without error (no duplicate creation)")
+        print("✓ Risk summary returned twice without error (no duplicate creation)")
         print(f"  - strategy_version: {summary1.json()['strategy_version']}")
         print(f"  - volatility_bucket: {summary1.json()['volatility_bucket']}")
 
@@ -440,7 +440,7 @@ class TestLifecycleProofRegression:
         # With blocked key, expect blocked or fallback_generated
         assert data["lifecycle_proof_status"] in ["blocked", "fallback_generated", "completed"], f"Unexpected status: {data['lifecycle_proof_status']}"
         
-        print(f"✓ Lifecycle proof working with artifact signing")
+        print("✓ Lifecycle proof working with artifact signing")
         print(f"  - status: {data['lifecycle_proof_status']}")
         print(f"  - evidence_type: {data['evidence_type']}")
         print(f"  - exchange_artifact_id: {data['exchange_artifact_id'][:8]}...")
@@ -491,7 +491,7 @@ class TestRiskSummaryRegression:
         assert data["artifact_id"], "artifact_id should not be empty"
         assert data["export_file"], "export_file should not be empty"
         
-        print(f"✓ Risk summary with artifact signing working")
+        print("✓ Risk summary with artifact signing working")
         print(f"  - artifact_id: {data['artifact_id'][:8]}...")
         print(f"  - export_file: {data['export_file'].split('/')[-1]}")
         print(f"  - schema_version: {data['schema_version']}")

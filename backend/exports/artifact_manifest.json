@@ -418,6 +418,105 @@
       "proof_id": "da196389-6fca-4185-93d8-88f73f45afae_20260311123022",
       "evidence_type": "fallback_replay",
       "status": "fallback_generated"
+    },
+    {
+      "artifact_id": "15f76729-e1b6-438a-869b-55c212f6f759",
+      "filename": "exchange_evidence_da196389-6fca-4185-93d8-88f73f45afae_20260311123430_20260311123430_15f76729.json",
+      "artifact_type": "exchange_evidence",
+      "sha256": "6a769221800afde60a37fedd8cc95a34a036e8be238d6a4a238bb727d96314d2",
+      "size": 1388,
+      "created_at": "2026-03-11T12:34:30.067340+00:00",
+      "proof_id": "da196389-6fca-4185-93d8-88f73f45afae_20260311123430",
+      "evidence_type": "blocked",
+      "status": "blocked"
+    },
+    {
+      "artifact_id": "0e44a525-2dab-4fa2-9f24-b061d56344f9",
+      "filename": "fallback_replay_evidence_da196389-6fca-4185-93d8-88f73f45afae_20260311123430_20260311123430_0e44a525.json",
+      "artifact_type": "fallback_replay_evidence",
+      "sha256": "af2482b1c70d79871532a694aaa2d73513ec615042bd13da8e7820515634f75f",
+      "size": 1220,
+      "created_at": "2026-03-11T12:34:30.694535+00:00",
+      "proof_id": "da196389-6fca-4185-93d8-88f73f45afae_20260311123430",
+      "evidence_type": "fallback_replay",
+      "status": "fallback_generated"
+    },
+    {
+      "artifact_id": "cafcc743-529d-403c-bf6c-76318a266dd7",
+      "filename": "exchange_evidence_da196389-6fca-4185-93d8-88f73f45afae_20260311123431_20260311123431_cafcc743.json",
+      "artifact_type": "exchange_evidence",
+      "sha256": "8687e28f5f0d88470043575078cd93e6276d2a370ef8f90278981430754f0746",
+      "size": 1388,
+      "created_at": "2026-03-11T12:34:31.049859+00:00",
+      "proof_id": "da196389-6fca-4185-93d8-88f73f45afae_20260311123431",
+      "evidence_type": "blocked",
+      "status": "blocked"
+    },
+    {
+      "artifact_id": "dd52159f-90ee-4c42-b8b2-cc46214c126f",
+      "filename": "fallback_replay_evidence_da196389-6fca-4185-93d8-88f73f45afae_20260311123431_20260311123431_dd52159f.json",
+      "artifact_type": "fallback_replay_evidence",
+      "sha256": "fd2db86f7bfc0c5a02496b53812aea9804f10e742dcbe736117ee553b2d98e4a",
+      "size": 1220,
+      "created_at": "2026-03-11T12:34:31.645219+00:00",
+      "proof_id": "da196389-6fca-4185-93d8-88f73f45afae_20260311123431",
+      "evidence_type": "fallback_replay",
+      "status": "fallback_generated"
+    },
+    {
+      "artifact_id": "3b31c2ba-e5ee-46f5-9d53-19f3844d8f8e",
+      "filename": "replay_risk_summary_af16d139-f099-49ed-b42d-dae3da63bc2c_20260311123432_3b31c2ba.json",
+      "artifact_type": "replay_risk_summary",
+      "sha256": "5e6e70ddd60e23c113a770ca074e61db2e230f8b9050f20a3bab117eb14da5c1",
+      "size": 1030,
+      "created_at": "2026-03-11T12:34:32.322969+00:00",
+      "proof_id": "af16d139-f099-49ed-b42d-dae3da63bc2c",
+      "evidence_type": "fallback_replay",
+      "status": "generated"
+    },
+    {
+      "artifact_id": "23b7a7cd-5346-41b9-9102-8cb31cb892a9",
+      "filename": "replay_risk_summary_af16d139-f099-49ed-b42d-dae3da63bc2c_20260311123432_23b7a7cd.json",
+      "artifact_type": "replay_risk_summary",
+      "sha256": "bb060546b85c9475c60378139411274b25227b3d076ed84e48032af90cd1c148",
+      "size": 1030,
+      "created_at": "2026-03-11T12:34:32.455555+00:00",
+      "proof_id": "af16d139-f099-49ed-b42d-dae3da63bc2c",
+      "evidence_type": "fallback_replay",
+      "status": "generated"
+    },
+    {
+      "artifact_id": "32c8c426-9a9f-40fb-91a1-00dbfb478ce4",
+      "filename": "exchange_evidence_da196389-6fca-4185-93d8-88f73f45afae_20260311123432_20260311123432_32c8c426.json",
+      "artifact_type": "exchange_evidence",
+      "sha256": "68414bad9fa2d89aa38446c86a6b27209e47163dd873e88d0ae149b7e02fff8d",
+      "size": 1388,
+      "created_at": "2026-03-11T12:34:32.928623+00:00",
+      "proof_id": "da196389-6fca-4185-93d8-88f73f45afae_20260311123432",
+      "evidence_type": "blocked",
+      "status": "blocked"
+    },
+    {
+      "artifact_id": "c3f7fa1e-0dcb-4760-9cd8-ba14ef63fe29",
+      "filename": "fallback_replay_evidence_da196389-6fca-4185-93d8-88f73f45afae_20260311123432_20260311123433_c3f7fa1e.json",
+      "artifact_type": "fallback_replay_evidence",
+      "sha256": "850bbb7812b6e89107ae5ccac51955cd6b6894af83ba411e1cbc8f12760c75e2",
+      "size": 1220,
+      "created_at": "2026-03-11T12:34:33.246976+00:00",
+      "proof_id": "da196389-6fca-4185-93d8-88f73f45afae_20260311123432",
+      "evidence_type": "fallback_replay",
+      "status": "fallback_generated"
+    },
+    {
+      "artifact_id": "6410996c-fc1c-4d42-ba5d-466169f18596",
+      "filename": "replay_risk_summary_50a0d2c7-4709-4baa-aba2-6b3cbeb45c3d_20260311123434_6410996c.json",
+      "artifact_type": "replay_risk_summary",
+      "sha256": "8467b600d4a2ff8d322d6c0a15042ccdb02232c55930b248c00ebffab30036f1",
+      "size": 1031,
+      "created_at": "2026-03-11T12:34:34.150825+00:00",
+      "proof_id": "50a0d2c7-4709-4baa-aba2-6b3cbeb45c3d",
+      "evidence_type": "fallback_replay",
+      "status": "generated"
     }
   ]
 }

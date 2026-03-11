@@ -531,6 +531,42 @@
   - `/app/backend/tests/test_phase5_iter4_lifecycle_immutable_risk.py` (5/5 pass)
   - Regression: iter3 test seti tekrar koşuldu (22/22 pass)
 
+### 2026-03-11 (Faz-5 Hardening İterasyon-5 — Artefact Integrity + Verify + Admin Proof Panel)
+- Kullanıcı karar seti uygulandı: **1A, 2B, 3B, 4B**
+- **Görev-1 (Proof Artefact Integrity / SHA-256):**
+  - Yeni servis: `backend/services/artifact_service.py`
+  - Tüm proof artefact’lar imzalanıyor (SHA-256):
+    - `exchange_evidence_*.json`
+    - `fallback_replay_evidence_*.json`
+    - `replay_risk_summary_*.json`
+  - Artefact metadata alanları eklendi: `schema_version`, `artifact_type`, `created_at`, `sha256`, `artifact_id`
+  - Merkezi manifest: `/app/backend/exports/artifact_manifest.json`
+    - zorunlu alanlar: `artifact_id`, `filename`, `artifact_type`, `sha256`, `size`, `created_at`
+- **Görev-2 (Proof Verification Endpoint):**
+  - Yeni router: `backend/routers/audit.py`
+  - Endpoint: `GET /api/audit/artifacts/{artifact_id}/verify`
+    - UUID tabanlı lookup (manifest içi `artifact_id`)
+    - `sha256_expected`, `sha256_actual`, `verified` döner
+    - doğrulama sonucu audit log’a yazılır (`action=artifact_verify`)
+  - Endpoint: `GET /api/audit/artifacts/{artifact_id}/download`
+- **Görev-3 (Admin Proof Panel):**
+  - Yeni rota: `/admin/proofs`
+  - Yeni sayfa: `frontend/src/pages/AdminProofsPage.jsx`
+  - Liste alanları: `proof_id`, `evidence_type`, `status`, `artifact_hash`, `created_at`, `filename`
+  - Satır aksiyonları: `Verify`, `Download`
+  - Nav entegrasyonu: `Proof Panel` linki eklendi
+- **Görev-4 (Replay Risk → Risk Policy Feed):**
+  - Yeni tablo/model: `risk_policy_audit_events`
+  - Trigger politikası: **yalnızca replay run completion** anında tek kayıt
+  - Duplicate önleme: aynı `replay_run_id` için ikinci write engellenir
+- Migration/DB:
+  - Alembic: `20260311_0014_risk_policy_audit_events.py`
+  - SQLite compatibility: `risk_policy_audit_events` tablosu eklendi
+- Testler:
+  - `/app/test_reports/iteration_20.json` (backend/frontend pass)
+  - `test_faz5_hardening_iter5_artifacts.py` (15/15 pass)
+  - Lokal regresyon: iter3+iter4 toplam 27/27 pass
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
@@ -557,7 +593,7 @@
 
 ## 7) Next Tasks List
 1. Geçerli testnet key ile gerçek order evidence (NEW/PARTIAL/FILLED/CANCELED) finalize et
-2. Lifecycle proof orchestrator çıktısını admin panelde kanıt panosuna bağla (live vs fallback etiketli)
-3. Replay risk summary metriklerini risk-policy denetim kayıtlarıyla ilişkilendir (audit + policy feedback)
+2. Faz-6.1 başlangıcı: StrategyDefinition + StrategyVersion append-only domain şeması
+3. Faz-6.2 başlangıcı: DecisionContext + deterministic evaluate(context) kernel iskeleti
 4. Hardening trend eşiklerini active alerts ile operasyonel policy’ye bağla
 5. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
