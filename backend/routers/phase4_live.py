@@ -23,6 +23,9 @@ from schemas import (
     ReleaseGateStatusResponse,
     OverrideAnalyticsResponse,
     AlertHistoryItemResponse,
+    AlertPolicyResponse,
+    AlertPolicyUpdate,
+    ActiveAlertResponse,
     TestOrderResponse,
     TestnetConnectivityResponse,
 )
@@ -37,10 +40,12 @@ from services.live_mode_service import (
     exchange_settings_view,
     get_or_create_exchange_settings,
     get_or_create_live_config,
+    get_or_create_alert_policy,
     list_release_gate_overrides,
     latest_execution_quality,
     list_execution_quality,
     override_alert_analytics,
+    active_alerts,
     permission_drift_trend,
     create_release_gate_override,
     revoke_release_gate_override,
@@ -50,6 +55,7 @@ from services.live_mode_service import (
     resolve_runtime_credentials,
     run_controlled_test_order,
     save_exchange_settings,
+    update_alert_policy,
     trigger_close_all_positions,
     trigger_stop_all_bots,
 )
@@ -400,6 +406,47 @@ def gate_alert_history(
     limit: int = Query(default=30, ge=10, le=100),
 ):
     return [AlertHistoryItemResponse(**item) for item in alert_history(db, limit=limit)]
+
+
+@router.get("/admin/alert-policy", response_model=AlertPolicyResponse)
+def gate_alert_policy(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    policy = get_or_create_alert_policy(db)
+    return AlertPolicyResponse(
+        admin_notification_enabled=policy.admin_notification_enabled,
+        ops_webhook_url=policy.ops_webhook_url,
+        monitoring_alert_log_enabled=policy.monitoring_alert_log_enabled,
+        execution_quality_warning_threshold=policy.execution_quality_warning_threshold,
+        execution_quality_critical_threshold=policy.execution_quality_critical_threshold,
+        permission_drift_warning_per_day=policy.permission_drift_warning_per_day,
+        permission_drift_critical_per_day=policy.permission_drift_critical_per_day,
+        gate_override_warning_per_day=policy.gate_override_warning_per_day,
+        gate_override_critical_per_day=policy.gate_override_critical_per_day,
+    )
+
+
+@router.put("/admin/alert-policy", response_model=AlertPolicyResponse)
+def gate_alert_policy_update(
+    payload: AlertPolicyUpdate,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    policy = update_alert_policy(db, payload.model_dump())
+    return AlertPolicyResponse(
+        admin_notification_enabled=policy.admin_notification_enabled,
+        ops_webhook_url=policy.ops_webhook_url,
+        monitoring_alert_log_enabled=policy.monitoring_alert_log_enabled,
+        execution_quality_warning_threshold=policy.execution_quality_warning_threshold,
+        execution_quality_critical_threshold=policy.execution_quality_critical_threshold,
+        permission_drift_warning_per_day=policy.permission_drift_warning_per_day,
+        permission_drift_critical_per_day=policy.permission_drift_critical_per_day,
+        gate_override_warning_per_day=policy.gate_override_warning_per_day,
+        gate_override_critical_per_day=policy.gate_override_critical_per_day,
+    )
+
+
+@router.get("/admin/active-alerts", response_model=list[ActiveAlertResponse])
+def gate_active_alerts(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return [ActiveAlertResponse(**item) for item in active_alerts(db)]
 
 
 @router.get("/testnet-connectivity", response_model=TestnetConnectivityResponse)

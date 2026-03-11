@@ -21,6 +21,8 @@ export const MonitoringPage = () => {
   const [overrideAnalytics, setOverrideAnalytics] = useState(null);
   const [alertHistory, setAlertHistory] = useState([]);
   const [hardeningTrend, setHardeningTrend] = useState(null);
+  const [activeAlerts, setActiveAlerts] = useState([]);
+  const [alertPolicy, setAlertPolicy] = useState({});
   const [overrideForm, setOverrideForm] = useState(defaultOverrideForm);
   const [isOverrideSubmitting, setIsOverrideSubmitting] = useState(false);
   const [isPageVisible, setIsPageVisible] = useState(true);
@@ -37,6 +39,8 @@ export const MonitoringPage = () => {
         { data: analyticsData },
         { data: alertsData },
         { data: hardeningData },
+        { data: activeAlertsData },
+        { data: alertPolicyData },
       ] = await Promise.all([
         apiClient.get("/pipeline/monitoring"),
         apiClient.get(`/phase4/admin/permission-drift-trend?days=${driftDays}`),
@@ -45,6 +49,8 @@ export const MonitoringPage = () => {
         apiClient.get(`/phase4/admin/override-analytics?days=${driftDays}`),
         apiClient.get("/phase4/admin/alert-history?limit=30"),
         apiClient.get("/admin-phase3/hardening-checklist/trend"),
+        apiClient.get("/phase4/admin/active-alerts"),
+        apiClient.get("/phase4/admin/alert-policy"),
       ]);
       setMetrics(monitoringData);
       setDrift(driftData);
@@ -53,6 +59,8 @@ export const MonitoringPage = () => {
       setOverrideAnalytics(analyticsData);
       setAlertHistory(alertsData);
       setHardeningTrend(hardeningData);
+      setActiveAlerts(activeAlertsData);
+      setAlertPolicy(alertPolicyData);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Monitoring verisi alınamadı");
     } finally {
@@ -134,6 +142,16 @@ export const MonitoringPage = () => {
       await fetchMonitoring();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Override revoke başarısız");
+    }
+  };
+
+  const saveAlertPolicy = async () => {
+    try {
+      await apiClient.put("/phase4/admin/alert-policy", alertPolicy);
+      toast.success("Alert policy güncellendi");
+      await fetchMonitoring();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Alert policy kaydedilemedi");
     }
   };
 
@@ -327,6 +345,34 @@ export const MonitoringPage = () => {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-active-alerts-panel">
+        <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="monitoring-active-alerts-title">Active Alerts</p>
+        <div className="grid gap-2 sm:grid-cols-3" data-testid="monitoring-active-alerts-grid">
+          {activeAlerts.map((alert) => (
+            <div key={alert.code} className={`border p-2 text-xs ${alert.severity === "critical" ? "border-red-600 bg-red-950/20" : "border-yellow-600 bg-yellow-950/20"}`} data-testid={`monitoring-active-alert-${alert.code}`}>
+              {alert.code} · {alert.severity} · value={alert.value}
+            </div>
+          ))}
+          {activeAlerts.length === 0 && (
+            <p className="text-xs text-slate-400" data-testid="monitoring-active-alerts-empty">Aktif alarm yok.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-alert-policy-panel">
+        <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="monitoring-alert-policy-title">Alert Policy</p>
+        <div className="grid gap-2 sm:grid-cols-2" data-testid="monitoring-alert-policy-grid">
+          <Input type="number" value={alertPolicy?.execution_quality_warning_threshold ?? 60} onChange={(event) => setAlertPolicy((prev) => ({ ...prev, execution_quality_warning_threshold: Number(event.target.value) }))} data-testid="monitoring-alert-policy-execution-warning-input" />
+          <Input type="number" value={alertPolicy?.execution_quality_critical_threshold ?? 40} onChange={(event) => setAlertPolicy((prev) => ({ ...prev, execution_quality_critical_threshold: Number(event.target.value) }))} data-testid="monitoring-alert-policy-execution-critical-input" />
+          <Input type="number" value={alertPolicy?.permission_drift_warning_per_day ?? 2} onChange={(event) => setAlertPolicy((prev) => ({ ...prev, permission_drift_warning_per_day: Number(event.target.value) }))} data-testid="monitoring-alert-policy-drift-warning-input" />
+          <Input type="number" value={alertPolicy?.permission_drift_critical_per_day ?? 5} onChange={(event) => setAlertPolicy((prev) => ({ ...prev, permission_drift_critical_per_day: Number(event.target.value) }))} data-testid="monitoring-alert-policy-drift-critical-input" />
+          <Input type="number" value={alertPolicy?.gate_override_warning_per_day ?? 2} onChange={(event) => setAlertPolicy((prev) => ({ ...prev, gate_override_warning_per_day: Number(event.target.value) }))} data-testid="monitoring-alert-policy-override-warning-input" />
+          <Input type="number" value={alertPolicy?.gate_override_critical_per_day ?? 5} onChange={(event) => setAlertPolicy((prev) => ({ ...prev, gate_override_critical_per_day: Number(event.target.value) }))} data-testid="monitoring-alert-policy-override-critical-input" />
+          <Input value={alertPolicy?.ops_webhook_url ?? ""} onChange={(event) => setAlertPolicy((prev) => ({ ...prev, ops_webhook_url: event.target.value }))} className="sm:col-span-2" data-testid="monitoring-alert-policy-ops-webhook-input" placeholder="Ops webhook URL" />
+        </div>
+        <Button className="bg-blue-700 text-white hover:bg-blue-800" onClick={saveAlertPolicy} data-testid="monitoring-alert-policy-save-button">Alert Policy Kaydet</Button>
       </div>
     </section>
   );

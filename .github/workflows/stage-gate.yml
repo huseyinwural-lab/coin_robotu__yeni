@@ -1,0 +1,12 @@
+name: stage-gate-check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stage-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run stage release gate
+        run: bash scripts/ci_stage_gate.sh

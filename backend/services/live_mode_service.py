@@ -18,6 +18,7 @@ from db import redis_client
 from models import (
     AdminControl,
     AuditLog,
+    AlertPolicy,
     BotProfile,
     ExecutionLifecycleEvent,
     ExecutionMetric,
@@ -31,6 +32,7 @@ from models import (
     TestnetExecutionLog,
     User,
     UserExchangeSetting,
+    UserRiskSetting,
 )
 from services.pipeline.cache_store import read_candles
 
@@ -497,6 +499,7 @@ def _record_permission_snapshot_and_drift(
     critical = bool(old_can_trade is True and not can_trade)
     changed = sorted(old_permissions) != new_permissions or old_can_trade != can_trade
 
+    drift_event = None
     if changed and (old_permissions or old_can_trade is not None):
         drift_event = PermissionDriftEvent(
             id=str(uuid.uuid4()),
@@ -518,6 +521,9 @@ def _record_permission_snapshot_and_drift(
     settings_row.validation_checked_at = datetime.now(timezone.utc)
     settings_row.updated_at = datetime.now(timezone.utc)
     db.commit()
+
+    if drift_event is not None:
+        route_permission_drift_alert(db, drift_event)
 
 
 def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[dict, int]:
@@ -631,6 +637,130 @@ def get_market_ticker(symbol: str = "BTCUSDT") -> dict:
         "mid_price": snapshot["mid_price"],
         "timestamp": snapshot["timestamp"],
     }
+
+
+def get_or_create_user_risk_settings(db: Session, user_id: str) -> UserRiskSetting:
+    row = db.query(UserRiskSetting).filter(UserRiskSetting.user_id == user_id).first()
+    if row:
+        return row
+    row = UserRiskSetting(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        allocation_pct=20,
+        trade_risk_pct=10,
+        daily_loss_limit_pct=3,
+        compounding_enabled=True,
+        base_capital=10000,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def update_user_risk_settings(
+    db: Session,
+    *,
+    user_id: str,
+    allocation_pct: float,
+    trade_risk_pct: float,
+    daily_loss_limit_pct: float,
+    compounding_enabled: bool,
+) -> UserRiskSetting:
+    if not 1 <= allocation_pct <= 50:
+        raise ValueError("İşleme ayrılan ana para 1-50 aralığında olmalı")
+    if not 1 <= trade_risk_pct <= 25:
+        raise ValueError("İşlemdeki paranın risk oranı 1-25 aralığında olmalı")
+    if not 1 <= daily_loss_limit_pct <= 10:
+        raise ValueError("Günlük zarar limiti 1-10 aralığında olmalı")
+
+    row = get_or_create_user_risk_settings(db, user_id)
+    row.allocation_pct = allocation_pct
+    row.trade_risk_pct = trade_risk_pct
+    row.daily_loss_limit_pct = daily_loss_limit_pct
+    row.compounding_enabled = compounding_enabled
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def _closed_pnl_proxy(db: Session, user_id: str) -> float:
+    # Exchange test order tarafında gerçek realize PnL henüz yoksa 0 bazında kalır.
+    return 0.0
+
+
+def _open_position_balance_proxy(db: Session, user_id: str) -> float:
+    positions = db.query(PaperPosition).filter(PaperPosition.user_id == user_id, PaperPosition.status == "open").all()
+    return round(sum(float(item.position_size or 0) * float(item.entry_price or 0) for item in positions), 2)
+
+
+def user_portfolio_overview(db: Session, user_id: str) -> dict:
+    settings_row = get_or_create_user_risk_settings(db, user_id)
+    closed_pnl = _closed_pnl_proxy(db, user_id)
+    current_capital = round(settings_row.base_capital + closed_pnl, 2)
+    open_position_balance = _open_position_balance_proxy(db, user_id)
+    available_balance = round(max(current_capital - open_position_balance, 0), 2)
+    next_base = current_capital if settings_row.compounding_enabled else settings_row.base_capital
+    return {
+        "current_capital": current_capital,
+        "available_balance": available_balance,
+        "open_position_balance": open_position_balance,
+        "closed_pnl": round(closed_pnl, 2),
+        "compounding_enabled": settings_row.compounding_enabled,
+        "next_base_capital": round(next_base, 2),
+    }
+
+
+def user_risk_preview(db: Session, user_id: str) -> dict:
+    settings_row = get_or_create_user_risk_settings(db, user_id)
+    overview = user_portfolio_overview(db, user_id)
+    current_capital = overview["current_capital"]
+    trade_allocation_amount = round(current_capital * (settings_row.allocation_pct / 100), 2)
+    max_trade_loss_amount = round(trade_allocation_amount * (settings_row.trade_risk_pct / 100), 2)
+    capital_impact = round((max_trade_loss_amount / max(current_capital, 1)) * 100, 2)
+    next_base = overview["next_base_capital"]
+
+    warnings: list[str] = []
+    if settings_row.allocation_pct > 30:
+        warnings.append("high_allocation")
+    if settings_row.trade_risk_pct > 15:
+        warnings.append("high_trade_risk")
+    if settings_row.daily_loss_limit_pct > 5:
+        warnings.append("high_daily_loss")
+
+    return {
+        "current_capital": current_capital,
+        "allocation_pct": settings_row.allocation_pct,
+        "trade_allocation_amount": trade_allocation_amount,
+        "trade_risk_pct": settings_row.trade_risk_pct,
+        "max_trade_loss_amount": max_trade_loss_amount,
+        "total_capital_impact_pct": capital_impact,
+        "compounding_enabled": settings_row.compounding_enabled,
+        "next_trade_base_capital": next_base,
+        "warnings": warnings,
+    }
+
+
+def get_or_create_alert_policy(db: Session) -> AlertPolicy:
+    row = db.query(AlertPolicy).filter(AlertPolicy.id == "global").first()
+    if row:
+        return row
+    row = AlertPolicy(id="global")
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def update_alert_policy(db: Session, payload: dict) -> AlertPolicy:
+    row = get_or_create_alert_policy(db)
+    for key, value in payload.items():
+        setattr(row, key, value)
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return row
 
 
 def _active_override(db: Session) -> ReleaseGateOverride | None:
@@ -1269,6 +1399,125 @@ def override_alert_analytics(db: Session, days: int = 7) -> dict:
         "points": [{"date": key, **value} for key, value in bucket.items()],
         "alert_source_breakdown": breakdown,
     }
+
+
+def active_alerts(db: Session) -> list[dict]:
+    policy = get_or_create_alert_policy(db)
+    alerts: list[dict] = []
+
+    score = _latest_execution_quality_score(db)
+    if score < policy.execution_quality_warning_threshold:
+        alerts.append(
+            {
+                "code": "execution_quality_alert",
+                "severity": "critical" if score < policy.execution_quality_critical_threshold else "warning",
+                "value": score,
+                "threshold_warning": policy.execution_quality_warning_threshold,
+                "threshold_critical": policy.execution_quality_critical_threshold,
+            }
+        )
+
+    drift_stats = permission_drift_trend(db, days=7)
+    drift_per_day = sum(point["event_count"] for point in drift_stats["points"]) / 7
+    if drift_per_day > policy.permission_drift_warning_per_day:
+        alerts.append(
+            {
+                "code": "permission_drift_alert",
+                "severity": "critical" if drift_per_day > policy.permission_drift_critical_per_day else "warning",
+                "value": round(drift_per_day, 2),
+                "threshold_warning": float(policy.permission_drift_warning_per_day),
+                "threshold_critical": float(policy.permission_drift_critical_per_day),
+            }
+        )
+
+    override_stats = override_alert_analytics(db, days=7)
+    override_per_day = sum(item["override_count"] for item in override_stats["points"]) / 7
+    if override_per_day > policy.gate_override_warning_per_day:
+        alerts.append(
+            {
+                "code": "gate_override_alert",
+                "severity": "critical" if override_per_day > policy.gate_override_critical_per_day else "warning",
+                "value": round(override_per_day, 2),
+                "threshold_warning": float(policy.gate_override_warning_per_day),
+                "threshold_critical": float(policy.gate_override_critical_per_day),
+            }
+        )
+
+    return alerts
+
+
+def route_permission_drift_alert(db: Session, drift_event: PermissionDriftEvent) -> None:
+    policy = get_or_create_alert_policy(db)
+    payload = {
+        "user_id": drift_event.user_id,
+        "exchange": drift_event.exchange,
+        "old_permissions": drift_event.old_permissions,
+        "new_permissions": drift_event.new_permissions,
+        "old_can_trade": drift_event.old_can_trade,
+        "new_can_trade": drift_event.new_can_trade,
+        "is_critical": drift_event.is_critical,
+        "timestamp": drift_event.created_at.isoformat(),
+    }
+
+    if policy.monitoring_alert_log_enabled:
+        db.add(
+            AuditLog(
+                id=str(uuid.uuid4()),
+                action="permission_drift_alert_logged",
+                entity_type="permission_drift",
+                entity_id=drift_event.id,
+                actor_user_id=None,
+                actor_role="system",
+                severity="critical" if drift_event.is_critical else "warning",
+                details=payload,
+            )
+        )
+
+    if policy.admin_notification_enabled:
+        db.add(
+            AuditLog(
+                id=str(uuid.uuid4()),
+                action="permission_drift_admin_notification",
+                entity_type="admin_notification",
+                entity_id=drift_event.id,
+                actor_user_id=None,
+                actor_role="system",
+                severity="warning",
+                details={"channel": "admin_panel", **payload},
+            )
+        )
+
+    webhook = (policy.ops_webhook_url or "").strip()
+    if webhook:
+        try:
+            httpx.post(webhook, json=payload, timeout=4)
+            db.add(
+                AuditLog(
+                    id=str(uuid.uuid4()),
+                    action="permission_drift_ops_webhook_sent",
+                    entity_type="ops_webhook",
+                    entity_id=drift_event.id,
+                    actor_user_id=None,
+                    actor_role="system",
+                    severity="info",
+                    details={"webhook": webhook, "status": "sent"},
+                )
+            )
+        except Exception as exc:
+            db.add(
+                AuditLog(
+                    id=str(uuid.uuid4()),
+                    action="permission_drift_ops_webhook_failed",
+                    entity_type="ops_webhook",
+                    entity_id=drift_event.id,
+                    actor_user_id=None,
+                    actor_role="system",
+                    severity="warning",
+                    details={"webhook": webhook, "error": str(exc)},
+                )
+            )
+
+    db.commit()
 
 
 def alert_history(db: Session, limit: int = 40) -> list[dict]:

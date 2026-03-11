@@ -14,6 +14,7 @@ const initialForm = {
 };
 
 export const UserExchangeSettingsPage = () => {
+  const [activeTab, setActiveTab] = useState("overview");
   const [settings, setSettings] = useState(null);
   const [permission, setPermission] = useState(null);
   const [validateResult, setValidateResult] = useState(null);
@@ -27,19 +28,28 @@ export const UserExchangeSettingsPage = () => {
   const [testOrderResult, setTestOrderResult] = useState(null);
   const [lifecycleEvidence, setLifecycleEvidence] = useState(null);
   const [testOrderBanner, setTestOrderBanner] = useState("");
+  const [riskSettings, setRiskSettings] = useState(null);
+  const [riskPreview, setRiskPreview] = useState(null);
+  const [portfolioOverview, setPortfolioOverview] = useState(null);
 
   const loadAll = useCallback(async () => {
     try {
-      const [settingsRes, permissionRes, tickerRes, readinessRes] = await Promise.all([
+      const [settingsRes, permissionRes, tickerRes, readinessRes, riskRes, previewRes, overviewRes] = await Promise.all([
         apiClient.get("/phase4/exchange-settings"),
         apiClient.get("/phase4/permission-status"),
         apiClient.get("/market/ticker?symbol=BTCUSDT"),
         apiClient.get("/exchange/readiness-checklist"),
+        apiClient.get("/user-risk/settings"),
+        apiClient.get("/user-risk/preview"),
+        apiClient.get("/user-risk/overview"),
       ]);
       setSettings(settingsRes.data);
       setPermission(permissionRes.data);
       setTicker(tickerRes.data);
       setReadiness(readinessRes.data);
+      setRiskSettings(riskRes.data);
+      setRiskPreview(previewRes.data);
+      setPortfolioOverview(overviewRes.data);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Exchange ayarları yüklenemedi");
     }
@@ -84,6 +94,25 @@ export const UserExchangeSettingsPage = () => {
       toast.error(error?.response?.data?.detail || "Ayarlar kaydedilemedi");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const saveRiskSettings = async () => {
+    if (!riskSettings) {
+      return;
+    }
+    try {
+      const { data } = await apiClient.put("/user-risk/settings", {
+        allocation_pct: Number(riskSettings.allocation_pct),
+        trade_risk_pct: Number(riskSettings.trade_risk_pct),
+        daily_loss_limit_pct: Number(riskSettings.daily_loss_limit_pct),
+        compounding_enabled: Boolean(riskSettings.compounding_enabled),
+      });
+      setRiskSettings(data);
+      toast.success("Risk ayarları kaydedildi");
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Risk ayarları kaydedilemedi");
     }
   };
 
@@ -166,6 +195,62 @@ export const UserExchangeSettingsPage = () => {
           Binance Futures Testnet API bilgilerini girin. Bilgiler plaintext değil, şifreli saklanır.
         </p>
       </header>
+
+      <div className="flex flex-wrap gap-2" data-testid="user-tabs-nav">
+        <Button className={activeTab === "overview" ? "bg-orange-500 text-black" : "bg-slate-800 text-slate-200"} onClick={() => setActiveTab("overview")} data-testid="user-tab-overview-button">Overview</Button>
+        <Button className={activeTab === "risk" ? "bg-orange-500 text-black" : "bg-slate-800 text-slate-200"} onClick={() => setActiveTab("risk")} data-testid="user-tab-risk-settings-button">Risk Settings</Button>
+        <Button className={activeTab === "test" ? "bg-orange-500 text-black" : "bg-slate-800 text-slate-200"} onClick={() => setActiveTab("test")} data-testid="user-tab-test-validation-button">Test & Validation</Button>
+      </div>
+
+      {activeTab === "overview" && (
+        <div className="space-y-4" data-testid="user-overview-tab-content">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6" data-testid="user-overview-metrics-grid">
+            <MetricCard label="Güncel Ana Para" value={portfolioOverview?.current_capital ?? "-"} tone="orange" testId="user-overview-current-capital" />
+            <MetricCard label="Kullanılabilir" value={portfolioOverview?.available_balance ?? "-"} tone="blue" testId="user-overview-available-balance" />
+            <MetricCard label="Açık Pozisyon" value={portfolioOverview?.open_position_balance ?? "-"} tone="orange" testId="user-overview-open-balance" />
+            <MetricCard label="Kapanmış PnL" value={portfolioOverview?.closed_pnl ?? "-"} tone="blue" testId="user-overview-closed-pnl" />
+            <MetricCard label="Compounding" value={String(portfolioOverview?.compounding_enabled ?? false)} tone="orange" testId="user-overview-compounding" />
+            <MetricCard label="Sonraki Baz" value={portfolioOverview?.next_base_capital ?? "-"} tone="blue" testId="user-overview-next-base" />
+          </div>
+        </div>
+      )}
+
+      {activeTab === "risk" && (
+        <div className="space-y-4" data-testid="user-risk-settings-tab-content">
+          <div className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="user-risk-settings-form-grid">
+            <Input type="number" min={1} max={50} value={riskSettings?.allocation_pct ?? 20} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), allocation_pct: event.target.value }))} data-testid="user-risk-allocation-input" placeholder="İşleme Ayrılan Ana Para (%)" />
+            <Input type="number" min={1} max={25} value={riskSettings?.trade_risk_pct ?? 10} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), trade_risk_pct: event.target.value }))} data-testid="user-risk-trade-risk-input" placeholder="İşlemdeki Paranın Risk Oranı (%)" />
+            <Input type="number" min={1} max={10} value={riskSettings?.daily_loss_limit_pct ?? 3} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), daily_loss_limit_pct: event.target.value }))} data-testid="user-risk-daily-loss-input" placeholder="Günlük Zarar Limiti (%)" />
+            <label className="flex items-center gap-2 text-sm" data-testid="user-risk-compounding-toggle-row">
+              <input type="checkbox" checked={Boolean(riskSettings?.compounding_enabled)} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), compounding_enabled: event.target.checked }))} data-testid="user-risk-compounding-toggle" />
+              Kâr/Zararı Ana Paraya Ekle
+            </label>
+            <Button className="md:col-span-2 bg-orange-500 text-black hover:bg-orange-600" onClick={saveRiskSettings} data-testid="user-risk-save-button">Risk Ayarlarını Kaydet</Button>
+          </div>
+
+          <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-risk-live-preview-card">
+            <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-risk-live-preview-title">Canlı İşlem Önizlemesi</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="user-risk-live-preview-grid">
+              <p data-testid="user-risk-preview-current-capital">Güncel ana para: {riskPreview?.current_capital ?? "-"} USDT</p>
+              <p data-testid="user-risk-preview-allocation-pct">İşleme ayrılan oran: %{riskPreview?.allocation_pct ?? "-"}</p>
+              <p data-testid="user-risk-preview-allocation-amount">İşleme girecek tutar: {riskPreview?.trade_allocation_amount ?? "-"} USDT</p>
+              <p data-testid="user-risk-preview-trade-risk-pct">İşlemde risk oranı: %{riskPreview?.trade_risk_pct ?? "-"}</p>
+              <p data-testid="user-risk-preview-max-loss">Maksimum bu işlem kaybı: {riskPreview?.max_trade_loss_amount ?? "-"} USDT</p>
+              <p data-testid="user-risk-preview-capital-impact">Toplam ana paraya etkisi: %{riskPreview?.total_capital_impact_pct ?? "-"}</p>
+              <p data-testid="user-risk-preview-next-base">Sonraki işlem baz hesabı: {riskPreview?.next_trade_base_capital ?? "-"}</p>
+              <p data-testid="user-risk-preview-compounding">Compounding: {String(riskPreview?.compounding_enabled ?? false)}</p>
+            </div>
+            <div className="mt-2 space-y-1" data-testid="user-risk-preview-warnings-list">
+              {(riskPreview?.warnings || []).map((warning) => (
+                <p key={warning} className="text-xs text-yellow-300" data-testid={`user-risk-preview-warning-${warning}`}>High risk configuration: {warning}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "test" && (
+        <div className="space-y-4" data-testid="user-test-validation-tab-content">
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="user-exchange-settings-metrics-grid">
         <MetricCard label="Exchange" value={settings?.exchange || "-"} tone="orange" testId="user-exchange-metric-exchange" />
@@ -294,6 +379,8 @@ export const UserExchangeSettingsPage = () => {
           )}
         </div>
       </div>
+        </div>
+      )}
     </section>
   );
 };

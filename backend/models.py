@@ -414,3 +414,32 @@ class ReleaseGateOverride(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     used_deploy_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class UserRiskSetting(Base):
+    __tablename__ = "user_risk_settings"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), unique=True, index=True)
+    allocation_pct: Mapped[float] = mapped_column(Float, default=20)
+    trade_risk_pct: Mapped[float] = mapped_column(Float, default=10)
+    daily_loss_limit_pct: Mapped[float] = mapped_column(Float, default=3)
+    compounding_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    base_capital: Mapped[float] = mapped_column(Float, default=10000)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class AlertPolicy(Base):
+    __tablename__ = "alert_policies"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default="global")
+    admin_notification_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    ops_webhook_url: Mapped[str] = mapped_column(Text, default="")
+    monitoring_alert_log_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    execution_quality_warning_threshold: Mapped[float] = mapped_column(Float, default=60)
+    execution_quality_critical_threshold: Mapped[float] = mapped_column(Float, default=40)
+    permission_drift_warning_per_day: Mapped[int] = mapped_column(Integer, default=2)
+    permission_drift_critical_per_day: Mapped[int] = mapped_column(Integer, default=5)
+    gate_override_warning_per_day: Mapped[int] = mapped_column(Integer, default=2)
+    gate_override_critical_per_day: Mapped[int] = mapped_column(Integer, default=5)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

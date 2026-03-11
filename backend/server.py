@@ -19,6 +19,7 @@ from routers import (
     phase4_live,
     pipeline,
     risk_policies,
+    user_risk,
     strategy_templates,
 )
 from services.bootstrap import seed_default_admin
@@ -50,6 +51,7 @@ api_router.include_router(auth.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(bot_profiles.router)
 api_router.include_router(risk_policies.router)
+api_router.include_router(user_risk.router)
 api_router.include_router(strategy_templates.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(exchange.router)

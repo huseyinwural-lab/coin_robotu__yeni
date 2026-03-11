@@ -1,0 +1,12 @@
+name: prod-gate-check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  prod-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run prod release gate
+        run: bash scripts/ci_prod_gate.sh

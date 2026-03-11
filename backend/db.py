@@ -87,6 +87,44 @@ def _ensure_sqlite_phase4_columns():
                     """
                 )
             )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS user_risk_settings (
+                        id VARCHAR PRIMARY KEY,
+                        user_id VARCHAR NOT NULL UNIQUE,
+                        allocation_pct FLOAT NOT NULL DEFAULT 20,
+                        trade_risk_pct FLOAT NOT NULL DEFAULT 10,
+                        daily_loss_limit_pct FLOAT NOT NULL DEFAULT 3,
+                        compounding_enabled BOOLEAN NOT NULL DEFAULT 1,
+                        base_capital FLOAT NOT NULL DEFAULT 10000,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS alert_policies (
+                        id VARCHAR PRIMARY KEY,
+                        admin_notification_enabled BOOLEAN NOT NULL DEFAULT 1,
+                        ops_webhook_url TEXT NOT NULL DEFAULT '',
+                        monitoring_alert_log_enabled BOOLEAN NOT NULL DEFAULT 1,
+                        execution_quality_warning_threshold FLOAT NOT NULL DEFAULT 60,
+                        execution_quality_critical_threshold FLOAT NOT NULL DEFAULT 40,
+                        permission_drift_warning_per_day INTEGER NOT NULL DEFAULT 2,
+                        permission_drift_critical_per_day INTEGER NOT NULL DEFAULT 5,
+                        gate_override_warning_per_day INTEGER NOT NULL DEFAULT 2,
+                        gate_override_critical_per_day INTEGER NOT NULL DEFAULT 5,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(text("INSERT OR IGNORE INTO alert_policies (id) VALUES ('global')"))
         except Exception:
             logger.exception("SQLite phase4 compatibility migration failed")
 

@@ -585,6 +585,74 @@ class AlertHistoryItemResponse(BaseModel):
     details: dict
 
 
+class UserRiskSettingsResponse(BaseModel):
+    allocation_pct: float
+    trade_risk_pct: float
+    daily_loss_limit_pct: float
+    compounding_enabled: bool
+    base_capital: float
+
+
+class UserRiskSettingsUpdate(BaseModel):
+    allocation_pct: float
+    trade_risk_pct: float
+    daily_loss_limit_pct: float
+    compounding_enabled: bool
+
+
+class UserRiskPreviewResponse(BaseModel):
+    current_capital: float
+    allocation_pct: float
+    trade_allocation_amount: float
+    trade_risk_pct: float
+    max_trade_loss_amount: float
+    total_capital_impact_pct: float
+    compounding_enabled: bool
+    next_trade_base_capital: float
+    warnings: list[str]
+
+
+class UserPortfolioOverviewResponse(BaseModel):
+    current_capital: float
+    available_balance: float
+    open_position_balance: float
+    closed_pnl: float
+    compounding_enabled: bool
+    next_base_capital: float
+
+
+class AlertPolicyResponse(BaseModel):
+    admin_notification_enabled: bool
+    ops_webhook_url: str
+    monitoring_alert_log_enabled: bool
+    execution_quality_warning_threshold: float
+    execution_quality_critical_threshold: float
+    permission_drift_warning_per_day: int
+    permission_drift_critical_per_day: int
+    gate_override_warning_per_day: int
+    gate_override_critical_per_day: int
+
+
+class AlertPolicyUpdate(BaseModel):
+    admin_notification_enabled: bool
+    ops_webhook_url: str
+    monitoring_alert_log_enabled: bool
+    execution_quality_warning_threshold: float
+    execution_quality_critical_threshold: float
+    permission_drift_warning_per_day: int
+    permission_drift_critical_per_day: int
+    gate_override_warning_per_day: int
+    gate_override_critical_per_day: int
+
+
+class ActiveAlertResponse(BaseModel):
+    code: str
+    severity: str
+    value: float
+    threshold_warning: float
+    threshold_critical: float
+
+
 class ExchangeSettingsUpdateRequest(BaseModel):
     exchange: str = "binance"
     mode: str = "testnet"
