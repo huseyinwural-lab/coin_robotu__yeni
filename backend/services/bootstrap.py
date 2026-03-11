@@ -7,6 +7,7 @@ from models import (
     AdminControl,
     BacktestResultCard,
     ExecutionPolicy,
+    LiveActivationConfig,
     RiskExposureGroup,
     User,
     UserRole,
@@ -200,6 +201,31 @@ def _seed_backtest_cards(db: Session):
     db.commit()
 
 
+def _seed_live_activation_config(db: Session):
+    config = db.query(LiveActivationConfig).filter(LiveActivationConfig.id == "global").first()
+    if config:
+        return
+    db.add(
+        LiveActivationConfig(
+            id="global",
+            exchange="binance",
+            market_type="futures_testnet",
+            safe_mode_enabled=True,
+            live_mode_enabled=False,
+            symbol_whitelist=["BTCUSDT"],
+            max_position_pct=0.1,
+            leverage_cap=1,
+            max_trades_per_hour=6,
+            max_notional_exposure=150,
+            kill_switch_enabled=False,
+            disable_futures=False,
+            ip_whitelist_ready=False,
+            trading_permission_ready=False,
+        )
+    )
+    db.commit()
+
+
 def seed_default_admin():
     db = SessionLocal()
     try:
@@ -208,5 +234,6 @@ def seed_default_admin():
         _seed_execution_policies(db)
         _seed_exposure_groups(db)
         _seed_backtest_cards(db)
+        _seed_live_activation_config(db)
     finally:
         db.close()

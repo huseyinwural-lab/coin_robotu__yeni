@@ -406,3 +406,61 @@ class CorrelationMatrixResponse(BaseModel):
     window: int
     symbols: list[str]
     matrix: dict
+
+
+class LiveActivationConfigBase(BaseModel):
+    exchange: str
+    market_type: str
+    safe_mode_enabled: bool
+    live_mode_enabled: bool
+    symbol_whitelist: list[str]
+    max_position_pct: float = Field(ge=0.01, le=1.0)
+    leverage_cap: int = Field(ge=1, le=3)
+    max_trades_per_hour: int = Field(ge=1, le=60)
+    max_notional_exposure: float = Field(ge=10)
+    kill_switch_enabled: bool
+    disable_futures: bool
+    ip_whitelist_ready: bool
+    trading_permission_ready: bool
+
+
+class LiveActivationConfigUpdate(LiveActivationConfigBase):
+    pass
+
+
+class LiveActivationConfigResponse(LiveActivationConfigBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    updated_at: datetime
+
+
+class LiveReadinessResponse(BaseModel):
+    mode: str
+    exchange: str
+    market_type: str
+    checks: list[dict]
+    safe_limits: dict
+    docs_references: list[str]
+
+
+class PermissionCheckRequest(BaseModel):
+    api_key: str | None = None
+    api_secret: str | None = None
+
+
+class PermissionCheckResponse(BaseModel):
+    api_key_present: bool
+    api_secret_present: bool
+    masked_key: str
+    credential_fingerprint: str
+    status: str
+    message: str
+
+
+class TestnetConnectivityResponse(BaseModel):
+    status: str
+    server_time: int | None
+    rest_url: str
+    ws_url: str
+    message: str

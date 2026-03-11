@@ -277,3 +277,23 @@ class HardeningChecklistRun(Base):
     checklist_items: Mapped[list[dict]] = mapped_column(JSON, default=list)
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class LiveActivationConfig(Base):
+    __tablename__ = "live_activation_config"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default="global")
+    exchange: Mapped[str] = mapped_column(String(30), default="binance")
+    market_type: Mapped[str] = mapped_column(String(20), default="futures_testnet")
+    safe_mode_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    live_mode_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    symbol_whitelist: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["BTCUSDT"])
+    max_position_pct: Mapped[float] = mapped_column(Float, default=0.1)
+    leverage_cap: Mapped[int] = mapped_column(Integer, default=1)
+    max_trades_per_hour: Mapped[int] = mapped_column(Integer, default=6)
+    max_notional_exposure: Mapped[float] = mapped_column(Float, default=150)
+    kill_switch_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    disable_futures: Mapped[bool] = mapped_column(Boolean, default=False)
+    ip_whitelist_ready: Mapped[bool] = mapped_column(Boolean, default=False)
+    trading_permission_ready: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

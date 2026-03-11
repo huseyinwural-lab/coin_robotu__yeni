@@ -36,7 +36,7 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="warm-theme grid min-h-screen grid-cols-1 bg-slate-950 text-slate-100 lg:grid-cols-2" data-testid="login-page">
+    <div className="grid min-h-screen grid-cols-1 bg-slate-950 text-slate-100 lg:grid-cols-2" data-testid="login-page">
       <div className="order-2 flex items-center justify-center p-6 lg:order-1 lg:p-10" data-testid="login-form-panel">
         <form onSubmit={onSubmit} className="w-full max-w-md border border-slate-800 bg-slate-900 p-5" data-testid="login-form">
           <p className="text-xs uppercase tracking-widest text-orange-500" data-testid="auth-mode-chip">Phase 1-b Skeleton</p>

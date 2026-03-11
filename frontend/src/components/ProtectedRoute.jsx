@@ -7,7 +7,7 @@ export const ProtectedRoute = ({ children, role = null }) => {
 
   if (loading) {
     return (
-      <div className="warm-theme flex min-h-screen items-center justify-center bg-slate-950 text-slate-100" data-testid="auth-loading-state">
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100" data-testid="auth-loading-state">
         Yükleniyor...
       </div>
     );

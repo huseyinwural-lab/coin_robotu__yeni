@@ -22,6 +22,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { MarketUniversePage } from "@/pages/MarketUniversePage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
 import { PaperPositionsPage } from "@/pages/PaperPositionsPage";
+import { Phase4LiveControlPage } from "@/pages/Phase4LiveControlPage";
 import { RiskPoliciesPage } from "@/pages/RiskPoliciesPage";
 import { StateRebuildLogsPage } from "@/pages/StateRebuildLogsPage";
 import { StrategyTemplatesPage } from "@/pages/StrategyTemplatesPage";
@@ -67,6 +68,7 @@ function App() {
             <Route path="state-rebuild" element={<ProtectedRoute role="admin"><StateRebuildLogsPage /></ProtectedRoute>} />
             <Route path="backtest-cards" element={<ProtectedRoute role="admin"><BacktestCardsPage /></ProtectedRoute>} />
             <Route path="monitoring" element={<ProtectedRoute role="admin"><MonitoringPage /></ProtectedRoute>} />
+            <Route path="phase4-live" element={<ProtectedRoute role="admin"><Phase4LiveControlPage /></ProtectedRoute>} />
             <Route path="bots" element={<BotProfilesPage />} />
             <Route path="risk-policies" element={<RiskPoliciesPage />} />
             <Route path="strategies" element={<StrategyTemplatesPage />} />

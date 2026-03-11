@@ -9,6 +9,7 @@ import {
   Globe,
   History,
   LineChart,
+  Radio,
   Settings2,
   ShieldAlert,
   ShieldCheck,
@@ -43,6 +44,7 @@ const adminOnlyItems = [
   { to: "/app/state-rebuild", label: "State Rebuild Logs", icon: History, testId: "nav-state-rebuild-link" },
   { to: "/app/backtest-cards", label: "Backtest Cards", icon: BarChartBig, testId: "nav-backtest-cards-link" },
   { to: "/app/monitoring", label: "Monitoring", icon: Activity, testId: "nav-monitoring-link" },
+  { to: "/app/phase4-live", label: "Phase-4 Live Control", icon: Radio, testId: "nav-phase4-live-link" },
   { to: "/app/audit-logs", label: "Audit Logs", icon: ClipboardList, testId: "nav-audit-logs-link" },
 ];
 
@@ -50,14 +52,24 @@ export const PanelLayout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const navItems = user?.role === "admin" ? [...adminOnlyItems, ...userNavItems] : userNavItems;
+  const isAdmin = user?.role === "admin";
+  const roleThemeClass = isAdmin ? "admin-ops-theme" : "user-theme";
+  const sidebarClass = isAdmin ? "border-blue-900 bg-slate-950" : "border-slate-800 bg-slate-900";
+  const brandTitleClass = isAdmin ? "text-blue-300" : "text-orange-500";
+  const activeNavClass = isAdmin
+    ? "border-blue-500 bg-slate-900 text-blue-300"
+    : "border-orange-500 bg-slate-800 text-orange-400";
+  const logoutButtonClass = isAdmin
+    ? "border-blue-800 bg-transparent text-slate-200 hover:border-blue-500 hover:text-blue-300"
+    : "border-slate-700 bg-transparent text-slate-200 hover:border-orange-500 hover:text-orange-500";
 
   return (
-    <div className="warm-theme h-screen overflow-hidden bg-slate-950 text-slate-100" data-testid="panel-layout-wrapper">
+    <div className={`${roleThemeClass} h-screen overflow-hidden bg-slate-950 text-slate-100`} data-testid="panel-layout-wrapper">
       <div className="grid h-full grid-cols-1 md:grid-cols-[240px_1fr]">
-        <aside className="border-r border-slate-800 bg-slate-900 p-4" data-testid="sidebar-panel">
+        <aside className={`border-r p-4 ${sidebarClass}`} data-testid="sidebar-panel">
           <div className="mb-6">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-400" data-testid="brand-kicker">Trading Engine</p>
-            <h1 className="text-xl font-bold uppercase tracking-tight text-orange-500" data-testid="brand-title">Industrial Cockpit</h1>
+            <h1 className={`text-xl font-bold uppercase tracking-tight ${brandTitleClass}`} data-testid="brand-title">Industrial Cockpit</h1>
             <p className="mt-2 text-xs text-slate-300" data-testid="active-user-role">Aktif Rol: {user?.role}</p>
           </div>
 
@@ -72,7 +84,7 @@ export const PanelLayout = () => {
                   className={({ isActive }) =>
                     `flex items-center gap-2 border px-3 py-2 text-sm transition-colors ${
                       isActive
-                        ? "border-orange-500 bg-slate-800 text-orange-400"
+                        ? activeNavClass
                         : "border-slate-700 text-slate-200 hover:border-slate-500 hover:text-white"
                     }`
                   }
@@ -86,7 +98,7 @@ export const PanelLayout = () => {
 
           <Button
             variant="outline"
-            className="mt-8 w-full border-slate-700 bg-transparent text-slate-200 hover:border-orange-500 hover:text-orange-500"
+            className={`mt-8 w-full ${logoutButtonClass}`}
             onClick={() => {
               logout();
               navigate("/login");

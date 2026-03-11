@@ -15,6 +15,7 @@ from routers import (
     dashboard,
     exchange,
     paper_positions,
+    phase4_live,
     pipeline,
     risk_policies,
     strategy_templates,
@@ -56,6 +57,7 @@ api_router.include_router(admin_phase3.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(paper_positions.router)
 api_router.include_router(backtest.router)
+api_router.include_router(phase4_live.router)
 
 fastapi_app.include_router(api_router)
 

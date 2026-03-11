@@ -2,76 +2,57 @@
   animation: fade-in 0.35s ease-out;
 }
 
-.warm-theme,
-.admin-theme {
+.user-theme {
   background: #ff8a00 !important;
   color: #111111 !important;
 }
 
-.warm-theme *,
-.admin-theme * {
+.user-theme * {
   color: #111111 !important;
   border-color: #6b3f00 !important;
 }
 
-.warm-theme .bg-slate-950,
-.warm-theme .bg-slate-900,
-.warm-theme .bg-slate-800,
-.warm-theme .bg-red-950\/20,
-.warm-theme .bg-blue-600,
-.warm-theme .bg-blue-700,
-.warm-theme .bg-transparent,
-.admin-theme .bg-slate-950,
-.admin-theme .bg-slate-900,
-.admin-theme .bg-slate-800,
-.admin-theme .bg-red-950\/20,
-.admin-theme .bg-blue-600,
-.admin-theme .bg-blue-700,
-.admin-theme .bg-transparent {
+.user-theme .bg-slate-950,
+.user-theme .bg-slate-900,
+.user-theme .bg-slate-800,
+.user-theme .bg-red-950\/20,
+.user-theme .bg-blue-600,
+.user-theme .bg-blue-700,
+.user-theme .bg-transparent {
   background: #ffd6a1 !important;
 }
 
-.warm-theme .hover\:bg-red-900\/40:hover,
-.warm-theme .hover\:bg-blue-700:hover,
-.warm-theme .hover\:bg-orange-600:hover,
-.warm-theme .hover\:bg-zinc-900:hover,
-.admin-theme .hover\:bg-red-900\/40:hover,
-.admin-theme .hover\:bg-blue-700:hover,
-.admin-theme .hover\:bg-orange-600:hover,
-.admin-theme .hover\:bg-zinc-900:hover {
+.user-theme .hover\:bg-red-900\/40:hover,
+.user-theme .hover\:bg-blue-700:hover,
+.user-theme .hover\:bg-orange-600:hover,
+.user-theme .hover\:bg-zinc-900:hover {
   background: #ffc67d !important;
 }
 
-.warm-theme input,
-.warm-theme textarea,
-.warm-theme select,
-.admin-theme input,
-.admin-theme textarea,
-.admin-theme select {
+.user-theme input,
+.user-theme textarea,
+.user-theme select {
   background: #fff1dc !important;
   color: #111111 !important;
 }
 
-.warm-theme input::placeholder,
-.warm-theme textarea::placeholder,
-.admin-theme input::placeholder,
-.admin-theme textarea::placeholder {
+.user-theme input::placeholder,
+.user-theme textarea::placeholder {
   color: #111111aa !important;
 }
 
-.warm-theme .text-slate-400,
-.warm-theme .text-slate-500,
-.warm-theme .text-blue-300,
-.warm-theme .text-red-300,
-.warm-theme .text-orange-500,
-.warm-theme .text-orange-400,
-.admin-theme .text-slate-400,
-.admin-theme .text-slate-500,
-.admin-theme .text-blue-300,
-.admin-theme .text-red-300,
-.admin-theme .text-orange-500,
-.admin-theme .text-orange-400 {
+.user-theme .text-slate-400,
+.user-theme .text-slate-500,
+.user-theme .text-blue-300,
+.user-theme .text-red-300,
+.user-theme .text-orange-500,
+.user-theme .text-orange-400 {
   color: #3b2500 !important;
+}
+
+.admin-ops-theme {
+  background: #020617 !important;
+  color: #e2e8f0 !important;
 }
 
 @keyframes fade-in {
