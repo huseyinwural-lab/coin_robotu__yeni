@@ -79,6 +79,9 @@ def evaluate_kill_switch(db: Session, cache, market_data_engine) -> dict:
             severity="CRITICAL",
             message="Daily loss limit exceeded (kill switch trigger)",
             details={"affected_users": exceeded_users},
+            entity_key="global",
+            root_cause_code="daily_loss_exceeded",
+            state_key="daily_loss_exceeded",
         )
 
     triggered = bool(reasons)
@@ -103,6 +106,9 @@ def evaluate_kill_switch(db: Session, cache, market_data_engine) -> dict:
             severity="CRITICAL",
             message="Global kill switch triggered",
             details={"reasons": reasons},
+            entity_key="global",
+            root_cause_code="kill_switch_triggered",
+            state_key="kill_switch_triggered",
         )
     elif control is not None and not triggered and not current_active:
         # remain inactive

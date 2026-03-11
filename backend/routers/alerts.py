@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
 from models import SystemAlert, User
 from schemas import SystemAlertResponse
+from services.alert_channel_service import channel_status
 from services.system_alert_service import list_system_alerts, update_system_alert_status
+from services.weekly_report_service import compute_next_run, generate_weekly_report, get_latest_report_path
 
 router = APIRouter(prefix="/admin/system-alerts", tags=["system_alerts"])
 
@@ -38,3 +41,26 @@ def resolve_system_alert(alert_id: str, current_admin: User = Depends(require_ad
     if alert is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert_not_found")
     return update_system_alert_status(db, alert, status="resolved")
+
+
+@router.get("/config")
+def get_alert_config(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    next_run = compute_next_run().isoformat()
+    return {"channels": channel_status(), "weekly_report_next_run": next_run, "timezone": "Europe/Berlin"}
+
+
+@router.post("/reports/run")
+def run_weekly_report(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    result = generate_weekly_report(db)
+    return {"path": result["path"], "alert_id": result["alert_id"]}
+
+
+@router.get("/reports/latest")
+def download_latest_report(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    path = get_latest_report_path()
+    if not path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="report_not_found")
+    return FileResponse(path, filename=path.split("/")[-1], media_type="text/csv")

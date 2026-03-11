@@ -370,6 +370,11 @@ class SystemAlertResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     details: dict
+    fingerprint: str | None = None
+    entity_key: str | None = None
+    root_cause_code: str | None = None
+    state_key: str | None = None
+    delivery_status: dict
 
 
 class RiskAnalyticsPoint(BaseModel):

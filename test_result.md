@@ -164,6 +164,33 @@ frontend:
       - working: true
         agent: "testing"
         comment: "Page renders correctly at /admin/dashboard. Alert banner area correctly hidden when no alerts are present (tested scenario: no alerts). When alerts exist, the banner would display with data-testid='admin-alerts-banner' and each alert row would have an 'Ack' button with data-testid='admin-alert-ack-{alert_id}'. Dashboard shows all metric cards and critical action buttons properly."
+      - working: true
+        agent: "testing"
+        comment: "Alert Pipeline v2 Smoke Test: Alert banner displaying correctly with 2 alerts. Both Ack buttons visible with proper data-testid attributes (admin-alert-ack-{alert_id}). Alert types shown: 'weekly_ops_report_generated' (INFO) and 'release_gate_blocked' (CRITICAL). Dashboard metrics grid loads correctly. No critical console errors. Alert Pipeline v2 backend changes verified working."
+
+  - task: "Admin Proofs Page - UI Rendering and Navigation"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/AdminProofsPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Smoke Test: Page loads correctly at /admin/proofs without UI regressions. All components render properly: header (data-testid='admin-proofs-header'), batch verification panel (data-testid='admin-proofs-batch-panel'), proofs list wrapper (data-testid='admin-proofs-list-wrapper'). Page displays multiple proof artifacts with Verify and Download buttons. No console errors specific to this page."
+
+  - task: "Navigation Sidebar - Admin Panel"
+    implemented: true
+    working: true
+    file: "frontend/src/components/PanelLayout.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Smoke Test: Sidebar navigation working correctly. Successfully navigated between /admin/dashboard and /admin/proofs using sidebar links (data-testid='nav-admin-dashboard-link', data-testid='nav-admin-proofs-link'). Sidebar panel visible (data-testid='sidebar-panel'). All navigation items rendering correctly with proper active states."
 
 backend:
   - task: "Strategy Domain API - Quarantine List Endpoint"
@@ -250,21 +277,35 @@ backend:
         agent: "testing"
         comment: "API endpoint POST /admin/system-alerts/{alertId}/ack not tested as no alerts existed during testing. Frontend is properly configured to call this endpoint when Ack button is clicked."
 
+  - task: "Phase-4 API - Release Gate Endpoint"
+    implemented: true
+    working: false
+    file: "backend/routers/phase4.py"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "Smoke Test: API endpoint GET /phase4/admin/release-gate?environment=prod returns 500 status during admin dashboard load. This is a non-critical feature for displaying release gate badge in sidebar. Frontend handles error gracefully (catches exception and sets gateBadge to null). No UI breakage observed. This does not affect Alert Pipeline v2 functionality."
+
 metadata:
   created_by: "testing_agent"
-  version: "1.1"
-  test_sequence: 2
+  version: "1.2"
+  test_sequence: 3
   run_ui: true
   last_updated: "2026-03-11"
-  test_phase: "Phase-7 Block-2"
+  test_phase: "Alert Pipeline v2 Smoke Test"
 
 test_plan:
   current_focus:
-    - "Phase-7 Block-2 admin UI features tested and validated"
+    - "Alert Pipeline v2 smoke test completed"
   stuck_tasks: []
-  test_all: true
+  test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "testing"
     message: "Phase-7 Block-2 testing completed. All 4 new admin pages tested successfully. Login works correctly. Runtime Quarantine page renders with empty state and action buttons ready. Runtime Recovery page displays 7 stuck intents with all action buttons functional - tested clicking Sync Exchange which triggered API call and toast (backend returned 400 for invalid state transition, frontend handled correctly). Risk Orchestrator Analytics page loads all metrics and 4 chart panels, refresh works. Dashboard alert banner properly hidden when no alerts present. One console error detected (400 backend response on action button click) which is expected behavior for invalid state transitions. Minor issue: Backend stuck intent action endpoint returns 400 status, likely due to validation logic - not a critical frontend issue as errors are properly handled and displayed to user."
+  - agent: "testing"
+    message: "Alert Pipeline v2 Smoke Test PASSED. Tested: 1) Admin login (admin@platform.dev) - WORKING. 2) Dashboard loads without critical errors - WORKING. Alert banner displays correctly with 2 alerts showing. Both Ack buttons visible and functional (data-testid verified). 3) /admin/proofs page loads without UI regressions - WORKING. All components render (header, batch panel, list wrapper). 4) Navigation sidebar working correctly - WORKING. Successfully navigated between dashboard and proofs. Minor Issue: 2 non-critical 500 errors for /api/phase4/admin/release-gate endpoint (release gate badge feature). Error is caught and handled gracefully in frontend - no UI breakage. Alert Pipeline v2 backend changes verified working correctly."

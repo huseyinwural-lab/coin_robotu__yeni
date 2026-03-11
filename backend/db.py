@@ -213,7 +213,12 @@ def _ensure_sqlite_phase4_columns():
                         alert_type VARCHAR(80) NOT NULL,
                         severity VARCHAR(20) NOT NULL,
                         message TEXT NOT NULL DEFAULT '',
+                        fingerprint VARCHAR(128),
+                        entity_key VARCHAR(120),
+                        root_cause_code VARCHAR(80),
+                        state_key VARCHAR(120),
                         details JSON NOT NULL DEFAULT '{}',
+                        delivery_status JSON NOT NULL DEFAULT '{}',
                         status VARCHAR(20) NOT NULL DEFAULT 'open',
                         occurrences INTEGER NOT NULL DEFAULT 1,
                         last_triggered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -223,6 +228,20 @@ def _ensure_sqlite_phase4_columns():
                     """
                 )
             )
+
+            system_alert_columns = {
+                row[1] for row in connection.execute(text("PRAGMA table_info(system_alerts)"))
+            }
+            if "fingerprint" not in system_alert_columns:
+                connection.execute(text("ALTER TABLE system_alerts ADD COLUMN fingerprint VARCHAR(128)"))
+            if "entity_key" not in system_alert_columns:
+                connection.execute(text("ALTER TABLE system_alerts ADD COLUMN entity_key VARCHAR(120)"))
+            if "root_cause_code" not in system_alert_columns:
+                connection.execute(text("ALTER TABLE system_alerts ADD COLUMN root_cause_code VARCHAR(80)"))
+            if "state_key" not in system_alert_columns:
+                connection.execute(text("ALTER TABLE system_alerts ADD COLUMN state_key VARCHAR(120)"))
+            if "delivery_status" not in system_alert_columns:
+                connection.execute(text("ALTER TABLE system_alerts ADD COLUMN delivery_status JSON NOT NULL DEFAULT '{}'"))
 
             connection.execute(
                 text(

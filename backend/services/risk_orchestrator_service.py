@@ -137,6 +137,9 @@ def _emit_risk_alerts(db: Session, *, reason_codes: list[str], strategy_id: str,
             severity="CRITICAL",
             message="Daily loss limit breached",
             details={"strategy_id": strategy_id, "symbol": symbol, "reason_codes": reason_codes},
+            entity_key=strategy_id,
+            root_cause_code="daily_loss_limit_exceeded",
+            state_key="daily_loss_limit_exceeded",
         )
     if any(code in {"account_max_notional_exceeded", "symbol_max_exposure_exceeded"} for code in reason_codes):
         create_system_alert(
@@ -145,6 +148,9 @@ def _emit_risk_alerts(db: Session, *, reason_codes: list[str], strategy_id: str,
             severity="CRITICAL",
             message="Exposure limit breach detected",
             details={"strategy_id": strategy_id, "symbol": symbol, "reason_codes": reason_codes},
+            entity_key=symbol or strategy_id,
+            root_cause_code="exposure_limit_breach",
+            state_key="exposure_limit_breach",
         )
     if any(code in {"duplicate_decision_hash", "duplicate_intent_hash"} for code in reason_codes):
         create_system_alert(
@@ -153,6 +159,9 @@ def _emit_risk_alerts(db: Session, *, reason_codes: list[str], strategy_id: str,
             severity="CRITICAL",
             message="Duplicate execution attempt detected",
             details={"strategy_id": strategy_id, "symbol": symbol, "reason_codes": reason_codes},
+            entity_key=strategy_id,
+            root_cause_code="duplicate_execution_attempt",
+            state_key="duplicate_execution_attempt",
         )
 
 

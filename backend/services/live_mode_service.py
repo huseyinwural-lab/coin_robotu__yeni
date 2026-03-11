@@ -2034,6 +2034,9 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
             severity="CRITICAL",
             message="Risk orchestrator devre dışı veya bulunamadı",
             details={"environment": env},
+            entity_key=env,
+            root_cause_code="risk_engine_disabled",
+            state_key="disabled",
         )
 
     if not kill_switch_tested:
@@ -2047,14 +2050,37 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
             severity="CRITICAL",
             message="Proof zinciri bütünlüğü bozuldu",
             details={"broken_index": chain_status.get("broken_index")},
+            entity_key="artifact_manifest",
+            root_cause_code="chain_integrity_failure",
+            state_key=str(chain_status.get("broken_index")),
         )
     elif chain_status.get("total", 0) == 0:
         warnings.append("proof_pipeline_empty")
 
     if failed_backlog >= 10:
         blockers.append("quarantine_backlog")
+        create_system_alert(
+            db,
+            alert_type="worker_quarantine_growth",
+            severity="CRITICAL",
+            message="Quarantine backlog kritik seviyede",
+            details={"backlog": failed_backlog},
+            entity_key="runtime_quarantine",
+            root_cause_code="worker_quarantine_growth",
+            state_key="critical",
+        )
     elif failed_backlog > 0:
         warnings.append("quarantine_backlog")
+        create_system_alert(
+            db,
+            alert_type="worker_quarantine_growth",
+            severity="WARNING",
+            message="Quarantine backlog artıyor",
+            details={"backlog": failed_backlog},
+            entity_key="runtime_quarantine",
+            root_cause_code="worker_quarantine_growth",
+            state_key="warning",
+        )
 
     if not live_mode_enabled:
         warnings.append("live_mode_disabled")
@@ -2082,6 +2108,29 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
         reason_code = warning_reasons[0]
 
     reasons = [*fail_reasons, *warning_reasons]
+
+    if status == "BLOCKED":
+        create_system_alert(
+            db,
+            alert_type="release_gate_blocked",
+            severity="CRITICAL",
+            message="Release gate BLOCKED",
+            details={"reasons": reasons, "environment": env},
+            entity_key=env,
+            root_cause_code=reason_code,
+            state_key="blocked",
+        )
+    elif status == "WARNING":
+        create_system_alert(
+            db,
+            alert_type="release_gate_warning",
+            severity="WARNING",
+            message="Release gate WARNING",
+            details={"reasons": reasons, "environment": env},
+            entity_key=env,
+            root_cause_code=reason_code,
+            state_key="warning",
+        )
 
     return {
         "status": status,
