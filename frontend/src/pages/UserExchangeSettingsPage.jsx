@@ -16,6 +16,8 @@ const initialForm = {
 export const UserExchangeSettingsPage = () => {
   const [settings, setSettings] = useState(null);
   const [permission, setPermission] = useState(null);
+  const [validateResult, setValidateResult] = useState(null);
+  const [ticker, setTicker] = useState(null);
   const [latestQuality, setLatestQuality] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [isSaving, setIsSaving] = useState(false);
@@ -23,14 +25,24 @@ export const UserExchangeSettingsPage = () => {
 
   const loadAll = useCallback(async () => {
     try {
-      const [settingsRes, permissionRes] = await Promise.all([
+      const [settingsRes, permissionRes, tickerRes] = await Promise.all([
         apiClient.get("/phase4/exchange-settings"),
         apiClient.get("/phase4/permission-status"),
+        apiClient.get("/market/ticker?symbol=BTCUSDT"),
       ]);
       setSettings(settingsRes.data);
       setPermission(permissionRes.data);
+      setTicker(tickerRes.data);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Exchange ayarları yüklenemedi");
+    }
+
+    try {
+      const { data } = await apiClient.get("/exchange/validate");
+      setValidateResult(data);
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      setValidateResult(typeof detail === "object" ? detail : null);
     }
 
     try {
@@ -63,31 +75,34 @@ export const UserExchangeSettingsPage = () => {
 
   const runPermission = async () => {
     try {
-      const { data } = await apiClient.get("/phase4/permission-status");
-      setPermission(data);
-      toast.success("Permission kontrolü tamamlandı");
+      const { data } = await apiClient.get("/exchange/validate");
+      setValidateResult(data);
+      toast.success("Exchange doğrulaması tamamlandı");
+      await loadAll();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Permission kontrolü başarısız");
+      const detail = error?.response?.data?.detail;
+      setValidateResult(typeof detail === "object" ? detail : null);
+      toast.error("Exchange doğrulaması başarısız");
     }
   };
 
   const runFirstTestOrder = async () => {
     setIsTesting(true);
     try {
-      const { data } = await apiClient.post("/phase4/test-order");
+      const { data } = await apiClient.post("/exchange/test-order");
       setLatestQuality({
-        execution_id: data.execution_id,
-        symbol: data.symbol,
+        execution_id: data.order_id,
+        symbol: "BTCUSDT",
         status: data.status,
         strategy_type: data.strategy_type,
         volatility_regime: data.volatility_regime,
         volatility_pct: data.volatility_pct,
-        expected_price: data.expected_price,
-        fill_price: data.fill_price,
-        slippage: data.slippage,
-        execution_latency: data.execution_latency,
+        expected_price: ticker?.mid_price,
+        fill_price: data.price_avg,
+        slippage: data.slippage_pct,
+        execution_latency: data.execution_time_ms,
         execution_quality_score: data.execution_quality_score,
-        timestamp: data.timestamp,
+        timestamp: new Date().toISOString(),
       });
       toast.success("İlk kontrollü test emri gönderildi");
       await loadAll();
@@ -113,6 +128,12 @@ export const UserExchangeSettingsPage = () => {
         <MetricCard label="Permission" value={permission?.overall_status || "-"} tone={permission?.overall_status === "pass" ? "orange" : "red"} testId="user-exchange-metric-permission" />
         <MetricCard label="Live Activation" value={permission?.live_activation || "blocked"} tone={permission?.live_activation === "ready" ? "orange" : "red"} testId="user-exchange-metric-live-activation" />
         <MetricCard label="Execution Quality" value={latestQuality?.execution_quality_score ?? "-"} tone="orange" testId="user-exchange-metric-quality" />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3" data-testid="user-exchange-validate-grid">
+        <MetricCard label="Validate is_valid" value={String(validateResult?.is_valid ?? false)} tone={validateResult?.is_valid ? "orange" : "red"} testId="user-exchange-validate-is-valid" />
+        <MetricCard label="can_trade" value={String(validateResult?.can_trade ?? false)} tone={validateResult?.can_trade ? "orange" : "red"} testId="user-exchange-validate-can-trade" />
+        <MetricCard label="mid_price" value={ticker?.mid_price ?? "-"} tone="blue" testId="user-exchange-mid-price" />
       </div>
 
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-quality-regime-panel">
@@ -148,6 +169,12 @@ export const UserExchangeSettingsPage = () => {
               {item.key}: {item.status} ({item.reason})
             </p>
           ))}
+          <p className="pt-2 text-xs font-mono text-slate-300" data-testid="user-exchange-validate-permissions-line">
+            permissions: {(validateResult?.permissions || []).join(",") || "-"}
+          </p>
+          <p className="text-xs font-mono text-slate-300" data-testid="user-exchange-validate-reason-codes-line">
+            reason_codes: {(validateResult?.reason_codes || []).join(",") || "-"}
+          </p>
         </div>
       </div>
     </section>

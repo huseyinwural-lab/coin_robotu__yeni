@@ -311,6 +311,9 @@ class UserExchangeSetting(Base):
     mode: Mapped[str] = mapped_column(String(20), default="testnet")
     api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
     api_secret_encrypted: Mapped[str] = mapped_column(Text, default="")
+    permissions_snapshot: Mapped[list[str]] = mapped_column(JSON, default=list)
+    can_trade_snapshot: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    validation_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
@@ -333,3 +336,43 @@ class TestnetExecutionLog(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExecutionMetric(Base):
+    __tablename__ = "execution_metrics"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(20), default="BTCUSDT")
+    order_id: Mapped[str] = mapped_column(String(80), index=True)
+    exchange_order_id: Mapped[str] = mapped_column(String(80), index=True)
+    order_type: Mapped[str] = mapped_column(String(20), default="MARKET")
+    side: Mapped[str] = mapped_column(String(10), default="BUY")
+    quote_qty: Mapped[float] = mapped_column(Float, default=10)
+    mid_price: Mapped[float] = mapped_column(Float)
+    mid_price_timestamp: Mapped[str] = mapped_column(String(40), default="")
+    price_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    executed_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    slippage_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    execution_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="NEW")
+    strategy_type: Mapped[str] = mapped_column(String(50), default="trend_following")
+    volatility_regime: Mapped[str] = mapped_column(String(20), default="low")
+    volatility_pct: Mapped[float] = mapped_column(Float, default=0)
+    execution_quality_score: Mapped[float] = mapped_column(Float, default=0)
+    state_machine_path: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PermissionDriftEvent(Base):
+    __tablename__ = "permission_drift_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    exchange: Mapped[str] = mapped_column(String(30), default="binance")
+    old_permissions: Mapped[list[str]] = mapped_column(JSON, default=list)
+    new_permissions: Mapped[list[str]] = mapped_column(JSON, default=list)
+    old_can_trade: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    new_can_trade: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    is_critical: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -5,11 +5,73 @@ from db import get_db, redis_client
 from deps import get_current_user
 from exchange.binance_mock import BinanceMockAdapter
 from models import BotProfile, ExecutionEvent, User, UserRole
-from schemas import ExecutionEventResponse, MockOrderRequest
+from schemas import (
+    ExchangeTestOrderResponse,
+    ExchangeValidateResponse,
+    ExecutionEventResponse,
+    MockOrderRequest,
+)
 from services.audit_service import create_audit_log
+from services.live_mode_service import run_exchange_test_order_market, validate_exchange_credentials_for_user
 
 router = APIRouter(prefix="/exchange", tags=["exchange"])
 adapter = BinanceMockAdapter(redis_client)
+
+
+@router.get("/validate", response_model=ExchangeValidateResponse)
+def validate_exchange(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    payload, response_code = validate_exchange_credentials_for_user(db, current_user.id)
+    create_audit_log(
+        db,
+        action="exchange_validate_checked",
+        entity_type="exchange_validate",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning" if response_code >= 400 else "info",
+        details=payload,
+    )
+    if response_code >= 400:
+        raise HTTPException(status_code=response_code, detail=payload)
+    return payload
+
+
+@router.post("/test-order", response_model=ExchangeTestOrderResponse)
+def exchange_test_order(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        metric = run_exchange_test_order_market(db, current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="exchange_test_order_sent",
+        entity_type="execution_metrics",
+        entity_id=metric.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning",
+        details={
+            "symbol": metric.symbol,
+            "status": metric.status,
+            "slippage_pct": metric.slippage_pct,
+            "execution_time_ms": metric.execution_time_ms,
+            "state_machine_path": metric.state_machine_path,
+        },
+    )
+    return ExchangeTestOrderResponse(
+        order_id=metric.order_id,
+        exchange_order_id=metric.exchange_order_id,
+        price_avg=metric.price_avg,
+        executed_qty=metric.executed_qty,
+        slippage_pct=metric.slippage_pct,
+        execution_time_ms=metric.execution_time_ms,
+        status=metric.status,
+        state_machine_path=metric.state_machine_path,
+        strategy_type=metric.strategy_type,
+        volatility_regime=metric.volatility_regime,
+        volatility_pct=metric.volatility_pct,
+    )
 
 
 @router.get("/mock/state")

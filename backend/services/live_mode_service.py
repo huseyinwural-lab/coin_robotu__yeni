@@ -18,9 +18,11 @@ from db import redis_client
 from models import (
     AdminControl,
     BotProfile,
+    ExecutionMetric,
     HardeningChecklistRun,
     LiveActivationConfig,
     PaperPosition,
+    PermissionDriftEvent,
     RiskExposureGroup,
     RiskPolicy,
     TestnetExecutionLog,
@@ -110,6 +112,25 @@ class BinanceFuturesTestnetAdapter:
         payload = response.json()
         return float(payload.get("price") or 0)
 
+    def book_ticker(self, symbol: str) -> dict:
+        response = httpx.get(
+            f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/ticker/bookTicker",
+            params={"symbol": symbol},
+            timeout=8,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        bid = float(payload.get("bidPrice") or 0)
+        ask = float(payload.get("askPrice") or 0)
+        mid = round((bid + ask) / 2, 6) if bid > 0 and ask > 0 else 0
+        return {
+            "symbol": payload.get("symbol", symbol),
+            "bid": bid,
+            "ask": ask,
+            "mid_price": mid,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
     def set_leverage(self, api_key: str, api_secret: str, symbol: str, leverage: int) -> tuple[dict, int]:
         return self._signed_post(
             api_key,
@@ -140,6 +161,27 @@ class BinanceFuturesTestnetAdapter:
                 "quantity": quantity,
                 "price": price,
                 "timeInForce": time_in_force,
+            },
+        )
+
+    def create_market_order(
+        self,
+        api_key: str,
+        api_secret: str,
+        *,
+        symbol: str,
+        side: str,
+        quantity: float,
+    ) -> tuple[dict, int]:
+        return self._signed_post(
+            api_key,
+            api_secret,
+            "/fapi/v1/order",
+            {
+                "symbol": symbol,
+                "side": side,
+                "type": "MARKET",
+                "quantity": quantity,
             },
         )
 
@@ -371,6 +413,161 @@ def permission_status_for_user(db: Session, user_id: str) -> dict:
     }
 
 
+def _normalize_permissions(account_payload: dict, mode: str) -> list[str]:
+    raw_permissions = account_payload.get("permissions") if isinstance(account_payload, dict) else None
+    if isinstance(raw_permissions, list) and raw_permissions:
+        return sorted({str(item).upper() for item in raw_permissions})
+
+    permissions: set[str] = set()
+    if bool(account_payload.get("canTrade")):
+        permissions.add("FUTURES" if mode == "testnet" else "SPOT")
+    if bool(account_payload.get("canDeposit")):
+        permissions.add("DEPOSIT")
+    if bool(account_payload.get("canWithdraw")):
+        permissions.add("WITHDRAW")
+    return sorted(permissions)
+
+
+def _extract_reason_codes(payload: dict, status_code: int) -> list[str]:
+    reason_codes: list[str] = []
+    message = str(payload.get("msg") or payload.get("message") or "").lower()
+    code = payload.get("code")
+
+    if status_code in {401, 403}:
+        if "ip" in message and ("restrict" in message or "whitelist" in message):
+            reason_codes.append("ip_restriction")
+        if code in {-2015, -2014, -1022} or "invalid" in message:
+            reason_codes.append("invalid_key")
+        if "permission" in message:
+            reason_codes.append("missing_trade_permission")
+
+    if not reason_codes and status_code >= 400:
+        reason_codes.append(f"exchange_error_{status_code}")
+    return reason_codes
+
+
+def _is_trade_capable(permissions: list[str]) -> bool:
+    normalized = {item.upper() for item in permissions}
+    return bool({"SPOT", "FUTURES", "MARGIN", "TRADE"} & normalized)
+
+
+def _record_permission_snapshot_and_drift(
+    db: Session,
+    *,
+    settings_row: UserExchangeSetting,
+    can_trade: bool,
+    permissions: list[str],
+) -> None:
+    old_permissions = settings_row.permissions_snapshot or []
+    old_can_trade = settings_row.can_trade_snapshot
+    new_permissions = sorted({item.upper() for item in permissions})
+    critical = bool(old_can_trade is True and not can_trade)
+    changed = sorted(old_permissions) != new_permissions or old_can_trade != can_trade
+
+    if changed and (old_permissions or old_can_trade is not None):
+        drift_event = PermissionDriftEvent(
+            id=str(uuid.uuid4()),
+            user_id=settings_row.user_id,
+            exchange=settings_row.exchange,
+            old_permissions=old_permissions,
+            new_permissions=new_permissions,
+            old_can_trade=old_can_trade,
+            new_can_trade=can_trade,
+            is_critical=critical,
+        )
+        db.add(drift_event)
+
+    settings_row.permissions_snapshot = new_permissions
+    settings_row.can_trade_snapshot = can_trade
+    settings_row.validation_checked_at = datetime.now(timezone.utc)
+    settings_row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[dict, int]:
+    settings_row = get_or_create_exchange_settings(db, user_id)
+    api_key = decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else ""
+    api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else ""
+
+    if not api_key or not api_secret:
+        return {
+            "exchange": settings_row.exchange,
+            "environment": settings_row.mode,
+            "is_valid": False,
+            "permissions": [],
+            "can_trade": False,
+            "can_withdraw": False,
+            "reason_codes": ["missing_credentials"],
+        }, 400
+
+    try:
+        payload, status_code, _ = adapter.account_probe(api_key, api_secret)
+    except httpx.HTTPError:
+        return {
+            "exchange": settings_row.exchange,
+            "environment": settings_row.mode,
+            "is_valid": False,
+            "permissions": [],
+            "can_trade": False,
+            "can_withdraw": False,
+            "reason_codes": ["exchange_unreachable"],
+        }, 503
+
+    reason_codes = _extract_reason_codes(payload if isinstance(payload, dict) else {}, status_code)
+    if status_code >= 400:
+        http_status = 403 if "ip_restriction" in reason_codes or "missing_trade_permission" in reason_codes else 400
+        return {
+            "exchange": settings_row.exchange,
+            "environment": settings_row.mode,
+            "is_valid": False,
+            "permissions": [],
+            "can_trade": False,
+            "can_withdraw": False,
+            "reason_codes": reason_codes,
+        }, http_status
+
+    permissions = _normalize_permissions(payload, settings_row.mode)
+    can_trade = bool(payload.get("canTrade", False))
+    can_withdraw = bool(payload.get("canWithdraw", False))
+    trade_capable = _is_trade_capable(permissions)
+
+    if not can_trade or not trade_capable:
+        _record_permission_snapshot_and_drift(db, settings_row=settings_row, can_trade=False, permissions=permissions)
+        return {
+            "exchange": settings_row.exchange,
+            "environment": settings_row.mode,
+            "is_valid": True,
+            "permissions": permissions,
+            "can_trade": can_trade,
+            "can_withdraw": can_withdraw,
+            "reason_codes": ["missing_trade_permission"],
+        }, 403
+
+    _record_permission_snapshot_and_drift(db, settings_row=settings_row, can_trade=True, permissions=permissions)
+    return {
+        "exchange": settings_row.exchange,
+        "environment": settings_row.mode,
+        "is_valid": True,
+        "permissions": permissions,
+        "can_trade": True,
+        "can_withdraw": can_withdraw,
+        "reason_codes": [],
+    }, 200
+
+
+def get_market_ticker(symbol: str = "BTCUSDT") -> dict:
+    snapshot = adapter.book_ticker(symbol)
+    return {
+        "exchange": "binance",
+        "environment": "testnet",
+        "symbol": snapshot["symbol"],
+        "bid": snapshot["bid"],
+        "ask": snapshot["ask"],
+        "mid_price": snapshot["mid_price"],
+        "timestamp": snapshot["timestamp"],
+    }
+
+
 def _trend_direction_from_candles() -> str:
     candles = read_candles(redis_client, "market:candles:BTCUSDT:15m")
     if len(candles) < 20:
@@ -586,7 +783,164 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     return execution_log
 
 
-def latest_execution_quality(db: Session, user_id: str) -> TestnetExecutionLog | None:
+def run_exchange_test_order_market(db: Session, user: User) -> ExecutionMetric:
+    validation, status_code = validate_exchange_credentials_for_user(db, user.id)
+    if status_code != 200:
+        raise ValueError("Exchange doğrulaması başarısız. Önce /api/exchange/validate başarılı olmalı.")
+
+    settings_row = get_or_create_exchange_settings(db, user.id)
+    api_key = decrypt_secret(settings_row.api_key_encrypted)
+    api_secret = decrypt_secret(settings_row.api_secret_encrypted)
+
+    symbol = SAFE_SYMBOL_WHITELIST[0]
+    side = "BUY"
+    quote_qty = 10.0
+    ticker = get_market_ticker(symbol)
+    mid_price = float(ticker["mid_price"] or 0)
+    mid_ts = ticker["timestamp"]
+    if mid_price <= 0:
+        raise ValueError("Market ticker alınamadı. Lütfen tekrar deneyin.")
+
+    quantity = round(quote_qty / mid_price, 3)
+    quantity = max(quantity, 0.001)
+    notional = quantity * mid_price
+    if notional > 10.05:
+        quantity = round(10.0 / mid_price, 3)
+
+    strategy_type, _ = _resolve_strategy_context(db, user.id)
+    volatility_pct = _market_volatility_pct()
+    volatility_regime = "high" if volatility_pct >= 0.03 else ("medium" if volatility_pct >= 0.018 else "low")
+
+    started = time.perf_counter()
+    order_payload, order_status = adapter.create_market_order(
+        api_key,
+        api_secret,
+        symbol=symbol,
+        side=side,
+        quantity=quantity,
+    )
+    if order_status >= 400:
+        raise ValueError("Test order gönderimi başarısız. Credentials veya exchange kısıtı kontrol edilmeli.")
+
+    exchange_order_id = str(order_payload.get("orderId") or "")
+    state_path = []
+    first_status = str(order_payload.get("status") or "NEW").upper()
+    state_path.append(first_status)
+
+    final_payload = order_payload
+    if first_status in {"NEW", "PARTIALLY_FILLED"} and exchange_order_id:
+        for _ in range(3):
+            time.sleep(0.2)
+            queried, _ = adapter.query_order(api_key, api_secret, symbol, int(exchange_order_id))
+            queried_status = str(queried.get("status") or first_status).upper()
+            final_payload = queried
+            if queried_status != state_path[-1]:
+                state_path.append(queried_status)
+            if queried_status in {"FILLED", "CANCELED", "EXPIRED", "REJECTED"}:
+                break
+
+    final_status = str(final_payload.get("status") or state_path[-1]).upper()
+    if final_status not in state_path:
+        state_path.append(final_status)
+
+    avg_price = float(final_payload.get("avgPrice") or 0) or None
+    executed_qty = float(final_payload.get("executedQty") or 0) or None
+    execution_time_ms = round((time.perf_counter() - started) * 1000, 2)
+    slippage_pct = None
+    if avg_price:
+        slippage_pct = round((abs(avg_price - mid_price) / mid_price) * 100, 6)
+
+    mapped_status = _map_order_status(final_status)
+    quality_score = _build_execution_quality_score(
+        expected_price=mid_price,
+        fill_price=avg_price,
+        execution_latency=execution_time_ms,
+        final_status=mapped_status,
+        strategy_type=strategy_type,
+        volatility_pct=volatility_pct,
+    )
+
+    metric = ExecutionMetric(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        symbol=symbol,
+        order_id=str(uuid.uuid4()),
+        exchange_order_id=exchange_order_id or "unknown",
+        order_type="MARKET",
+        side=side,
+        quote_qty=quote_qty,
+        mid_price=mid_price,
+        mid_price_timestamp=mid_ts,
+        price_avg=avg_price,
+        executed_qty=executed_qty,
+        slippage_pct=slippage_pct,
+        execution_time_ms=execution_time_ms,
+        status=final_status,
+        strategy_type=strategy_type,
+        volatility_regime=volatility_regime,
+        volatility_pct=volatility_pct,
+        execution_quality_score=quality_score,
+        state_machine_path=state_path,
+    )
+    db.add(metric)
+    db.commit()
+    db.refresh(metric)
+    return metric
+
+
+def latest_execution_metric(db: Session, user_id: str) -> ExecutionMetric | None:
+    return (
+        db.query(ExecutionMetric)
+        .filter(ExecutionMetric.user_id == user_id)
+        .order_by(ExecutionMetric.created_at.desc())
+        .first()
+    )
+
+
+def list_execution_metrics(db: Session, limit: int = 20) -> list[ExecutionMetric]:
+    return db.query(ExecutionMetric).order_by(ExecutionMetric.created_at.desc()).limit(limit).all()
+
+
+def permission_drift_trend(db: Session, days: int = 7) -> dict:
+    days = 30 if days > 7 else 7
+    today = datetime.now(timezone.utc).date()
+    start_date = today.fromordinal(today.toordinal() - (days - 1))
+
+    rows = (
+        db.query(PermissionDriftEvent)
+        .filter(PermissionDriftEvent.created_at >= datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc))
+        .all()
+    )
+
+    bucket = {str(start_date.fromordinal(start_date.toordinal() + i)): {"event_count": 0, "critical_count": 0} for i in range(days)}
+    affected_users = set()
+    latest_timestamp = None
+    for row in rows:
+        date_key = row.created_at.date().isoformat()
+        if date_key in bucket:
+            bucket[date_key]["event_count"] += 1
+            bucket[date_key]["critical_count"] += 1 if row.is_critical else 0
+            affected_users.add(row.user_id)
+            if latest_timestamp is None or row.created_at > latest_timestamp:
+                latest_timestamp = row.created_at
+
+    points = [
+        {"date": key, "event_count": value["event_count"], "critical_count": value["critical_count"]}
+        for key, value in bucket.items()
+    ]
+    return {
+        "days": days,
+        "points": points,
+        "affected_user_count": len(affected_users),
+        "latest_timestamp": latest_timestamp,
+        "critical_drift_count": sum(item["critical_count"] for item in points),
+    }
+
+
+def latest_execution_quality(db: Session, user_id: str):
+    metric = latest_execution_metric(db, user_id)
+    if metric:
+        return metric
     return (
         db.query(TestnetExecutionLog)
         .filter(TestnetExecutionLog.user_id == user_id)
@@ -595,7 +949,10 @@ def latest_execution_quality(db: Session, user_id: str) -> TestnetExecutionLog |
     )
 
 
-def list_execution_quality(db: Session, limit: int = 20) -> list[TestnetExecutionLog]:
+def list_execution_quality(db: Session, limit: int = 20):
+    metrics = list_execution_metrics(db, limit=limit)
+    if metrics:
+        return metrics
     return db.query(TestnetExecutionLog).order_by(TestnetExecutionLog.created_at.desc()).limit(limit).all()
 
 
@@ -651,8 +1008,12 @@ def compute_live_readiness_score(db: Session) -> dict:
         permission_ready = permission_status_for_user(db, probe_user.id)["overall_status"] == "pass"
 
     risk_engine_pass = bool(db.query(AdminControl).filter(AdminControl.id == "global").first()) and bool(db.query(RiskPolicy).first())
-    latest_exec = db.query(TestnetExecutionLog).order_by(TestnetExecutionLog.created_at.desc()).first()
-    execution_simulation_pass = bool(latest_exec and latest_exec.status in {"filled", "partial_fill", "cancelled"})
+    latest_metric = db.query(ExecutionMetric).order_by(ExecutionMetric.created_at.desc()).first()
+    if latest_metric:
+        execution_simulation_pass = latest_metric.status in {"FILLED", "PARTIALLY_FILLED", "CANCELED", "EXPIRED"}
+    else:
+        latest_exec = db.query(TestnetExecutionLog).order_by(TestnetExecutionLog.created_at.desc()).first()
+        execution_simulation_pass = bool(latest_exec and latest_exec.status in {"filled", "partial_fill", "cancelled"})
     correlation_model_pass = db.query(RiskExposureGroup).count() > 0
     latest_hardening = db.query(HardeningChecklistRun).order_by(HardeningChecklistRun.created_at.desc()).first()
     hardening_checklist_pass = bool(latest_hardening and latest_hardening.readiness_status == "ready")

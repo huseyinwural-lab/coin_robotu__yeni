@@ -16,6 +16,7 @@ from schemas import (
     LiveReadinessResponse,
     PermissionCheckRequest,
     PermissionCheckResponse,
+    PermissionDriftTrendResponse,
     PermissionStatusResponse,
     ReleaseGateStatusResponse,
     TestOrderResponse,
@@ -34,6 +35,7 @@ from services.live_mode_service import (
     get_or_create_live_config,
     latest_execution_quality,
     list_execution_quality,
+    permission_drift_trend,
     permission_status_for_user,
     release_gate_view,
     resolve_runtime_credentials,
@@ -44,6 +46,39 @@ from services.live_mode_service import (
 )
 
 router = APIRouter(prefix="/phase4", tags=["phase4_live"])
+
+
+def _quality_response(item) -> ExecutionQualitySummaryResponse:
+    if hasattr(item, "mid_price"):
+        return ExecutionQualitySummaryResponse(
+            execution_id=item.id,
+            symbol=item.symbol,
+            status=item.status,
+            strategy_type=item.strategy_type,
+            volatility_regime=item.volatility_regime,
+            volatility_pct=float(item.volatility_pct or 0),
+            expected_price=item.mid_price,
+            fill_price=item.price_avg,
+            slippage=item.slippage_pct,
+            execution_latency=item.execution_time_ms,
+            execution_quality_score=item.execution_quality_score,
+            timestamp=item.created_at,
+        )
+
+    return ExecutionQualitySummaryResponse(
+        execution_id=item.id,
+        symbol=item.symbol,
+        status=item.status,
+        strategy_type=item.details.get("strategy_type", "unknown"),
+        volatility_regime=item.details.get("volatility_regime", "low"),
+        volatility_pct=float(item.details.get("volatility_pct", 0) or 0),
+        expected_price=item.expected_price,
+        fill_price=item.fill_price,
+        slippage=item.slippage,
+        execution_latency=item.execution_latency,
+        execution_quality_score=item.execution_quality_score,
+        timestamp=item.created_at,
+    )
 
 
 @router.get("/live-config", response_model=LiveActivationConfigResponse)
@@ -196,20 +231,7 @@ def latest_user_execution_quality(current_user: User = Depends(get_current_user)
     latest = latest_execution_quality(db, current_user.id)
     if latest is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz test emri kaydı yok")
-    return ExecutionQualitySummaryResponse(
-        execution_id=latest.id,
-        symbol=latest.symbol,
-        status=latest.status,
-        strategy_type=latest.details.get("strategy_type", "unknown"),
-        volatility_regime=latest.details.get("volatility_regime", "low"),
-        volatility_pct=float(latest.details.get("volatility_pct", 0) or 0),
-        expected_price=latest.expected_price,
-        fill_price=latest.fill_price,
-        slippage=latest.slippage,
-        execution_latency=latest.execution_latency,
-        execution_quality_score=latest.execution_quality_score,
-        timestamp=latest.created_at,
-    )
+    return _quality_response(latest)
 
 
 @router.get("/admin/execution-quality", response_model=list[ExecutionQualitySummaryResponse])
@@ -219,23 +241,17 @@ def admin_execution_quality(
     limit: int = Query(default=25, ge=5, le=100),
 ):
     rows = list_execution_quality(db, limit=limit)
-    return [
-        ExecutionQualitySummaryResponse(
-            execution_id=item.id,
-            symbol=item.symbol,
-            status=item.status,
-            strategy_type=item.details.get("strategy_type", "unknown"),
-            volatility_regime=item.details.get("volatility_regime", "low"),
-            volatility_pct=float(item.details.get("volatility_pct", 0) or 0),
-            expected_price=item.expected_price,
-            fill_price=item.fill_price,
-            slippage=item.slippage,
-            execution_latency=item.execution_latency,
-            execution_quality_score=item.execution_quality_score,
-            timestamp=item.created_at,
-        )
-        for item in rows
-    ]
+    return [_quality_response(item) for item in rows]
+
+
+@router.get("/admin/permission-drift-trend", response_model=PermissionDriftTrendResponse)
+def admin_permission_drift_trend(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    days: int = Query(default=7, ge=7, le=30),
+):
+    trend = permission_drift_trend(db, days=days)
+    return PermissionDriftTrendResponse(**trend)
 
 
 @router.get("/admin/live-readiness-score", response_model=LiveReadinessScoreResponse)

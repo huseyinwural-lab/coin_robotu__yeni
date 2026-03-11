@@ -472,6 +472,40 @@ class TestnetConnectivityResponse(BaseModel):
     message: str
 
 
+class ExchangeValidateResponse(BaseModel):
+    exchange: str
+    environment: str
+    is_valid: bool
+    permissions: list[str]
+    can_trade: bool
+    can_withdraw: bool
+    reason_codes: list[str]
+
+
+class MarketTickerResponse(BaseModel):
+    exchange: str
+    environment: str
+    symbol: str
+    bid: float
+    ask: float
+    mid_price: float
+    timestamp: str
+
+
+class ExchangeTestOrderResponse(BaseModel):
+    order_id: str
+    exchange_order_id: str
+    price_avg: float | None
+    executed_qty: float | None
+    slippage_pct: float | None
+    execution_time_ms: float | None
+    status: str
+    state_machine_path: list[str]
+    strategy_type: str
+    volatility_regime: str
+    volatility_pct: float
+
+
 class ExchangeSettingsUpdateRequest(BaseModel):
     exchange: str = "binance"
     mode: str = "testnet"
@@ -533,6 +567,20 @@ class ExecutionQualitySummaryResponse(BaseModel):
     execution_latency: float | None
     execution_quality_score: float
     timestamp: datetime
+
+
+class PermissionDriftPointResponse(BaseModel):
+    date: str
+    event_count: int
+    critical_count: int
+
+
+class PermissionDriftTrendResponse(BaseModel):
+    days: int
+    points: list[PermissionDriftPointResponse]
+    affected_user_count: int
+    latest_timestamp: datetime | None
+    critical_drift_count: int
 
 
 class ReleaseGateStatusResponse(BaseModel):

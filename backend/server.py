@@ -14,6 +14,7 @@ from routers import (
     bot_profiles,
     dashboard,
     exchange,
+    market,
     paper_positions,
     phase4_live,
     pipeline,
@@ -52,6 +53,7 @@ api_router.include_router(risk_policies.router)
 api_router.include_router(strategy_templates.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(exchange.router)
+api_router.include_router(market.router)
 api_router.include_router(admin_control.router)
 api_router.include_router(admin_phase3.router)
 api_router.include_router(pipeline.router)
