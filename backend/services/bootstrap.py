@@ -147,6 +147,16 @@ def _seed_execution_policies(db: Session):
             "execution_urgency": "low",
             "retry_limit": 1,
         },
+        {
+            "strategy_type": "spot_volatility_breakout_v1",
+            "execution_style": "aggressive",
+            "order_preference": "market_first",
+            "timeout_seconds": 6,
+            "fallback_behavior": "market_fallback",
+            "partial_fill_tolerance_pct": 70,
+            "execution_urgency": "high",
+            "retry_limit": 2,
+        },
     ]
 
     for payload in defaults:

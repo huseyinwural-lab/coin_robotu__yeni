@@ -19,7 +19,7 @@ DEFAULT_STRATEGY_CONFIG = {
     "min_adjusted_score": 55,
     "freeze_duration_candles": 2,
     "multiplier_bounds": {"min": MULTIPLIER_MIN, "max": MULTIPLIER_MAX},
-    "active_strategies": ["spot_pullback_v1", "spot_range_reversion_v1"],
+    "active_strategies": ["spot_pullback_v1", "spot_range_reversion_v1", "spot_volatility_breakout_v1"],
 }
 
 REGIME_STRATEGY_MAP = {
@@ -260,8 +260,35 @@ def _derive_component_scores(candles: list[dict], indicators: dict, strategy_id:
     ema50 = indicators.get("ema50", 0.0)
     ema200 = indicators.get("ema200", 0.0)
     vwap = indicators.get("vwap", 0.0)
+    compression_range_pct = 0.0
+    breakout_strength = 0.0
+    wick_cleanliness_ratio = 0.0
 
-    if strategy_id == "spot_range_reversion_v1":
+    if strategy_id == "spot_volatility_breakout_v1":
+        lookback = candles[-21:-1] if len(candles) > 21 else candles[:-1]
+        high_20 = max((_safe_float(item.get("high")) for item in lookback), default=close)
+        low_20 = min((_safe_float(item.get("low")) for item in lookback), default=close)
+        compression_range_pct = ((high_20 - low_20) / close) * 100 if close else 0.0
+        breakout_strength = ((close - high_20) / close) * 100 if close else 0.0
+        breakout_candle = candles[-2] if len(candles) >= 2 else candles[-1]
+        b_open = _safe_float(breakout_candle.get("open"))
+        b_close = _safe_float(breakout_candle.get("close"))
+        b_high = _safe_float(breakout_candle.get("high"))
+        body = abs(b_close - b_open)
+        upper_wick = max(b_high - max(b_open, b_close), 0.0)
+        wick_cleanliness_ratio = upper_wick / max(body, 0.0001)
+
+        trend_alignment = {"weak": 35.0, "medium": 70.0, "strong": 90.0}.get(trend_strength, 35.0)
+        structure_break = min(max((breakout_strength * 180) + 40, 20), 98)
+        volume_expansion = min(max(relative_volume * 50, 15), 100)
+        volatility_quality = 92.0 if compression_range_pct <= 2.5 else 62.0 if compression_range_pct <= 3.5 else 35.0
+        wick_cleanliness = 90.0 if upper_wick < max(body, 0.0001) else 55.0
+
+        trend_quality = trend_alignment
+        pullback_score = structure_break
+        relative_volume_score = volume_expansion
+        structure_cleanliness = wick_cleanliness
+    elif strategy_id == "spot_range_reversion_v1":
         ema_spread_pct = abs(((ema50 - ema200) / ema200) * 100) if ema200 else 0.0
         range_fit = 92.0 if ema_spread_pct <= 0.35 else 72.0 if ema_spread_pct <= 0.75 else 45.0
         trend_quality = range_fit
@@ -320,6 +347,9 @@ def _derive_component_scores(candles: list[dict], indicators: dict, strategy_id:
         "structure_cleanliness": round(structure_cleanliness, 4),
         "atr_pct": round(atr_pct, 6),
         "rsi14": round(indicators.get("rsi14", 50.0), 4),
+        "compression_range_pct": round(compression_range_pct, 6),
+        "breakout_strength": round(breakout_strength, 6),
+        "wick_cleanliness_ratio": round(wick_cleanliness_ratio, 6),
     }
 
 
@@ -382,7 +412,7 @@ def _evaluate_symbol_candidate(
     strategy_name = STRATEGY_NAME_MAP.get(strategy_id, strategy_id.upper())
 
     hard_rejections: list[str] = []
-    if strategy_id == "spot_pullback_v1" and component_scores["trend_strength"] == "weak":
+    if component_scores["trend_strength"] == "weak":
         hard_rejections.append("trend_strength_weak")
     if btc_context.btc_regime == "hostile":
         hard_rejections.append("btc_regime_hostile")
@@ -394,7 +424,39 @@ def _evaluate_symbol_candidate(
         hard_rejections.append("strategy_not_activated")
 
     setup_rejections: list[str] = []
-    if strategy_id == "spot_range_reversion_v1":
+    if strategy_id == "spot_volatility_breakout_v1":
+        lookback = candles[-21:-1] if len(candles) > 21 else candles[:-1]
+        high_20 = max((_safe_float(item.get("high")) for item in lookback), default=close)
+        low_20 = min((_safe_float(item.get("low")) for item in lookback), default=close)
+        range_midpoint = (high_20 + low_20) / 2
+
+        breakout_candle = candles[-2] if len(candles) >= 2 else candles[-1]
+        confirmation_candle = candles[-1]
+        breakout_close = _safe_float(breakout_candle.get("close"))
+        breakout_open = _safe_float(breakout_candle.get("open"))
+        breakout_high = _safe_float(breakout_candle.get("high"))
+        breakout_body_pct = ((breakout_close - breakout_open) / breakout_open) * 100 if breakout_open else 0.0
+
+        compression_ok = component_scores["compression_range_pct"] < 2.5
+        breakout_ok = breakout_close > high_20
+        volume_ok = component_scores["relative_volume"] >= 1.5
+        confirmation_ok = _safe_float(confirmation_candle.get("close")) > breakout_close or breakout_body_pct >= 0.6
+        wick_ok = (breakout_high - breakout_close) < max((breakout_close - breakout_open), 0.0001)
+        midpoint_ok = breakout_close > range_midpoint
+
+        if not compression_ok:
+            setup_rejections.append("compression_missing")
+        if not breakout_ok:
+            setup_rejections.append("breakout_not_confirmed")
+        if not volume_ok:
+            setup_rejections.append("relative_volume_too_low")
+        if not confirmation_ok:
+            setup_rejections.append("confirmation_missing")
+        if not wick_ok:
+            setup_rejections.append("wick_rejection_high")
+        if not midpoint_ok:
+            setup_rejections.append("range_midpoint_not_reclaimed")
+    elif strategy_id == "spot_range_reversion_v1":
         vwap = indicators.get("vwap", 0.0)
         if trend == "bullish" and component_scores["trend_strength"] == "strong":
             setup_rejections.append("market_not_ranging_enough")
@@ -481,6 +543,24 @@ def _evaluate_symbol_candidate(
             "vwap": round(indicators.get("vwap", 0.0), 6),
             "freeze_guard_active": btc_context.freeze_active,
             "strategy_name": strategy_name,
+            "breakout_level": round(
+                max((_safe_float(item.get("high")) for item in (candles[-21:-1] if len(candles) > 21 else candles[:-1])), default=close),
+                6,
+            )
+            if strategy_id == "spot_volatility_breakout_v1"
+            else None,
+            "compression_range": component_scores.get("compression_range_pct", 0),
+            "breakout_strength": component_scores.get("breakout_strength", 0),
+            "confirmation_candle": (
+                {
+                    "open": _safe_float(candles[-1].get("open")),
+                    "close": _safe_float(candles[-1].get("close")),
+                    "high": _safe_float(candles[-1].get("high")),
+                    "low": _safe_float(candles[-1].get("low")),
+                }
+                if strategy_id == "spot_volatility_breakout_v1" and candles
+                else None
+            ),
         },
     }
 

@@ -33,14 +33,21 @@ from services.pipeline.spot_strategy_service import (
     refresh_spot_tradable_universe,
     update_indicator_cache,
 )
-from services.strategy_observability_service import log_strategy_observability_events
+from services.strategy_observability_service import log_risk_outcome_event, log_strategy_observability_events
 from services.pipeline.strategy_engine import evaluate_strategy
 from services.pipeline.universe_engine import build_effective_universe
 from services.live_mode_service import enforce_release_gate
 
 logger = logging.getLogger(__name__)
 
-SPOT_STRATEGY_TYPES = {"spot_pullback", "spot_pullback_v1", "spot_range_reversion", "spot_range_reversion_v1"}
+SPOT_STRATEGY_TYPES = {
+    "spot_pullback",
+    "spot_pullback_v1",
+    "spot_range_reversion",
+    "spot_range_reversion_v1",
+    "spot_volatility_breakout",
+    "spot_volatility_breakout_v1",
+}
 
 
 class PipelineRuntime:
@@ -417,9 +424,58 @@ class PipelineRuntime:
                     actor_user_id=user.id,
                     actor_role=user.role.value,
                     severity="warning",
-                    details={"tags": risk_decision.risk_tags},
+                    details={
+                        "tags": risk_decision.risk_tags,
+                        "risk_check_result": "rejected",
+                        "capital_allocation": risk_decision.capital_allocation,
+                    },
+                )
+                log_risk_outcome_event(
+                    db,
+                    selection_cycle_id=cycle_entity_id,
+                    audit_log_id=None,
+                    bot_profile_id=bot.id,
+                    user_id=user.id,
+                    symbol=candidate["symbol"],
+                    strategy_id=candidate.get("strategy_id", "spot_pullback_v1"),
+                    strategy_name=candidate.get("strategy_name", "SPOT_TREND_PULLBACK"),
+                    market_regime=candidate.get("market_regime", "RANGING"),
+                    multiplier_version=candidate.get("multiplier_version", "v1"),
+                    multiplier_set=candidate.get("multiplier_set", {}),
+                    base_score=float(candidate.get("base_score", 0.0)),
+                    adjusted_score=float(candidate.get("adjusted_score", 0.0)),
+                    score_delta=float(candidate.get("score_delta", 0.0)),
+                    selection_rank=candidate.get("selection_rank"),
+                    trend_strength=candidate.get("trend_strength"),
+                    relative_volume=float(candidate.get("relative_volume", 0.0) or 0.0),
+                    risk_check_result="rejected",
+                    capital_allocation=risk_decision.capital_allocation,
+                    reason_codes=risk_decision.risk_tags,
                 )
                 continue
+
+            log_risk_outcome_event(
+                db,
+                selection_cycle_id=cycle_entity_id,
+                audit_log_id=None,
+                bot_profile_id=bot.id,
+                user_id=user.id,
+                symbol=candidate["symbol"],
+                strategy_id=candidate.get("strategy_id", "spot_pullback_v1"),
+                strategy_name=candidate.get("strategy_name", "SPOT_TREND_PULLBACK"),
+                market_regime=candidate.get("market_regime", "RANGING"),
+                multiplier_version=candidate.get("multiplier_version", "v1"),
+                multiplier_set=candidate.get("multiplier_set", {}),
+                base_score=float(candidate.get("base_score", 0.0)),
+                adjusted_score=float(candidate.get("adjusted_score", 0.0)),
+                score_delta=float(candidate.get("score_delta", 0.0)),
+                selection_rank=candidate.get("selection_rank"),
+                trend_strength=candidate.get("trend_strength"),
+                relative_volume=float(candidate.get("relative_volume", 0.0) or 0.0),
+                risk_check_result="approved",
+                capital_allocation=risk_decision.capital_allocation,
+                reason_codes=risk_decision.risk_tags,
+            )
 
             policy = get_policy_for_strategy(db, candidate.get("strategy_id", bot.strategy_type))
             execution_policy_payload = {
@@ -449,6 +505,8 @@ class PipelineRuntime:
                     "mode": "paper",
                     "strategy_id": signal.strategy_id,
                     "risk_tags": risk_decision.risk_tags,
+                    "risk_check_result": "approved",
+                    "capital_allocation": risk_decision.capital_allocation,
                     "strategy_name": candidate.get("strategy_name", "SPOT_TREND_PULLBACK"),
                     "market_regime": candidate.get("market_regime"),
                     "multiplier_version": candidate.get("multiplier_version"),
@@ -503,6 +561,8 @@ class PipelineRuntime:
                     "adjusted_score": candidate.get("adjusted_score"),
                     "score_delta": candidate.get("score_delta"),
                     "selection_rank": candidate.get("selection_rank"),
+                    "risk_check_result": "approved",
+                    "capital_allocation": risk_decision.capital_allocation,
                     "lifecycle_state": "OPEN",
                 },
             )
@@ -670,7 +730,11 @@ class PipelineRuntime:
                                 actor_user_id=user.id,
                                 actor_role=user.role.value,
                                 severity="warning",
-                                details={"tags": risk_decision.risk_tags},
+                                details={
+                                    "tags": risk_decision.risk_tags,
+                                    "risk_check_result": "rejected",
+                                    "capital_allocation": risk_decision.capital_allocation,
+                                },
                             )
                             continue
 
@@ -702,6 +766,8 @@ class PipelineRuntime:
                                 "mode": "paper",
                                 "strategy_id": signal.strategy_id,
                                 "risk_tags": risk_decision.risk_tags,
+                                "risk_check_result": "approved",
+                                "capital_allocation": risk_decision.capital_allocation,
                                 "signal_score": signal.signal_score,
                                 "signal_strength": signal.signal_strength,
                                 "signal_metadata": signal.metadata,

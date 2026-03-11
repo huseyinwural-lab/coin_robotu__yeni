@@ -16,22 +16,25 @@ export const AdminStrategyObservabilityPage = () => {
   const [rejection, setRejection] = useState(null);
   const [scoreMetrics, setScoreMetrics] = useState(null);
   const [report, setReport] = useState(null);
+  const [riskCapital, setRiskCapital] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const safeTopN = Math.min(Math.max(Number(topN) || 10, 1), 50);
-      const [topRes, rejectionRes, scoreRes, reportRes] = await Promise.all([
+      const [topRes, rejectionRes, scoreRes, reportRes, riskCapitalRes] = await Promise.all([
         apiClient.get("/admin/strategy/top-signals", { params: { window: windowRange, top_n: safeTopN } }),
         apiClient.get("/admin/strategy/rejection-analytics", { params: { window: windowRange } }),
         apiClient.get("/admin/strategy/score-metrics", { params: { window: windowRange } }),
         apiClient.get("/admin/strategy/report", { params: { window: windowRange } }),
+        apiClient.get("/admin/strategy/risk-capital/status"),
       ]);
 
       setTopSignals(topRes.data?.items || []);
       setRejection(rejectionRes.data || null);
       setScoreMetrics(scoreRes.data || null);
       setReport(reportRes.data || null);
+      setRiskCapital(riskCapitalRes.data || null);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Strategy observability verisi alınamadı");
     } finally {
@@ -159,7 +162,29 @@ export const AdminStrategyObservabilityPage = () => {
             <p data-testid="strategy-report-selected-per-strategy">
               selected_signals_per_strategy: {JSON.stringify(report?.selected_signals_per_strategy || {})}
             </p>
+            <p data-testid="strategy-report-profit-factor-by-strategy">
+              strategy_profit_factor: {JSON.stringify(report?.strategy_profit_factor || {})}
+            </p>
+            <p data-testid="strategy-report-drawdown-by-strategy">
+              strategy_drawdown: {JSON.stringify(report?.strategy_drawdown || {})}
+            </p>
           </div>
+        </div>
+      </div>
+
+      <div className="border border-black/25 bg-orange-100 p-4" data-testid="risk-capital-status-panel">
+        <h3 className="text-lg font-bold" data-testid="risk-capital-status-title">Risk & Capital Status</h3>
+        <div className="mt-3 grid gap-2 text-sm md:grid-cols-2" data-testid="risk-capital-status-grid">
+          <p data-testid="risk-capital-equity">equity: {riskCapital?.equity ?? 0}</p>
+          <p data-testid="risk-capital-open-risk">open_risk_pct: {riskCapital?.open_risk_pct ?? 0}</p>
+          <p data-testid="risk-capital-daily-loss">daily_loss: {riskCapital?.daily_loss?.daily_loss_amount ?? 0}</p>
+          <p data-testid="risk-capital-portfolio-drawdown">portfolio_drawdown_pct: {riskCapital?.portfolio_drawdown_pct ?? 0}</p>
+          <p className="md:col-span-2" data-testid="risk-capital-allocation-json">
+            allocation: {JSON.stringify(riskCapital?.allocation || {})}
+          </p>
+          <p className="md:col-span-2" data-testid="risk-capital-limits-json">
+            limits: {JSON.stringify(riskCapital?.limits || {})}
+          </p>
         </div>
       </div>
 

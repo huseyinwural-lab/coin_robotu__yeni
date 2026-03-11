@@ -35,3 +35,7 @@ class RiskDecision(BaseModel):
     equity: float = 0
     trade_allocation_usdt: float = 0
     risk_amount_usdt: float = 0
+    strategy_drawdown_pct: float = 0
+    portfolio_drawdown_pct: float = 0
+    open_risk_pct: float = 0
+    capital_allocation: dict = {}

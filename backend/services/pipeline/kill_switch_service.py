@@ -3,13 +3,64 @@ import json
 
 from sqlalchemy.orm import Session
 
-from models import AdminControl, BotProfile, FailedEvent, PaperPosition, UserRiskSetting
+from models import AdminControl, BotProfile, ExecutionMetric, FailedEvent, PaperPosition, UserRiskSetting
 from services.audit_service import create_audit_log
 from services.pipeline.execution_engine import manual_close_position
 from services.system_alert_service import create_system_alert
 
 KILL_SWITCH_EXECUTION_ERROR_THRESHOLD = 5
 KILL_SWITCH_RISK_ANOMALY_THRESHOLD = 3
+KILL_SWITCH_ORDER_REJECT_RATE_THRESHOLD = 0.35
+
+
+def _flash_crash_detected(cache) -> bool:
+    raw = cache.get("market:candles:BTCUSDT:15m") if cache else None
+    if not raw:
+        return False
+    try:
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        candles = json.loads(raw)
+        if not candles:
+            return False
+        last = candles[-1]
+        open_price = float(last.get("open", 0))
+        close_price = float(last.get("close", 0))
+        move_pct = ((close_price - open_price) / open_price) * 100 if open_price else 0
+        return move_pct <= -10
+    except Exception:
+        return False
+
+
+def _execution_health_flags(db: Session) -> dict:
+    rows = (
+        db.query(ExecutionMetric)
+        .order_by(ExecutionMetric.timestamp.desc())
+        .limit(120)
+        .all()
+    )
+    if not rows:
+        return {"slippage_spike": False, "reject_rate_high": False, "reject_rate": 0, "recent_slippage": 0, "baseline_slippage": 0}
+
+    recent = rows[:20]
+    baseline = rows[20:] if len(rows) > 20 else rows
+
+    recent_slippage = sum(abs(float(item.slippage_pct or 0)) for item in recent) / max(len(recent), 1)
+    baseline_slippage = sum(abs(float(item.slippage_pct or 0)) for item in baseline) / max(len(baseline), 1)
+    slippage_spike = baseline_slippage > 0 and recent_slippage > (baseline_slippage * 3)
+
+    reject_statuses = {"rejected", "error", "failed", "timeout"}
+    reject_count = sum(1 for item in recent if str(item.final_status or "").lower() in reject_statuses)
+    reject_rate = reject_count / max(len(recent), 1)
+    reject_rate_high = reject_rate >= KILL_SWITCH_ORDER_REJECT_RATE_THRESHOLD
+
+    return {
+        "slippage_spike": slippage_spike,
+        "reject_rate_high": reject_rate_high,
+        "reject_rate": round(reject_rate, 4),
+        "recent_slippage": round(recent_slippage, 4),
+        "baseline_slippage": round(baseline_slippage, 4),
+    }
 
 
 def _today_daily_loss_exceeded_users(db: Session) -> list[str]:
@@ -72,6 +123,15 @@ def evaluate_kill_switch(db: Session, cache, market_data_engine) -> dict:
     if failed_events_pending >= 20:
         reasons.append("failed_events_overload")
 
+    if _flash_crash_detected(cache):
+        reasons.append("flash_crash_detected")
+
+    execution_health = _execution_health_flags(db)
+    if execution_health["slippage_spike"]:
+        reasons.append("slippage_spike")
+    if execution_health["reject_rate_high"]:
+        reasons.append("exchange_error_reject_rate_high")
+
     if "daily_loss_exceeded" in reasons:
         create_system_alert(
             db,
@@ -127,6 +187,7 @@ def evaluate_kill_switch(db: Session, cache, market_data_engine) -> dict:
         "risk_anomalies_5m": risk_anomalies_5m,
         "daily_loss_exceeded_users": exceeded_users,
         "failed_events_pending": failed_events_pending,
+        "execution_health": execution_health,
     }
     cache.set("pipeline:kill_switch", json.dumps(payload))
     return payload

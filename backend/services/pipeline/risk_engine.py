@@ -1,25 +1,61 @@
+import json
+
 from sqlalchemy.orm import Session
 
 from models import AdminControl, PaperPosition, RiskExposureGroup, RiskPolicy, User
 from services.pipeline.events import RiskDecision, SignalDecision
 from services.pipeline.correlation_service import pair_correlation
 from services.pipeline.position_sizing_engine import compute_position_sizing, consecutive_losses, daily_loss_usage
+from services.pipeline.spot_risk_capital_service import (
+    MAX_CORRELATED_POSITIONS,
+    MAX_DAILY_LOSS_PCT,
+    MAX_OPEN_RISK_PCT,
+    MAX_PORTFOLIO_DRAWDOWN_PCT,
+    MAX_POSITIONS_PER_STRATEGY,
+    MAX_SECTOR_EXPOSURE_PCT,
+    MAX_STRATEGY_DRAWDOWN_PCT,
+    compute_open_risk_pct,
+    correlated_positions_count,
+    portfolio_drawdown_pct,
+    resolve_capital_allocation,
+    sector_exposure_pct,
+    slot_weight_for_rank,
+    strategy_open_positions,
+)
 
 MAX_CONSECUTIVE_LOSS_LIMIT = 3
 
 
-def _evaluate_spot_pullback_risk(
+def _disabled_strategies(cache) -> set[str]:
+    raw = cache.get("spot_strategy:disabled") if cache else None
+    if not raw:
+        return set()
+    try:
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        payload = json.loads(raw)
+        return {str(item) for item in payload}
+    except Exception:
+        return set()
+
+
+def _persist_disabled_strategy(cache, strategy_id: str):
+    disabled = _disabled_strategies(cache)
+    disabled.add(strategy_id)
+    if cache:
+        cache.set("spot_strategy:disabled", json.dumps(sorted(disabled)))
+
+
+def _evaluate_spot_strategy_risk(
     db: Session,
     *,
     current_user: User,
+    cache,
     signal: SignalDecision,
     market_price: float,
 ) -> RiskDecision:
-    open_positions_list = (
-        db.query(PaperPosition)
-        .filter(PaperPosition.user_id == current_user.id, PaperPosition.status == "open")
-        .all()
-    )
+    open_positions_list, open_by_strategy = strategy_open_positions(db, current_user.id)
+    strategy_id = signal.strategy_id
 
     risk_tags: list[str] = []
     if signal.signal == "none":
@@ -30,6 +66,11 @@ def _evaluate_spot_pullback_risk(
         risk_tags.append("max_open_positions_reached")
     if any(position.symbol.upper() == signal.symbol.upper() for position in open_positions_list):
         risk_tags.append("max_position_per_symbol_reached")
+    if len(open_by_strategy.get(strategy_id, [])) >= MAX_POSITIONS_PER_STRATEGY:
+        risk_tags.append("max_positions_per_strategy_reached")
+
+    if strategy_id in _disabled_strategies(cache):
+        risk_tags.append("strategy_disabled")
 
     sizing = compute_position_sizing(db, current_user.id, market_price)
     equity = float(sizing["equity"])
@@ -37,9 +78,71 @@ def _evaluate_spot_pullback_risk(
     stop = float(signal.proposed_stop or (entry * 0.99))
     take_profit = float(signal.proposed_take_profit or (entry * 1.02))
     stop_distance = max(abs(entry - stop), entry * 0.01, 0.0001)
+
+    strategy_allocation = resolve_capital_allocation(db, current_user.id, strategy_id)
+    strategy_limit_notional = equity * float(strategy_allocation["effective_allocation"])
+    strategy_open_notional = sum(
+        float(position.entry_price) * float(position.quantity)
+        for position in open_by_strategy.get(strategy_id, [])
+    )
+    remaining_strategy_capacity = max(strategy_limit_notional - strategy_open_notional, 0.0)
+
+    selection_rank = None
+    if isinstance(signal.metadata, dict):
+        selection_rank = signal.metadata.get("selection_rank")
+    slot_weight = slot_weight_for_rank(selection_rank)
+    slot_capacity = equity * slot_weight
+
     risk_amount_usdt = equity * 0.01
-    quantity = round(max(risk_amount_usdt / stop_distance, 0.0001), 6)
+    quantity_from_risk = max(risk_amount_usdt / stop_distance, 0.0001)
+    quantity_from_allocation = max(min(slot_capacity, remaining_strategy_capacity) / max(entry, 0.0001), 0.0001)
+    quantity = round(min(quantity_from_risk, quantity_from_allocation), 6)
     trade_allocation_usdt = quantity * entry
+
+    if remaining_strategy_capacity <= 0:
+        risk_tags.append("strategy_capital_limit_reached")
+
+    open_risk_pct = compute_open_risk_pct(equity, open_positions_list)
+    proposed_risk_pct = (risk_amount_usdt / max(equity, 0.01)) * 100
+    if open_risk_pct + proposed_risk_pct > MAX_OPEN_RISK_PCT:
+        risk_tags.append("max_open_risk_exceeded")
+
+    daily_loss = daily_loss_usage(db, current_user.id)
+    daily_loss_pct = (float(daily_loss["daily_loss_amount"]) / max(equity, 0.01)) * 100
+    if daily_loss_pct >= MAX_DAILY_LOSS_PCT:
+        risk_tags.append("max_daily_loss_exceeded")
+
+    portfolio_dd = portfolio_drawdown_pct(db, current_user.id, equity)
+    if portfolio_dd >= MAX_PORTFOLIO_DRAWDOWN_PCT:
+        risk_tags.append("max_portfolio_drawdown_exceeded")
+
+    strategy_stats_dd = 0.0
+    from services.pipeline.spot_risk_capital_service import _strategy_drawdown_stats
+
+    stats = _strategy_drawdown_stats(db, current_user.id)
+    strategy_stats_dd = float((stats.get(strategy_id) or {}).get("drawdown_pct", 0.0))
+    if strategy_stats_dd >= MAX_STRATEGY_DRAWDOWN_PCT:
+        risk_tags.append("strategy_drawdown_limit_exceeded")
+        _persist_disabled_strategy(cache, strategy_id)
+
+    sector_exposure = sector_exposure_pct(db, open_positions_list, signal.symbol, equity)
+    if sector_exposure >= MAX_SECTOR_EXPOSURE_PCT:
+        risk_tags.append("max_sector_exposure_exceeded")
+
+    correlated_count = correlated_positions_count(cache, open_positions_list, signal.symbol, signal.direction)
+    if correlated_count >= MAX_CORRELATED_POSITIONS:
+        risk_tags.append("max_correlated_positions_exceeded")
+
+    kill_switch_raw = cache.get("pipeline:kill_switch") if cache else None
+    if kill_switch_raw:
+        try:
+            if isinstance(kill_switch_raw, bytes):
+                kill_switch_raw = kill_switch_raw.decode()
+            kill_switch_state = json.loads(kill_switch_raw)
+            if kill_switch_state.get("active"):
+                risk_tags.append("kill_switch_active")
+        except Exception:
+            pass
 
     if risk_tags:
         return RiskDecision(
@@ -52,6 +155,17 @@ def _evaluate_spot_pullback_risk(
             equity=equity,
             trade_allocation_usdt=trade_allocation_usdt,
             risk_amount_usdt=risk_amount_usdt,
+            strategy_drawdown_pct=strategy_stats_dd,
+            portfolio_drawdown_pct=portfolio_dd,
+            open_risk_pct=round(open_risk_pct, 4),
+            capital_allocation={
+                **strategy_allocation,
+                "strategy_limit_notional": round(strategy_limit_notional, 4),
+                "strategy_open_notional": round(strategy_open_notional, 4),
+                "remaining_strategy_capacity": round(remaining_strategy_capacity, 4),
+                "slot_weight": slot_weight,
+                "slot_capacity": round(slot_capacity, 4),
+            },
         )
 
     return RiskDecision(
@@ -64,6 +178,18 @@ def _evaluate_spot_pullback_risk(
         equity=equity,
         trade_allocation_usdt=trade_allocation_usdt,
         risk_amount_usdt=risk_amount_usdt,
+        strategy_drawdown_pct=strategy_stats_dd,
+        portfolio_drawdown_pct=portfolio_dd,
+        open_risk_pct=round(open_risk_pct, 4),
+        capital_allocation={
+            **strategy_allocation,
+            "strategy_limit_notional": round(strategy_limit_notional, 4),
+            "strategy_open_notional": round(strategy_open_notional, 4),
+            "remaining_strategy_capacity": round(remaining_strategy_capacity, 4),
+            "slot_weight": slot_weight,
+            "slot_capacity": round(slot_capacity, 4),
+            "selection_rank": selection_rank,
+        },
     )
 
 
@@ -97,7 +223,14 @@ def evaluate_risk(
 ) -> RiskDecision:
     control = db.query(AdminControl).filter(AdminControl.id == "global").first()
 
-    if signal.strategy_id in {"spot_pullback", "spot_pullback_v1", "spot_range_reversion", "spot_range_reversion_v1"}:
+    if signal.strategy_id in {
+        "spot_pullback",
+        "spot_pullback_v1",
+        "spot_range_reversion",
+        "spot_range_reversion_v1",
+        "spot_volatility_breakout",
+        "spot_volatility_breakout_v1",
+    }:
         if control is None:
             return RiskDecision(
                 approved=False,
@@ -107,9 +240,10 @@ def evaluate_risk(
                 take_profit=signal.proposed_take_profit,
                 risk_tags=["missing_policy"],
             )
-        return _evaluate_spot_pullback_risk(
+        return _evaluate_spot_strategy_risk(
             db,
             current_user=current_user,
+            cache=cache,
             signal=signal,
             market_price=market_price,
         )

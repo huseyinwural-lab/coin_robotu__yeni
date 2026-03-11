@@ -3,7 +3,40 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import StrategyObservabilityEvent, StrategyTemplate
+from models import PaperPosition, PositionLedgerEvent, StrategyObservabilityEvent, StrategyTemplate
+
+
+def _global_strategy_stats(db: Session) -> dict:
+    open_events = db.query(PositionLedgerEvent).filter(PositionLedgerEvent.event_type == "trade_open").all()
+    strategy_map = {event.position_id: str((event.payload or {}).get("strategy_id") or "spot_pullback_v1") for event in open_events}
+
+    closed_rows = db.query(PaperPosition).filter(PaperPosition.closed_at.is_not(None)).all()
+    pnl_by_strategy: dict[str, list[float]] = {}
+    for row in closed_rows:
+        strategy_id = strategy_map.get(row.id, "spot_pullback_v1")
+        pnl_by_strategy.setdefault(strategy_id, []).append(float(row.realized_pnl or 0.0))
+
+    result: dict[str, dict] = {}
+    for strategy_id, pnls in pnl_by_strategy.items():
+        positive = sum(item for item in pnls if item > 0)
+        negative = sum(abs(item) for item in pnls if item < 0)
+        pf = (positive / negative) if negative > 0 else (2.0 if positive > 0 else 1.0)
+
+        cumulative = 0.0
+        peak = 0.0
+        drawdown = 0.0
+        for item in pnls:
+            cumulative += item
+            peak = max(peak, cumulative)
+            drawdown = max(drawdown, peak - cumulative)
+        drawdown_pct = (drawdown / 10000.0) * 100
+
+        result[strategy_id] = {
+            "profit_factor": round(pf, 4),
+            "drawdown_pct": round(drawdown_pct, 4),
+            "trades": len(pnls),
+        }
+    return result
 
 
 def parse_window_to_since(window: str) -> tuple[str, datetime]:
@@ -224,6 +257,10 @@ def get_strategy_observability_report(db: Session, *, window: str):
     if not active_spot_strategies:
         observed = list((score_metrics.get("signals_per_strategy") or {}).keys())
         active_spot_strategies = sorted(observed)
+
+    strategy_stats = _global_strategy_stats(db)
+    strategy_profit_factor = {key: value.get("profit_factor", 0) for key, value in strategy_stats.items()}
+    strategy_drawdown = {key: value.get("drawdown_pct", 0) for key, value in strategy_stats.items()}
     return {
         "window": rejection["window"],
         "active_spot_strategies": active_spot_strategies,
@@ -238,7 +275,65 @@ def get_strategy_observability_report(db: Session, *, window: str):
             "freeze_guard": rejection.get("signals_rejected_freeze_guard", 0),
             "threshold": rejection.get("signals_rejected_threshold", 0),
         },
+        "strategy_profit_factor": strategy_profit_factor,
+        "strategy_drawdown": strategy_drawdown,
         "avg_adjusted_score": score_metrics.get("avg_adjusted_score", 0),
         "avg_base_score": score_metrics.get("avg_base_score", 0),
         "score_delta_avg": score_metrics.get("avg_score_delta", 0),
     }
+
+
+def log_risk_outcome_event(
+    db: Session,
+    *,
+    selection_cycle_id: str,
+    audit_log_id: str | None,
+    bot_profile_id: str | None,
+    user_id: str | None,
+    symbol: str,
+    strategy_id: str,
+    strategy_name: str,
+    market_regime: str,
+    multiplier_version: str,
+    multiplier_set: dict,
+    base_score: float,
+    adjusted_score: float,
+    score_delta: float,
+    selection_rank: int | None,
+    trend_strength: str | None,
+    relative_volume: float | None,
+    risk_check_result: str,
+    capital_allocation: dict,
+    reason_codes: list[str],
+):
+    row = StrategyObservabilityEvent(
+        selection_cycle_id=selection_cycle_id,
+        audit_log_id=audit_log_id,
+        bot_profile_id=bot_profile_id,
+        user_id=user_id,
+        symbol=symbol,
+        strategy_id=strategy_id,
+        strategy_name=strategy_name,
+        event_type="risk_result",
+        market_regime=market_regime,
+        multiplier_version=multiplier_version,
+        multiplier_set=multiplier_set,
+        base_score=float(base_score or 0),
+        adjusted_score=float(adjusted_score or 0),
+        score_delta=float(score_delta or 0),
+        selection_rank=selection_rank,
+        trend_strength=trend_strength,
+        relative_volume=float(relative_volume or 0),
+        hard_gate_pass=True,
+        threshold_pass=True,
+        rejection_reason=None if risk_check_result == "approved" else (reason_codes[0] if reason_codes else "risk_rejected"),
+        event_metadata={
+            "risk_check_result": risk_check_result,
+            "capital_allocation": capital_allocation,
+            "reason_codes": reason_codes,
+        },
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
