@@ -203,6 +203,8 @@ def open_paper_position(
                 "direction": direction,
                 "execution_event_id": execution_event.id,
                 "execution_policy": execution_policy,
+                "strategy_id": response_payload.get("strategy_id"),
+                "lifecycle_state": "OPEN",
             },
         )
     )
@@ -245,11 +247,17 @@ def refresh_open_positions(db: Session, latest_prices: dict[str, float]):
             position.status = close_reason
             position.realized_pnl = round(unrealized, 6)
             position.closed_at = datetime.now(timezone.utc)
+            lifecycle_state = "TAKE_PROFIT" if close_reason == "tp_hit" else "STOPPED"
             db.add(
                 PositionLedgerEvent(
                     position_id=position.id,
                     event_type="trade_close",
-                    payload={"reason": close_reason, "exit_price": last_price, "realized_pnl": position.realized_pnl},
+                    payload={
+                        "reason": close_reason,
+                        "exit_price": last_price,
+                        "realized_pnl": position.realized_pnl,
+                        "lifecycle_state": lifecycle_state,
+                    },
                 )
             )
             closed.append(position)

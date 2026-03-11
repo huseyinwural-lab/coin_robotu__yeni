@@ -21,6 +21,7 @@ from routers import (
     paper_positions,
     phase4_live,
     pipeline,
+    spot_strategy,
     ops_alerts,
     report_archive,
     risk_policies,
@@ -83,6 +84,7 @@ api_router.include_router(market.router)
 api_router.include_router(admin_control.router)
 api_router.include_router(admin_phase3.router)
 api_router.include_router(pipeline.router)
+api_router.include_router(spot_strategy.router)
 api_router.include_router(paper_positions.router)
 api_router.include_router(backtest.router)
 api_router.include_router(phase4_live.router)

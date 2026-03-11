@@ -3,7 +3,17 @@ import logging
 from datetime import datetime, timezone
 
 from db import SessionLocal, redis_client
-from models import BotProfile, ExecutionStateTransition, FailedEvent, PaperPosition, SignalEvent, StateRebuildLog, StrategyTemplate, User
+from models import (
+    BotProfile,
+    ExecutionStateTransition,
+    FailedEvent,
+    PaperPosition,
+    PositionLedgerEvent,
+    SignalEvent,
+    StateRebuildLog,
+    StrategyTemplate,
+    User,
+)
 from services.audit_service import create_audit_log
 from services.execution_policy_service import get_policy_for_strategy
 from services.failed_event_service import create_failed_event, mark_failed_event_resolved, mark_failed_event_retry
@@ -16,6 +26,12 @@ from services.pipeline.kill_switch_service import (
 )
 from services.pipeline.market_data_engine import MarketDataEngine
 from services.pipeline.risk_engine import evaluate_risk
+from services.pipeline.spot_strategy_service import (
+    bootstrap_market_data_store,
+    generate_daily_strategy_report,
+    refresh_spot_tradable_universe,
+    update_indicator_cache,
+)
 from services.pipeline.strategy_engine import evaluate_strategy
 from services.pipeline.universe_engine import build_effective_universe
 from services.live_mode_service import enforce_release_gate
@@ -34,6 +50,8 @@ class PipelineRuntime:
         self._failed_event_task: asyncio.Task | None = None
         self._release_gate_task: asyncio.Task | None = None
         self._kill_switch_task: asyncio.Task | None = None
+        self._spot_universe_task: asyncio.Task | None = None
+        self._daily_report_task: asyncio.Task | None = None
         self._last_release_gate_status: str | None = None
         self._last_kill_switch_active: bool = False
         self._running = False
@@ -49,6 +67,8 @@ class PipelineRuntime:
         self._failed_event_task = asyncio.create_task(self._failed_event_recovery_loop(), name="failed-event-recovery")
         self._release_gate_task = asyncio.create_task(self._release_gate_guard_loop(), name="release-gate-guard")
         self._kill_switch_task = asyncio.create_task(self._kill_switch_guard_loop(), name="kill-switch-guard")
+        self._spot_universe_task = asyncio.create_task(self._spot_universe_refresh_loop(), name="spot-universe-refresh")
+        self._daily_report_task = asyncio.create_task(self._daily_strategy_report_loop(), name="spot-daily-report")
         logger.info("Phase-3 runtime started")
 
     async def stop(self):
@@ -61,6 +81,8 @@ class PipelineRuntime:
             self._failed_event_task,
             self._release_gate_task,
             self._kill_switch_task,
+            self._spot_universe_task,
+            self._daily_report_task,
         ]:
             if task:
                 task.cancel()
@@ -120,6 +142,75 @@ class PipelineRuntime:
             finally:
                 db.close()
 
+    async def _spot_universe_refresh_loop(self):
+        while self._running:
+            db = SessionLocal()
+            try:
+                cached = get_json(self.cache, "universe:spot:tradable") or {}
+                generated_at = str(cached.get("generated_at", ""))
+                current_day = datetime.now(timezone.utc).date().isoformat()
+                should_refresh = not generated_at.startswith(current_day)
+                if should_refresh:
+                    payload = refresh_spot_tradable_universe(self.cache)
+                    symbols = payload.get("symbols", [])
+                    if "BTCUSDT" not in symbols:
+                        symbols = [*symbols, "BTCUSDT"]
+                    bootstrap_result = bootstrap_market_data_store(self.cache, symbols)
+                    create_audit_log(
+                        db,
+                        action="SPOT_UNIVERSE_REFRESHED",
+                        entity_type="spot_universe",
+                        entity_id=current_day,
+                        actor_user_id=None,
+                        actor_role="system",
+                        severity="info",
+                        details={
+                            "symbol_count": payload.get("count", 0),
+                            "seeded": bootstrap_result.get("seeded", 0),
+                            "failed": bootstrap_result.get("failed", []),
+                        },
+                    )
+            except Exception as exc:
+                logger.exception("Spot universe refresh loop error: %s", exc)
+            finally:
+                db.close()
+            await asyncio.sleep(3600)
+
+    async def _daily_strategy_report_loop(self):
+        while self._running:
+            await asyncio.sleep(3600)
+            now = datetime.now(timezone.utc)
+            if now.hour != 0:
+                continue
+            db = SessionLocal()
+            try:
+                report = generate_daily_strategy_report(db, self.cache)
+                create_audit_log(
+                    db,
+                    action="DAILY_STRATEGY_REPORT_GENERATED",
+                    entity_type="strategy_report",
+                    entity_id=report["date"],
+                    actor_user_id=None,
+                    actor_role="system",
+                    severity="info",
+                    details={"daily_trades": report.get("daily_trades", 0), "win_rate": report.get("win_rate", 0)},
+                )
+                for key in [
+                    "spot_strategy:signals_total:day",
+                    "spot_strategy:rejected:trend_strength_weak",
+                    "spot_strategy:rejected:relative_volume_low",
+                    "spot_strategy:rejected:btc_regime_hostile",
+                    "spot_strategy:rejected:pullback_quality_low",
+                    "spot_strategy:executed_signals:day",
+                    "spot_strategy:signal_score_sum:day",
+                    "spot_strategy:avg_signal_score:day",
+                ]:
+                    self.cache.set(key, "0")
+            except Exception as exc:
+                logger.exception("Daily strategy report loop error: %s", exc)
+            finally:
+                db.close()
+
     async def _orchestrate(self):
         while self._running:
             event = await self.candle_queue.get()
@@ -129,6 +220,10 @@ class PipelineRuntime:
                 if kill_switch_state(self.cache).get("active", False):
                     continue
                 universe = build_effective_universe(db, self.cache)
+                if event.timeframe == "15m":
+                    symbol_candles = get_json(self.cache, f"market:candles:{event.symbol}:15m") or []
+                    if symbol_candles:
+                        update_indicator_cache(self.cache, event.symbol, symbol_candles)
                 bots = (
                     db.query(BotProfile)
                     .filter(BotProfile.is_enabled.is_(True), BotProfile.is_running.is_(True), BotProfile.timeframe == event.timeframe)
@@ -137,6 +232,8 @@ class PipelineRuntime:
                 for bot in bots:
                     try:
                         symbol_set = {symbol.upper() for symbol in bot.symbols}
+                        if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"} and (not symbol_set or "*" in symbol_set):
+                            symbol_set = {symbol.upper() for symbol in universe["spot_symbols"]}
                         if event.symbol not in symbol_set:
                             continue
                         if bot.market_type == "spot" and event.symbol not in universe["spot_symbols"]:
@@ -167,9 +264,23 @@ class PipelineRuntime:
                             secondary_candles=secondary_candles,
                             spread_bps=spread_bps,
                             params=params,
+                            context={"btc_candles": get_json(self.cache, "market:candles:BTCUSDT:15m") or []},
                         )
 
                         if signal.signal == "none":
+                            if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+                                incr_counter(self.cache, "spot_strategy:signals_total:day", 1)
+                                if signal.reason_codes:
+                                    reason = signal.reason_codes[0]
+                                    reason_map = {
+                                        "trend_strength_weak": "spot_strategy:rejected:trend_strength_weak",
+                                        "btc_regime_hostile": "spot_strategy:rejected:btc_regime_hostile",
+                                        "volume_spike_missing": "spot_strategy:rejected:relative_volume_low",
+                                        "signal_score_below_executable": "spot_strategy:rejected:pullback_quality_low",
+                                    }
+                                    counter_key = reason_map.get(reason)
+                                    if counter_key:
+                                        incr_counter(self.cache, counter_key, 1)
                             continue
 
                         idempotency_key = (
@@ -206,6 +317,8 @@ class PipelineRuntime:
                             actor_role=user.role.value,
                             details={"symbol": signal.symbol, "direction": signal.direction, "strategy": signal.strategy_id},
                         )
+                        if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+                            incr_counter(self.cache, "spot_strategy:signals_total:day", 1)
                         incr_counter(self.cache, "metrics:signals:5m", 1)
 
                         ticker_payload = get_json(self.cache, f"market:ticker:{event.symbol}") or {}
@@ -274,6 +387,9 @@ class PipelineRuntime:
                                 "mode": "paper",
                                 "strategy_id": signal.strategy_id,
                                 "risk_tags": risk_decision.risk_tags,
+                                "signal_score": signal.signal_score,
+                                "signal_strength": signal.signal_strength,
+                                "signal_metadata": signal.metadata,
                             },
                             execution_context={
                                 "spread_bps": spread_bps,
@@ -311,6 +427,17 @@ class PipelineRuntime:
                             continue
 
                         position = execution_result["position"]
+                        if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+                            incr_counter(self.cache, "spot_strategy:executed_signals:day", 1)
+                            total_score = float(self.cache.get("spot_strategy:signal_score_sum:day") or 0)
+                            executed = int(self.cache.get("spot_strategy:executed_signals:day") or 1)
+                            total_score += float(signal.signal_score)
+                            self.cache.set("spot_strategy:signal_score_sum:day", str(total_score))
+                            self.cache.set(
+                                "spot_strategy:avg_signal_score:day",
+                                str(round(total_score / max(executed, 1), 4)),
+                            )
+
                         create_audit_log(
                             db,
                             action="trade_open",
@@ -325,6 +452,21 @@ class PipelineRuntime:
                                 "execution_style": policy.execution_style,
                             },
                         )
+                        if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+                            create_audit_log(
+                                db,
+                                action="TRADE_OPENED",
+                                entity_type="paper_position",
+                                entity_id=position.id,
+                                actor_user_id=user.id,
+                                actor_role=user.role.value,
+                                severity="info",
+                                details={
+                                    "symbol": position.symbol,
+                                    "signal_score": signal.signal_score,
+                                    "lifecycle_state": "OPEN",
+                                },
+                            )
                         incr_counter(self.cache, "metrics:paper_trades:5m", 1)
                     except Exception as bot_exc:
                         logger.exception("Pipeline bot processing failure (%s): %s", bot.id, bot_exc)
@@ -374,6 +516,17 @@ class PipelineRuntime:
                     user = db.query(User).filter(User.id == position.user_id).first()
                     if user is None:
                         continue
+                    open_event = (
+                        db.query(PositionLedgerEvent)
+                        .filter(
+                            PositionLedgerEvent.position_id == position.id,
+                            PositionLedgerEvent.event_type == "trade_open",
+                        )
+                        .order_by(PositionLedgerEvent.created_at.asc())
+                        .first()
+                    )
+                    strategy_id = ((open_event.payload or {}).get("strategy_id") if open_event else None) or ""
+
                     create_audit_log(
                         db,
                         action="trade_close",
@@ -383,6 +536,43 @@ class PipelineRuntime:
                         actor_role=user.role.value,
                         details={"reason": position.status, "realized_pnl": position.realized_pnl},
                     )
+                    if strategy_id in {"spot_pullback", "spot_pullback_v1"}:
+                        if position.status == "stop_hit":
+                            create_audit_log(
+                                db,
+                                action="STOP_LOSS_TRIGGERED",
+                                entity_type="paper_position",
+                                entity_id=position.id,
+                                actor_user_id=user.id,
+                                actor_role=user.role.value,
+                                severity="warning",
+                                details={"symbol": position.symbol, "realized_pnl": position.realized_pnl},
+                            )
+                        elif position.status == "tp_hit":
+                            create_audit_log(
+                                db,
+                                action="TAKE_PROFIT_TRIGGERED",
+                                entity_type="paper_position",
+                                entity_id=position.id,
+                                actor_user_id=user.id,
+                                actor_role=user.role.value,
+                                severity="info",
+                                details={"symbol": position.symbol, "realized_pnl": position.realized_pnl},
+                            )
+                        create_audit_log(
+                            db,
+                            action="TRADE_CLOSED",
+                            entity_type="paper_position",
+                            entity_id=position.id,
+                            actor_user_id=user.id,
+                            actor_role=user.role.value,
+                            severity="info",
+                            details={
+                                "symbol": position.symbol,
+                                "state": "TAKE_PROFIT" if position.status == "tp_hit" else "STOPPED",
+                                "realized_pnl": position.realized_pnl,
+                            },
+                        )
             except Exception as exc:
                 logger.exception("Position refresh error: %s", exc)
                 create_failed_event(

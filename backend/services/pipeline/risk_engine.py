@@ -8,6 +8,65 @@ from services.pipeline.position_sizing_engine import compute_position_sizing, co
 MAX_CONSECUTIVE_LOSS_LIMIT = 3
 
 
+def _evaluate_spot_pullback_risk(
+    db: Session,
+    *,
+    current_user: User,
+    signal: SignalDecision,
+    market_price: float,
+) -> RiskDecision:
+    open_positions_list = (
+        db.query(PaperPosition)
+        .filter(PaperPosition.user_id == current_user.id, PaperPosition.status == "open")
+        .all()
+    )
+
+    risk_tags: list[str] = []
+    if signal.signal == "none":
+        risk_tags.append("no_signal")
+    if signal.direction != "long":
+        risk_tags.append("spot_long_only")
+    if len(open_positions_list) >= 3:
+        risk_tags.append("max_open_positions_reached")
+    if any(position.symbol.upper() == signal.symbol.upper() for position in open_positions_list):
+        risk_tags.append("max_position_per_symbol_reached")
+
+    sizing = compute_position_sizing(db, current_user.id, market_price)
+    equity = float(sizing["equity"])
+    entry = float(signal.proposed_entry or market_price)
+    stop = float(signal.proposed_stop or (entry * 0.99))
+    take_profit = float(signal.proposed_take_profit or (entry * 1.02))
+    stop_distance = max(abs(entry - stop), entry * 0.01, 0.0001)
+    risk_amount_usdt = equity * 0.01
+    quantity = round(max(risk_amount_usdt / stop_distance, 0.0001), 6)
+    trade_allocation_usdt = quantity * entry
+
+    if risk_tags:
+        return RiskDecision(
+            approved=False,
+            size=0,
+            leverage=1,
+            stop=stop,
+            take_profit=take_profit,
+            risk_tags=risk_tags,
+            equity=equity,
+            trade_allocation_usdt=trade_allocation_usdt,
+            risk_amount_usdt=risk_amount_usdt,
+        )
+
+    return RiskDecision(
+        approved=True,
+        size=quantity,
+        leverage=1,
+        stop=stop,
+        take_profit=take_profit,
+        risk_tags=["approved", "spot_pullback_1pct_risk", "position_control_3x1"],
+        equity=equity,
+        trade_allocation_usdt=trade_allocation_usdt,
+        risk_amount_usdt=risk_amount_usdt,
+    )
+
+
 def _symbol_in_group(symbol: str, group: RiskExposureGroup) -> bool:
     normalized = {item.upper() for item in group.symbols}
     return bool(normalized) and symbol.upper() in normalized
@@ -37,6 +96,24 @@ def evaluate_risk(
     atr_pct: float,
 ) -> RiskDecision:
     control = db.query(AdminControl).filter(AdminControl.id == "global").first()
+
+    if signal.strategy_id in {"spot_pullback", "spot_pullback_v1"}:
+        if control is None:
+            return RiskDecision(
+                approved=False,
+                size=0,
+                leverage=1,
+                stop=signal.proposed_stop,
+                take_profit=signal.proposed_take_profit,
+                risk_tags=["missing_policy"],
+            )
+        return _evaluate_spot_pullback_risk(
+            db,
+            current_user=current_user,
+            signal=signal,
+            market_price=market_price,
+        )
+
     policy = (
         db.query(RiskPolicy)
         .filter(RiskPolicy.user_id == current_user.id)

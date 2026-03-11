@@ -20,6 +20,9 @@ class SignalDecision(BaseModel):
     proposed_stop: float
     proposed_take_profit: float
     timestamp: datetime
+    signal_strength: float = 0.0
+    signal_score: float = 0.0
+    metadata: dict = {}
 
 
 class RiskDecision(BaseModel):

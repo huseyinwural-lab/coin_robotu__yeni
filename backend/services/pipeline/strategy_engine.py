@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from services.pipeline.events import SignalDecision
+from services.pipeline.spot_strategy_service import evaluate_spot_pullback_candidate
 
 
 def _confidence(delta_pct: float) -> float:
@@ -19,6 +20,9 @@ def _default_signal(symbol: str, strategy_id: str, close: float) -> SignalDecisi
         proposed_stop=close,
         proposed_take_profit=close,
         timestamp=datetime.now(timezone.utc),
+        signal_strength=0.0,
+        signal_score=0.0,
+        metadata={},
     )
 
 
@@ -30,6 +34,7 @@ def evaluate_strategy(
     secondary_candles: list[dict],
     spread_bps: float,
     params: dict,
+    context: dict | None = None,
 ) -> SignalDecision:
     if len(primary_candles) < 8 or len(secondary_candles) < 4:
         close = float(primary_candles[-1]["close"]) if primary_candles else 0
@@ -47,6 +52,26 @@ def evaluate_strategy(
     signal = "none"
     direction = "none"
     reason_codes: list[str] = []
+
+    if strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+        market_context = context or {}
+        btc_candles = market_context.get("btc_candles", [])
+        candidate = evaluate_spot_pullback_candidate(symbol, primary_candles[-500:], btc_candles[-500:])
+        return SignalDecision(
+            signal=candidate["signal"],
+            symbol=symbol,
+            direction=candidate["direction"],
+            confidence=candidate["signal_strength"],
+            strategy_id="spot_pullback_v1",
+            reason_codes=candidate["reason_codes"],
+            proposed_entry=candidate["entry"],
+            proposed_stop=candidate["stop"],
+            proposed_take_profit=candidate["take_profit"],
+            timestamp=datetime.now(timezone.utc),
+            signal_strength=candidate["signal_strength"],
+            signal_score=candidate["signal_score"],
+            metadata=candidate["metadata"],
+        )
 
     if strategy_type == "trend_following":
         if close > avg_close and trend_close > trend_prev:
@@ -116,4 +141,7 @@ def evaluate_strategy(
         proposed_stop=stop,
         proposed_take_profit=tp,
         timestamp=datetime.now(timezone.utc),
+        signal_strength=_confidence(delta_pct),
+        signal_score=round(_confidence(delta_pct) * 100, 2),
+        metadata={"spread_bps": spread_bps},
     )

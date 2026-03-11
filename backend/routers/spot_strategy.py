@@ -1,0 +1,120 @@
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from db import get_db
+from deps import get_current_user, require_admin
+from models import User
+from services.audit_service import create_audit_log
+from services.pipeline.runtime import pipeline_runtime
+from services.pipeline.spot_strategy_service import (
+    MIN_15M_CANDLES,
+    bootstrap_market_data_store,
+    generate_daily_strategy_report,
+    get_spot_tradable_universe,
+    refresh_spot_tradable_universe,
+    scan_spot_universe_for_signals,
+)
+
+router = APIRouter(prefix="/spot-strategy", tags=["spot_strategy"])
+
+
+@router.get("/universe")
+def get_universe(_: User = Depends(get_current_user)):
+    return get_spot_tradable_universe(pipeline_runtime.cache)
+
+
+@router.post("/universe/refresh")
+def refresh_universe(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    universe_payload = refresh_spot_tradable_universe(pipeline_runtime.cache)
+    symbols = universe_payload.get("symbols", [])
+    if "BTCUSDT" not in symbols:
+        symbols = [*symbols, "BTCUSDT"]
+    bootstrap_payload = bootstrap_market_data_store(pipeline_runtime.cache, symbols, MIN_15M_CANDLES)
+    create_audit_log(
+        db,
+        action="SPOT_UNIVERSE_REFRESHED",
+        entity_type="spot_universe",
+        entity_id=universe_payload.get("generated_at", "-"),
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="info",
+        details={"count": universe_payload.get("count", 0), "bootstrap": bootstrap_payload},
+    )
+    return {"universe": universe_payload, "bootstrap": bootstrap_payload}
+
+
+@router.get("/indicators/{symbol}")
+def get_symbol_indicators(symbol: str, _: User = Depends(get_current_user)):
+    key = f"indicators:spot:{symbol.upper()}:15m"
+    payload = pipeline_runtime.cache.get(key)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="indicator_not_found")
+    import json
+
+    return json.loads(payload)
+
+
+@router.get("/market-data/{symbol}")
+def get_market_data(symbol: str, limit: int = Query(default=500, ge=50, le=600), _: User = Depends(get_current_user)):
+    import json
+
+    raw = pipeline_runtime.cache.get(f"market_data_store:{symbol.upper()}:15m")
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="market_data_not_found")
+    candles = json.loads(raw)
+    return {"symbol": symbol.upper(), "timeframe": "15m", "count": len(candles), "candles": candles[-limit:]}
+
+
+@router.post("/report/daily/generate")
+def run_daily_report(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    report = generate_daily_strategy_report(db, pipeline_runtime.cache)
+    create_audit_log(
+        db,
+        action="DAILY_STRATEGY_REPORT_GENERATED",
+        entity_type="strategy_report",
+        entity_id=report["date"],
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="info",
+        details={"daily_trades": report.get("daily_trades", 0), "win_rate": report.get("win_rate", 0)},
+    )
+    return report
+
+
+@router.get("/report/daily")
+def get_daily_report(_: User = Depends(get_current_user)):
+    payload = pipeline_runtime.cache.get("spot_strategy:daily_report")
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="daily_report_not_found")
+    import json
+
+    return json.loads(payload)
+
+
+@router.post("/scan/run")
+def run_spot_scan(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    payload = scan_spot_universe_for_signals(pipeline_runtime.cache)
+    create_audit_log(
+        db,
+        action="SPOT_SCAN_COMPLETED",
+        entity_type="spot_strategy_scan",
+        entity_id=payload.get("generated_at", "-"),
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="info",
+        details={
+            "symbol_count": payload.get("symbol_count", 0),
+            "executable_count": payload.get("executable_count", 0),
+        },
+    )
+    return payload
+
+
+@router.get("/scan/latest")
+def get_latest_scan(_: User = Depends(get_current_user)):
+    payload = pipeline_runtime.cache.get("spot_strategy:last_scan")
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="scan_not_found")
+    import json
+
+    return json.loads(payload)

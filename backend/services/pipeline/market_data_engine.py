@@ -8,6 +8,11 @@ import websockets
 
 from services.pipeline.cache_store import append_candle, incr_counter, set_json, utc_now_iso
 from services.pipeline.events import CandleClosedEvent
+from services.pipeline.spot_strategy_service import (
+    MIN_15M_CANDLES,
+    bootstrap_market_data_store,
+    get_spot_tradable_universe,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +27,7 @@ class MarketDataEngine:
         self.last_heartbeat = utc_now_iso()
         self.latency_ms = 0.0
         self.latest_prices: dict[str, float] = {}
+        self._last_bootstrap_day: str | None = None
 
     async def start(self):
         if self._task and not self._task.done():
@@ -41,6 +47,11 @@ class MarketDataEngine:
     async def _run(self):
         while not self._stop_event.is_set():
             symbols = self._load_symbols()
+            today = datetime.now(timezone.utc).date().isoformat()
+            if self._last_bootstrap_day != today:
+                await asyncio.to_thread(bootstrap_market_data_store, self.cache, symbols, MIN_15M_CANDLES)
+                self._last_bootstrap_day = today
+
             url = self._build_stream_url(symbols)
             try:
                 self.websocket_status = "connecting"
@@ -70,6 +81,12 @@ class MarketDataEngine:
                 await asyncio.sleep(5)
 
     def _load_symbols(self) -> list[str]:
+        dynamic_universe = get_spot_tradable_universe(self.cache)
+        dynamic_symbols = [symbol.upper() for symbol in dynamic_universe.get("symbols", []) if symbol]
+        if dynamic_symbols:
+            merged_dynamic = sorted({*dynamic_symbols, "BTCUSDT"})
+            return merged_dynamic[:55]
+
         effective_universe_raw = self.cache.get("universe:effective")
         if not effective_universe_raw:
             return ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
@@ -80,7 +97,7 @@ class MarketDataEngine:
 
         merged = payload.get("spot_symbols", []) + payload.get("futures_symbols", [])
         symbols = sorted({symbol.upper() for symbol in merged if symbol})
-        return symbols[:20] if symbols else ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+        return symbols[:55] if symbols else ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
 
     def _build_stream_url(self, symbols: list[str]) -> str:
         streams: list[str] = []
@@ -143,6 +160,8 @@ class MarketDataEngine:
                 "is_closed": bool(kline.get("x")),
             }
             append_candle(self.cache, f"market:candles:{symbol}:{timeframe}", candle)
+            if timeframe == "15m":
+                append_candle(self.cache, f"market_data_store:{symbol}:15m", candle)
             if candle["is_closed"]:
                 incr_counter(self.cache, "metrics:candle_closed_count", 1)
                 await self.candle_queue.put(

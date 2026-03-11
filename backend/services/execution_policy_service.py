@@ -39,6 +39,15 @@ DEFAULT_POLICY_MAP = {
         "execution_urgency": "medium",
         "retry_limit": 2,
     },
+    "spot_pullback_v1": {
+        "execution_style": "balanced",
+        "order_preference": "limit_first",
+        "timeout_seconds": 8,
+        "fallback_behavior": "market_fallback",
+        "partial_fill_tolerance_pct": 60,
+        "execution_urgency": "medium",
+        "retry_limit": 1,
+    },
 }
 
 

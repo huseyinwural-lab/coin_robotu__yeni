@@ -1,0 +1,224 @@
+{
+  "generated_at": "2026-03-11T20:29:28.810702+00:00",
+  "filters": {
+    "min_24h_volume_usdt": 20000000,
+    "max_spread_pct": 0.3,
+    "quote_asset": "USDT"
+  },
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT",
+    "SOLUSDT",
+    "XRPUSDT",
+    "ADAUSDT",
+    "DOGEUSDT",
+    "TRXUSDT",
+    "AVAXUSDT",
+    "DOTUSDT",
+    "LINKUSDT",
+    "LTCUSDT",
+    "BCHUSDT",
+    "UNIUSDT",
+    "MATICUSDT",
+    "ATOMUSDT",
+    "AAVEUSDT",
+    "NEARUSDT",
+    "APTUSDT",
+    "ARBUSDT",
+    "OPUSDT",
+    "SUIUSDT",
+    "INJUSDT",
+    "ETCUSDT",
+    "FILUSDT",
+    "RUNEUSDT",
+    "ICPUSDT",
+    "SEIUSDT",
+    "XLMUSDT",
+    "HBARUSDT"
+  ],
+  "rows": [
+    {
+      "symbol": "BTCUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "ETHUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "BNBUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "SOLUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "XRPUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "ADAUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "TRXUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "AVAXUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "DOTUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "LINKUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "LTCUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "BCHUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "UNIUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "MATICUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "ATOMUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "AAVEUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "APTUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "ARBUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "OPUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "SUIUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "INJUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "ETCUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "FILUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "RUNEUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "ICPUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "SEIUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "XLMUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    },
+    {
+      "symbol": "HBARUSDT",
+      "24h_volume": 0.0,
+      "spread": 0.0,
+      "status": "fallback"
+    }
+  ],
+  "count": 30,
+  "source": "binance_spot"
+}

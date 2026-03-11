@@ -20,7 +20,7 @@ def get_json(cache, key: str) -> dict | None:
         return None
 
 
-def append_candle(cache, key: str, candle: dict, max_len: int = 400):
+def append_candle(cache, key: str, candle: dict, max_len: int = 600):
     candles = get_json(cache, key) or []
     candles.append(candle)
     cache.set(key, json.dumps(candles[-max_len:]))
