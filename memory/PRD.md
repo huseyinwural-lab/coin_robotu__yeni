@@ -192,9 +192,42 @@
   - `/app/test_reports/iteration_9.json` (backend 13/13 pass, frontend 100%)
   - `/app/backend/tests/test_user_approval_flow.py`
 
+### 2026-03-11 (Faz-4 İterasyon-2B — Testnet Validation + Execution Quality)
+- User panelde **Exchange Settings** akışı eklendi (`/user/exchange-settings`):
+  - `exchange`, `mode`, `api_key`, `api_secret` alanları
+  - API key/secret backend’de şifreli saklama (Fernet, plaintext response yok)
+- Permission doğrulama detayları eklendi:
+  - `can_trade`, `can_futures`, `timestamp_sync`, `rate_limit_ok`
+  - standart çıktı: `status`, `reason`, `timestamp`
+  - fail durumunda `live_activation=blocked`
+- Hard safety layer test order için zorlandı (override edilemez):
+  - `symbol=BTCUSDT`, `leverage=1x`, `notional<=150`, `%0.1` güvenli sınır yaklaşımı
+- İlk kontrollü test order altyapısı eklendi:
+  - `order_type=LIMIT`, fallback `IOC`
+  - lifecycle path: `created -> submitted -> acknowledged -> partial_fill|filled|cancelled|failed`
+  - state machine path loglanır
+- Execution kalite metrikleri eklendi:
+  - `expected_price`, `fill_price`, `slippage`, `execution_latency`, `execution_quality_score`
+  - User dashboard’da sade score, admin panelde detay tablo
+- Admin panel Phase-4 genişletildi:
+  - Live Readiness Score kartı
+  - Release Gate Status paneli (`PASS|WARNING|BLOCKED`)
+  - Permission Status paneli
+  - Execution Quality Metrics tablosu
+- Dry-run release gate aktif:
+  - BLOCKED ise `live_activation=disabled`
+  - kritik blokajlar readiness skorunu 80 üstüne çıkarmayı engeller
+- Yeni DB migration:
+  - `20260311_0006_exchange_settings_and_test_logs.py`
+  - `user_exchange_settings`, `testnet_execution_logs`
+- Testler:
+  - `/app/test_reports/iteration_10.json` (backend 23/23 pass, frontend 100%)
+  - `/app/backend/tests/test_phase4_iter2_exchange_settings.py`
+  - Not: valid testnet key olmadan gerçek test order bilinçli olarak BLOCKED kaldı (beklenen davranış)
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
-- Binance Testnet API key’leri ile ilk kontrollü canlı test emri (yalnız BTCUSDT, 1x, düşük notional)
+- Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
 - Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
@@ -216,8 +249,8 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Kullanıcıdan Binance Futures Testnet key’lerini alıp permission=ready + ilk canlı test emrini doğrula
-2. Slippage metriğini (beklenen fiyat vs gerçekleşen fiyat) pipeline + admin/user görünümüne ekle
+1. Geçerli testnet key ile ilk order sonucu (filled/partial/cancelled) ve slippage doğrulamasını canlı testte tamamla
+2. Execution quality score formülünü strategy bazlı normalize et (volatiliteye duyarlı)
 3. Hardening checklist trendini grafik + alarm geçmişi ile zenginleştir
 4. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
-5. Canlı emir öncesi dry-run otomasyon senaryolarını release-gate pipeline’a bağla
+5. Release gate’i deploy öncesi otomasyon pipeline’ına bağla
