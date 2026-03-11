@@ -431,6 +431,9 @@ def _build_selection_metrics(candidates: list[dict], selected: list[dict]) -> di
         "signals_rejected_freeze_guard": sum(
             1 for item in candidates if "freeze_guard_active" in item.get("reason_codes", [])
         ),
+        "signals_rejected_threshold": sum(
+            1 for item in candidates if "adjusted_score_below_threshold" in item.get("reason_codes", [])
+        ),
     }
 
 

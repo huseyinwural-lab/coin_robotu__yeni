@@ -170,6 +170,34 @@ class SignalEvent(Base):
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class StrategyObservabilityEvent(Base):
+    __tablename__ = "strategy_observability_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    selection_cycle_id: Mapped[str] = mapped_column(String(120), index=True)
+    audit_log_id: Mapped[str | None] = mapped_column(String, ForeignKey("audit_logs.id"), nullable=True, index=True)
+    bot_profile_id: Mapped[str | None] = mapped_column(String, ForeignKey("bot_profiles.id"), nullable=True, index=True)
+    user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    strategy_id: Mapped[str] = mapped_column(String(80), index=True)
+    strategy_name: Mapped[str] = mapped_column(String(120), default="SPOT_TREND_PULLBACK")
+    event_type: Mapped[str] = mapped_column(String(40), index=True)
+    market_regime: Mapped[str] = mapped_column(String(30), default="RANGING", index=True)
+    multiplier_version: Mapped[str] = mapped_column(String(20), default="v1")
+    multiplier_set: Mapped[dict] = mapped_column(JSON, default=dict)
+    base_score: Mapped[float] = mapped_column(Float, default=0)
+    adjusted_score: Mapped[float] = mapped_column(Float, default=0)
+    score_delta: Mapped[float] = mapped_column(Float, default=0)
+    selection_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    trend_strength: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    relative_volume: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hard_gate_pass: Mapped[bool] = mapped_column(Boolean, default=False)
+    threshold_pass: Mapped[bool] = mapped_column(Boolean, default=False)
+    rejection_reason: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    event_metadata: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
 class PaperPosition(Base):
     __tablename__ = "paper_positions"
 

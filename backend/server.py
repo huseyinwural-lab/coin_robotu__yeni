@@ -9,6 +9,7 @@ from db import Base, engine
 from routers import (
     admin_control,
     admin_phase3,
+    admin_strategy_observability,
     admin_users,
     alerts,
     audit_logs,
@@ -83,6 +84,7 @@ api_router.include_router(audit.router)
 api_router.include_router(market.router)
 api_router.include_router(admin_control.router)
 api_router.include_router(admin_phase3.router)
+api_router.include_router(admin_strategy_observability.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(spot_strategy.router)
 api_router.include_router(paper_positions.router)

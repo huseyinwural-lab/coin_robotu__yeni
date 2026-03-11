@@ -33,6 +33,7 @@ from services.pipeline.spot_strategy_service import (
     refresh_spot_tradable_universe,
     update_indicator_cache,
 )
+from services.strategy_observability_service import log_strategy_observability_events
 from services.pipeline.strategy_engine import evaluate_strategy
 from services.pipeline.universe_engine import build_effective_universe
 from services.live_mode_service import enforce_release_gate
@@ -204,6 +205,7 @@ class PipelineRuntime:
                     "spot_strategy:rejected:trend_strength_weak",
                     "spot_strategy:rejected:btc_regime_hostile",
                     "spot_strategy:rejected:freeze_guard",
+                    "spot_strategy:rejected:threshold",
                     "spot_strategy:executed_signals:day",
                     "spot_strategy:signal_score_sum:day",
                     "spot_strategy:avg_signal_score:day",
@@ -223,6 +225,7 @@ class PipelineRuntime:
             "signals_rejected_trend_strength": "spot_strategy:rejected:trend_strength_weak",
             "signals_rejected_btc_regime": "spot_strategy:rejected:btc_regime_hostile",
             "signals_rejected_freeze_guard": "spot_strategy:rejected:freeze_guard",
+            "signals_rejected_threshold": "spot_strategy:rejected:threshold",
         }
         for metric_key, cache_key in counter_map.items():
             value = int(metrics.get(metric_key, 0))
@@ -259,11 +262,12 @@ class PipelineRuntime:
         metrics = selection.get("metrics", {})
         self._apply_spot_metrics_counters(metrics)
 
-        create_audit_log(
+        cycle_entity_id = f"{bot.id}:{event.timestamp.strftime('%Y%m%d%H%M')}"
+        cycle_audit_log = create_audit_log(
             db,
             action="SPOT_SELECTION_CYCLE_COMPLETED",
             entity_type="spot_selection_cycle",
-            entity_id=f"{bot.id}:{event.timestamp.strftime('%Y%m%d%H%M')}",
+            entity_id=cycle_entity_id,
             actor_user_id=user.id,
             actor_role=user.role.value,
             severity="info",
@@ -283,7 +287,7 @@ class PipelineRuntime:
                 db,
                 action="SPOT_MARKET_REGIME_CHANGED",
                 entity_type="spot_market_regime",
-                entity_id=f"{bot.id}:{event.timestamp.strftime('%Y%m%d%H%M')}",
+                entity_id=cycle_entity_id,
                 actor_user_id=user.id,
                 actor_role=user.role.value,
                 severity="info",
@@ -301,12 +305,27 @@ class PipelineRuntime:
                 db,
                 action="SPOT_MULTIPLIER_CLAMP_APPLIED",
                 entity_type="spot_selection_cycle",
-                entity_id=f"{bot.id}:{event.timestamp.strftime('%Y%m%d%H%M')}",
+                entity_id=cycle_entity_id,
                 actor_user_id=user.id,
                 actor_role=user.role.value,
                 severity="warning",
                 details={"events": clamp_events},
             )
+
+        log_strategy_observability_events(
+            db,
+            selection_cycle_id=cycle_entity_id,
+            audit_log_id=cycle_audit_log.id,
+            bot_profile_id=bot.id,
+            user_id=user.id,
+            strategy_id="spot_pullback_v1",
+            strategy_name="SPOT_TREND_PULLBACK",
+            market_regime=selection.get("market_regime", "RANGING"),
+            multiplier_version=selection.get("multiplier_version", "v1"),
+            multiplier_set=selection.get("multiplier_set", {}),
+            ranked=selection.get("ranked", []),
+            selected=selection.get("selected", []),
+        )
 
         selected_candidates = selection.get("selected", [])
         for candidate in selected_candidates:

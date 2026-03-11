@@ -14,6 +14,7 @@ from services.pipeline.spot_strategy_service import (
     get_spot_tradable_universe,
     refresh_spot_tradable_universe,
 )
+from services.strategy_observability_service import log_strategy_observability_events
 
 router = APIRouter(prefix="/spot-strategy", tags=["spot_strategy"])
 
@@ -119,7 +120,7 @@ def run_spot_scan(current_admin: User = Depends(require_admin), db: Session = De
             for item in top_ranked
         ],
     }
-    create_audit_log(
+    scan_audit = create_audit_log(
         db,
         action="SPOT_SCAN_COMPLETED",
         entity_type="spot_strategy_scan",
@@ -134,6 +135,23 @@ def run_spot_scan(current_admin: User = Depends(require_admin), db: Session = De
             "multiplier_version": response_payload.get("multiplier_version"),
         },
     )
+
+    cycle_id = f"manual-scan:{current_admin.id}:{response_payload.get('generated_at','-')}"
+    log_strategy_observability_events(
+        db,
+        selection_cycle_id=cycle_id,
+        audit_log_id=scan_audit.id,
+        bot_profile_id=None,
+        user_id=current_admin.id,
+        strategy_id="spot_pullback_v1",
+        strategy_name="SPOT_TREND_PULLBACK",
+        market_regime=response_payload.get("market_regime", "RANGING"),
+        multiplier_version=response_payload.get("multiplier_version", "v1"),
+        multiplier_set=response_payload.get("multiplier_set", {}),
+        ranked=response_payload.get("ranked", []),
+        selected=response_payload.get("selected", []),
+    )
+
     return response_payload
 
 

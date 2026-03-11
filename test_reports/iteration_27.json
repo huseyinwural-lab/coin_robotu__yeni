@@ -1,0 +1,122 @@
+{
+  "summary": "Faz-3 (P2) Strategy Observability & Tuning testing completed. All 28 backend API tests passed. Frontend Strategy Observability page fully functional with window/top_n filters, rejection cards, score metrics, report panel, and top signals table. Admin regression pages (/admin/users, /admin/system-alerts) working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_faz3_strategy_observability.py",
+    "/app/test_reports/pytest/pytest_results_iter27_faz3_observability.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Strategy Observability endpoints properly implemented at /admin/strategy prefix",
+    "top_n parameter correctly enforced with FastAPI Query(ge=1, le=50)",
+    "Window parameter (24h/7d/30d) properly handled with fallback to 24h for invalid values",
+    "strategy_observability_events table correctly populated via log_strategy_observability_events() on scan/run",
+    "Top signals query filters for event_type='selected_for_execution' only",
+    "Rejection analytics returns comprehensive breakdown of rejection reasons",
+    "Score metrics calculates regime distribution and average scores",
+    "Strategy report aggregates observability data with signals breakdown",
+    "Frontend uses proper data-testid attributes for all components",
+    "API responses include all required fields per spec"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_faz3_strategy_observability.py"
+  ],
+  "success_rate": {
+    "backend": "100% (28/28 tests passed)",
+    "frontend": "100% (Strategy Observability page + Admin regression pages passed)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!"
+  },
+  "seed_data_creation": "None - used existing scan data from previous iterations",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Faz-3 P2 Strategy Observability fully verified. New /admin/strategy/* endpoints working: top-signals, rejection-analytics, score-metrics, report. Frontend page /admin/strategy-observability renders all components correctly. Window filter (24h/7d/30d) and top_n (1-50) filters work. Data is populated via POST /api/spot-strategy/scan/run which logs to strategy_observability_events table. Currently shows 90 signals total with 0 selected (market conditions not meeting all pullback criteria - expected).",
+  "features_verified": {
+    "top_signals_endpoint": {
+      "endpoint": "GET /api/admin/strategy/top-signals",
+      "status": "PASS",
+      "params_tested": ["window=24h/7d/30d", "top_n=1-50"],
+      "validation": "top_n>50 returns 422, top_n<=50 works, invalid window defaults to 24h",
+      "response_fields": ["window", "top_n", "selection_cycle_id", "items[]"]
+    },
+    "rejection_analytics_endpoint": {
+      "endpoint": "GET /api/admin/strategy/rejection-analytics",
+      "status": "PASS",
+      "response_fields": ["window", "signals_total", "signals_after_hard_gate", "signals_rejected_trend_strength", "signals_rejected_btc_regime", "signals_rejected_freeze_guard", "signals_rejected_threshold", "signals_selected"]
+    },
+    "score_metrics_endpoint": {
+      "endpoint": "GET /api/admin/strategy/score-metrics",
+      "status": "PASS",
+      "response_fields": ["window", "market_regime_distribution", "avg_base_score", "avg_adjusted_score", "avg_score_delta", "signals_per_regime", "selected_signals_per_regime"]
+    },
+    "strategy_report_endpoint": {
+      "endpoint": "GET /api/admin/strategy/report",
+      "status": "PASS",
+      "response_fields": ["window", "active_spot_strategies", "market_regime_distribution", "signals_total", "signals_selected", "signals_rejected_breakdown", "avg_adjusted_score", "avg_base_score", "score_delta_avg"]
+    },
+    "scan_observability_logging": {
+      "endpoint": "POST /api/spot-strategy/scan/run",
+      "status": "PASS",
+      "behavior": "Logs to strategy_observability_events table via log_strategy_observability_events()"
+    },
+    "frontend_strategy_observability_page": {
+      "route": "/admin/strategy-observability",
+      "status": "PASS",
+      "components_verified": [
+        "Page header (Strategy Observability Center)",
+        "Controls section (window select, top_n input, refresh button)",
+        "Rejection analytics cards (4 cards: trend, btc, freeze, threshold)",
+        "Score Tuning Dashboard (avg scores, regime distribution bar chart)",
+        "Strategy Observability Report panel",
+        "Top N Executable Signals table with all column headers"
+      ],
+      "filters_tested": ["window=24h/7d/30d", "top_n change to 20"]
+    },
+    "admin_regression_pages": {
+      "users_page": {
+        "route": "/admin/users",
+        "status": "PASS",
+        "verified": "User list displays, filter controls work"
+      },
+      "system_alerts_page": {
+        "route": "/admin/system-alerts",
+        "status": "PASS",
+        "verified": "Alerts list displays with timeline, bulk acknowledge available"
+      }
+    }
+  },
+  "sample_api_responses": {
+    "top_signals_24h": {
+      "window": "24h",
+      "top_n": 10,
+      "selection_cycle_id": null,
+      "items": []
+    },
+    "rejection_analytics_24h": {
+      "window": "24h",
+      "signals_total": 90,
+      "signals_after_hard_gate": 81,
+      "signals_rejected_trend_strength": 9,
+      "signals_rejected_btc_regime": 0,
+      "signals_rejected_freeze_guard": 0,
+      "signals_rejected_threshold": 0,
+      "signals_selected": 0
+    },
+    "score_metrics_24h": {
+      "window": "24h",
+      "market_regime_distribution": {"RANGING": 90},
+      "avg_base_score": 64.6648,
+      "avg_adjusted_score": 63.9422,
+      "avg_score_delta": -0.7226
+    }
+  }
+}

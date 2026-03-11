@@ -15,6 +15,7 @@ import { AdminRiskOrchestratorAnalyticsPage } from "@/pages/AdminRiskOrchestrato
 import { AdminRuntimeQuarantinePage } from "@/pages/AdminRuntimeQuarantinePage";
 import { AdminRuntimeRecoveryPage } from "@/pages/AdminRuntimeRecoveryPage";
 import { AdminStrategiesPage } from "@/pages/AdminStrategiesPage";
+import { AdminStrategyObservabilityPage } from "@/pages/AdminStrategyObservabilityPage";
 import { AdminSystemAlertsPage } from "@/pages/AdminSystemAlertsPage";
 import { AdminUserApprovalsPage } from "@/pages/AdminUserApprovalsPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
@@ -76,6 +77,7 @@ function App() {
             <Route path="users" element={<AdminUsersPage />} />
             <Route path="user-approvals" element={<AdminUserApprovalsPage />} />
             <Route path="system-alerts" element={<AdminSystemAlertsPage />} />
+            <Route path="strategy-observability" element={<AdminStrategyObservabilityPage />} />
             <Route path="exchanges" element={<AdminExchangesPage />} />
             <Route path="proofs" element={<AdminProofsPage />} />
             <Route path="reports/archive" element={<AdminReportsArchivePage />} />
