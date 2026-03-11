@@ -439,9 +439,39 @@
   - `/app/backend/tests/test_phase5_iter1_risk_killswitch.py`
   - `/app/test_reports/pytest/pytest_results_iter16_phase5_iter1.xml`
 
+### 2026-03-11 (Faz-5 İterasyon-2 — Venue Expansion Tamamlama)
+- Kullanıcı karar seti uygulandı: **1C, 2B, 3A, 4A**
+- Admin tarafında Venue yönetimi ürünleştirildi:
+  - Yeni sayfa: `/admin/exchanges`
+  - **Exchange Registry FULL CRUD** (create/list/update/delete)
+  - **Capabilities FULL CRUD** (create/list/update/delete)
+  - **Allowed Markets FULL CRUD** (create/list/toggle/delete)
+  - **User Assignment matrix** (list/upsert/delete)
+  - Venue health/availability/capability mismatch özet görünümü
+- Backend Venue API’leri genişletildi ve ana router’a eklendi:
+  - `server.py` içine `venues.router` include edildi
+  - `venues.py` içinde CRUD endpointleri tamamlandı
+  - `seed_binance_venue_registry` idempotent hale getirildi (admin override edilen alanları ezmiyor)
+- `/api/exchange/validate` endpointi artık **venue-aware zorunlu contract** ile çalışıyor:
+  - Zorunlu query: `exchange`, `market_type`, `environment`
+  - Response alanları: `exchange`, `market_type`, `environment`, `capability_match`, `reason_codes`
+  - Venue access/assignment/capability kontrolleri validate hattına bağlandı
+- User panelde Venue seçimi güçlendirildi (`/user/exchange-settings`):
+  - `Risk Settings` + `Test & Validation` sekmelerine exchange/market/environment dropdownları
+  - Canlı `venue access` paneli (`allowed`, `venue_state`, `capability_match`, `reason_codes`)
+  - Test order butonunda venue uygunluk kısıtı (`binance/futures/testnet`)
+- PostgreSQL-only doğrulama:
+  - Kod tabanı tarandı; `mongo/pymongo/ObjectId` üretim kodunda kalıntı bulunmadı
+- Testler:
+  - `/app/test_reports/iteration_17.json` (backend 34/34 pass, frontend venue kapsamı pass)
+  - `/app/backend/tests/test_phase5_iter2_venue_expansion.py`
+  - `/app/test_reports/pytest/pytest_results_iter17_venue_expansion.xml`
+  - Frontend smoke: admin exchanges sayfası ve landing yüklenmesi doğrulandı
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
+- Spot+Futures dual-mode davranışını tamamla (seçime göre form alanları/risk preview/test-order uygunluk kuralları)
 - Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
@@ -463,8 +493,8 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Faz-5 İterasyon-2: Backtest/Replay engine’i canlı pipeline ile aynı risk+execution katmanına bağla
-2. Geçerli testnet key ile gerçek order evidence (NEW/PARTIAL/FILLED/CANCELED) finalize et
-3. Hardening trend eşiklerini active alerts ile operasyonel policy’ye bağla
-4. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
-5. Ops webhook teslimatına retry/backoff + dead-letter ekle
+1. Geçerli testnet key ile gerçek order evidence (NEW/PARTIAL/FILLED/CANCELED) finalize et
+2. Spot+Futures dual-mode UI mantığını leverage/preview/test-order akışına tam bağla
+3. Faz-5 İterasyon-3: Backtest/Replay engine’i canlı risk+execution katmanına bağla
+4. Hardening trend eşiklerini active alerts ile operasyonel policy’ye bağla
+5. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
