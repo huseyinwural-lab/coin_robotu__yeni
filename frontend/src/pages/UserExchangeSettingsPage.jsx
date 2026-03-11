@@ -19,6 +19,12 @@ const fallbackVenue = {
   environment: "testnet",
 };
 
+const initialFuturesContext = {
+  leverage: 3,
+  margin_mode: "cross",
+  position_side: "BOTH",
+};
+
 export const UserExchangeSettingsPage = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [settings, setSettings] = useState(null);
@@ -37,6 +43,7 @@ export const UserExchangeSettingsPage = () => {
   const [riskSettings, setRiskSettings] = useState(null);
   const [riskPreview, setRiskPreview] = useState(null);
   const [portfolioOverview, setPortfolioOverview] = useState(null);
+  const [futuresContext, setFuturesContext] = useState(initialFuturesContext);
   const [venueOptions, setVenueOptions] = useState([]);
   const [selectedVenue, setSelectedVenue] = useState(fallbackVenue);
   const [venueAccess, setVenueAccess] = useState(null);
@@ -70,13 +77,18 @@ export const UserExchangeSettingsPage = () => {
 
   const loadAll = useCallback(async () => {
     try {
-      const [settingsRes, permissionRes, tickerRes, readinessRes, riskRes, previewRes, overviewRes, venueOptionsRes] = await Promise.all([
+      const [settingsRes, permissionRes, tickerRes, readinessRes, riskRes, overviewRes, venueOptionsRes] = await Promise.all([
         apiClient.get("/phase4/exchange-settings"),
         apiClient.get("/phase4/permission-status"),
         apiClient.get("/market/ticker?symbol=BTCUSDT"),
-        apiClient.get("/exchange/readiness-checklist"),
+        apiClient.get("/exchange/readiness-checklist", {
+          params: {
+            exchange: selectedVenue.exchange,
+            market_type: selectedVenue.market_type,
+            environment: selectedVenue.environment,
+          },
+        }),
         apiClient.get("/user-risk/settings"),
-        apiClient.get("/user-risk/preview"),
         apiClient.get("/user-risk/overview"),
         apiClient.get("/venues/options"),
       ]);
@@ -85,7 +97,6 @@ export const UserExchangeSettingsPage = () => {
       setTicker(tickerRes.data);
       setReadiness(readinessRes.data);
       setRiskSettings(riskRes.data);
-      setRiskPreview(previewRes.data);
       setPortfolioOverview(overviewRes.data);
       const allowedVenueOptions = (venueOptionsRes.data || []).filter((item) => item.exchange !== "-");
       setVenueOptions(allowedVenueOptions);
@@ -120,7 +131,7 @@ export const UserExchangeSettingsPage = () => {
     } catch (_) {
       setLifecycleEvidence(null);
     }
-  }, []);
+  }, [selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type]);
 
   useEffect(() => {
     loadAll();
@@ -151,6 +162,25 @@ export const UserExchangeSettingsPage = () => {
     };
     runAccessCheck();
   }, [selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type]);
+
+  useEffect(() => {
+    const fetchPreview = async () => {
+      try {
+        const { data } = await apiClient.get("/user-risk/preview", {
+          params: {
+            market_type: selectedVenue.market_type,
+            leverage: futuresContext.leverage,
+            margin_mode: futuresContext.margin_mode,
+            position_side: futuresContext.position_side,
+          },
+        });
+        setRiskPreview(data);
+      } catch (error) {
+        toast.error(error?.response?.data?.detail || "Risk preview alınamadı");
+      }
+    };
+    fetchPreview();
+  }, [futuresContext.leverage, futuresContext.margin_mode, futuresContext.position_side, selectedVenue.market_type]);
 
   const onExchangeChange = (nextExchange) => {
     const markets = [
@@ -241,6 +271,11 @@ export const UserExchangeSettingsPage = () => {
     } catch (error) {
       const detail = error?.response?.data?.detail;
       setValidateResult(typeof detail === "object" ? detail : null);
+      if (typeof detail === "object") {
+        const context = [detail.exchange, detail.market_type, detail.environment].filter(Boolean).join("/");
+        const reason = Array.isArray(detail.reason_codes) ? detail.reason_codes.join(",") : detail.failure_code || detail.status || "validation_failed";
+        setTestOrderBanner(context ? `${context}: ${reason}` : reason);
+      }
       toast.error("Exchange doğrulaması başarısız");
     } finally {
       setIsValidating(false);
@@ -248,19 +283,26 @@ export const UserExchangeSettingsPage = () => {
   };
 
   const runFirstTestOrder = async () => {
-    const venueEligible = selectedVenue.exchange === "binance"
-      && selectedVenue.market_type === "futures"
-      && selectedVenue.environment === "testnet";
+    const venueEligible = selectedVenue.exchange === "binance" && selectedVenue.environment === "testnet";
     if (!venueEligible) {
-      setTestOrderBanner("unsupported_venue_for_test_order: İlk kontrollü test emri sadece binance/futures/testnet için açık.");
-      toast.error("İlk kontrollü test emri yalnızca binance/futures/testnet için desteklenir");
+      setTestOrderBanner("unsupported_venue_for_test_order: İlk kontrollü test emri sadece binance/testnet için açık.");
+      toast.error("İlk kontrollü test emri yalnızca binance/testnet için desteklenir");
       return;
     }
 
     setIsTesting(true);
     setTestOrderBanner("");
     try {
-      const { data } = await apiClient.post("/exchange/test-order");
+      const { data } = await apiClient.post("/exchange/test-order", null, {
+        params: {
+          exchange: selectedVenue.exchange,
+          market_type: selectedVenue.market_type,
+          environment: selectedVenue.environment,
+          leverage: futuresContext.leverage,
+          margin_mode: futuresContext.margin_mode,
+          position_side: futuresContext.position_side,
+        },
+      });
       setTestOrderResult(data);
       setLatestQuality({
         execution_id: data.order_id,
@@ -287,7 +329,9 @@ export const UserExchangeSettingsPage = () => {
     } catch (error) {
       const detail = error?.response?.data?.detail;
       if (typeof detail === "object") {
-        setTestOrderBanner(`${detail.failure_code || "unknown_exchange_error"}: ${detail.message || "awaiting valid key"}`);
+        const context = [detail.exchange, detail.market_type, detail.environment].filter(Boolean).join("/");
+        const reason = `${detail.failure_code || "unknown_exchange_error"}: ${detail.message || "awaiting valid key"}`;
+        setTestOrderBanner(context ? `${context}: ${reason}` : reason);
       }
       toast.error(typeof detail === "object" ? detail.message : (detail || "Test emri başarısız"));
     } finally {
@@ -311,16 +355,14 @@ export const UserExchangeSettingsPage = () => {
         ? "ready"
         : readiness?.readiness_status || "blocked";
 
-  const testOrderEligible = selectedVenue.exchange === "binance"
-    && selectedVenue.market_type === "futures"
-    && selectedVenue.environment === "testnet";
+  const testOrderEligible = selectedVenue.exchange === "binance" && selectedVenue.environment === "testnet";
 
   return (
     <section className="space-y-4" data-testid="user-exchange-settings-page">
       <header className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-settings-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-exchange-settings-title">Exchange Settings</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-exchange-settings-description">
-          Binance Futures Testnet API bilgilerini girin. Bilgiler plaintext değil, şifreli saklanır.
+          Spot/Futures venue seçimine göre API doğrulama ve test-order akışı. Bilgiler plaintext değil, şifreli saklanır.
         </p>
       </header>
 
@@ -367,6 +409,54 @@ export const UserExchangeSettingsPage = () => {
             )}
           </div>
 
+          <div className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-4" data-testid="user-risk-dual-mode-panel">
+            <p className="md:col-span-4 text-xs uppercase tracking-widest text-slate-500" data-testid="user-risk-dual-mode-title">
+              Mod: {selectedVenue.market_type === "futures" ? "Futures" : "Spot"}
+            </p>
+
+            {selectedVenue.market_type === "futures" && (
+              <>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={futuresContext.leverage}
+                  onChange={(event) => setFuturesContext((prev) => ({ ...prev, leverage: Number(event.target.value) || 1 }))}
+                  data-testid="user-futures-leverage-input"
+                  placeholder="Leverage"
+                />
+                <select
+                  value={futuresContext.margin_mode}
+                  onChange={(event) => setFuturesContext((prev) => ({ ...prev, margin_mode: event.target.value }))}
+                  className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  data-testid="user-futures-margin-mode-select"
+                >
+                  <option value="cross">cross</option>
+                  <option value="isolated">isolated</option>
+                </select>
+                <select
+                  value={futuresContext.position_side}
+                  onChange={(event) => setFuturesContext((prev) => ({ ...prev, position_side: event.target.value }))}
+                  className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  data-testid="user-futures-position-side-select"
+                >
+                  <option value="BOTH">BOTH</option>
+                  <option value="LONG">LONG</option>
+                  <option value="SHORT">SHORT</option>
+                </select>
+                <p className="text-sm text-yellow-300" data-testid="user-futures-liquidation-risk-text">
+                  liquidation risk: leverage arttıkça likidasyon buffer düşer.
+                </p>
+              </>
+            )}
+
+            {selectedVenue.market_type === "spot" && (
+              <p className="md:col-span-4 text-sm text-emerald-300" data-testid="user-spot-fields-hidden-text">
+                Spot modda leverage / margin_mode / position_side / liquidation risk alanları gizlenir. Test order quoteQty ile çalışır.
+              </p>
+            )}
+          </div>
+
           <div className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="user-risk-settings-form-grid">
             <Input type="number" min={1} max={50} value={riskSettings?.allocation_pct ?? 20} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), allocation_pct: event.target.value }))} data-testid="user-risk-allocation-input" placeholder="İşleme Ayrılan Ana Para (%)" />
             <Input type="number" min={1} max={25} value={riskSettings?.trade_risk_pct ?? 10} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), trade_risk_pct: event.target.value }))} data-testid="user-risk-trade-risk-input" placeholder="İşlemdeki Paranın Risk Oranı (%)" />
@@ -381,7 +471,10 @@ export const UserExchangeSettingsPage = () => {
           <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-risk-live-preview-card">
             <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-risk-live-preview-title">Canlı İşlem Önizlemesi</p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="user-risk-live-preview-grid">
+              <p data-testid="user-risk-preview-market-type">Market Type: {riskPreview?.market_type ?? "-"}</p>
               <p data-testid="user-risk-preview-current-capital">Güncel ana para: {riskPreview?.current_capital ?? "-"} USDT</p>
+              <p data-testid="user-risk-preview-position-size">Position size: {riskPreview?.position_size ?? "-"} USDT</p>
+              <p data-testid="user-risk-preview-risk-amount">Risk amount: {riskPreview?.risk_amount ?? "-"} USDT</p>
               <p data-testid="user-risk-preview-allocation-pct">İşleme ayrılan oran: %{riskPreview?.allocation_pct ?? "-"}</p>
               <p data-testid="user-risk-preview-allocation-amount">İşleme girecek tutar: {riskPreview?.trade_allocation_amount ?? "-"} USDT</p>
               <p data-testid="user-risk-preview-trade-risk-pct">İşlemde risk oranı: %{riskPreview?.trade_risk_pct ?? "-"}</p>
@@ -389,6 +482,16 @@ export const UserExchangeSettingsPage = () => {
               <p data-testid="user-risk-preview-capital-impact">Toplam ana paraya etkisi: %{riskPreview?.total_capital_impact_pct ?? "-"}</p>
               <p data-testid="user-risk-preview-next-base">Sonraki işlem baz hesabı: {riskPreview?.next_trade_base_capital ?? "-"}</p>
               <p data-testid="user-risk-preview-compounding">Compounding: {String(riskPreview?.compounding_enabled ?? false)}</p>
+
+              {selectedVenue.market_type === "futures" && (
+                <>
+                  <p data-testid="user-risk-preview-futures-leverage">Leverage: x{riskPreview?.leverage ?? "-"}</p>
+                  <p data-testid="user-risk-preview-futures-margin-mode">Margin mode: {riskPreview?.margin_mode ?? "-"}</p>
+                  <p data-testid="user-risk-preview-futures-position-side">Position side: {riskPreview?.position_side ?? "-"}</p>
+                  <p data-testid="user-risk-preview-futures-margin-usage">Margin usage: %{riskPreview?.margin_usage_pct ?? "-"}</p>
+                  <p data-testid="user-risk-preview-futures-liquidation-buffer">Estimated liquidation buffer: %{riskPreview?.estimated_liquidation_buffer_pct ?? "-"}</p>
+                </>
+              )}
             </div>
             <div className="mt-2 space-y-1" data-testid="user-risk-preview-warnings-list">
               {(riskPreview?.warnings || []).map((warning) => (
@@ -423,6 +526,27 @@ export const UserExchangeSettingsPage = () => {
           <p className="md:col-span-3 text-xs text-yellow-300" data-testid="user-test-no-assignment-warning">Henüz venue assignment yok. Admin panelden kullanıcıya venue atanmalı.</p>
         )}
       </div>
+
+      {selectedVenue.market_type === "futures" && (
+        <div className="grid gap-2 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-test-futures-context-grid">
+          <Input type="number" min={1} max={20} value={futuresContext.leverage} onChange={(event) => setFuturesContext((prev) => ({ ...prev, leverage: Number(event.target.value) || 1 }))} data-testid="user-test-futures-leverage-input" placeholder="Leverage" />
+          <select value={futuresContext.margin_mode} onChange={(event) => setFuturesContext((prev) => ({ ...prev, margin_mode: event.target.value }))} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-futures-margin-mode-select">
+            <option value="cross">cross</option>
+            <option value="isolated">isolated</option>
+          </select>
+          <select value={futuresContext.position_side} onChange={(event) => setFuturesContext((prev) => ({ ...prev, position_side: event.target.value }))} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-futures-position-side-select">
+            <option value="BOTH">BOTH</option>
+            <option value="LONG">LONG</option>
+            <option value="SHORT">SHORT</option>
+          </select>
+        </div>
+      )}
+
+      {selectedVenue.market_type === "spot" && (
+        <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-test-spot-context-card">
+          <p className="text-sm text-emerald-300" data-testid="user-test-spot-quote-qty-text">Spot test order quoteQty=10 USDT semantiği ile gönderilir.</p>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="user-exchange-settings-metrics-grid">
         <MetricCard label="Exchange" value={settings?.exchange || "-"} tone="orange" testId="user-exchange-metric-exchange" />
@@ -519,7 +643,7 @@ export const UserExchangeSettingsPage = () => {
 
         {!testOrderEligible && (
           <p className="mt-2 text-xs text-yellow-300" data-testid="user-test-order-venue-constraint-text">
-            Test order şu an yalnızca binance/futures/testnet kombinasyonu için destekleniyor.
+            Test order şu an yalnızca binance/testnet kombinasyonu için destekleniyor.
           </p>
         )}
 
@@ -541,6 +665,9 @@ export const UserExchangeSettingsPage = () => {
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-test-order-result-card">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-test-order-result-title">Test Order Result</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="user-test-order-result-grid">
+          <p data-testid="user-test-order-exchange">exchange: {testOrderResult?.exchange || selectedVenue.exchange}</p>
+          <p data-testid="user-test-order-market-type">market_type: {testOrderResult?.market_type || selectedVenue.market_type}</p>
+          <p data-testid="user-test-order-environment">environment: {testOrderResult?.environment || selectedVenue.environment}</p>
           <p data-testid="user-test-order-status">order status: {testOrderResult?.status || "awaiting_valid_key"}</p>
           <p data-testid="user-test-order-final-status">final status: {testOrderResult?.final_status || "-"}</p>
           <p data-testid="user-test-order-exchange-order-id">exchange order id: {testOrderResult?.exchange_order_id || "-"}</p>

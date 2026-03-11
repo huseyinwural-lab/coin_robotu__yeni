@@ -509,6 +509,9 @@ class ExchangeTestOrderResponse(BaseModel):
     order_id: str
     exchange_order_id: str
     client_order_id: str
+    exchange: str
+    market_type: str
+    environment: str
     price_avg: float | None
     executed_qty: float | None
     slippage_pct: float | None
@@ -545,6 +548,10 @@ class ExchangeLifecycleEvidenceResponse(BaseModel):
 
 class UserReadinessChecklistResponse(BaseModel):
     readiness_status: str
+    exchange: str | None = None
+    market_type: str | None = None
+    environment: str | None = None
+    capability_match: bool | None = None
     has_api_key: bool
     has_api_secret: bool
     validation_success: bool
@@ -614,7 +621,10 @@ class UserRiskSettingsUpdate(BaseModel):
 
 
 class UserRiskPreviewResponse(BaseModel):
+    market_type: str
     current_capital: float
+    position_size: float
+    risk_amount: float
     allocation_pct: float
     trade_allocation_amount: float
     trade_risk_pct: float
@@ -622,7 +632,62 @@ class UserRiskPreviewResponse(BaseModel):
     total_capital_impact_pct: float
     compounding_enabled: bool
     next_trade_base_capital: float
+    leverage: int | None = None
+    margin_mode: str | None = None
+    position_side: str | None = None
+    estimated_liquidation_buffer_pct: float | None = None
+    margin_usage_pct: float | None = None
     warnings: list[str]
+
+
+class ReplayRunRequest(BaseModel):
+    symbol: str = "BTCUSDT"
+    timeframe: str = "15m"
+    exchange: str = "binance"
+    market_type: str = "futures"
+    environment: str = "testnet"
+    strategy_type: str = "trend_following"
+    limit: int = Field(default=300, ge=120, le=1000)
+
+
+class ReplayExecutionItemResponse(BaseModel):
+    symbol: str
+    timeframe: str
+    signal: str
+    direction: str
+    market_price: float
+    simulated_fill_price: float | None
+    simulated_latency_ms: float | None
+    simulated_slippage_pct: float | None
+    lifecycle: list[str]
+    status: str
+    risk_tags: list[str]
+    candle_timestamp: str
+
+
+class ReplayRunResponse(BaseModel):
+    run_id: str
+    user_id: str
+    exchange: str
+    market_type: str
+    environment: str
+    symbol: str
+    timeframe: str
+    strategy_type: str
+    candles_processed: int
+    executions_count: int
+    filled_count: int
+    canceled_count: int
+    avg_simulated_latency_ms: float
+    avg_simulated_slippage_pct: float
+    status: str
+    started_at: datetime
+    completed_at: datetime | None
+
+
+class ReplayRunDetailResponse(ReplayRunResponse):
+    metrics: dict
+    executions: list[ReplayExecutionItemResponse]
 
 
 class UserPortfolioOverviewResponse(BaseModel):

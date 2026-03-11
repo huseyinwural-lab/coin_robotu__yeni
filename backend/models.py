@@ -351,6 +351,9 @@ class ExecutionMetric(Base):
     exchange_order_id: Mapped[str] = mapped_column(String(80), index=True)
     client_order_id: Mapped[str] = mapped_column(String(120), default="")
     order_type: Mapped[str] = mapped_column(String(20), default="MARKET")
+    exchange: Mapped[str] = mapped_column(String(30), default="binance")
+    market_type: Mapped[str] = mapped_column(String(20), default="futures")
+    environment: Mapped[str] = mapped_column(String(20), default="testnet")
     side: Mapped[str] = mapped_column(String(10), default="BUY")
     quote_qty: Mapped[float] = mapped_column(Float, default=10)
     mid_price: Mapped[float] = mapped_column(Float)
@@ -500,3 +503,47 @@ class UserVenueAssignment(Base):
     testnet_allowed: Mapped[bool] = mapped_column(Boolean, default=True)
     live_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ReplayRun(Base):
+    __tablename__ = "replay_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    exchange: Mapped[str] = mapped_column(String(30), default="binance")
+    market_type: Mapped[str] = mapped_column(String(20), default="futures")
+    environment: Mapped[str] = mapped_column(String(20), default="testnet")
+    symbol: Mapped[str] = mapped_column(String(20), default="BTCUSDT")
+    timeframe: Mapped[str] = mapped_column(String(10), default="15m")
+    strategy_type: Mapped[str] = mapped_column(String(50), default="trend_following")
+    candles_processed: Mapped[int] = mapped_column(Integer, default=0)
+    executions_count: Mapped[int] = mapped_column(Integer, default=0)
+    filled_count: Mapped[int] = mapped_column(Integer, default=0)
+    canceled_count: Mapped[int] = mapped_column(Integer, default=0)
+    avg_simulated_latency_ms: Mapped[float] = mapped_column(Float, default=0)
+    avg_simulated_slippage_pct: Mapped[float] = mapped_column(Float, default=0)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="completed")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ReplayExecution(Base):
+    __tablename__ = "replay_executions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    replay_run_id: Mapped[str] = mapped_column(String, ForeignKey("replay_runs.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(20), default="BTCUSDT")
+    timeframe: Mapped[str] = mapped_column(String(10), default="15m")
+    signal: Mapped[str] = mapped_column(String(20), default="none")
+    direction: Mapped[str] = mapped_column(String(10), default="none")
+    market_price: Mapped[float] = mapped_column(Float)
+    simulated_fill_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    simulated_latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    simulated_slippage_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lifecycle: Mapped[list[str]] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(20), default="SIM_CANCELED")
+    risk_tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    candle_timestamp: Mapped[str] = mapped_column(String(40), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

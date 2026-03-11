@@ -58,19 +58,40 @@ def validate_exchange(
 
 
 @router.post("/test-order", response_model=ExchangeTestOrderResponse)
-def exchange_test_order(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    readiness = user_readiness_checklist(db, current_user.id)
+def exchange_test_order(
+    exchange: str | None = Query(default=None),
+    market_type: str = Query(default="futures"),
+    environment: str | None = Query(default=None),
+    leverage: int = Query(default=1),
+    margin_mode: str = Query(default="cross"),
+    position_side: str = Query(default="BOTH"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    readiness = user_readiness_checklist(
+        db,
+        current_user.id,
+        exchange=exchange,
+        market_type=market_type,
+        environment=environment,
+    )
     if readiness["readiness_status"] != "ready_for_test_order":
         reason_map = {
             "missing_credentials": "invalid_key",
+            "exchange_error_451": "invalid_key",
             "missing_trade_permission": "permission_denied",
             "ip_restriction": "ip_restricted",
+            "insufficient_balance": "insufficient_balance",
             "exchange_unreachable": "testnet_unreachable",
             "stale_validation_snapshot": "stale_validation",
             "release_gate_forced_block": "exchange_rejected",
             "exchange_health_degraded": "testnet_unreachable",
+            "settings_mismatch": "stale_validation",
         }
-        failure_code = reason_map.get(readiness.get("last_error_reason"), "stale_validation" if readiness.get("is_validation_stale") else "exchange_rejected")
+        failure_code = reason_map.get(
+            readiness.get("last_error_reason"),
+            "stale_validation" if readiness.get("is_validation_stale") else "unknown_exchange_error",
+        )
         reason_message = {
             "awaiting_valid_key": "awaiting valid key",
             "blocked": readiness.get("last_error_reason") or "blocked",
@@ -80,14 +101,48 @@ def exchange_test_order(current_user: User = Depends(get_current_user), db: Sess
             detail={
                 "status": readiness["readiness_status"],
                 "failure_code": failure_code,
+                "exchange": readiness.get("exchange"),
+                "market_type": readiness.get("market_type"),
+                "environment": readiness.get("environment"),
                 "message": f"Binance Testnet API key ve secret doğrulanmadan gerçek test-order çalıştırılamaz. ({reason_message})",
             },
         )
 
     try:
-        metric = run_exchange_test_order_market(db, current_user)
+        metric = run_exchange_test_order_market(
+            db,
+            current_user,
+            exchange=readiness.get("exchange") or "binance",
+            market_type=readiness.get("market_type") or "futures",
+            environment=readiness.get("environment") or "testnet",
+            leverage=leverage,
+            margin_mode=margin_mode,
+            position_side=position_side,
+        )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        known_codes = {
+            "invalid_key",
+            "permission_denied",
+            "ip_restricted",
+            "insufficient_balance",
+            "exchange_rejected",
+            "testnet_unreachable",
+            "stale_validation",
+            "unknown_exchange_error",
+        }
+        message = str(exc)
+        failure_code = next((code for code in known_codes if code in message), "unknown_exchange_error")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "status": "blocked",
+                "failure_code": failure_code,
+                "message": message,
+                "exchange": readiness.get("exchange"),
+                "market_type": readiness.get("market_type"),
+                "environment": readiness.get("environment"),
+            },
+        ) from exc
 
     create_audit_log(
         db,
@@ -109,6 +164,9 @@ def exchange_test_order(current_user: User = Depends(get_current_user), db: Sess
         order_id=metric.order_id,
         exchange_order_id=metric.exchange_order_id,
         client_order_id=metric.client_order_id,
+        exchange=metric.exchange,
+        market_type=metric.market_type,
+        environment=metric.environment,
         price_avg=metric.price_avg,
         executed_qty=metric.executed_qty,
         slippage_pct=metric.slippage_pct,
@@ -129,8 +187,22 @@ def exchange_test_order(current_user: User = Depends(get_current_user), db: Sess
 
 
 @router.get("/readiness-checklist", response_model=UserReadinessChecklistResponse)
-def exchange_readiness_checklist(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return UserReadinessChecklistResponse(**user_readiness_checklist(db, current_user.id))
+def exchange_readiness_checklist(
+    exchange: str | None = Query(default=None),
+    market_type: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return UserReadinessChecklistResponse(
+        **user_readiness_checklist(
+            db,
+            current_user.id,
+            exchange=exchange,
+            market_type=market_type,
+            environment=environment,
+        )
+    )
 
 
 @router.get("/lifecycle-evidence/latest", response_model=ExchangeLifecycleEvidenceResponse)

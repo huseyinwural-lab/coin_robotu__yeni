@@ -39,6 +39,7 @@ from services.venue_service import check_user_venue_access, seed_binance_venue_r
 
 BINANCE_FUTURES_TESTNET_REST = "https://testnet.binancefuture.com"
 BINANCE_FUTURES_TESTNET_WS = "wss://stream.binancefuture.com/ws"
+BINANCE_SPOT_TESTNET_REST = "https://testnet.binance.vision"
 SAFE_SYMBOL_WHITELIST = ["BTCUSDT"]
 MAX_SAFE_POSITION_PCT = 0.1
 MAX_SAFE_LEVERAGE = 1
@@ -98,6 +99,15 @@ class BinanceFuturesTestnetAdapter:
         payload = response.json() if response.content else {}
         return payload, response.status_code, dict(response.headers)
 
+    def _signed_get_spot(self, api_key: str, api_secret: str, endpoint: str, params: dict) -> tuple[dict, int, dict]:
+        params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
+        query = urlencode(params)
+        signature = self._signature(api_secret, query)
+        url = f"{BINANCE_SPOT_TESTNET_REST}{endpoint}?{query}&signature={signature}"
+        response = httpx.get(url, headers={"X-MBX-APIKEY": api_key}, timeout=8)
+        payload = response.json() if response.content else {}
+        return payload, response.status_code, dict(response.headers)
+
     def _signed_post(self, api_key: str, api_secret: str, endpoint: str, params: dict) -> tuple[dict, int]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
@@ -107,8 +117,30 @@ class BinanceFuturesTestnetAdapter:
         payload = response.json() if response.content else {}
         return payload, response.status_code
 
+    def _signed_post_spot(self, api_key: str, api_secret: str, endpoint: str, params: dict) -> tuple[dict, int]:
+        params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
+        query = urlencode(params)
+        signature = self._signature(api_secret, query)
+        url = f"{BINANCE_SPOT_TESTNET_REST}{endpoint}?{query}&signature={signature}"
+        response = httpx.post(url, headers={"X-MBX-APIKEY": api_key}, timeout=10)
+        payload = response.json() if response.content else {}
+        return payload, response.status_code
+
+    def _signed_delete(self, api_key: str, api_secret: str, endpoint: str, params: dict, *, spot: bool = False) -> tuple[dict, int]:
+        params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
+        query = urlencode(params)
+        signature = self._signature(api_secret, query)
+        base_url = BINANCE_SPOT_TESTNET_REST if spot else BINANCE_FUTURES_TESTNET_REST
+        url = f"{base_url}{endpoint}?{query}&signature={signature}"
+        response = httpx.delete(url, headers={"X-MBX-APIKEY": api_key}, timeout=8)
+        payload = response.json() if response.content else {}
+        return payload, response.status_code
+
     def account_probe(self, api_key: str, api_secret: str) -> tuple[dict, int, dict]:
         return self._signed_get(api_key, api_secret, "/fapi/v2/account", {})
+
+    def account_probe_spot(self, api_key: str, api_secret: str) -> tuple[dict, int, dict]:
+        return self._signed_get_spot(api_key, api_secret, "/api/v3/account", {})
 
     def mark_price(self, symbol: str) -> float:
         response = httpx.get(
@@ -193,6 +225,27 @@ class BinanceFuturesTestnetAdapter:
             },
         )
 
+    def create_spot_market_order(
+        self,
+        api_key: str,
+        api_secret: str,
+        *,
+        symbol: str,
+        side: str,
+        quote_order_qty: float,
+    ) -> tuple[dict, int]:
+        return self._signed_post_spot(
+            api_key,
+            api_secret,
+            "/api/v3/order",
+            {
+                "symbol": symbol,
+                "side": side,
+                "type": "MARKET",
+                "quoteOrderQty": round(float(quote_order_qty), 2),
+            },
+        )
+
     def query_order(self, api_key: str, api_secret: str, symbol: str, order_id: int) -> tuple[dict, int]:
         payload, status_code, _ = self._signed_get(
             api_key,
@@ -201,6 +254,20 @@ class BinanceFuturesTestnetAdapter:
             {"symbol": symbol, "orderId": order_id},
         )
         return payload, status_code
+
+    def query_spot_order(self, api_key: str, api_secret: str, symbol: str, order_id: int) -> tuple[dict, int]:
+        payload, status_code, _ = self._signed_get_spot(
+            api_key,
+            api_secret,
+            "/api/v3/order",
+            {"symbol": symbol, "orderId": order_id},
+        )
+        return payload, status_code
+
+    def cancel_order(self, api_key: str, api_secret: str, symbol: str, order_id: int, *, market_type: str) -> tuple[dict, int]:
+        if market_type == "spot":
+            return self._signed_delete(api_key, api_secret, "/api/v3/order", {"symbol": symbol, "orderId": order_id}, spot=True)
+        return self._signed_delete(api_key, api_secret, "/fapi/v1/order", {"symbol": symbol, "orderId": order_id}, spot=False)
 
     def evaluate_permission_controls(self, api_key: str | None, api_secret: str | None) -> dict:
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -470,6 +537,8 @@ def normalize_failure_code(payload: dict | None, status_code: int | None = None,
 
     if fallback == "stale_validation_snapshot":
         return "stale_validation"
+    if status_code == 451 or "exchange_error_451" in message:
+        return "invalid_key"
     if status_code in {401, 403} and (code in {-2015, -2014, -1022} or "invalid" in message):
         return "invalid_key"
     if "permission" in message or "not authorized" in message:
@@ -588,7 +657,10 @@ def validate_exchange_credentials_for_user(
         return _validation_failure(["missing_credentials"], 400)
 
     try:
-        payload, status_code, _ = adapter.account_probe(api_key, api_secret)
+        if requested_market_type == "spot":
+            payload, status_code, _ = adapter.account_probe_spot(api_key, api_secret)
+        else:
+            payload, status_code, _ = adapter.account_probe(api_key, api_secret)
     except httpx.HTTPError:
         return _validation_failure(["exchange_unreachable"], 503)
 
@@ -598,8 +670,12 @@ def validate_exchange_credentials_for_user(
         return _validation_failure(reason_codes, http_status)
 
     permissions = _normalize_permissions(payload, requested_market_type, requested_environment)
-    can_trade = bool(payload.get("canTrade", False))
-    can_withdraw = bool(payload.get("canWithdraw", False))
+    if requested_market_type == "spot":
+        can_trade = bool(payload.get("canTrade", True))
+        can_withdraw = bool(payload.get("canWithdraw", True))
+    else:
+        can_trade = bool(payload.get("canTrade", False))
+        can_withdraw = bool(payload.get("canWithdraw", False))
     trade_capable = _is_trade_capable(permissions)
     market_tag = "FUTURES" if requested_market_type == "futures" else "SPOT"
     market_capable = market_tag in {item.upper() for item in permissions}
@@ -732,14 +808,36 @@ def user_portfolio_overview(db: Session, user_id: str) -> dict:
     }
 
 
-def user_risk_preview(db: Session, user_id: str) -> dict:
+def user_risk_preview(
+    db: Session,
+    user_id: str,
+    *,
+    market_type: str = "spot",
+    leverage: int = 1,
+    margin_mode: str = "cross",
+    position_side: str = "BOTH",
+) -> dict:
     settings_row = get_or_create_user_risk_settings(db, user_id)
+    normalized_market_type = (market_type or "spot").strip().lower()
+    safe_leverage = max(1, min(int(leverage or 1), 20))
     overview = user_portfolio_overview(db, user_id)
     current_capital = overview["current_capital"]
-    trade_allocation_amount = round(current_capital * (settings_row.allocation_pct / 100), 2)
-    max_trade_loss_amount = round(trade_allocation_amount * (settings_row.trade_risk_pct / 100), 2)
+    position_size = round(current_capital * (settings_row.allocation_pct / 100), 2)
+    trade_allocation_amount = position_size
+    max_trade_loss_amount = round(position_size * (settings_row.trade_risk_pct / 100), 2)
     capital_impact = round((max_trade_loss_amount / max(current_capital, 1)) * 100, 2)
     next_base = overview["next_base_capital"]
+
+    leverage_value = None
+    margin_usage_pct = None
+    estimated_liquidation_buffer_pct = None
+
+    if normalized_market_type == "futures":
+        leverage_value = safe_leverage
+        leveraged_notional = round(position_size * safe_leverage, 2)
+        margin_usage_pct = round((position_size / max(current_capital, 1)) * 100, 2)
+        estimated_liquidation_buffer_pct = round(max(2.0, (100 / safe_leverage) - (settings_row.trade_risk_pct * 0.6)), 2)
+        trade_allocation_amount = leveraged_notional
 
     warnings: list[str] = []
     if settings_row.allocation_pct > 30:
@@ -750,7 +848,10 @@ def user_risk_preview(db: Session, user_id: str) -> dict:
         warnings.append("high_daily_loss")
 
     return {
+        "market_type": normalized_market_type,
         "current_capital": current_capital,
+        "position_size": position_size,
+        "risk_amount": max_trade_loss_amount,
         "allocation_pct": settings_row.allocation_pct,
         "trade_allocation_amount": trade_allocation_amount,
         "trade_risk_pct": settings_row.trade_risk_pct,
@@ -758,6 +859,11 @@ def user_risk_preview(db: Session, user_id: str) -> dict:
         "total_capital_impact_pct": capital_impact,
         "compounding_enabled": settings_row.compounding_enabled,
         "next_trade_base_capital": next_base,
+        "leverage": leverage_value,
+        "margin_mode": margin_mode if normalized_market_type == "futures" else None,
+        "position_side": position_side if normalized_market_type == "futures" else None,
+        "estimated_liquidation_buffer_pct": estimated_liquidation_buffer_pct,
+        "margin_usage_pct": margin_usage_pct,
         "warnings": warnings,
     }
 
@@ -880,8 +986,27 @@ def mark_active_override_used_in_deploy(db: Session) -> ReleaseGateOverride | No
     return row
 
 
-def user_readiness_checklist(db: Session, user_id: str) -> dict:
+def user_readiness_checklist(
+    db: Session,
+    user_id: str,
+    *,
+    exchange: str | None = None,
+    market_type: str | None = None,
+    environment: str | None = None,
+) -> dict:
     settings_row = get_or_create_exchange_settings(db, user_id)
+    requested_exchange = (exchange or settings_row.exchange or "binance").strip().lower()
+    requested_market_type = (market_type or "futures").strip().lower()
+    requested_environment = (environment or settings_row.mode or "testnet").strip().lower()
+
+    allowed, venue_state, capability_match, venue_reason_codes = check_user_venue_access(
+        db,
+        user_id,
+        requested_exchange,
+        requested_market_type,
+        requested_environment,
+    )
+
     has_api_key = bool(settings_row.api_key_encrypted)
     has_api_secret = bool(settings_row.api_secret_encrypted)
     validation_ts = settings_row.validation_checked_at
@@ -893,12 +1018,18 @@ def user_readiness_checklist(db: Session, user_id: str) -> dict:
 
     validation_success = bool(settings_row.last_validation_success)
     can_trade = bool(settings_row.can_trade_snapshot)
-    is_testnet = settings_row.mode == "testnet"
+    is_testnet = requested_environment == "testnet"
     reason_codes = settings_row.last_reason_codes or []
 
     readiness_status = "blocked"
     last_error_reason = reason_codes[0] if reason_codes else ""
-    if not has_api_key or not has_api_secret:
+    if not allowed:
+        readiness_status = "blocked"
+        last_error_reason = (venue_reason_codes or [venue_state])[0]
+    elif requested_exchange != settings_row.exchange.lower() or requested_environment != settings_row.mode.lower():
+        readiness_status = "blocked"
+        last_error_reason = "settings_mismatch"
+    elif not has_api_key or not has_api_secret:
         readiness_status = "awaiting_valid_key"
         last_error_reason = "missing_credentials"
     elif stale:
@@ -931,6 +1062,10 @@ def user_readiness_checklist(db: Session, user_id: str) -> dict:
         "validation_snapshot_id": settings_row.validation_snapshot_id,
         "stale_after_minutes": VALIDATION_STALE_MINUTES,
         "last_error_reason": last_error_reason,
+        "exchange": requested_exchange,
+        "market_type": requested_market_type,
+        "environment": requested_environment,
+        "capability_match": capability_match,
     }
 
 
@@ -1149,17 +1284,53 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     return execution_log
 
 
-def run_exchange_test_order_market(db: Session, user: User) -> ExecutionMetric:
+def run_exchange_test_order_market(
+    db: Session,
+    user: User,
+    *,
+    exchange: str,
+    market_type: str,
+    environment: str,
+    leverage: int = 1,
+    margin_mode: str = "cross",
+    position_side: str = "BOTH",
+) -> ExecutionMetric:
+    normalized_exchange = exchange.strip().lower()
+    normalized_market_type = market_type.strip().lower()
+    normalized_environment = environment.strip().lower()
+
+    if normalized_exchange != "binance":
+        raise ValueError("Sadece binance adaptörü aktif. exchange_rejected")
+    if normalized_environment != "testnet":
+        raise ValueError("Sadece testnet environment destekleniyor. exchange_rejected")
+    if normalized_market_type not in {"spot", "futures"}:
+        raise ValueError("market_type spot veya futures olmalı")
+
     settings_row = get_or_create_exchange_settings(db, user.id)
     validation, status_code = validate_exchange_credentials_for_user(
         db,
         user.id,
-        exchange=settings_row.exchange,
-        market_type="futures",
-        environment=settings_row.mode,
+        exchange=normalized_exchange,
+        market_type=normalized_market_type,
+        environment=normalized_environment,
     )
     if status_code != 200:
-        raise ValueError("Exchange doğrulaması başarısız. Önce /api/exchange/validate başarılı olmalı.")
+        normalize_map = {
+            "missing_credentials": "invalid_key",
+            "exchange_error_451": "invalid_key",
+            "missing_trade_permission": "permission_denied",
+            "ip_restriction": "ip_restricted",
+            "insufficient_balance": "insufficient_balance",
+            "exchange_unreachable": "testnet_unreachable",
+            "stale_validation_snapshot": "stale_validation",
+            "settings_mismatch": "stale_validation",
+        }
+        first_reason = (validation.get("reason_codes") or ["unknown_exchange_error"])[0]
+        normalized_reason = normalize_map.get(first_reason, "unknown_exchange_error")
+        raise ValueError(f"{normalized_reason}: Exchange doğrulaması başarısız")
+
+    if normalized_market_type == "futures" and (leverage < 1 or leverage > 20):
+        raise ValueError("Futures için leverage 1-20 aralığında olmalı")
 
     api_key = decrypt_secret(settings_row.api_key_encrypted)
     api_secret = decrypt_secret(settings_row.api_secret_encrypted)
@@ -1186,26 +1357,55 @@ def run_exchange_test_order_market(db: Session, user: User) -> ExecutionMetric:
     order_id = str(uuid.uuid4())
     client_order_id = f"cli-{uuid.uuid4().hex[:20]}"
     submitted_at = datetime.now(timezone.utc)
-    timeline_events: list[tuple[str, datetime, dict]] = [("request_sent", submitted_at, {"symbol": symbol, "side": side, "quote_qty": quote_qty})]
+    timeline_events: list[tuple[str, datetime, dict]] = [
+        (
+            "request_sent",
+            submitted_at,
+            {
+                "symbol": symbol,
+                "side": side,
+                "quote_qty": quote_qty,
+                "quantity": quantity,
+                "exchange": normalized_exchange,
+                "market_type": normalized_market_type,
+                "environment": normalized_environment,
+                "leverage": leverage if normalized_market_type == "futures" else None,
+                "margin_mode": margin_mode if normalized_market_type == "futures" else None,
+                "position_side": position_side if normalized_market_type == "futures" else None,
+            },
+        )
+    ]
 
     started = time.perf_counter()
     order_payload: dict = {}
     order_status = 500
     exchange_order_id = "unknown"
-    state_path: list[str] = []
+    state_path: list[str] = ["NEW"]
     final_payload: dict = {}
     ack_at = None
     final_at = None
     failure_code = None
 
     try:
-        order_payload, order_status = adapter.create_market_order(
-            api_key,
-            api_secret,
-            symbol=symbol,
-            side=side,
-            quantity=quantity,
-        )
+        if normalized_market_type == "futures":
+            leverage_payload, leverage_status = adapter.set_leverage(api_key, api_secret, symbol, leverage)
+            if leverage_status >= 400:
+                raise ValueError(f"{normalize_failure_code(leverage_payload, leverage_status)}: leverage_context_invalid")
+            order_payload, order_status = adapter.create_market_order(
+                api_key,
+                api_secret,
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+            )
+        else:
+            order_payload, order_status = adapter.create_spot_market_order(
+                api_key,
+                api_secret,
+                symbol=symbol,
+                side=side,
+                quote_order_qty=quote_qty,
+            )
     except httpx.HTTPError:
         order_payload = {"msg": "testnet_unreachable"}
         order_status = 503
@@ -1216,39 +1416,67 @@ def run_exchange_test_order_market(db: Session, user: User) -> ExecutionMetric:
     if order_status >= 400:
         final_status = "REJECTED"
         failure_code = normalize_failure_code(order_payload, order_status)
-        state_path = ["NEW", "REJECTED"]
+        if final_status not in state_path:
+            state_path.append(final_status)
         final_payload = order_payload
     else:
         exchange_order_id = str(order_payload.get("orderId") or "")
         first_status = str(order_payload.get("status") or "NEW").upper()
-        state_path.append("NEW")
-        if first_status != "NEW":
+        if first_status not in state_path:
             state_path.append(first_status)
         final_payload = order_payload
 
+        terminal_statuses = {"FILLED", "CANCELED", "EXPIRED", "REJECTED"}
         if first_status in {"NEW", "PARTIALLY_FILLED"} and exchange_order_id:
-            for _ in range(4):
+            for _ in range(6):
                 time.sleep(0.2)
-                queried, _ = adapter.query_order(api_key, api_secret, symbol, int(exchange_order_id))
+                if normalized_market_type == "spot":
+                    queried, _ = adapter.query_spot_order(api_key, api_secret, symbol, int(exchange_order_id))
+                else:
+                    queried, _ = adapter.query_order(api_key, api_secret, symbol, int(exchange_order_id))
+
                 queried_status = str(queried.get("status") or first_status).upper()
                 final_payload = queried
                 now_evt = datetime.now(timezone.utc)
                 if queried_status != state_path[-1]:
                     state_path.append(queried_status)
-                    timeline_events.append(("lifecycle_transition", now_evt, {"status": queried_status, "payload": queried}))
-                if queried_status in {"FILLED", "CANCELED", "EXPIRED", "REJECTED"}:
+                if queried_status == "PARTIALLY_FILLED":
+                    timeline_events.append(("partial_fill", now_evt, {"status": queried_status, "payload": queried}))
+                if queried_status in terminal_statuses:
                     break
 
-        final_status = str(final_payload.get("status") or state_path[-1]).upper()
+        current_status = str(final_payload.get("status") or state_path[-1]).upper()
+        if current_status not in terminal_statuses and exchange_order_id:
+            cancel_payload, cancel_status = adapter.cancel_order(
+                api_key,
+                api_secret,
+                symbol,
+                int(exchange_order_id),
+                market_type=normalized_market_type,
+            )
+            if cancel_status < 400:
+                final_payload = cancel_payload
+                current_status = str(cancel_payload.get("status") or "CANCELED").upper()
+            else:
+                failure_code = normalize_failure_code(cancel_payload, cancel_status)
+
+        final_status = current_status
         if final_status not in state_path:
             state_path.append(final_status)
-        if final_status in {"REJECTED", "CANCELED", "EXPIRED"}:
+        if final_status in {"REJECTED", "CANCELED", "EXPIRED"} and failure_code is None:
             failure_code = normalize_failure_code(final_payload, order_status)
 
     final_at = datetime.now(timezone.utc)
-    timeline_events.append(("final_status", final_at, {"status": final_status}))
+    if final_status == "FILLED":
+        timeline_events.append(("final_fill", final_at, {"status": final_status}))
+    elif final_status in {"CANCELED", "EXPIRED"}:
+        timeline_events.append(("final_cancel", final_at, {"status": final_status}))
+    else:
+        timeline_events.append(("final_status", final_at, {"status": final_status}))
 
-    avg_price = float(final_payload.get("avgPrice") or 0) or None
+    avg_price = float(final_payload.get("avgPrice") or final_payload.get("cummulativeQuoteQty", 0) or 0) or None
+    if normalized_market_type == "spot" and avg_price and quantity > 0 and (final_payload.get("avgPrice") in {None, "0", 0}):
+        avg_price = round(float(final_payload.get("cummulativeQuoteQty") or 0) / quantity, 8)
     executed_qty = float(final_payload.get("executedQty") or 0) or None
     execution_time_ms = round((time.perf_counter() - started) * 1000, 2)
     slippage_pct = None
@@ -1273,6 +1501,9 @@ def run_exchange_test_order_market(db: Session, user: User) -> ExecutionMetric:
         exchange_order_id=exchange_order_id or "unknown",
         client_order_id=client_order_id,
         order_type="MARKET",
+        exchange=normalized_exchange,
+        market_type=normalized_market_type,
+        environment=normalized_environment,
         side=side,
         quote_qty=quote_qty,
         mid_price=mid_price,

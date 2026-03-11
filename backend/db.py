@@ -67,6 +67,16 @@ def _ensure_sqlite_phase4_columns():
 
     with engine.begin() as connection:
         try:
+            execution_metric_columns = {
+                row[1] for row in connection.execute(text("PRAGMA table_info(execution_metrics)"))
+            }
+            if "exchange" not in execution_metric_columns:
+                connection.execute(text("ALTER TABLE execution_metrics ADD COLUMN exchange VARCHAR(30) DEFAULT 'binance'"))
+            if "market_type" not in execution_metric_columns:
+                connection.execute(text("ALTER TABLE execution_metrics ADD COLUMN market_type VARCHAR(20) DEFAULT 'futures'"))
+            if "environment" not in execution_metric_columns:
+                connection.execute(text("ALTER TABLE execution_metrics ADD COLUMN environment VARCHAR(20) DEFAULT 'testnet'"))
+
             user_exchange_columns = {
                 row[1] for row in connection.execute(text("PRAGMA table_info(user_exchange_settings)"))
             }
@@ -194,6 +204,58 @@ def _ensure_sqlite_phase4_columns():
                         testnet_allowed BOOLEAN NOT NULL DEFAULT 1,
                         live_allowed BOOLEAN NOT NULL DEFAULT 0,
                         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS replay_runs (
+                        id VARCHAR PRIMARY KEY,
+                        user_id VARCHAR NOT NULL,
+                        exchange VARCHAR(30) NOT NULL DEFAULT 'binance',
+                        market_type VARCHAR(20) NOT NULL DEFAULT 'futures',
+                        environment VARCHAR(20) NOT NULL DEFAULT 'testnet',
+                        symbol VARCHAR(20) NOT NULL DEFAULT 'BTCUSDT',
+                        timeframe VARCHAR(10) NOT NULL DEFAULT '15m',
+                        strategy_type VARCHAR(50) NOT NULL DEFAULT 'trend_following',
+                        candles_processed INTEGER NOT NULL DEFAULT 0,
+                        executions_count INTEGER NOT NULL DEFAULT 0,
+                        filled_count INTEGER NOT NULL DEFAULT 0,
+                        canceled_count INTEGER NOT NULL DEFAULT 0,
+                        avg_simulated_latency_ms FLOAT NOT NULL DEFAULT 0,
+                        avg_simulated_slippage_pct FLOAT NOT NULL DEFAULT 0,
+                        metrics JSON NOT NULL DEFAULT '{}',
+                        status VARCHAR(20) NOT NULL DEFAULT 'completed',
+                        started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        completed_at DATETIME
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS replay_executions (
+                        id VARCHAR PRIMARY KEY,
+                        replay_run_id VARCHAR NOT NULL,
+                        user_id VARCHAR NOT NULL,
+                        symbol VARCHAR(20) NOT NULL DEFAULT 'BTCUSDT',
+                        timeframe VARCHAR(10) NOT NULL DEFAULT '15m',
+                        signal VARCHAR(20) NOT NULL DEFAULT 'none',
+                        direction VARCHAR(10) NOT NULL DEFAULT 'none',
+                        market_price FLOAT NOT NULL,
+                        simulated_fill_price FLOAT,
+                        simulated_latency_ms FLOAT,
+                        simulated_slippage_pct FLOAT,
+                        lifecycle JSON NOT NULL DEFAULT '[]',
+                        status VARCHAR(20) NOT NULL DEFAULT 'SIM_CANCELED',
+                        risk_tags JSON NOT NULL DEFAULT '[]',
+                        candle_timestamp VARCHAR(40) NOT NULL DEFAULT '',
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                     )
                     """
                 )

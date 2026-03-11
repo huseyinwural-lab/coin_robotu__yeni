@@ -60,8 +60,24 @@ def put_risk_settings(
 
 
 @router.get("/preview", response_model=UserRiskPreviewResponse)
-def get_risk_preview(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return UserRiskPreviewResponse(**user_risk_preview(db, current_user.id))
+def get_risk_preview(
+    market_type: str = "spot",
+    leverage: int = 1,
+    margin_mode: str = "cross",
+    position_side: str = "BOTH",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return UserRiskPreviewResponse(
+        **user_risk_preview(
+            db,
+            current_user.id,
+            market_type=market_type,
+            leverage=leverage,
+            margin_mode=margin_mode,
+            position_side=position_side,
+        )
+    )
 
 
 @router.get("/overview", response_model=UserPortfolioOverviewResponse)
