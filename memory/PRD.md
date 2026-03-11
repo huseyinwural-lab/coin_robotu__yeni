@@ -567,11 +567,50 @@
   - `test_faz5_hardening_iter5_artifacts.py` (15/15 pass)
   - Lokal regresyon: iter3+iter4 toplam 27/27 pass
 
+### 2026-03-11 (Faz-6.1 + 6.2 — Strategy Domain + Deterministic Kernel Contract)
+- Kullanıcı karar seti uygulandı: **kapsam A (6.1+6.2), admin-only create/version, rota `/admin/strategies`, manifest_chain_hash ertelendi**
+- **6.1 Strategy Domain:**
+  - Yeni modeller: `StrategyDefinition`, `StrategyVersion` (append-only sürümleme)
+  - `StrategyDefinition` alanları: `strategy_id`, `name`, `code(unique)`, `description`, `owner_type=admin`, `created_by`, `status`, `active_version_id`, `created_at`, `updated_at`
+  - `StrategyVersion` alanları: `version_id`, `strategy_id`, `version_number`, `config_json`, `config_schema_version`, `created_by`, `created_at`, `version_hash`
+  - Hash kuralı uygulandı: `sha256(canonical_config_json + strategy_id + version_number + config_schema_version)`
+  - `StrategyVersion` immutable: SQLAlchemy `before_update` bloklama
+  - Activation pointer modeli: `active_version_id` + status güncellemesi
+  - Strategy registry read katmanı: strategy/version/active set çözümlemesi
+- **6.2 Deterministic Kernel Contract:**
+  - `DecisionContextInput` sözleşmesi eklendi (canonical hash üretimi)
+  - `POST /api/strategy-domain/admin/kernel/evaluate` pure-kernel contract endpoint’i eklendi
+  - `DecisionResult` sözleşmesi: `action`, `order_intent`, `size`, `price_reference`, `confidence`, `risk_score`, `reason_codes`, `context_hash`, `decision_hash`
+  - Typed reject davranışı eklendi:
+    - `validation_error`
+    - `strategy_version_not_found`
+    - `strategy_version_hash_mismatch`
+    - `risk_gate_blocked`
+- **Admin UI (`/admin/strategies`):**
+  - Strategy list/detail, version list, create definition, create version, activate version, archive strategy
+  - Deterministic kernel evaluate paneli
+  - Panel `/admin/proofs`’tan bağımsız bounded context olarak ayrıldı
+- **Yeni API yüzeyi:**
+  - `GET/POST /api/strategy-domain/admin/strategies`
+  - `GET /api/strategy-domain/admin/strategies/{strategy_id}`
+  - `POST /api/strategy-domain/admin/strategies/{strategy_id}/versions`
+  - `POST /api/strategy-domain/admin/strategies/{strategy_id}/activate/{version_id}`
+  - `POST /api/strategy-domain/admin/strategies/{strategy_id}/archive`
+  - `GET /api/strategy-domain/admin/registry/active`
+  - `POST /api/strategy-domain/admin/kernel/evaluate`
+- Migration/DB:
+  - Alembic: `20260311_0015_strategy_domain_core.py`
+  - SQLite compatibility: `strategy_definitions`, `strategy_versions` tabloları
+- Testler:
+  - `/app/test_reports/iteration_21.json` (backend/frontend pass)
+  - `test_phase6_iter2_comprehensive_strategy_domain.py` (testing agent comprehensive suite)
+  - Lokal regresyon: `test_phase6_iter1_strategy_domain_kernel.py` + iter5/iter4 toplam 9/9 pass
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
 - Gerçek execution evidence’de immutable alanları canlı order üzerinden finalize et (exchange_order_id/client_order_id/submitted/ack/fill/slippage/validation_snapshot)
-- Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
+- Faz-6.3 Event-driven runtime skeleton (event bus + worker + symbol partition + single-writer kuralı)
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
 - Alembic migration’larda rollback senaryolarının staging doğrulaması
@@ -593,7 +632,7 @@
 
 ## 7) Next Tasks List
 1. Geçerli testnet key ile gerçek order evidence (NEW/PARTIAL/FILLED/CANCELED) finalize et
-2. Faz-6.1 başlangıcı: StrategyDefinition + StrategyVersion append-only domain şeması
-3. Faz-6.2 başlangıcı: DecisionContext + deterministic evaluate(context) kernel iskeleti
-4. Hardening trend eşiklerini active alerts ile operasyonel policy’ye bağla
+2. Faz-6.3: DecisionResult -> ExecutionIntent mapper + event-driven runtime worker skeleton
+3. Faz-6.4: Regime classifier contract + regime-gated karar akışı
+4. Hardening+: manifest_chain_hash (append chain integrity)
 5. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
