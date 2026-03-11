@@ -686,9 +686,18 @@
 - Release gate chain/risk alertleri + kill-switch audit + günlük loss uyarıları.
 - Testler: curl stuck-intents + analytics + system-alerts, Playwright runtime quarantine/recovery/analytics.
 
+### 2026-03-11 (Alert Pipeline v2 — Resend/Slack boundary + Weekly CSV)
+- System alerts v2: fingerprint/entity_key/root_cause_code/state_key + delivery_status alanları.
+- Dedup (10 dk) + rate-limit (5/min, CRITICAL 3/30m) + severity routing uygulandı.
+- Resend/Slack channel adapter iskeleti (config missing → CONFIG_MISSING), channel config endpointi eklendi.
+- Weekly CSV report generator + scheduler (Pzt 09:00 Europe/Berlin) + manual run/download endpointleri.
+- Release gate warning/blocked alertleri ve quarantine growth uyarıları eklendi.
+- Fix: /api/phase4/admin/release-gate 500 (timezone diff) giderildi.
+- Testler: curl config/report/run + release-gate; smoke UI test.
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
-- Slack/Email webhook entegrasyonu (system alert pipeline v2)
+- Resend/Slack secrets sağlanınca Alert Pipeline v2 kanal aktivasyonu + uçtan uca test
 - Geçerli Binance Testnet key ile live order lifecycle proof (BLOCKED: key bekleniyor)
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
@@ -710,7 +719,7 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Slack/Email webhook entegrasyonu (system alerts v2)
+1. Resend/Slack secrets sağlanınca Alert Pipeline v2 kanal aktivasyonu + uçtan uca test
 2. Live testnet key ile order lifecycle proof (validate → test-order)
 3. User approval paneline arama/sıralama + toplu onay (bulk action)
 4. Replay-native analytics (param sweep) için ilk UI/deney seti

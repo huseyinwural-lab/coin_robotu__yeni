@@ -61,7 +61,10 @@ def create_system_alert(
             return existing
 
     if existing and existing.status in {"open", "ack"} and existing.last_triggered_at:
-        delta = now - existing.last_triggered_at
+        last_triggered = existing.last_triggered_at
+        if last_triggered.tzinfo is None:
+            last_triggered = last_triggered.replace(tzinfo=timezone.utc)
+        delta = now - last_triggered
         if delta.total_seconds() < dedupe_window_seconds:
             existing.occurrences += 1
             existing.last_triggered_at = now
