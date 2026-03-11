@@ -45,12 +45,19 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     return user
 
 
-def _login_with_policy(payload: LoginRequest, db: Session, target_role: UserRole | None = None) -> AuthResponse:
+def _login_with_policy(
+    payload: LoginRequest,
+    db: Session,
+    target_role: UserRole | None = None,
+    allowed_roles: set[UserRole] | None = None,
+) -> AuthResponse:
     user = db.query(User).filter(User.email == payload.email).first()
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if target_role and user.role != target_role:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yanlış giriş paneli")
+    if allowed_roles and user.role not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yanlış giriş paneli")
 
     if user.role == UserRole.USER and user.approval_status == "pending":
@@ -80,7 +87,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 @router.post("/login/admin", response_model=AuthResponse)
 def admin_login(payload: LoginRequest, db: Session = Depends(get_db)):
-    return _login_with_policy(payload, db, target_role=UserRole.ADMIN)
+    return _login_with_policy(payload, db, allowed_roles={UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS})
 
 
 @router.post("/login/user", response_model=AuthResponse)

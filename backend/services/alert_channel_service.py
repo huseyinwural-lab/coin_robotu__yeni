@@ -66,6 +66,14 @@ def channel_status() -> dict:
     return {
         "email": "READY" if email_ready else "CONFIG_MISSING",
         "slack": "READY" if slack_ready else "CONFIG_MISSING",
+        "channel_status": {
+            "email": "READY" if email_ready else "DISABLED",
+            "slack": "READY" if slack_ready else "DISABLED",
+        },
+        "secret_status": {
+            "resend": "ready" if email_ready else "missing",
+            "slack": "ready" if slack_ready else "missing",
+        },
         "dedup_window_seconds": DEDUP_WINDOW_SECONDS,
         "rate_limit_per_min": RATE_LIMIT_PER_MIN,
         "critical_limit_30m": CRITICAL_LIMIT_30M,

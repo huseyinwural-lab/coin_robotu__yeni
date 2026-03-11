@@ -50,6 +50,13 @@ def get_alert_config(current_admin: User = Depends(require_admin)):
     return {"channels": channel_status(), "weekly_report_next_run": next_run, "timezone": "Europe/Berlin"}
 
 
+@router.post("/config")
+def refresh_alert_config(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    next_run = compute_next_run().isoformat()
+    return {"channels": channel_status(), "weekly_report_next_run": next_run, "timezone": "Europe/Berlin"}
+
+
 @router.post("/reports/run")
 def run_weekly_report(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     result = generate_weekly_report(db, trigger_source="manual", generated_by=current_admin.id)

@@ -102,7 +102,20 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Test Weekly Report Archive UI: 1) Login as admin@platform.dev / Admin12345!. 2) Navigate to /admin/reports/archive. Confirm filters render, list shows at least one report with status/sha256. 3) Click Download for a generated report and confirm a file download is triggered (or at least no UI error). 4) Confirm navigation sidebar shows Reports Archive link. 5) Ensure no console errors."
+user_problem_statement: "Test Admin User Approvals bulk actions UI: 1) Login as admin@platform.dev / Admin12345!. 2) Navigate to /admin/user-approvals. Verify search/sort inputs render, bulk approve/reject buttons visible, reject reason input required. 3) Select one user checkbox; click Bulk Approve and ensure success toast or no error. 4) Select another user; enter reject reason and click Bulk Reject; ensure success toast. 5) Verify selected count updates and list refreshes. 6) Ensure no console errors."
+
+frontend:
+  - task: "Admin User Approvals Page - UI Rendering and Navigation"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/AdminUserApprovalsPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Admin User Approvals UI Test PASSED. All requirements verified: 1) Admin login successful with admin@platform.dev credentials. 2) Successfully navigated to /admin/user-approvals. Page loaded with proper header 'KULLANICI ONAY MERKEZI'. 3) All UI elements render correctly: Search input (data-testid='admin-user-approvals-search-input'), Sort by dropdown (data-testid='admin-user-approvals-sort-by'), Sort direction dropdown (data-testid='admin-user-approvals-sort-dir'), Bulk Approve button (data-testid='admin-user-approvals-bulk-approve-button'), Bulk Reject button (data-testid='admin-user-approvals-bulk-reject-button'), Reject reason input (data-testid='admin-user-approvals-reject-reason-input'), and count display showing 'Bekleyen Talep: 5 · Seçili: 0'. 4) Found 5 pending user approval requests in table. 5) Bulk Approve test: Selected first user checkbox, count updated to 'Seçili: 1', clicked Bulk Approve button, success toast displayed 'Seçili kullanıcılar onaylandı', list refreshed from 5 to 4 users. 6) Bulk Reject test: Selected another user, entered reject reason 'User does not meet platform requirements', clicked Bulk Reject button, success toast displayed 'Seçili kullanıcılar reddedildi', list refreshed from 4 to 3 users, reject reason input cleared after action. 7) Reject reason validation: Attempted bulk reject without reason, error toast displayed 'Reject reason zorunlu' - validation working correctly. 8) NO console errors detected. NO failed network requests. All data-testid attributes present and functional. Sidebar navigation shows 'Kullanıcı Onayları' link. Feature is production-ready."
 
 frontend:
   - task: "Admin Login with credentials admin@platform.dev / Admin12345!"
@@ -215,6 +228,43 @@ frontend:
       - working: true
         agent: "testing"
         comment: "Smoke Test: Sidebar navigation working correctly. Successfully navigated between /admin/dashboard and /admin/proofs using sidebar links (data-testid='nav-admin-dashboard-link', data-testid='nav-admin-proofs-link'). Sidebar panel visible (data-testid='sidebar-panel'). All navigation items rendering correctly with proper active states."
+
+backend:
+  - task: "User Approvals API - List Endpoint"
+    implemented: true
+    working: true
+    file: "backend/routers/user_approvals.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "API endpoint GET /api/admin/user-approvals returns list of pending user approval requests correctly. Tested with status_filter='pending' and returned 5 pending users with all required fields (id, email, approval_status, approval_requested_at). Sort and search parameters working correctly. No errors detected."
+
+  - task: "User Approvals API - Bulk Approve Endpoint"
+    implemented: true
+    working: true
+    file: "backend/routers/user_approvals.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "API endpoint POST /api/admin/user-approvals/bulk-approve successfully approves selected users. Tested with 1 user ID, returned success response, user removed from pending list. Frontend displayed success toast 'Seçili kullanıcılar onaylandı' and list refreshed correctly from 5 to 4 pending users. Audit log created successfully."
+
+  - task: "User Approvals API - Bulk Reject Endpoint"
+    implemented: true
+    working: true
+    file: "backend/routers/user_approvals.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "API endpoint POST /api/admin/user-approvals/bulk-reject successfully rejects selected users with reason. Tested with 1 user ID and reason 'User does not meet platform requirements', returned success response, user removed from pending list. Frontend displayed success toast 'Seçili kullanıcılar reddedildi' and list refreshed correctly from 4 to 3 pending users. Reject reason validation working correctly (400 error when reason is empty). Audit log created successfully."
 
 backend:
   - task: "Strategy Domain API - Quarantine List Endpoint"
@@ -342,15 +392,15 @@ backend:
 
 metadata:
   created_by: "testing_agent"
-  version: "1.4"
-  test_sequence: 5
+  version: "1.5"
+  test_sequence: 6
   run_ui: true
   last_updated: "2026-03-11"
-  test_phase: "Phase4 Live Control - Release Gate Widget Regression Test"
+  test_phase: "Admin User Approvals - Bulk Actions UI Test"
 
 test_plan:
   current_focus:
-    - "Phase4 Live Control - Release Gate Widget regression test completed successfully"
+    - "Admin User Approvals - Bulk Actions UI test completed successfully"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -364,3 +414,5 @@ agent_communication:
     message: "Weekly Report Archive UI Test COMPLETED - ALL TESTS PASSED. Comprehensive testing performed on /admin/reports/archive page. Results: 1) Admin authentication working perfectly (admin@platform.dev). 2) Navigation: 'Reports Archive' link visible in sidebar, navigation to /admin/reports/archive successful. 3) UI Components: Page header renders with title 'WEEKLY REPORT ARCHIVE' and description. All 5 filters render correctly (report_type, date_from, date_to, status dropdown, trigger_source dropdown) with functional Refresh button. 4) Data Display: Reports list shows 1 report with complete details - filename (weekly_ops_report_20260311175728.csv), status (generated), period (3/1/2026 – 3/11/2026), size (387 bytes), SHA256 checksum (1c32aa8524dfc49d8cf5927de376c986d9f4acfd46f87d4bcd1c...), trigger source (manual), generated timestamp (3/11/2026, 5:57:28 PM). 5) Download Functionality: Download button enabled for 'generated' status reports. Successfully triggered file download - verified by browser download handler. File received: weekly_ops_report_20260311175728.csv. 6) Filter Testing: Status filter functional - selected 'generated', clicked refresh, page reloaded correctly. 7) Error Monitoring: NO critical console errors detected, NO failed API requests. Backend endpoints working correctly: GET /api/admin/reports/archive returns proper JSON, GET /api/admin/reports/archive/{report_id}/download triggers file download with correct headers. All data-testid attributes present and functional for automated testing. Weekly Report Archive feature is production-ready."
   - agent: "testing"
     message: "Phase4 Live Control - Release Gate Widget Regression Test COMPLETED - ALL TESTS PASSED. Regression testing after test-order backend fix. Results: 1) Admin login successful (admin@platform.dev / Admin12345!) - redirected to dashboard. 2) Navigation to /admin/phase4-live successful - page loads without errors. 3) Release Gate Widget VERIFIED WORKING: a) Release Gate metric card displays 'WARNING' status correctly. b) Live Activation metric card displays 'guarded' status correctly. c) Dry-Run Release Gate panel renders with 'Status: WARNING' and 2 reasons displayed: 'execution_quality_score_warning', 'live_mode_disabled'. 4) Additional components verified: Metrics grid (8 metrics: Mode, Exchange, Market, Whitelist, Testnet, Live Readiness, Release Gate, Live Activation), Live Readiness Factor panel (all 5 factors showing true values), Permission Status panel (overall=pass, live_activation=ready, 5 control checks displayed), Testnet Connectivity panel (REST and WS URLs visible). 5) Dashboard navigation successful - no UI errors detected. 6) Console Monitoring: ZERO console errors detected throughout entire test flow. 7) Network Monitoring: ZERO release-gate API errors (previously returned 500 status). ZERO 5xx server errors. Total network errors: 0. Backend fix confirmed successful - /api/phase4/admin/release-gate endpoint now returns proper data. Frontend Release Gate widget displays correctly with all expected UI components."
+  - agent: "testing"
+    message: "Admin User Approvals - Bulk Actions UI Test COMPLETED - ALL TESTS PASSED. Comprehensive testing of user approval management feature. Results: 1) Admin authentication successful (admin@platform.dev / Admin12345!). 2) Navigation: Successfully navigated to /admin/user-approvals. Page header displays 'KULLANICI ONAY MERKEZI' with description. Sidebar shows 'Kullanıcı Onayları' link. 3) UI Components: ALL elements render correctly - Search input, Sort by dropdown (requested_at/email), Sort direction dropdown (asc/desc), Yenile (Refresh) button, Bulk Approve button, Bulk Reject button, Reject reason input. Count display shows 'Bekleyen Talep: 5 · Seçili: 0'. 4) Data Display: Table displays 5 pending user approval requests with columns (checkbox, E-posta, Durum, Talep Zamanı). All rows have proper data-testid attributes. 5) Bulk Approve Test: Selected 1 user checkbox, count updated to 'Seçili: 1', clicked Bulk Approve button, success toast displayed 'Seçili kullanıcılar onaylandı', list automatically refreshed from 5 to 4 users. Backend API POST /api/admin/user-approvals/bulk-approve working correctly. 6) Bulk Reject Test: Selected another user, entered reject reason 'User does not meet platform requirements', clicked Bulk Reject button, success toast displayed 'Seçili kullanıcılar reddedildi', list refreshed from 4 to 3 users, reject reason input cleared after action. Backend API POST /api/admin/user-approvals/bulk-reject working correctly. 7) Validation Test: Attempted bulk reject without reason, error toast displayed 'Reject reason zorunlu' - frontend validation working as expected. 8) Error Monitoring: ZERO console errors detected. ZERO failed network requests. 9) Backend Integration: GET /api/admin/user-approvals returns correct pending user list, POST /api/admin/user-approvals/bulk-approve successfully approves users, POST /api/admin/user-approvals/bulk-reject successfully rejects users with reason validation. All data-testid attributes present and functional for automated testing. Admin User Approvals feature is production-ready."
