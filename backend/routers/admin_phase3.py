@@ -13,6 +13,7 @@ from schemas import (
     ExecutionStateTransitionResponse,
     ExecutionPolicyUpdate,
     FailedEventResponse,
+    HardeningChecklistRunResponse,
     HardeningSummaryResponse,
     RiskExposureGroupCreate,
     RiskExposureGroupResponse,
@@ -22,6 +23,7 @@ from schemas import (
 from services.audit_service import create_audit_log
 from services.execution_policy_service import get_policy_for_strategy
 from services.failed_event_service import create_failed_event, mark_failed_event_resolved, mark_failed_event_retry
+from services.hardening_checklist_service import get_latest_hardening_checklist_run, run_hardening_checklist
 from services.pipeline.cache_store import incr_counter
 from services.pipeline.execution_engine import open_paper_position
 from services.pipeline.runtime import pipeline_runtime
@@ -283,6 +285,29 @@ def list_execution_state_transitions(
     return pipeline_runtime.list_execution_state_transitions(db, limit)
 
 
+@router.post("/hardening-checklist/run", response_model=HardeningChecklistRunResponse)
+def run_hardening_checklist_endpoint(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    checklist = run_hardening_checklist(db)
+    create_audit_log(
+        db,
+        action="hardening_checklist_run",
+        entity_type="hardening_checklist",
+        entity_id=checklist.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"score": checklist.score, "critical_blocked": checklist.critical_blocked},
+    )
+    return checklist
+
+
+@router.get("/hardening-checklist/latest", response_model=HardeningChecklistRunResponse)
+def get_latest_hardening_checklist_endpoint(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    latest = get_latest_hardening_checklist_run(db)
+    if latest is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hardening checklist run yet")
+    return latest
+
+
 @router.post("/execution-state-transitions/simulate")
 def simulate_execution_state_flow(
     current_admin: User = Depends(require_admin),
@@ -290,6 +315,7 @@ def simulate_execution_state_flow(
     strategy_type: str = Query(default="breakout"),
     symbol: str = Query(default="BTCUSDT"),
     side: str = Query(default="long"),
+    outcome: str = Query(default="filled"),
 ):
     bot = (
         db.query(BotProfile)
@@ -328,6 +354,11 @@ def simulate_execution_state_flow(
             "retry_limit": policy.retry_limit,
         },
         response_payload={"mode": "simulation", "trigger": "admin_manual"},
+        execution_context={
+            "forced_outcome": None if outcome == "filled" else outcome,
+            "spread_bps": 12,
+            "latency_ms": 220,
+        },
     )
 
     create_audit_log(

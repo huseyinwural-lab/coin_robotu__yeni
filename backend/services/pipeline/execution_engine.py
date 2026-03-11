@@ -5,11 +5,43 @@ from sqlalchemy.orm import Session
 from models import BotProfile, ExecutionEvent, ExecutionStateTransition, PaperPosition, PositionLedgerEvent, User
 
 
-def _build_state_path(execution_policy: dict) -> list[str]:
+def _build_state_path(execution_policy: dict, execution_context: dict | None = None) -> list[str]:
+    context = execution_context or {}
     path = ["created", "submitted", "acknowledged"]
     order_preference = execution_policy.get("order_preference", "limit_first")
     fallback_behavior = execution_policy.get("fallback_behavior", "market_fallback")
     partial_fill_tolerance = float(execution_policy.get("partial_fill_tolerance_pct", 50))
+    timeout_seconds = int(execution_policy.get("timeout_seconds", 8))
+    execution_style = execution_policy.get("style", execution_policy.get("execution_style", "balanced"))
+    spread_bps = float(context.get("spread_bps", 0))
+    latency_ms = float(context.get("latency_ms", 0))
+    forced_outcome = context.get("forced_outcome")
+
+    if forced_outcome == "rejected":
+        path.append("rejected")
+        return path
+    if forced_outcome == "failed":
+        path.append("failed")
+        return path
+    if forced_outcome == "timeout":
+        path.append("timeout")
+        if fallback_behavior in {"market_fallback", "limit_retry_then_market"}:
+            path.extend(["fallback_submitted", "filled"])
+        else:
+            path.extend(["cancel_requested", "cancelled", "failed"])
+        return path
+
+    if execution_style == "aggressive" and spread_bps > 70:
+        path.append("rejected")
+        return path
+
+    if latency_ms > 1200:
+        path.append("timeout")
+        if fallback_behavior in {"market_fallback", "limit_retry_then_market"}:
+            path.extend(["fallback_submitted", "filled"])
+        else:
+            path.extend(["cancel_requested", "cancelled", "failed"])
+        return path
 
     if order_preference == "market_first":
         path.append("filled")
@@ -18,8 +50,16 @@ def _build_state_path(execution_policy: dict) -> list[str]:
     if partial_fill_tolerance < 95:
         path.append("partially_filled")
 
+    if timeout_seconds <= 3:
+        path.append("timeout")
+        if fallback_behavior in {"market_fallback", "limit_retry_then_market"}:
+            path.extend(["fallback_submitted", "filled"])
+        else:
+            path.extend(["cancel_requested", "cancelled", "failed"])
+        return path
+
     if fallback_behavior == "cancel_no_fill":
-        path.extend(["cancel_requested", "cancelled"])
+        path.extend(["cancel_requested", "cancelled", "failed"])
         return path
 
     if fallback_behavior in {"market_fallback", "limit_retry_then_market"}:
@@ -44,8 +84,9 @@ def open_paper_position(
     take_profit: float,
     execution_policy: dict,
     response_payload: dict,
+    execution_context: dict | None = None,
 ) -> dict:
-    state_path = _build_state_path(execution_policy)
+    state_path = _build_state_path(execution_policy, execution_context)
     final_state = state_path[-1]
     enriched_payload = {
         **response_payload,

@@ -14,6 +14,7 @@ import { ExecutionStatesPage } from "@/pages/ExecutionStatesPage";
 import { ExposureGroupsPage } from "@/pages/ExposureGroupsPage";
 import { ExchangeMockPage } from "@/pages/ExchangeMockPage";
 import { FailedEventsPage } from "@/pages/FailedEventsPage";
+import { HardeningChecklistPage } from "@/pages/HardeningChecklistPage";
 import { LandingPage } from "@/pages/LandingPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { MarketUniversePage } from "@/pages/MarketUniversePage";
@@ -58,6 +59,7 @@ function App() {
             <Route path="execution-policies" element={<ProtectedRoute role="admin"><ExecutionPoliciesPage /></ProtectedRoute>} />
             <Route path="exposure-groups" element={<ProtectedRoute role="admin"><ExposureGroupsPage /></ProtectedRoute>} />
             <Route path="execution-states" element={<ProtectedRoute role="admin"><ExecutionStatesPage /></ProtectedRoute>} />
+            <Route path="hardening-checklist" element={<ProtectedRoute role="admin"><HardeningChecklistPage /></ProtectedRoute>} />
             <Route path="failed-events" element={<ProtectedRoute role="admin"><FailedEventsPage /></ProtectedRoute>} />
             <Route path="state-rebuild" element={<ProtectedRoute role="admin"><StateRebuildLogsPage /></ProtectedRoute>} />
             <Route path="backtest-cards" element={<ProtectedRoute role="admin"><BacktestCardsPage /></ProtectedRoute>} />

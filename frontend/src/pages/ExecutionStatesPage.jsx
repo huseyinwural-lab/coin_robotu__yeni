@@ -29,10 +29,12 @@ export const ExecutionStatesPage = () => {
     return () => clearInterval(timer);
   }, [loadData]);
 
-  const simulateStateFlow = async () => {
+  const simulateStateFlow = async (outcome = "filled") => {
     try {
-      await apiClient.post("/admin-phase3/execution-state-transitions/simulate?strategy_type=breakout&symbol=BTCUSDT&side=long");
-      toast.success("Execution state simülasyonu üretildi");
+      await apiClient.post(
+        `/admin-phase3/execution-state-transitions/simulate?strategy_type=breakout&symbol=BTCUSDT&side=long&outcome=${outcome}`,
+      );
+      toast.success(`Execution state simülasyonu üretildi: ${outcome}`);
       loadData();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "State simülasyonu başarısız");
@@ -44,9 +46,17 @@ export const ExecutionStatesPage = () => {
       <header className="border border-blue-900 bg-slate-900 p-4" data-testid="execution-states-header">
         <h2 className="text-4xl font-black uppercase tracking-tight text-blue-300" data-testid="execution-states-title">Execution State Machine</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="execution-states-description">State geçiş zinciri ve hardening çekirdek metrikleri.</p>
-        <Button className="mt-3 bg-blue-600 text-white hover:bg-blue-700" onClick={simulateStateFlow} data-testid="execution-states-simulate-button">
-          Simulate State Flow
-        </Button>
+        <div className="mt-3 flex flex-wrap gap-2" data-testid="execution-states-simulate-group">
+          <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => simulateStateFlow("filled")} data-testid="execution-states-simulate-filled-button">
+            Simulate Filled
+          </Button>
+          <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={() => simulateStateFlow("timeout")} data-testid="execution-states-simulate-timeout-button">
+            Simulate Timeout
+          </Button>
+          <Button className="bg-red-600 text-white hover:bg-red-700" onClick={() => simulateStateFlow("rejected")} data-testid="execution-states-simulate-rejected-button">
+            Simulate Rejected
+          </Button>
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="execution-states-metrics-grid">

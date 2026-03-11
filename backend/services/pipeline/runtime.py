@@ -195,6 +195,10 @@ class PipelineRuntime:
                                 "strategy_id": signal.strategy_id,
                                 "risk_tags": risk_decision.risk_tags,
                             },
+                            execution_context={
+                                "spread_bps": spread_bps,
+                                "latency_ms": self.market_data_engine.latency_ms,
+                            },
                         )
                         incr_counter(self.cache, "metrics:state_transitions:5m", execution_result["transition_count"])
 

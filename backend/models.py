@@ -265,3 +265,15 @@ class ExecutionStateTransition(Base):
     sequence: Mapped[int] = mapped_column(Integer)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class HardeningChecklistRun(Base):
+    __tablename__ = "hardening_checklist_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    score: Mapped[float] = mapped_column(Float, default=0)
+    critical_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    readiness_status: Mapped[str] = mapped_column(String(20), default="blocked")
+    checklist_items: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

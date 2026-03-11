@@ -379,3 +379,15 @@ class HardeningSummaryResponse(BaseModel):
     failed_events_dead: int
     last_state_rebuild_status: str
     last_state_rebuild_at: datetime | None
+
+
+class HardeningChecklistRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    score: float
+    critical_blocked: bool
+    readiness_status: str
+    checklist_items: list[dict]
+    summary: dict
+    created_at: datetime
