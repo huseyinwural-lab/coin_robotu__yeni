@@ -18,11 +18,10 @@ def main() -> int:
         print(f"reason_code={gate.get('reason_code', 'ok')}")
         if gate.get("override_expires_at"):
             print(f"override_expires_at={gate['override_expires_at']}")
-        if gate["status"] == "PASS_WITH_OVERRIDE":
+        if gate.get("override_active"):
             used = mark_active_override_used_in_deploy(db)
             if used is not None:
                 print(f"override_id={used.id}")
-            return 0
         if gate["status"] == "BLOCKED":
             reason = gate["reasons"][0] if gate["reasons"] else "unknown"
             print(f"reason={reason}")

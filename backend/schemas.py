@@ -755,6 +755,9 @@ class ArtifactManifestItemResponse(BaseModel):
     proof_id: str
     evidence_type: str
     status: str
+    chain_position: int | None = None
+    prev_chain_hash: str | None = None
+    chain_hash: str | None = None
 
 
 class ArtifactVerifyResponse(BaseModel):
@@ -763,6 +766,32 @@ class ArtifactVerifyResponse(BaseModel):
     sha256_expected: str
     sha256_actual: str
     verified: bool
+    chain_position: int | None = None
+    prev_chain_hash: str | None = None
+    chain_hash: str | None = None
+    chain_valid: bool
+    chain_broken: bool
+    chain_broken_index: int | None = None
+    chain_broken_artifact_id: str | None = None
+
+
+class ArtifactBatchVerifyItem(BaseModel):
+    artifact_id: str
+    filename: str | None = None
+    artifact_type: str | None = None
+    status: str
+    reason_codes: list[str]
+
+
+class ArtifactBatchVerifyResponse(BaseModel):
+    total: int
+    verified: int
+    mismatch: int
+    missing: int
+    chain_broken: int
+    chain_broken_index: int | None = None
+    chain_broken_artifact_id: str | None = None
+    items: list[ArtifactBatchVerifyItem]
 
 
 class StrategyDefinitionCreate(BaseModel):
@@ -1265,6 +1294,8 @@ class PermissionDriftTrendResponse(BaseModel):
 class ReleaseGateStatusResponse(BaseModel):
     status: str
     reasons: list[str]
+    fail_reasons: list[str]
+    warning_reasons: list[str]
     live_activation: str
     environment: str | None = None
     reason_code: str | None = None

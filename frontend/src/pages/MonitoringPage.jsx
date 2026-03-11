@@ -178,7 +178,7 @@ export const MonitoringPage = () => {
         <MetricCard label="Open Positions" value={isLoading ? "loading" : (metrics?.open_positions ?? "-")} testId="monitoring-open-positions" />
         <MetricCard label="Latency ms" value={isLoading ? "loading" : (metrics?.latency_ms ?? "-")} tone="blue" testId="monitoring-latency" />
         <MetricCard label="Transitions / 5m" value={isLoading ? "loading" : (metrics?.execution_transitions_5m ?? "-")} tone="orange" testId="monitoring-transitions" />
-        <MetricCard label="Release Gate" value={isLoading ? "loading" : (metrics?.release_gate_status ?? "-")} tone={metrics?.release_gate_status === "PASS" ? "blue" : metrics?.release_gate_status === "WARNING" ? "orange" : "red"} testId="monitoring-release-gate" />
+        <MetricCard label="Release Gate" value={isLoading ? "loading" : (metrics?.release_gate_status ?? "-")} tone={metrics?.release_gate_status === "READY" ? "blue" : metrics?.release_gate_status === "WARNING" ? "orange" : "red"} testId="monitoring-release-gate" />
         <MetricCard label="Gate Checked" value={isLoading ? "loading" : (metrics?.release_gate_last_checked ?? "-")} tone="blue" testId="monitoring-release-gate-checked" />
         <MetricCard label="Kill Switch" value={isLoading ? "loading" : String(metrics?.global_trading_pause ?? false)} tone={metrics?.global_trading_pause ? "red" : "blue"} testId="monitoring-kill-switch" />
         <MetricCard label="Exec Errors/5m" value={isLoading ? "loading" : (metrics?.execution_errors_5m ?? "-")} tone="red" testId="monitoring-execution-errors-5m" />

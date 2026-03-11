@@ -20,20 +20,25 @@ from models import (
     AuditLog,
     AlertPolicy,
     BotProfile,
+    ExchangeRegistry,
     ExecutionLifecycleEvent,
     ExecutionMetric,
+    FailedEvent,
     HardeningChecklistRun,
     LiveActivationConfig,
     PaperPosition,
     PermissionDriftEvent,
     ReleaseGateOverride,
     RiskExposureGroup,
+    RiskOrchestratorPolicy,
     RiskPolicy,
     TestnetExecutionLog,
     User,
     UserExchangeSetting,
     UserRiskSetting,
 )
+from services.artifact_service import verify_manifest_chain
+from services.risk_orchestrator_service import get_or_create_policy
 from services.pipeline.cache_store import read_candles
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
@@ -1881,6 +1886,72 @@ def _permission_drift_alert_active(db: Session) -> bool:
     return critical_count > 0
 
 
+def _clock_drift_seconds() -> float | None:
+    ping = adapter.ping()
+    server_time = ping.get("server_time")
+    if not server_time:
+        return None
+    try:
+        server_ts = float(server_time)
+    except (TypeError, ValueError):
+        return None
+    if server_ts > 1e12:
+        server_ts = server_ts / 1000
+    server_dt = datetime.fromtimestamp(server_ts, tz=timezone.utc)
+    return abs((datetime.now(timezone.utc) - server_dt).total_seconds())
+
+
+def _worker_lag_seconds() -> float:
+    try:
+        raw = redis_client.lindex("runtime:events:all", 0)
+        if not raw:
+            return 0.0
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        payload = json.loads(raw)
+        created_at = payload.get("created_at")
+        if not created_at:
+            return 0.0
+        event_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        return abs((datetime.now(timezone.utc) - event_dt).total_seconds())
+    except Exception:
+        return 0.0
+
+
+def _rate_limit_health(db: Session) -> str:
+    registry = db.query(ExchangeRegistry).filter(ExchangeRegistry.exchange_code == "binance").first()
+    if not registry:
+        return "unknown"
+    status = (registry.rate_limit_status or "unknown").lower()
+    if status in {"ok", "healthy"}:
+        return "ok"
+    if status in {"critical", "blocked"}:
+        return "critical"
+    return "warning"
+
+
+def _risk_orchestrator_enabled(db: Session) -> bool:
+    policy = db.query(RiskOrchestratorPolicy).filter(RiskOrchestratorPolicy.id == "global").first()
+    if policy is None:
+        policy = get_or_create_policy(db)
+    return policy is not None
+
+
+def _kill_switch_tested(db: Session) -> bool:
+    threshold = datetime.now(timezone.utc) - timedelta(days=30)
+    actions = {"kill_switch_triggered", "kill_switch_reset", "kill_switch_tested"}
+    count = (
+        db.query(AuditLog)
+        .filter(AuditLog.created_at >= threshold, AuditLog.action.in_(actions))
+        .count()
+    )
+    return count > 0
+
+
+def _failed_event_backlog(db: Session) -> int:
+    return db.query(FailedEvent).filter(FailedEvent.status == "dead").count()
+
+
 def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict:
     env = (environment or "").lower().strip()
     if env not in {"stage", "prod"}:
@@ -1894,6 +1965,17 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
     active_override = override is not None
     live_mode_enabled = bool(config.live_mode_enabled)
 
+    permission_overview = admin_permission_overview(db)
+    permission_controls = {item.get("key"): item for item in permission_overview.get("controls", [])}
+
+    clock_drift = _clock_drift_seconds()
+    worker_lag = _worker_lag_seconds()
+    rate_limit_health = _rate_limit_health(db)
+    risk_orchestrator_ok = _risk_orchestrator_enabled(db)
+    kill_switch_tested = _kill_switch_tested(db)
+    chain_status = verify_manifest_chain()
+    failed_backlog = _failed_event_backlog(db)
+
     score_block_threshold = 40 if env == "stage" else 60
     score_warn_threshold = 60 if env == "stage" else 75
 
@@ -1906,7 +1988,7 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
     if execution_quality_score < score_block_threshold:
         blockers.append("execution_quality_score")
     elif execution_quality_score < score_warn_threshold:
-        warnings.append("execution_quality_score_warn")
+        warnings.append("execution_quality_score_warning")
 
     if permission_drift_alert:
         if env == "prod":
@@ -1914,59 +1996,101 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
         else:
             warnings.append("permission_drift_alert")
 
+    if permission_overview.get("overall_status") != "pass":
+        blockers.append("permission_check_fail")
+    else:
+        for key, control in permission_controls.items():
+            status = control.get("status")
+            if status == "fail":
+                blockers.append(f"{key}_fail")
+            elif status == "warning":
+                warnings.append(f"{key}_warning")
+
+    if clock_drift is None:
+        warnings.append("clock_drift_unknown")
+    elif clock_drift > 2:
+        blockers.append("clock_drift")
+    elif clock_drift > 1:
+        warnings.append("clock_drift_warning")
+
+    if worker_lag > 60:
+        blockers.append("worker_lag")
+    elif worker_lag > 30:
+        warnings.append("worker_lag_warning")
+
+    if rate_limit_health == "critical":
+        blockers.append("rate_limit_health")
+    elif rate_limit_health == "warning":
+        warnings.append("rate_limit_health_warning")
+    elif rate_limit_health == "unknown":
+        warnings.append("rate_limit_health_unknown")
+
+    if not risk_orchestrator_ok:
+        blockers.append("risk_orchestrator_missing")
+
+    if not kill_switch_tested:
+        warnings.append("kill_switch_not_tested")
+
+    if chain_status.get("chain_broken"):
+        blockers.append("chain_integrity_failure")
+    elif chain_status.get("total", 0) == 0:
+        warnings.append("proof_pipeline_empty")
+
+    if failed_backlog >= 10:
+        blockers.append("quarantine_backlog")
+    elif failed_backlog > 0:
+        warnings.append("quarantine_backlog")
+
     if not live_mode_enabled:
         warnings.append("live_mode_disabled")
 
-    if blockers:
-        if active_override:
-            return {
-                "status": "PASS_WITH_OVERRIDE",
-                "environment": env,
-                "reasons": ["manual_override_active", *blockers],
-                "reason_code": override.reason_code,
-                "override_expires_at": override.expires_at,
-                "override_id": override.id,
-                "live_activation": "guarded_override",
-                "metrics": {
-                    "exchange_health": exchange_health,
-                    "execution_quality_score": execution_quality_score,
-                    "permission_drift_alert": permission_drift_alert,
-                    "active_override": active_override,
-                    "live_mode_enabled": live_mode_enabled,
-                },
-            }
-        return {
-            "status": "BLOCKED",
-            "environment": env,
-            "reasons": blockers,
-            "reason_code": blockers[0],
-            "override_expires_at": None,
-            "override_id": None,
-            "live_activation": "disabled",
-            "metrics": {
-                "exchange_health": exchange_health,
-                "execution_quality_score": execution_quality_score,
-                "permission_drift_alert": permission_drift_alert,
-                "active_override": active_override,
-                "live_mode_enabled": live_mode_enabled,
-            },
-        }
+    fail_reasons = list(dict.fromkeys(blockers))
+    warning_reasons = list(dict.fromkeys(warnings))
 
-    status = "WARN" if warnings else "PASS"
+    status = "READY"
+    live_activation = "ready"
+    reason_code = "ok"
+
+    if fail_reasons:
+        if active_override:
+            status = "WARNING"
+            live_activation = "guarded_override"
+            warning_reasons = ["manual_override_active", *warning_reasons]
+            reason_code = override.reason_code
+        else:
+            status = "BLOCKED"
+            live_activation = "disabled"
+            reason_code = fail_reasons[0]
+    elif warning_reasons:
+        status = "WARNING"
+        live_activation = "guarded"
+        reason_code = warning_reasons[0]
+
+    reasons = [*fail_reasons, *warning_reasons]
+
     return {
         "status": status,
         "environment": env,
-        "reasons": warnings,
-        "reason_code": warnings[0] if warnings else "ok",
+        "reasons": reasons,
+        "fail_reasons": fail_reasons,
+        "warning_reasons": warning_reasons,
+        "reason_code": reason_code,
         "override_expires_at": override.expires_at if active_override else None,
         "override_id": override.id if active_override else None,
-        "live_activation": "guarded" if status == "WARN" else "ready",
+        "live_activation": live_activation,
         "metrics": {
             "exchange_health": exchange_health,
             "execution_quality_score": execution_quality_score,
             "permission_drift_alert": permission_drift_alert,
             "active_override": active_override,
             "live_mode_enabled": live_mode_enabled,
+            "clock_drift_seconds": clock_drift,
+            "worker_lag_seconds": worker_lag,
+            "rate_limit_health": rate_limit_health,
+            "risk_orchestrator_enabled": risk_orchestrator_ok,
+            "kill_switch_tested": kill_switch_tested,
+            "chain_integrity_broken": chain_status.get("chain_broken"),
+            "failed_event_backlog": failed_backlog,
         },
     }
 
@@ -2042,8 +2166,10 @@ def release_gate_view(db: Session, environment: str = "prod") -> dict:
     return {
         "status": policy["status"],
         "reasons": policy["reasons"],
+        "fail_reasons": policy.get("fail_reasons", []),
+        "warning_reasons": policy.get("warning_reasons", []),
         "live_activation": policy["live_activation"],
-        "override_active": policy["status"] == "PASS_WITH_OVERRIDE" or bool(policy.get("override_id")),
+        "override_active": bool(policy.get("override_id")),
         "override_expires_at": policy.get("override_expires_at"),
         "override_id": policy.get("override_id"),
         "environment": policy.get("environment", environment),
