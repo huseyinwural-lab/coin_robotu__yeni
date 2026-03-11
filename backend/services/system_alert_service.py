@@ -101,7 +101,8 @@ def create_system_alert(
             "details": alert.details,
             "entity_key": alert.entity_key,
             "root_cause_code": alert.root_cause_code,
-        }
+        },
+        db=db,
     )
     alert.delivery_status = delivery_status
     db.commit()
@@ -109,11 +110,46 @@ def create_system_alert(
     return alert
 
 
-def list_system_alerts(db: Session, status: str | None = None, limit: int = 50) -> list[SystemAlert]:
+def list_system_alerts(
+    db: Session,
+    *,
+    status: str | None = None,
+    severity: str | None = None,
+    alert_type: str | None = None,
+    entity_key: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    limit: int = 50,
+) -> list[SystemAlert]:
     query = db.query(SystemAlert)
     if status:
         query = query.filter(SystemAlert.status == status)
+    if severity:
+        query = query.filter(SystemAlert.severity == severity)
+    if alert_type:
+        query = query.filter(SystemAlert.alert_type == alert_type)
+    if entity_key:
+        query = query.filter(SystemAlert.entity_key == entity_key)
+    if date_from:
+        query = query.filter(SystemAlert.created_at >= date_from)
+    if date_to:
+        query = query.filter(SystemAlert.created_at <= date_to)
     return query.order_by(SystemAlert.last_triggered_at.desc()).limit(limit).all()
+
+
+def build_alert_timeline(db: Session, *, days: int = 14) -> list[dict]:
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        db.query(SystemAlert)
+        .filter(SystemAlert.created_at >= since)
+        .order_by(SystemAlert.created_at.asc())
+        .all()
+    )
+    buckets: dict[str, int] = {}
+    for row in rows:
+        day = row.created_at.date().isoformat()
+        buckets[day] = buckets.get(day, 0) + 1
+    return [{"date": day, "count": buckets[day]} for day in sorted(buckets.keys())]
 
 
 def update_system_alert_status(db: Session, alert: SystemAlert, status: str) -> SystemAlert:

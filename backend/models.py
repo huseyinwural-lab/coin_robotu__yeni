@@ -30,7 +30,13 @@ class User(Base):
     approval_status: Mapped[str] = mapped_column(String(20), default="approved")
     approval_requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    @property
+    def status(self) -> str:
+        return "active" if self.is_active else "disabled"
 
 
 class BotProfile(Base):
@@ -476,6 +482,17 @@ class AlertPolicy(Base):
     permission_drift_critical_per_day: Mapped[int] = mapped_column(Integer, default=5)
     gate_override_warning_per_day: Mapped[int] = mapped_column(Integer, default=2)
     gate_override_critical_per_day: Mapped[int] = mapped_column(Integer, default=5)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class AlertChannelConfig(Base):
+    __tablename__ = "alert_channel_configs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default="global")
+    resend_api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
+    alert_from: Mapped[str] = mapped_column(String(255), default="")
+    alert_to: Mapped[str] = mapped_column(Text, default="")
+    slack_webhook_url_encrypted: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 

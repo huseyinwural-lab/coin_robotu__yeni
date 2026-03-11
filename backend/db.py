@@ -261,6 +261,13 @@ def _ensure_sqlite_phase4_columns():
             if "updated_at" not in weekly_report_columns:
                 connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN updated_at DATETIME"))
 
+            user_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(users)"))}
+            if user_columns:
+                if "disabled_at" not in user_columns:
+                    connection.execute(text("ALTER TABLE users ADD COLUMN disabled_at DATETIME"))
+                if "updated_at" not in user_columns:
+                    connection.execute(text("ALTER TABLE users ADD COLUMN updated_at DATETIME"))
+
             connection.execute(
                 text(
                     """

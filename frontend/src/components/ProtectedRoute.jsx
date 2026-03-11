@@ -2,6 +2,8 @@ import { Navigate } from "react-router-dom";
 
 import { useAuth } from "@/context/AuthContext";
 
+const adminRoles = new Set(["super_admin", "admin", "ops"]);
+
 export const ProtectedRoute = ({ children, role = null }) => {
   const { user, loading } = useAuth();
 
@@ -18,8 +20,13 @@ export const ProtectedRoute = ({ children, role = null }) => {
     return <Navigate to={loginPath} replace />;
   }
 
-  if (role && user.role !== role) {
-    return <Navigate to={user.role === "admin" ? "/admin/dashboard" : "/user/dashboard"} replace />;
+  const roleMatched =
+    !role
+    || (role === "admin" && adminRoles.has(user.role))
+    || (role !== "admin" && user.role === role);
+
+  if (!roleMatched) {
+    return <Navigate to={adminRoles.has(user.role) ? "/admin/dashboard" : "/user/dashboard"} replace />;
   }
 
   return children;

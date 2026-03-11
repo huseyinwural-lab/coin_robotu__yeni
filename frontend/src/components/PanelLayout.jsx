@@ -40,7 +40,9 @@ const userNavItems = [
 
 const adminOnlyItems = [
   { to: "/admin/dashboard", label: "Admin Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
+  { to: "/admin/users", label: "Kullanıcı Yönetimi", icon: UserCog, testId: "nav-admin-users-link" },
   { to: "/admin/user-approvals", label: "Kullanıcı Onayları", icon: ListChecks, testId: "nav-admin-user-approvals-link" },
+  { to: "/admin/system-alerts", label: "System Alerts", icon: AlertTriangle, testId: "nav-admin-system-alerts-link" },
   { to: "/admin/exchanges", label: "Exchanges", icon: Globe, testId: "nav-admin-exchanges-link" },
   { to: "/admin/proofs", label: "Proof Panel", icon: ShieldCheck, testId: "nav-admin-proofs-link" },
   { to: "/admin/reports/archive", label: "Reports Archive", icon: Archive, testId: "nav-reports-archive-link" },
@@ -66,10 +68,11 @@ const adminOnlyItems = [
 export const PanelLayout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const adminRoles = new Set(["super_admin", "admin", "ops"]);
   const [gateBadge, setGateBadge] = useState(null);
   const [nowTick, setNowTick] = useState(Date.now());
-  const navItems = user?.role === "admin" ? adminOnlyItems : userNavItems;
-  const isAdmin = user?.role === "admin";
+  const isAdmin = adminRoles.has(user?.role);
+  const navItems = isAdmin ? adminOnlyItems : userNavItems;
   const roleThemeClass = isAdmin ? "admin-ops-theme" : "user-theme";
   const sidebarClass = isAdmin ? "border-orange-700 bg-orange-300" : "border-slate-800 bg-slate-900";
   const brandTitleClass = isAdmin ? "text-black" : "text-orange-500";

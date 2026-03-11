@@ -7,13 +7,16 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    email: EmailStr
+    email: str
     role: str
+    status: str
     is_active: bool
     approval_status: str
     approval_requested_at: datetime
     approved_at: datetime | None
+    disabled_at: datetime | None = None
     created_at: datetime
+    updated_at: datetime | None = None
 
 
 class RegisterRequest(BaseModel):
@@ -24,6 +27,21 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class UserRoleUpdateRequest(BaseModel):
+    role: str
+
+
+class UserStatusUpdateRequest(BaseModel):
+    status: str
+
+
+class AlertChannelConfigUpdateRequest(BaseModel):
+    resend_api_key: str | None = None
+    alert_from: str | None = None
+    alert_to: str | None = None
+    slack_webhook_url: str | None = None
 
 
 class AuthResponse(BaseModel):

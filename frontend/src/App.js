@@ -15,7 +15,9 @@ import { AdminRiskOrchestratorAnalyticsPage } from "@/pages/AdminRiskOrchestrato
 import { AdminRuntimeQuarantinePage } from "@/pages/AdminRuntimeQuarantinePage";
 import { AdminRuntimeRecoveryPage } from "@/pages/AdminRuntimeRecoveryPage";
 import { AdminStrategiesPage } from "@/pages/AdminStrategiesPage";
+import { AdminSystemAlertsPage } from "@/pages/AdminSystemAlertsPage";
 import { AdminUserApprovalsPage } from "@/pages/AdminUserApprovalsPage";
+import { AdminUsersPage } from "@/pages/AdminUsersPage";
 import { AuditLogsPage } from "@/pages/AuditLogsPage";
 import { BacktestCardsPage } from "@/pages/BacktestCardsPage";
 import { BacktestInsightsPage } from "@/pages/BacktestInsightsPage";
@@ -41,11 +43,12 @@ import { UserDashboardPage } from "@/pages/UserDashboardPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
+  const adminRoles = new Set(["super_admin", "admin", "ops"]);
 
   if (!user) {
     return <LandingPage />;
   }
-  if (user.role === "admin") {
+  if (adminRoles.has(user.role)) {
     return <Navigate to="/admin/dashboard" replace />;
   }
   return <Navigate to="/user/dashboard" replace />;
@@ -70,7 +73,9 @@ function App() {
             }
           >
             <Route path="dashboard" element={<AdminDashboardPage />} />
+            <Route path="users" element={<AdminUsersPage />} />
             <Route path="user-approvals" element={<AdminUserApprovalsPage />} />
+            <Route path="system-alerts" element={<AdminSystemAlertsPage />} />
             <Route path="exchanges" element={<AdminExchangesPage />} />
             <Route path="proofs" element={<AdminProofsPage />} />
             <Route path="reports/archive" element={<AdminReportsArchivePage />} />

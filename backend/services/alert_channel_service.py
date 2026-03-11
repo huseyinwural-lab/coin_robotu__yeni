@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import importlib
 import os
+import hashlib
+from base64 import urlsafe_b64encode
 from datetime import datetime, timezone
 from typing import Any
 
+from cryptography.fernet import Fernet
+
+from core.config import settings
 from db import redis_client
+from models import AlertChannelConfig
+
+from sqlalchemy.orm import Session
 
 RATE_LIMIT_PER_MIN = 5
 CRITICAL_LIMIT_30M = 3
@@ -16,6 +24,121 @@ def _parse_recipients(raw: str | None) -> list[str]:
     if not raw:
         return []
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _mask_secret(raw: str | None) -> str:
+    value = (raw or "").strip()
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "*" * len(value)
+    return f"{value[:4]}...{value[-4:]}"
+
+
+def _build_crypto() -> Fernet:
+    digest = hashlib.sha256(settings.jwt_secret.encode()).digest()
+    return Fernet(urlsafe_b64encode(digest))
+
+
+def encrypt_secret(raw: str) -> str:
+    if not raw:
+        return ""
+    return _build_crypto().encrypt(raw.encode()).decode()
+
+
+def decrypt_secret(raw_encrypted: str) -> str:
+    if not raw_encrypted:
+        return ""
+    return _build_crypto().decrypt(raw_encrypted.encode()).decode()
+
+
+def _get_config_row(db: Session | None) -> AlertChannelConfig | None:
+    if db is None:
+        return None
+    return db.query(AlertChannelConfig).filter(AlertChannelConfig.id == "global").first()
+
+
+def _resolve_config(db: Session | None = None) -> dict:
+    env_api_key = os.environ.get("RESEND_API_KEY")
+    env_sender = os.environ.get("ALERT_FROM")
+    env_recipients = _parse_recipients(os.environ.get("ALERT_TO"))
+    env_webhook = os.environ.get("SLACK_WEBHOOK_URL")
+
+    api_key = env_api_key
+    sender = env_sender
+    recipients = env_recipients
+    webhook_url = env_webhook
+    source = "environment"
+
+    row = _get_config_row(db)
+    if row:
+        row_api_key = decrypt_secret(row.resend_api_key_encrypted) if row.resend_api_key_encrypted else ""
+        row_sender = (row.alert_from or "").strip()
+        row_recipients = _parse_recipients(row.alert_to)
+        row_webhook = decrypt_secret(row.slack_webhook_url_encrypted) if row.slack_webhook_url_encrypted else ""
+
+        if row_api_key:
+            api_key = row_api_key
+        if row_sender:
+            sender = row_sender
+        if row_recipients:
+            recipients = row_recipients
+        if row_webhook:
+            webhook_url = row_webhook
+
+        if any([row_api_key, row_sender, row_recipients, row_webhook]):
+            source = "admin_config"
+
+    return {
+        "api_key": api_key,
+        "sender": sender,
+        "recipients": recipients,
+        "webhook_url": webhook_url,
+        "source": source,
+    }
+
+
+def upsert_alert_channel_config(
+    db: Session,
+    *,
+    resend_api_key: str | None,
+    alert_from: str | None,
+    alert_to: str | None,
+    slack_webhook_url: str | None,
+) -> dict:
+    row = _get_config_row(db)
+    if row is None:
+        row = AlertChannelConfig(id="global")
+        db.add(row)
+
+    if resend_api_key is not None:
+        row.resend_api_key_encrypted = encrypt_secret(resend_api_key.strip())
+    if alert_from is not None:
+        row.alert_from = alert_from.strip()
+    if alert_to is not None:
+        normalized = ",".join(_parse_recipients(alert_to))
+        row.alert_to = normalized
+    if slack_webhook_url is not None:
+        row.slack_webhook_url_encrypted = encrypt_secret(slack_webhook_url.strip())
+
+    db.commit()
+    db.refresh(row)
+    return get_alert_config_public(db)
+
+
+def get_alert_config_public(db: Session | None = None) -> dict:
+    resolved = _resolve_config(db)
+    return {
+        "source": resolved["source"],
+        "alert_from": resolved["sender"] or "",
+        "alert_to": resolved["recipients"],
+        "has_resend_api_key": bool(resolved["api_key"]),
+        "has_slack_webhook_url": bool(resolved["webhook_url"]),
+        "masked": {
+            "resend_api_key": _mask_secret(resolved["api_key"]),
+            "slack_webhook_url": _mask_secret(resolved["webhook_url"]),
+        },
+    }
 
 
 def _rate_limit_key(channel: str, window: str) -> str:
@@ -42,23 +165,26 @@ def _check_rate_limit(channel: str, severity: str) -> tuple[bool, str | None]:
     return True, None
 
 
-def _resend_config() -> dict:
+def _resend_config(db: Session | None = None) -> dict:
+    resolved = _resolve_config(db)
     return {
-        "api_key": os.environ.get("RESEND_API_KEY"),
-        "sender": os.environ.get("ALERT_FROM"),
-        "recipients": _parse_recipients(os.environ.get("ALERT_TO")),
+        "api_key": resolved["api_key"],
+        "sender": resolved["sender"],
+        "recipients": resolved["recipients"],
     }
 
 
-def _slack_config() -> dict:
+def _slack_config(db: Session | None = None) -> dict:
+    resolved = _resolve_config(db)
     return {
-        "webhook_url": os.environ.get("SLACK_WEBHOOK_URL"),
+        "webhook_url": resolved["webhook_url"],
     }
 
 
-def channel_status() -> dict:
-    resend_cfg = _resend_config()
-    slack_cfg = _slack_config()
+def channel_status(db: Session | None = None) -> dict:
+    resend_cfg = _resend_config(db)
+    slack_cfg = _slack_config(db)
+    resolved = _resolve_config(db)
 
     email_ready = bool(resend_cfg["api_key"] and resend_cfg["sender"] and resend_cfg["recipients"])
     slack_ready = bool(slack_cfg["webhook_url"])
@@ -77,11 +203,12 @@ def channel_status() -> dict:
         "dedup_window_seconds": DEDUP_WINDOW_SECONDS,
         "rate_limit_per_min": RATE_LIMIT_PER_MIN,
         "critical_limit_30m": CRITICAL_LIMIT_30M,
+        "config_source": resolved["source"],
     }
 
 
-def send_email_alert(subject: str, html_content: str, severity: str) -> dict:
-    resend_cfg = _resend_config()
+def send_email_alert(subject: str, html_content: str, severity: str, db: Session | None = None) -> dict:
+    resend_cfg = _resend_config(db)
     if not (resend_cfg["api_key"] and resend_cfg["sender"] and resend_cfg["recipients"]):
         return {"status": "CONFIG_MISSING", "reason": "missing_resend_config"}
 
@@ -108,8 +235,8 @@ def send_email_alert(subject: str, html_content: str, severity: str) -> dict:
         return {"status": "FAILED", "reason": str(exc)}
 
 
-def send_slack_alert(message: str, severity: str) -> dict:
-    slack_cfg = _slack_config()
+def send_slack_alert(message: str, severity: str, db: Session | None = None) -> dict:
+    slack_cfg = _slack_config(db)
     if not slack_cfg["webhook_url"]:
         return {"status": "CONFIG_MISSING", "reason": "missing_slack_webhook"}
 
@@ -146,7 +273,7 @@ def build_alert_message(alert_payload: dict) -> dict:
     return {"subject": subject, "html": html_content, "slack": slack_message}
 
 
-def dispatch_alert(alert_payload: dict) -> dict:
+def dispatch_alert(alert_payload: dict, db: Session | None = None) -> dict:
     severity = alert_payload.get("severity", "INFO")
     alert_type = alert_payload.get("alert_type", "")
     routing = {
@@ -163,14 +290,14 @@ def dispatch_alert(alert_payload: dict) -> dict:
         delivery_status["email"] = {"status": "CHANNEL_DISABLED"}
     else:
         message = build_alert_message(alert_payload)
-        delivery_status["email"] = send_email_alert(message["subject"], message["html"], severity)
+        delivery_status["email"] = send_email_alert(message["subject"], message["html"], severity, db)
 
     if "slack" not in channels:
         delivery_status["slack"] = {"status": "CHANNEL_DISABLED"}
     else:
         message = build_alert_message(alert_payload)
-        delivery_status["slack"] = send_slack_alert(message["slack"], severity)
+        delivery_status["slack"] = send_slack_alert(message["slack"], severity, db)
 
     delivery_status["routing"] = channels
-    delivery_status["config"] = channel_status()
+    delivery_status["config"] = channel_status(db)
     return delivery_status

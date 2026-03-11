@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -5,9 +7,10 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import require_admin
 from models import SystemAlert, User
-from schemas import SystemAlertResponse
-from services.alert_channel_service import channel_status
-from services.system_alert_service import list_system_alerts, update_system_alert_status
+from schemas import AlertChannelConfigUpdateRequest, SystemAlertResponse
+from services.alert_channel_service import channel_status, get_alert_config_public, upsert_alert_channel_config
+from services.audit_service import create_audit_log
+from services.system_alert_service import build_alert_timeline, list_system_alerts, update_system_alert_status
 from services.weekly_report_service import compute_next_run, generate_weekly_report, get_latest_report
 
 router = APIRouter(prefix="/admin/system-alerts", tags=["system_alerts"])
@@ -18,11 +21,57 @@ def get_system_alerts(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
     status_filter: str | None = Query(default="open"),
+    severity: str | None = None,
+    alert_type: str | None = None,
+    entity_key: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
     limit: int = 50,
 ):
     _ = current_admin
     status_value = status_filter if status_filter != "all" else None
-    return list_system_alerts(db, status=status_value, limit=limit)
+    parsed_from = datetime.fromisoformat(date_from.replace("Z", "+00:00")) if date_from else None
+    parsed_to = datetime.fromisoformat(date_to.replace("Z", "+00:00")) if date_to else None
+    return list_system_alerts(
+        db,
+        status=status_value,
+        severity=severity,
+        alert_type=alert_type,
+        entity_key=entity_key,
+        date_from=parsed_from,
+        date_to=parsed_to,
+        limit=limit,
+    )
+
+
+@router.post("/bulk-ack")
+def bulk_ack(current_admin: User = Depends(require_admin), db: Session = Depends(get_db), payload: dict | None = None):
+    payload = payload or {}
+    ids = payload.get("ids") or []
+    if not ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ids_required")
+    rows = db.query(SystemAlert).filter(SystemAlert.id.in_(ids)).all()
+    for row in rows:
+        row.status = "ack"
+        row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    create_audit_log(
+        db,
+        action="SYSTEM_ALERTS_BULK_ACK",
+        entity_type="system_alert",
+        entity_id=current_admin.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="info",
+        details={"count": len(rows), "ids": [row.id for row in rows]},
+    )
+    return {"count": len(rows), "ids": [row.id for row in rows]}
+
+
+@router.get("/timeline")
+def alerts_timeline(current_admin: User = Depends(require_admin), db: Session = Depends(get_db), days: int = 14):
+    _ = current_admin
+    return {"days": days, "points": build_alert_timeline(db, days=days)}
 
 
 @router.post("/{alert_id}/ack", response_model=SystemAlertResponse)
@@ -44,17 +93,51 @@ def resolve_system_alert(alert_id: str, current_admin: User = Depends(require_ad
 
 
 @router.get("/config")
-def get_alert_config(current_admin: User = Depends(require_admin)):
+def get_alert_config(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _ = current_admin
     next_run = compute_next_run().isoformat()
-    return {"channels": channel_status(), "weekly_report_next_run": next_run, "timezone": "Europe/Berlin"}
+    return {
+        "channels": channel_status(db),
+        "config": get_alert_config_public(db),
+        "weekly_report_next_run": next_run,
+        "timezone": "Europe/Berlin",
+    }
 
 
 @router.post("/config")
-def refresh_alert_config(current_admin: User = Depends(require_admin)):
-    _ = current_admin
+def refresh_alert_config(
+    payload: AlertChannelConfigUpdateRequest | None = None,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    payload = payload or AlertChannelConfigUpdateRequest()
+    changed_fields = [key for key, value in payload.model_dump().items() if value is not None]
+    if changed_fields:
+        upsert_alert_channel_config(
+            db,
+            resend_api_key=payload.resend_api_key,
+            alert_from=payload.alert_from,
+            alert_to=payload.alert_to,
+            slack_webhook_url=payload.slack_webhook_url,
+        )
+        create_audit_log(
+            db,
+            action="SYSTEM_ALERT_CONFIG_UPDATED",
+            entity_type="system_alert_config",
+            entity_id="global",
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            severity="info",
+            details={"changed_fields": changed_fields},
+        )
+
     next_run = compute_next_run().isoformat()
-    return {"channels": channel_status(), "weekly_report_next_run": next_run, "timezone": "Europe/Berlin"}
+    return {
+        "channels": channel_status(db),
+        "config": get_alert_config_public(db),
+        "weekly_report_next_run": next_run,
+        "timezone": "Europe/Berlin",
+    }
 
 
 @router.post("/reports/run")
