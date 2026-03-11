@@ -501,19 +501,24 @@ def scan_spot_universe_for_signals(cache, max_symbols: int = 50) -> dict:
     return payload
 
 
-def _extract_spot_pullback_position_ids(db: Session) -> set[str]:
+def _extract_spot_strategy_position_ids(db: Session) -> set[str]:
     events = db.query(PositionLedgerEvent).filter(PositionLedgerEvent.event_type == "trade_open").all()
     result: set[str] = set()
     for event in events:
         payload = event.payload or {}
-        if payload.get("strategy_id") in {"spot_pullback", "spot_pullback_v1"}:
+        if payload.get("strategy_id") in {
+            "spot_pullback",
+            "spot_pullback_v1",
+            "spot_range_reversion",
+            "spot_range_reversion_v1",
+        }:
             result.add(event.position_id)
     return result
 
 
 def generate_daily_strategy_report(db: Session, cache, report_day: date | None = None) -> dict:
     target_day = report_day or datetime.now(timezone.utc).date()
-    strategy_position_ids = _extract_spot_pullback_position_ids(db)
+    strategy_position_ids = _extract_spot_strategy_position_ids(db)
     positions: list[PaperPosition] = []
     if strategy_position_ids:
         positions = db.query(PaperPosition).filter(PaperPosition.id.in_(list(strategy_position_ids))).all()
@@ -567,7 +572,7 @@ def generate_daily_strategy_report(db: Session, cache, report_day: date | None =
 
     report = {
         "date": target_day.isoformat(),
-        "strategy": "spot_pullback_v1",
+        "strategy": "spot_multi_regime_v1",
         "market_regime": last_scan.get("market_regime", "RANGING"),
         "multiplier_version": multiplier_contract.get("multiplier_version", "v1"),
         "multiplier_set": multiplier_contract.get("multiplier_set", {}),

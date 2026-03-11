@@ -19,6 +19,19 @@ DEFAULT_STRATEGY_CONFIG = {
     "min_adjusted_score": 55,
     "freeze_duration_candles": 2,
     "multiplier_bounds": {"min": MULTIPLIER_MIN, "max": MULTIPLIER_MAX},
+    "active_strategies": ["spot_pullback_v1", "spot_range_reversion_v1"],
+}
+
+REGIME_STRATEGY_MAP = {
+    "TRENDING": "spot_pullback_v1",
+    "RANGING": "spot_range_reversion_v1",
+    "VOLATILE": "spot_volatility_breakout_v1",
+}
+
+STRATEGY_NAME_MAP = {
+    "spot_pullback_v1": "SPOT_TREND_PULLBACK",
+    "spot_range_reversion_v1": "SPOT_RANGE_REVERSION",
+    "spot_volatility_breakout_v1": "SPOT_VOLATILITY_BREAKOUT",
 }
 
 REGIME_MULTIPLIERS = {
@@ -72,6 +85,10 @@ def get_spot_strategy_config(cache, params: dict | None = None) -> dict:
             cfg["max_open_positions"] = int(params.get("max_open_positions"))
         if params.get("freeze_duration_candles") is not None:
             cfg["freeze_duration_candles"] = int(params.get("freeze_duration_candles"))
+        if params.get("active_strategies") is not None:
+            value = params.get("active_strategies")
+            if isinstance(value, list):
+                cfg["active_strategies"] = [str(item) for item in value]
     return cfg
 
 
@@ -234,32 +251,63 @@ def _update_btc_freeze_guard(cache, btc_candles: list[dict], freeze_duration_can
     return payload
 
 
-def _derive_component_scores(candles: list[dict], indicators: dict) -> dict:
+def _derive_component_scores(candles: list[dict], indicators: dict, strategy_id: str) -> dict:
     trend_strength = _trend_strength(candles, indicators)
     pullback_quality = _pullback_quality(candles, indicators)
     relative_volume = indicators.get("relative_volume", 0.0)
     atr_pct = indicators.get("atr_pct", 0.0)
     close = indicators.get("close", 0.0)
     ema50 = indicators.get("ema50", 0.0)
+    ema200 = indicators.get("ema200", 0.0)
     vwap = indicators.get("vwap", 0.0)
 
-    trend_quality = {"weak": 30.0, "medium": 70.0, "strong": 92.0}.get(trend_strength, 30.0)
-    pullback_score = {"low": 25.0, "acceptable": 68.0, "strong": 90.0}.get(pullback_quality, 25.0)
-    relative_volume_score = min(max(relative_volume * 45, 0), 100)
+    if strategy_id == "spot_range_reversion_v1":
+        ema_spread_pct = abs(((ema50 - ema200) / ema200) * 100) if ema200 else 0.0
+        range_fit = 92.0 if ema_spread_pct <= 0.35 else 72.0 if ema_spread_pct <= 0.75 else 45.0
+        trend_quality = range_fit
 
-    if atr_pct < 0.008:
-        volatility_quality = 20.0
-    elif atr_pct <= 0.03:
-        volatility_quality = min(95.0, 55 + (atr_pct * 1000))
-    else:
-        volatility_quality = 65.0
+        price_to_vwap_pct = ((vwap - close) / close) * 100 if close else 0.0
+        if price_to_vwap_pct >= 0.8:
+            pullback_score = 90.0
+        elif price_to_vwap_pct >= 0.25:
+            pullback_score = 72.0
+        else:
+            pullback_score = 45.0
 
-    if close <= 0:
-        structure_cleanliness = 20.0
+        if 0.9 <= relative_volume <= 1.8:
+            relative_volume_score = 84.0
+        elif 0.7 <= relative_volume <= 2.2:
+            relative_volume_score = 66.0
+        else:
+            relative_volume_score = 42.0
+
+        if 0.006 <= atr_pct <= 0.02:
+            volatility_quality = 84.0
+        elif 0.004 <= atr_pct <= 0.03:
+            volatility_quality = 62.0
+        else:
+            volatility_quality = 35.0
+
+        rsi_center_distance = abs(indicators.get("rsi14", 50.0) - 46)
+        structure_cleanliness = max(25.0, 92.0 - (rsi_center_distance * 2.1))
     else:
-        ema_gap = abs((close - ema50) / close) if close else 0.0
-        vwap_gap = abs((close - vwap) / close) if close else 0.0
-        structure_cleanliness = max(20.0, 95.0 - (ema_gap * 800) - (vwap_gap * 600))
+        trend_quality = {"weak": 30.0, "medium": 70.0, "strong": 92.0}.get(trend_strength, 30.0)
+        pullback_score = {"low": 25.0, "acceptable": 68.0, "strong": 90.0}.get(pullback_quality, 25.0)
+        relative_volume_score = min(max(relative_volume * 45, 0), 100)
+
+        if atr_pct < 0.008:
+            volatility_quality = 20.0
+        elif atr_pct <= 0.03:
+            volatility_quality = min(95.0, 55 + (atr_pct * 1000))
+        else:
+            volatility_quality = 65.0
+
+        if close <= 0:
+            structure_cleanliness = 20.0
+        else:
+            ema_gap = abs((close - ema50) / close) if close else 0.0
+            vwap_gap = abs((close - vwap) / close) if close else 0.0
+            structure_cleanliness = max(20.0, 95.0 - (ema_gap * 800) - (vwap_gap * 600))
 
     return {
         "trend_strength": trend_strength,
@@ -324,14 +372,17 @@ def _evaluate_symbol_candidate(
     btc_context: BtcContext,
     open_symbols: set[str],
     threshold: float,
+    strategy_id: str,
+    strategy_active: bool,
 ) -> dict:
     indicators = calculate_indicator_snapshot(candles)
     close = indicators.get("close", 0.0)
     trend = "bullish" if indicators.get("ema50", 0.0) > indicators.get("ema200", 0.0) else "bearish"
-    component_scores = _derive_component_scores(candles, indicators)
+    component_scores = _derive_component_scores(candles, indicators, strategy_id)
+    strategy_name = STRATEGY_NAME_MAP.get(strategy_id, strategy_id.upper())
 
     hard_rejections: list[str] = []
-    if component_scores["trend_strength"] == "weak":
+    if strategy_id == "spot_pullback_v1" and component_scores["trend_strength"] == "weak":
         hard_rejections.append("trend_strength_weak")
     if btc_context.btc_regime == "hostile":
         hard_rejections.append("btc_regime_hostile")
@@ -339,16 +390,31 @@ def _evaluate_symbol_candidate(
         hard_rejections.append("freeze_guard_active")
     if symbol.upper() in open_symbols:
         hard_rejections.append("symbol_position_open")
+    if not strategy_active:
+        hard_rejections.append("strategy_not_activated")
 
     setup_rejections: list[str] = []
-    if trend != "bullish":
-        setup_rejections.append("trend_not_bullish")
-    if close > indicators.get("ema50", 0.0):
-        setup_rejections.append("price_above_ema50")
-    if component_scores["rsi14"] >= 45:
-        setup_rejections.append("rsi_not_ready")
-    if component_scores["atr_pct"] <= 0.008:
-        setup_rejections.append("volatility_too_low")
+    if strategy_id == "spot_range_reversion_v1":
+        vwap = indicators.get("vwap", 0.0)
+        if trend == "bullish" and component_scores["trend_strength"] == "strong":
+            setup_rejections.append("market_not_ranging_enough")
+        if close > (vwap * 1.003 if vwap else close):
+            setup_rejections.append("price_not_below_mean")
+        if component_scores["rsi14"] > 52:
+            setup_rejections.append("rsi_not_reversion_ready")
+        if component_scores["relative_volume"] < 0.8:
+            setup_rejections.append("relative_volume_too_low")
+        if not (0.006 <= component_scores["atr_pct"] <= 0.03):
+            setup_rejections.append("volatility_out_of_range")
+    else:
+        if trend != "bullish":
+            setup_rejections.append("trend_not_bullish")
+        if close > indicators.get("ema50", 0.0):
+            setup_rejections.append("price_above_ema50")
+        if component_scores["rsi14"] >= 45:
+            setup_rejections.append("rsi_not_ready")
+        if component_scores["atr_pct"] <= 0.008:
+            setup_rejections.append("volatility_too_low")
 
     base_score = 0.0
     adjusted_score = 0.0
@@ -378,6 +444,8 @@ def _evaluate_symbol_candidate(
 
     return {
         "symbol": symbol.upper(),
+        "strategy_id": strategy_id,
+        "strategy_name": strategy_name,
         "status": status,
         "reason_codes": reason_codes,
         "signal": "long" if status == "candidate" else "none",
@@ -412,11 +480,21 @@ def _evaluate_symbol_candidate(
             "ema200": round(indicators.get("ema200", 0.0), 6),
             "vwap": round(indicators.get("vwap", 0.0), 6),
             "freeze_guard_active": btc_context.freeze_active,
+            "strategy_name": strategy_name,
         },
     }
 
 
 def _build_selection_metrics(candidates: list[dict], selected: list[dict]) -> dict:
+    selected_by_strategy: dict[str, int] = {}
+    total_by_strategy: dict[str, int] = {}
+    for item in candidates:
+        strategy_id = str(item.get("strategy_id", "unknown"))
+        total_by_strategy[strategy_id] = total_by_strategy.get(strategy_id, 0) + 1
+    for item in selected:
+        strategy_id = str(item.get("strategy_id", "unknown"))
+        selected_by_strategy[strategy_id] = selected_by_strategy.get(strategy_id, 0) + 1
+
     return {
         "signals_total": len(candidates),
         "signals_after_hard_gate": sum(1 for item in candidates if item.get("hard_gate_pass")),
@@ -434,6 +512,11 @@ def _build_selection_metrics(candidates: list[dict], selected: list[dict]) -> di
         "signals_rejected_threshold": sum(
             1 for item in candidates if "adjusted_score_below_threshold" in item.get("reason_codes", [])
         ),
+        "signals_rejected_strategy_inactive": sum(
+            1 for item in candidates if "strategy_not_activated" in item.get("reason_codes", [])
+        ),
+        "signals_per_strategy": total_by_strategy,
+        "selected_signals_per_strategy": selected_by_strategy,
     }
 
 
@@ -449,6 +532,10 @@ def run_dynamic_selection_cycle(
     normalized_symbols = sorted({symbol.upper() for symbol in symbols if symbol})
     btc_candles = get_json(cache, "market_data_store:BTCUSDT:15m") or get_json(cache, "market:candles:BTCUSDT:15m") or []
     btc_context = _prepare_btc_context(cache, btc_candles, cfg)
+    active_strategy_id = REGIME_STRATEGY_MAP.get(btc_context.market_regime, "spot_pullback_v1")
+    strategy_active_set = {str(item) for item in cfg.get("active_strategies", [])}
+    strategy_active = active_strategy_id in strategy_active_set
+    active_strategy_name = STRATEGY_NAME_MAP.get(active_strategy_id, active_strategy_id.upper())
 
     candidates: list[dict] = []
     for symbol in normalized_symbols:
@@ -457,6 +544,8 @@ def run_dynamic_selection_cycle(
             candidates.append(
                 {
                     "symbol": symbol,
+                    "strategy_id": active_strategy_id,
+                    "strategy_name": active_strategy_name,
                     "status": "rejected_signal_setup",
                     "reason_codes": ["insufficient_data"],
                     "signal": "none",
@@ -482,7 +571,17 @@ def run_dynamic_selection_cycle(
             )
             continue
 
-        candidates.append(_evaluate_symbol_candidate(symbol, candles[-500:], btc_context, open_symbols, threshold))
+        candidates.append(
+            _evaluate_symbol_candidate(
+                symbol,
+                candles[-500:],
+                btc_context,
+                open_symbols,
+                threshold,
+                strategy_id=active_strategy_id,
+                strategy_active=strategy_active,
+            )
+        )
 
     executable = [
         item
@@ -503,6 +602,10 @@ def run_dynamic_selection_cycle(
     payload = {
         "generated_at": utc_now_iso(),
         "market_regime": btc_context.market_regime,
+        "active_strategy_id": active_strategy_id,
+        "active_strategy_name": active_strategy_name,
+        "active_strategy_enabled": strategy_active,
+        "regime_strategy_map": REGIME_STRATEGY_MAP,
         "btc_regime": btc_context.btc_regime,
         "regime_state": btc_context.regime_state,
         "multiplier_version": btc_context.multiplier_version,

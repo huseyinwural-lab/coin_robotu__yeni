@@ -93,7 +93,7 @@ def get_daily_report(_: User = Depends(get_current_user)):
 
 
 @router.post("/scan/run")
-def run_spot_scan(current_admin: User = Depends(require_admin), db: Session = Depends(get_db), top_n: int = Query(default=10, ge=1, le=30)):
+def run_spot_scan(current_admin: User = Depends(require_admin), db: Session = Depends(get_db), top_n: int = Query(default=10, ge=1, le=50)):
     universe = get_spot_tradable_universe(pipeline_runtime.cache)
     symbols = [symbol.upper() for symbol in universe.get("symbols", [])]
     payload = run_dynamic_selection_cycle(
@@ -112,6 +112,9 @@ def run_spot_scan(current_admin: User = Depends(require_admin), db: Session = De
             {
                 "symbol": item.get("symbol"),
                 "signal": item.get("signal"),
+                "strategy_id": item.get("strategy_id"),
+                "strategy_name": item.get("strategy_name"),
+                "market_regime": item.get("market_regime"),
                 "signal_score": item.get("adjusted_score", 0),
                 "base_score": item.get("base_score", 0),
                 "adjusted_score": item.get("adjusted_score", 0),
@@ -143,8 +146,8 @@ def run_spot_scan(current_admin: User = Depends(require_admin), db: Session = De
         audit_log_id=scan_audit.id,
         bot_profile_id=None,
         user_id=current_admin.id,
-        strategy_id="spot_pullback_v1",
-        strategy_name="SPOT_TREND_PULLBACK",
+        strategy_id=response_payload.get("active_strategy_id", "spot_pullback_v1"),
+        strategy_name=response_payload.get("active_strategy_name", "SPOT_TREND_PULLBACK"),
         market_regime=response_payload.get("market_regime", "RANGING"),
         multiplier_version=response_payload.get("multiplier_version", "v1"),
         multiplier_set=response_payload.get("multiplier_set", {}),
@@ -168,6 +171,9 @@ def get_latest_scan(_: User = Depends(get_current_user)):
             {
                 "symbol": item.get("symbol"),
                 "signal": item.get("signal"),
+                "strategy_id": item.get("strategy_id"),
+                "strategy_name": item.get("strategy_name"),
+                "market_regime": item.get("market_regime"),
                 "signal_score": item.get("adjusted_score", 0),
                 "base_score": item.get("base_score", 0),
                 "adjusted_score": item.get("adjusted_score", 0),

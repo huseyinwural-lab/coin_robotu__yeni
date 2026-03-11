@@ -40,6 +40,8 @@ from services.live_mode_service import enforce_release_gate
 
 logger = logging.getLogger(__name__)
 
+SPOT_STRATEGY_TYPES = {"spot_pullback", "spot_pullback_v1", "spot_range_reversion", "spot_range_reversion_v1"}
+
 
 class PipelineRuntime:
     def __init__(self, cache):
@@ -275,6 +277,8 @@ class PipelineRuntime:
                 "symbol_count": selection.get("symbol_count", 0),
                 "signals_selected": metrics.get("signals_selected", 0),
                 "market_regime": selection.get("market_regime"),
+                "active_strategy_id": selection.get("active_strategy_id"),
+                "active_strategy_enabled": selection.get("active_strategy_enabled"),
                 "btc_regime": selection.get("btc_regime"),
                 "threshold": selection.get("threshold"),
                 "freeze_guard": selection.get("freeze_guard"),
@@ -318,8 +322,8 @@ class PipelineRuntime:
             audit_log_id=cycle_audit_log.id,
             bot_profile_id=bot.id,
             user_id=user.id,
-            strategy_id="spot_pullback_v1",
-            strategy_name="SPOT_TREND_PULLBACK",
+            strategy_id=selection.get("active_strategy_id", "spot_pullback_v1"),
+            strategy_name=selection.get("active_strategy_name", "SPOT_TREND_PULLBACK"),
             market_regime=selection.get("market_regime", "RANGING"),
             multiplier_version=selection.get("multiplier_version", "v1"),
             multiplier_set=selection.get("multiplier_set", {}),
@@ -335,7 +339,7 @@ class PipelineRuntime:
                 symbol=candidate["symbol"],
                 market_type=bot.market_type,
                 timeframe=bot.timeframe,
-                strategy_id="spot_pullback_v1",
+                strategy_id=candidate.get("strategy_id", "spot_pullback_v1"),
                 signal="long",
                 direction="long",
                 confidence=round(candidate.get("adjusted_score", 0.0) / 100, 4),
@@ -354,14 +358,14 @@ class PipelineRuntime:
                 details={
                     "symbol": candidate["symbol"],
                     "direction": "long",
-                    "strategy": "spot_pullback_v1",
+                    "strategy": candidate.get("strategy_id", "spot_pullback_v1"),
                     "selection_rank": candidate.get("selection_rank"),
                 },
             )
             incr_counter(self.cache, "metrics:signals:5m", 1)
 
             signal = evaluate_strategy(
-                strategy_type="spot_pullback_v1",
+                strategy_type=candidate.get("strategy_id", "spot_pullback_v1"),
                 symbol=candidate["symbol"],
                 primary_candles=get_json(self.cache, f"market:candles:{candidate['symbol']}:15m") or [],
                 secondary_candles=get_json(self.cache, f"market:candles:{candidate['symbol']}:1h") or [],
@@ -369,14 +373,18 @@ class PipelineRuntime:
                 params=params,
                 context={"btc_candles": get_json(self.cache, "market:candles:BTCUSDT:15m") or []},
             )
+            signal.signal = "long"
+            signal.direction = "long"
+            signal.strategy_id = candidate.get("strategy_id", signal.strategy_id)
             signal.proposed_entry = float(candidate.get("entry", signal.proposed_entry))
             signal.proposed_stop = float(candidate.get("stop", signal.proposed_stop))
             signal.proposed_take_profit = float(candidate.get("take_profit", signal.proposed_take_profit))
             signal.signal_strength = round(candidate.get("adjusted_score", 0.0) / 100, 4)
             signal.signal_score = float(candidate.get("adjusted_score", 0.0))
+            signal.reason_codes = ["selected_dynamic_score_engine"]
             signal.metadata = {
                 **(signal.metadata or {}),
-                "strategy_name": "SPOT_TREND_PULLBACK",
+                "strategy_name": candidate.get("strategy_name", "SPOT_TREND_PULLBACK"),
                 "market_regime": candidate.get("market_regime"),
                 "multiplier_version": candidate.get("multiplier_version"),
                 "multiplier_set": candidate.get("multiplier_set"),
@@ -413,7 +421,7 @@ class PipelineRuntime:
                 )
                 continue
 
-            policy = get_policy_for_strategy(db, bot.strategy_type)
+            policy = get_policy_for_strategy(db, candidate.get("strategy_id", bot.strategy_type))
             execution_policy_payload = {
                 "style": policy.execution_style,
                 "order_preference": policy.order_preference,
@@ -441,7 +449,7 @@ class PipelineRuntime:
                     "mode": "paper",
                     "strategy_id": signal.strategy_id,
                     "risk_tags": risk_decision.risk_tags,
-                    "strategy_name": "SPOT_TREND_PULLBACK",
+                    "strategy_name": candidate.get("strategy_name", "SPOT_TREND_PULLBACK"),
                     "market_regime": candidate.get("market_regime"),
                     "multiplier_version": candidate.get("multiplier_version"),
                     "multiplier_set": candidate.get("multiplier_set"),
@@ -487,8 +495,8 @@ class PipelineRuntime:
                 severity="info",
                 details={
                     "symbol": position.symbol,
-                    "strategy_id": "spot_pullback_v1",
-                    "strategy_name": "SPOT_TREND_PULLBACK",
+                    "strategy_id": candidate.get("strategy_id", "spot_pullback_v1"),
+                    "strategy_name": candidate.get("strategy_name", "SPOT_TREND_PULLBACK"),
                     "market_regime": candidate.get("market_regime"),
                     "multiplier_version": candidate.get("multiplier_version"),
                     "base_score": candidate.get("base_score"),
@@ -527,7 +535,7 @@ class PipelineRuntime:
                 for bot in bots:
                     try:
                         symbol_set = {symbol.upper() for symbol in bot.symbols}
-                        if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"} and (not symbol_set or "*" in symbol_set):
+                        if bot.strategy_type in SPOT_STRATEGY_TYPES and (not symbol_set or "*" in symbol_set):
                             symbol_set = {symbol.upper() for symbol in universe["spot_symbols"]}
                         if event.symbol not in symbol_set:
                             continue
@@ -548,7 +556,7 @@ class PipelineRuntime:
                         )
                         params = strategy_template.parameters if strategy_template else {}
 
-                        if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+                        if bot.strategy_type in SPOT_STRATEGY_TYPES:
                             self._process_spot_pullback_selection(
                                 db,
                                 bot=bot,
@@ -575,7 +583,7 @@ class PipelineRuntime:
                         )
 
                         if signal.signal == "none":
-                            if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+                            if bot.strategy_type in SPOT_STRATEGY_TYPES:
                                 incr_counter(self.cache, "spot_strategy:signals_total:day", 1)
                                 if signal.reason_codes:
                                     reason = signal.reason_codes[0]
@@ -624,7 +632,7 @@ class PipelineRuntime:
                             actor_role=user.role.value,
                             details={"symbol": signal.symbol, "direction": signal.direction, "strategy": signal.strategy_id},
                         )
-                        if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+                        if bot.strategy_type in SPOT_STRATEGY_TYPES:
                             incr_counter(self.cache, "spot_strategy:signals_total:day", 1)
                         incr_counter(self.cache, "metrics:signals:5m", 1)
 
@@ -734,7 +742,7 @@ class PipelineRuntime:
                             continue
 
                         position = execution_result["position"]
-                        if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+                        if bot.strategy_type in SPOT_STRATEGY_TYPES:
                             incr_counter(self.cache, "spot_strategy:executed_signals:day", 1)
                             total_score = float(self.cache.get("spot_strategy:signal_score_sum:day") or 0)
                             executed = int(self.cache.get("spot_strategy:executed_signals:day") or 1)
@@ -759,7 +767,7 @@ class PipelineRuntime:
                                 "execution_style": policy.execution_style,
                             },
                         )
-                        if bot.strategy_type in {"spot_pullback", "spot_pullback_v1"}:
+                        if bot.strategy_type in SPOT_STRATEGY_TYPES:
                             create_audit_log(
                                 db,
                                 action="TRADE_OPENED",
@@ -843,7 +851,7 @@ class PipelineRuntime:
                         actor_role=user.role.value,
                         details={"reason": position.status, "realized_pnl": position.realized_pnl},
                     )
-                    if strategy_id in {"spot_pullback", "spot_pullback_v1"}:
+                    if strategy_id in SPOT_STRATEGY_TYPES:
                         if position.status == "stop_hit":
                             create_audit_log(
                                 db,

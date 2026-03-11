@@ -60,7 +60,7 @@ def _evaluate_spot_pullback_risk(
         leverage=1,
         stop=stop,
         take_profit=take_profit,
-        risk_tags=["approved", "spot_pullback_1pct_risk", "position_control_3x1"],
+        risk_tags=["approved", "spot_strategy_1pct_risk", "position_control_3x1"],
         equity=equity,
         trade_allocation_usdt=trade_allocation_usdt,
         risk_amount_usdt=risk_amount_usdt,
@@ -97,7 +97,7 @@ def evaluate_risk(
 ) -> RiskDecision:
     control = db.query(AdminControl).filter(AdminControl.id == "global").first()
 
-    if signal.strategy_id in {"spot_pullback", "spot_pullback_v1"}:
+    if signal.strategy_id in {"spot_pullback", "spot_pullback_v1", "spot_range_reversion", "spot_range_reversion_v1"}:
         if control is None:
             return RiskDecision(
                 approved=False,

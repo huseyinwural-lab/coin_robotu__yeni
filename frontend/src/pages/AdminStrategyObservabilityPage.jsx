@@ -121,6 +121,12 @@ export const AdminStrategyObservabilityPage = () => {
             <p data-testid="score-metrics-avg-base">avg_base_score: {scoreMetrics?.avg_base_score ?? 0}</p>
             <p data-testid="score-metrics-avg-adjusted">avg_adjusted_score: {scoreMetrics?.avg_adjusted_score ?? 0}</p>
             <p data-testid="score-metrics-avg-delta">avg_score_delta: {scoreMetrics?.avg_score_delta ?? 0}</p>
+            <p data-testid="score-metrics-signals-per-strategy">
+              signals_per_strategy: {JSON.stringify(scoreMetrics?.signals_per_strategy || {})}
+            </p>
+            <p data-testid="score-metrics-selected-per-strategy">
+              selected_signals_per_strategy: {JSON.stringify(scoreMetrics?.selected_signals_per_strategy || {})}
+            </p>
           </div>
           <div className="mt-4 space-y-2" data-testid="regime-distribution-bars">
             {regimeRows.map(([regime, count]) => {
@@ -147,6 +153,12 @@ export const AdminStrategyObservabilityPage = () => {
             <p data-testid="strategy-report-avg-adjusted">avg_adjusted_score: {report?.avg_adjusted_score ?? 0}</p>
             <p data-testid="strategy-report-avg-base">avg_base_score: {report?.avg_base_score ?? 0}</p>
             <p data-testid="strategy-report-score-delta">score_delta_avg: {report?.score_delta_avg ?? 0}</p>
+            <p data-testid="strategy-report-signals-per-strategy">
+              signals_per_strategy: {JSON.stringify(report?.signals_per_strategy || {})}
+            </p>
+            <p data-testid="strategy-report-selected-per-strategy">
+              selected_signals_per_strategy: {JSON.stringify(report?.selected_signals_per_strategy || {})}
+            </p>
           </div>
         </div>
       </div>

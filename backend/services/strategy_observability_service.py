@@ -52,12 +52,12 @@ def log_strategy_observability_events(
                 bot_profile_id=bot_profile_id,
                 user_id=user_id,
                 symbol=symbol,
-                strategy_id=strategy_id,
-                strategy_name=strategy_name,
+                strategy_id=str(candidate.get("strategy_id") or strategy_id),
+                strategy_name=str(candidate.get("strategy_name") or strategy_name),
                 event_type=event_type,
-                market_regime=market_regime,
-                multiplier_version=multiplier_version,
-                multiplier_set=multiplier_set,
+                market_regime=str(candidate.get("market_regime") or market_regime),
+                multiplier_version=str(candidate.get("multiplier_version") or multiplier_version),
+                multiplier_set=candidate.get("multiplier_set") or multiplier_set,
                 base_score=float(candidate.get("base_score", 0.0)),
                 adjusted_score=float(candidate.get("adjusted_score", 0.0)),
                 score_delta=float(candidate.get("score_delta", 0.0)),
@@ -170,18 +170,24 @@ def get_score_metrics(db: Session, *, window: str):
             "avg_score_delta": 0,
             "signals_per_regime": {},
             "selected_signals_per_regime": {},
+            "signals_per_strategy": {},
+            "selected_signals_per_strategy": {},
         }
 
     regime_counts: dict[str, int] = {}
     selected_per_regime: dict[str, int] = {}
+    signals_per_strategy: dict[str, int] = {}
+    selected_signals_per_strategy: dict[str, int] = {}
     base_scores: list[float] = []
     adjusted_scores: list[float] = []
     deltas: list[float] = []
 
     for row in rows:
         regime_counts[row.market_regime] = regime_counts.get(row.market_regime, 0) + 1
+        signals_per_strategy[row.strategy_id] = signals_per_strategy.get(row.strategy_id, 0) + 1
         if row.event_type == "selected_for_execution":
             selected_per_regime[row.market_regime] = selected_per_regime.get(row.market_regime, 0) + 1
+            selected_signals_per_strategy[row.strategy_id] = selected_signals_per_strategy.get(row.strategy_id, 0) + 1
         if row.base_score is not None:
             base_scores.append(float(row.base_score))
         if row.adjusted_score is not None:
@@ -201,6 +207,8 @@ def get_score_metrics(db: Session, *, window: str):
         "avg_score_delta": round(avg_delta, 4),
         "signals_per_regime": regime_counts,
         "selected_signals_per_regime": selected_per_regime,
+        "signals_per_strategy": signals_per_strategy,
+        "selected_signals_per_strategy": selected_signals_per_strategy,
     }
 
 
@@ -213,10 +221,15 @@ def get_strategy_observability_report(db: Session, *, window: str):
         .filter(StrategyTemplate.is_active.is_(True), StrategyTemplate.strategy_type.like("spot_%"))
         .all()
     ]
+    if not active_spot_strategies:
+        observed = list((score_metrics.get("signals_per_strategy") or {}).keys())
+        active_spot_strategies = sorted(observed)
     return {
         "window": rejection["window"],
         "active_spot_strategies": active_spot_strategies,
         "market_regime_distribution": score_metrics.get("market_regime_distribution", {}),
+        "signals_per_strategy": score_metrics.get("signals_per_strategy", {}),
+        "selected_signals_per_strategy": score_metrics.get("selected_signals_per_strategy", {}),
         "signals_total": rejection.get("signals_total", 0),
         "signals_selected": rejection.get("signals_selected", 0),
         "signals_rejected_breakdown": {
