@@ -933,3 +933,55 @@
    - `SPOT_RANGE_REVERSION`
    - `SPOT_VOLATILITY_BREAKOUT`
 2. Futures strategy engine ve capital allocation modeli
+
+## 13) 2026-03-11 — Faz-4 (Adım-1) Spot Strategy Expansion: Range Reversion Aktivasyonu
+
+### Uygulanan kararlar (user onayına göre)
+- Sadece **Adım-1** uygulandı: `SPOT_RANGE_REVERSION` aktive edildi.
+- Hard switch korundu (aynı anda tek strateji):
+  - `TRENDING -> spot_pullback_v1`
+  - `RANGING -> spot_range_reversion_v1`
+  - `VOLATILE -> spot_volatility_breakout_v1` (**pasif / aktive değil**)
+- Reversion başlangıç profili: **dengeli**
+- BREAKOUT geçiş kriteri: **7d stabilite zorunlu** (bu iterasyonda breakout kod/aktivasyon yapılmadı)
+
+### Teknik değişiklikler
+- `spot_dynamic_score_engine.py`
+  - Rejim-temelli aktif strateji seçimi (`REGIME_STRATEGY_MAP`)
+  - `active_strategies` config desteği
+  - Strategy-specific component score hesapları (pullback vs reversion)
+  - Hard switch + passive strategy rejection (`strategy_not_activated`)
+  - Strategy-level metrikler (`signals_per_strategy`, `selected_signals_per_strategy`)
+- `runtime.py`
+  - Spot selection akışı `SPOT_STRATEGY_TYPES` setiyle genişletildi
+  - Selection ve trade metadata’da strategy_id/strategy_name dinamik hale getirildi
+- `risk_engine.py`
+  - `spot_range_reversion_v1` için spot risk modeli kapsamına alındı
+- `execution_policy_service.py` + `bootstrap.py`
+  - `spot_range_reversion_v1` execution policy eklendi (balanced/limit-first)
+- `strategy_observability_service.py`
+  - Strategy-level dağılım alanları eklendi
+- `spot_strategy.py`
+  - scan `top_n` üst limiti `50` olarak enforce
+  - top_ranked/scan response strategy-level alanlarla genişletildi
+
+### Observability ve raporlama
+- Strategy-level ayrışma netleştirildi:
+  - `signals_per_strategy`
+  - `selected_signals_per_strategy`
+- Admin observability panelinde strategy-level alanlar görünür ve filtrelerle çalışır.
+
+### Test sonucu
+- Testing agent: `/app/test_reports/iteration_28.json`
+  - Backend: **25/25 PASS**
+  - Frontend: **100% PASS**
+- Ek frontend doğrulama (`auto_frontend_testing_agent`): **12/12 PASS**
+
+### Faz-4 Adım-1 kapanış durumu
+- ✅ `RANGING -> SPOT_RANGE_REVERSION` aktif
+- ✅ Hard switch deterministik
+- ✅ `VOLATILE -> BREAKOUT` eşleşmesi mevcut ama aktif değil
+
+### Sonraki adım (planlandığı gibi)
+1. 7 günlük gözlem/tuning döngüsü (24h -> 7d değerlendirme)
+2. Stabilite sağlanırsa Faz-4 Adım-2: `SPOT_VOLATILITY_BREAKOUT` kontrollü aktivasyon
