@@ -606,11 +606,62 @@
   - `test_phase6_iter2_comprehensive_strategy_domain.py` (testing agent comprehensive suite)
   - Lokal regresyon: `test_phase6_iter1_strategy_domain_kernel.py` + iter5/iter4 toplam 9/9 pass
 
+### 2026-03-11 (Faz-6.3 — Runtime Execution Skeleton + Hot/Cold Trace Skeleton)
+- Kullanıcı karar seti uygulandı: **kapsam B (6.3 + hot/cold skeleton), Redis event bus, ayrı process worker iskeleti, paper/mock adapter boundary**
+- **6.3.1 Redis Event Bus Contract:**
+  - Yeni servis: `runtime_event_bus_service.py`
+  - Event envelope alanları sabitlendi:
+    - `event_id`, `event_type`, `correlation_id`, `causation_id`, `partition_key`, `created_at`, `schema_version`, `payload`, `payload_hash`, `ordering`
+  - At-least-once semantiği + idempotent tüketim için `processed event set` eklendi
+- **6.3.2 Event Zinciri:**
+  - `decision.produced`
+  - `execution.intent.created` / `execution.intent.rejected`
+  - `execution.order.submission_requested`
+  - `execution.order.submitted`
+  - `execution.order.updated`
+  - `execution.order.finalized`
+- **6.3.3 Decision -> ExecutionIntent Mapper:**
+  - Yeni servis: `runtime_execution_service.py`
+  - Kurallar:
+    - `REJECT` -> intent yok, rejected event
+    - `HOLD` -> intent yok, `hold_noop` rejected event
+    - `BUY|SELL|CLOSE` -> immutable intent üretimi
+  - `intent_hash` deterministic canonical hash ile üretiliyor
+- **6.3.4 Worker Skeleton (ayrı process hazır):**
+  - Worker giriş noktası: `backend/workers/execution_worker.py`
+  - API tetikleme iskeleti: `POST /api/strategy-domain/admin/runtime/worker/run-once`
+  - Duplicate event toleransı: processed-set + ack akışı
+- **6.3.5 Paper/Mock Adapter Boundary:**
+  - Yeni adapter: `paper_exchange_adapter_service.py`
+  - Deterministic lifecycle simülasyonu: `NEW`, `PARTIALLY_FILLED`, `FILLED|CANCELED|REJECTED`
+  - **Canlı submit bu fazda kapalı** (safety-first)
+- **6.3.6/6.3.7 Hot/Cold Storage Skeleton:**
+  - Yeni tablolar:
+    - `decision_trace_hot` (48h TTL alanı ile)
+    - `decision_trace_cold` (append-only audit/replay özet)
+  - Runtime dispatch anında hot trace, worker finalization sonrası cold trace yazılıyor
+- **Yeni runtime API yüzeyi:**
+  - `POST /api/strategy-domain/admin/runtime/dispatch`
+  - `POST /api/strategy-domain/admin/runtime/worker/run-once`
+  - `GET /api/strategy-domain/admin/runtime/intents`
+  - `GET /api/strategy-domain/admin/runtime/intents/{intent_id}/events`
+  - `GET /api/strategy-domain/admin/runtime/hot-traces`
+  - `GET /api/strategy-domain/admin/runtime/cold-traces`
+- **Admin UI güncellemesi (`/admin/strategies`):**
+  - Runtime dispatch, worker run-once, intents/hot/cold görünümleri eklendi
+- Migration/DB:
+  - Alembic: `20260311_0016_runtime_execution_skeleton.py`
+  - Yeni modeller: `ExecutionIntent`, `ExecutionIntentEvent`, `DecisionTraceHot`, `DecisionTraceCold`
+- Testler:
+  - `/app/test_reports/iteration_22.json` (backend/frontend pass)
+  - `test_faz63_runtime_skeleton.py` (testing agent suite)
+  - Lokal regresyon: `test_phase6_iter3_runtime_skeleton.py` + `test_phase6_iter1_strategy_domain_kernel.py` + iter5 toplam 6/6 pass
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
 - Gerçek execution evidence’de immutable alanları canlı order üzerinden finalize et (exchange_order_id/client_order_id/submitted/ack/fill/slippage/validation_snapshot)
-- Faz-6.3 Event-driven runtime skeleton (event bus + worker + symbol partition + single-writer kuralı)
+- Faz-6.4 Regime classifier contract + regime-gated decision flow
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
 - Alembic migration’larda rollback senaryolarının staging doğrulaması
@@ -632,7 +683,7 @@
 
 ## 7) Next Tasks List
 1. Geçerli testnet key ile gerçek order evidence (NEW/PARTIAL/FILLED/CANCELED) finalize et
-2. Faz-6.3: DecisionResult -> ExecutionIntent mapper + event-driven runtime worker skeleton
-3. Faz-6.4: Regime classifier contract + regime-gated karar akışı
+2. Faz-6.4: Regime classifier contract + regime-gated karar akışı
+3. Faz-6.5: Risk orchestrator (pre-trade gate + in-trade supervisor + kill-switch)
 4. Hardening+: manifest_chain_hash (append chain integrity)
 5. User approval paneline arama/sıralama + toplu onay (bulk action) ekle

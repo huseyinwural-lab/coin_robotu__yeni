@@ -402,7 +402,6 @@ class TestPaperMockAdapterBoundary:
         intent = dispatch.json()["execution_intent"]
         if intent is None:
             pytest.skip("No intent created")
-        intent_id = intent["intent_id"]
 
         # Run worker to process with paper adapter
         worker = requests.post(
