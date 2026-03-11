@@ -170,12 +170,34 @@
   - `/app/test_reports/iteration_8.json` (backend 22/22 pass, frontend 100%)
   - `/app/backend/tests/test_phase4_live_activation.py`
 
+### 2026-03-11 (Faz-4 İterasyon-2 — Panel Ayrımı + Kullanıcı Onay Akışı)
+- Kullanıcı kararları uygulandı: **1A, 2A, 3A, 4A**
+- Admin panel teması turuncu + koyu siyah yapıldı; sidebar menüsüne taşma için `overflow-y-auto` eklendi.
+- Admin/User yapısı ayrıldı:
+  - Login ekranları: `/admin/login` ve `/user/login`
+  - Panel rotaları: `/admin/*` ve `/user/*`
+  - Role mismatch durumunda otomatik doğru panele yönlendirme
+- User giriş ekranı referans görsele yakın şekilde yeniden tasarlandı (Bireysel seçeneği, e-posta/şifre alanları, checkbox, forgot-password linki, turuncu CTA).
+- Backend user approval workflow eklendi:
+  - Register sonrası user: `approval_status=pending`, `is_active=false`
+  - Admin onay API’leri:
+    - `GET /api/auth/admin/user-approval-requests?status=pending`
+    - `POST /api/auth/admin/user-approval-requests/{id}/approve`
+    - `POST /api/auth/admin/user-approval-requests/{id}/reject`
+  - Rol bazlı login endpointleri:
+    - `POST /api/auth/login/admin`
+    - `POST /api/auth/login/user`
+- DB migration eklendi: `20260311_0005_user_approval_flow.py` (approval kolonları)
+- Testler:
+  - `/app/test_reports/iteration_9.json` (backend 13/13 pass, frontend 100%)
+  - `/app/backend/tests/test_user_approval_flow.py`
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Binance Testnet API key’leri ile ilk kontrollü canlı test emri (yalnız BTCUSDT, 1x, düşük notional)
 - Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
-- Admin user-management modülü (listeleme, disable/enable)
+- Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
 - Alembic migration’larda rollback senaryolarının staging doğrulaması
 
 ### P1
@@ -197,5 +219,5 @@
 1. Kullanıcıdan Binance Futures Testnet key’lerini alıp permission=ready + ilk canlı test emrini doğrula
 2. Slippage metriğini (beklenen fiyat vs gerçekleşen fiyat) pipeline + admin/user görünümüne ekle
 3. Hardening checklist trendini grafik + alarm geçmişi ile zenginleştir
-4. Backtest insights sayfasına filtre/sıralama ve karşılaştırma ekle
+4. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
 5. Canlı emir öncesi dry-run otomasyon senaryolarını release-gate pipeline’a bağla
