@@ -225,6 +225,24 @@
   - `/app/backend/tests/test_phase4_iter2_exchange_settings.py`
   - Not: valid testnet key olmadan gerçek test order bilinçli olarak BLOCKED kaldı (beklenen davranış)
 
+### 2026-03-11 (Faz-4 İterasyon-2C — A→B→C İlerlemesi)
+- Kullanıcı tercihi uygulandı: **A→B→C**
+- **A (Test Order + Slippage doğrulama altyapısı):**
+  - User panel exchange settings üzerinden key yönetimi akışı korundu
+  - Test order path valid key yoksa `400` ile güvenli bloklanır
+  - Valid key geldiğinde ilk kontrollü order lifecycle + slippage/latency/quality ölçümü hazır
+- **B (Release Gate otomasyon pipeline):**
+  - Runtime içine 30 sn döngüyle release gate guard loop eklendi
+  - `BLOCKED => live_mode_enabled=False` otomatik zorlanır
+  - Monitoring endpointine `release_gate_status`, `release_gate_last_checked` eklendi
+- **C (Execution quality normalizasyonu):**
+  - Quality score strategy + volatility rejimine göre normalize edildi
+  - `strategy_type`, `volatility_regime`, `volatility_pct` alanları execution quality response’larına eklendi
+- Bu iterasyonda kullanıcı talebine göre **permission drift trend grafiği eklenmedi** (sonraki iterasyona bırakıldı).
+- Testler:
+  - `/app/test_reports/iteration_11.json` (backend 23/23 pass, frontend 100%)
+  - `/app/backend/tests/test_phase4_iter2_release_gate_pipeline.py`
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
@@ -250,7 +268,7 @@
 
 ## 7) Next Tasks List
 1. Geçerli testnet key ile ilk order sonucu (filled/partial/cancelled) ve slippage doğrulamasını canlı testte tamamla
-2. Execution quality score formülünü strategy bazlı normalize et (volatiliteye duyarlı)
-3. Hardening checklist trendini grafik + alarm geçmişi ile zenginleştir
-4. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
+2. Hardening checklist trendini grafik + alarm geçmişi ile zenginleştir
+3. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
+4. Permission drift trend grafiğini admin panelde devreye al
 5. Release gate’i deploy öncesi otomasyon pipeline’ına bağla
