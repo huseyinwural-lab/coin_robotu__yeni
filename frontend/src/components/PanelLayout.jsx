@@ -127,7 +127,7 @@ export const PanelLayout = () => {
   return (
     <div className={`${roleThemeClass} h-screen overflow-hidden bg-slate-950 text-slate-100`} data-testid="panel-layout-wrapper">
       <div className="grid h-full grid-cols-1 md:grid-cols-[240px_1fr]">
-        <aside className={`flex h-full flex-col border-r p-4 ${sidebarClass}`} data-testid="sidebar-panel">
+        <aside className={`flex h-full min-h-0 flex-col overflow-hidden border-r p-4 ${sidebarClass}`} data-testid="sidebar-panel">
           <div className="mb-6">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-400" data-testid="brand-kicker">Trading Engine</p>
             <h1 className={`text-xl font-bold uppercase tracking-tight ${brandTitleClass}`} data-testid="brand-title">Industrial Cockpit</h1>
@@ -139,7 +139,7 @@ export const PanelLayout = () => {
             )}
           </div>
 
-          <nav className="flex-1 space-y-2 overflow-y-auto pr-1" data-testid="sidebar-navigation">
+          <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1" data-testid="sidebar-navigation">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -164,7 +164,7 @@ export const PanelLayout = () => {
 
           <Button
             variant="outline"
-            className={`mt-8 w-full ${logoutButtonClass}`}
+            className={`mt-4 w-full shrink-0 ${logoutButtonClass}`}
             onClick={() => {
               logout();
               navigate(isAdmin ? "/admin/login" : "/user/login");
