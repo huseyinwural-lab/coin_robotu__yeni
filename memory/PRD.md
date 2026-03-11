@@ -668,10 +668,22 @@
 - PostgreSQL-only sweep tekrarlandı: mongo/pymongo/ObjectId kalıntısı yok.
 - Testler: curl risk-orchestrator + regime evaluate, Playwright screenshot (risk orchestrator + strategies).
 
+### 2026-03-11 (Faz-7.1/7.2/7.5 — Hardening Blok-1)
+- Manifest zinciri eklendi: `prev_chain_hash`, `chain_hash`, `chain_position` (GENESIS bootstrap).
+- Verify endpoint chain doğrulaması dönüyor; chain bozulması tespit ediliyor.
+- Batch verify endpointi eklendi: `GET /api/audit/artifacts/verify-all` (artifact_type/date/status filtreleri).
+- Admin Proof paneli: batch verify UI + chain alanları görünür oldu.
+- Release Gate Hardening: READY/WARNING/BLOCKED statüleri, clock drift ve worker lag eşikleri, rate-limit/permission/risk-orchestrator/chain kontrolleri.
+- Release gate CLI ve admin UI statü renkleri güncellendi.
+- Testler: curl batch verify + release gate; Playwright: proofs + phase4 live control.
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
-- Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
-- Gerçek execution evidence’de immutable alanları canlı order üzerinden finalize et (exchange_order_id/client_order_id/submitted/ack/fill/slippage/validation_snapshot)
+- Faz-7.3: DLQ + poison message quarantine (retry limit, quarantine reason, admin list + reprocess/dismiss)
+- Faz-7.4: Stuck intent recovery (timeout policy, resync/mark_failed/replay_from_last_safe_event)
+- Faz-7.6: Kritik breach alert pipeline (admin internal alert + duplicate suppression)
+- Faz-7.7: Breach trend / operasyon görünürlüğü (breach count, reject dağılımı, backlog metrikleri)
+- Geçerli Binance Testnet key ile live order lifecycle proof (BLOCKED: key bekleniyor)
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
 - Alembic migration’larda rollback senaryolarının staging doğrulaması
@@ -692,7 +704,10 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Geçerli testnet key ile gerçek order evidence (NEW/PARTIAL/FILLED/CANCELED) finalize et
-2. Hardening+: manifest_chain_hash (append chain integrity)
-3. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
-4. Replay-native analytics (param sweep) için ilk UI/deney seti
+1. Faz-7.3 DLQ + poison message quarantine
+2. Faz-7.4 Stuck intent recovery
+3. Faz-7.6 Kritik breach alert pipeline
+4. Faz-7.7 Breach trend görünürlüğü
+5. Geçerli Binance Testnet key geldiğinde live order lifecycle proof
+6. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
+7. Replay-native analytics (param sweep) için ilk UI/deney seti
