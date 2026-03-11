@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from models import StrategyDefinition, StrategyVersion
+from models import AuditLog, RegimeSnapshot, StrategyDefinition, StrategyRegimeBinding, StrategyVersion
 
 
 _CACHE_TTL_SECONDS = 30
@@ -171,3 +171,100 @@ def archive_strategy(db: Session, *, strategy_id: str) -> StrategyDefinition:
     db.refresh(strategy)
     _strategy_cache[strategy.strategy_id] = (time.time(), strategy.strategy_id)
     return strategy
+
+
+def create_strategy_regime_binding(
+    db: Session,
+    *,
+    strategy_version_id: str,
+    allowed_regimes: list[str],
+    blocked_regimes: list[str],
+    priority: int,
+    gating_policy_version: str,
+    created_by: str,
+) -> StrategyRegimeBinding:
+    version = get_version(db, strategy_version_id)
+    if version is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_version_not_found")
+
+    row = StrategyRegimeBinding(
+        binding_id=str(uuid.uuid4()),
+        strategy_version_id=strategy_version_id,
+        allowed_regimes=sorted(set(allowed_regimes)),
+        blocked_regimes=sorted(set(blocked_regimes)),
+        priority=priority,
+        gating_policy_version=gating_policy_version,
+        created_by=created_by,
+        created_at=_now_utc(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def get_latest_regime_binding(db: Session, strategy_version_id: str) -> StrategyRegimeBinding | None:
+    return (
+        db.query(StrategyRegimeBinding)
+        .filter(StrategyRegimeBinding.strategy_version_id == strategy_version_id)
+        .order_by(StrategyRegimeBinding.created_at.desc())
+        .first()
+    )
+
+
+def get_strategy_regime_bindings(db: Session, strategy_version_id: str) -> list[StrategyRegimeBinding]:
+    return (
+        db.query(StrategyRegimeBinding)
+        .filter(StrategyRegimeBinding.strategy_version_id == strategy_version_id)
+        .order_by(StrategyRegimeBinding.created_at.desc())
+        .all()
+    )
+
+
+def get_strategy_regime_overview(db: Session, strategy_id: str, *, limit: int = 30) -> dict:
+    versions = (
+        db.query(StrategyVersion)
+        .filter(StrategyVersion.strategy_id == strategy_id)
+        .order_by(StrategyVersion.version_number.desc())
+        .all()
+    )
+    version_ids = [item.version_id for item in versions]
+
+    if version_ids:
+        bindings = (
+            db.query(StrategyRegimeBinding)
+            .filter(StrategyRegimeBinding.strategy_version_id.in_(version_ids))
+            .order_by(StrategyRegimeBinding.created_at.desc())
+            .all()
+        )
+        snapshots = (
+            db.query(RegimeSnapshot)
+            .filter(RegimeSnapshot.strategy_version_id.in_(version_ids))
+            .order_by(RegimeSnapshot.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+    else:
+        bindings = []
+        snapshots = []
+
+    reject_logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "strategy_regime_gated_reject")
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit * 5)
+        .all()
+    )
+    reject_distribution: dict[str, int] = {}
+    for log in reject_logs:
+        details = log.details or {}
+        if details.get("strategy_id") != strategy_id:
+            continue
+        reason = details.get("reason_code", "regime_not_allowed")
+        reject_distribution[reason] = reject_distribution.get(reason, 0) + 1
+
+    return {
+        "bindings": bindings,
+        "snapshots": snapshots,
+        "reject_distribution": reject_distribution,
+    }

@@ -399,6 +399,46 @@ def _ensure_sqlite_phase4_columns():
             connection.execute(
                 text(
                     """
+                    CREATE TABLE IF NOT EXISTS strategy_regime_bindings (
+                        binding_id VARCHAR PRIMARY KEY,
+                        strategy_version_id VARCHAR NOT NULL,
+                        allowed_regimes JSON NOT NULL DEFAULT '[]',
+                        blocked_regimes JSON NOT NULL DEFAULT '[]',
+                        priority INTEGER NOT NULL DEFAULT 100,
+                        gating_policy_version VARCHAR(30) NOT NULL DEFAULT '1.0',
+                        created_by VARCHAR NOT NULL,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS regime_snapshots (
+                        regime_snapshot_id VARCHAR PRIMARY KEY,
+                        timestamp_utc VARCHAR(40) NOT NULL,
+                        symbol VARCHAR(20) NOT NULL,
+                        timeframe VARCHAR(10) NOT NULL,
+                        strategy_version_id VARCHAR NOT NULL,
+                        volatility_regime VARCHAR(40) NOT NULL DEFAULT 'normal',
+                        trend_regime VARCHAR(40) NOT NULL DEFAULT 'flat',
+                        liquidity_regime VARCHAR(40) NOT NULL DEFAULT 'normal',
+                        market_state_features JSON NOT NULL DEFAULT '{}',
+                        feature_set_version VARCHAR(30) NOT NULL DEFAULT '1.0',
+                        regime_score FLOAT NOT NULL DEFAULT 0,
+                        regime_label VARCHAR(50) NOT NULL,
+                        regime_hash VARCHAR(128) NOT NULL,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
                     CREATE TABLE IF NOT EXISTS execution_intents (
                         intent_id VARCHAR PRIMARY KEY,
                         strategy_id VARCHAR NOT NULL,

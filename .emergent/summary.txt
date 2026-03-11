@@ -2,93 +2,93 @@
 The user wants to build a multi-user, web-based, algorithmic trading platform.
 
 **PRODUCT REQUIREMENTS:**
-- **Tech Stack:** Python/FastAPI (Backend), React/TailwindCSS (Frontend), PostgreSQL (Database), Redis (Cache/State), Docker (Containerization).
+- **Tech Stack:** Python/FastAPI (Backend), React/TailwindCSS (Frontend), PostgreSQL (Database), Redis (Cache/Event Bus), Docker (Containerization).
 - **Core Goal:** Create a sustainable, scalable, and modular platform, avoiding short-term fixes.
 - **Database:** PostgreSQL is mandatory; MongoDB must not be used at all.
 - **Functionality:**
-    - Multi-user architecture with role-based access (Admin, User) and an admin approval flow for new users.
-    - User-managed, encrypted exchange API keys.
-    - Support for Spot and Futures trading, with a venue-aware architecture to support multiple exchanges (starting with Binance).
-    - Advanced, user-configurable risk management layer (capital allocation %, risk per trade %, daily loss limits, compounding).
-    - A Trade Preview feature to show users the financial implications of their risk settings before trading.
-    - Centralized Admin Panel for system monitoring (health, release gates, alerts) and control (managing exchanges, user permissions, release gate overrides).
-    - A CI/CD Release Gate to ensure deployment safety, with environment-specific policies (stage/prod) and manual override capabilities for admins.
-- **UI Theme:** Distinct themes for user and admin panels. The user-facing panel uses an orange/black theme, and the admin panel has also been updated to this theme per a recent user request.
+    - A multi-phase development plan focusing on a robust, deterministic, and event-driven architecture.
+    - **Phase 4 (Completed):** Established multi-user roles, encrypted API key management, risk management UI, and a CI/CD Release Gate.
+    - **Phase 5 (Completed):** Hardened the system with audit trails, cryptographic proof of artifacts (e.g., execution results), verification endpoints, and a dedicated admin panel for proofs.
+    - **Phase 6 (In Progress):** Build the core Strategy Engine. This includes a versioned, append-only domain for strategies, a deterministic decision kernel (pure function), an event-driven runtime for execution, a market regime classifier, and a centralized risk orchestrator.
+- **UI Theme:** Distinct themes for user and admin panels (orange/black).
 
 **User's preferred language**: The user communicates exclusively in **Turkish**. The next agent MUST continue the conversation in Turkish.
 
 **what currently exists?**
-The project is a sophisticated, multi-user trading platform foundation with a complete, but currently mocked, execution pipeline.
-- The backend is a modular, event-driven FastAPI application using PostgreSQL with Alembic for migrations.
-- The frontend is a React application with separate, secure portals for Users and Admins.
-- **Phase 4 is nearly complete:**
-    - A comprehensive admin monitoring dashboard is in place, featuring a CI/CD release gate status, manual override controls with audit trails, and an alert system.
-    - A sophisticated user-facing risk management panel has been built with a 3-tab layout (, , ), allowing users to configure their capital and risk strategy as per a detailed user model.
-    - The entire pipeline to validate user API keys and prepare for a test order is built and functional. It is currently in an  state because the user-provided credentials are invalid.
-- **Venue Expansion is in progress:** The backend models for a multi-exchange architecture (, , , ) have been created in PostgreSQL to prepare the system for Phase 5.
+The project is a sophisticated algorithmic trading platform foundation with a highly structured, event-driven backend and separate admin/user frontends. The core architecture for the Strategy Engine (Phase 6) is now largely in place.
+
+- **Backend:** A modular FastAPI application using PostgreSQL (with Alembic migrations) and Redis. The system is built around key principles of determinism and immutability.
+- **Frontend:** A React application with a comprehensive admin portal for managing users, exchanges, audit proofs, and now strategies.
+- **Strategy Engine (Phase 6):**
+    - **Domain (6.1):** Append-only models for  and  are implemented, with an admin UI to manage them.
+    - **Kernel (6.2):** A  function provides a deterministic decision-making core, taking a  and returning a .
+    - **Runtime (6.3):** A Redis-based event bus connects the kernel to a separate execution worker process. The flow from  ->  is mapped. The system currently uses a paper/mock exchange adapter for safety. Hot/Cold storage for decision traces is implemented.
+    - **Regime Gating (6.4):** The system can now classify market regimes ( pure function) and gate strategy execution based on predefined rules (). This logic is complete, and the admin panel has been updated for visibility.
 
 **Last working item**:
--   **Last item agent was working:** The agent was implementing the Venue Expansion Preparation architecture, a prerequisite for starting Phase 5 (Strategy Engine). This involves making the platform multi-exchange and multi-market-aware. The agent successfully created the backend PostgreSQL models and was about to begin implementing the corresponding Admin UI for managing exchanges, capabilities, and user assignments.
--   **Status:** IN PROGRESS
--   **Agent Testing Done:** N
+-   **Last item agent was working:** Completing **Phase 6.4: Regime Classifier Contract + Regime-Gated Decision Flow**. This involved creating the backend models (, ), a deterministic  function, integrating this into the decision flow to prevent strategies from running in unsuitable market conditions, and adding visibility to the admin panel.
+-   **Status:** USER VERIFICATION PENDING
+-   **Agent Testing Done:** Y (Testing agent  passed, along with local regression tests).
 -   **Which testing method agent to use?** both
 -   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
 -   **Issue 1: Real Exchange Order Lifecycle Proof (P0)**
-    -   **Description:** The final, critical step of Phase 4 is to execute a real order on the Binance Futures Testnet to prove the end-to-end execution pipeline works. The entire system is ready for this, but the user has so far provided invalid API credentials. The system has correctly identified the keys as invalid and is displaying an  status to the user.
-    -   **Attempted fixes:** The full infrastructure for key validation and status reporting is complete and working as designed.
+    -   **Description:** The final validation of the trading pipeline requires executing a real order on the Binance Futures Testnet. The system is architecturally ready, but it is blocked because the user has not provided valid API credentials. During this session, the user made several attempts to provide keys, but they consistently failed validation with  and  errors.
+    -   **Attempted fixes:** The agent correctly diagnosed the key validation failures and provided the user with a clear debug checklist. The system correctly remains in a  state for live execution while allowing other development to proceed.
     -   **Next debug checklist:**
-        1.  The user must enter valid **Binance Futures Testnet** API keys (with trading permissions enabled) into the user panel ( tab).
-        2.  After the user confirms the keys are entered, the agent must trigger the  endpoint (with correct venue parameters) to confirm  and .
-        3.  Once validated, trigger the  flow.
-        4.  Verify that the complete order lifecycle (e.g., NEW, FILLED, CANCELED) and execution metrics (slippage, latency) are captured and stored correctly in the database.
-        5.  Confirm the Execution Evidence Panel on the user UI correctly displays the results.
-    -   **Why fix this issue and what will be achieved with the fix?** This is the ultimate validation of the entire trading infrastructure built in Phase 4. Completing it will bridge the gap from a mock system to a real-world execution-capable platform, officially closing Phase 4.
+        1.  The user MUST provide valid **Binance Futures Testnet** API keys with **Futures trading permissions enabled**. IP restrictions should be disabled for testing.
+        2.  Once the user confirms the keys are saved, the agent must trigger  to confirm a successful response.
+        3.  Upon validation, trigger the  flow and verify the complete order lifecycle.
+    -   **Why fix this issue and what will be achieved with the fix?** This will provide the ultimate proof that the end-to-end execution pipeline works with a live exchange, officially closing a major project milestone.
     -   **Status:** USER VERIFICATION PENDING
     -   **Is recurring issue?** Y
     -   **Should Test frontend/backend/both after fix?** both
-    -   **Blocked on other issue:** The user needs to provide valid API keys.
+    -   **Blocked on other issue:** User needs to provide valid API keys.
 
 **In progress Task List**:
--   **Task 1: Complete Venue Expansion Preparation (P0)**
-    -   **Where to resume:** The backend models are done (). The agent needs to resume by building the frontend UIs.
-        1.  **Admin UI:** Implement the UI in  to allow admins to manage Exchanges, Capabilities, Allowed Markets (per environment), and User Assignments.
-        2.  **User UI:** Implement the venue selection components (Dropdowns for Exchange, Market Type, Environment) in the user panel ( and  tabs).
-        3.  **Backend API:** Update the  endpoint to require , , and  parameters, making it venue-aware.
-    -   **What will be achieved with this?** This will transform the platform from a single-venue application to a scalable, multi-exchange architecture, which is a mandatory prerequisite before starting the Strategy Engine (Phase 5).
-    -   **Status:** IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** both
-    -   **Blocked on something:** None.
+- None.
 
 **Upcoming and Future Tasks**
 *   **Upcoming Tasks:**
-    *   **P0: Implement Spot+Futures dual mode UI:** As requested by the user, modify the user panel to have a clear toggle or selection for  vs. . The UI should adapt based on the selection, hiding/showing fields like leverage and using the correct risk preview logic. This should be integrated with the new Venue Selection mechanism.
-    *   **P1: Phase 5, Iteration 1 - Core Safety Layers:** Begin building the foundation of the Strategy Engine, focusing on safety first:
-        - **Risk Engine:** A service that acts as a final gatekeeper, vetoing any trade proposals that violate user-defined risk rules (hard veto).
-        - **Position Sizing Engine:** A service to calculate trade size based on the user's capital management settings.
-        - **Kill Switch:** A system-wide switch to halt all new trading activity in case of an emergency.
-
+    *   **P0: Phase 6.5 - Risk Orchestrator:** Implement the centralized risk engine. This is the next critical step. It will act as a final gatekeeper, enforcing rules independent of strategy logic.
+        - Pre-trade risk gate (veto power).
+        - In-trade risk supervisor.
+        - System-wide kill-switch and circuit breakers.
+        - Exposure limits (per symbol, strategy, account).
 *   **Future Tasks:**
-    *   **Phase 5, Iteration 2: Backtest/Replay Engine:** Build an engine to test strategies on historical data.
-    *   **Phase 5, Iteration 3+: Advanced Strategy Components:** Implement Market Regime Detection, Strategy Isolation, and Portfolio Exposure Management.
-    *   **Add Bybit Support:** Once the venue architecture is proven with Binance, add the adapter for Bybit.
+    *   **P1: Phase 6.6 - Replay-Native Analytics:** Build tools for reproducible replay runs and parameter sweep experiments.
+    - **P1: Phase 6.7/6.8 - User-Facing UI:** Develop the user-side UI for observing strategy performance and the final HTML/CSS polish.
+    *   **P2: Implement Spot+Futures dual mode UI:** Adapt the user-facing UI to handle both Spot and Futures trading, showing/hiding relevant fields like leverage.
+    *   **P2: Add Bybit Support:** Integrate a new exchange adapter once the core architecture is fully proven.
+    *   **P2: DLQ / Poison-Message Quarantine:** Enhance worker robustness by adding a dead-letter queue for failing messages.
 
 **Completed work in this session**
--   **Admin & Auth:** Implemented a full user approval workflow, split admin/user login routes, and updated the admin panel UI theme.
--   **Phase 4 - Controlled Live Activation:**
-    -   **User Risk Management UI:** Built a sophisticated 3-tab user panel (, , ) based on the user's detailed capital management model, including a live Trade Preview.
-    -   **Readiness & Validation:** Created the complete infrastructure for users to input, store (encrypted), and validate their API keys, with clear status feedback on the UI.
-    -   **Release Gate & Deploy Safety:** Implemented an environment-aware (stage/prod) CI/CD release gate with admin-controlled manual override, audit trails, and live countdown timers.
-    -   **Admin Monitoring:** Enhanced the admin dashboard with a full suite of monitoring tools for release gates, security alerts (permission drift), and system health.
--   **Venue Expansion Prep (Backend):** Created the necessary PostgreSQL models to support a multi-exchange architecture.
+- **Phase 5 Hardening:**
+  - Implemented artifact integrity with SHA-256 hashes and a manifest file ().
+  - Created a verification endpoint ().
+  - Built a dedicated admin panel for proofs ().
+  - Created an audit trail for replay results feeding into risk policies ().
+- **Phase 6.1 Strategy Core Domain:**
+  - Established  &  append-only models and an admin UI () for management.
+- **Phase 6.2 Deterministic Decision Kernel:**
+  - Implemented a  function with deterministic  and  contracts to ensure replayability.
+- **Phase 6.3 Event-Driven Runtime Skeleton:**
+  - Integrated a Redis-based event bus for communication between services.
+  - Created a separate execution worker process, decoupled from the main web app.
+  - Implemented a  mapper.
+  - Established a safe paper/mock exchange adapter boundary.
+  - Implemented a Hot/Cold storage pattern for decision traces.
+- **Phase 6.4 Regime Classifier & Gating:**
+  - Implemented a  function and  model.
+  - Added logic to gate strategy execution based on market regime rules, with visibility in the admin panel.
 
 **Earlier issues found/mentioned but not fixed**
 -   **Issue 1: Ensure No MongoDB Remnants**
-    -   **Debug checklist:** The user has repeatedly insisted on no mongo whatsoever. A final, full codebase search for , ,  is required before final production deployment to ensure 100% compliance.
+    -   **Debug checklist:** A full codebase search for , ,  is required before final production deployment to ensure 100% compliance with the user's PostgreSQL-only directive.
     -   **Why to solve this issue and what will be achieved with this?** To satisfy a critical and recurring architectural constraint from the user.
     -   **Should Test frontend/backend/both after fix:** Backend
-    -   **Is recurring issue?** Y (as a user directive).
+    -   **Is recurring issue?** Y
 
 **Known issue recurrence from previous fork**
 -   N/A
@@ -99,81 +99,83 @@ The project is a sophisticated, multi-user trading platform foundation with a co
 **Key Technical Concepts**
 -   **Backend:** FastAPI, Python, SQLAlchemy ORM
 -   **Frontend:** React, TailwindCSS, Shadcn UI
--   **Database:** PostgreSQL with Alembic for migrations
--   **Architecture:** Event-Driven, Modular Trading Core, Adapter pattern for exchanges, CI/CD safety gates.
--   **Real-time Data:** Binance WebSocket API (for market data).
--   **Execution:** Binance REST API (for orders).
+-   **Database:** PostgreSQL with Alembic
+-   **Event Bus:** Redis
+-   **Architecture:** Event-Driven, Modular Core, Deterministic Pure Functions, Immutable Append-Only Data Models, Regime-Gated Logic, Hot/Cold Storage Pattern, Separate Worker Processes.
 
 **key DB schema**
--   : Stores user data, roles (, ), and approval status.
--   : Stores user's encrypted exchange API keys.
--   : **(New)** Registry of supported exchanges (e.g., 'binance').
--   : **(New)** Registry of market types (e.g., 'spot', 'futures').
--   : **(New)** Matrix of features for each exchange/market combo.
--   : **(New)** Maps users to allowed exchanges/markets.
--   : Audit trail for manual deployment overrides.
+-   , , , 
+-   **New:** , , , , , , , , .
 
 **changes in tech stack**
--   None. The project strictly adheres to the PostgreSQL/FastAPI/React stack.
+-   **Redis** was added and is now a core dependency for the event bus architecture.
 
 **All files of reference**
--   : Contains the new SQLAlchemy models for the Venue Expansion architecture.
--   : To be created for the admin venue management UI.
--   , : Need modification for venue selection UI.
--   : The  endpoint here needs to be updated to be venue-aware.
--   : The core logic for the CI/CD safety gate.
+-   : Defines  and .
+-   : Defines  and .
+-   : Contains the  pure function.
+-   : Contains the  pure function.
+-   : Core logic for the Redis event bus.
+-   : Entry point for the separate worker process.
+-   : New admin panel for audit proofs.
+-   : New admin panel for strategy management.
+-   Alembic migration files for the newly added tables.
 
 **Areas that need refactoring**:
--   None. The current work on Venue Expansion is a proactive refactor to prepare the architecture for scalability.
+- None. The architecture is being built out methodically based on user-approved plans.
 
 **key api endpoints**
--   : To approve new user registrations.
--   : To save a user's encrypted API keys.
--   : To validate API keys and permissions. **(Needs update to be venue-aware)**.
--   : To execute a controlled test order.
--   : To manually override a blocked deployment.
+-   
+-   , 
+-   **New:** 
+-   **New:** 
+-   **New:**  (and associated sub-routes)
 
 **Critical Info for New Agent**
--   **Turkish Language:** The user communicates exclusively in Turkish. All agent responses MUST be in Turkish.
--   **Follow User Specs:** The user provides very detailed, multi-page specifications. These are non-negotiable PRDs and must be followed precisely.
--   **No MongoDB:** This is a critical, recurring constraint. Only PostgreSQL is allowed.
--   **Phased Development:** The project proceeds in clear phases. The current tasks (Venue Expansion and Real Order Proof) must be completed before starting Phase 5 (Strategy Engine).
--   **Safety First:** The user consistently prioritizes safety, risk management, and operational control. Do not compromise on these safety layers (Release Gates, Risk Engine, etc.).
--   **Blocked on User for Phase 4 Completion:** The final step of Phase 4 is blocked until the user provides valid Binance Futures Testnet keys. The agent should work on the Venue Expansion task in the meantime.
+-   **Turkish Language:** All communication with the user must be in Turkish. This is non-negotiable.
+-   **Phased Development:** The project is in **Phase 6**. The next approved task is **Phase 6.5 (Risk Orchestrator)**. Follow the user's detailed, PRD-style decision documents precisely.
+-   **Deterministic & Immutable Core:** The architecture is built on pure functions, append-only versioning, and event sourcing principles. Do not introduce side effects into the decision kernel or regime classifier.
+-   **Real Execution is Blocked:** Do not get stuck waiting for valid API keys from the user. The system is designed to proceed with development using the paper/mock adapter. The real execution proof is a pending issue blocked on the user.
+-   **Redis Dependency:** Redis is a new and critical part of the infrastructure for the event-driven runtime.
 
 **documents and test reports created in this job**
--   The user's detailed messages serve as the PRD. The agent should consider compiling these into .
--   No formal test reports have been generated.
+-   
+-   
+-   
+-   
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User:** Asks if the API key entry field was removed.
-2.  **Agent:** Clarifies the field is now in the  tab.
-3.  **User:** States they have entered the key and asks for a check and if there's a warning system.
-4.  **Agent:** Confirms the system sees  and explains the warning system is active and working.
-5.  **User:** Says saved it.
-6.  **Agent:** Explains the keys are saved but still failing validation, suggesting common reasons (wrong testnet, permissions).
-7.  **User:** Asks if the issue is with saving, provides a screenshot.
-8.  **Agent:** Analyzes the screenshot, confirms keys are saved but validation is failing, and provides a debug checklist for the user.
-9.  **User:** Asks if there is a design for Spot trading, as the current flow is Futures-focused.
-10. **Agent:** Acknowledges this is a new requirement and proposes a Spot+Futures dual mode design.
+1.  **User:** (Msg 733) Acknowledges completion of Phase 6.3 and provides a detailed PRD for the next task: **Phase 6.4 (Regime Classifier)**.
+2.  **Agent:** (Msg 734) Asks for confirmation to proceed with the plan for Phase 6.4.
+3.  **User:** (Msg 736) Responds with a single a, which the agent correctly interprets as a need for a more detailed breakdown before starting implementation.
+4.  **Agent:** (Msg 738-740) Provides a detailed implementation plan for Phase 6.4. The agent then proceeds to implement this plan over many steps.
+5.  **Agent:** (Msg 732) Announces completion of Phase 6.3 and that all tests have passed.
+6.  **User:** (Msg 731) Provides a detailed PRD for Phase 6.3. (This appears to be a re-submission or confirmation of the plan).
+7.  **User:** (Msg 676) Provides the decision set to approve the plan for Phase 6.3 (Runtime Skeleton).
+8.  **Agent:** (Msg 675) Proposes a detailed plan for Phase 6.3.
+9.  **User:** (Msg 673) Acknowledges completion of Phase 6.1/6.2 and provides a detailed PRD for Phase 6.3.
+10. **User:** (Msg 405) Reports Revalidate hata veriyor (Revalidate is giving an error) with a screenshot, part of the failed attempts to provide a valid Binance API key.
 
 **Project Health Check:**
--   **Broken:** Nothing is broken. Services are running.
--   **Mocked:** The final, real-world execution step is blocked due to invalid user API keys. The system is correctly in an  state.
+-   **Broken:** Nothing is broken. All services are running as expected.
+-   **Mocked:** The  is intentionally a paper/mock adapter. Live trading is disabled for safety during development. The final proof of live execution is blocked on the user providing valid API keys.
 
 **3rd Party Integrations**
--   **Binance API:** Used for WebSocket market data and REST API for order execution. The system is being architected to support other exchanges like Bybit in the future.
+-   **PostgreSQL:** Primary database for all persistent data.
+-   **Redis:** Used as a durable event bus for the event-driven architecture.
+-   **Binance API:** The target for live trading. Currently, only a mock adapter boundary is implemented.
 
 **Testing status**
--   **Testing agent used after significant changes:** NO
+-   **Testing agent used after significant changes:** YES (The agent ran tests up to ).
 -   **Troubleshoot agent used after agent stuck in loop:** NO
--   **Test files created:** []
+-   **Test files created:** Alembic migration files were created for new database models. No new dedicated test files were mentioned.
 -   **Known regressions:** None.
 
 **Credentials to test flow:**
 -   **Admin Login:**  / 
 -   **User Login:**  / 
--   **Binance Testnet API Keys:** The user must provide these. The system is waiting.
+-   **Binance Testnet API Keys:** **Pending from user.** The system is currently blocked on this for live execution proof.
 
 **What agent forgot to execute**
--   The agent has not compiled the user's detailed specification messages into a formal  file, which is a required administrative task.</analysis>
+-   **Final MongoDB Remnants Sweep:** The agent has not performed the final codebase search for , , or  to ensure 100% compliance with the user's PostgreSQL-only directive. This remains a low-priority cleanup task.
+-   **Consolidate PRD.md:** The agent has been following the user's detailed PRD-like messages but has not consolidated them into a single  file as suggested in the initial handoff.</analysis>

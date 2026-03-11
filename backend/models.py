@@ -618,6 +618,38 @@ class StrategyVersion(Base):
     version_hash: Mapped[str] = mapped_column(String(128), index=True)
 
 
+class StrategyRegimeBinding(Base):
+    __tablename__ = "strategy_regime_bindings"
+
+    binding_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    strategy_version_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_versions.version_id"), index=True)
+    allowed_regimes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    blocked_regimes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    priority: Mapped[int] = mapped_column(Integer, default=100)
+    gating_policy_version: Mapped[str] = mapped_column(String(30), default="1.0")
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RegimeSnapshot(Base):
+    __tablename__ = "regime_snapshots"
+
+    regime_snapshot_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    timestamp_utc: Mapped[str] = mapped_column(String(40), index=True)
+    symbol: Mapped[str] = mapped_column(String(20), index=True)
+    timeframe: Mapped[str] = mapped_column(String(10), index=True)
+    strategy_version_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_versions.version_id"), index=True)
+    volatility_regime: Mapped[str] = mapped_column(String(40), default="normal")
+    trend_regime: Mapped[str] = mapped_column(String(40), default="flat")
+    liquidity_regime: Mapped[str] = mapped_column(String(40), default="normal")
+    market_state_features: Mapped[dict] = mapped_column(JSON, default=dict)
+    feature_set_version: Mapped[str] = mapped_column(String(30), default="1.0")
+    regime_score: Mapped[float] = mapped_column(Float, default=0)
+    regime_label: Mapped[str] = mapped_column(String(50), index=True)
+    regime_hash: Mapped[str] = mapped_column(String(128), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class ExecutionIntent(Base):
     __tablename__ = "execution_intents"
 
@@ -693,3 +725,8 @@ def _block_strategy_version_update(_, __, ___):
 @event.listens_for(ExecutionIntent, "before_update", propagate=True)
 def _block_execution_intent_update(_, __, ___):
     raise ValueError("execution_intent_immutable")
+
+
+@event.listens_for(StrategyRegimeBinding, "before_update", propagate=True)
+def _block_strategy_regime_binding_update(_, __, ___):
+    raise ValueError("strategy_regime_binding_immutable")
