@@ -2,16 +2,25 @@
   animation: fade-in 0.35s ease-out;
 }
 
+.warm-theme,
 .admin-theme {
   background: #ff8a00 !important;
   color: #111111 !important;
 }
 
+.warm-theme *,
 .admin-theme * {
   color: #111111 !important;
   border-color: #6b3f00 !important;
 }
 
+.warm-theme .bg-slate-950,
+.warm-theme .bg-slate-900,
+.warm-theme .bg-slate-800,
+.warm-theme .bg-red-950\/20,
+.warm-theme .bg-blue-600,
+.warm-theme .bg-blue-700,
+.warm-theme .bg-transparent,
 .admin-theme .bg-slate-950,
 .admin-theme .bg-slate-900,
 .admin-theme .bg-slate-800,
@@ -22,6 +31,10 @@
   background: #ffd6a1 !important;
 }
 
+.warm-theme .hover\:bg-red-900\/40:hover,
+.warm-theme .hover\:bg-blue-700:hover,
+.warm-theme .hover\:bg-orange-600:hover,
+.warm-theme .hover\:bg-zinc-900:hover,
 .admin-theme .hover\:bg-red-900\/40:hover,
 .admin-theme .hover\:bg-blue-700:hover,
 .admin-theme .hover\:bg-orange-600:hover,
@@ -29,6 +42,9 @@
   background: #ffc67d !important;
 }
 
+.warm-theme input,
+.warm-theme textarea,
+.warm-theme select,
 .admin-theme input,
 .admin-theme textarea,
 .admin-theme select {
@@ -36,11 +52,19 @@
   color: #111111 !important;
 }
 
+.warm-theme input::placeholder,
+.warm-theme textarea::placeholder,
 .admin-theme input::placeholder,
 .admin-theme textarea::placeholder {
   color: #111111aa !important;
 }
 
+.warm-theme .text-slate-400,
+.warm-theme .text-slate-500,
+.warm-theme .text-blue-300,
+.warm-theme .text-red-300,
+.warm-theme .text-orange-500,
+.warm-theme .text-orange-400,
 .admin-theme .text-slate-400,
 .admin-theme .text-slate-500,
 .admin-theme .text-blue-300,
