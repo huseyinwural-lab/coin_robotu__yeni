@@ -704,6 +704,7 @@ class ReplayRiskSummaryResponse(BaseModel):
     exposure_breach_count: int
     risk_reject_count: int
     evidence_type: str
+    artifact_id: str | None = None
     export_file: str
     generated_at: datetime
 
@@ -735,11 +736,33 @@ class LifecycleProofResponse(BaseModel):
     market_type: str
     environment: str
     reason_codes: list[str]
+    exchange_artifact_id: str | None = None
+    fallback_artifact_id: str | None = None
     exchange_evidence_file: str
     fallback_replay_evidence_file: str | None
     replay_run_id: str | None
     message: str
     generated_at: datetime
+
+
+class ArtifactManifestItemResponse(BaseModel):
+    artifact_id: str
+    filename: str
+    artifact_type: str
+    sha256: str
+    size: int
+    created_at: str
+    proof_id: str
+    evidence_type: str
+    status: str
+
+
+class ArtifactVerifyResponse(BaseModel):
+    artifact_id: str
+    filename: str
+    sha256_expected: str
+    sha256_actual: str
+    verified: bool
 
 
 class UserPortfolioOverviewResponse(BaseModel):

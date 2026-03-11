@@ -1,7 +1,5 @@
-import json
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -31,10 +29,10 @@ from services.live_mode_service import (
     validate_exchange_credentials_for_user,
 )
 from services.replay_service import get_replay_run_detail, run_replay_pipeline
+from services.artifact_service import write_signed_artifact
 
 router = APIRouter(prefix="/exchange", tags=["exchange"])
 adapter = BinanceMockAdapter(redis_client)
-EXPORT_DIR = Path("/app/backend/exports")
 
 
 @router.get("/validate", response_model=ExchangeValidateResponse)
@@ -312,11 +310,7 @@ def run_lifecycle_proof_pipeline(
     market_type = "futures"
     environment = "testnet"
     timestamp = datetime.now(timezone.utc)
-
-    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     proof_id = f"{current_user.id}_{timestamp.strftime('%Y%m%d%H%M%S')}"
-    exchange_file = EXPORT_DIR / f"exchange_evidence_{proof_id}.json"
-    fallback_file = EXPORT_DIR / f"fallback_replay_evidence_{proof_id}.json"
 
     readiness = user_readiness_checklist(
         db,
@@ -341,17 +335,20 @@ def run_lifecycle_proof_pipeline(
         except ValueError as exc:
             reason_codes = [str(exc)]
             blocker_payload = {
-                "schema_version": "execution-lifecycle-proof-v1",
                 "evidence_type": "blocked",
                 "lifecycle_proof_status": "blocked",
+                "proof_id": proof_id,
                 "exchange": exchange,
                 "market_type": market_type,
                 "environment": environment,
                 "reason_codes": reason_codes,
                 "generated_at": timestamp.isoformat(),
             }
-            with exchange_file.open("w", encoding="utf-8") as fh:
-                json.dump(blocker_payload, fh, ensure_ascii=False, indent=2, default=str)
+            exchange_artifact = write_signed_artifact(
+                blocker_payload,
+                artifact_type="exchange_evidence",
+                filename_prefix=f"exchange_evidence_{proof_id}",
+            )
             return LifecycleProofResponse(
                 lifecycle_proof_status="blocked",
                 evidence_type="blocked",
@@ -359,7 +356,9 @@ def run_lifecycle_proof_pipeline(
                 market_type=market_type,
                 environment=environment,
                 reason_codes=reason_codes,
-                exchange_evidence_file=str(exchange_file),
+                exchange_artifact_id=exchange_artifact["artifact_id"],
+                fallback_artifact_id=None,
+                exchange_evidence_file=str(exchange_artifact["path"]),
                 fallback_replay_evidence_file=None,
                 replay_run_id=None,
                 message="Live lifecycle proof denemesi başarısız",
@@ -367,9 +366,9 @@ def run_lifecycle_proof_pipeline(
             )
         timeline = lifecycle_evidence_for_metric(db, metric.id)
         payload = {
-            "schema_version": "execution-lifecycle-proof-v1",
             "evidence_type": "live_exchange",
             "lifecycle_proof_status": "completed",
+            "proof_id": proof_id,
             "exchange": exchange,
             "market_type": market_type,
             "environment": environment,
@@ -397,8 +396,11 @@ def run_lifecycle_proof_pipeline(
             ],
             "generated_at": timestamp.isoformat(),
         }
-        with exchange_file.open("w", encoding="utf-8") as fh:
-            json.dump(payload, fh, ensure_ascii=False, indent=2, default=str)
+        exchange_artifact = write_signed_artifact(
+            payload,
+            artifact_type="exchange_evidence",
+            filename_prefix=f"exchange_evidence_{proof_id}",
+        )
 
         return LifecycleProofResponse(
             lifecycle_proof_status="completed",
@@ -407,7 +409,9 @@ def run_lifecycle_proof_pipeline(
             market_type=market_type,
             environment=environment,
             reason_codes=[],
-            exchange_evidence_file=str(exchange_file),
+            exchange_artifact_id=exchange_artifact["artifact_id"],
+            fallback_artifact_id=None,
+            exchange_evidence_file=str(exchange_artifact["path"]),
             fallback_replay_evidence_file=None,
             replay_run_id=None,
             message="Gerçek Binance Futures Testnet lifecycle proof tamamlandı",
@@ -416,9 +420,9 @@ def run_lifecycle_proof_pipeline(
 
     reason_codes = [readiness.get("last_error_reason") or "awaiting_valid_key"]
     blocker_payload = {
-        "schema_version": "execution-lifecycle-proof-v1",
         "evidence_type": "blocked",
         "lifecycle_proof_status": "blocked",
+        "proof_id": proof_id,
         "exchange": exchange,
         "market_type": market_type,
         "environment": environment,
@@ -426,8 +430,11 @@ def run_lifecycle_proof_pipeline(
         "readiness": readiness,
         "generated_at": timestamp.isoformat(),
     }
-    with exchange_file.open("w", encoding="utf-8") as fh:
-        json.dump(blocker_payload, fh, ensure_ascii=False, indent=2, default=str)
+    exchange_artifact = write_signed_artifact(
+        blocker_payload,
+        artifact_type="exchange_evidence",
+        filename_prefix=f"exchange_evidence_{proof_id}",
+    )
 
     try:
         replay_run = run_replay_pipeline(
@@ -450,17 +457,19 @@ def run_lifecycle_proof_pipeline(
             market_type=market_type,
             environment=environment,
             reason_codes=reason_codes + [str(exc)],
-            exchange_evidence_file=str(exchange_file),
+            exchange_artifact_id=exchange_artifact["artifact_id"],
+            fallback_artifact_id=None,
+            exchange_evidence_file=str(exchange_artifact["path"]),
             fallback_replay_evidence_file=None,
             replay_run_id=None,
             message="Live proof bloklu; fallback replay üretimi de başarısız",
             generated_at=timestamp,
         )
     fallback_payload = {
-        "schema_version": "execution-lifecycle-proof-v1",
         "evidence_type": "fallback_replay",
         "non_live_evidence": True,
         "lifecycle_proof_status": "fallback_generated",
+        "proof_id": proof_id,
         "exchange": exchange,
         "market_type": market_type,
         "environment": environment,
@@ -481,8 +490,11 @@ def run_lifecycle_proof_pipeline(
         },
         "generated_at": timestamp.isoformat(),
     }
-    with fallback_file.open("w", encoding="utf-8") as fh:
-        json.dump(fallback_payload, fh, ensure_ascii=False, indent=2, default=str)
+    fallback_artifact = write_signed_artifact(
+        fallback_payload,
+        artifact_type="fallback_replay_evidence",
+        filename_prefix=f"fallback_replay_evidence_{proof_id}",
+    )
 
     return LifecycleProofResponse(
         lifecycle_proof_status="fallback_generated",
@@ -491,8 +503,10 @@ def run_lifecycle_proof_pipeline(
         market_type=market_type,
         environment=environment,
         reason_codes=reason_codes,
-        exchange_evidence_file=str(exchange_file),
-        fallback_replay_evidence_file=str(fallback_file),
+        exchange_artifact_id=exchange_artifact["artifact_id"],
+        fallback_artifact_id=fallback_artifact["artifact_id"],
+        exchange_evidence_file=str(exchange_artifact["path"]),
+        fallback_replay_evidence_file=str(fallback_artifact["path"]),
         replay_run_id=run.id,
         message="Live proof bloklu; fallback replay evidence üretildi",
         generated_at=timestamp,

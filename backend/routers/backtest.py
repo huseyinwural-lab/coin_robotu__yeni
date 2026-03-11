@@ -122,7 +122,7 @@ def replay_risk_summary(run_id: str, current_user: User = Depends(get_current_us
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
-    export_file = export_replay_risk_summary(summary)
+    export_meta = export_replay_risk_summary(summary)
     return ReplayRiskSummaryResponse(
         schema_version=summary["schema_version"],
         run_id=summary["run_id"],
@@ -137,6 +137,7 @@ def replay_risk_summary(run_id: str, current_user: User = Depends(get_current_us
         exposure_breach_count=summary["exposure_breach_count"],
         risk_reject_count=summary["risk_reject_count"],
         evidence_type=summary["evidence_type"],
-        export_file=export_file,
+        artifact_id=export_meta["artifact_id"],
+        export_file=export_meta["path"],
         generated_at=summary["generated_at"],
     )

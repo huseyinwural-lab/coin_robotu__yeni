@@ -41,6 +41,7 @@ const adminOnlyItems = [
   { to: "/admin/dashboard", label: "Admin Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
   { to: "/admin/user-approvals", label: "Kullanıcı Onayları", icon: ListChecks, testId: "nav-admin-user-approvals-link" },
   { to: "/admin/exchanges", label: "Exchanges", icon: Globe, testId: "nav-admin-exchanges-link" },
+  { to: "/admin/proofs", label: "Proof Panel", icon: ShieldCheck, testId: "nav-admin-proofs-link" },
   { to: "/admin/market-universe", label: "Market Universe", icon: Globe, testId: "nav-market-universe-link" },
   { to: "/admin/execution-policies", label: "Execution Policies", icon: Settings2, testId: "nav-execution-policies-link" },
   { to: "/admin/exposure-groups", label: "Exposure Groups", icon: ShieldAlert, testId: "nav-exposure-groups-link" },

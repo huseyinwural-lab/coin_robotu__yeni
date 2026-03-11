@@ -1,20 +1,18 @@
 import statistics
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
-import json
 import math
 
 import httpx
 from sqlalchemy.orm import Session
 
-from models import ReplayEquityPoint, ReplayExecution, ReplayRun
+from models import ReplayEquityPoint, ReplayExecution, ReplayRun, RiskPolicyAuditEvent
+from services.artifact_service import write_signed_artifact
 from services.pipeline.position_sizing_engine import compute_position_sizing
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
 BINANCE_FUTURES_TESTNET_REST = "https://testnet.binancefuture.com"
 SUPPORTED_INTERVALS = {"1m", "5m", "15m", "1h"}
-EXPORT_DIR = Path("/app/backend/exports")
 
 
 def _fetch_futures_klines(symbol: str, timeframe: str, limit: int) -> list[dict]:
@@ -227,6 +225,7 @@ def run_replay_pipeline(
     }
     run.status = "completed"
     run.completed_at = datetime.now(timezone.utc)
+    _persist_risk_policy_audit_event(db, run)
     db.commit()
     db.refresh(run)
     return run
@@ -320,10 +319,55 @@ def compute_replay_risk_summary(db: Session, user_id: str, run_id: str) -> dict:
     return summary
 
 
-def export_replay_risk_summary(summary: dict) -> str:
-    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    path = EXPORT_DIR / f"replay_risk_summary_{summary['run_id']}.json"
-    with path.open("w", encoding="utf-8") as fh:
-        json.dump(summary, fh, ensure_ascii=False, indent=2)
-    return str(path)
+def export_replay_risk_summary(summary: dict) -> dict:
+    signed = write_signed_artifact(
+        summary,
+        artifact_type="replay_risk_summary",
+        filename_prefix=f"replay_risk_summary_{summary['run_id']}",
+    )
+    return {"path": str(signed["path"]), "artifact_id": signed["artifact_id"]}
+
+
+def _persist_risk_policy_audit_event(db: Session, run: ReplayRun) -> None:
+    existing = db.query(RiskPolicyAuditEvent).filter(RiskPolicyAuditEvent.replay_run_id == run.id).first()
+    if existing is not None:
+        return
+
+    points = (
+        db.query(ReplayEquityPoint)
+        .filter(ReplayEquityPoint.replay_run_id == run.id, ReplayEquityPoint.user_id == run.user_id)
+        .order_by(ReplayEquityPoint.created_at.asc())
+        .all()
+    )
+    executions = (
+        db.query(ReplayExecution)
+        .filter(ReplayExecution.replay_run_id == run.id, ReplayExecution.user_id == run.user_id)
+        .order_by(ReplayExecution.created_at.asc())
+        .all()
+    )
+    max_drawdown = max((float(item.drawdown_pct or 0) for item in points), default=0)
+
+    high_vol = sum(1 for item in executions if "volatility_spike" in (item.risk_tags or []))
+    low_conf = sum(1 for item in executions if "low_confidence" in (item.risk_tags or []))
+    normal = max(len(executions) - high_vol - low_conf, 0)
+    regime_bucket = max(
+        {
+            "high_volatility": high_vol,
+            "low_confidence": low_conf,
+            "normal": normal,
+        }.items(),
+        key=lambda kv: kv[1],
+    )[0]
+
+    row = RiskPolicyAuditEvent(
+        id=str(uuid.uuid4()),
+        replay_run_id=run.id,
+        user_id=run.user_id,
+        strategy_version=str(run.metrics.get("strategy_version") or f"{run.strategy_type}-v1"),
+        regime_bucket=regime_bucket,
+        drawdown=round(max_drawdown, 6),
+        exposure_breach=int(run.metrics.get("exposure_breach_count") or 0),
+        reject_count=int(run.metrics.get("risk_reject_count") or 0),
+    )
+    db.add(row)
 

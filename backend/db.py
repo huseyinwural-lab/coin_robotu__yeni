@@ -294,6 +294,24 @@ def _ensure_sqlite_phase4_columns():
                     """
                 )
             )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS risk_policy_audit_events (
+                        id VARCHAR PRIMARY KEY,
+                        replay_run_id VARCHAR NOT NULL,
+                        user_id VARCHAR NOT NULL,
+                        strategy_version VARCHAR(120) NOT NULL DEFAULT 'unknown-v1',
+                        regime_bucket VARCHAR(40) NOT NULL DEFAULT 'normal',
+                        drawdown FLOAT NOT NULL DEFAULT 0,
+                        exposure_breach INTEGER NOT NULL DEFAULT 0,
+                        reject_count INTEGER NOT NULL DEFAULT 0,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
         except Exception:
             logger.exception("SQLite phase4 compatibility migration failed")
 

@@ -1,0 +1,30 @@
+{
+  "schema_version": "replay-risk-summary-v1",
+  "run_id": "4d2e868c-a1b6-4048-8df1-6ccb8fa8b99a",
+  "strategy_version": "trend_following-v1",
+  "max_drawdown": 1.515641,
+  "sharpe": -4.989266,
+  "win_rate": 16.129,
+  "profit_factor": 0.191487,
+  "avg_slippage_bps": 22.216394,
+  "volatility_bucket": "low",
+  "regime_bucket_distribution": {
+    "high_volatility": 43,
+    "low_confidence": 48,
+    "normal": 11
+  },
+  "exposure_breach_count": 43,
+  "risk_reject_count": 71,
+  "evidence_type": "fallback_replay",
+  "generated_at": "2026-03-11T12:26:57.123895+00:00",
+  "metadata": {
+    "schema_version": "1.0",
+    "artifact_type": "replay_risk_summary",
+    "created_at": "2026-03-11T12:26:57.124059+00:00",
+    "artifact_id": "9ce37d02-0c3e-42b6-82e6-c762314336d5",
+    "sha256": "8d0accbc16f8b553d57488d350df75d1b4067cf7081a054b709ef6979e03b597"
+  },
+  "artifact_type": "replay_risk_summary",
+  "created_at": "2026-03-11T12:26:57.124059+00:00",
+  "sha256": "8d0accbc16f8b553d57488d350df75d1b4067cf7081a054b709ef6979e03b597"
+}

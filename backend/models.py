@@ -575,6 +575,20 @@ class ReplayEquityPoint(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class RiskPolicyAuditEvent(Base):
+    __tablename__ = "risk_policy_audit_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    replay_run_id: Mapped[str] = mapped_column(String, ForeignKey("replay_runs.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    strategy_version: Mapped[str] = mapped_column(String(120), default="unknown-v1")
+    regime_bucket: Mapped[str] = mapped_column(String(40), default="normal")
+    drawdown: Mapped[float] = mapped_column(Float, default=0)
+    exposure_breach: Mapped[int] = mapped_column(Integer, default=0)
+    reject_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 @event.listens_for(ExecutionMetric, "before_update", propagate=True)
 def _block_execution_metric_update(_, __, ___):
     raise ValueError("execution_metric_immutable")
