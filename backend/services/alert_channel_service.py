@@ -77,17 +77,11 @@ def _resolve_config(db: Session | None = None) -> dict:
         row_recipients = _parse_recipients(row.alert_to)
         row_webhook = decrypt_secret(row.slack_webhook_url_encrypted) if row.slack_webhook_url_encrypted else ""
 
-        if row_api_key:
-            api_key = row_api_key
-        if row_sender:
-            sender = row_sender
-        if row_recipients:
-            recipients = row_recipients
-        if row_webhook:
-            webhook_url = row_webhook
-
-        if any([row_api_key, row_sender, row_recipients, row_webhook]):
-            source = "admin_config"
+        api_key = row_api_key
+        sender = row_sender
+        recipients = row_recipients
+        webhook_url = row_webhook
+        source = "admin_config"
 
     return {
         "api_key": api_key,
@@ -193,9 +187,10 @@ def channel_status(db: Session | None = None) -> dict:
         "email": "READY" if email_ready else "CONFIG_MISSING",
         "slack": "READY" if slack_ready else "CONFIG_MISSING",
         "channel_status": {
-            "email": "READY" if email_ready else "DISABLED",
-            "slack": "READY" if slack_ready else "DISABLED",
+            "email": "ACTIVE" if email_ready else "DISABLED",
+            "slack": "ACTIVE" if slack_ready else "DISABLED",
         },
+        "channel_status_overall": "READY" if (email_ready or slack_ready) else "CONFIG_MISSING",
         "secret_status": {
             "resend": "ready" if email_ready else "missing",
             "slack": "ready" if slack_ready else "missing",
@@ -285,15 +280,20 @@ def dispatch_alert(alert_payload: dict, db: Session | None = None) -> dict:
     if alert_type == "weekly_ops_report_generated":
         channels = ["email"]
     delivery_status: dict[str, Any] = {}
+    readiness = channel_status(db)
 
     if "email" not in channels:
         delivery_status["email"] = {"status": "CHANNEL_DISABLED"}
+    elif readiness["email"] != "READY":
+        delivery_status["email"] = {"status": "CHANNEL_DISABLED", "reason": "config_missing"}
     else:
         message = build_alert_message(alert_payload)
         delivery_status["email"] = send_email_alert(message["subject"], message["html"], severity, db)
 
     if "slack" not in channels:
         delivery_status["slack"] = {"status": "CHANNEL_DISABLED"}
+    elif readiness["slack"] != "READY":
+        delivery_status["slack"] = {"status": "CHANNEL_DISABLED", "reason": "config_missing"}
     else:
         message = build_alert_message(alert_payload)
         delivery_status["slack"] = send_slack_alert(message["slack"], severity, db)

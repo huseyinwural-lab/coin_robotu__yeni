@@ -150,7 +150,7 @@ export const AdminSystemAlertsPage = () => {
       <div className="space-y-3 border border-black/30 bg-orange-100 p-4" data-testid="admin-system-alerts-config-panel">
         <p className="text-sm font-semibold text-black" data-testid="admin-system-alerts-config-title">Alert Delivery Activation</p>
         <p className="text-xs text-black/70" data-testid="admin-system-alerts-channel-status-line">
-          email={config?.channels?.email || "-"} · slack={config?.channels?.slack || "-"} · config_source={config?.channels?.config_source || "-"}
+          channel_status={config?.channels?.channel_status_overall || "-"} · email_channel={(config?.channels?.channel_status?.email || "-").toLowerCase()} · slack_channel={(config?.channels?.channel_status?.slack || "-").toLowerCase()}
         </p>
         <p className="text-xs text-black/70" data-testid="admin-system-alerts-masked-secrets-line">
           resend={config?.config?.masked?.resend_api_key || ""} · slack={config?.config?.masked?.slack_webhook_url || ""}
