@@ -822,3 +822,69 @@
 2. RelativeVolume + PullbackQuality skorlarının slot bazlı sıralama kararına bağlanması.
 3. `max_open_positions` altında en yüksek skorlu sinyali seçen selection layer.
 4. BTC hostile freeze guard (2 candle freeze) ve rapor metriklerine etkisinin izlenmesi.
+
+## 11) 2026-03-11 — Spot Strategy Engine Faz-2 (P1) Dynamic Score Engine Uygulandı
+
+### Uygulanan kararlar (user onayı ile)
+- MarketRegime sınıfları: `TRENDING | RANGING | VOLATILE`
+- Multiplier version: `v1`
+- Selection threshold: `min_adjusted_score = 55` (**config tabanlı**)
+- Hard gate scoring’den önce çalışacak
+- BTC hostile freeze guard: 2 candle
+- Top N executable widget: **bu iterasyonda yapılmadı (P2)**
+
+### Implement edilen çekirdek bileşenler
+1. **Slot-based signal selection**
+   - Akış: hard gate pass → adjusted_score >= threshold → DESC sort → Top-N select
+   - Deterministik sıralama: `adjusted_score DESC`, eşitlikte `symbol ASC`
+2. **Execution gate finalization (hard gate)**
+   - `trend_strength != weak`
+   - `btc_regime != hostile`
+   - `freeze_guard == inactive`
+   - `symbol_position_open == false`
+3. **BTC hostile freeze guard**
+   - Tetik: `BTC 15m <= -1.5%` veya `3 candle cumulative <= -2.2%`
+   - `freeze_duration = 2 candle`
+4. **Dynamic Score Engine**
+   - Multiplier contract + `v1` seti
+   - Base score + adjusted score + score delta
+   - Multiplier boundary clamp: `[0.75, 1.25]`
+   - Clamp event audit log eklendi
+5. **Market regime stabilization**
+   - Rejim değişimi için `2 closed candle` confirmation
+   - Rejim değişim audit log eklendi
+6. **Reporting ve trade metadata genişletme**
+   - Günlük rapora market/multiplier/score alanları eklendi
+   - Trade open lifecycle payload/audit içine score breakdown metadata eklendi
+
+### Yeni/Değişen backend parçaları
+- Yeni servis: `backend/services/pipeline/spot_dynamic_score_engine.py`
+- Runtime entegrasyonu: `backend/services/pipeline/runtime.py`
+- Scan/report API güncellemeleri: `backend/routers/spot_strategy.py`
+- Report alan genişletme: `backend/services/pipeline/spot_strategy_service.py`
+- Trade ledger metadata genişletme: `backend/services/pipeline/execution_engine.py`
+
+### Rapor alanları (Faz-2)
+- `market_regime`
+- `multiplier_version`
+- `multiplier_set`
+- `base_score`
+- `adjusted_score`
+- `score_delta`
+- `signals_total`
+- `signals_after_hard_gate`
+- `signals_above_threshold`
+- `signals_selected`
+- `signals_rejected_trend_strength`
+- `signals_rejected_btc_regime`
+- `signals_rejected_freeze_guard`
+
+### Test durumu
+- Testing agent raporu: `/app/test_reports/iteration_26.json`
+  - Backend: **18/18 PASS**
+  - Frontend smoke (admin users/system-alerts): **PASS**
+
+### Güncel P2 Backlog
+1. Top N executable signals admin widget
+2. Dynamic multiplier set versiyon yönetimi (`v2+`) ve A/B karşılaştırmalı tuning
+3. Spot dışında ek strateji aktivasyonu (range/breakout) — sadece P1 davranışı stabilize olduktan sonra
