@@ -1,14 +1,23 @@
 import sys
+import argparse
 
 from db import SessionLocal
 from services.live_mode_service import enforce_release_gate, mark_active_override_used_in_deploy
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--env", required=True, choices=["stage", "prod"])
+    args = parser.parse_args()
+
     db = SessionLocal()
     try:
-        gate = enforce_release_gate(db)
+        gate = enforce_release_gate(db, environment=args.env)
         print(f"release_gate_status={gate['status']}")
+        print(f"environment={args.env}")
+        print(f"reason_code={gate.get('reason_code', 'ok')}")
+        if gate.get("override_expires_at"):
+            print(f"override_expires_at={gate['override_expires_at']}")
         if gate["status"] == "PASS_WITH_OVERRIDE":
             used = mark_active_override_used_in_deploy(db)
             if used is not None:

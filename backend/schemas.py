@@ -495,15 +495,39 @@ class MarketTickerResponse(BaseModel):
 class ExchangeTestOrderResponse(BaseModel):
     order_id: str
     exchange_order_id: str
+    client_order_id: str
     price_avg: float | None
     executed_qty: float | None
     slippage_pct: float | None
     execution_time_ms: float | None
     status: str
+    final_status: str
+    failure_code: str | None
+    submitted_at: datetime | None
+    ack_at: datetime | None
+    final_at: datetime | None
+    validation_snapshot_id: str | None
+    raw_exchange_status: dict
     state_machine_path: list[str]
     strategy_type: str
     volatility_regime: str
     volatility_pct: float
+
+
+class ExecutionLifecycleEventResponse(BaseModel):
+    event_name: str
+    event_timestamp: datetime
+    payload: dict
+
+
+class ExchangeLifecycleEvidenceResponse(BaseModel):
+    order_id: str
+    exchange_order_id: str
+    final_status: str
+    submitted_at: datetime | None
+    ack_at: datetime | None
+    final_at: datetime | None
+    timeline: list[ExecutionLifecycleEventResponse]
 
 
 class UserReadinessChecklistResponse(BaseModel):
@@ -515,6 +539,7 @@ class UserReadinessChecklistResponse(BaseModel):
     is_testnet_environment: bool
     is_validation_stale: bool
     validation_timestamp: datetime | None
+    validation_snapshot_id: str | None
     stale_after_minutes: int
     last_error_reason: str
 
@@ -641,6 +666,8 @@ class ReleaseGateStatusResponse(BaseModel):
     status: str
     reasons: list[str]
     live_activation: str
+    environment: str | None = None
+    reason_code: str | None = None
     override_active: bool = False
     override_expires_at: datetime | None = None
     override_id: str | None = None

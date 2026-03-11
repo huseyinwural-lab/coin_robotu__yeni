@@ -315,6 +315,7 @@ class UserExchangeSetting(Base):
     can_trade_snapshot: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_validation_success: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    validation_snapshot_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     validation_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -348,6 +349,7 @@ class ExecutionMetric(Base):
     symbol: Mapped[str] = mapped_column(String(20), default="BTCUSDT")
     order_id: Mapped[str] = mapped_column(String(80), index=True)
     exchange_order_id: Mapped[str] = mapped_column(String(80), index=True)
+    client_order_id: Mapped[str] = mapped_column(String(120), default="")
     order_type: Mapped[str] = mapped_column(String(20), default="MARKET")
     side: Mapped[str] = mapped_column(String(10), default="BUY")
     quote_qty: Mapped[float] = mapped_column(Float, default=10)
@@ -358,12 +360,30 @@ class ExecutionMetric(Base):
     slippage_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     execution_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="NEW")
+    final_status: Mapped[str] = mapped_column(String(30), default="NEW")
+    failure_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
     strategy_type: Mapped[str] = mapped_column(String(50), default="trend_following")
     volatility_regime: Mapped[str] = mapped_column(String(20), default="low")
     volatility_pct: Mapped[float] = mapped_column(Float, default=0)
     execution_quality_score: Mapped[float] = mapped_column(Float, default=0)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    final_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    validation_snapshot_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    raw_exchange_status: Mapped[dict] = mapped_column(JSON, default=dict)
     state_machine_path: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ExecutionLifecycleEvent(Base):
+    __tablename__ = "execution_lifecycle_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    execution_metric_id: Mapped[str] = mapped_column(String, ForeignKey("execution_metrics.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    event_name: Mapped[str] = mapped_column(String(40))
+    event_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class PermissionDriftEvent(Base):

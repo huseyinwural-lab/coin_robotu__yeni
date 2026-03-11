@@ -275,8 +275,12 @@ def admin_permission_status(_: User = Depends(require_admin), db: Session = Depe
 
 
 @router.get("/admin/release-gate", response_model=ReleaseGateStatusResponse)
-def admin_release_gate(_: User = Depends(require_admin), db: Session = Depends(get_db)):
-    return ReleaseGateStatusResponse(**enforce_release_gate(db))
+def admin_release_gate(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    environment: str = Query(default="prod"),
+):
+    return ReleaseGateStatusResponse(**enforce_release_gate(db, environment=environment))
 
 
 @router.post("/admin/release-gate/override", response_model=ReleaseGateOverrideResponse)

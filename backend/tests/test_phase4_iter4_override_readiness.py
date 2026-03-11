@@ -290,14 +290,14 @@ class TestShellScriptReleaseGate:
         """Script should exist and be executable"""
         script_path = "/app/scripts/run_release_gate_check.sh"
         assert os.path.exists(script_path), f"Script should exist at {script_path}"
-        assert os.access(script_path, os.X_OK), f"Script should be executable"
+        assert os.access(script_path, os.X_OK), "Script should be executable"
 
     def test_script_outputs_release_gate_status(self):
         """Script should output release_gate_status=VALUE"""
         script_path = "/app/scripts/run_release_gate_check.sh"
         try:
             result = subprocess.run(
-                [script_path],
+                [script_path, "--env=prod"],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -320,7 +320,7 @@ class TestShellScriptReleaseGate:
         script_path = "/app/scripts/run_release_gate_check.sh"
         try:
             result = subprocess.run(
-                [script_path],
+                [script_path, "--env=prod"],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -555,8 +555,6 @@ class TestDefaultOverrideTTL:
             headers=admin_headers,
         )
         assert gate_resp.status_code == 200
-        gate_status = gate_resp.json()["status"]
-        
         # Try with TTL > 60
         payload = {
             "reason_code": "false_positive",

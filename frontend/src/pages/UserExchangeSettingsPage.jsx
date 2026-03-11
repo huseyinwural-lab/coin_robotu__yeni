@@ -25,6 +25,7 @@ export const UserExchangeSettingsPage = () => {
   const [isValidating, setIsValidating] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testOrderResult, setTestOrderResult] = useState(null);
+  const [lifecycleEvidence, setLifecycleEvidence] = useState(null);
   const [testOrderBanner, setTestOrderBanner] = useState("");
 
   const loadAll = useCallback(async () => {
@@ -56,6 +57,13 @@ export const UserExchangeSettingsPage = () => {
       setLatestQuality(data);
     } catch (_) {
       setLatestQuality(null);
+    }
+
+    try {
+      const { data } = await apiClient.get("/exchange/lifecycle-evidence/latest");
+      setLifecycleEvidence(data);
+    } catch (_) {
+      setLifecycleEvidence(null);
     }
   }, []);
 
@@ -115,12 +123,18 @@ export const UserExchangeSettingsPage = () => {
         execution_quality_score: data.execution_quality_score,
         timestamp: new Date().toISOString(),
       });
+      try {
+        const evidenceRes = await apiClient.get("/exchange/lifecycle-evidence/latest");
+        setLifecycleEvidence(evidenceRes.data);
+      } catch (_) {
+        setLifecycleEvidence(null);
+      }
       toast.success("İlk kontrollü test emri gönderildi");
       await loadAll();
     } catch (error) {
       const detail = error?.response?.data?.detail;
       if (typeof detail === "object") {
-        setTestOrderBanner(detail.message || "awaiting valid key");
+        setTestOrderBanner(`${detail.failure_code || "unknown_exchange_error"}: ${detail.message || "awaiting valid key"}`);
       }
       toast.error(typeof detail === "object" ? detail.message : (detail || "Test emri başarısız"));
     } finally {
@@ -138,6 +152,8 @@ export const UserExchangeSettingsPage = () => {
     ? "executing"
     : isValidating
       ? "validating"
+      : testOrderResult?.final_status
+        ? "completed"
       : readiness?.readiness_status === "ready_for_test_order"
         ? "ready"
         : readiness?.readiness_status || "blocked";
@@ -247,14 +263,35 @@ export const UserExchangeSettingsPage = () => {
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-test-order-result-title">Test Order Result</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="user-test-order-result-grid">
           <p data-testid="user-test-order-status">order status: {testOrderResult?.status || "awaiting_valid_key"}</p>
+          <p data-testid="user-test-order-final-status">final status: {testOrderResult?.final_status || "-"}</p>
           <p data-testid="user-test-order-exchange-order-id">exchange order id: {testOrderResult?.exchange_order_id || "-"}</p>
+          <p data-testid="user-test-order-client-order-id">client order id: {testOrderResult?.client_order_id || "-"}</p>
           <p data-testid="user-test-order-average-fill-price">average fill price: {testOrderResult?.price_avg ?? "-"}</p>
           <p data-testid="user-test-order-executed-qty">executed quantity: {testOrderResult?.executed_qty ?? "-"}</p>
           <p data-testid="user-test-order-slippage-pct">slippage pct: {testOrderResult?.slippage_pct ?? "-"}</p>
           <p data-testid="user-test-order-execution-time-ms">execution time ms: {testOrderResult?.execution_time_ms ?? "-"}</p>
           <p data-testid="user-test-order-volatility-regime">volatility regime: {testOrderResult?.volatility_regime || "-"}</p>
           <p data-testid="user-test-order-strategy-type">strategy type: {testOrderResult?.strategy_type || "-"}</p>
+          <p data-testid="user-test-order-failure-code">failure code: {testOrderResult?.failure_code || "-"}</p>
+          <p data-testid="user-test-order-submitted-at">submitted_at: {testOrderResult?.submitted_at || "-"}</p>
+          <p data-testid="user-test-order-ack-at">ack_at: {testOrderResult?.ack_at || "-"}</p>
+          <p data-testid="user-test-order-final-at">final_at: {testOrderResult?.final_at || "-"}</p>
           <p className="sm:col-span-2" data-testid="user-test-order-validation-timestamp">validation timestamp: {readiness?.validation_timestamp || "-"}</p>
+          <p className="sm:col-span-2" data-testid="user-test-order-validation-snapshot-id">validation snapshot id: {readiness?.validation_snapshot_id || "-"}</p>
+        </div>
+      </div>
+
+      <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-lifecycle-evidence-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-lifecycle-evidence-title">Lifecycle Evidence Timeline</p>
+        <div className="mt-3 space-y-2" data-testid="user-lifecycle-evidence-list">
+          {(lifecycleEvidence?.timeline || []).map((item, index) => (
+            <div key={`${item.event_name}-${index}`} className="border border-slate-700 p-2 text-xs" data-testid={`user-lifecycle-evidence-item-${index}`}>
+              {item.event_name} — {item.event_timestamp}
+            </div>
+          ))}
+          {(!lifecycleEvidence || (lifecycleEvidence.timeline || []).length === 0) && (
+            <p className="text-xs text-slate-400" data-testid="user-lifecycle-evidence-empty">Henüz lifecycle evidence yok.</p>
+          )}
         </div>
       </div>
     </section>

@@ -61,6 +61,39 @@ Base = declarative_base()
 redis_client = _build_redis_client()
 
 
+def _ensure_sqlite_phase4_columns():
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.begin() as connection:
+        try:
+            user_exchange_columns = {
+                row[1] for row in connection.execute(text("PRAGMA table_info(user_exchange_settings)"))
+            }
+            if "validation_snapshot_id" not in user_exchange_columns:
+                connection.execute(text("ALTER TABLE user_exchange_settings ADD COLUMN validation_snapshot_id VARCHAR(120)"))
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS execution_lifecycle_events (
+                        id VARCHAR PRIMARY KEY,
+                        execution_metric_id VARCHAR NOT NULL,
+                        user_id VARCHAR NOT NULL,
+                        event_name VARCHAR(40) NOT NULL,
+                        event_timestamp DATETIME NOT NULL,
+                        payload JSON NOT NULL
+                    )
+                    """
+                )
+            )
+        except Exception:
+            logger.exception("SQLite phase4 compatibility migration failed")
+
+
+_ensure_sqlite_phase4_columns()
+
+
 def get_db():
     db = SessionLocal()
     try:

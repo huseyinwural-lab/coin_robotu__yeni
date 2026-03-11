@@ -23,6 +23,8 @@ export const MonitoringPage = () => {
   const [hardeningTrend, setHardeningTrend] = useState(null);
   const [overrideForm, setOverrideForm] = useState(defaultOverrideForm);
   const [isOverrideSubmitting, setIsOverrideSubmitting] = useState(false);
+  const [isPageVisible, setIsPageVisible] = useState(true);
+  const [nowMs, setNowMs] = useState(Date.now());
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchMonitoring = useCallback(async () => {
@@ -59,10 +61,26 @@ export const MonitoringPage = () => {
   }, [driftDays]);
 
   useEffect(() => {
+    const onVisibility = () => setIsPageVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", onVisibility);
+    onVisibility();
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  useEffect(() => {
     fetchMonitoring();
-    const timer = setInterval(fetchMonitoring, 5000);
-    return () => clearInterval(timer);
   }, [fetchMonitoring]);
+
+  useEffect(() => {
+    const refreshMs = releaseGate?.override_active && isPageVisible ? 15000 : 30000;
+    const timer = setInterval(fetchMonitoring, refreshMs);
+    return () => clearInterval(timer);
+  }, [fetchMonitoring, releaseGate?.override_active, isPageVisible]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const points = drift?.points || [];
   const maxCount = Math.max(...points.map((point) => point.event_count), 1);
@@ -75,6 +93,15 @@ export const MonitoringPage = () => {
     .join(" ");
 
   const analyticsPoints = overrideAnalytics?.points || [];
+  const overrideExpiryMs = releaseGate?.override_expires_at ? new Date(releaseGate.override_expires_at).getTime() : null;
+  const remainingMs = overrideExpiryMs ? Math.max(0, overrideExpiryMs - nowMs) : 0;
+  const remainingMinutes = Math.floor(remainingMs / 60000);
+  const remainingSeconds = Math.floor((remainingMs % 60000) / 1000);
+  const overrideExpired = Boolean(releaseGate?.override_active) && remainingMs <= 0;
+  const overrideWarning = Boolean(releaseGate?.override_active) && remainingMs > 0 && remainingMs <= 5 * 60 * 1000;
+  const progressPct = overrideExpiryMs && releaseGate?.override_active
+    ? Math.max(0, Math.min(100, (remainingMs / (30 * 60 * 1000)) * 100))
+    : 0;
 
   const submitOverride = async () => {
     if (!overrideForm.reason_note || overrideForm.reason_note.trim().length < 12) {
@@ -117,6 +144,15 @@ export const MonitoringPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="monitoring-description">Websocket, signal rate, paper trade ve latency durumu.</p>
       </header>
 
+      <div className="flex flex-wrap items-center gap-3 border border-slate-800 bg-slate-900 p-3" data-testid="monitoring-operability-bar">
+        <span className="text-xs text-slate-300" data-testid="monitoring-operability-refresh-mode">
+          auto-refresh: {releaseGate?.override_active ? "15s" : "30s"}
+        </span>
+        <span className="text-xs text-slate-300" data-testid="monitoring-operability-page-visibility">
+          page_visible: {String(isPageVisible)}
+        </span>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-8" data-testid="monitoring-metrics-grid">
         <MetricCard label="WS Status" value={isLoading ? "loading" : (metrics?.websocket_status || "-")} tone="blue" testId="monitoring-ws-status" />
         <MetricCard label="Signal / 5m" value={isLoading ? "loading" : (metrics?.signal_rate_last_5m ?? "-")} testId="monitoring-signal-rate" />
@@ -133,6 +169,17 @@ export const MonitoringPage = () => {
         <p className="mt-2 text-sm text-black" data-testid="monitoring-release-gate-override-status-line">
           status={releaseGate?.status || "-"} | override_active={String(releaseGate?.override_active || false)} | override_expires_at={releaseGate?.override_expires_at || "-"}
         </p>
+        <div className="mt-2 flex flex-wrap items-center gap-3" data-testid="monitoring-release-gate-override-countdown-row">
+          <span className={`rounded border px-2 py-1 text-xs ${overrideExpired ? "border-red-700 bg-red-700 text-white" : overrideWarning ? "border-yellow-600 bg-yellow-200 text-black" : "border-green-700 bg-green-200 text-black"}`} data-testid="monitoring-release-gate-override-countdown-badge">
+            {releaseGate?.override_active ? (overrideExpired ? "expired" : `${remainingMinutes}m ${remainingSeconds}s`) : "no-active-override"}
+          </span>
+          <span className="text-xs text-black" data-testid="monitoring-release-gate-override-countdown-note">
+            {overrideWarning ? "son 5 dk warning" : ""}
+          </span>
+        </div>
+        <div className="mt-2 h-2 w-full overflow-hidden rounded bg-black/20" data-testid="monitoring-release-gate-override-progress-wrapper">
+          <div className={`h-full ${overrideWarning ? "bg-yellow-500" : "bg-green-600"}`} style={{ width: `${progressPct}%` }} data-testid="monitoring-release-gate-override-progress-bar" />
+        </div>
         <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="monitoring-release-gate-override-form-grid">
           <select
             value={overrideForm.reason_code}

@@ -19,6 +19,7 @@ from models import (
     AdminControl,
     AuditLog,
     BotProfile,
+    ExecutionLifecycleEvent,
     ExecutionMetric,
     HardeningChecklistRun,
     LiveActivationConfig,
@@ -454,6 +455,28 @@ def _extract_reason_codes(payload: dict, status_code: int) -> list[str]:
     return reason_codes
 
 
+def normalize_failure_code(payload: dict | None, status_code: int | None = None, fallback: str | None = None) -> str:
+    raw = payload or {}
+    message = str(raw.get("msg") or raw.get("message") or "").lower()
+    code = raw.get("code")
+
+    if fallback == "stale_validation_snapshot":
+        return "stale_validation"
+    if status_code in {401, 403} and (code in {-2015, -2014, -1022} or "invalid" in message):
+        return "invalid_key"
+    if "permission" in message or "not authorized" in message:
+        return "permission_denied"
+    if "ip" in message and ("whitelist" in message or "restrict" in message):
+        return "ip_restricted"
+    if "insufficient" in message or "balance" in message:
+        return "insufficient_balance"
+    if fallback == "testnet_unreachable" or status_code == 503:
+        return "testnet_unreachable"
+    if status_code and status_code >= 400:
+        return "exchange_rejected"
+    return "unknown_exchange_error"
+
+
 def _is_trade_capable(permissions: list[str]) -> bool:
     normalized = {item.upper() for item in permissions}
     return bool({"SPOT", "FUTURES", "MARGIN", "TRADE"} & normalized)
@@ -491,6 +514,7 @@ def _record_permission_snapshot_and_drift(
     settings_row.can_trade_snapshot = can_trade
     settings_row.last_validation_success = validation_success
     settings_row.last_reason_codes = reason_codes
+    settings_row.validation_snapshot_id = str(uuid.uuid4())
     settings_row.validation_checked_at = datetime.now(timezone.utc)
     settings_row.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -504,6 +528,7 @@ def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[d
     if not api_key or not api_secret:
         settings_row.last_validation_success = False
         settings_row.last_reason_codes = ["missing_credentials"]
+        settings_row.validation_snapshot_id = str(uuid.uuid4())
         settings_row.validation_checked_at = datetime.now(timezone.utc)
         db.commit()
         return {
@@ -521,6 +546,7 @@ def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[d
     except httpx.HTTPError:
         settings_row.last_validation_success = False
         settings_row.last_reason_codes = ["exchange_unreachable"]
+        settings_row.validation_snapshot_id = str(uuid.uuid4())
         settings_row.validation_checked_at = datetime.now(timezone.utc)
         db.commit()
         return {
@@ -537,6 +563,7 @@ def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[d
     if status_code >= 400:
         settings_row.last_validation_success = False
         settings_row.last_reason_codes = reason_codes
+        settings_row.validation_snapshot_id = str(uuid.uuid4())
         settings_row.validation_checked_at = datetime.now(timezone.utc)
         db.commit()
         http_status = 403 if "ip_restriction" in reason_codes or "missing_trade_permission" in reason_codes else 400
@@ -708,6 +735,8 @@ def user_readiness_checklist(db: Session, user_id: str) -> dict:
     has_api_key = bool(settings_row.api_key_encrypted)
     has_api_secret = bool(settings_row.api_secret_encrypted)
     validation_ts = settings_row.validation_checked_at
+    if validation_ts and validation_ts.tzinfo is None:
+        validation_ts = validation_ts.replace(tzinfo=timezone.utc)
     stale = True
     if validation_ts:
         stale = validation_ts + timedelta(minutes=VALIDATION_STALE_MINUTES) < datetime.now(timezone.utc)
@@ -749,6 +778,7 @@ def user_readiness_checklist(db: Session, user_id: str) -> dict:
         "is_testnet_environment": is_testnet,
         "is_validation_stale": stale,
         "validation_timestamp": validation_ts,
+        "validation_snapshot_id": settings_row.validation_snapshot_id,
         "stale_after_minutes": VALIDATION_STALE_MINUTES,
         "last_error_reason": last_error_reason,
     }
@@ -997,37 +1027,70 @@ def run_exchange_test_order_market(db: Session, user: User) -> ExecutionMetric:
     volatility_pct = _market_volatility_pct()
     volatility_regime = "high" if volatility_pct >= 0.03 else ("medium" if volatility_pct >= 0.018 else "low")
 
+    order_id = str(uuid.uuid4())
+    client_order_id = f"cli-{uuid.uuid4().hex[:20]}"
+    submitted_at = datetime.now(timezone.utc)
+    timeline_events: list[tuple[str, datetime, dict]] = [("request_sent", submitted_at, {"symbol": symbol, "side": side, "quote_qty": quote_qty})]
+
     started = time.perf_counter()
-    order_payload, order_status = adapter.create_market_order(
-        api_key,
-        api_secret,
-        symbol=symbol,
-        side=side,
-        quantity=quantity,
-    )
+    order_payload: dict = {}
+    order_status = 500
+    exchange_order_id = "unknown"
+    state_path: list[str] = []
+    final_payload: dict = {}
+    ack_at = None
+    final_at = None
+    failure_code = None
+
+    try:
+        order_payload, order_status = adapter.create_market_order(
+            api_key,
+            api_secret,
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+        )
+    except httpx.HTTPError:
+        order_payload = {"msg": "testnet_unreachable"}
+        order_status = 503
+
+    ack_at = datetime.now(timezone.utc)
+    timeline_events.append(("exchange_ack", ack_at, {"status_code": order_status, "payload": order_payload}))
+
     if order_status >= 400:
-        raise ValueError("Test order gönderimi başarısız. Credentials veya exchange kısıtı kontrol edilmeli.")
+        final_status = "REJECTED"
+        failure_code = normalize_failure_code(order_payload, order_status)
+        state_path = ["NEW", "REJECTED"]
+        final_payload = order_payload
+    else:
+        exchange_order_id = str(order_payload.get("orderId") or "")
+        first_status = str(order_payload.get("status") or "NEW").upper()
+        state_path.append("NEW")
+        if first_status != "NEW":
+            state_path.append(first_status)
+        final_payload = order_payload
 
-    exchange_order_id = str(order_payload.get("orderId") or "")
-    state_path = []
-    first_status = str(order_payload.get("status") or "NEW").upper()
-    state_path.append(first_status)
+        if first_status in {"NEW", "PARTIALLY_FILLED"} and exchange_order_id:
+            for _ in range(4):
+                time.sleep(0.2)
+                queried, _ = adapter.query_order(api_key, api_secret, symbol, int(exchange_order_id))
+                queried_status = str(queried.get("status") or first_status).upper()
+                final_payload = queried
+                now_evt = datetime.now(timezone.utc)
+                if queried_status != state_path[-1]:
+                    state_path.append(queried_status)
+                    timeline_events.append(("lifecycle_transition", now_evt, {"status": queried_status, "payload": queried}))
+                if queried_status in {"FILLED", "CANCELED", "EXPIRED", "REJECTED"}:
+                    break
 
-    final_payload = order_payload
-    if first_status in {"NEW", "PARTIALLY_FILLED"} and exchange_order_id:
-        for _ in range(3):
-            time.sleep(0.2)
-            queried, _ = adapter.query_order(api_key, api_secret, symbol, int(exchange_order_id))
-            queried_status = str(queried.get("status") or first_status).upper()
-            final_payload = queried
-            if queried_status != state_path[-1]:
-                state_path.append(queried_status)
-            if queried_status in {"FILLED", "CANCELED", "EXPIRED", "REJECTED"}:
-                break
+        final_status = str(final_payload.get("status") or state_path[-1]).upper()
+        if final_status not in state_path:
+            state_path.append(final_status)
+        if final_status in {"REJECTED", "CANCELED", "EXPIRED"}:
+            failure_code = normalize_failure_code(final_payload, order_status)
 
-    final_status = str(final_payload.get("status") or state_path[-1]).upper()
-    if final_status not in state_path:
-        state_path.append(final_status)
+    final_at = datetime.now(timezone.utc)
+    timeline_events.append(("final_status", final_at, {"status": final_status}))
 
     avg_price = float(final_payload.get("avgPrice") or 0) or None
     executed_qty = float(final_payload.get("executedQty") or 0) or None
@@ -1050,8 +1113,9 @@ def run_exchange_test_order_market(db: Session, user: User) -> ExecutionMetric:
         id=str(uuid.uuid4()),
         user_id=user.id,
         symbol=symbol,
-        order_id=str(uuid.uuid4()),
+        order_id=order_id,
         exchange_order_id=exchange_order_id or "unknown",
+        client_order_id=client_order_id,
         order_type="MARKET",
         side=side,
         quote_qty=quote_qty,
@@ -1062,13 +1126,34 @@ def run_exchange_test_order_market(db: Session, user: User) -> ExecutionMetric:
         slippage_pct=slippage_pct,
         execution_time_ms=execution_time_ms,
         status=final_status,
+        final_status=final_status,
+        failure_code=failure_code,
         strategy_type=strategy_type,
         volatility_regime=volatility_regime,
         volatility_pct=volatility_pct,
         execution_quality_score=quality_score,
+        submitted_at=submitted_at,
+        ack_at=ack_at,
+        final_at=final_at,
+        validation_snapshot_id=settings_row.validation_snapshot_id,
+        raw_exchange_status=final_payload,
         state_machine_path=state_path,
     )
     db.add(metric)
+    db.flush()
+
+    for event_name, event_timestamp, payload in timeline_events:
+        db.add(
+            ExecutionLifecycleEvent(
+                id=str(uuid.uuid4()),
+                execution_metric_id=metric.id,
+                user_id=user.id,
+                event_name=event_name,
+                event_timestamp=event_timestamp,
+                payload=payload,
+            )
+        )
+
     db.commit()
     db.refresh(metric)
     return metric
@@ -1085,6 +1170,15 @@ def latest_execution_metric(db: Session, user_id: str) -> ExecutionMetric | None
 
 def list_execution_metrics(db: Session, limit: int = 20) -> list[ExecutionMetric]:
     return db.query(ExecutionMetric).order_by(ExecutionMetric.created_at.desc()).limit(limit).all()
+
+
+def lifecycle_evidence_for_metric(db: Session, metric_id: str) -> list[ExecutionLifecycleEvent]:
+    return (
+        db.query(ExecutionLifecycleEvent)
+        .filter(ExecutionLifecycleEvent.execution_metric_id == metric_id)
+        .order_by(ExecutionLifecycleEvent.event_timestamp.asc())
+        .all()
+    )
 
 
 def permission_drift_trend(db: Session, days: int = 7) -> dict:
@@ -1216,8 +1310,8 @@ def list_execution_quality(db: Session, limit: int = 20):
     return db.query(TestnetExecutionLog).order_by(TestnetExecutionLog.created_at.desc()).limit(limit).all()
 
 
-def enforce_release_gate(db: Session) -> dict:
-    gate = release_gate_view(db)
+def enforce_release_gate(db: Session, environment: str = "prod") -> dict:
+    gate = release_gate_view(db, environment=environment)
     config = get_or_create_live_config(db)
     if gate["status"] == "BLOCKED":
         config.live_mode_enabled = False
@@ -1225,6 +1319,7 @@ def enforce_release_gate(db: Session) -> dict:
     db.commit()
 
     redis_client.set("phase4:release_gate:status", gate["status"])
+    redis_client.set("phase4:release_gate:environment", gate.get("environment", "prod"))
     redis_client.set("phase4:release_gate:last_checked", datetime.now(timezone.utc).isoformat())
     redis_client.set("phase4:release_gate:live_activation", gate["live_activation"])
     redis_client.set("phase4:release_gate:reasons", json.dumps(gate["reasons"]))
@@ -1258,6 +1353,116 @@ def admin_permission_overview(db: Session) -> dict:
             ],
         }
     return permission_status_for_user(db, probe_user.id)
+
+
+def _latest_execution_quality_score(db: Session) -> float:
+    latest_metric = db.query(ExecutionMetric).order_by(ExecutionMetric.created_at.desc()).first()
+    if latest_metric:
+        return float(latest_metric.execution_quality_score or 0)
+    latest_exec = db.query(TestnetExecutionLog).order_by(TestnetExecutionLog.created_at.desc()).first()
+    if latest_exec:
+        return float(latest_exec.execution_quality_score or 0)
+    return 0.0
+
+
+def _permission_drift_alert_active(db: Session) -> bool:
+    threshold = datetime.now(timezone.utc) - timedelta(days=1)
+    critical_count = (
+        db.query(PermissionDriftEvent)
+        .filter(PermissionDriftEvent.created_at >= threshold, PermissionDriftEvent.is_critical.is_(True))
+        .count()
+    )
+    return critical_count > 0
+
+
+def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict:
+    env = (environment or "").lower().strip()
+    if env not in {"stage", "prod"}:
+        raise ValueError("environment must be stage or prod")
+
+    config = get_or_create_live_config(db)
+    exchange_health = adapter.ping()["status"] == "reachable"
+    execution_quality_score = _latest_execution_quality_score(db)
+    permission_drift_alert = _permission_drift_alert_active(db)
+    override = _active_override(db)
+    active_override = override is not None
+    live_mode_enabled = bool(config.live_mode_enabled)
+
+    score_block_threshold = 40 if env == "stage" else 60
+    score_warn_threshold = 60 if env == "stage" else 75
+
+    blockers: list[str] = []
+    warnings: list[str] = []
+
+    if not exchange_health:
+        blockers.append("exchange_health")
+
+    if execution_quality_score < score_block_threshold:
+        blockers.append("execution_quality_score")
+    elif execution_quality_score < score_warn_threshold:
+        warnings.append("execution_quality_score_warn")
+
+    if permission_drift_alert:
+        if env == "prod":
+            blockers.append("permission_drift_alert")
+        else:
+            warnings.append("permission_drift_alert")
+
+    if not live_mode_enabled:
+        warnings.append("live_mode_disabled")
+
+    if blockers:
+        if active_override:
+            return {
+                "status": "PASS_WITH_OVERRIDE",
+                "environment": env,
+                "reasons": ["manual_override_active", *blockers],
+                "reason_code": override.reason_code,
+                "override_expires_at": override.expires_at,
+                "override_id": override.id,
+                "live_activation": "guarded_override",
+                "metrics": {
+                    "exchange_health": exchange_health,
+                    "execution_quality_score": execution_quality_score,
+                    "permission_drift_alert": permission_drift_alert,
+                    "active_override": active_override,
+                    "live_mode_enabled": live_mode_enabled,
+                },
+            }
+        return {
+            "status": "BLOCKED",
+            "environment": env,
+            "reasons": blockers,
+            "reason_code": blockers[0],
+            "override_expires_at": None,
+            "override_id": None,
+            "live_activation": "disabled",
+            "metrics": {
+                "exchange_health": exchange_health,
+                "execution_quality_score": execution_quality_score,
+                "permission_drift_alert": permission_drift_alert,
+                "active_override": active_override,
+                "live_mode_enabled": live_mode_enabled,
+            },
+        }
+
+    status = "WARN" if warnings else "PASS"
+    return {
+        "status": status,
+        "environment": env,
+        "reasons": warnings,
+        "reason_code": warnings[0] if warnings else "ok",
+        "override_expires_at": override.expires_at if active_override else None,
+        "override_id": override.id if active_override else None,
+        "live_activation": "guarded" if status == "WARN" else "ready",
+        "metrics": {
+            "exchange_health": exchange_health,
+            "execution_quality_score": execution_quality_score,
+            "permission_drift_alert": permission_drift_alert,
+            "active_override": active_override,
+            "live_mode_enabled": live_mode_enabled,
+        },
+    }
 
 
 def compute_live_readiness_score(db: Session) -> dict:
@@ -1326,30 +1531,18 @@ def compute_live_readiness_score(db: Session) -> dict:
     }
 
 
-def release_gate_view(db: Session) -> dict:
-    readiness = compute_live_readiness_score(db)
-    reasons = readiness["critical_blockers"]
-    if readiness["release_gate_status"] == "WARNING" and not reasons:
-        reasons = ["non_critical_checks_pending"]
-
-    override = _active_override(db)
-    if readiness["release_gate_status"] == "BLOCKED" and override:
-        return {
-            "status": "PASS_WITH_OVERRIDE",
-            "reasons": ["manual_override_active", *reasons],
-            "live_activation": "guarded_override",
-            "override_active": True,
-            "override_expires_at": override.expires_at,
-            "override_id": override.id,
-        }
-
+def release_gate_view(db: Session, environment: str = "prod") -> dict:
+    policy = evaluate_release_gate_policy(db, environment=environment)
     return {
-        "status": readiness["release_gate_status"],
-        "reasons": reasons,
-        "live_activation": readiness["live_activation"],
-        "override_active": False,
-        "override_expires_at": None,
-        "override_id": None,
+        "status": policy["status"],
+        "reasons": policy["reasons"],
+        "live_activation": policy["live_activation"],
+        "override_active": policy["status"] == "PASS_WITH_OVERRIDE" or bool(policy.get("override_id")),
+        "override_expires_at": policy.get("override_expires_at"),
+        "override_id": policy.get("override_id"),
+        "environment": policy.get("environment", environment),
+        "reason_code": policy.get("reason_code", "ok"),
+        "metrics": policy.get("metrics", {}),
     }
 
 
