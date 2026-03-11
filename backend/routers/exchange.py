@@ -10,9 +10,14 @@ from schemas import (
     ExchangeValidateResponse,
     ExecutionEventResponse,
     MockOrderRequest,
+    UserReadinessChecklistResponse,
 )
 from services.audit_service import create_audit_log
-from services.live_mode_service import run_exchange_test_order_market, validate_exchange_credentials_for_user
+from services.live_mode_service import (
+    run_exchange_test_order_market,
+    user_readiness_checklist,
+    validate_exchange_credentials_for_user,
+)
 
 router = APIRouter(prefix="/exchange", tags=["exchange"])
 adapter = BinanceMockAdapter(redis_client)
@@ -38,6 +43,20 @@ def validate_exchange(current_user: User = Depends(get_current_user), db: Sessio
 
 @router.post("/test-order", response_model=ExchangeTestOrderResponse)
 def exchange_test_order(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    readiness = user_readiness_checklist(db, current_user.id)
+    if readiness["readiness_status"] != "ready_for_test_order":
+        reason_message = {
+            "awaiting_valid_key": "awaiting valid key",
+            "blocked": readiness.get("last_error_reason") or "blocked",
+        }.get(readiness["readiness_status"], readiness["readiness_status"])
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "status": readiness["readiness_status"],
+                "message": f"Binance Testnet API key ve secret doğrulanmadan gerçek test-order çalıştırılamaz. ({reason_message})",
+            },
+        )
+
     try:
         metric = run_exchange_test_order_market(db, current_user)
     except ValueError as exc:
@@ -72,6 +91,11 @@ def exchange_test_order(current_user: User = Depends(get_current_user), db: Sess
         volatility_regime=metric.volatility_regime,
         volatility_pct=metric.volatility_pct,
     )
+
+
+@router.get("/readiness-checklist", response_model=UserReadinessChecklistResponse)
+def exchange_readiness_checklist(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return UserReadinessChecklistResponse(**user_readiness_checklist(db, current_user.id))
 
 
 @router.get("/mock/state")

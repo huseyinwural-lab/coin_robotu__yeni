@@ -2,22 +2,55 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { MetricCard } from "@/components/MetricCard";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
+
+const defaultOverrideForm = {
+  reason_code: "false_positive",
+  reason_note: "",
+  ttl_minutes: 30,
+};
 
 export const MonitoringPage = () => {
   const [metrics, setMetrics] = useState(null);
   const [driftDays, setDriftDays] = useState(7);
   const [drift, setDrift] = useState(null);
+  const [releaseGate, setReleaseGate] = useState(null);
+  const [overrideHistory, setOverrideHistory] = useState([]);
+  const [overrideAnalytics, setOverrideAnalytics] = useState(null);
+  const [alertHistory, setAlertHistory] = useState([]);
+  const [hardeningTrend, setHardeningTrend] = useState(null);
+  const [overrideForm, setOverrideForm] = useState(defaultOverrideForm);
+  const [isOverrideSubmitting, setIsOverrideSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchMonitoring = useCallback(async () => {
     try {
-      const [{ data: monitoringData }, { data: driftData }] = await Promise.all([
+      const [
+        { data: monitoringData },
+        { data: driftData },
+        { data: releaseGateData },
+        { data: historyData },
+        { data: analyticsData },
+        { data: alertsData },
+        { data: hardeningData },
+      ] = await Promise.all([
         apiClient.get("/pipeline/monitoring"),
         apiClient.get(`/phase4/admin/permission-drift-trend?days=${driftDays}`),
+        apiClient.get("/phase4/admin/release-gate"),
+        apiClient.get("/phase4/admin/release-gate/overrides?limit=20"),
+        apiClient.get(`/phase4/admin/override-analytics?days=${driftDays}`),
+        apiClient.get("/phase4/admin/alert-history?limit=30"),
+        apiClient.get("/admin-phase3/hardening-checklist/trend"),
       ]);
       setMetrics(monitoringData);
       setDrift(driftData);
+      setReleaseGate(releaseGateData);
+      setOverrideHistory(historyData);
+      setOverrideAnalytics(analyticsData);
+      setAlertHistory(alertsData);
+      setHardeningTrend(hardeningData);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Monitoring verisi alınamadı");
     } finally {
@@ -41,6 +74,42 @@ export const MonitoringPage = () => {
     })
     .join(" ");
 
+  const analyticsPoints = overrideAnalytics?.points || [];
+
+  const submitOverride = async () => {
+    if (!overrideForm.reason_note || overrideForm.reason_note.trim().length < 12) {
+      toast.error("reason_note en az 12 karakter olmalı");
+      return;
+    }
+
+    setIsOverrideSubmitting(true);
+    try {
+      await apiClient.post("/phase4/admin/release-gate/override", {
+        reason_code: overrideForm.reason_code,
+        reason_note: overrideForm.reason_note,
+        ttl_minutes: Number(overrideForm.ttl_minutes) || 30,
+        deploy_context: { source: "admin_monitoring_ui" },
+      });
+      toast.success("Manual override aktif edildi");
+      setOverrideForm(defaultOverrideForm);
+      await fetchMonitoring();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Override oluşturulamadı");
+    } finally {
+      setIsOverrideSubmitting(false);
+    }
+  };
+
+  const revokeOverride = async (overrideId) => {
+    try {
+      await apiClient.post(`/phase4/admin/release-gate/override/${overrideId}/revoke`);
+      toast.success("Override revoke edildi");
+      await fetchMonitoring();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Override revoke başarısız");
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="monitoring-page">
       <header className="border border-blue-900 bg-slate-900 p-4" data-testid="monitoring-header">
@@ -57,6 +126,45 @@ export const MonitoringPage = () => {
         <MetricCard label="Transitions / 5m" value={isLoading ? "loading" : (metrics?.execution_transitions_5m ?? "-")} tone="orange" testId="monitoring-transitions" />
         <MetricCard label="Release Gate" value={isLoading ? "loading" : (metrics?.release_gate_status ?? "-")} tone={metrics?.release_gate_status === "PASS" ? "blue" : metrics?.release_gate_status === "WARNING" ? "orange" : "red"} testId="monitoring-release-gate" />
         <MetricCard label="Gate Checked" value={isLoading ? "loading" : (metrics?.release_gate_last_checked ?? "-")} tone="blue" testId="monitoring-release-gate-checked" />
+      </div>
+
+      <div className="border border-orange-700 bg-orange-200 p-4" data-testid="monitoring-release-gate-override-status-panel">
+        <p className="text-xs uppercase tracking-widest text-black" data-testid="monitoring-release-gate-override-status-title">Release Gate Override Status</p>
+        <p className="mt-2 text-sm text-black" data-testid="monitoring-release-gate-override-status-line">
+          status={releaseGate?.status || "-"} | override_active={String(releaseGate?.override_active || false)} | override_expires_at={releaseGate?.override_expires_at || "-"}
+        </p>
+        <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="monitoring-release-gate-override-form-grid">
+          <select
+            value={overrideForm.reason_code}
+            onChange={(event) => setOverrideForm((prev) => ({ ...prev, reason_code: event.target.value }))}
+            className="border border-black bg-orange-100 px-3 py-2 text-sm text-black"
+            data-testid="monitoring-release-gate-override-reason-code-select"
+          >
+            <option value="false_positive">false_positive</option>
+            <option value="exchange_incident">exchange_incident</option>
+            <option value="ops_emergency">ops_emergency</option>
+            <option value="manual_review">manual_review</option>
+          </select>
+          <Input
+            value={overrideForm.reason_note}
+            onChange={(event) => setOverrideForm((prev) => ({ ...prev, reason_note: event.target.value }))}
+            placeholder="reason_note (min 12)"
+            className="border-black bg-orange-100 text-black"
+            data-testid="monitoring-release-gate-override-reason-note-input"
+          />
+          <Input
+            type="number"
+            min={1}
+            max={60}
+            value={overrideForm.ttl_minutes}
+            onChange={(event) => setOverrideForm((prev) => ({ ...prev, ttl_minutes: event.target.value }))}
+            className="border-black bg-orange-100 text-black"
+            data-testid="monitoring-release-gate-override-ttl-input"
+          />
+          <Button className="bg-black text-orange-400 hover:bg-zinc-900" onClick={submitOverride} data-testid="monitoring-release-gate-override-submit-button" disabled={isOverrideSubmitting}>
+            {isOverrideSubmitting ? "Gönderiliyor..." : "Override Aç"}
+          </Button>
+        </div>
       </div>
 
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-details-panel">
@@ -113,6 +221,64 @@ export const MonitoringPage = () => {
               </span>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-hardening-trend-panel">
+        <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="monitoring-hardening-trend-title">Hardening Checklist Trend</p>
+        <div className="grid gap-3 sm:grid-cols-3" data-testid="monitoring-hardening-trend-summary-grid">
+          <MetricCard label="Avg Score(5)" value={hardeningTrend?.average_score_last_5 ?? "-"} tone="blue" testId="monitoring-hardening-avg-score" />
+          <MetricCard label="Trend Alarm" value={String(hardeningTrend?.trend_alarm ?? false)} tone={hardeningTrend?.trend_alarm ? "red" : "orange"} testId="monitoring-hardening-trend-alarm" />
+          <MetricCard label="Critical Alarm" value={String(hardeningTrend?.critical_alarm ?? false)} tone={hardeningTrend?.critical_alarm ? "red" : "orange"} testId="monitoring-hardening-critical-alarm" />
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-override-analytics-panel">
+        <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="monitoring-override-analytics-title">Override Analytics</p>
+        <div className="grid gap-2 sm:grid-cols-3" data-testid="monitoring-override-analytics-cards-grid">
+          <MetricCard label="Blocked Gate / Period" value={analyticsPoints.reduce((sum, item) => sum + item.blocked_gate_count, 0)} tone="red" testId="monitoring-override-analytics-blocked-total" />
+          <MetricCard label="Override Count" value={analyticsPoints.reduce((sum, item) => sum + item.override_count, 0)} tone="orange" testId="monitoring-override-analytics-override-total" />
+          <MetricCard label="Override Deploy Uses" value={analyticsPoints.reduce((sum, item) => sum + item.override_deploy_count, 0)} tone="blue" testId="monitoring-override-analytics-deploy-total" />
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2" data-testid="monitoring-alert-source-breakdown-grid">
+          {Object.entries(overrideAnalytics?.alert_source_breakdown || {}).slice(0, 8).map(([source, count]) => (
+            <div key={source} className="border border-slate-700 p-2 text-xs" data-testid={`monitoring-alert-source-${source}`}>
+              {source}: {count}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-override-history-panel">
+        <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="monitoring-override-history-title">Override History</p>
+        <div className="space-y-2" data-testid="monitoring-override-history-list">
+          {overrideHistory.map((row) => (
+            <div key={row.override_id} className="grid gap-2 border border-slate-700 p-3 md:grid-cols-5" data-testid={`monitoring-override-history-row-${row.override_id}`}>
+              <p className="text-xs" data-testid={`monitoring-override-history-reason-${row.override_id}`}>{row.reason_code}</p>
+              <p className="text-xs" data-testid={`monitoring-override-history-note-${row.override_id}`}>{row.reason_note}</p>
+              <p className="text-xs" data-testid={`monitoring-override-history-expiry-${row.override_id}`}>{row.expires_at}</p>
+              <p className="text-xs" data-testid={`monitoring-override-history-uses-${row.override_id}`}>deploy_use={row.used_deploy_count}</p>
+              <Button
+                className="h-8 border border-red-500 bg-red-700 text-white hover:bg-red-800"
+                onClick={() => revokeOverride(row.override_id)}
+                data-testid={`monitoring-override-history-revoke-button-${row.override_id}`}
+                disabled={Boolean(row.revoked_at)}
+              >
+                {row.revoked_at ? "Revoked" : "Revoke"}
+              </Button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-alert-history-panel">
+        <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="monitoring-alert-history-title">Alert History</p>
+        <div className="space-y-2" data-testid="monitoring-alert-history-list">
+          {alertHistory.slice(0, 20).map((row, index) => (
+            <div key={`${row.created_at}-${index}`} className="border border-slate-700 p-2 text-xs" data-testid={`monitoring-alert-history-item-${index}`}>
+              [{row.severity}] {row.action} — {row.created_at}
+            </div>
+          ))}
         </div>
       </div>
     </section>

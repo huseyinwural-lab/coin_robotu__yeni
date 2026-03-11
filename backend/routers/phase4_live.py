@@ -18,7 +18,11 @@ from schemas import (
     PermissionCheckResponse,
     PermissionDriftTrendResponse,
     PermissionStatusResponse,
+    ReleaseGateOverrideRequest,
+    ReleaseGateOverrideResponse,
     ReleaseGateStatusResponse,
+    OverrideAnalyticsResponse,
+    AlertHistoryItemResponse,
     TestOrderResponse,
     TestnetConnectivityResponse,
 )
@@ -33,9 +37,14 @@ from services.live_mode_service import (
     exchange_settings_view,
     get_or_create_exchange_settings,
     get_or_create_live_config,
+    list_release_gate_overrides,
     latest_execution_quality,
     list_execution_quality,
+    override_alert_analytics,
     permission_drift_trend,
+    create_release_gate_override,
+    revoke_release_gate_override,
+    alert_history,
     permission_status_for_user,
     release_gate_view,
     resolve_runtime_credentials,
@@ -268,6 +277,125 @@ def admin_permission_status(_: User = Depends(require_admin), db: Session = Depe
 @router.get("/admin/release-gate", response_model=ReleaseGateStatusResponse)
 def admin_release_gate(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     return ReleaseGateStatusResponse(**enforce_release_gate(db))
+
+
+@router.post("/admin/release-gate/override", response_model=ReleaseGateOverrideResponse)
+def create_gate_override(
+    payload: ReleaseGateOverrideRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = create_release_gate_override(
+            db,
+            admin_user_id=current_admin.id,
+            reason_code=payload.reason_code,
+            reason_note=payload.reason_note,
+            ttl_minutes=payload.ttl_minutes,
+            deploy_context=payload.deploy_context,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="release_gate_override_created",
+        entity_type="release_gate_override",
+        entity_id=row.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={"reason_code": row.reason_code, "expires_at": row.expires_at.isoformat()},
+    )
+    return ReleaseGateOverrideResponse(
+        override_id=row.id,
+        admin_user_id=row.admin_user_id,
+        reason_code=row.reason_code,
+        reason_note=row.reason_note,
+        release_gate_snapshot=row.release_gate_snapshot,
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+        revoked_at=row.revoked_at,
+        deploy_context=row.deploy_context,
+        used_deploy_count=row.used_deploy_count,
+    )
+
+
+@router.post("/admin/release-gate/override/{override_id}/revoke", response_model=ReleaseGateOverrideResponse)
+def revoke_gate_override(
+    override_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = revoke_release_gate_override(db, override_id=override_id, admin_user_id=current_admin.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="release_gate_override_revoked",
+        entity_type="release_gate_override",
+        entity_id=row.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={"revoked_at": row.revoked_at.isoformat() if row.revoked_at else None},
+    )
+    return ReleaseGateOverrideResponse(
+        override_id=row.id,
+        admin_user_id=row.admin_user_id,
+        reason_code=row.reason_code,
+        reason_note=row.reason_note,
+        release_gate_snapshot=row.release_gate_snapshot,
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+        revoked_at=row.revoked_at,
+        deploy_context=row.deploy_context,
+        used_deploy_count=row.used_deploy_count,
+    )
+
+
+@router.get("/admin/release-gate/overrides", response_model=list[ReleaseGateOverrideResponse])
+def gate_override_history(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=30, ge=5, le=100),
+):
+    rows = list_release_gate_overrides(db, limit=limit)
+    return [
+        ReleaseGateOverrideResponse(
+            override_id=row.id,
+            admin_user_id=row.admin_user_id,
+            reason_code=row.reason_code,
+            reason_note=row.reason_note,
+            release_gate_snapshot=row.release_gate_snapshot,
+            created_at=row.created_at,
+            expires_at=row.expires_at,
+            revoked_at=row.revoked_at,
+            deploy_context=row.deploy_context,
+            used_deploy_count=row.used_deploy_count,
+        )
+        for row in rows
+    ]
+
+
+@router.get("/admin/override-analytics", response_model=OverrideAnalyticsResponse)
+def gate_override_analytics(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    days: int = Query(default=7, ge=7, le=30),
+):
+    return OverrideAnalyticsResponse(**override_alert_analytics(db, days=days))
+
+
+@router.get("/admin/alert-history", response_model=list[AlertHistoryItemResponse])
+def gate_alert_history(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=30, ge=10, le=100),
+):
+    return [AlertHistoryItemResponse(**item) for item in alert_history(db, limit=limit)]
 
 
 @router.get("/testnet-connectivity", response_model=TestnetConnectivityResponse)

@@ -6,7 +6,7 @@ import statistics
 import time
 import uuid
 from base64 import urlsafe_b64encode
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import httpx
@@ -17,12 +17,14 @@ from core.config import settings
 from db import redis_client
 from models import (
     AdminControl,
+    AuditLog,
     BotProfile,
     ExecutionMetric,
     HardeningChecklistRun,
     LiveActivationConfig,
     PaperPosition,
     PermissionDriftEvent,
+    ReleaseGateOverride,
     RiskExposureGroup,
     RiskPolicy,
     TestnetExecutionLog,
@@ -37,6 +39,8 @@ SAFE_SYMBOL_WHITELIST = ["BTCUSDT"]
 MAX_SAFE_POSITION_PCT = 0.1
 MAX_SAFE_LEVERAGE = 1
 MAX_SAFE_NOTIONAL_EXPOSURE = 150
+VALIDATION_STALE_MINUTES = 10
+OVERRIDE_REASON_CODES = {"false_positive", "exchange_incident", "ops_emergency", "manual_review"}
 
 
 class BinanceFuturesTestnetAdapter:
@@ -363,6 +367,10 @@ def get_or_create_exchange_settings(db: Session, user_id: str) -> UserExchangeSe
         mode="testnet",
         api_key_encrypted="",
         api_secret_encrypted="",
+        permissions_snapshot=[],
+        can_trade_snapshot=None,
+        last_validation_success=None,
+        last_reason_codes=[],
     )
     db.add(settings_row)
     db.commit()
@@ -457,6 +465,8 @@ def _record_permission_snapshot_and_drift(
     settings_row: UserExchangeSetting,
     can_trade: bool,
     permissions: list[str],
+    validation_success: bool,
+    reason_codes: list[str],
 ) -> None:
     old_permissions = settings_row.permissions_snapshot or []
     old_can_trade = settings_row.can_trade_snapshot
@@ -479,6 +489,8 @@ def _record_permission_snapshot_and_drift(
 
     settings_row.permissions_snapshot = new_permissions
     settings_row.can_trade_snapshot = can_trade
+    settings_row.last_validation_success = validation_success
+    settings_row.last_reason_codes = reason_codes
     settings_row.validation_checked_at = datetime.now(timezone.utc)
     settings_row.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -490,6 +502,10 @@ def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[d
     api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else ""
 
     if not api_key or not api_secret:
+        settings_row.last_validation_success = False
+        settings_row.last_reason_codes = ["missing_credentials"]
+        settings_row.validation_checked_at = datetime.now(timezone.utc)
+        db.commit()
         return {
             "exchange": settings_row.exchange,
             "environment": settings_row.mode,
@@ -503,6 +519,10 @@ def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[d
     try:
         payload, status_code, _ = adapter.account_probe(api_key, api_secret)
     except httpx.HTTPError:
+        settings_row.last_validation_success = False
+        settings_row.last_reason_codes = ["exchange_unreachable"]
+        settings_row.validation_checked_at = datetime.now(timezone.utc)
+        db.commit()
         return {
             "exchange": settings_row.exchange,
             "environment": settings_row.mode,
@@ -515,6 +535,10 @@ def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[d
 
     reason_codes = _extract_reason_codes(payload if isinstance(payload, dict) else {}, status_code)
     if status_code >= 400:
+        settings_row.last_validation_success = False
+        settings_row.last_reason_codes = reason_codes
+        settings_row.validation_checked_at = datetime.now(timezone.utc)
+        db.commit()
         http_status = 403 if "ip_restriction" in reason_codes or "missing_trade_permission" in reason_codes else 400
         return {
             "exchange": settings_row.exchange,
@@ -532,7 +556,14 @@ def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[d
     trade_capable = _is_trade_capable(permissions)
 
     if not can_trade or not trade_capable:
-        _record_permission_snapshot_and_drift(db, settings_row=settings_row, can_trade=False, permissions=permissions)
+        _record_permission_snapshot_and_drift(
+            db,
+            settings_row=settings_row,
+            can_trade=False,
+            permissions=permissions,
+            validation_success=False,
+            reason_codes=["missing_trade_permission"],
+        )
         return {
             "exchange": settings_row.exchange,
             "environment": settings_row.mode,
@@ -543,7 +574,14 @@ def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[d
             "reason_codes": ["missing_trade_permission"],
         }, 403
 
-    _record_permission_snapshot_and_drift(db, settings_row=settings_row, can_trade=True, permissions=permissions)
+    _record_permission_snapshot_and_drift(
+        db,
+        settings_row=settings_row,
+        can_trade=True,
+        permissions=permissions,
+        validation_success=True,
+        reason_codes=[],
+    )
     return {
         "exchange": settings_row.exchange,
         "environment": settings_row.mode,
@@ -565,6 +603,154 @@ def get_market_ticker(symbol: str = "BTCUSDT") -> dict:
         "ask": snapshot["ask"],
         "mid_price": snapshot["mid_price"],
         "timestamp": snapshot["timestamp"],
+    }
+
+
+def _active_override(db: Session) -> ReleaseGateOverride | None:
+    now = datetime.now(timezone.utc)
+    return (
+        db.query(ReleaseGateOverride)
+        .filter(
+            ReleaseGateOverride.revoked_at.is_(None),
+            ReleaseGateOverride.expires_at > now,
+        )
+        .order_by(ReleaseGateOverride.created_at.desc())
+        .first()
+    )
+
+
+def _serialize_override(row: ReleaseGateOverride) -> dict:
+    return {
+        "override_id": row.id,
+        "admin_user_id": row.admin_user_id,
+        "reason_code": row.reason_code,
+        "reason_note": row.reason_note,
+        "release_gate_snapshot": row.release_gate_snapshot,
+        "created_at": row.created_at,
+        "expires_at": row.expires_at,
+        "revoked_at": row.revoked_at,
+        "deploy_context": row.deploy_context,
+        "used_deploy_count": row.used_deploy_count,
+    }
+
+
+def create_release_gate_override(
+    db: Session,
+    *,
+    admin_user_id: str,
+    reason_code: str,
+    reason_note: str,
+    ttl_minutes: int,
+    deploy_context: dict,
+) -> ReleaseGateOverride:
+    normalized_reason = reason_code.strip().lower()
+    if normalized_reason not in OVERRIDE_REASON_CODES:
+        raise ValueError("reason_code geçersiz")
+    if len(reason_note.strip()) < 12:
+        raise ValueError("reason_note en az 12 karakter olmalı")
+    if ttl_minutes > 60:
+        raise ValueError("ttl_minutes en fazla 60 olabilir")
+
+    gate = release_gate_view(db)
+    if gate["status"] != "BLOCKED":
+        raise ValueError("Manual override sadece BLOCKED durumunda açılabilir")
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=ttl_minutes or 30)
+    row = ReleaseGateOverride(
+        id=str(uuid.uuid4()),
+        admin_user_id=admin_user_id,
+        reason_code=normalized_reason,
+        reason_note=reason_note.strip(),
+        release_gate_snapshot=gate,
+        deploy_context=deploy_context,
+        created_at=now,
+        expires_at=expires_at,
+        revoked_at=None,
+        used_deploy_count=0,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def revoke_release_gate_override(db: Session, override_id: str, admin_user_id: str) -> ReleaseGateOverride:
+    row = db.query(ReleaseGateOverride).filter(ReleaseGateOverride.id == override_id).first()
+    if row is None:
+        raise ValueError("override bulunamadı")
+    if row.revoked_at is not None:
+        return row
+    row.revoked_at = datetime.now(timezone.utc)
+    row.deploy_context = {**(row.deploy_context or {}), "revoked_by": admin_user_id}
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_release_gate_overrides(db: Session, limit: int = 50) -> list[ReleaseGateOverride]:
+    return db.query(ReleaseGateOverride).order_by(ReleaseGateOverride.created_at.desc()).limit(limit).all()
+
+
+def mark_active_override_used_in_deploy(db: Session) -> ReleaseGateOverride | None:
+    row = _active_override(db)
+    if row is None:
+        return None
+    row.used_deploy_count += 1
+    row.last_used_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def user_readiness_checklist(db: Session, user_id: str) -> dict:
+    settings_row = get_or_create_exchange_settings(db, user_id)
+    has_api_key = bool(settings_row.api_key_encrypted)
+    has_api_secret = bool(settings_row.api_secret_encrypted)
+    validation_ts = settings_row.validation_checked_at
+    stale = True
+    if validation_ts:
+        stale = validation_ts + timedelta(minutes=VALIDATION_STALE_MINUTES) < datetime.now(timezone.utc)
+
+    validation_success = bool(settings_row.last_validation_success)
+    can_trade = bool(settings_row.can_trade_snapshot)
+    is_testnet = settings_row.mode == "testnet"
+    reason_codes = settings_row.last_reason_codes or []
+
+    readiness_status = "blocked"
+    last_error_reason = reason_codes[0] if reason_codes else ""
+    if not has_api_key or not has_api_secret:
+        readiness_status = "awaiting_valid_key"
+        last_error_reason = "missing_credentials"
+    elif stale:
+        readiness_status = "blocked"
+        last_error_reason = "stale_validation_snapshot"
+    elif not validation_success or not can_trade:
+        readiness_status = "blocked"
+    else:
+        gate = release_gate_view(db)
+        if gate["status"] == "BLOCKED":
+            readiness_status = "blocked"
+            last_error_reason = "release_gate_forced_block"
+        else:
+            connectivity = adapter.ping()
+            if connectivity["status"] != "reachable":
+                readiness_status = "blocked"
+                last_error_reason = "exchange_health_degraded"
+            else:
+                readiness_status = "ready_for_test_order"
+
+    return {
+        "readiness_status": readiness_status,
+        "has_api_key": has_api_key,
+        "has_api_secret": has_api_secret,
+        "validation_success": validation_success,
+        "can_trade": can_trade,
+        "is_testnet_environment": is_testnet,
+        "is_validation_stale": stale,
+        "validation_timestamp": validation_ts,
+        "stale_after_minutes": VALIDATION_STALE_MINUTES,
+        "last_error_reason": last_error_reason,
     }
 
 
@@ -937,6 +1123,80 @@ def permission_drift_trend(db: Session, days: int = 7) -> dict:
     }
 
 
+def override_alert_analytics(db: Session, days: int = 7) -> dict:
+    days = 30 if days > 7 else 7
+    today = datetime.now(timezone.utc).date()
+    start_date = today - timedelta(days=days - 1)
+    bucket = {
+        (start_date + timedelta(days=i)).isoformat(): {"blocked_gate_count": 0, "override_count": 0, "override_deploy_count": 0}
+        for i in range(days)
+    }
+
+    blocked_logs = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "release_gate_status_changed",
+            AuditLog.created_at >= datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc),
+        )
+        .all()
+    )
+    for log in blocked_logs:
+        if (log.details or {}).get("status") == "BLOCKED":
+            key = log.created_at.date().isoformat()
+            if key in bucket:
+                bucket[key]["blocked_gate_count"] += 1
+
+    overrides = (
+        db.query(ReleaseGateOverride)
+        .filter(ReleaseGateOverride.created_at >= datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc))
+        .all()
+    )
+    for row in overrides:
+        key = row.created_at.date().isoformat()
+        if key in bucket:
+            bucket[key]["override_count"] += 1
+            bucket[key]["override_deploy_count"] += int(row.used_deploy_count or 0)
+
+    alert_logs = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.created_at >= datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc),
+            AuditLog.severity.in_(["warning", "error"]),
+        )
+        .all()
+    )
+    breakdown: dict[str, int] = {}
+    for log in alert_logs:
+        source = log.action
+        breakdown[source] = breakdown.get(source, 0) + 1
+
+    return {
+        "days": days,
+        "points": [{"date": key, **value} for key, value in bucket.items()],
+        "alert_source_breakdown": breakdown,
+    }
+
+
+def alert_history(db: Session, limit: int = 40) -> list[dict]:
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.severity.in_(["warning", "error"]))
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "created_at": row.created_at,
+            "action": row.action,
+            "severity": row.severity,
+            "source": row.entity_type,
+            "details": row.details,
+        }
+        for row in rows
+    ]
+
+
 def latest_execution_quality(db: Session, user_id: str):
     metric = latest_execution_metric(db, user_id)
     if metric:
@@ -1071,10 +1331,25 @@ def release_gate_view(db: Session) -> dict:
     reasons = readiness["critical_blockers"]
     if readiness["release_gate_status"] == "WARNING" and not reasons:
         reasons = ["non_critical_checks_pending"]
+
+    override = _active_override(db)
+    if readiness["release_gate_status"] == "BLOCKED" and override:
+        return {
+            "status": "PASS_WITH_OVERRIDE",
+            "reasons": ["manual_override_active", *reasons],
+            "live_activation": "guarded_override",
+            "override_active": True,
+            "override_expires_at": override.expires_at,
+            "override_id": override.id,
+        }
+
     return {
         "status": readiness["release_gate_status"],
         "reasons": reasons,
         "live_activation": readiness["live_activation"],
+        "override_active": False,
+        "override_expires_at": None,
+        "override_id": None,
     }
 
 

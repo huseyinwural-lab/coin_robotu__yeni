@@ -506,6 +506,60 @@ class ExchangeTestOrderResponse(BaseModel):
     volatility_pct: float
 
 
+class UserReadinessChecklistResponse(BaseModel):
+    readiness_status: str
+    has_api_key: bool
+    has_api_secret: bool
+    validation_success: bool
+    can_trade: bool
+    is_testnet_environment: bool
+    is_validation_stale: bool
+    validation_timestamp: datetime | None
+    stale_after_minutes: int
+    last_error_reason: str
+
+
+class ReleaseGateOverrideRequest(BaseModel):
+    reason_code: str
+    reason_note: str
+    ttl_minutes: int = Field(default=30, ge=1, le=60)
+    deploy_context: dict = Field(default_factory=dict)
+
+
+class ReleaseGateOverrideResponse(BaseModel):
+    override_id: str
+    admin_user_id: str
+    reason_code: str
+    reason_note: str
+    release_gate_snapshot: dict
+    created_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None
+    deploy_context: dict
+    used_deploy_count: int
+
+
+class OverrideAnalyticsPointResponse(BaseModel):
+    date: str
+    blocked_gate_count: int
+    override_count: int
+    override_deploy_count: int
+
+
+class OverrideAnalyticsResponse(BaseModel):
+    days: int
+    points: list[OverrideAnalyticsPointResponse]
+    alert_source_breakdown: dict[str, int]
+
+
+class AlertHistoryItemResponse(BaseModel):
+    created_at: datetime
+    action: str
+    severity: str
+    source: str
+    details: dict
+
+
 class ExchangeSettingsUpdateRequest(BaseModel):
     exchange: str = "binance"
     mode: str = "testnet"
@@ -587,6 +641,9 @@ class ReleaseGateStatusResponse(BaseModel):
     status: str
     reasons: list[str]
     live_activation: str
+    override_active: bool = False
+    override_expires_at: datetime | None = None
+    override_id: str | None = None
 
 
 class LiveReadinessScoreResponse(BaseModel):

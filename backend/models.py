@@ -313,6 +313,8 @@ class UserExchangeSetting(Base):
     api_secret_encrypted: Mapped[str] = mapped_column(Text, default="")
     permissions_snapshot: Mapped[list[str]] = mapped_column(JSON, default=list)
     can_trade_snapshot: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_validation_success: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
     validation_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -376,3 +378,19 @@ class PermissionDriftEvent(Base):
     new_can_trade: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     is_critical: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ReleaseGateOverride(Base):
+    __tablename__ = "release_gate_overrides"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    admin_user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    reason_code: Mapped[str] = mapped_column(String(40))
+    reason_note: Mapped[str] = mapped_column(Text)
+    release_gate_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    deploy_context: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    used_deploy_count: Mapped[int] = mapped_column(Integer, default=0)
