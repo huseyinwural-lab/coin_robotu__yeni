@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, event
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
@@ -589,6 +589,40 @@ class RiskPolicyAuditEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class StrategyDefinition(Base):
+    __tablename__ = "strategy_definitions"
+
+    strategy_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(120), index=True)
+    code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    owner_type: Mapped[str] = mapped_column(String(20), default="admin")
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    active_version_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class StrategyVersion(Base):
+    __tablename__ = "strategy_versions"
+    __table_args__ = (UniqueConstraint("strategy_id", "version_number", name="uq_strategy_versions_strategy_version"),)
+
+    version_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    strategy_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_definitions.strategy_id"), index=True)
+    version_number: Mapped[int] = mapped_column(Integer)
+    config_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    config_schema_version: Mapped[str] = mapped_column(String(30), default="1.0")
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    version_hash: Mapped[str] = mapped_column(String(128), index=True)
+
+
 @event.listens_for(ExecutionMetric, "before_update", propagate=True)
 def _block_execution_metric_update(_, __, ___):
     raise ValueError("execution_metric_immutable")
+
+
+@event.listens_for(StrategyVersion, "before_update", propagate=True)
+def _block_strategy_version_update(_, __, ___):
+    raise ValueError("strategy_version_immutable")

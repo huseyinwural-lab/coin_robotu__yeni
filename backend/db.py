@@ -312,6 +312,43 @@ def _ensure_sqlite_phase4_columns():
                     """
                 )
             )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS strategy_definitions (
+                        strategy_id VARCHAR PRIMARY KEY,
+                        name VARCHAR(120) NOT NULL,
+                        code VARCHAR(80) NOT NULL UNIQUE,
+                        description TEXT NOT NULL DEFAULT '',
+                        owner_type VARCHAR(20) NOT NULL DEFAULT 'admin',
+                        created_by VARCHAR NOT NULL,
+                        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                        active_version_id VARCHAR,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS strategy_versions (
+                        version_id VARCHAR PRIMARY KEY,
+                        strategy_id VARCHAR NOT NULL,
+                        version_number INTEGER NOT NULL,
+                        config_json JSON NOT NULL DEFAULT '{}',
+                        config_schema_version VARCHAR(30) NOT NULL DEFAULT '1.0',
+                        created_by VARCHAR NOT NULL,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        version_hash VARCHAR(128) NOT NULL,
+                        UNIQUE(strategy_id, version_number)
+                    )
+                    """
+                )
+            )
         except Exception:
             logger.exception("SQLite phase4 compatibility migration failed")
 

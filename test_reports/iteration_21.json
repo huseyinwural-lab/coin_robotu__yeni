@@ -1,0 +1,114 @@
+{
+  "summary": "Faz-6.1 + 6.2 Strategy Domain & Deterministic Kernel Contract testing complete. All 32 backend tests passed. Frontend /admin/strategies page fully functional with create/version/activate/archive flows and deterministic kernel evaluate. Bug fix applied: strategy_domain.py line 185 changed payload.symbol to context.symbol for non-existent version handling.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase6_iter2_comprehensive_strategy_domain.py",
+    "/app/test_reports/pytest/pytest_results_iter21_faz6_comprehensive.xml",
+    "/app/test_reports/artifacts_iter21/admin_strategies_page.jpeg",
+    "/app/test_reports/artifacts_iter21/strategy_created.jpeg",
+    "/app/test_reports/artifacts_iter21/version_created.jpeg",
+    "/app/test_reports/artifacts_iter21/strategy_activated.jpeg",
+    "/app/test_reports/artifacts_iter21/kernel_evaluate_result.jpeg"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "StrategyDefinition.code unique constraint + case-insensitive normalization working correctly",
+    "StrategyVersion immutable via SQLAlchemy event listener @event.listens_for(StrategyVersion, 'before_update')",
+    "version_hash = SHA-256(canonical_json(config) + strategy_id + version_number + schema_version)",
+    "Append-only behavior: same config creates new version because version_number increments",
+    "Activation pointer updates active_version_id + sets status='active'",
+    "Archive sets status='archived'",
+    "Registry /admin/registry/active returns only status='active' strategies",
+    "Kernel determinism verified: same context -> same context_hash + decision_hash",
+    "Canonical JSON ordering: key order does not affect hash (sort_keys=True)",
+    "Validation errors return 200 + REJECT action (not HTTP 422)",
+    "Hash mismatch returns 200 + REJECT with reason_code='strategy_version_hash_mismatch'",
+    "Non-existent version returns 200 + REJECT with reason_code='strategy_version_not_found' (after bug fix)",
+    "risk_state.blocked=True returns REJECT with reason_code='risk_gate_blocked'"
+  ],
+  "updated_files": [
+    "/app/backend/routers/strategy_domain.py",
+    "/app/backend/tests/test_phase6_iter2_comprehensive_strategy_domain.py"
+  ],
+  "success_rate": {
+    "backend": "100% (32/32 tests passed)",
+    "frontend": "100% (Admin Strategies page: create/version/activate/archive/kernel-evaluate flows working)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!"
+  },
+  "seed_data_creation": "Multiple strategy definitions and versions created during testing (codes: ui-test-*, test-strat-*, kernel-test-*, etc.)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Faz-6.1 + 6.2 Strategy Domain features fully tested. Key behaviors: (1) StrategyDefinition has unique code (case-insensitive), owner_type=admin, status=draft/active/archived, (2) StrategyVersion is immutable with auto-incrementing version_number and SHA-256 version_hash, (3) Activation updates active_version_id pointer and sets status=active, (4) Archive sets status=archived, (5) Registry returns only active strategies, (6) Kernel evaluate is deterministic (same context -> same hashes), (7) Canonical JSON ordering invariance verified, (8) Validation errors return typed REJECT (not 422), (9) Hash mismatch and non-existent version return REJECT. Frontend /admin/strategies page has all UI elements with data-testid attributes. Phase-6.3 runtime/event-bus NOT tested per scope.",
+  "features_verified": {
+    "admin_only_endpoints": {
+      "GET /strategy-domain/admin/strategies": "Admin auth required (403 for user, 401 for unauthenticated)",
+      "POST /strategy-domain/admin/strategies": "Admin auth required",
+      "GET /strategy-domain/admin/strategies/{id}": "Admin auth required, returns strategy + versions",
+      "POST /strategy-domain/admin/strategies/{id}/versions": "Admin auth required",
+      "POST /strategy-domain/admin/strategies/{id}/activate/{version_id}": "Admin auth required",
+      "POST /strategy-domain/admin/strategies/{id}/archive": "Admin auth required",
+      "GET /strategy-domain/admin/registry/active": "Admin auth required, returns only active strategies",
+      "POST /strategy-domain/admin/kernel/evaluate": "Admin auth required"
+    },
+    "strategy_definition": {
+      "unique_code": "Duplicate code returns 400 with detail='strategy_code_exists'",
+      "code_normalization": "Code converted to lowercase on creation",
+      "initial_status": "New strategy has status='draft'",
+      "owner_type": "Admin-created strategy has owner_type='admin'"
+    },
+    "strategy_version": {
+      "auto_increment": "version_number auto-increments per strategy",
+      "immutability": "SQLAlchemy event listener blocks updates",
+      "version_hash": "SHA-256 of (canonical_config + strategy_id + version_number + schema_version)",
+      "append_only": "Same config creates new version (hash changes due to version_number)"
+    },
+    "activation": {
+      "pointer_update": "active_version_id set to activated version",
+      "status_change": "status changes from draft to active",
+      "cross_strategy_blocked": "Cannot activate version from different strategy (404)"
+    },
+    "archive": {
+      "status_change": "status changes to archived"
+    },
+    "kernel_evaluate": {
+      "determinism": "Same context produces same context_hash and decision_hash",
+      "canonical_ordering": "JSON key order does not affect hashes",
+      "validation_error": "Invalid payload returns 200 + action=REJECT + reason_codes=['validation_error']",
+      "hash_mismatch": "Wrong version_hash returns 200 + action=REJECT + reason_codes=['strategy_version_hash_mismatch']",
+      "version_not_found": "Non-existent version returns 200 + action=REJECT + reason_codes=['strategy_version_not_found']",
+      "risk_blocked": "risk_state.blocked=True returns action=REJECT + reason_codes=['risk_gate_blocked']",
+      "decision_logic": {
+        "momentum>0.1": "action=BUY",
+        "momentum<-0.1": "action=SELL",
+        "abs(momentum)<0.02": "action=HOLD",
+        "else": "action=CLOSE"
+      }
+    },
+    "frontend_admin_strategies_page": {
+      "route": "/admin/strategies",
+      "create_strategy_form": "name, code, description inputs + Create Definition button",
+      "create_version_form": "schema_version input, config_json textarea + Create Version button",
+      "strategy_list": "Shows all strategies with code and status",
+      "strategy_detail": "Shows code, status, active_version_id + Archive Strategy button",
+      "versions_list": "Shows version_number, schema, hash + Activate Version button",
+      "kernel_evaluate": "JSON context textarea + Evaluate Context button + result card"
+    }
+  },
+  "bug_fixed": {
+    "file": "/app/backend/routers/strategy_domain.py",
+    "line": 185,
+    "issue": "Used payload.symbol instead of context.symbol when version not found, causing AttributeError (500)",
+    "fix": "Changed payload.symbol to context.symbol"
+  },
+  "mocked_api_note": "No mocked APIs. All endpoints use live PostgreSQL database."
+}

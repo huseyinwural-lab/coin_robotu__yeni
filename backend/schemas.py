@@ -765,6 +765,80 @@ class ArtifactVerifyResponse(BaseModel):
     verified: bool
 
 
+class StrategyDefinitionCreate(BaseModel):
+    name: str
+    code: str
+    description: str = ""
+
+
+class StrategyVersionCreate(BaseModel):
+    config_json: dict
+    config_schema_version: str = "1.0"
+
+
+class StrategyDefinitionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    strategy_id: str
+    name: str
+    code: str
+    description: str
+    owner_type: str
+    created_by: str
+    status: str
+    active_version_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class StrategyVersionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    version_id: str
+    strategy_id: str
+    version_number: int
+    config_json: dict
+    config_schema_version: str
+    created_by: str
+    created_at: datetime
+    version_hash: str
+
+
+class StrategyDetailResponse(BaseModel):
+    strategy: StrategyDefinitionResponse
+    versions: list[StrategyVersionResponse]
+
+
+class DecisionContextInput(BaseModel):
+    context_id: str
+    timestamp_utc: str
+    symbol: str
+    timeframe: str
+    market_snapshot: dict
+    market_snapshot_hash: str
+    position_state: dict
+    risk_state: dict
+    account_state_projection: dict
+    strategy_version_id: str
+    strategy_version_hash: str
+    input_features: dict
+    correlation_id: str
+
+
+class DecisionResultResponse(BaseModel):
+    decision_id: str
+    action: str
+    order_intent: dict
+    size: float
+    price_reference: dict
+    confidence: float
+    risk_score: float
+    reason_codes: list[str]
+    strategy_version_id: str | None
+    context_hash: str
+    decision_hash: str
+
+
 class UserPortfolioOverviewResponse(BaseModel):
     current_capital: float
     available_balance: float
