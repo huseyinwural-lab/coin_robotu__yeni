@@ -9,6 +9,7 @@ import { AdminLoginPage } from "@/pages/AdminLoginPage";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { AdminExchangesPage } from "@/pages/AdminExchangesPage";
 import { AdminProofsPage } from "@/pages/AdminProofsPage";
+import { AdminReportsArchivePage } from "@/pages/AdminReportsArchivePage";
 import { AdminRiskOrchestratorPage } from "@/pages/AdminRiskOrchestratorPage";
 import { AdminRiskOrchestratorAnalyticsPage } from "@/pages/AdminRiskOrchestratorAnalyticsPage";
 import { AdminRuntimeQuarantinePage } from "@/pages/AdminRuntimeQuarantinePage";
@@ -72,6 +73,7 @@ function App() {
             <Route path="user-approvals" element={<AdminUserApprovalsPage />} />
             <Route path="exchanges" element={<AdminExchangesPage />} />
             <Route path="proofs" element={<AdminProofsPage />} />
+            <Route path="reports/archive" element={<AdminReportsArchivePage />} />
             <Route path="strategies" element={<AdminStrategiesPage />} />
             <Route path="risk-orchestrator" element={<AdminRiskOrchestratorPage />} />
             <Route path="risk-orchestrator/analytics" element={<AdminRiskOrchestratorAnalyticsPage />} />

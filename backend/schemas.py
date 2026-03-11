@@ -377,6 +377,26 @@ class SystemAlertResponse(BaseModel):
     delivery_status: dict
 
 
+class WeeklyReportArchiveResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    report_id: str
+    report_type: str
+    period_start: datetime
+    period_end: datetime
+    generated_at: datetime
+    timezone: str
+    filename: str
+    storage_path: str
+    size_bytes: int
+    sha256: str
+    status: str
+    trigger_source: str
+    generated_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class RiskAnalyticsPoint(BaseModel):
     label: str
     value: int

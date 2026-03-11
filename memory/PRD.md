@@ -695,6 +695,12 @@
 - Fix: /api/phase4/admin/release-gate 500 (timezone diff) giderildi.
 - Testler: curl config/report/run + release-gate; smoke UI test.
 
+### 2026-03-11 (Weekly CSV Archive + Admin Reports)
+- WeeklyReportArchive modeli + retention (12 ay) + checksum üretimi.
+- /admin/reports/archive list/filter + download (verify opsiyonlu) endpointleri.
+- Admin Reports Archive UI (liste, filtre, checksum, download).
+- Weekly report manual run artık archive kaydı oluşturuyor; download audit log yazılıyor.
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Resend/Slack secrets sağlanınca Alert Pipeline v2 kanal aktivasyonu + uçtan uca test

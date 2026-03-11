@@ -208,20 +208,20 @@ def _ensure_sqlite_phase4_columns():
             connection.execute(
                 text(
                     """
-                    CREATE TABLE IF NOT EXISTS system_alerts (
-                        id VARCHAR PRIMARY KEY,
-                        alert_type VARCHAR(80) NOT NULL,
-                        severity VARCHAR(20) NOT NULL,
-                        message TEXT NOT NULL DEFAULT '',
-                        fingerprint VARCHAR(128),
-                        entity_key VARCHAR(120),
-                        root_cause_code VARCHAR(80),
-                        state_key VARCHAR(120),
-                        details JSON NOT NULL DEFAULT '{}',
-                        delivery_status JSON NOT NULL DEFAULT '{}',
-                        status VARCHAR(20) NOT NULL DEFAULT 'open',
-                        occurrences INTEGER NOT NULL DEFAULT 1,
-                        last_triggered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CREATE TABLE IF NOT EXISTS weekly_report_archives (
+                        report_id VARCHAR PRIMARY KEY,
+                        report_type VARCHAR(40) NOT NULL DEFAULT 'weekly_ops',
+                        period_start DATETIME NOT NULL,
+                        period_end DATETIME NOT NULL,
+                        generated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        timezone VARCHAR(40) NOT NULL DEFAULT 'Europe/Berlin',
+                        filename VARCHAR(200) NOT NULL,
+                        storage_path TEXT NOT NULL DEFAULT '',
+                        size_bytes INTEGER NOT NULL DEFAULT 0,
+                        sha256 VARCHAR(128) NOT NULL DEFAULT '',
+                        status VARCHAR(20) NOT NULL DEFAULT 'generated',
+                        trigger_source VARCHAR(20) NOT NULL DEFAULT 'scheduled',
+                        generated_by VARCHAR(120) NOT NULL DEFAULT 'system',
                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                     )
@@ -229,19 +229,37 @@ def _ensure_sqlite_phase4_columns():
                 )
             )
 
-            system_alert_columns = {
-                row[1] for row in connection.execute(text("PRAGMA table_info(system_alerts)"))
+            weekly_report_columns = {
+                row[1] for row in connection.execute(text("PRAGMA table_info(weekly_report_archives)"))
             }
-            if "fingerprint" not in system_alert_columns:
-                connection.execute(text("ALTER TABLE system_alerts ADD COLUMN fingerprint VARCHAR(128)"))
-            if "entity_key" not in system_alert_columns:
-                connection.execute(text("ALTER TABLE system_alerts ADD COLUMN entity_key VARCHAR(120)"))
-            if "root_cause_code" not in system_alert_columns:
-                connection.execute(text("ALTER TABLE system_alerts ADD COLUMN root_cause_code VARCHAR(80)"))
-            if "state_key" not in system_alert_columns:
-                connection.execute(text("ALTER TABLE system_alerts ADD COLUMN state_key VARCHAR(120)"))
-            if "delivery_status" not in system_alert_columns:
-                connection.execute(text("ALTER TABLE system_alerts ADD COLUMN delivery_status JSON NOT NULL DEFAULT '{}'"))
+            if "report_type" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN report_type VARCHAR(40) NOT NULL DEFAULT 'weekly_ops'"))
+            if "period_start" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN period_start DATETIME"))
+            if "period_end" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN period_end DATETIME"))
+            if "generated_at" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN generated_at DATETIME"))
+            if "timezone" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN timezone VARCHAR(40) NOT NULL DEFAULT 'Europe/Berlin'"))
+            if "filename" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN filename VARCHAR(200)"))
+            if "storage_path" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN storage_path TEXT NOT NULL DEFAULT ''"))
+            if "size_bytes" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN size_bytes INTEGER NOT NULL DEFAULT 0"))
+            if "sha256" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN sha256 VARCHAR(128) NOT NULL DEFAULT ''"))
+            if "status" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'generated'"))
+            if "trigger_source" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN trigger_source VARCHAR(20) NOT NULL DEFAULT 'scheduled'"))
+            if "generated_by" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN generated_by VARCHAR(120) NOT NULL DEFAULT 'system'"))
+            if "created_at" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN created_at DATETIME"))
+            if "updated_at" not in weekly_report_columns:
+                connection.execute(text("ALTER TABLE weekly_report_archives ADD COLUMN updated_at DATETIME"))
 
             connection.execute(
                 text(

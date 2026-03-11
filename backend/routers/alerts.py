@@ -8,7 +8,7 @@ from models import SystemAlert, User
 from schemas import SystemAlertResponse
 from services.alert_channel_service import channel_status
 from services.system_alert_service import list_system_alerts, update_system_alert_status
-from services.weekly_report_service import compute_next_run, generate_weekly_report, get_latest_report_path
+from services.weekly_report_service import compute_next_run, generate_weekly_report, get_latest_report
 
 router = APIRouter(prefix="/admin/system-alerts", tags=["system_alerts"])
 
@@ -52,15 +52,14 @@ def get_alert_config(current_admin: User = Depends(require_admin)):
 
 @router.post("/reports/run")
 def run_weekly_report(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    _ = current_admin
-    result = generate_weekly_report(db)
-    return {"path": result["path"], "alert_id": result["alert_id"]}
+    result = generate_weekly_report(db, trigger_source="manual", generated_by=current_admin.id)
+    report = result.get("report")
+    return {"report_id": report.report_id, "status": report.status}
 
 
 @router.get("/reports/latest")
-def download_latest_report(current_admin: User = Depends(require_admin)):
-    _ = current_admin
-    path = get_latest_report_path()
-    if not path:
+def download_latest_report(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    report = get_latest_report(db)
+    if not report or report.status != "generated":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="report_not_found")
-    return FileResponse(path, filename=path.split("/")[-1], media_type="text/csv")
+    return FileResponse(report.storage_path, filename=report.filename, media_type="text/csv")

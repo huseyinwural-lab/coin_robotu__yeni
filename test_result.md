@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Test new Phase-7 Block-2 admin UI: 1) Login as admin@platform.dev / Admin12345!. 2) Navigate to /admin/runtime/quarantine. Confirm list renders (empty state ok) and buttons Replay/Dismiss/Mark Failed are visible for any row. 3) Navigate to /admin/runtime/recovery. Confirm thresholds inputs render and stuck intent list shows action buttons (Sync Exchange/Replay Chain/Cancel/Mark Failed). Try clicking one action on a row (if exists) and confirm toast/response (ignore backend side-effects). 4) Navigate to /admin/risk-orchestrator/analytics. Confirm summary metrics and charts load, refresh works. 5) Navigate to /admin/dashboard and verify alert banner area is either hidden (no alerts) or shows list with Ack button. 6) Ensure no console errors."
+user_problem_statement: "Test Weekly Report Archive UI: 1) Login as admin@platform.dev / Admin12345!. 2) Navigate to /admin/reports/archive. Confirm filters render, list shows at least one report with status/sha256. 3) Click Download for a generated report and confirm a file download is triggered (or at least no UI error). 4) Confirm navigation sidebar shows Reports Archive link. 5) Ensure no console errors."
 
 frontend:
   - task: "Admin Login with credentials admin@platform.dev / Admin12345!"
@@ -167,6 +167,18 @@ frontend:
       - working: true
         agent: "testing"
         comment: "Alert Pipeline v2 Smoke Test: Alert banner displaying correctly with 2 alerts. Both Ack buttons visible with proper data-testid attributes (admin-alert-ack-{alert_id}). Alert types shown: 'weekly_ops_report_generated' (INFO) and 'release_gate_blocked' (CRITICAL). Dashboard metrics grid loads correctly. No critical console errors. Alert Pipeline v2 backend changes verified working."
+
+  - task: "Weekly Report Archive Page - UI and Navigation"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/AdminReportsArchivePage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Weekly Report Archive UI Test PASSED. All requirements verified: 1) Admin login successful with admin@platform.dev credentials. 2) Successfully navigated to /admin/reports/archive. 3) All 5 filters render correctly (report_type input, date_from input, date_to input, status dropdown, trigger_source dropdown) with Refresh button functional. 4) Reports list displays 1 report with status='generated' and SHA256 checksum visible (sha256: 1c32aa8524dfc...). 5) Download button present and enabled - successfully triggered file download (weekly_ops_report_20260311175728.csv). 6) 'Reports Archive' link visible and functional in sidebar navigation. 7) No critical console errors or failed API requests detected. Page structure uses proper data-testid attributes for all interactive elements."
 
   - task: "Admin Proofs Page - UI Rendering and Navigation"
     implemented: true
@@ -265,6 +277,30 @@ backend:
         agent: "testing"
         comment: "API endpoint GET /dashboard/summary returns correct data with metrics and empty alerts array. During testing, alerts array was empty which resulted in hidden alert banner (correct behavior)."
 
+  - task: "Report Archive API - List Reports Endpoint"
+    implemented: true
+    working: true
+    file: "backend/routers/report_archive.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "API endpoint GET /admin/reports/archive returns list of reports correctly. Tested with filters (status_filter='generated') and successfully retrieved 1 report with all required fields: report_id, filename, status, period_start, period_end, size_bytes, sha256, trigger_source, generated_at. Filter parameters working correctly."
+
+  - task: "Report Archive API - Download Report Endpoint"
+    implemented: true
+    working: true
+    file: "backend/routers/report_archive.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "API endpoint GET /admin/reports/archive/{report_id}/download successfully triggers file download. Tested with verify=true parameter. Downloaded file: weekly_ops_report_20260311175728.csv (387 bytes). File download mechanism works correctly with proper Content-Type headers and blob handling."
+
   - task: "Admin API - Alert Ack Endpoint"
     implemented: true
     working: "NA"
@@ -291,15 +327,15 @@ backend:
 
 metadata:
   created_by: "testing_agent"
-  version: "1.2"
-  test_sequence: 3
+  version: "1.3"
+  test_sequence: 4
   run_ui: true
   last_updated: "2026-03-11"
-  test_phase: "Alert Pipeline v2 Smoke Test"
+  test_phase: "Weekly Report Archive UI Test"
 
 test_plan:
   current_focus:
-    - "Alert Pipeline v2 smoke test completed"
+    - "Weekly Report Archive UI test completed successfully"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -309,3 +345,5 @@ agent_communication:
     message: "Phase-7 Block-2 testing completed. All 4 new admin pages tested successfully. Login works correctly. Runtime Quarantine page renders with empty state and action buttons ready. Runtime Recovery page displays 7 stuck intents with all action buttons functional - tested clicking Sync Exchange which triggered API call and toast (backend returned 400 for invalid state transition, frontend handled correctly). Risk Orchestrator Analytics page loads all metrics and 4 chart panels, refresh works. Dashboard alert banner properly hidden when no alerts present. One console error detected (400 backend response on action button click) which is expected behavior for invalid state transitions. Minor issue: Backend stuck intent action endpoint returns 400 status, likely due to validation logic - not a critical frontend issue as errors are properly handled and displayed to user."
   - agent: "testing"
     message: "Alert Pipeline v2 Smoke Test PASSED. Tested: 1) Admin login (admin@platform.dev) - WORKING. 2) Dashboard loads without critical errors - WORKING. Alert banner displays correctly with 2 alerts showing. Both Ack buttons visible and functional (data-testid verified). 3) /admin/proofs page loads without UI regressions - WORKING. All components render (header, batch panel, list wrapper). 4) Navigation sidebar working correctly - WORKING. Successfully navigated between dashboard and proofs. Minor Issue: 2 non-critical 500 errors for /api/phase4/admin/release-gate endpoint (release gate badge feature). Error is caught and handled gracefully in frontend - no UI breakage. Alert Pipeline v2 backend changes verified working correctly."
+  - agent: "testing"
+    message: "Weekly Report Archive UI Test COMPLETED - ALL TESTS PASSED. Comprehensive testing performed on /admin/reports/archive page. Results: 1) Admin authentication working perfectly (admin@platform.dev). 2) Navigation: 'Reports Archive' link visible in sidebar, navigation to /admin/reports/archive successful. 3) UI Components: Page header renders with title 'WEEKLY REPORT ARCHIVE' and description. All 5 filters render correctly (report_type, date_from, date_to, status dropdown, trigger_source dropdown) with functional Refresh button. 4) Data Display: Reports list shows 1 report with complete details - filename (weekly_ops_report_20260311175728.csv), status (generated), period (3/1/2026 – 3/11/2026), size (387 bytes), SHA256 checksum (1c32aa8524dfc49d8cf5927de376c986d9f4acfd46f87d4bcd1c...), trigger source (manual), generated timestamp (3/11/2026, 5:57:28 PM). 5) Download Functionality: Download button enabled for 'generated' status reports. Successfully triggered file download - verified by browser download handler. File received: weekly_ops_report_20260311175728.csv. 6) Filter Testing: Status filter functional - selected 'generated', clicked refresh, page reloaded correctly. 7) Error Monitoring: NO critical console errors detected, NO failed API requests. Backend endpoints working correctly: GET /api/admin/reports/archive returns proper JSON, GET /api/admin/reports/archive/{report_id}/download triggers file download with correct headers. All data-testid attributes present and functional for automated testing. Weekly Report Archive feature is production-ready."

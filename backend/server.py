@@ -20,6 +20,7 @@ from routers import (
     paper_positions,
     phase4_live,
     pipeline,
+    report_archive,
     risk_policies,
     user_risk,
     strategy_templates,
@@ -68,6 +69,7 @@ api_router.include_router(strategy_templates.router)
 api_router.include_router(strategy_domain.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(alerts.router)
+api_router.include_router(report_archive.router)
 api_router.include_router(exchange.router)
 api_router.include_router(venues.router)
 api_router.include_router(audit.router)

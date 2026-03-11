@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertTriangle,
+  Archive,
   BarChart3,
   BarChartBig,
   ClipboardList,
@@ -42,6 +43,7 @@ const adminOnlyItems = [
   { to: "/admin/user-approvals", label: "Kullanıcı Onayları", icon: ListChecks, testId: "nav-admin-user-approvals-link" },
   { to: "/admin/exchanges", label: "Exchanges", icon: Globe, testId: "nav-admin-exchanges-link" },
   { to: "/admin/proofs", label: "Proof Panel", icon: ShieldCheck, testId: "nav-admin-proofs-link" },
+  { to: "/admin/reports/archive", label: "Reports Archive", icon: Archive, testId: "nav-reports-archive-link" },
   { to: "/admin/strategies", label: "Strategies", icon: ClipboardList, testId: "nav-admin-strategies-link" },
   { to: "/admin/risk-orchestrator", label: "Risk Orchestrator", icon: ShieldAlert, testId: "nav-risk-orchestrator-link" },
   { to: "/admin/risk-orchestrator/analytics", label: "Risk Analytics", icon: BarChart3, testId: "nav-risk-analytics-link" },

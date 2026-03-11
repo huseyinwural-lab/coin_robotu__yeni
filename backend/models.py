@@ -497,6 +497,26 @@ class SystemAlert(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class WeeklyReportArchive(Base):
+    __tablename__ = "weekly_report_archives"
+
+    report_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    report_type: Mapped[str] = mapped_column(String(40), default="weekly_ops")
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    timezone: Mapped[str] = mapped_column(String(40), default="Europe/Berlin")
+    filename: Mapped[str] = mapped_column(String(200))
+    storage_path: Mapped[str] = mapped_column(Text, default="")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    sha256: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(20), default="generated")
+    trigger_source: Mapped[str] = mapped_column(String(20), default="scheduled")
+    generated_by: Mapped[str] = mapped_column(String(120), default="system")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class ExchangeRegistry(Base):
     __tablename__ = "exchange_registry"
 
