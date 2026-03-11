@@ -985,3 +985,54 @@
 ### Sonraki adım (planlandığı gibi)
 1. 7 günlük gözlem/tuning döngüsü (24h -> 7d değerlendirme)
 2. Stabilite sağlanırsa Faz-4 Adım-2: `SPOT_VOLATILITY_BREAKOUT` kontrollü aktivasyon
+
+## 14) 2026-03-11 — Faz-4 Finalizasyon (Risk + Capital + Breakout + Exposure Controls)
+
+### Uygulanan kapsam
+1. **Risk Engine Implementasyonu**
+   - Trade risk: `%1 risk_per_trade`, stop-loss zorunlu, quantity risk-distance ile hesaplanır.
+   - Strategy risk: `max_positions_per_strategy=2`, `max_strategy_drawdown=5%` ihlalinde strategy disable cache’e yazılır.
+   - Portfolio risk: `max_open_risk=3%`, `max_daily_loss=3%`, `max_portfolio_drawdown=15%` kontrolleri eklendi.
+2. **Kill Switch genişletmesi**
+   - Flash crash algısı (BTC hızlı düşüş guard)
+   - Slippage spike (son dönem slippage > 3x baseline)
+   - Exchange reject-rate high guard
+   - Bu sinyaller execution akışını güvenli biçimde bloke edecek risk tag’lerine bağlandı.
+3. **Capital Allocation Engine**
+   - Base allocation: Pullback `45%`, Reversion `35%`, Breakout `20%`
+   - Slot model: `%40/%35/%25` (selection_rank bazlı)
+   - Dynamic allocation: PF>1.5 `+5%`, PF<1.0 `-5%` (bounded)
+4. **Breakout Strategy (spot_volatility_breakout_v1) implement + aktivasyon**
+   - Compression + breakout + volume expansion + confirmation mantığı eklendi.
+   - Rejim eşleşmesi hard switch ile canlı:
+     - `TRENDING -> spot_pullback_v1`
+     - `RANGING -> spot_range_reversion_v1`
+     - `VOLATILE -> spot_volatility_breakout_v1`
+5. **Observability genişletmesi**
+   - Yeni endpoint: `GET /api/admin/strategy/risk-capital/status`
+   - Report ve score endpointlerinde strategy-level dağılım + profit_factor/drawdown alanları genişletildi.
+   - Risk sonucu (`risk_check_result`) ve `capital_allocation` metadata’sı observability eventlere işlendi.
+6. **Exposure / Correlation Control**
+   - `max_sector_exposure=30%`
+   - `max_correlated_positions=2`
+
+### Değişen ana dosyalar
+- `backend/services/pipeline/risk_engine.py`
+- `backend/services/pipeline/spot_risk_capital_service.py` (yeni)
+- `backend/services/pipeline/kill_switch_service.py`
+- `backend/services/pipeline/spot_dynamic_score_engine.py`
+- `backend/services/pipeline/runtime.py`
+- `backend/services/strategy_observability_service.py`
+- `backend/routers/admin_strategy_risk_capital.py` (yeni)
+- `backend/server.py`
+- `frontend/src/pages/AdminStrategyObservabilityPage.jsx`
+
+### Doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_29.json`
+  - Backend: **36/36 PASS**
+  - Frontend: **PASS** (observability + risk capital panel + admin regression)
+
+### Spot Engine durumu
+- Multi-strategy regime-aware spot engine artık üç stratejiyi destekliyor.
+- Risk/capital/observability/exposure katmanları aktif.
+- Spot engine finalizasyonu teknik olarak tamamlandı; sonraki büyük faz Futures Strategy Engine.
