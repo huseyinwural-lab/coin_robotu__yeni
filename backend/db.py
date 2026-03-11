@@ -125,6 +125,79 @@ def _ensure_sqlite_phase4_columns():
                 )
             )
             connection.execute(text("INSERT OR IGNORE INTO alert_policies (id) VALUES ('global')"))
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS exchange_registry (
+                        id VARCHAR PRIMARY KEY,
+                        exchange_code VARCHAR(40) UNIQUE NOT NULL,
+                        exchange_name VARCHAR(120) NOT NULL,
+                        status VARCHAR(20) NOT NULL DEFAULT 'active',
+                        supported_market_types JSON NOT NULL DEFAULT '[]',
+                        supports_testnet BOOLEAN NOT NULL DEFAULT 1,
+                        supports_live BOOLEAN NOT NULL DEFAULT 0,
+                        health_status VARCHAR(20) NOT NULL DEFAULT 'healthy',
+                        rate_limit_status VARCHAR(20) NOT NULL DEFAULT 'ok',
+                        adapter_version VARCHAR(40) NOT NULL DEFAULT 'v1',
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS exchange_capabilities (
+                        id VARCHAR PRIMARY KEY,
+                        exchange_code VARCHAR(40) NOT NULL,
+                        market_type VARCHAR(20) NOT NULL,
+                        supports_spot BOOLEAN NOT NULL DEFAULT 0,
+                        supports_futures BOOLEAN NOT NULL DEFAULT 0,
+                        supports_test_order BOOLEAN NOT NULL DEFAULT 1,
+                        supports_quote_qty BOOLEAN NOT NULL DEFAULT 0,
+                        supports_reduce_only BOOLEAN NOT NULL DEFAULT 0,
+                        supports_leverage BOOLEAN NOT NULL DEFAULT 0,
+                        supports_margin_mode BOOLEAN NOT NULL DEFAULT 0,
+                        supports_hedge_mode BOOLEAN NOT NULL DEFAULT 0,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS allowed_markets (
+                        id VARCHAR PRIMARY KEY,
+                        exchange_code VARCHAR(40) NOT NULL,
+                        market_type VARCHAR(20) NOT NULL,
+                        environment VARCHAR(20) NOT NULL,
+                        enabled BOOLEAN NOT NULL DEFAULT 1,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS user_venue_assignments (
+                        id VARCHAR PRIMARY KEY,
+                        user_id VARCHAR NOT NULL,
+                        exchange_code VARCHAR(40) NOT NULL,
+                        spot_allowed BOOLEAN NOT NULL DEFAULT 0,
+                        futures_allowed BOOLEAN NOT NULL DEFAULT 0,
+                        testnet_allowed BOOLEAN NOT NULL DEFAULT 1,
+                        live_allowed BOOLEAN NOT NULL DEFAULT 0,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
         except Exception:
             logger.exception("SQLite phase4 compatibility migration failed")
 

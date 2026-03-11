@@ -443,3 +443,60 @@ class AlertPolicy(Base):
     gate_override_warning_per_day: Mapped[int] = mapped_column(Integer, default=2)
     gate_override_critical_per_day: Mapped[int] = mapped_column(Integer, default=5)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExchangeRegistry(Base):
+    __tablename__ = "exchange_registry"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    exchange_code: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    exchange_name: Mapped[str] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    supported_market_types: Mapped[list[str]] = mapped_column(JSON, default=list)
+    supports_testnet: Mapped[bool] = mapped_column(Boolean, default=True)
+    supports_live: Mapped[bool] = mapped_column(Boolean, default=False)
+    health_status: Mapped[str] = mapped_column(String(20), default="healthy")
+    rate_limit_status: Mapped[str] = mapped_column(String(20), default="ok")
+    adapter_version: Mapped[str] = mapped_column(String(40), default="v1")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExchangeCapability(Base):
+    __tablename__ = "exchange_capabilities"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    exchange_code: Mapped[str] = mapped_column(String(40), index=True)
+    market_type: Mapped[str] = mapped_column(String(20), default="spot")
+    supports_spot: Mapped[bool] = mapped_column(Boolean, default=False)
+    supports_futures: Mapped[bool] = mapped_column(Boolean, default=False)
+    supports_test_order: Mapped[bool] = mapped_column(Boolean, default=True)
+    supports_quote_qty: Mapped[bool] = mapped_column(Boolean, default=False)
+    supports_reduce_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    supports_leverage: Mapped[bool] = mapped_column(Boolean, default=False)
+    supports_margin_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    supports_hedge_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class AllowedMarket(Base):
+    __tablename__ = "allowed_markets"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    exchange_code: Mapped[str] = mapped_column(String(40), index=True)
+    market_type: Mapped[str] = mapped_column(String(20))
+    environment: Mapped[str] = mapped_column(String(20), default="testnet")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UserVenueAssignment(Base):
+    __tablename__ = "user_venue_assignments"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    exchange_code: Mapped[str] = mapped_column(String(40), index=True)
+    spot_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+    futures_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+    testnet_allowed: Mapped[bool] = mapped_column(Boolean, default=True)
+    live_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

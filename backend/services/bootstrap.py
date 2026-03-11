@@ -14,6 +14,7 @@ from models import (
     UserRole,
 )
 from services.audit_service import create_audit_log
+from services.venue_service import seed_binance_venue_registry
 
 
 def _seed_admin(db: Session):
@@ -244,5 +245,6 @@ def seed_default_admin():
         _seed_exposure_groups(db)
         _seed_backtest_cards(db)
         _seed_live_activation_config(db)
+        seed_binance_venue_registry(db)
     finally:
         db.close()

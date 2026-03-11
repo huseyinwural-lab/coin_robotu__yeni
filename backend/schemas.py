@@ -485,12 +485,14 @@ class TestnetConnectivityResponse(BaseModel):
 
 class ExchangeValidateResponse(BaseModel):
     exchange: str
+    market_type: str
     environment: str
     is_valid: bool
     permissions: list[str]
     can_trade: bool
     can_withdraw: bool
     reason_codes: list[str]
+    capability_match: bool
 
 
 class MarketTickerResponse(BaseModel):
@@ -662,6 +664,106 @@ class ActiveAlertResponse(BaseModel):
     value: float
     threshold_warning: float
     threshold_critical: float
+
+
+class ExchangeRegistryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    exchange_code: str
+    exchange_name: str
+    status: str
+    supported_market_types: list[str]
+    supports_testnet: bool
+    supports_live: bool
+    health_status: str
+    rate_limit_status: str
+    adapter_version: str
+    updated_at: datetime
+
+
+class ExchangeRegistryUpdate(BaseModel):
+    status: str
+    health_status: str
+    rate_limit_status: str
+    adapter_version: str
+
+
+class ExchangeCapabilityResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    exchange_code: str
+    market_type: str
+    supports_spot: bool
+    supports_futures: bool
+    supports_test_order: bool
+    supports_quote_qty: bool
+    supports_reduce_only: bool
+    supports_leverage: bool
+    supports_margin_mode: bool
+    supports_hedge_mode: bool
+    updated_at: datetime
+
+
+class ExchangeCapabilityUpdate(BaseModel):
+    supports_test_order: bool
+    supports_quote_qty: bool
+    supports_reduce_only: bool
+    supports_leverage: bool
+    supports_margin_mode: bool
+    supports_hedge_mode: bool
+
+
+class AllowedMarketResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    exchange_code: str
+    market_type: str
+    environment: str
+    enabled: bool
+    updated_at: datetime
+
+
+class AllowedMarketToggle(BaseModel):
+    enabled: bool
+
+
+class UserVenueAssignmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    exchange_code: str
+    spot_allowed: bool
+    futures_allowed: bool
+    testnet_allowed: bool
+    live_allowed: bool
+    updated_at: datetime
+
+
+class UserVenueAssignmentUpdate(BaseModel):
+    user_id: str
+    exchange_code: str
+    spot_allowed: bool
+    futures_allowed: bool
+    testnet_allowed: bool
+    live_allowed: bool
+
+
+class UserVenueOptionResponse(BaseModel):
+    exchange: str
+    market_type: str
+    environment: str
+    venue_state: str
+
+
+class VenueHealthSummaryResponse(BaseModel):
+    exchange_health: dict[str, str]
+    market_availability: dict[str, bool]
+    capability_mismatch: list[str]
+    adapter_error_status: dict[str, str]
 
 
 class ExchangeSettingsUpdateRequest(BaseModel):
