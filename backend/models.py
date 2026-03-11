@@ -254,3 +254,14 @@ class BacktestResultCard(Base):
     period_end: Mapped[str] = mapped_column(String(30), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExecutionStateTransition(Base):
+    __tablename__ = "execution_state_transitions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    execution_event_id: Mapped[str] = mapped_column(String, ForeignKey("execution_events.id"), index=True)
+    state: Mapped[str] = mapped_column(String(30), index=True)
+    sequence: Mapped[int] = mapped_column(Integer)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

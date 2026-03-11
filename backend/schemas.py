@@ -237,6 +237,12 @@ class PipelineMonitoringResponse(BaseModel):
     latency_ms: float
     queue_depth: int
     active_bots_running: int
+    websocket_reconnects_5m: int
+    idempotency_keys_5m: int
+    duplicate_signals_blocked_5m: int
+    execution_transitions_5m: int
+    failed_events_pending: int
+    failed_events_dead: int
 
 
 class ExecutionPolicyBase(BaseModel):
@@ -351,3 +357,25 @@ class BacktestResultCardResponse(BacktestResultCardBase):
     id: str
     created_at: datetime
     updated_at: datetime
+
+
+class ExecutionStateTransitionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    execution_event_id: str
+    state: str
+    sequence: int
+    details: dict
+    occurred_at: datetime
+
+
+class HardeningSummaryResponse(BaseModel):
+    websocket_reconnects_5m: int
+    idempotency_keys_5m: int
+    duplicate_signals_blocked_5m: int
+    execution_transitions_5m: int
+    failed_events_pending: int
+    failed_events_dead: int
+    last_state_rebuild_status: str
+    last_state_rebuild_at: datetime | None

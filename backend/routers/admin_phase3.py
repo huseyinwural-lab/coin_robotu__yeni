@@ -3,22 +3,28 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
-from models import BacktestResultCard, ExecutionPolicy, FailedEvent, RiskExposureGroup, User
+from models import BacktestResultCard, BotProfile, ExecutionPolicy, FailedEvent, RiskExposureGroup, User
 from schemas import (
     BacktestResultCardCreate,
     BacktestResultCardResponse,
     BacktestResultCardUpdate,
     ExecutionPolicyCreate,
     ExecutionPolicyResponse,
+    ExecutionStateTransitionResponse,
     ExecutionPolicyUpdate,
     FailedEventResponse,
+    HardeningSummaryResponse,
     RiskExposureGroupCreate,
     RiskExposureGroupResponse,
     RiskExposureGroupUpdate,
     StateRebuildLogResponse,
 )
 from services.audit_service import create_audit_log
+from services.execution_policy_service import get_policy_for_strategy
 from services.failed_event_service import create_failed_event, mark_failed_event_resolved, mark_failed_event_retry
+from services.pipeline.cache_store import incr_counter
+from services.pipeline.execution_engine import open_paper_position
+from services.pipeline.runtime import pipeline_runtime
 from services.state_rebuild_service import run_state_rebuild
 
 router = APIRouter(prefix="/admin-phase3", tags=["admin_phase3"])
@@ -261,3 +267,82 @@ def update_backtest_card(
         details={"strategy": card.strategy_type, "risk_label": card.risk_label},
     )
     return card
+
+
+@router.get("/hardening-summary", response_model=HardeningSummaryResponse)
+def get_hardening_summary(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return pipeline_runtime.hardening_summary(db)
+
+
+@router.get("/execution-state-transitions", response_model=list[ExecutionStateTransitionResponse])
+def list_execution_state_transitions(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=200, ge=20, le=500),
+):
+    return pipeline_runtime.list_execution_state_transitions(db, limit)
+
+
+@router.post("/execution-state-transitions/simulate")
+def simulate_execution_state_flow(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    strategy_type: str = Query(default="breakout"),
+    symbol: str = Query(default="BTCUSDT"),
+    side: str = Query(default="long"),
+):
+    bot = (
+        db.query(BotProfile)
+        .filter(BotProfile.strategy_type == strategy_type)
+        .order_by(BotProfile.created_at.desc())
+        .first()
+    )
+    if bot is None:
+        bot = db.query(BotProfile).order_by(BotProfile.created_at.desc()).first()
+    if bot is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No bot profile found for simulation")
+
+    user = db.query(User).filter(User.id == bot.user_id).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bot owner not found")
+
+    policy = get_policy_for_strategy(db, strategy_type)
+    execution_result = open_paper_position(
+        db,
+        user=user,
+        bot=bot,
+        symbol=symbol.upper(),
+        direction=side.lower(),
+        market_price=100.0,
+        quantity=0.01,
+        leverage=1,
+        stop_loss=98.0 if side.lower() == "long" else 102.0,
+        take_profit=104.0 if side.lower() == "long" else 96.0,
+        execution_policy={
+            "style": policy.execution_style,
+            "order_preference": policy.order_preference,
+            "timeout_seconds": policy.timeout_seconds,
+            "fallback_behavior": policy.fallback_behavior,
+            "partial_fill_tolerance_pct": policy.partial_fill_tolerance_pct,
+            "execution_urgency": policy.execution_urgency,
+            "retry_limit": policy.retry_limit,
+        },
+        response_payload={"mode": "simulation", "trigger": "admin_manual"},
+    )
+
+    create_audit_log(
+        db,
+        action="execution_state_simulated",
+        entity_type="execution_event",
+        entity_id=execution_result["execution_event"].id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"strategy_type": strategy_type, "final_state": execution_result["final_state"]},
+    )
+    incr_counter(pipeline_runtime.cache, "metrics:state_transitions:5m", execution_result["transition_count"])
+
+    return {
+        "execution_event_id": execution_result["execution_event"].id,
+        "final_state": execution_result["final_state"],
+        "state_path": execution_result["state_path"],
+    }

@@ -65,6 +65,7 @@ class MarketDataEngine:
             except Exception as exc:
                 logger.warning("Market data websocket reconnect triggered: %s", exc)
                 self.websocket_status = "reconnecting"
+                incr_counter(self.cache, "metrics:websocket_reconnects:5m", 1)
                 await self._emit_synthetic_data(symbols)
                 await asyncio.sleep(5)
 

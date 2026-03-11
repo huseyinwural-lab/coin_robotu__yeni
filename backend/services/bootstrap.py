@@ -117,20 +117,48 @@ def _seed_execution_policies(db: Session):
 
 
 def _seed_exposure_groups(db: Session):
-    existing = db.query(RiskExposureGroup).count()
-    if existing:
-        return
+    defaults = [
+        {
+            "name": "majors",
+            "label": "Majors Cluster (BTC, ETH)",
+            "symbols": ["BTCUSDT", "ETHUSDT"],
+            "max_group_open_positions": 6,
+            "max_group_directional_positions": 4,
+            "max_group_risk_pct": 22,
+        },
+        {
+            "name": "high_beta_alts",
+            "label": "High Beta Alts (SOL, AVAX, LINK)",
+            "symbols": ["SOLUSDT", "AVAXUSDT", "LINKUSDT"],
+            "max_group_open_positions": 5,
+            "max_group_directional_positions": 3,
+            "max_group_risk_pct": 18,
+        },
+        {
+            "name": "mid_cap",
+            "label": "Mid Cap & Others (Fallback Group)",
+            "symbols": [],
+            "max_group_open_positions": 8,
+            "max_group_directional_positions": 5,
+            "max_group_risk_pct": 20,
+        },
+    ]
 
-    db.add(
-        RiskExposureGroup(
-            name="all_symbols",
-            label="All Symbols Unified Exposure Group",
-            symbols=[],
-            max_group_open_positions=12,
-            max_group_directional_positions=8,
-            max_group_risk_pct=35,
-        )
-    )
+    for payload in defaults:
+        existing = db.query(RiskExposureGroup).filter(RiskExposureGroup.name == payload["name"]).first()
+        if existing:
+            existing.label = payload["label"]
+            existing.symbols = payload["symbols"]
+            existing.max_group_open_positions = payload["max_group_open_positions"]
+            existing.max_group_directional_positions = payload["max_group_directional_positions"]
+            existing.max_group_risk_pct = payload["max_group_risk_pct"]
+            continue
+        db.add(RiskExposureGroup(**payload))
+
+    legacy = db.query(RiskExposureGroup).filter(RiskExposureGroup.name == "all_symbols").first()
+    if legacy:
+        legacy.label = "Legacy Unified Group (deprecated)"
+
     db.commit()
 
 

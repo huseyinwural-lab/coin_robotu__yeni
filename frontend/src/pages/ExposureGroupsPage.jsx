@@ -7,12 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { apiClient } from "@/lib/api";
 
 const initialForm = {
-  name: "all_symbols",
-  label: "All Symbols Unified Exposure Group",
-  symbols: "",
-  max_group_open_positions: 12,
-  max_group_directional_positions: 8,
-  max_group_risk_pct: 35,
+  name: "majors",
+  label: "Majors Cluster",
+  symbols: "BTCUSDT,ETHUSDT",
+  max_group_open_positions: 6,
+  max_group_directional_positions: 4,
+  max_group_risk_pct: 22,
 };
 
 export const ExposureGroupsPage = () => {
@@ -62,7 +62,7 @@ export const ExposureGroupsPage = () => {
     <section className="space-y-4" data-testid="exposure-groups-page">
       <header className="border border-blue-900 bg-slate-900 p-4" data-testid="exposure-groups-header">
         <h2 className="text-4xl font-black uppercase tracking-tight text-blue-300" data-testid="exposure-groups-title">Exposure Group Yönetimi</h2>
-        <p className="mt-2 text-sm text-slate-400" data-testid="exposure-groups-description">İlk iterasyon sade mod: tek havuz exposure kontrolü.</p>
+        <p className="mt-2 text-sm text-slate-400" data-testid="exposure-groups-description">Çoklu cluster modeli: majors, high-beta, mid-cap fallback.</p>
       </header>
 
       <form onSubmit={submitGroup} className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="exposure-group-form">

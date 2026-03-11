@@ -2,7 +2,32 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from models import BotProfile, ExecutionEvent, PaperPosition, PositionLedgerEvent, User
+from models import BotProfile, ExecutionEvent, ExecutionStateTransition, PaperPosition, PositionLedgerEvent, User
+
+
+def _build_state_path(execution_policy: dict) -> list[str]:
+    path = ["created", "submitted", "acknowledged"]
+    order_preference = execution_policy.get("order_preference", "limit_first")
+    fallback_behavior = execution_policy.get("fallback_behavior", "market_fallback")
+    partial_fill_tolerance = float(execution_policy.get("partial_fill_tolerance_pct", 50))
+
+    if order_preference == "market_first":
+        path.append("filled")
+        return path
+
+    if partial_fill_tolerance < 95:
+        path.append("partially_filled")
+
+    if fallback_behavior == "cancel_no_fill":
+        path.extend(["cancel_requested", "cancelled"])
+        return path
+
+    if fallback_behavior in {"market_fallback", "limit_retry_then_market"}:
+        path.extend(["fallback_submitted", "filled"])
+        return path
+
+    path.append("filled")
+    return path
 
 
 def open_paper_position(
@@ -19,14 +44,16 @@ def open_paper_position(
     take_profit: float,
     execution_policy: dict,
     response_payload: dict,
-) -> PaperPosition:
+) -> dict:
+    state_path = _build_state_path(execution_policy)
+    final_state = state_path[-1]
     enriched_payload = {
         **response_payload,
         "execution_policy": execution_policy,
         "state_machine": {
             "previous": "created",
-            "current": "filled",
-            "path": ["created", "submitted", "acknowledged", "filled"],
+            "current": final_state,
+            "path": state_path,
         },
     }
 
@@ -37,12 +64,36 @@ def open_paper_position(
         side=direction,
         quantity=quantity,
         mock_price=market_price,
-        execution_status="filled",
+        execution_status=final_state,
         response_payload=enriched_payload,
         note="Paper trading execution",
     )
     db.add(execution_event)
     db.flush()
+
+    for index, state in enumerate(state_path):
+        db.add(
+            ExecutionStateTransition(
+                execution_event_id=execution_event.id,
+                state=state,
+                sequence=index,
+                details={
+                    "symbol": symbol,
+                    "side": direction,
+                    "execution_style": execution_policy.get("style"),
+                },
+            )
+        )
+
+    if final_state in {"cancelled", "failed", "rejected"}:
+        db.commit()
+        return {
+            "position": None,
+            "execution_event": execution_event,
+            "final_state": final_state,
+            "state_path": state_path,
+            "transition_count": len(state_path),
+        }
 
     position = PaperPosition(
         user_id=user.id,
@@ -77,7 +128,13 @@ def open_paper_position(
     )
     db.commit()
     db.refresh(position)
-    return position
+    return {
+        "position": position,
+        "execution_event": execution_event,
+        "final_state": final_state,
+        "state_path": state_path,
+        "transition_count": len(state_path),
+    }
 
 
 def refresh_open_positions(db: Session, latest_prices: dict[str, float]):

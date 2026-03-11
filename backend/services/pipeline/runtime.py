@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 
 from db import SessionLocal, redis_client
-from models import BotProfile, FailedEvent, PaperPosition, SignalEvent, StrategyTemplate, User
+from models import BotProfile, ExecutionStateTransition, FailedEvent, PaperPosition, SignalEvent, StateRebuildLog, StrategyTemplate, User
 from services.audit_service import create_audit_log
 from services.execution_policy_service import get_policy_for_strategy
 from services.failed_event_service import create_failed_event, mark_failed_event_resolved, mark_failed_event_retry
@@ -100,6 +100,16 @@ class PipelineRuntime:
                         if signal.signal == "none":
                             continue
 
+                        idempotency_key = (
+                            f"idempotency:signal:{bot.id}:{event.symbol}:{event.timeframe}:"
+                            f"{event.timestamp.strftime('%Y%m%d%H%M')}:{signal.direction}"
+                        )
+                        if self.cache.get(idempotency_key):
+                            incr_counter(self.cache, "metrics:duplicates_blocked:5m", 1)
+                            continue
+                        self.cache.set(idempotency_key, utc_now_iso())
+                        incr_counter(self.cache, "metrics:idempotency_keys:5m", 1)
+
                         signal_event = SignalEvent(
                             bot_profile_id=bot.id,
                             user_id=user.id,
@@ -137,6 +147,7 @@ class PipelineRuntime:
                             db,
                             current_user=user,
                             signal=signal,
+                            market_type=bot.market_type,
                             market_price=market_price,
                             spread_bps=spread_bps,
                             atr_pct=atr_pct,
@@ -166,7 +177,7 @@ class PipelineRuntime:
                             "retry_limit": policy.retry_limit,
                         }
 
-                        position = open_paper_position(
+                        execution_result = open_paper_position(
                             db,
                             user=user,
                             bot=bot,
@@ -185,6 +196,34 @@ class PipelineRuntime:
                                 "risk_tags": risk_decision.risk_tags,
                             },
                         )
+                        incr_counter(self.cache, "metrics:state_transitions:5m", execution_result["transition_count"])
+
+                        if execution_result["position"] is None:
+                            create_failed_event(
+                                db,
+                                event_type="execution_not_filled",
+                                entity_type="execution_event",
+                                entity_id=execution_result["execution_event"].id,
+                                payload={
+                                    "final_state": execution_result["final_state"],
+                                    "state_path": execution_result["state_path"],
+                                    "strategy": signal.strategy_id,
+                                },
+                                error_message="Execution state machine ended without fill",
+                            )
+                            create_audit_log(
+                                db,
+                                action="trade_rejected",
+                                entity_type="execution_event",
+                                entity_id=execution_result["execution_event"].id,
+                                actor_user_id=user.id,
+                                actor_role=user.role.value,
+                                severity="warning",
+                                details={"final_state": execution_result["final_state"]},
+                            )
+                            continue
+
+                        position = execution_result["position"]
                         create_audit_log(
                             db,
                             action="trade_open",
@@ -274,6 +313,10 @@ class PipelineRuntime:
             await asyncio.sleep(300)
             self.cache.set("metrics:signals:5m", "0")
             self.cache.set("metrics:paper_trades:5m", "0")
+            self.cache.set("metrics:duplicates_blocked:5m", "0")
+            self.cache.set("metrics:idempotency_keys:5m", "0")
+            self.cache.set("metrics:state_transitions:5m", "0")
+            self.cache.set("metrics:websocket_reconnects:5m", "0")
 
     async def _failed_event_recovery_loop(self):
         while self._running:
@@ -304,6 +347,8 @@ class PipelineRuntime:
     def monitoring_snapshot(self, db):
         ws = get_json(self.cache, "pipeline:websocket") or {}
         orchestrator = get_json(self.cache, "pipeline:orchestrator") or {}
+        pending_failed = db.query(FailedEvent).filter(FailedEvent.status.in_(["pending", "retrying"])).count()
+        dead_failed = db.query(FailedEvent).filter(FailedEvent.status == "dead").count()
         return {
             "websocket_status": ws.get("status", self.market_data_engine.websocket_status),
             "heartbeat": ws.get("heartbeat", self.market_data_engine.last_heartbeat),
@@ -313,7 +358,35 @@ class PipelineRuntime:
             "latency_ms": orchestrator.get("latency_ms", self.market_data_engine.latency_ms),
             "queue_depth": self.candle_queue.qsize(),
             "active_bots_running": db.query(BotProfile).filter(BotProfile.is_running.is_(True)).count(),
+            "websocket_reconnects_5m": get_counter(self.cache, "metrics:websocket_reconnects:5m"),
+            "idempotency_keys_5m": get_counter(self.cache, "metrics:idempotency_keys:5m"),
+            "duplicate_signals_blocked_5m": get_counter(self.cache, "metrics:duplicates_blocked:5m"),
+            "execution_transitions_5m": get_counter(self.cache, "metrics:state_transitions:5m"),
+            "failed_events_pending": pending_failed,
+            "failed_events_dead": dead_failed,
         }
+
+    def hardening_summary(self, db):
+        monitoring = self.monitoring_snapshot(db)
+        last_rebuild = db.query(StateRebuildLog).order_by(StateRebuildLog.started_at.desc()).first()
+        return {
+            "websocket_reconnects_5m": monitoring["websocket_reconnects_5m"],
+            "idempotency_keys_5m": monitoring["idempotency_keys_5m"],
+            "duplicate_signals_blocked_5m": monitoring["duplicate_signals_blocked_5m"],
+            "execution_transitions_5m": monitoring["execution_transitions_5m"],
+            "failed_events_pending": monitoring["failed_events_pending"],
+            "failed_events_dead": monitoring["failed_events_dead"],
+            "last_state_rebuild_status": last_rebuild.status if last_rebuild else "unknown",
+            "last_state_rebuild_at": last_rebuild.finished_at if last_rebuild else None,
+        }
+
+    def list_execution_state_transitions(self, db, limit: int = 200):
+        return (
+            db.query(ExecutionStateTransition)
+            .order_by(ExecutionStateTransition.occurred_at.desc())
+            .limit(limit)
+            .all()
+        )
 
 
 pipeline_runtime = PipelineRuntime(redis_client)

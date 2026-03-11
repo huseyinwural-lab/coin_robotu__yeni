@@ -10,6 +10,7 @@ import { AuditLogsPage } from "@/pages/AuditLogsPage";
 import { BacktestCardsPage } from "@/pages/BacktestCardsPage";
 import { BotProfilesPage } from "@/pages/BotProfilesPage";
 import { ExecutionPoliciesPage } from "@/pages/ExecutionPoliciesPage";
+import { ExecutionStatesPage } from "@/pages/ExecutionStatesPage";
 import { ExposureGroupsPage } from "@/pages/ExposureGroupsPage";
 import { ExchangeMockPage } from "@/pages/ExchangeMockPage";
 import { FailedEventsPage } from "@/pages/FailedEventsPage";
@@ -56,6 +57,7 @@ function App() {
             <Route path="market-universe" element={<ProtectedRoute role="admin"><MarketUniversePage /></ProtectedRoute>} />
             <Route path="execution-policies" element={<ProtectedRoute role="admin"><ExecutionPoliciesPage /></ProtectedRoute>} />
             <Route path="exposure-groups" element={<ProtectedRoute role="admin"><ExposureGroupsPage /></ProtectedRoute>} />
+            <Route path="execution-states" element={<ProtectedRoute role="admin"><ExecutionStatesPage /></ProtectedRoute>} />
             <Route path="failed-events" element={<ProtectedRoute role="admin"><FailedEventsPage /></ProtectedRoute>} />
             <Route path="state-rebuild" element={<ProtectedRoute role="admin"><StateRebuildLogsPage /></ProtectedRoute>} />
             <Route path="backtest-cards" element={<ProtectedRoute role="admin"><BacktestCardsPage /></ProtectedRoute>} />

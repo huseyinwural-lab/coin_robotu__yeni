@@ -32,12 +32,13 @@ export const MonitoringPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="monitoring-description">Websocket, signal rate, paper trade ve latency durumu.</p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="monitoring-metrics-grid">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6" data-testid="monitoring-metrics-grid">
         <MetricCard label="WS Status" value={isLoading ? "loading" : (metrics?.websocket_status || "-")} tone="blue" testId="monitoring-ws-status" />
         <MetricCard label="Signal / 5m" value={isLoading ? "loading" : (metrics?.signal_rate_last_5m ?? "-")} testId="monitoring-signal-rate" />
         <MetricCard label="Paper Trade / 5m" value={isLoading ? "loading" : (metrics?.paper_trades_last_5m ?? "-")} tone="orange" testId="monitoring-paper-trades" />
         <MetricCard label="Open Positions" value={isLoading ? "loading" : (metrics?.open_positions ?? "-")} testId="monitoring-open-positions" />
         <MetricCard label="Latency ms" value={isLoading ? "loading" : (metrics?.latency_ms ?? "-")} tone="blue" testId="monitoring-latency" />
+        <MetricCard label="Transitions / 5m" value={isLoading ? "loading" : (metrics?.execution_transitions_5m ?? "-")} tone="orange" testId="monitoring-transitions" />
       </div>
 
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-details-panel">
@@ -45,6 +46,11 @@ export const MonitoringPage = () => {
         <p className="mt-2 font-mono text-sm" data-testid="monitoring-heartbeat-value">{metrics?.heartbeat || "-"}</p>
         <p className="mt-2 font-mono text-xs text-slate-400" data-testid="monitoring-queue-depth">Queue Depth: {metrics?.queue_depth ?? "-"}</p>
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-running-bots">Running Bots: {metrics?.active_bots_running ?? "-"}</p>
+        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-reconnects">WS Reconnect /5m: {metrics?.websocket_reconnects_5m ?? "-"}</p>
+        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-idempotency">Idempotency Keys /5m: {metrics?.idempotency_keys_5m ?? "-"}</p>
+        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-duplicates">Duplicate Blocked /5m: {metrics?.duplicate_signals_blocked_5m ?? "-"}</p>
+        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-failed-pending">Failed Events Pending: {metrics?.failed_events_pending ?? "-"}</p>
+        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-failed-dead">Failed Events Dead: {metrics?.failed_events_dead ?? "-"}</p>
       </div>
     </section>
   );

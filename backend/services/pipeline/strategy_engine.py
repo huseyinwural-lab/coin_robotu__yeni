@@ -75,6 +75,10 @@ def evaluate_strategy(
         elif close < recent_low:
             signal, direction = "short", "short"
             reason_codes = ["breakout_low", "momentum"]
+        elif abs(delta_pct) > 0.0025:
+            signal = "long" if delta_pct > 0 else "short"
+            direction = signal
+            reason_codes = ["breakout_momentum_proxy", "delta_trigger"]
 
     elif strategy_type == "volatility_expansion":
         avg_range = sum(float(c["high"]) - float(c["low"]) for c in primary_candles[-10:-1]) / 9
