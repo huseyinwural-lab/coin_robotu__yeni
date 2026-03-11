@@ -137,3 +137,48 @@ def run_hardening_checklist(db: Session) -> HardeningChecklistRun:
 
 def get_latest_hardening_checklist_run(db: Session) -> HardeningChecklistRun | None:
     return db.query(HardeningChecklistRun).order_by(HardeningChecklistRun.created_at.desc()).first()
+
+
+def get_hardening_trend(db: Session) -> dict:
+    recent_runs = (
+        db.query(HardeningChecklistRun)
+        .order_by(HardeningChecklistRun.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    if not recent_runs:
+        return {
+            "average_score_last_5": 0.0,
+            "trend_alarm": False,
+            "critical_alarm": False,
+            "active_alerts": [],
+            "recent_runs": [],
+        }
+
+    avg_score = sum(run.score for run in recent_runs) / len(recent_runs)
+    latest = recent_runs[0]
+    critical_alarm = latest.critical_blocked
+    trend_alarm = avg_score < 70
+
+    alerts: list[str] = []
+    if critical_alarm:
+        alerts.append("critical_fail_in_latest_run")
+    if trend_alarm:
+        alerts.append("score_trend_below_70_last_5")
+
+    return {
+        "average_score_last_5": round(avg_score, 2),
+        "trend_alarm": trend_alarm,
+        "critical_alarm": critical_alarm,
+        "active_alerts": alerts,
+        "recent_runs": [
+            {
+                "id": run.id,
+                "score": run.score,
+                "critical_blocked": run.critical_blocked,
+                "readiness_status": run.readiness_status,
+                "created_at": run.created_at.isoformat(),
+            }
+            for run in recent_runs
+        ],
+    }

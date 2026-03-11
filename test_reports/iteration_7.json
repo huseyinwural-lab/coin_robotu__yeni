@@ -1,0 +1,46 @@
+{
+  "summary": "Phase-3 Iterasyon-4 kapsamı backend+frontend public endpoint üzerinde test edildi: hibrit exposure (statik grup + rolling korelasyon) unit doğrulaması, correlation matrix endpoint/UI, execution state simulate branchleri ve retry budget, hardening checklist trend/alarm, user read-only backtest insights ve monitoring correlation rejection metrik görünürlüğü doğrulandı.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ExecutionStatesPage",
+        "issue": "UI'da 'failed' branch simülasyonu için buton bulunmuyor; yalnızca filled/partial/timeout/rejected var.",
+        "selector": "[data-testid=\"execution-states-simulate-group\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase3_iter4_hybrid_checklist_backtest.py",
+    "/app/backend/tests/test_websocket_phase3_retest.py",
+    "/app/test_reports/pytest/pytest_results_iter7_phase3.xml"
+  ],
+  "action_items": [
+    "Execution States admin UI'ya failed branch için simulate butonu ekleyin (outcome=failed).",
+    "Execution States tablosunda failed branch üretimini UI üzerinden erişilebilir yaparak kapsamı requirement ile hizalayın."
+  ],
+  "critical_code_review_comments": [
+    "Execution state machine backend tarafında failed branch destekli; ancak frontend tetikleyici eksik olduğu için feature parity bozuluyor.",
+    "MOCKED: Paper execution akışı canlı emir yerine paper engine ile çalışıyor.",
+    "MOCKED: Synthetic market fallback (Binance websocket kısıtında) beklenen davranış olarak aktif."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase3_iter4_hybrid_checklist_backtest.py",
+    "/app/test_reports/iteration_7.json"
+  ],
+  "success_rate": {
+    "backend": "100% (18 passed, 1 skipped)",
+    "frontend": "92% (ana akışlar geçti, failed simulate UI aksiyonu eksik)"
+  },
+  "seed_data_creation": "Admin simulate endpoint (filled/partial/timeout/rejected/failed) ve backtest card create ile test verisi üretildi.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration_7 backend regression dosyası eklendi. Public URL'de admin+viewer akışları çalışıyor. Tek açık gap: ExecutionStatesPage'de failed simulate butonu yok; backend endpointte outcome=failed çalışıyor.",
+  "rca of the issue": "Reproduction: Admin -> Execution States sayfası -> simulate aksiyonlarında failed seçeneği yok. Root cause: frontend/src/pages/ExecutionStatesPage.jsx içinde simulate buton setinde failed outcome için Button tanımı eklenmemiş. Mitigation: data-testid ile failed buton ekleyip simulateStateFlow('failed') çağırmak."
+}

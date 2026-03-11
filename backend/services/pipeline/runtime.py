@@ -146,6 +146,7 @@ class PipelineRuntime:
                         risk_decision = evaluate_risk(
                             db,
                             current_user=user,
+                            cache=self.cache,
                             signal=signal,
                             market_type=bot.market_type,
                             market_price=market_price,
@@ -154,6 +155,11 @@ class PipelineRuntime:
                         )
 
                         if not risk_decision.approved:
+                            if any(
+                                tag in {"correlated_cluster_overload", "high_pair_correlation"}
+                                for tag in risk_decision.risk_tags
+                            ):
+                                incr_counter(self.cache, "metrics:correlation_rejections:5m", 1)
                             create_audit_log(
                                 db,
                                 action="risk_rejection",
@@ -212,6 +218,8 @@ class PipelineRuntime:
                                     "final_state": execution_result["final_state"],
                                     "state_path": execution_result["state_path"],
                                     "strategy": signal.strategy_id,
+                                    "retry_budget_used": execution_result.get("retry_budget_used", 0),
+                                    "partial_fill_ratio": execution_result.get("partial_fill_ratio", 0),
                                 },
                                 error_message="Execution state machine ended without fill",
                             )
@@ -321,6 +329,7 @@ class PipelineRuntime:
             self.cache.set("metrics:idempotency_keys:5m", "0")
             self.cache.set("metrics:state_transitions:5m", "0")
             self.cache.set("metrics:websocket_reconnects:5m", "0")
+            self.cache.set("metrics:correlation_rejections:5m", "0")
 
     async def _failed_event_recovery_loop(self):
         while self._running:
@@ -368,6 +377,7 @@ class PipelineRuntime:
             "execution_transitions_5m": get_counter(self.cache, "metrics:state_transitions:5m"),
             "failed_events_pending": pending_failed,
             "failed_events_dead": dead_failed,
+            "correlation_rejections_5m": get_counter(self.cache, "metrics:correlation_rejections:5m"),
         }
 
     def hardening_summary(self, db):

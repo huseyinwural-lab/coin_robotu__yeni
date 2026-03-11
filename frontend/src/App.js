@@ -8,7 +8,9 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { AuditLogsPage } from "@/pages/AuditLogsPage";
 import { BacktestCardsPage } from "@/pages/BacktestCardsPage";
+import { BacktestInsightsPage } from "@/pages/BacktestInsightsPage";
 import { BotProfilesPage } from "@/pages/BotProfilesPage";
+import { CorrelationMatrixPage } from "@/pages/CorrelationMatrixPage";
 import { ExecutionPoliciesPage } from "@/pages/ExecutionPoliciesPage";
 import { ExecutionStatesPage } from "@/pages/ExecutionStatesPage";
 import { ExposureGroupsPage } from "@/pages/ExposureGroupsPage";
@@ -58,6 +60,7 @@ function App() {
             <Route path="market-universe" element={<ProtectedRoute role="admin"><MarketUniversePage /></ProtectedRoute>} />
             <Route path="execution-policies" element={<ProtectedRoute role="admin"><ExecutionPoliciesPage /></ProtectedRoute>} />
             <Route path="exposure-groups" element={<ProtectedRoute role="admin"><ExposureGroupsPage /></ProtectedRoute>} />
+            <Route path="correlation-matrix" element={<ProtectedRoute role="admin"><CorrelationMatrixPage /></ProtectedRoute>} />
             <Route path="execution-states" element={<ProtectedRoute role="admin"><ExecutionStatesPage /></ProtectedRoute>} />
             <Route path="hardening-checklist" element={<ProtectedRoute role="admin"><HardeningChecklistPage /></ProtectedRoute>} />
             <Route path="failed-events" element={<ProtectedRoute role="admin"><FailedEventsPage /></ProtectedRoute>} />
@@ -67,6 +70,7 @@ function App() {
             <Route path="bots" element={<BotProfilesPage />} />
             <Route path="risk-policies" element={<RiskPoliciesPage />} />
             <Route path="strategies" element={<StrategyTemplatesPage />} />
+            <Route path="backtest-insights" element={<BacktestInsightsPage />} />
             <Route path="positions" element={<PaperPositionsPage />} />
             <Route path="audit-logs" element={<ProtectedRoute role="admin"><AuditLogsPage /></ProtectedRoute>} />
             <Route path="exchange-mock" element={<ExchangeMockPage />} />

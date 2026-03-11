@@ -10,6 +10,7 @@ from routers import (
     admin_phase3,
     audit_logs,
     auth,
+    backtest,
     bot_profiles,
     dashboard,
     exchange,
@@ -54,6 +55,7 @@ api_router.include_router(admin_control.router)
 api_router.include_router(admin_phase3.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(paper_positions.router)
+api_router.include_router(backtest.router)
 
 fastapi_app.include_router(api_router)
 

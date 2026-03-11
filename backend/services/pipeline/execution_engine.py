@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from models import BotProfile, ExecutionEvent, ExecutionStateTransition, PaperPosition, PositionLedgerEvent, User
 
 
-def _build_state_path(execution_policy: dict, execution_context: dict | None = None) -> list[str]:
+def _build_state_path(execution_policy: dict, execution_context: dict | None = None) -> dict:
     context = execution_context or {}
     path = ["created", "submitted", "acknowledged"]
     order_preference = execution_policy.get("order_preference", "limit_first")
@@ -13,61 +13,93 @@ def _build_state_path(execution_policy: dict, execution_context: dict | None = N
     partial_fill_tolerance = float(execution_policy.get("partial_fill_tolerance_pct", 50))
     timeout_seconds = int(execution_policy.get("timeout_seconds", 8))
     execution_style = execution_policy.get("style", execution_policy.get("execution_style", "balanced"))
+    retry_limit = int(execution_policy.get("retry_limit", 1))
     spread_bps = float(context.get("spread_bps", 0))
     latency_ms = float(context.get("latency_ms", 0))
     forced_outcome = context.get("forced_outcome")
 
+    retry_budget_used = 0
+    partial_fill_ratio = 0.0
+
+    def _result():
+        return {
+            "path": path,
+            "retry_budget_used": retry_budget_used,
+            "partial_fill_ratio": round(partial_fill_ratio, 2),
+        }
+
     if forced_outcome == "rejected":
         path.append("rejected")
-        return path
+        return _result()
     if forced_outcome == "failed":
         path.append("failed")
-        return path
+        return _result()
     if forced_outcome == "timeout":
         path.append("timeout")
-        if fallback_behavior in {"market_fallback", "limit_retry_then_market"}:
+        for retry_index in range(retry_limit):
+            path.append(f"retry_{retry_index + 1}_submitted")
+            retry_budget_used += 1
+        if fallback_behavior in {"market_fallback", "limit_retry_then_market"} and retry_limit > 0:
             path.extend(["fallback_submitted", "filled"])
         else:
             path.extend(["cancel_requested", "cancelled", "failed"])
-        return path
+        return _result()
+    if forced_outcome == "partial":
+        partial_fill_ratio = float(context.get("partial_fill_ratio", 0.45))
+        path.append("partially_filled")
+        for retry_index in range(min(retry_limit, 2)):
+            path.append(f"retry_{retry_index + 1}_submitted")
+            retry_budget_used += 1
+        path.extend(["fallback_submitted", "filled"])
+        return _result()
 
     if execution_style == "aggressive" and spread_bps > 70:
         path.append("rejected")
-        return path
+        return _result()
 
     if latency_ms > 1200:
         path.append("timeout")
-        if fallback_behavior in {"market_fallback", "limit_retry_then_market"}:
+        for retry_index in range(retry_limit):
+            path.append(f"retry_{retry_index + 1}_submitted")
+            retry_budget_used += 1
+        if fallback_behavior in {"market_fallback", "limit_retry_then_market"} and retry_limit > 0:
             path.extend(["fallback_submitted", "filled"])
         else:
             path.extend(["cancel_requested", "cancelled", "failed"])
-        return path
+        return _result()
 
     if order_preference == "market_first":
         path.append("filled")
-        return path
+        return _result()
 
     if partial_fill_tolerance < 95:
         path.append("partially_filled")
+        partial_fill_ratio = 0.6
 
     if timeout_seconds <= 3:
         path.append("timeout")
-        if fallback_behavior in {"market_fallback", "limit_retry_then_market"}:
+        for retry_index in range(retry_limit):
+            path.append(f"retry_{retry_index + 1}_submitted")
+            retry_budget_used += 1
+        if fallback_behavior in {"market_fallback", "limit_retry_then_market"} and retry_limit > 0:
             path.extend(["fallback_submitted", "filled"])
         else:
             path.extend(["cancel_requested", "cancelled", "failed"])
-        return path
+        return _result()
 
     if fallback_behavior == "cancel_no_fill":
         path.extend(["cancel_requested", "cancelled", "failed"])
-        return path
+        return _result()
 
     if fallback_behavior in {"market_fallback", "limit_retry_then_market"}:
+        for retry_index in range(min(retry_limit, 1)):
+            path.append(f"retry_{retry_index + 1}_submitted")
+            retry_budget_used += 1
         path.extend(["fallback_submitted", "filled"])
-        return path
+        return _result()
 
     path.append("filled")
-    return path
+    return _result()
 
 
 def open_paper_position(
@@ -86,7 +118,8 @@ def open_paper_position(
     response_payload: dict,
     execution_context: dict | None = None,
 ) -> dict:
-    state_path = _build_state_path(execution_policy, execution_context)
+    state_machine = _build_state_path(execution_policy, execution_context)
+    state_path = state_machine["path"]
     final_state = state_path[-1]
     enriched_payload = {
         **response_payload,
@@ -95,6 +128,8 @@ def open_paper_position(
             "previous": "created",
             "current": final_state,
             "path": state_path,
+            "retry_budget_used": state_machine["retry_budget_used"],
+            "partial_fill_ratio": state_machine["partial_fill_ratio"],
         },
     }
 
@@ -122,6 +157,8 @@ def open_paper_position(
                     "symbol": symbol,
                     "side": direction,
                     "execution_style": execution_policy.get("style"),
+                    "retry_budget_used": state_machine["retry_budget_used"],
+                    "partial_fill_ratio": state_machine["partial_fill_ratio"],
                 },
             )
         )
@@ -134,6 +171,8 @@ def open_paper_position(
             "final_state": final_state,
             "state_path": state_path,
             "transition_count": len(state_path),
+            "retry_budget_used": state_machine["retry_budget_used"],
+            "partial_fill_ratio": state_machine["partial_fill_ratio"],
         }
 
     position = PaperPosition(
@@ -175,6 +214,8 @@ def open_paper_position(
         "final_state": final_state,
         "state_path": state_path,
         "transition_count": len(state_path),
+        "retry_budget_used": state_machine["retry_budget_used"],
+        "partial_fill_ratio": state_machine["partial_fill_ratio"],
     }
 
 

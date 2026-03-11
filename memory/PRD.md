@@ -128,6 +128,27 @@
   - `/app/test_reports/iteration_6.json`
   - minor bulgular giderildi (threshold iyileştirmesi + simulate allow-list validation)
 
+### 2026-03-11 (Faz-3 İterasyon-4 — Hibrit Korelasyon + Trend Alarm + User Read-only)
+- Kullanıcı seçimleri: **1-a, 2-c, 3-c**
+- Korelasyon hibrit modeli eklendi:
+  - statik risk grupları (majors/high_beta/mid_cap)
+  - rolling korelasyon puanı (window destekli)
+  - risk engine içinde correlation tabanlı cluster rejection etiketleri
+- Admin correlation matrix endpoint + ekranı eklendi (`/api/admin-phase3/correlation-matrix`)
+- Execution state simülasyonu genişletildi:
+  - partial-fill + retry budget desteği
+  - simulate endpoint outcome seçenekleri: filled/partial/timeout/rejected/failed
+- Hardening checklist trend/alarm katmanı eklendi:
+  - kritik fail varsa anlık alarm
+  - son 5 run ortalaması < 70 ise trend alarm
+  - admin ekranında trend metrikleri + alert listesi + recent runs tablosu
+- User tarafında minimum karar destek görünümü eklendi:
+  - `/api/backtest/cards` read-only endpoint
+  - `Backtest Insights` user sayfası
+- Test raporu:
+  - `/app/test_reports/iteration_7.json` (backend+frontend doğrulandı)
+  - belirtilen UI eksikliği (simulate failed butonu) giderildi
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
@@ -143,6 +164,7 @@
 - Monitoring detayları: per-symbol latency, dead-letter benzeri failed-event kuyruğu
 - Hardening metriklerinin kalıcı snapshot/raporlanabilir hale getirilmesi
 - Hardening checklist trend analizi (run history grafiği + regresyon alarmı)
+- Backtest insights filtreleme (market/timeframe/risk etiketine göre)
 
 ### P2
 - Bybit/OKX adapter stubları
@@ -151,8 +173,8 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Exposure gruplarında korelasyon matrisi + sektör/tema bazlı cluster sınıflandırmayı ekle
-2. Hardening checklist run geçmişi için trend ekranı ve alarm eşikleri oluştur
-3. Execution state machine’e partial-fill miktar simulasyonu ve retry budget tüketimi ekle
-4. Backtest kartlarını user panelde read-only karar destek modülüne taşı
+1. Korelasyon modeline sektör/tema tabanlı ikinci seviye cluster sınıflandırma ekle
+2. Hardening checklist trendini grafik + alarm geçmişi ile zenginleştir
+3. Execution simülasyonunda retry budget tüketimini PnL etkisiyle bağla
+4. Backtest insights sayfasına filtre/sıralama ve karşılaştırma ekle
 5. Canlı emir öncesi dry-run otomasyon senaryolarını release-gate pipeline’a bağla

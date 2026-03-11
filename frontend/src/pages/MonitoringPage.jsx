@@ -49,6 +49,7 @@ export const MonitoringPage = () => {
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-reconnects">WS Reconnect /5m: {metrics?.websocket_reconnects_5m ?? "-"}</p>
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-idempotency">Idempotency Keys /5m: {metrics?.idempotency_keys_5m ?? "-"}</p>
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-duplicates">Duplicate Blocked /5m: {metrics?.duplicate_signals_blocked_5m ?? "-"}</p>
+        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-correlation-rejections">Correlation Rejections /5m: {metrics?.correlation_rejections_5m ?? "-"}</p>
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-failed-pending">Failed Events Pending: {metrics?.failed_events_pending ?? "-"}</p>
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-failed-dead">Failed Events Dead: {metrics?.failed_events_dead ?? "-"}</p>
       </div>

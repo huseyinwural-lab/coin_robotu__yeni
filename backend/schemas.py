@@ -243,6 +243,7 @@ class PipelineMonitoringResponse(BaseModel):
     execution_transitions_5m: int
     failed_events_pending: int
     failed_events_dead: int
+    correlation_rejections_5m: int
 
 
 class ExecutionPolicyBase(BaseModel):
@@ -391,3 +392,17 @@ class HardeningChecklistRunResponse(BaseModel):
     checklist_items: list[dict]
     summary: dict
     created_at: datetime
+
+
+class HardeningChecklistTrendResponse(BaseModel):
+    average_score_last_5: float
+    trend_alarm: bool
+    critical_alarm: bool
+    active_alerts: list[str]
+    recent_runs: list[dict]
+
+
+class CorrelationMatrixResponse(BaseModel):
+    window: int
+    symbols: list[str]
+    matrix: dict

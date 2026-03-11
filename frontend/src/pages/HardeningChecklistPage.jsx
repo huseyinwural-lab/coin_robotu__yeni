@@ -8,11 +8,16 @@ import { apiClient } from "@/lib/api";
 
 export const HardeningChecklistPage = () => {
   const [checklist, setChecklist] = useState(null);
+  const [trend, setTrend] = useState(null);
 
   const loadLatest = useCallback(async () => {
     try {
-      const { data } = await apiClient.get("/admin-phase3/hardening-checklist/latest");
-      setChecklist(data);
+      const [latestRes, trendRes] = await Promise.all([
+        apiClient.get("/admin-phase3/hardening-checklist/latest"),
+        apiClient.get("/admin-phase3/hardening-checklist/trend"),
+      ]);
+      setChecklist(latestRes.data);
+      setTrend(trendRes.data);
     } catch (error) {
       if (error?.response?.status !== 404) {
         toast.error(error?.response?.data?.detail || "Checklist verisi alınamadı");
@@ -26,8 +31,8 @@ export const HardeningChecklistPage = () => {
 
   const runChecklist = async () => {
     try {
-      const { data } = await apiClient.post("/admin-phase3/hardening-checklist/run");
-      setChecklist(data);
+      await apiClient.post("/admin-phase3/hardening-checklist/run");
+      await loadLatest();
       toast.success("Hardening checklist çalıştırıldı");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Checklist çalıştırılamadı");
@@ -51,6 +56,50 @@ export const HardeningChecklistPage = () => {
         <MetricCard label="Readiness" value={checklist?.readiness_status ?? "-"} tone={checklist?.readiness_status === "ready" ? "blue" : "red"} testId="hardening-metric-readiness" />
         <MetricCard label="Critical Blocked" value={String(checklist?.critical_blocked ?? "-")} tone="red" testId="hardening-metric-critical-blocked" />
         <MetricCard label="Last Run" value={checklist?.created_at ? new Date(checklist.created_at).toLocaleString() : "-"} tone="orange" testId="hardening-metric-last-run" />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3" data-testid="hardening-checklist-trend-grid">
+        <MetricCard label="Avg Score (Last 5)" value={trend?.average_score_last_5 ?? "-"} tone="blue" testId="hardening-trend-avg-score" />
+        <MetricCard label="Critical Alarm" value={String(trend?.critical_alarm ?? false)} tone={trend?.critical_alarm ? "red" : "blue"} testId="hardening-trend-critical" />
+        <MetricCard label="Trend Alarm" value={String(trend?.trend_alarm ?? false)} tone={trend?.trend_alarm ? "red" : "blue"} testId="hardening-trend-score" />
+      </div>
+
+      <div className="border border-slate-800 bg-slate-900 p-4" data-testid="hardening-alerts-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="hardening-alerts-label">Active Alerts</p>
+        <div className="mt-2 flex flex-wrap gap-2" data-testid="hardening-alerts-list">
+          {(trend?.active_alerts || []).length ? (
+            trend.active_alerts.map((alert) => (
+              <span key={alert} className="border border-red-500 px-2 py-1 text-xs text-red-300" data-testid={`hardening-alert-${alert}`}>
+                {alert}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-slate-500" data-testid="hardening-alert-none">No active alert</span>
+          )}
+        </div>
+      </div>
+
+      <div className="border border-slate-800 bg-slate-900" data-testid="hardening-trend-table-wrapper">
+        <Table data-testid="hardening-trend-table">
+          <TableHeader>
+            <TableRow>
+              <TableHead data-testid="hardening-trend-head-time">Run Time</TableHead>
+              <TableHead data-testid="hardening-trend-head-score">Score</TableHead>
+              <TableHead data-testid="hardening-trend-head-critical">Critical</TableHead>
+              <TableHead data-testid="hardening-trend-head-readiness">Readiness</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(trend?.recent_runs || []).map((run) => (
+              <TableRow key={run.id} data-testid={`hardening-trend-row-${run.id}`}>
+                <TableCell className="font-mono text-xs" data-testid={`hardening-trend-time-${run.id}`}>{new Date(run.created_at).toLocaleString()}</TableCell>
+                <TableCell data-testid={`hardening-trend-score-${run.id}`}>{run.score}</TableCell>
+                <TableCell data-testid={`hardening-trend-critical-${run.id}`}>{String(run.critical_blocked)}</TableCell>
+                <TableCell data-testid={`hardening-trend-readiness-${run.id}`}>{run.readiness_status}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
 
       <div className="border border-slate-800 bg-slate-900" data-testid="hardening-checklist-table-wrapper">

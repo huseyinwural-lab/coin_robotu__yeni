@@ -3,12 +3,14 @@ import { toast } from "sonner";
 
 import { MetricCard } from "@/components/MetricCard";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiClient } from "@/lib/api";
 
 export const ExecutionStatesPage = () => {
   const [summary, setSummary] = useState(null);
   const [transitions, setTransitions] = useState([]);
+  const [retryBudget, setRetryBudget] = useState(2);
 
   const loadData = useCallback(async () => {
     try {
@@ -32,7 +34,7 @@ export const ExecutionStatesPage = () => {
   const simulateStateFlow = async (outcome = "filled") => {
     try {
       await apiClient.post(
-        `/admin-phase3/execution-state-transitions/simulate?strategy_type=breakout&symbol=BTCUSDT&side=long&outcome=${outcome}`,
+        `/admin-phase3/execution-state-transitions/simulate?strategy_type=breakout&symbol=BTCUSDT&side=long&outcome=${outcome}&retry_budget=${retryBudget}`,
       );
       toast.success(`Execution state simülasyonu üretildi: ${outcome}`);
       loadData();
@@ -47,14 +49,29 @@ export const ExecutionStatesPage = () => {
         <h2 className="text-4xl font-black uppercase tracking-tight text-blue-300" data-testid="execution-states-title">Execution State Machine</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="execution-states-description">State geçiş zinciri ve hardening çekirdek metrikleri.</p>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="execution-states-simulate-group">
+          <Input
+            type="number"
+            min={0}
+            max={5}
+            value={retryBudget}
+            onChange={(event) => setRetryBudget(event.target.value)}
+            className="w-28"
+            data-testid="execution-states-retry-budget-input"
+          />
           <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => simulateStateFlow("filled")} data-testid="execution-states-simulate-filled-button">
             Simulate Filled
+          </Button>
+          <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => simulateStateFlow("partial")} data-testid="execution-states-simulate-partial-button">
+            Simulate Partial
           </Button>
           <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={() => simulateStateFlow("timeout")} data-testid="execution-states-simulate-timeout-button">
             Simulate Timeout
           </Button>
           <Button className="bg-red-600 text-white hover:bg-red-700" onClick={() => simulateStateFlow("rejected")} data-testid="execution-states-simulate-rejected-button">
             Simulate Rejected
+          </Button>
+          <Button className="bg-zinc-800 text-white hover:bg-zinc-700" onClick={() => simulateStateFlow("failed")} data-testid="execution-states-simulate-failed-button">
+            Simulate Failed
           </Button>
         </div>
       </header>

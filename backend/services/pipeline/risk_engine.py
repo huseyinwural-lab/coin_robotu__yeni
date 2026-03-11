@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from models import AdminControl, PaperPosition, RiskExposureGroup, RiskPolicy, User
 from services.pipeline.events import RiskDecision, SignalDecision
+from services.pipeline.correlation_service import pair_correlation
 
 
 def _symbol_in_group(symbol: str, group: RiskExposureGroup) -> bool:
@@ -25,6 +26,7 @@ def evaluate_risk(
     db: Session,
     *,
     current_user: User,
+    cache,
     signal: SignalDecision,
     market_type: str,
     market_price: float,
@@ -88,6 +90,21 @@ def evaluate_risk(
         proposed_risk = abs(signal.proposed_entry - signal.proposed_stop) * max(market_price, 0.0001)
         if theoretical_group_risk + proposed_risk >= (target_group.max_group_risk_pct * 10):
             risk_tags.append("group_total_risk_limit")
+
+        high_corr_same_direction = 0
+        max_corr = 0.0
+        for position in open_positions_list:
+            if position.side != signal.direction:
+                continue
+            corr = abs(pair_correlation(cache, signal.symbol, position.symbol, window=200))
+            max_corr = max(max_corr, corr)
+            if corr >= 0.75:
+                high_corr_same_direction += 1
+
+        if high_corr_same_direction >= 2:
+            risk_tags.append("correlated_cluster_overload")
+        elif high_corr_same_direction == 1 and max_corr >= 0.9:
+            risk_tags.append("high_pair_correlation")
 
     same_direction_global = [position for position in open_positions_list if position.side == signal.direction]
     direction_limit = int(min(control.max_open_positions_cap, policy.max_open_positions) * 0.8)

@@ -8,12 +8,14 @@ from schemas import (
     BacktestResultCardCreate,
     BacktestResultCardResponse,
     BacktestResultCardUpdate,
+    CorrelationMatrixResponse,
     ExecutionPolicyCreate,
     ExecutionPolicyResponse,
     ExecutionStateTransitionResponse,
     ExecutionPolicyUpdate,
     FailedEventResponse,
     HardeningChecklistRunResponse,
+    HardeningChecklistTrendResponse,
     HardeningSummaryResponse,
     RiskExposureGroupCreate,
     RiskExposureGroupResponse,
@@ -23,8 +25,13 @@ from schemas import (
 from services.audit_service import create_audit_log
 from services.execution_policy_service import get_policy_for_strategy
 from services.failed_event_service import create_failed_event, mark_failed_event_resolved, mark_failed_event_retry
-from services.hardening_checklist_service import get_latest_hardening_checklist_run, run_hardening_checklist
+from services.hardening_checklist_service import (
+    get_hardening_trend,
+    get_latest_hardening_checklist_run,
+    run_hardening_checklist,
+)
 from services.pipeline.cache_store import incr_counter
+from services.pipeline.correlation_service import build_correlation_matrix
 from services.pipeline.execution_engine import open_paper_position
 from services.pipeline.runtime import pipeline_runtime
 from services.state_rebuild_service import run_state_rebuild
@@ -285,6 +292,26 @@ def list_execution_state_transitions(
     return pipeline_runtime.list_execution_state_transitions(db, limit)
 
 
+@router.get("/correlation-matrix", response_model=CorrelationMatrixResponse)
+def get_correlation_matrix(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    window: int = Query(default=200, ge=30, le=500),
+):
+    symbols: list[str] = []
+    for group in db.query(RiskExposureGroup).all():
+        symbols.extend(group.symbols)
+
+    if not symbols:
+        for bot in db.query(BotProfile).all():
+            symbols.extend(bot.symbols)
+
+    if not symbols:
+        symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+
+    return build_correlation_matrix(pipeline_runtime.cache, symbols, window=window)
+
+
 @router.post("/hardening-checklist/run", response_model=HardeningChecklistRunResponse)
 def run_hardening_checklist_endpoint(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     checklist = run_hardening_checklist(db)
@@ -308,6 +335,11 @@ def get_latest_hardening_checklist_endpoint(_: User = Depends(require_admin), db
     return latest
 
 
+@router.get("/hardening-checklist/trend", response_model=HardeningChecklistTrendResponse)
+def get_hardening_checklist_trend_endpoint(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return get_hardening_trend(db)
+
+
 @router.post("/execution-state-transitions/simulate")
 def simulate_execution_state_flow(
     current_admin: User = Depends(require_admin),
@@ -316,8 +348,9 @@ def simulate_execution_state_flow(
     symbol: str = Query(default="BTCUSDT"),
     side: str = Query(default="long"),
     outcome: str = Query(default="filled"),
+    retry_budget: int = Query(default=2, ge=0, le=5),
 ):
-    allowed_outcomes = {"filled", "timeout", "rejected", "failed"}
+    allowed_outcomes = {"filled", "timeout", "rejected", "failed", "partial"}
     allowed_sides = {"long", "short"}
     if outcome not in allowed_outcomes:
         raise HTTPException(
@@ -364,13 +397,14 @@ def simulate_execution_state_flow(
             "fallback_behavior": policy.fallback_behavior,
             "partial_fill_tolerance_pct": policy.partial_fill_tolerance_pct,
             "execution_urgency": policy.execution_urgency,
-            "retry_limit": policy.retry_limit,
+            "retry_limit": retry_budget,
         },
         response_payload={"mode": "simulation", "trigger": "admin_manual"},
         execution_context={
             "forced_outcome": None if outcome == "filled" else outcome,
             "spread_bps": 12,
             "latency_ms": 220,
+            "partial_fill_ratio": 0.42,
         },
     )
 
@@ -389,4 +423,6 @@ def simulate_execution_state_flow(
         "execution_event_id": execution_result["execution_event"].id,
         "final_state": execution_result["final_state"],
         "state_path": execution_result["state_path"],
+        "retry_budget_used": execution_result.get("retry_budget_used", 0),
+        "partial_fill_ratio": execution_result.get("partial_fill_ratio", 0),
     }
