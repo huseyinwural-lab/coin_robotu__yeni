@@ -743,3 +743,39 @@
 5. Legacy endpoint cleanup
 6. Adapter stubs (Bybit/OKX)
 7. User platform başlangıcı (dashboard/portfolio)
+
+## 8) 2026-03-11 — Admin Domain Closure Güncellemesi
+- **Tamamlandı (P0): Admin User Management**
+  - Backend: `GET /api/admin/users`, `PATCH /api/admin/users/{id}/role`, `PATCH /api/admin/users/{id}/status`
+  - Legacy uyumluluk korundu: `POST /api/admin/users/{id}/role|disable|enable`
+  - Rol seti aktif: `super_admin`, `admin`, `ops`, `user`
+  - Durum modeli aktif: `active`, `disabled`
+  - Audit event’leri doğrulandı: `USER_ROLE_CHANGED`, `USER_DISABLED`, `USER_ENABLED`
+- **Tamamlandı (P0): System Alerts Panel Upgrade**
+  - Yeni admin sayfası: `/admin/system-alerts`
+  - Özellikler: status/severity/alert_type/entity_key filtreleri, timeline, delivery status görünürlüğü, bulk acknowledge, single ack/resolve
+  - Yeni frontend sayfası: `frontend/src/pages/AdminSystemAlertsPage.jsx`
+- **Tamamlandı (P0): Admin Users UI**
+  - Yeni admin sayfası: `/admin/users`
+  - Özellikler: kullanıcı listeleme, arama/filtre/sıralama, satır bazlı rol atama, enable/disable
+  - Yeni frontend sayfası: `frontend/src/pages/AdminUsersPage.jsx`
+- **Tamamlandı: Alert Delivery Activation Config Akışı**
+  - `POST /api/admin/system-alerts/config` artık payload alarak DB’ye güvenli (encrypted) kanal konfigürasyonu yazıyor
+  - `GET /api/admin/system-alerts/config` kanal readiness + masked config döndürüyor
+  - Yeni model/migration: `AlertChannelConfig`, `20260311_0023_alert_channel_configs.py`
+  - `POST /api/ops-alerts/simulate` delivery_status ile çalışıyor
+- **Erişim Politikası İyileştirmesi**
+  - Frontend admin route guard güncellendi: `super_admin/admin/ops` admin paneline erişebiliyor
+  - Home redirect ve sidebar admin-role aware hale getirildi
+- **Test Durumu**
+  - Testing Agent: `/app/test_reports/iteration_23.json`
+  - Sonuç: Backend **21/21 pass**, Frontend admin users + system alerts akışları **pass**
+
+### Güncel Kapanış Durumu (Admin Domain)
+- [x] Admin user management
+- [x] System alerts panel upgrade
+- [ ] Alert delivery **gerçek kanal başarı doğrulaması** (Resend/Slack gerçek secret ile son mile test)
+
+### Kalan P0
+1. Admin panel `/admin/system-alerts` üzerinden gerçek secret’ları girip `CONFIG_MISSING -> READY` geçişini doğrulamak
+2. `POST /api/ops-alerts/simulate` sonrası email/slack için gerçek `SENT` sonuçlarını doğrulamak ve kapanış kanıtını almak

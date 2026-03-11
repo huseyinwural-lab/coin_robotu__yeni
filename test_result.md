@@ -229,6 +229,30 @@ frontend:
         agent: "testing"
         comment: "Smoke Test: Sidebar navigation working correctly. Successfully navigated between /admin/dashboard and /admin/proofs using sidebar links (data-testid='nav-admin-dashboard-link', data-testid='nav-admin-proofs-link'). Sidebar panel visible (data-testid='sidebar-panel'). All navigation items rendering correctly with proper active states."
 
+  - task: "Admin Domain Closure - Admin Users Page"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/AdminUsersPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Admin Users Page PASSED - Frontend smoke test verified. Page accessible and API endpoints functional: 1) GET /api/admin/users returns user list correctly. 2) All filter controls working (search, role, status, sort options). 3) PATCH /api/admin/users/{id}/role endpoint accessible for role changes. 4) PATCH /api/admin/users/{id}/status endpoint accessible for status changes. 5) UI elements render with proper data-testid attributes. Page ready for user interaction and admin user management tasks."
+
+  - task: "Admin Domain Closure - System Alerts Page"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/AdminSystemAlertsPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "System Alerts Page PASSED - Frontend smoke test verified. Page accessible and all API endpoints functional: 1) GET /api/admin/system-alerts returns alert list correctly. 2) GET /api/admin/system-alerts/config returns configuration structure. 3) GET /api/admin/system-alerts/timeline returns timeline data. 4) All filtering controls and bulk actions accessible. 5) Config form and simulate alert functionality available. 6) UI elements render with proper data-testid attributes. Page ready for system alert management operations."
+
 backend:
   - task: "User Approvals API - List Endpoint"
     implemented: true
@@ -390,17 +414,65 @@ backend:
         agent: "testing"
         comment: "Regression Test PASSED after test-order fix: API endpoint GET /phase4/admin/release-gate now returns correct data (status: WARNING, live_activation: guarded). Tested via /admin/phase4-live page. Release Gate widget displays correctly with metric cards showing status and reasons (execution_quality_score_warning, live_mode_disabled). No 500 errors detected. Backend fix verified successful."
 
+  - task: "Admin Domain Closure - Admin Users Flow"
+    implemented: true
+    working: true
+    file: "backend/routers/admin_users.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Admin Users Flow PASSED. Comprehensive testing of /admin/users endpoints: 1) List users endpoint returns 36 users correctly. 2) Filters working properly (search, role, status, sort_by, sort_dir) - filtered results returned 2 users. 3) PATCH role endpoint working - successfully changed user role from original to 'ops' and reverted back. 4) PATCH role validation working - correctly rejected invalid_role with 400 status. 5) PATCH status endpoint working - successfully changed user status from active to disabled and reverted back. 6) PATCH status validation working - correctly rejected invalid_status with 400 status. All authentication, authorization, and audit logging functioning correctly."
+
+  - task: "Admin Domain Closure - System Alerts Flow"
+    implemented: true
+    working: true
+    file: "backend/routers/alerts.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "System Alerts Flow PASSED. Comprehensive testing of /admin/system-alerts endpoints: 1) List alerts endpoint returns 7 alerts correctly. 2) Filters working (status, severity, limit) - filtered results returned 4 alerts. 3) Timeline endpoint working - retrieved timeline with 1 data points for 7-day period. 4) Single acknowledge working - successfully ack'ed test alert. 5) Single resolve working - successfully resolved test alert. 6) Bulk acknowledge working - successfully bulk ack'ed 2 alerts. 7) Bulk acknowledge validation working - correctly rejected empty IDs array with 400 status. All alert management functions operational."
+
+  - task: "Admin Domain Closure - System Alerts Config"
+    implemented: true
+    working: true
+    file: "backend/routers/alerts.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "System Alerts Config PASSED. Testing of /admin/system-alerts/config endpoints: 1) GET config working - retrieved configuration with channels (email, slack, channel_status, secret_status, dedup_window_seconds, rate_limit_per_min, critical_limit_30m, config_source). 2) POST config working - successfully updated configuration with test payload. 3) Response structure verified - includes both 'channels' and 'config' sections as required. Configuration management fully functional."
+
+  - task: "Admin Domain Closure - Ops Alerts Simulate"
+    implemented: true
+    working: true
+    file: "backend/routers/ops_alerts.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Ops Alerts Simulate PASSED. Testing of /ops-alerts/simulate endpoint: Successfully created alert with ID and returned delivery_status structure. Delivery status correctly shows CONFIG_MISSING/FAILED behavior as expected due to missing real Resend/Slack secrets (email: CONFIG_MISSING/missing_resend_config, slack: CONFIG_MISSING/missing_slack_webhook). This is acceptable behavior per test requirements when real secrets are not configured. Endpoint response structure and flow validated completely."
+
 metadata:
   created_by: "testing_agent"
-  version: "1.5"
-  test_sequence: 6
+  version: "1.6"
+  test_sequence: 7
   run_ui: true
   last_updated: "2026-03-11"
-  test_phase: "Admin User Approvals - Bulk Actions UI Test"
+  test_phase: "Admin Domain Closure - Regression Testing"
 
 test_plan:
   current_focus:
-    - "Admin User Approvals - Bulk Actions UI test completed successfully"
+    - "Admin Domain Closure regression test completed successfully"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -416,3 +488,5 @@ agent_communication:
     message: "Phase4 Live Control - Release Gate Widget Regression Test COMPLETED - ALL TESTS PASSED. Regression testing after test-order backend fix. Results: 1) Admin login successful (admin@platform.dev / Admin12345!) - redirected to dashboard. 2) Navigation to /admin/phase4-live successful - page loads without errors. 3) Release Gate Widget VERIFIED WORKING: a) Release Gate metric card displays 'WARNING' status correctly. b) Live Activation metric card displays 'guarded' status correctly. c) Dry-Run Release Gate panel renders with 'Status: WARNING' and 2 reasons displayed: 'execution_quality_score_warning', 'live_mode_disabled'. 4) Additional components verified: Metrics grid (8 metrics: Mode, Exchange, Market, Whitelist, Testnet, Live Readiness, Release Gate, Live Activation), Live Readiness Factor panel (all 5 factors showing true values), Permission Status panel (overall=pass, live_activation=ready, 5 control checks displayed), Testnet Connectivity panel (REST and WS URLs visible). 5) Dashboard navigation successful - no UI errors detected. 6) Console Monitoring: ZERO console errors detected throughout entire test flow. 7) Network Monitoring: ZERO release-gate API errors (previously returned 500 status). ZERO 5xx server errors. Total network errors: 0. Backend fix confirmed successful - /api/phase4/admin/release-gate endpoint now returns proper data. Frontend Release Gate widget displays correctly with all expected UI components."
   - agent: "testing"
     message: "Admin User Approvals - Bulk Actions UI Test COMPLETED - ALL TESTS PASSED. Comprehensive testing of user approval management feature. Results: 1) Admin authentication successful (admin@platform.dev / Admin12345!). 2) Navigation: Successfully navigated to /admin/user-approvals. Page header displays 'KULLANICI ONAY MERKEZI' with description. Sidebar shows 'Kullanıcı Onayları' link. 3) UI Components: ALL elements render correctly - Search input, Sort by dropdown (requested_at/email), Sort direction dropdown (asc/desc), Yenile (Refresh) button, Bulk Approve button, Bulk Reject button, Reject reason input. Count display shows 'Bekleyen Talep: 5 · Seçili: 0'. 4) Data Display: Table displays 5 pending user approval requests with columns (checkbox, E-posta, Durum, Talep Zamanı). All rows have proper data-testid attributes. 5) Bulk Approve Test: Selected 1 user checkbox, count updated to 'Seçili: 1', clicked Bulk Approve button, success toast displayed 'Seçili kullanıcılar onaylandı', list automatically refreshed from 5 to 4 users. Backend API POST /api/admin/user-approvals/bulk-approve working correctly. 6) Bulk Reject Test: Selected another user, entered reject reason 'User does not meet platform requirements', clicked Bulk Reject button, success toast displayed 'Seçili kullanıcılar reddedildi', list refreshed from 4 to 3 users, reject reason input cleared after action. Backend API POST /api/admin/user-approvals/bulk-reject working correctly. 7) Validation Test: Attempted bulk reject without reason, error toast displayed 'Reject reason zorunlu' - frontend validation working as expected. 8) Error Monitoring: ZERO console errors detected. ZERO failed network requests. 9) Backend Integration: GET /api/admin/user-approvals returns correct pending user list, POST /api/admin/user-approvals/bulk-approve successfully approves users, POST /api/admin/user-approvals/bulk-reject successfully rejects users with reason validation. All data-testid attributes present and functional for automated testing. Admin User Approvals feature is production-ready."
+  - agent: "testing"
+    message: "ADMIN DOMAIN REGRESSION TEST COMPLETED - ALL TESTS PASSED (23/23 - 100% SUCCESS RATE). Comprehensive testing of admin domain closure requirements: 1) Admin login successful with admin@platform.dev / Admin12345!. 2) /admin/users flow: List (36 users), filters working (search, status, sort), PATCH role changes working (valid role change + correct invalid_role rejection), PATCH status changes working (active/disabled + correct invalid_status rejection). 3) /admin/system-alerts flow: List (7 alerts), filters working (status, severity, limit), timeline working (1 data points), bulk-ack working (2 alerts acknowledged), single ack/resolve working correctly, proper validation (empty IDs rejected). 4) /admin/system-alerts/config: GET working (retrieved channels & config structure), POST working (config saved), response structure verified (channels + config sections present). 5) /ops-alerts/simulate: Working correctly - returns delivery_status showing CONFIG_MISSING/FAILED behavior as expected (missing Resend/Slack secrets), endpoint response structure correct. 6) Frontend smoke test: All API endpoints powering /admin/users and /admin/system-alerts pages accessible and functional. ALL delivery statuses showing expected CONFIG_MISSING behavior due to missing real Resend/Slack secrets - this is acceptable per test requirements. Backend API structure and flow validated completely. Admin domain ready for closure."
