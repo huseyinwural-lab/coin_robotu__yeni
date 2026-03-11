@@ -408,6 +408,37 @@
   - `/app/test_reports/pytest/pytest_results_iter15_phase4_iter6.xml`
   - Not: valid testnet key paylaşılmadığı için gerçek fill lifecycle bu turda da **MOCKED/BLOCKED** (awaiting_valid_key) modunda bırakıldı.
 
+### 2026-03-11 (Faz-5 İterasyon-1 — Safety-First Core)
+- Kullanıcı kararı uygulandı: **1A, 2A, 3A, 4A**
+  - 1A: Risk Engine + Position Sizing + Kill Switch
+  - 2A: Hard veto
+  - 3A: Kill switch sadece yeni order’ları durdurur, açık pozisyonlara dokunmaz
+  - 4A: Backtest/Replay Faz-5 İterasyon-2’ye planlandı
+- Yeni servisler:
+  - `services/pipeline/position_sizing_engine.py`
+  - `services/pipeline/kill_switch_service.py`
+- Risk Engine iyileştirmeleri:
+  - Position sizing formülü user modeliyle bağlandı
+  - günlük zarar limiti ve consecutive loss kontrolü eklendi
+  - max portfolio exposure + max risk per trade kontrolleri eklendi
+  - Hard veto blok sebepleri zorunlu risk_tags ile dönüyor
+- Runtime Kill Switch guard:
+  - 10sn loop ile tetik kontrolü
+  - aktifken orchestrator yeni order üretmez
+  - `mode=block_new_orders_only` (açık pozisyonlar korunur)
+  - botlar pause edilir, audit log düşülür
+- Kill switch admin endpointleri:
+  - `GET /api/admin-control/kill-switch/status`
+  - `POST /api/admin-control/kill-switch/reset`
+- Monitoring snapshot alanları genişledi:
+  - `execution_errors_5m`, `risk_anomalies_5m`, `global_trading_pause`, `kill_switch_reasons`
+- Frontend monitoring:
+  - Kill Switch metriği ve reasons gösterimi eklendi
+- Testler:
+  - `/app/test_reports/iteration_16.json` (backend 22/22 pass, frontend 100%)
+  - `/app/backend/tests/test_phase5_iter1_risk_killswitch.py`
+  - `/app/test_reports/pytest/pytest_results_iter16_phase5_iter1.xml`
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
@@ -432,8 +463,8 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Geçerli testnet key ile ilk order sonucu (filled/partial/cancelled) ve slippage doğrulamasını canlı testte tamamla
-2. Hardening checklist trendini alarm geçmişiyle operasyonel eşiklere bağla
-3. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
-4. Ops webhook teslimatını retry/backoff + dead-letter mantığıyla sertleştir
-5. Valid key sonrası lifecycle evidence panelinde gerçek NEW/PARTIAL/FILLED kanıtını finalize et
+1. Faz-5 İterasyon-2: Backtest/Replay engine’i canlı pipeline ile aynı risk+execution katmanına bağla
+2. Geçerli testnet key ile gerçek order evidence (NEW/PARTIAL/FILLED/CANCELED) finalize et
+3. Hardening trend eşiklerini active alerts ile operasyonel policy’ye bağla
+4. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
+5. Ops webhook teslimatına retry/backoff + dead-letter ekle
