@@ -247,6 +247,8 @@ class PipelineMonitoringResponse(BaseModel):
     failed_events_pending: int
     failed_events_dead: int
     correlation_rejections_5m: int
+    release_gate_status: str
+    release_gate_last_checked: str
 
 
 class ExecutionPolicyBase(BaseModel):
@@ -504,6 +506,9 @@ class TestOrderResponse(BaseModel):
     execution_id: str
     symbol: str
     strategy_direction: str
+    strategy_type: str
+    volatility_regime: str
+    volatility_pct: float
     status: str
     state_machine_path: list[str]
     expected_price: float
@@ -519,6 +524,9 @@ class ExecutionQualitySummaryResponse(BaseModel):
     execution_id: str
     symbol: str
     status: str
+    strategy_type: str
+    volatility_regime: str
+    volatility_pct: float
     expected_price: float
     fill_price: float | None
     slippage: float | None

@@ -28,6 +28,7 @@ from services.live_mode_service import (
     build_readiness_report,
     compute_live_readiness_score,
     admin_permission_overview,
+    enforce_release_gate,
     exchange_settings_view,
     get_or_create_exchange_settings,
     get_or_create_live_config,
@@ -170,10 +171,14 @@ def send_first_test_order(current_user: User = Depends(get_current_user), db: Se
             "state_machine_path": log.state_machine_path,
         },
     )
+    enforce_release_gate(db)
     return TestOrderResponse(
         execution_id=log.id,
         symbol=log.symbol,
         strategy_direction=log.strategy_direction,
+        strategy_type=log.details.get("strategy_type", "unknown"),
+        volatility_regime=log.details.get("volatility_regime", "low"),
+        volatility_pct=float(log.details.get("volatility_pct", 0) or 0),
         status=log.status,
         state_machine_path=log.state_machine_path,
         expected_price=log.expected_price,
@@ -195,6 +200,9 @@ def latest_user_execution_quality(current_user: User = Depends(get_current_user)
         execution_id=latest.id,
         symbol=latest.symbol,
         status=latest.status,
+        strategy_type=latest.details.get("strategy_type", "unknown"),
+        volatility_regime=latest.details.get("volatility_regime", "low"),
+        volatility_pct=float(latest.details.get("volatility_pct", 0) or 0),
         expected_price=latest.expected_price,
         fill_price=latest.fill_price,
         slippage=latest.slippage,
@@ -216,6 +224,9 @@ def admin_execution_quality(
             execution_id=item.id,
             symbol=item.symbol,
             status=item.status,
+            strategy_type=item.details.get("strategy_type", "unknown"),
+            volatility_regime=item.details.get("volatility_regime", "low"),
+            volatility_pct=float(item.details.get("volatility_pct", 0) or 0),
             expected_price=item.expected_price,
             fill_price=item.fill_price,
             slippage=item.slippage,
@@ -229,6 +240,7 @@ def admin_execution_quality(
 
 @router.get("/admin/live-readiness-score", response_model=LiveReadinessScoreResponse)
 def admin_live_readiness_score(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    enforce_release_gate(db)
     return LiveReadinessScoreResponse(**compute_live_readiness_score(db))
 
 
@@ -239,7 +251,7 @@ def admin_permission_status(_: User = Depends(require_admin), db: Session = Depe
 
 @router.get("/admin/release-gate", response_model=ReleaseGateStatusResponse)
 def admin_release_gate(_: User = Depends(require_admin), db: Session = Depends(get_db)):
-    return ReleaseGateStatusResponse(**release_gate_view(db))
+    return ReleaseGateStatusResponse(**enforce_release_gate(db))
 
 
 @router.get("/testnet-connectivity", response_model=TestnetConnectivityResponse)

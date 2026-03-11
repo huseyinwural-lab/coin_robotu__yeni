@@ -1,6 +1,8 @@
 import hashlib
 import hmac
+import json
 import os
+import statistics
 import time
 import uuid
 from base64 import urlsafe_b64encode
@@ -369,16 +371,47 @@ def permission_status_for_user(db: Session, user_id: str) -> dict:
     }
 
 
-def _infer_strategy_direction() -> str:
+def _trend_direction_from_candles() -> str:
     candles = read_candles(redis_client, "market:candles:BTCUSDT:15m")
     if len(candles) < 20:
         return "long"
 
-    closes = [float(item.get("close") or 0) for item in candles[-20:]]
-    if not closes or closes[-1] == 0:
+    closes = [float(item.get("close") or 0) for item in candles[-20:] if float(item.get("close") or 0) > 0]
+    if not closes:
         return "long"
     sma20 = sum(closes) / len(closes)
     return "long" if closes[-1] >= sma20 else "short"
+
+
+def _market_volatility_pct() -> float:
+    candles = read_candles(redis_client, "market:candles:BTCUSDT:15m")
+    if len(candles) < 30:
+        return 0.015
+
+    closes = [float(item.get("close") or 0) for item in candles[-30:] if float(item.get("close") or 0) > 0]
+    if len(closes) < 10:
+        return 0.015
+
+    mean_price = sum(closes) / len(closes)
+    std_dev = statistics.pstdev(closes)
+    return round((std_dev / max(mean_price, 0.0001)), 6)
+
+
+def _resolve_strategy_context(db: Session, user_id: str) -> tuple[str, str]:
+    trend_direction = _trend_direction_from_candles()
+    bot = (
+        db.query(BotProfile)
+        .filter(BotProfile.user_id == user_id, BotProfile.is_enabled.is_(True))
+        .order_by(BotProfile.updated_at.desc())
+        .first()
+    )
+    strategy_type = bot.strategy_type if bot else "trend_following"
+
+    if strategy_type == "mean_reversion":
+        direction = "short" if trend_direction == "long" else "long"
+    else:
+        direction = trend_direction
+    return strategy_type, direction
 
 
 def _build_execution_quality_score(
@@ -387,10 +420,27 @@ def _build_execution_quality_score(
     fill_price: float | None,
     execution_latency: float,
     final_status: str,
+    strategy_type: str,
+    volatility_pct: float,
 ) -> float:
     slippage_bps = 0.0
     if fill_price and expected_price > 0:
         slippage_bps = abs((fill_price - expected_price) / expected_price) * 10000
+
+    regime = "low"
+    if volatility_pct >= 0.03:
+        regime = "high"
+    elif volatility_pct >= 0.018:
+        regime = "medium"
+
+    regime_slippage_tolerance = {"low": 4.0, "medium": 7.0, "high": 12.0}[regime]
+    strategy_multiplier = {
+        "trend_following": 1.0,
+        "breakout": 1.1,
+        "volatility_expansion": 1.15,
+        "mean_reversion": 0.85,
+    }.get(strategy_type, 1.0)
+    normalized_slippage = (slippage_bps / max(regime_slippage_tolerance * strategy_multiplier, 0.1)) * 10
 
     status_penalty = {
         "filled": 0,
@@ -398,7 +448,9 @@ def _build_execution_quality_score(
         "cancelled": 20,
         "failed": 35,
     }.get(final_status, 25)
-    score = 100 - min(45, slippage_bps * 2.2) - min(35, execution_latency / 100) - status_penalty
+    latency_budget = 1400 if regime == "high" else 1000
+    latency_component = min(35, max(0.0, execution_latency / max(latency_budget, 1)) * 35)
+    score = 100 - min(45, normalized_slippage) - latency_component - status_penalty
     return round(max(0, score), 2)
 
 
@@ -430,8 +482,10 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
         raise ValueError("Permission check başarısız. Önce API key doğrulamasını geçmelisiniz.")
 
     symbol = SAFE_SYMBOL_WHITELIST[0]
-    direction = _infer_strategy_direction()
+    strategy_type, direction = _resolve_strategy_context(db, user.id)
     side = "BUY" if direction == "long" else "SELL"
+    volatility_pct = _market_volatility_pct()
+    volatility_regime = "high" if volatility_pct >= 0.03 else ("medium" if volatility_pct >= 0.018 else "low")
     expected_price = adapter.mark_price(symbol)
     quantity = _safe_quantity(expected_price)
 
@@ -496,6 +550,8 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
         fill_price=fill_price,
         execution_latency=execution_latency,
         final_status=final_status,
+        strategy_type=strategy_type,
+        volatility_pct=volatility_pct,
     )
 
     execution_log = TestnetExecutionLog(
@@ -515,6 +571,9 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
         details={
             "order_type": "limit",
             "fallback": "IOC",
+            "strategy_type": strategy_type,
+            "volatility_pct": volatility_pct,
+            "volatility_regime": volatility_regime,
             "max_position_pct": MAX_SAFE_POSITION_PCT,
             "max_notional": MAX_SAFE_NOTIONAL_EXPOSURE,
             "leverage": MAX_SAFE_LEVERAGE,
@@ -538,6 +597,21 @@ def latest_execution_quality(db: Session, user_id: str) -> TestnetExecutionLog |
 
 def list_execution_quality(db: Session, limit: int = 20) -> list[TestnetExecutionLog]:
     return db.query(TestnetExecutionLog).order_by(TestnetExecutionLog.created_at.desc()).limit(limit).all()
+
+
+def enforce_release_gate(db: Session) -> dict:
+    gate = release_gate_view(db)
+    config = get_or_create_live_config(db)
+    if gate["status"] == "BLOCKED":
+        config.live_mode_enabled = False
+    config.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    redis_client.set("phase4:release_gate:status", gate["status"])
+    redis_client.set("phase4:release_gate:last_checked", datetime.now(timezone.utc).isoformat())
+    redis_client.set("phase4:release_gate:live_activation", gate["live_activation"])
+    redis_client.set("phase4:release_gate:reasons", json.dumps(gate["reasons"]))
+    return gate
 
 
 def _pick_latest_exchange_user(db: Session) -> User | None:

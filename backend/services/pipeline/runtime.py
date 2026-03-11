@@ -13,6 +13,7 @@ from services.pipeline.market_data_engine import MarketDataEngine
 from services.pipeline.risk_engine import evaluate_risk
 from services.pipeline.strategy_engine import evaluate_strategy
 from services.pipeline.universe_engine import build_effective_universe
+from services.live_mode_service import enforce_release_gate
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,8 @@ class PipelineRuntime:
         self._position_task: asyncio.Task | None = None
         self._metrics_window_task: asyncio.Task | None = None
         self._failed_event_task: asyncio.Task | None = None
+        self._release_gate_task: asyncio.Task | None = None
+        self._last_release_gate_status: str | None = None
         self._running = False
 
     async def start(self):
@@ -37,18 +40,48 @@ class PipelineRuntime:
         self._position_task = asyncio.create_task(self._refresh_positions_loop(), name="position-engine")
         self._metrics_window_task = asyncio.create_task(self._rolling_metrics_reset(), name="metrics-window")
         self._failed_event_task = asyncio.create_task(self._failed_event_recovery_loop(), name="failed-event-recovery")
+        self._release_gate_task = asyncio.create_task(self._release_gate_guard_loop(), name="release-gate-guard")
         logger.info("Phase-3 runtime started")
 
     async def stop(self):
         self._running = False
         await self.market_data_engine.stop()
-        for task in [self._orchestrator_task, self._position_task, self._metrics_window_task, self._failed_event_task]:
+        for task in [
+            self._orchestrator_task,
+            self._position_task,
+            self._metrics_window_task,
+            self._failed_event_task,
+            self._release_gate_task,
+        ]:
             if task:
                 task.cancel()
                 try:
                     await task
                 except asyncio.CancelledError:
                     pass
+
+    async def _release_gate_guard_loop(self):
+        while self._running:
+            await asyncio.sleep(30)
+            db = SessionLocal()
+            try:
+                gate = enforce_release_gate(db)
+                if gate["status"] != self._last_release_gate_status:
+                    self._last_release_gate_status = gate["status"]
+                    create_audit_log(
+                        db,
+                        action="release_gate_status_changed",
+                        entity_type="release_gate",
+                        entity_id="phase4",
+                        actor_user_id=None,
+                        actor_role="system",
+                        severity="warning" if gate["status"] == "BLOCKED" else "info",
+                        details={"status": gate["status"], "reasons": gate["reasons"]},
+                    )
+            except Exception as exc:
+                logger.exception("Release gate guard loop error: %s", exc)
+            finally:
+                db.close()
 
     async def _orchestrate(self):
         while self._running:
@@ -362,6 +395,8 @@ class PipelineRuntime:
         orchestrator = get_json(self.cache, "pipeline:orchestrator") or {}
         pending_failed = db.query(FailedEvent).filter(FailedEvent.status.in_(["pending", "retrying"])).count()
         dead_failed = db.query(FailedEvent).filter(FailedEvent.status == "dead").count()
+        release_gate_status = self.cache.get("phase4:release_gate:status") or "UNKNOWN"
+        release_gate_last_checked = self.cache.get("phase4:release_gate:last_checked") or "-"
         return {
             "websocket_status": ws.get("status", self.market_data_engine.websocket_status),
             "heartbeat": ws.get("heartbeat", self.market_data_engine.last_heartbeat),
@@ -378,6 +413,8 @@ class PipelineRuntime:
             "failed_events_pending": pending_failed,
             "failed_events_dead": dead_failed,
             "correlation_rejections_5m": get_counter(self.cache, "metrics:correlation_rejections:5m"),
+            "release_gate_status": release_gate_status,
+            "release_gate_last_checked": release_gate_last_checked,
         }
 
     def hardening_summary(self, db):

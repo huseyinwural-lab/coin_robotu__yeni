@@ -248,6 +248,8 @@ export const Phase4LiveControlPage = () => {
             <TableRow>
               <TableHead data-testid="phase4-exec-quality-head-time">Timestamp</TableHead>
               <TableHead data-testid="phase4-exec-quality-head-symbol">Symbol</TableHead>
+              <TableHead data-testid="phase4-exec-quality-head-strategy">Strategy</TableHead>
+              <TableHead data-testid="phase4-exec-quality-head-vol-regime">Vol Regime</TableHead>
               <TableHead data-testid="phase4-exec-quality-head-expected">Expected</TableHead>
               <TableHead data-testid="phase4-exec-quality-head-fill">Fill</TableHead>
               <TableHead data-testid="phase4-exec-quality-head-slippage">Slippage</TableHead>
@@ -260,6 +262,8 @@ export const Phase4LiveControlPage = () => {
               <TableRow key={item.execution_id} data-testid={`phase4-exec-quality-row-${item.execution_id}`}>
                 <TableCell className="font-mono text-xs" data-testid={`phase4-exec-quality-time-${item.execution_id}`}>{new Date(item.timestamp).toLocaleString()}</TableCell>
                 <TableCell data-testid={`phase4-exec-quality-symbol-${item.execution_id}`}>{item.symbol}</TableCell>
+                <TableCell data-testid={`phase4-exec-quality-strategy-${item.execution_id}`}>{item.strategy_type}</TableCell>
+                <TableCell data-testid={`phase4-exec-quality-vol-regime-${item.execution_id}`}>{item.volatility_regime}</TableCell>
                 <TableCell data-testid={`phase4-exec-quality-expected-${item.execution_id}`}>{item.expected_price}</TableCell>
                 <TableCell data-testid={`phase4-exec-quality-fill-${item.execution_id}`}>{item.fill_price ?? "-"}</TableCell>
                 <TableCell data-testid={`phase4-exec-quality-slippage-${item.execution_id}`}>{item.slippage ?? "-"}</TableCell>
@@ -269,7 +273,7 @@ export const Phase4LiveControlPage = () => {
             ))}
             {qualityRows.length === 0 && (
               <TableRow data-testid="phase4-exec-quality-empty-row">
-                <TableCell colSpan={7} className="text-center text-sm text-slate-400" data-testid="phase4-exec-quality-empty-text">
+                <TableCell colSpan={9} className="text-center text-sm text-slate-400" data-testid="phase4-exec-quality-empty-text">
                   Henüz test order execution kaydı yok.
                 </TableCell>
               </TableRow>
