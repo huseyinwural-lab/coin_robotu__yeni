@@ -83,6 +83,7 @@
 - Testler:
   - `/app/test_reports/iteration_3.json`
   - `/app/backend/tests/test_phase3_admin_policy_engine.py`
+  - Retest: `/app/test_reports/iteration_4.json` (UI/API scope: temiz)
 
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
