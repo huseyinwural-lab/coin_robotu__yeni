@@ -10,6 +10,9 @@ import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { AdminExchangesPage } from "@/pages/AdminExchangesPage";
 import { AdminProofsPage } from "@/pages/AdminProofsPage";
 import { AdminRiskOrchestratorPage } from "@/pages/AdminRiskOrchestratorPage";
+import { AdminRiskOrchestratorAnalyticsPage } from "@/pages/AdminRiskOrchestratorAnalyticsPage";
+import { AdminRuntimeQuarantinePage } from "@/pages/AdminRuntimeQuarantinePage";
+import { AdminRuntimeRecoveryPage } from "@/pages/AdminRuntimeRecoveryPage";
 import { AdminStrategiesPage } from "@/pages/AdminStrategiesPage";
 import { AdminUserApprovalsPage } from "@/pages/AdminUserApprovalsPage";
 import { AuditLogsPage } from "@/pages/AuditLogsPage";
@@ -71,6 +74,9 @@ function App() {
             <Route path="proofs" element={<AdminProofsPage />} />
             <Route path="strategies" element={<AdminStrategiesPage />} />
             <Route path="risk-orchestrator" element={<AdminRiskOrchestratorPage />} />
+            <Route path="risk-orchestrator/analytics" element={<AdminRiskOrchestratorAnalyticsPage />} />
+            <Route path="runtime/quarantine" element={<AdminRuntimeQuarantinePage />} />
+            <Route path="runtime/recovery" element={<AdminRuntimeRecoveryPage />} />
             <Route path="market-universe" element={<MarketUniversePage />} />
             <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />

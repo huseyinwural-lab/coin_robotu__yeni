@@ -39,6 +39,7 @@ from models import (
 )
 from services.artifact_service import verify_manifest_chain
 from services.risk_orchestrator_service import get_or_create_policy
+from services.system_alert_service import create_system_alert
 from services.pipeline.cache_store import read_candles
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
@@ -2027,12 +2028,26 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
 
     if not risk_orchestrator_ok:
         blockers.append("risk_orchestrator_missing")
+        create_system_alert(
+            db,
+            alert_type="risk_engine_disabled",
+            severity="CRITICAL",
+            message="Risk orchestrator devre dışı veya bulunamadı",
+            details={"environment": env},
+        )
 
     if not kill_switch_tested:
         warnings.append("kill_switch_not_tested")
 
     if chain_status.get("chain_broken"):
         blockers.append("chain_integrity_failure")
+        create_system_alert(
+            db,
+            alert_type="chain_integrity_failure",
+            severity="CRITICAL",
+            message="Proof zinciri bütünlüğü bozuldu",
+            details={"broken_index": chain_status.get("broken_index")},
+        )
     elif chain_status.get("total", 0) == 0:
         warnings.append("proof_pipeline_empty")
 

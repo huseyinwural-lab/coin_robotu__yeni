@@ -208,6 +208,25 @@ def _ensure_sqlite_phase4_columns():
             connection.execute(
                 text(
                     """
+                    CREATE TABLE IF NOT EXISTS system_alerts (
+                        id VARCHAR PRIMARY KEY,
+                        alert_type VARCHAR(80) NOT NULL,
+                        severity VARCHAR(20) NOT NULL,
+                        message TEXT NOT NULL DEFAULT '',
+                        details JSON NOT NULL DEFAULT '{}',
+                        status VARCHAR(20) NOT NULL DEFAULT 'open',
+                        occurrences INTEGER NOT NULL DEFAULT 1,
+                        last_triggered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
                     CREATE TABLE IF NOT EXISTS exchange_registry (
                         id VARCHAR PRIMARY KEY,
                         exchange_code VARCHAR(40) UNIQUE NOT NULL,

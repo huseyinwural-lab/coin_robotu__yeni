@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
 from deps import get_current_user
-from models import AuditLog, BotProfile, PaperPosition, RiskPolicy, StrategyTemplate, User, UserRole
+from models import AuditLog, BotProfile, PaperPosition, RiskPolicy, StrategyTemplate, SystemAlert, User, UserRole
 from services.pipeline.runtime import pipeline_runtime
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -27,6 +27,26 @@ def dashboard_summary(current_user: User = Depends(get_current_user), db: Sessio
             "paper_trades_5m": monitoring["paper_trades_last_5m"],
             "websocket_status": monitoring["websocket_status"],
         }
+        alerts_rows = (
+            db.query(SystemAlert)
+            .filter(SystemAlert.status.in_(["open", "ack"]))
+            .order_by(SystemAlert.last_triggered_at.desc())
+            .limit(5)
+            .all()
+        )
+        alerts_payload = [
+            {
+                "id": row.id,
+                "alert_type": row.alert_type,
+                "severity": row.severity,
+                "message": row.message,
+                "status": row.status,
+                "occurrences": row.occurrences,
+                "last_triggered_at": row.last_triggered_at,
+                "details": row.details,
+            }
+            for row in alerts_rows
+        ]
     else:
         data = {
             "bots": db.query(BotProfile).filter(BotProfile.user_id == current_user.id).count(),
@@ -43,7 +63,8 @@ def dashboard_summary(current_user: User = Depends(get_current_user), db: Sessio
             .count(),
             "mode": "paper_execution",
         }
+        alerts_payload = []
 
     heartbeat = datetime.now(timezone.utc).isoformat()
     redis_client.set(f"dashboard:heartbeat:{current_user.id}", heartbeat)
-    return {"role": current_user.role.value, "metrics": data, "heartbeat": heartbeat}
+    return {"role": current_user.role.value, "metrics": data, "heartbeat": heartbeat, "alerts": alerts_payload}

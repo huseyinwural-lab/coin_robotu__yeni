@@ -477,6 +477,21 @@ class AlertPolicy(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class SystemAlert(Base):
+    __tablename__ = "system_alerts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    alert_type: Mapped[str] = mapped_column(String(80), index=True)
+    severity: Mapped[str] = mapped_column(String(20), default="INFO")
+    message: Mapped[str] = mapped_column(Text, default="")
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    occurrences: Mapped[int] = mapped_column(Integer, default=1)
+    last_triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class ExchangeRegistry(Base):
     __tablename__ = "exchange_registry"
 

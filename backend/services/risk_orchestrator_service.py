@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from models import AdminControl, ExecutionIntent, ExecutionIntentEvent, RiskOrchestratorPolicy
 from services.runtime_execution_service import map_decision_to_intent
+from services.system_alert_service import create_system_alert
 
 
 def _now() -> datetime:
@@ -124,6 +125,35 @@ def build_status_snapshot(db: Session) -> dict:
         "open_intents_by_symbol": _build_exposure_rows(open_intents, key_fn=lambda intent: intent.symbol),
         "open_intents_by_strategy": _build_exposure_rows(open_intents, key_fn=lambda intent: intent.strategy_id),
     }
+
+
+def _emit_risk_alerts(db: Session, *, reason_codes: list[str], strategy_id: str, symbol: str | None) -> None:
+    if not reason_codes:
+        return
+    if "daily_loss_limit_exceeded" in reason_codes:
+        create_system_alert(
+            db,
+            alert_type="daily_loss_limit_hit",
+            severity="CRITICAL",
+            message="Daily loss limit breached",
+            details={"strategy_id": strategy_id, "symbol": symbol, "reason_codes": reason_codes},
+        )
+    if any(code in {"account_max_notional_exceeded", "symbol_max_exposure_exceeded"} for code in reason_codes):
+        create_system_alert(
+            db,
+            alert_type="exposure_limit_breach",
+            severity="CRITICAL",
+            message="Exposure limit breach detected",
+            details={"strategy_id": strategy_id, "symbol": symbol, "reason_codes": reason_codes},
+        )
+    if any(code in {"duplicate_decision_hash", "duplicate_intent_hash"} for code in reason_codes):
+        create_system_alert(
+            db,
+            alert_type="duplicate_execution_attempt",
+            severity="CRITICAL",
+            message="Duplicate execution attempt detected",
+            details={"strategy_id": strategy_id, "symbol": symbol, "reason_codes": reason_codes},
+        )
 
 
 def evaluate_pre_trade(
@@ -254,6 +284,14 @@ def evaluate_pre_trade(
         reason_codes.append("daily_loss_limit_exceeded")
     if equity > 0 and daily_loss_usd >= (equity * (policy.daily_loss_limit_pct / 100)):
         reason_codes.append("daily_loss_limit_exceeded")
+
+    if reason_codes:
+        _emit_risk_alerts(
+            db,
+            reason_codes=reason_codes,
+            strategy_id=strategy_id,
+            symbol=intent_payload.get("symbol"),
+        )
 
     return {
         "approved": len(reason_codes) == 0,

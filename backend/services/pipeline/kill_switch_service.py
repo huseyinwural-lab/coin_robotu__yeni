@@ -4,7 +4,9 @@ import json
 from sqlalchemy.orm import Session
 
 from models import AdminControl, BotProfile, FailedEvent, PaperPosition, UserRiskSetting
+from services.audit_service import create_audit_log
 from services.pipeline.execution_engine import manual_close_position
+from services.system_alert_service import create_system_alert
 
 KILL_SWITCH_EXECUTION_ERROR_THRESHOLD = 5
 KILL_SWITCH_RISK_ANOMALY_THRESHOLD = 3
@@ -70,12 +72,38 @@ def evaluate_kill_switch(db: Session, cache, market_data_engine) -> dict:
     if failed_events_pending >= 20:
         reasons.append("failed_events_overload")
 
+    if "daily_loss_exceeded" in reasons:
+        create_system_alert(
+            db,
+            alert_type="daily_loss_limit_hit",
+            severity="CRITICAL",
+            message="Daily loss limit exceeded (kill switch trigger)",
+            details={"affected_users": exceeded_users},
+        )
+
     triggered = bool(reasons)
     current_active = bool(control and control.emergency_mode)
 
     if control is not None and triggered and not current_active:
         control.emergency_mode = True
         db.commit()
+        create_audit_log(
+            db,
+            action="kill_switch_triggered",
+            entity_type="admin_control",
+            entity_id=control.id,
+            actor_user_id="system",
+            actor_role="system",
+            severity="critical",
+            details={"reasons": reasons},
+        )
+        create_system_alert(
+            db,
+            alert_type="global_kill_switch_triggered",
+            severity="CRITICAL",
+            message="Global kill switch triggered",
+            details={"reasons": reasons},
+        )
     elif control is not None and not triggered and not current_active:
         # remain inactive
         pass
@@ -120,6 +148,16 @@ def reset_kill_switch(db: Session, cache) -> dict:
     if control is not None:
         control.emergency_mode = False
         db.commit()
+        create_audit_log(
+            db,
+            action="kill_switch_reset",
+            entity_type="admin_control",
+            entity_id=control.id,
+            actor_user_id="system",
+            actor_role="system",
+            severity="info",
+            details={"manual_reset": True},
+        )
 
     payload = {
         "triggered": False,

@@ -12,6 +12,7 @@ from models import (
     DecisionTraceHot,
     ExecutionIntent,
     ExecutionIntentEvent,
+    FailedEvent,
     StrategyDefinition,
     StrategyVersion,
     User,
@@ -23,6 +24,7 @@ from schemas import (
     ExecutionIntentResponse,
     RegimeEvaluationResponse,
     RegimeSnapshotResponse,
+    RiskOrchestratorAnalyticsResponse,
     RiskOrchestratorPolicyResponse,
     RiskOrchestratorPolicyUpdate,
     RiskOrchestratorRejectResponse,
@@ -31,6 +33,8 @@ from schemas import (
     RuntimeDispatchRequest,
     RuntimeDispatchResponse,
     RuntimeEventEnvelopeResponse,
+    RuntimeQuarantineEventResponse,
+    RuntimeStuckIntentResponse,
     StrategyDefinitionCreate,
     StrategyDefinitionResponse,
     StrategyDetailResponse,
@@ -51,6 +55,15 @@ from services.risk_orchestrator_service import (
     update_policy,
 )
 from services.runtime_execution_service import dispatch_decision_result, process_submission_event_once
+from services.runtime_ops_service import (
+    dismiss_quarantined_event,
+    list_quarantined_events,
+    list_stuck_intents,
+    mark_quarantined_failed,
+    perform_recovery_action,
+    replay_quarantined_event,
+)
+from services.risk_orchestrator_analytics_service import compute_risk_analytics
 from services.strategy_domain_service import (
     activate_strategy_version,
     archive_strategy,
@@ -597,3 +610,130 @@ def admin_cold_traces(current_admin: User = Depends(require_admin), db: Session 
     _ = current_admin
     rows = db.query(DecisionTraceCold).order_by(DecisionTraceCold.created_at.desc()).limit(100).all()
     return [{"archive_id": row.archive_id, "correlation_id": row.correlation_id, "context_hash": row.context_hash, "decision_hash": row.decision_hash, "intent_hash": row.intent_hash, "terminal_state": row.terminal_state, "created_at": row.created_at} for row in rows]
+
+
+@router.get("/admin/runtime/quarantine", response_model=list[RuntimeQuarantineEventResponse])
+def admin_runtime_quarantine(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    rows = list_quarantined_events(db)
+    response: list[RuntimeQuarantineEventResponse] = []
+    for row in rows:
+        payload = row.payload or {}
+        response.append(
+            RuntimeQuarantineEventResponse(
+                id=row.id,
+                event_id=row.entity_id,
+                event_type=row.event_type,
+                status=row.status,
+                retry_count=row.retry_count,
+                max_retry=row.max_retry,
+                reason_code=payload.get("reason_code"),
+                error_message=row.error_message,
+                payload=payload,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+        )
+    return response
+
+
+@router.post("/admin/runtime/quarantine/{event_id}/{action}", response_model=RuntimeQuarantineEventResponse)
+def admin_runtime_quarantine_action(
+    event_id: str,
+    action: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    failed_event = (
+        db.query(FailedEvent)
+        .filter(FailedEvent.entity_type == "runtime_event", FailedEvent.entity_id == event_id)
+        .first()
+    )
+    if failed_event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="quarantine_event_not_found")
+
+    if action == "replay":
+        failed_event = replay_quarantined_event(db, failed_event)
+        action_label = "runtime_quarantine_replay"
+    elif action == "dismiss":
+        failed_event = dismiss_quarantined_event(db, failed_event)
+        action_label = "runtime_quarantine_dismiss"
+    elif action == "mark_failed":
+        failed_event = mark_quarantined_failed(db, failed_event)
+        action_label = "runtime_quarantine_mark_failed"
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_action")
+
+    create_audit_log(
+        db,
+        action=action_label,
+        entity_type="failed_event",
+        entity_id=failed_event.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={"event_id": event_id, "action": action},
+    )
+
+    payload = failed_event.payload or {}
+    return RuntimeQuarantineEventResponse(
+        id=failed_event.id,
+        event_id=failed_event.entity_id,
+        event_type=failed_event.event_type,
+        status=failed_event.status,
+        retry_count=failed_event.retry_count,
+        max_retry=failed_event.max_retry,
+        reason_code=payload.get("reason_code"),
+        error_message=failed_event.error_message,
+        payload=payload,
+        created_at=failed_event.created_at,
+        updated_at=failed_event.updated_at,
+    )
+
+
+@router.get("/admin/runtime/stuck-intents", response_model=list[RuntimeStuckIntentResponse])
+def admin_stuck_intents(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    pending_threshold: int = 60,
+    submitted_threshold: int = 120,
+    partial_threshold: int = 300,
+):
+    _ = current_admin
+    rows = list_stuck_intents(
+        db,
+        pending_threshold=pending_threshold,
+        submitted_threshold=submitted_threshold,
+        partial_threshold=partial_threshold,
+    )
+    return [RuntimeStuckIntentResponse(**row) for row in rows]
+
+
+@router.post("/admin/runtime/stuck-intents/{intent_id}/{action}")
+def admin_stuck_intent_action(
+    intent_id: str,
+    action: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return perform_recovery_action(
+            db,
+            intent_id=intent_id,
+            action=action,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/admin/risk-orchestrator/analytics", response_model=RiskOrchestratorAnalyticsResponse)
+def admin_risk_orchestrator_analytics(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    days: int = 14,
+):
+    _ = current_admin
+    data = compute_risk_analytics(db, days=days)
+    return RiskOrchestratorAnalyticsResponse(**data)

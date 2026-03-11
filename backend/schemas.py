@@ -333,6 +333,67 @@ class FailedEventResponse(BaseModel):
     resolved_at: datetime | None
 
 
+class RuntimeQuarantineEventResponse(BaseModel):
+    id: str
+    event_id: str
+    event_type: str
+    status: str
+    retry_count: int
+    max_retry: int
+    reason_code: str | None = None
+    error_message: str
+    payload: dict
+    created_at: datetime
+    updated_at: datetime
+
+
+class RuntimeStuckIntentResponse(BaseModel):
+    intent_id: str
+    strategy_id: str
+    symbol: str
+    status: str
+    age_seconds: float
+    last_event_at: datetime | None
+    reason: str
+
+
+class SystemAlertResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    alert_type: str
+    severity: str
+    message: str
+    status: str
+    occurrences: int
+    last_triggered_at: datetime
+    created_at: datetime
+    updated_at: datetime
+    details: dict
+
+
+class RiskAnalyticsPoint(BaseModel):
+    label: str
+    value: int
+
+
+class RiskAnalyticsSeriesPoint(BaseModel):
+    date: str
+    value: int
+
+
+class RiskOrchestratorAnalyticsResponse(BaseModel):
+    days: int
+    generated_at: datetime
+    risk_policy_hits: int
+    kill_switch_events: int
+    duplicate_intent_attempts: int
+    reject_reason_distribution: list[RiskAnalyticsPoint]
+    breach_by_day: list[RiskAnalyticsSeriesPoint]
+    breach_by_strategy: list[RiskAnalyticsPoint]
+    breach_by_symbol: list[RiskAnalyticsPoint]
+
+
 class StateRebuildLogResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

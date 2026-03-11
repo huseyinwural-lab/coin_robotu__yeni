@@ -9,11 +9,15 @@ from models import DecisionTraceCold, DecisionTraceHot, ExecutionIntent, Executi
 from services.runtime_event_bus_service import (
     ack_runtime_event,
     consume_runtime_event,
+    enqueue_quarantine_event,
+    enqueue_retry_event,
     is_event_processed,
     mark_event_processed,
     publish_runtime_event,
+    release_due_retry_events,
 )
 from services.paper_exchange_adapter_service import paper_exchange_adapter
+from services.failed_event_service import upsert_failed_event
 
 
 def _canonical(payload: dict) -> str:
@@ -22,6 +26,49 @@ def _canonical(payload: dict) -> str:
 
 def _hash(payload: dict) -> str:
     return hashlib.sha256(_canonical(payload).encode("utf-8")).hexdigest()
+
+
+def _classify_failure(envelope: dict, intent: ExecutionIntent | None, exc: Exception) -> str:
+    if isinstance(exc, KeyError):
+        return "schema_error"
+    if intent is None:
+        return "intent_state_violation"
+    if isinstance(exc, ValueError) and str(exc) == "duplicate_terminal_event":
+        return "duplicate_terminal_event"
+    if isinstance(exc, RuntimeError) and str(exc) == "exchange_adapter_failure":
+        return "exchange_adapter_failure"
+    return "worker_internal_error"
+
+
+def _handle_runtime_failure(
+    db: Session,
+    *,
+    envelope: dict,
+    error_message: str,
+    reason_code: str,
+    retry_count: int,
+    max_retry: int,
+    next_retry_at: datetime | None,
+    status: str,
+) -> None:
+    payload = {
+        "envelope": envelope,
+        "reason_code": reason_code,
+        "last_error": error_message,
+        "queue": status,
+    }
+    upsert_failed_event(
+        db,
+        event_type=envelope.get("event_type", "unknown"),
+        entity_type="runtime_event",
+        entity_id=envelope.get("event_id", "unknown"),
+        payload=payload,
+        error_message=error_message,
+        status=status,
+        retry_count=retry_count,
+        max_retry=max_retry,
+        next_retry_at=next_retry_at,
+    )
 
 
 def map_decision_to_intent(*, strategy_id: str, correlation_id: str, decision_result: dict, context_payload: dict) -> dict | None:
@@ -170,87 +217,171 @@ def dispatch_decision_result(
 
 
 def process_submission_event_once(db: Session, worker_name: str = "execution-worker") -> dict | None:
+    release_due_retry_events()
     consumed = consume_runtime_event("execution.order.submission_requested", worker_name=worker_name, timeout=1)
     if consumed is None:
         return None
 
     envelope, processing_queue, raw = consumed
-    event_id = envelope["event_id"]
+    event_id = envelope.get("event_id")
+    if not event_id:
+        ack_runtime_event(processing_queue, raw)
+        return {"status": "schema_error", "event_id": None}
+
     if is_event_processed(event_id):
         ack_runtime_event(processing_queue, raw)
         return {"status": "duplicate_skipped", "event_id": event_id}
 
-    payload = envelope["payload"]
-    intent_id = payload["intent_id"]
-    intent = db.query(ExecutionIntent).filter(ExecutionIntent.intent_id == intent_id).first()
-    if intent is None:
-        ack_runtime_event(processing_queue, raw)
-        mark_event_processed(event_id)
-        return {"status": "intent_missing", "event_id": event_id}
+    payload = envelope.get("payload") or {}
+    intent_id = payload.get("intent_id")
 
-    submission = paper_exchange_adapter.submit_order(
-        {
-            "intent_hash": intent.intent_hash,
-            "quantity": intent.quantity,
-            "price_reference": intent.price_reference,
-        }
-    )
+    intent = None
+    try:
+        if not intent_id:
+            raise KeyError("intent_id")
 
-    db.add(
-        ExecutionIntentEvent(
-            id=str(uuid.uuid4()),
-            intent_id=intent.intent_id,
-            event_type="execution.order.submitted",
-            event_status="submitted",
-            external_order_id=submission["external_order_id"],
-            payload=submission,
+        intent = db.query(ExecutionIntent).filter(ExecutionIntent.intent_id == intent_id).first()
+        if intent is None:
+            raise ValueError("intent_missing")
+
+        terminal_event = (
+            db.query(ExecutionIntentEvent)
+            .filter(
+                ExecutionIntentEvent.intent_id == intent.intent_id,
+                ExecutionIntentEvent.event_type == "execution.order.finalized",
+            )
+            .first()
         )
-    )
-    publish_runtime_event(
-        event_type="execution.order.submitted",
-        payload={"intent_id": intent.intent_id, "external_order_id": submission["external_order_id"]},
-        correlation_id=intent.correlation_id,
-        causation_id=envelope["event_id"],
-        partition_key=f"{intent.symbol}::{intent.strategy_id}",
-    )
+        if terminal_event is not None:
+            raise ValueError("duplicate_terminal_event")
 
-    for state in submission["lifecycle"]:
-        event_type = "execution.order.updated" if state not in {"FILLED", "CANCELED", "REJECTED"} else "execution.order.finalized"
-        mapped_status = state.lower()
+        try:
+            submission = paper_exchange_adapter.submit_order(
+                {
+                    "intent_hash": intent.intent_hash,
+                    "quantity": intent.quantity,
+                    "price_reference": intent.price_reference,
+                }
+            )
+        except Exception as exc:
+            raise RuntimeError("exchange_adapter_failure") from exc
+
         db.add(
             ExecutionIntentEvent(
                 id=str(uuid.uuid4()),
                 intent_id=intent.intent_id,
-                event_type=event_type,
-                event_status=mapped_status,
+                event_type="execution.order.submitted",
+                event_status="submitted",
                 external_order_id=submission["external_order_id"],
-                payload={"state": state},
+                payload=submission,
             )
         )
         publish_runtime_event(
-            event_type=event_type,
-            payload={"intent_id": intent.intent_id, "state": state, "external_order_id": submission["external_order_id"]},
+            event_type="execution.order.submitted",
+            payload={"intent_id": intent.intent_id, "external_order_id": submission["external_order_id"]},
             correlation_id=intent.correlation_id,
             causation_id=envelope["event_id"],
             partition_key=f"{intent.symbol}::{intent.strategy_id}",
         )
 
-    terminal = submission["lifecycle"][-1]
-    db.add(
-        DecisionTraceCold(
-            archive_id=str(uuid.uuid4()),
-            correlation_id=intent.correlation_id,
-            strategy_version_id=intent.strategy_version_id,
-            context_hash=intent.context_hash,
-            decision_hash=intent.decision_hash,
-            intent_hash=intent.intent_hash,
-            artifact_id=None,
-            lifecycle_summary={"lifecycle": submission["lifecycle"], "external_order_id": submission["external_order_id"]},
-            terminal_state=terminal,
-        )
-    )
+        for state in submission["lifecycle"]:
+            event_type = "execution.order.updated" if state not in {"FILLED", "CANCELED", "REJECTED"} else "execution.order.finalized"
+            mapped_status = state.lower()
+            db.add(
+                ExecutionIntentEvent(
+                    id=str(uuid.uuid4()),
+                    intent_id=intent.intent_id,
+                    event_type=event_type,
+                    event_status=mapped_status,
+                    external_order_id=submission["external_order_id"],
+                    payload={"state": state},
+                )
+            )
+            publish_runtime_event(
+                event_type=event_type,
+                payload={"intent_id": intent.intent_id, "state": state, "external_order_id": submission["external_order_id"]},
+                correlation_id=intent.correlation_id,
+                causation_id=envelope["event_id"],
+                partition_key=f"{intent.symbol}::{intent.strategy_id}",
+            )
 
-    db.commit()
-    mark_event_processed(event_id)
-    ack_runtime_event(processing_queue, raw)
-    return {"status": "processed", "event_id": event_id, "intent_id": intent.intent_id, "terminal_state": terminal}
+        terminal = submission["lifecycle"][-1]
+        db.add(
+            DecisionTraceCold(
+                archive_id=str(uuid.uuid4()),
+                correlation_id=intent.correlation_id,
+                strategy_version_id=intent.strategy_version_id,
+                context_hash=intent.context_hash,
+                decision_hash=intent.decision_hash,
+                intent_hash=intent.intent_hash,
+                artifact_id=None,
+                lifecycle_summary={"lifecycle": submission["lifecycle"], "external_order_id": submission["external_order_id"]},
+                terminal_state=terminal,
+            )
+        )
+
+        db.commit()
+        mark_event_processed(event_id)
+        ack_runtime_event(processing_queue, raw)
+        return {"status": "processed", "event_id": event_id, "intent_id": intent.intent_id, "terminal_state": terminal}
+    except Exception as exc:
+        reason_code = _classify_failure(envelope, intent, exc)
+        max_retry = 3
+        retry_count = int(envelope.get("metadata", {}).get("retry_count", 0)) + 1
+        backoff_seconds = 2 ** (retry_count - 1)
+        next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)
+        envelope.setdefault("metadata", {})
+        envelope["metadata"].update(
+            {
+                "retry_count": retry_count,
+                "reason_code": reason_code,
+                "last_error": str(exc),
+            }
+        )
+
+        immediate_quarantine = {
+            "schema_error",
+            "intent_state_violation",
+            "duplicate_terminal_event",
+        }
+
+        ack_runtime_event(processing_queue, raw)
+        if reason_code in immediate_quarantine or retry_count >= max_retry:
+            enqueue_quarantine_event(
+                envelope=envelope,
+                error_message=str(exc),
+                reason_code=reason_code,
+                retry_count=retry_count,
+                max_retry=max_retry,
+            )
+            _handle_runtime_failure(
+                db,
+                envelope=envelope,
+                error_message=str(exc),
+                reason_code=reason_code,
+                retry_count=retry_count,
+                max_retry=max_retry,
+                next_retry_at=None,
+                status="quarantined",
+            )
+            return {"status": "quarantined", "event_id": event_id, "reason_code": reason_code}
+
+        enqueue_retry_event(
+            envelope=envelope,
+            error_message=str(exc),
+            reason_code=reason_code,
+            retry_count=retry_count,
+            max_retry=max_retry,
+            next_retry_at=next_retry_at.isoformat(),
+        )
+        _handle_runtime_failure(
+            db,
+            envelope=envelope,
+            error_message=str(exc),
+            reason_code=reason_code,
+            retry_count=retry_count,
+            max_retry=max_retry,
+            next_retry_at=next_retry_at,
+            status="retrying",
+        )
+        return {"status": "retrying", "event_id": event_id, "reason_code": reason_code}

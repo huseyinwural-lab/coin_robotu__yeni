@@ -14,11 +14,13 @@ const criticalActions = [
 
 export const AdminDashboardPage = () => {
   const [summary, setSummary] = useState(null);
+  const [alerts, setAlerts] = useState([]);
 
   useEffect(() => {
     const fetchSummary = async () => {
       const { data } = await apiClient.get("/dashboard/summary");
       setSummary(data);
+      setAlerts(data?.alerts || []);
     };
     fetchSummary();
   }, []);
@@ -32,6 +34,16 @@ export const AdminDashboardPage = () => {
     }
   };
 
+  const ackAlert = async (alertId) => {
+    try {
+      await apiClient.post(`/admin/system-alerts/${alertId}/ack`);
+      setAlerts((prev) => prev.filter((item) => item.id !== alertId));
+      toast.success("Alert ack edildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Alert ack edilemedi");
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="admin-dashboard-page">
       <header className="border border-blue-900 bg-slate-900 p-4" data-testid="admin-dashboard-header">
@@ -40,6 +52,33 @@ export const AdminDashboardPage = () => {
           Normal alanlar mavi, kritik alanlar kırmızı. Double-confirm pattern aktif.
         </p>
       </header>
+
+      {alerts.length > 0 && (
+        <div className="border border-red-500/60 bg-red-950/20 p-4" data-testid="admin-alerts-banner">
+          <p className="text-xs uppercase tracking-widest text-red-300" data-testid="admin-alerts-title">CRITICAL ALERTS</p>
+          <div className="mt-3 space-y-2" data-testid="admin-alerts-list">
+            {alerts.map((alert) => (
+              <div key={alert.id} className="flex flex-wrap items-center justify-between gap-2 border border-red-700/40 p-2" data-testid={`admin-alert-row-${alert.id}`}>
+                <div className="text-xs" data-testid={`admin-alert-meta-${alert.id}`}>
+                  <span className="font-semibold" data-testid={`admin-alert-type-${alert.id}`}>{alert.alert_type}</span> ·
+                  <span className="ml-1" data-testid={`admin-alert-severity-${alert.id}`}>{alert.severity}</span> ·
+                  <span className="ml-1" data-testid={`admin-alert-occurrences-${alert.id}`}>x{alert.occurrences}</span>
+                  <p className="text-slate-300" data-testid={`admin-alert-message-${alert.id}`}>{alert.message}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-400 bg-transparent text-red-300"
+                  onClick={() => ackAlert(alert.id)}
+                  data-testid={`admin-alert-ack-${alert.id}`}
+                >
+                  Ack
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-8" data-testid="admin-dashboard-metrics-grid">
         <MetricCard label="Kullanıcı" value={summary?.metrics?.users ?? "-"} tone="blue" testId="admin-metric-users" />
