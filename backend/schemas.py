@@ -10,6 +10,9 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: str
     is_active: bool
+    approval_status: str
+    approval_requested_at: datetime
+    approved_at: datetime | None
     created_at: datetime
 
 

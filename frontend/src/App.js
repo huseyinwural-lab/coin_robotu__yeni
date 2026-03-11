@@ -5,7 +5,9 @@ import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { PanelLayout } from "@/components/PanelLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AdminLoginPage } from "@/pages/AdminLoginPage";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
+import { AdminUserApprovalsPage } from "@/pages/AdminUserApprovalsPage";
 import { AuditLogsPage } from "@/pages/AuditLogsPage";
 import { BacktestCardsPage } from "@/pages/BacktestCardsPage";
 import { BacktestInsightsPage } from "@/pages/BacktestInsightsPage";
@@ -18,7 +20,6 @@ import { ExchangeMockPage } from "@/pages/ExchangeMockPage";
 import { FailedEventsPage } from "@/pages/FailedEventsPage";
 import { HardeningChecklistPage } from "@/pages/HardeningChecklistPage";
 import { LandingPage } from "@/pages/LandingPage";
-import { LoginPage } from "@/pages/LoginPage";
 import { MarketUniversePage } from "@/pages/MarketUniversePage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
 import { PaperPositionsPage } from "@/pages/PaperPositionsPage";
@@ -26,6 +27,7 @@ import { Phase4LiveControlPage } from "@/pages/Phase4LiveControlPage";
 import { RiskPoliciesPage } from "@/pages/RiskPoliciesPage";
 import { StateRebuildLogsPage } from "@/pages/StateRebuildLogsPage";
 import { StrategyTemplatesPage } from "@/pages/StrategyTemplatesPage";
+import { UserLoginPage } from "@/pages/UserLoginPage";
 import { UserDashboardPage } from "@/pages/UserDashboardPage";
 
 const HomeRedirect = () => {
@@ -35,9 +37,9 @@ const HomeRedirect = () => {
     return <LandingPage />;
   }
   if (user.role === "admin") {
-    return <Navigate to="/app/admin" replace />;
+    return <Navigate to="/admin/dashboard" replace />;
   }
-  return <Navigate to="/app/user" replace />;
+  return <Navigate to="/user/dashboard" replace />;
 };
 
 function App() {
@@ -46,37 +48,52 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<HomeRedirect />} />
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login" element={<Navigate to="/user/login" replace />} />
+          <Route path="/user/login" element={<UserLoginPage />} />
+          <Route path="/admin/login" element={<AdminLoginPage />} />
 
           <Route
-            path="/app"
+            path="/admin"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute role="admin">
                 <PanelLayout />
               </ProtectedRoute>
             }
           >
-            <Route path="user" element={<UserDashboardPage />} />
-            <Route path="admin" element={<ProtectedRoute role="admin"><AdminDashboardPage /></ProtectedRoute>} />
-            <Route path="market-universe" element={<ProtectedRoute role="admin"><MarketUniversePage /></ProtectedRoute>} />
-            <Route path="execution-policies" element={<ProtectedRoute role="admin"><ExecutionPoliciesPage /></ProtectedRoute>} />
-            <Route path="exposure-groups" element={<ProtectedRoute role="admin"><ExposureGroupsPage /></ProtectedRoute>} />
-            <Route path="correlation-matrix" element={<ProtectedRoute role="admin"><CorrelationMatrixPage /></ProtectedRoute>} />
-            <Route path="execution-states" element={<ProtectedRoute role="admin"><ExecutionStatesPage /></ProtectedRoute>} />
-            <Route path="hardening-checklist" element={<ProtectedRoute role="admin"><HardeningChecklistPage /></ProtectedRoute>} />
-            <Route path="failed-events" element={<ProtectedRoute role="admin"><FailedEventsPage /></ProtectedRoute>} />
-            <Route path="state-rebuild" element={<ProtectedRoute role="admin"><StateRebuildLogsPage /></ProtectedRoute>} />
-            <Route path="backtest-cards" element={<ProtectedRoute role="admin"><BacktestCardsPage /></ProtectedRoute>} />
-            <Route path="monitoring" element={<ProtectedRoute role="admin"><MonitoringPage /></ProtectedRoute>} />
-            <Route path="phase4-live" element={<ProtectedRoute role="admin"><Phase4LiveControlPage /></ProtectedRoute>} />
+            <Route path="dashboard" element={<AdminDashboardPage />} />
+            <Route path="user-approvals" element={<AdminUserApprovalsPage />} />
+            <Route path="market-universe" element={<MarketUniversePage />} />
+            <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
+            <Route path="exposure-groups" element={<ExposureGroupsPage />} />
+            <Route path="correlation-matrix" element={<CorrelationMatrixPage />} />
+            <Route path="execution-states" element={<ExecutionStatesPage />} />
+            <Route path="hardening-checklist" element={<HardeningChecklistPage />} />
+            <Route path="failed-events" element={<FailedEventsPage />} />
+            <Route path="state-rebuild" element={<StateRebuildLogsPage />} />
+            <Route path="backtest-cards" element={<BacktestCardsPage />} />
+            <Route path="monitoring" element={<MonitoringPage />} />
+            <Route path="phase4-live" element={<Phase4LiveControlPage />} />
+            <Route path="audit-logs" element={<AuditLogsPage />} />
+          </Route>
+
+          <Route
+            path="/user"
+            element={
+              <ProtectedRoute role="user">
+                <PanelLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="dashboard" element={<UserDashboardPage />} />
             <Route path="bots" element={<BotProfilesPage />} />
             <Route path="risk-policies" element={<RiskPoliciesPage />} />
             <Route path="strategies" element={<StrategyTemplatesPage />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
             <Route path="positions" element={<PaperPositionsPage />} />
-            <Route path="audit-logs" element={<ProtectedRoute role="admin"><AuditLogsPage /></ProtectedRoute>} />
             <Route path="exchange-mock" element={<ExchangeMockPage />} />
           </Route>
+
+          <Route path="/app/*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
       <Toaster position="top-right" richColors closeButton />

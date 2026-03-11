@@ -14,11 +14,12 @@ export const ProtectedRoute = ({ children, role = null }) => {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    const loginPath = role === "admin" ? "/admin/login" : "/user/login";
+    return <Navigate to={loginPath} replace />;
   }
 
   if (role && user.role !== role) {
-    return <Navigate to="/app/user" replace />;
+    return <Navigate to={user.role === "admin" ? "/admin/dashboard" : "/user/dashboard"} replace />;
   }
 
   return children;

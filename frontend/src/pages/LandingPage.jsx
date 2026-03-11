@@ -16,9 +16,14 @@ export const LandingPage = () => {
           className="flex flex-wrap items-center justify-between gap-3"
         >
           <p className="font-mono text-sm font-bold uppercase tracking-widest" data-testid="landing-brand">Algorithmic Platform</p>
-          <Link to="/login" data-testid="landing-login-link">
-            <Button className="border border-black bg-black text-orange-500 hover:bg-zinc-900" data-testid="landing-login-button">Giriş Yap</Button>
-          </Link>
+          <div className="flex flex-wrap gap-2" data-testid="landing-login-actions">
+            <Link to="/user/login" data-testid="landing-user-login-link">
+              <Button className="border border-black bg-black text-orange-500 hover:bg-zinc-900" data-testid="landing-user-login-button">Kullanıcı Girişi</Button>
+            </Link>
+            <Link to="/admin/login" data-testid="landing-admin-login-link">
+              <Button className="border border-black bg-orange-300 text-black hover:bg-orange-200" data-testid="landing-admin-login-button">Admin Girişi</Button>
+            </Link>
+          </div>
         </motion.header>
 
         <section className="grid items-center gap-8 py-12 lg:grid-cols-2" data-testid="landing-hero-section">
@@ -34,7 +39,7 @@ export const LandingPage = () => {
               Binance adapter + MOCK execution ile güvenli başlangıç. User/Admin panel, bot config, risk policy ve strategy template yönetimi ilk fazda hazır.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link to="/login" data-testid="landing-start-link">
+              <Link to="/user/login" data-testid="landing-start-link">
                 <Button className="border border-black bg-black text-orange-500 hover:bg-zinc-900" data-testid="landing-start-button">Platforma Başla</Button>
               </Link>
               <div className="border border-black px-3 py-2 text-xs font-mono" data-testid="landing-mode-chip">Execution Mode: MOCK</div>

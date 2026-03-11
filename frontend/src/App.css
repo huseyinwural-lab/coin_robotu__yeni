@@ -51,8 +51,42 @@
 }
 
 .admin-ops-theme {
-  background: #020617 !important;
-  color: #e2e8f0 !important;
+  background: #ff8a00 !important;
+  color: #111111 !important;
+}
+
+.admin-ops-theme * {
+  color: #111111 !important;
+  border-color: #6b3f00 !important;
+}
+
+.admin-ops-theme .bg-slate-950,
+.admin-ops-theme .bg-slate-900,
+.admin-ops-theme .bg-slate-800,
+.admin-ops-theme .bg-red-950\/20,
+.admin-ops-theme .bg-blue-600,
+.admin-ops-theme .bg-blue-700,
+.admin-ops-theme .bg-transparent {
+  background: #ffd6a1 !important;
+}
+
+.admin-ops-theme .text-slate-400,
+.admin-ops-theme .text-slate-500,
+.admin-ops-theme .text-blue-300,
+.admin-ops-theme .text-red-300,
+.admin-ops-theme .text-orange-500,
+.admin-ops-theme .text-orange-400 {
+  color: #3b2500 !important;
+}
+
+.admin-ops-theme .hover\:bg-red-900\/40:hover,
+.admin-ops-theme .hover\:bg-blue-700:hover,
+.admin-ops-theme .hover\:bg-orange-600:hover,
+.admin-ops-theme .hover\:bg-zinc-900:hover,
+.admin-ops-theme .hover\:bg-zinc-700:hover,
+.admin-ops-theme .hover\:bg-red-700:hover,
+.admin-ops-theme .hover\:bg-red-800:hover {
+  background: #ffc67d !important;
 }
 
 @keyframes fade-in {

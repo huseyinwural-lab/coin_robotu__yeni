@@ -9,6 +9,7 @@ import {
   Globe,
   History,
   LineChart,
+  ListChecks,
   Radio,
   Settings2,
   ShieldAlert,
@@ -23,57 +24,58 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 
 const userNavItems = [
-  { to: "/app/user", label: "User Dashboard", icon: BarChart3, testId: "nav-user-dashboard-link" },
-  { to: "/app/bots", label: "Bot Profilleri", icon: TrendingUp, testId: "nav-bot-profiles-link" },
-  { to: "/app/risk-policies", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
-  { to: "/app/strategies", label: "Strategy Template", icon: ClipboardList, testId: "nav-strategy-templates-link" },
-  { to: "/app/backtest-insights", label: "Backtest Insights", icon: LineChart, testId: "nav-backtest-insights-link" },
-  { to: "/app/positions", label: "Paper Positions", icon: Activity, testId: "nav-paper-positions-link" },
-  { to: "/app/exchange-mock", label: "Exchange Mock", icon: TestTube2, testId: "nav-exchange-mock-link" },
+  { to: "/user/dashboard", label: "User Dashboard", icon: BarChart3, testId: "nav-user-dashboard-link" },
+  { to: "/user/bots", label: "Bot Profilleri", icon: TrendingUp, testId: "nav-bot-profiles-link" },
+  { to: "/user/risk-policies", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
+  { to: "/user/strategies", label: "Strategy Template", icon: ClipboardList, testId: "nav-strategy-templates-link" },
+  { to: "/user/backtest-insights", label: "Backtest Insights", icon: LineChart, testId: "nav-backtest-insights-link" },
+  { to: "/user/positions", label: "Paper Positions", icon: Activity, testId: "nav-paper-positions-link" },
+  { to: "/user/exchange-mock", label: "Exchange Mock", icon: TestTube2, testId: "nav-exchange-mock-link" },
 ];
 
 const adminOnlyItems = [
-  { to: "/app/admin", label: "Admin Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
-  { to: "/app/market-universe", label: "Market Universe", icon: Globe, testId: "nav-market-universe-link" },
-  { to: "/app/execution-policies", label: "Execution Policies", icon: Settings2, testId: "nav-execution-policies-link" },
-  { to: "/app/exposure-groups", label: "Exposure Groups", icon: ShieldAlert, testId: "nav-exposure-groups-link" },
-  { to: "/app/correlation-matrix", label: "Correlation Matrix", icon: CircuitBoard, testId: "nav-correlation-matrix-link" },
-  { to: "/app/execution-states", label: "Execution States", icon: Cpu, testId: "nav-execution-states-link" },
-  { to: "/app/hardening-checklist", label: "Hardening Checklist", icon: ShieldCheck, testId: "nav-hardening-checklist-link" },
-  { to: "/app/failed-events", label: "Failed Events", icon: AlertTriangle, testId: "nav-failed-events-link" },
-  { to: "/app/state-rebuild", label: "State Rebuild Logs", icon: History, testId: "nav-state-rebuild-link" },
-  { to: "/app/backtest-cards", label: "Backtest Cards", icon: BarChartBig, testId: "nav-backtest-cards-link" },
-  { to: "/app/monitoring", label: "Monitoring", icon: Activity, testId: "nav-monitoring-link" },
-  { to: "/app/phase4-live", label: "Phase-4 Live Control", icon: Radio, testId: "nav-phase4-live-link" },
-  { to: "/app/audit-logs", label: "Audit Logs", icon: ClipboardList, testId: "nav-audit-logs-link" },
+  { to: "/admin/dashboard", label: "Admin Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
+  { to: "/admin/user-approvals", label: "Kullanıcı Onayları", icon: ListChecks, testId: "nav-admin-user-approvals-link" },
+  { to: "/admin/market-universe", label: "Market Universe", icon: Globe, testId: "nav-market-universe-link" },
+  { to: "/admin/execution-policies", label: "Execution Policies", icon: Settings2, testId: "nav-execution-policies-link" },
+  { to: "/admin/exposure-groups", label: "Exposure Groups", icon: ShieldAlert, testId: "nav-exposure-groups-link" },
+  { to: "/admin/correlation-matrix", label: "Correlation Matrix", icon: CircuitBoard, testId: "nav-correlation-matrix-link" },
+  { to: "/admin/execution-states", label: "Execution States", icon: Cpu, testId: "nav-execution-states-link" },
+  { to: "/admin/hardening-checklist", label: "Hardening Checklist", icon: ShieldCheck, testId: "nav-hardening-checklist-link" },
+  { to: "/admin/failed-events", label: "Failed Events", icon: AlertTriangle, testId: "nav-failed-events-link" },
+  { to: "/admin/state-rebuild", label: "State Rebuild Logs", icon: History, testId: "nav-state-rebuild-link" },
+  { to: "/admin/backtest-cards", label: "Backtest Cards", icon: BarChartBig, testId: "nav-backtest-cards-link" },
+  { to: "/admin/monitoring", label: "Monitoring", icon: Activity, testId: "nav-monitoring-link" },
+  { to: "/admin/phase4-live", label: "Phase-4 Live Control", icon: Radio, testId: "nav-phase4-live-link" },
+  { to: "/admin/audit-logs", label: "Audit Logs", icon: ClipboardList, testId: "nav-audit-logs-link" },
 ];
 
 export const PanelLayout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const navItems = user?.role === "admin" ? [...adminOnlyItems, ...userNavItems] : userNavItems;
+  const navItems = user?.role === "admin" ? adminOnlyItems : userNavItems;
   const isAdmin = user?.role === "admin";
   const roleThemeClass = isAdmin ? "admin-ops-theme" : "user-theme";
-  const sidebarClass = isAdmin ? "border-blue-900 bg-slate-950" : "border-slate-800 bg-slate-900";
-  const brandTitleClass = isAdmin ? "text-blue-300" : "text-orange-500";
+  const sidebarClass = isAdmin ? "border-orange-700 bg-orange-300" : "border-slate-800 bg-slate-900";
+  const brandTitleClass = isAdmin ? "text-black" : "text-orange-500";
   const activeNavClass = isAdmin
-    ? "border-blue-500 bg-slate-900 text-blue-300"
+    ? "border-black bg-orange-400 text-black"
     : "border-orange-500 bg-slate-800 text-orange-400";
   const logoutButtonClass = isAdmin
-    ? "border-blue-800 bg-transparent text-slate-200 hover:border-blue-500 hover:text-blue-300"
+    ? "border-black bg-orange-400 text-black hover:bg-orange-500"
     : "border-slate-700 bg-transparent text-slate-200 hover:border-orange-500 hover:text-orange-500";
 
   return (
     <div className={`${roleThemeClass} h-screen overflow-hidden bg-slate-950 text-slate-100`} data-testid="panel-layout-wrapper">
       <div className="grid h-full grid-cols-1 md:grid-cols-[240px_1fr]">
-        <aside className={`border-r p-4 ${sidebarClass}`} data-testid="sidebar-panel">
+        <aside className={`flex h-full flex-col border-r p-4 ${sidebarClass}`} data-testid="sidebar-panel">
           <div className="mb-6">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-400" data-testid="brand-kicker">Trading Engine</p>
             <h1 className={`text-xl font-bold uppercase tracking-tight ${brandTitleClass}`} data-testid="brand-title">Industrial Cockpit</h1>
             <p className="mt-2 text-xs text-slate-300" data-testid="active-user-role">Aktif Rol: {user?.role}</p>
           </div>
 
-          <nav className="space-y-2" data-testid="sidebar-navigation">
+          <nav className="flex-1 space-y-2 overflow-y-auto pr-1" data-testid="sidebar-navigation">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -101,7 +103,7 @@ export const PanelLayout = () => {
             className={`mt-8 w-full ${logoutButtonClass}`}
             onClick={() => {
               logout();
-              navigate("/login");
+              navigate(isAdmin ? "/admin/login" : "/user/login");
             }}
             data-testid="logout-button"
           >

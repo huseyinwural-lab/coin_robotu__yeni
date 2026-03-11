@@ -26,7 +26,7 @@ export const LoginPage = () => {
       } else {
         const user = await login(form);
         toast.success("Giriş başarılı");
-        navigate(user.role === "admin" ? "/app/admin" : "/app/user");
+        navigate(user.role === "admin" ? "/admin/dashboard" : "/user/dashboard");
       }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "İşlem başarısız");

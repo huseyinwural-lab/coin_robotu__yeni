@@ -31,8 +31,9 @@ export const AuthProvider = ({ children }) => {
     hydrate();
   }, [token]);
 
-  const login = async ({ email, password }) => {
-    const { data } = await apiClient.post("/auth/login", { email, password });
+  const login = async ({ email, password, panel = "user" }) => {
+    const loginEndpoint = panel === "admin" ? "/auth/login/admin" : "/auth/login/user";
+    const { data } = await apiClient.post(loginEndpoint, { email, password });
     localStorage.setItem("token", data.access_token);
     setAuthToken(data.access_token);
     setToken(data.access_token);
@@ -41,7 +42,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async ({ email, password }) => {
-    await apiClient.post("/auth/register", { email, password });
+    const { data } = await apiClient.post("/auth/register", { email, password });
+    return data;
   };
 
   const logout = () => {

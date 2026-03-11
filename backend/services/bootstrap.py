@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 
 from core.config import settings
 from core.security import hash_password
@@ -21,6 +22,11 @@ def _seed_admin(db: Session):
 
     existing_admin = db.query(User).filter(User.email == settings.default_admin_email).first()
     if existing_admin:
+        existing_admin.is_active = True
+        existing_admin.approval_status = "approved"
+        existing_admin.approval_requested_at = existing_admin.approval_requested_at or datetime.now(timezone.utc)
+        existing_admin.approved_at = existing_admin.approved_at or datetime.now(timezone.utc)
+        db.commit()
         return
 
     admin = User(
@@ -28,6 +34,9 @@ def _seed_admin(db: Session):
         password_hash=hash_password(settings.default_admin_password),
         role=UserRole.ADMIN,
         is_active=True,
+        approval_status="approved",
+        approval_requested_at=datetime.now(timezone.utc),
+        approved_at=datetime.now(timezone.utc),
     )
     db.add(admin)
     db.commit()
