@@ -99,8 +99,8 @@ class TestPhase4Iter5EnvAwareReleaseGate:
         assert response.status_code == 200
         data = response.json()
         assert "override_active" in data
-        assert "override_expires_at" in data or data["override_active"] == False
-        assert "override_id" in data or data["override_active"] == False
+        assert "override_expires_at" in data or (not data["override_active"])
+        assert "override_id" in data or (not data["override_active"])
 
     # A3: Script output parsing - PASS_WITH_OVERRIDE output format
     def test_script_output_pass_with_override_format(self):

@@ -317,6 +317,50 @@
   - `/app/backend/tests/test_phase4_iter4_override_readiness.py`
   - Not: valid Binance key olmadığı için gerçek fill lifecycle bu turda **MOCKED/BLOCKED** doğrulandı.
 
+### 2026-03-11 (Faz-4 İterasyon-5 — Env-aware Gate + Evidence Lifecycle + Operability)
+- **A1 Environment-aware release gate** tamamlandı:
+  - `run_release_gate_check.sh` artık `--env=stage|prod` zorunlu alır
+  - `--env` verilmezse hard fail (`missing required argument: --env`, non-zero exit)
+  - stage/prod policy matrix aktif:
+    - Stage score eşikleri: `<40 BLOCKED`, `40-60 WARN`, `>=60 PASS`
+    - Prod score eşikleri: `<60 BLOCKED`, `60-75 WARN`, `>=75 PASS`
+- **A2 Gate policy matrix** backend/CLI katmanına taşındı:
+  - değerlendirilen alanlar: `exchange_health`, `execution_quality_score`, `permission_drift_alert`, `active_override`, `live_mode_enabled`
+  - çıktı statüleri: `PASS | PASS_WITH_OVERRIDE | WARN | BLOCKED`
+  - release gate endpoint environment-aware oldu: `GET /api/phase4/admin/release-gate?environment=stage|prod`
+- **A3 CI entegrasyonu** hazırlandı:
+  - wrapper scriptler eklendi:
+    - `/app/scripts/ci_stage_gate.sh`
+    - `/app/scripts/ci_prod_gate.sh`
+  - script parse çıktısı:
+    - `release_gate_status=...`
+    - `environment=...`
+    - `reason_code=...`
+    - override varsa `override_expires_at=...`
+- **A4 Override countdown + auto-refresh** eklendi:
+  - `/admin/monitoring` override kartında kalan süre badge + progress bar
+  - son 5 dk warning state
+  - operability bar: `auto-refresh` ve `page_visible`
+  - aktif override varken 15sn polling, aksi halde 30sn
+- **B1/B2/B3/B4 User execution kanıt hattı** güçlendirildi:
+  - readiness endpoint genişletildi (`validation_snapshot_id` dahil)
+  - `POST /api/exchange/test-order` blocked durumunda normalized `failure_code` döner
+  - failure normalization sözlüğü aktif: `invalid_key, permission_denied, ip_restricted, testnet_unreachable, insufficient_balance, exchange_rejected, stale_validation, unknown_exchange_error`
+  - yeni evidence endpoint: `GET /api/exchange/lifecycle-evidence/latest`
+  - execution persistence alanları genişletildi (client order id, submitted/ack/final timestamps, raw status, validation snapshot korelasyonu)
+  - lifecycle timeline olay tablosu eklendi (`execution_lifecycle_events`)
+- **C HTML/CSS operability standardizasyonu**:
+  - monitoring operability bar + override status kartı sertleştirildi
+  - user tarafında readiness/failure/evidence kartları tutarlı state modeliyle hizalandı
+- Migrationlar:
+  - `20260311_0009_execution_evidence_fields.py`
+  - SQLite fallback uyumluluğu için `db.py` tarafına kritik sütun/tablolar için güvenli bootstrap eklendi
+- Testler:
+  - `/app/test_reports/iteration_14.json` (backend 27/27 pass, frontend 100%)
+  - `/app/backend/tests/test_phase4_iter5_env_aware_release_gate.py`
+  - `/app/test_reports/pytest/pytest_results_iter14_phase4_iter5.xml`
+  - Not: valid Binance testnet key olmadığı için gerçek fill doğrulaması bu turda da **MOCKED/BLOCKED** akışla test edildi.
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
@@ -342,7 +386,7 @@
 
 ## 7) Next Tasks List
 1. Geçerli testnet key ile ilk order sonucu (filled/partial/cancelled) ve slippage doğrulamasını canlı testte tamamla
-2. Hardening checklist trendini alarm geçmişiyle birlikte operasyonel eşiklere bağla
+2. Hardening checklist trendini alarm geçmişiyle operasyonel eşiklere bağla
 3. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
 4. Permission drift için kritik alarm eşikleri + bildirim yönlendirmesi ekle
-5. Release gate scriptini stage/prod CI pipeline adımlarına environment-aware bağla
+5. Valid key sonrası lifecycle evidence panelinde gerçek NEW/PARTIAL/FILLED kanıtını finalize et
