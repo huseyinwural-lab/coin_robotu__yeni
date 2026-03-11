@@ -85,6 +85,28 @@
   - `/app/backend/tests/test_phase3_admin_policy_engine.py`
   - Retest: `/app/test_reports/iteration_4.json` (UI/API scope: temiz)
 
+### 2026-03-11 (Faz-3 İterasyon-2 — Çoklu Exposure + State Machine Görünürlüğü)
+- Kullanıcı kararı: **kapanış seviyesi c** (backend motorlar + adminde minimum işlevsel görünürlük)
+- Risk motoru çoklu exposure group modeline genişletildi:
+  - `majors` (BTC, ETH)
+  - `high_beta_alts` (SOL, AVAX, LINK)
+  - `mid_cap` (fallback)
+- Global directional crowding + group open limit + group directional limit + group risk budget kontrolleri eklendi
+- Execution state machine için `execution_state_transitions` tablosu eklendi (Alembic revision `20260311_0002`)
+- Paper execution akışında state path kaydı aktif: `created -> submitted -> acknowledged -> ...`
+- Hardening çekirdek metrikleri genişletildi:
+  - idempotency keys /5m
+  - duplicate blocked /5m
+  - websocket reconnect /5m
+  - execution transitions /5m
+  - failed events pending/dead
+- Admin görünürlüğü artırıldı:
+  - **Execution States** sayfası eklendi (state transition tablosu + hardening özet kartları)
+  - Simülasyon endpointi eklendi: `/api/admin-phase3/execution-state-transitions/simulate`
+  - Monitoring ekranı hardening metrikleriyle genişletildi
+- Testler:
+  - `/app/test_reports/iteration_5.json` (backend+frontend, %100 pass)
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
@@ -95,10 +117,10 @@
 
 ### P1
 - Strategy param validasyonları ve Basic/Advanced user modları
-- Correlation/cluster exposure kontrolü (BTC-ETH-SOL benzer risk kümeleri)
+- Correlation/cluster exposure kontrolünün gerçek korelasyon matrisi ile güçlendirilmesi
 - Session protection: cooldown + frequency limit + günlük PnL gate
 - Monitoring detayları: per-symbol latency, dead-letter benzeri failed-event kuyruğu
-- Unified exposure modelinden çoklu exposure group modeline geçiş (majors/high-beta/mid-cap)
+- Hardening metriklerinin kalıcı snapshot/raporlanabilir hale getirilmesi
 
 ### P2
 - Bybit/OKX adapter stubları
@@ -107,8 +129,8 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Risk engine’i tek-gruptan çoklu exposure gruplarına genişlet (majors/high-beta/mid-cap)
-2. Execution engine state machine adımlarını policy’ye bağlı granular hale getir
-3. Hardening checklist endpoint/rapor ekranını ekle (idempotency, duplicate-protection, reconnect test sonuçları)
-4. Backtest card’ları kullanıcı tarafında read-only karar destek ekranına taşı
-5. Canlı emir öncesi dry-run senaryoları için otomatik test paketini artır
+1. Execution state machine’i `rejected/failed/timeout/partial` senaryolarında policy-driven koşullarla daha detaylılaştır
+2. Hardening checklist ekranını skor bazlı hale getir (pass/fail + son test zamanı)
+3. Exposure kontrollerine korelasyon matrisi tabanlı cluster risk ölçümü ekle
+4. Backtest card’ları user panelde read-only karar destek modülüne taşı
+5. Canlı emir öncesi dry-run otomasyon senaryolarını genişlet ve release-gate kriteri tanımla
