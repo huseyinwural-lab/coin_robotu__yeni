@@ -497,6 +497,40 @@
   - `/app/backend/tests/test_phase5_iter3_execution_dualmode_replay.py` (22/22 pass)
   - Smoke ve API self-testler: dual-mode UI + replay run/detail + venue-context test-order doğrulandı
 
+### 2026-03-11 (Faz-5 İterasyon-4 — Lifecycle Proof Orchestration + Immutable Execution + Replay Risk Summary)
+- Kullanıcı karar seti uygulandı: **1B, 2B, 3B, 4B**
+- **Görev-1 (Lifecycle Proof):**
+  - Yeni orchestrator endpoint: `POST /api/exchange/lifecycle-proof`
+  - Pipeline davranışı:
+    - Önce live proof denemesi (`binance/futures/testnet`)
+    - Key blokajında machine-readable blocker üretimi
+    - Otomatik fallback replay evidence üretimi
+  - Artifact çıktıları:
+    - `exchange_evidence_{...}.json` (live veya blocked)
+    - `fallback_replay_evidence_{...}.json` (non-live kanıt)
+  - `evidence_type` alanı ile ayrım kesinleştirildi: `live_exchange | fallback_replay | blocked`
+- **Görev-2 (Immutable Execution):**
+  - `ExecutionMetric` satırı SQLAlchemy `before_update` hook ile immutable yapıldı
+  - Yeni append-only event modeli: `execution_correction_events`
+  - Yeni API’ler:
+    - `POST /api/exchange/execution/{execution_id}/corrections`
+    - `GET /api/exchange/execution/{execution_id}/corrections`
+  - Update yerine correction-event akışı devreye alındı
+- **Görev-3 (Replay → Risk Policy Feedback):**
+  - Replay equity eğrisi persist edildi (`replay_equity_points`)
+  - Yeni endpoint: `GET /api/backtest/replay/{run_id}/risk-summary`
+  - Risk metrikleri: `max_drawdown`, `sharpe`, `win_rate`, `profit_factor`, `avg_slippage_bps`, `volatility_bucket`, `regime_bucket_distribution`, `exposure_breach_count`, `risk_reject_count`
+  - Deterministic export: `replay_risk_summary_{run_id}.json` (`schema_version` zorunlu)
+- Ek API uyumluluğu:
+  - Alias endpoint eklendi: `POST /api/exchange/execution/order` (mevcut test-order contract delegasyonu)
+- Migration/DB güncellemeleri:
+  - Alembic: `20260311_0013_execution_immutability_and_replay_risk.py`
+  - Yeni tablolar: `execution_correction_events`, `replay_equity_points`
+- Testler:
+  - `/app/test_reports/iteration_19.json` (backend/frontend pass)
+  - `/app/backend/tests/test_phase5_iter4_lifecycle_immutable_risk.py` (5/5 pass)
+  - Regression: iter3 test seti tekrar koşuldu (22/22 pass)
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
@@ -523,7 +557,7 @@
 
 ## 7) Next Tasks List
 1. Geçerli testnet key ile gerçek order evidence (NEW/PARTIAL/FILLED/CANCELED) finalize et
-2. Replay backend sonuçlarını risk-policy denetim kayıtlarıyla ilişkilendir (audit + policy feedback)
-3. Backtest/Replay için admin/user sonuç filtreleme ve export endpointleri
+2. Lifecycle proof orchestrator çıktısını admin panelde kanıt panosuna bağla (live vs fallback etiketli)
+3. Replay risk summary metriklerini risk-policy denetim kayıtlarıyla ilişkilendir (audit + policy feedback)
 4. Hardening trend eşiklerini active alerts ile operasyonel policy’ye bağla
 5. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
