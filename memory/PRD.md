@@ -791,3 +791,34 @@
 ### Not (Provider Constraint)
 - `ALERT_FROM=admin@platform.dev` değeri Resend domain doğrulaması yapılmadığı için doğrudan gönderimde `domain not verified` hatası üretir.
 - `ALERT_TO` alanında yazım düzeltmesi (`huseyinwural@gmail.com`) ile hesap sahibi test alıcısına başarılı gönderim doğrulandı.
+
+## 10) 2026-03-11 — Spot Strategy Engine Faz-1 (P0) Uygulandı
+
+### Uygulanan P0 Omurga
+- **Daily Spot Tradable Universe**: Binance spot verisinden günlük universe yenileme (`/api/spot-strategy/universe/refresh`) + `spot_universe.json` artefact üretimi.
+- **Market Data Collector (15m)**: Universe sembolleri için `market_data_store:{symbol}:15m` cache akışı ve **min 500 candle** bootstrap.
+- **Indicator Layer**: EMA50, EMA200, RSI14, ATR14, VWAP hesaplama ve symbol bazlı cache (`/api/spot-strategy/indicators/{symbol}`).
+- **Signal Engine**: Spot trend-pullback long mantığı (trend/pullback/RSI/volume spike/volatility) + skor alanları.
+- **Risk + Position Control**: Spot pullback için %1 risk yaklaşımı, TP/SL (2%/1%), max open positions=3, max per symbol=1.
+- **Paper Execution Lifecycle Hooks**: Trade open/close audit eventleri (`TRADE_OPENED`, `TRADE_CLOSED`, `STOP_LOSS_TRIGGERED`, `TAKE_PROFIT_TRIGGERED`) eklendi.
+- **Performance Logger**: `daily_strategy_report.json` üretimi + endpoint (`/api/spot-strategy/report/daily/generate`).
+
+### Yeni API Yüzeyi
+- `GET /api/spot-strategy/universe`
+- `POST /api/spot-strategy/universe/refresh`
+- `GET /api/spot-strategy/market-data/{symbol}`
+- `GET /api/spot-strategy/indicators/{symbol}`
+- `POST /api/spot-strategy/scan/run`
+- `GET /api/spot-strategy/scan/latest`
+- `POST /api/spot-strategy/report/daily/generate`
+- `GET /api/spot-strategy/report/daily`
+
+### Test Durumu
+- Testing agent: `/app/test_reports/iteration_25.json` → **11/11 PASS** (backend).
+- Deep backend test: **16/16 PASS**.
+
+### P1 (Sıradaki Güçlendirme)
+1. TrendStrength + BTCRegime hard gate’lerini execution selection katmanına taşımak.
+2. RelativeVolume + PullbackQuality skorlarının slot bazlı sıralama kararına bağlanması.
+3. `max_open_positions` altında en yüksek skorlu sinyali seçen selection layer.
+4. BTC hostile freeze guard (2 candle freeze) ve rapor metriklerine etkisinin izlenmesi.
