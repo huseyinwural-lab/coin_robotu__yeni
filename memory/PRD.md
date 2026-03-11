@@ -107,6 +107,27 @@
 - Testler:
   - `/app/test_reports/iteration_5.json` (backend+frontend, %100 pass)
 
+### 2026-03-11 (Faz-3 İterasyon-3 — Policy Branching + Hardening Gate)
+- Kullanıcı seçimleri: **1-d, 2-b, 3-a**
+- Policy-driven state machine branch davranışları derinleştirildi:
+  - filled
+  - timeout -> fallback_submitted -> filled
+  - rejected
+  - failed
+- Admin simulate endpointi outcome bazlı hale getirildi (`filled/timeout/rejected/failed`) ve allow-list doğrulaması eklendi
+- Yeni model/migration: `hardening_checklist_runs` (Alembic revision `20260311_0003`)
+- Hardening checklist kritik kapı mantığı aktif:
+  - kritik maddelerden biri fail ise skor `<=59` sınırına kilitlenir
+  - readiness status `blocked`
+- Yeni admin ekranı: **Hardening Checklist**
+  - run butonu
+  - score/readiness/critical blocked kartları
+  - item bazlı pass/fail tablo görünümü
+- Execution States ekranı outcome bazlı simülasyon butonları ile genişletildi
+- Test raporları:
+  - `/app/test_reports/iteration_6.json`
+  - minor bulgular giderildi (threshold iyileştirmesi + simulate allow-list validation)
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
@@ -121,6 +142,7 @@
 - Session protection: cooldown + frequency limit + günlük PnL gate
 - Monitoring detayları: per-symbol latency, dead-letter benzeri failed-event kuyruğu
 - Hardening metriklerinin kalıcı snapshot/raporlanabilir hale getirilmesi
+- Hardening checklist trend analizi (run history grafiği + regresyon alarmı)
 
 ### P2
 - Bybit/OKX adapter stubları
@@ -129,8 +151,8 @@
 - İnce ayar UX optimizasyonları ve onboarding akışları
 
 ## 7) Next Tasks List
-1. Execution state machine’i `rejected/failed/timeout/partial` senaryolarında policy-driven koşullarla daha detaylılaştır
-2. Hardening checklist ekranını skor bazlı hale getir (pass/fail + son test zamanı)
-3. Exposure kontrollerine korelasyon matrisi tabanlı cluster risk ölçümü ekle
-4. Backtest card’ları user panelde read-only karar destek modülüne taşı
-5. Canlı emir öncesi dry-run otomasyon senaryolarını genişlet ve release-gate kriteri tanımla
+1. Exposure gruplarında korelasyon matrisi + sektör/tema bazlı cluster sınıflandırmayı ekle
+2. Hardening checklist run geçmişi için trend ekranı ve alarm eşikleri oluştur
+3. Execution state machine’e partial-fill miktar simulasyonu ve retry budget tüketimi ekle
+4. Backtest kartlarını user panelde read-only karar destek modülüne taşı
+5. Canlı emir öncesi dry-run otomasyon senaryolarını release-gate pipeline’a bağla

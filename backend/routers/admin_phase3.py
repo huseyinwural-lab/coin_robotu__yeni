@@ -317,6 +317,19 @@ def simulate_execution_state_flow(
     side: str = Query(default="long"),
     outcome: str = Query(default="filled"),
 ):
+    allowed_outcomes = {"filled", "timeout", "rejected", "failed"}
+    allowed_sides = {"long", "short"}
+    if outcome not in allowed_outcomes:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid outcome. Allowed: {sorted(allowed_outcomes)}",
+        )
+    if side.lower() not in allowed_sides:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid side. Allowed: {sorted(allowed_sides)}",
+        )
+
     bot = (
         db.query(BotProfile)
         .filter(BotProfile.strategy_type == strategy_type)

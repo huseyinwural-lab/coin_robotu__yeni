@@ -20,25 +20,37 @@ def run_hardening_checklist(db: Session) -> HardeningChecklistRun:
     monitoring = pipeline_runtime.monitoring_snapshot(db)
     transitions_count = db.query(ExecutionStateTransition).count()
     audit_count = db.query(AuditLog).count()
+    activity_window = (
+        monitoring["signal_rate_last_5m"]
+        + monitoring["paper_trades_last_5m"]
+        + monitoring["execution_transitions_5m"]
+    )
+
+    idempotency_ok = monitoring["idempotency_keys_5m"] > 0 if activity_window > 0 else True
+    duplicate_ok = (
+        0 <= monitoring["duplicate_signals_blocked_5m"] <= max(monitoring["idempotency_keys_5m"], 0)
+        if activity_window > 0
+        else True
+    )
 
     items = [
         _item(
             "idempotency_protection",
             "Idempotency protection active",
             True,
-            monitoring["idempotency_keys_5m"] >= 0,
+            idempotency_ok,
             monitoring["idempotency_keys_5m"],
-            ">= 0",
-            "Signal anahtarları üretilebiliyor olmalı.",
+            "> 0 when activity > 0",
+            "Aktif pencerede idempotency key üretimi zorunlu.",
         ),
         _item(
             "duplicate_blocking",
             "Duplicate signal blocking active",
             True,
-            monitoring["duplicate_signals_blocked_5m"] >= 0,
+            duplicate_ok,
             monitoring["duplicate_signals_blocked_5m"],
-            ">= 0",
-            "Duplicate koruma mekanizması izlenebilir olmalı.",
+            "0 <= blocked <= idempotency_keys when activity > 0",
+            "Duplicate bloklama idempotency üretimiyle tutarlı olmalı.",
         ),
         _item(
             "websocket_resilience",
