@@ -276,6 +276,47 @@
   - `/app/test_reports/pytest/pytest_results_iter12_phase4_iter3.xml`
   - Not: valid Binance testnet key olmadan gerçek fill doğrulaması bu turda **BLOCKED** bırakıldı (beklenen güvenli davranış)
 
+### 2026-03-11 (Faz-4 İterasyon-4 — Override + Readiness + UI Sertleştirme)
+- Admin manual override mekanizması eklendi (admin-only):
+  - `POST /api/phase4/admin/release-gate/override`
+  - `reason_code` enum zorunlu: `false_positive | exchange_incident | ops_emergency | manual_review`
+  - `reason_note` zorunlu, min 12 karakter
+  - default TTL 30 dk, max 60 dk
+  - sadece `BLOCKED` gate durumunda override açılabilir
+- Override audit trail tamamlandı:
+  - yeni tablo: `release_gate_overrides`
+  - alanlar: `override_id, admin_user_id, release_gate_snapshot, override_reason(code+note), created_at, expires_at, revoked_at, deploy_context, used_deploy_count`
+  - revoke endpoint: `POST /api/phase4/admin/release-gate/override/{override_id}/revoke`
+- Release gate sonucu override-aware hale getirildi:
+  - aktif override varsa `PASS_WITH_OVERRIDE`
+  - deploy runner script bu durumda exit `0`, BLOCKED’de exit `2`
+  - CLI deploy kullanımında active override `used_deploy_count` artırılır
+- User readiness checklist tamamlandı:
+  - endpoint: `GET /api/exchange/readiness-checklist`
+  - stale threshold: **10 dk**
+  - durumlar: `awaiting_valid_key`, `ready_for_test_order`, `blocked`
+- User test-order güvenli bloklama korunarak sertleştirildi:
+  - `POST /api/exchange/test-order` readiness uygun değilse detaylı `status` ile 400 döner
+  - valid key yoksa net mesaj: *awaiting valid key*
+- Admin monitoring genişletildi (tek panel yaklaşımı):
+  - Release Gate Override Status
+  - Override History
+  - Override Analytics (günlük blocked/override/override-deploy)
+  - Hardening Checklist Trend
+  - Alert History
+  - Permission Drift Trend (7/30 toggle) korunarak devam
+- User panel görsel/etkileşim sertleştirme:
+  - readiness checklist card
+  - failure reason banner
+  - action state machine (`disabled/validating/ready/blocked/executing`)
+  - test-order sonuç kartı (status, exchange order id, fill, qty, slippage, time, volatility, strategy, validation timestamp)
+- Migration:
+  - `20260311_0008_release_gate_override_and_validation_snapshot.py`
+- Testler:
+  - `/app/test_reports/iteration_13.json` (backend 26/26 pass, frontend 100%)
+  - `/app/backend/tests/test_phase4_iter4_override_readiness.py`
+  - Not: valid Binance key olmadığı için gerçek fill lifecycle bu turda **MOCKED/BLOCKED** doğrulandı.
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
@@ -301,7 +342,7 @@
 
 ## 7) Next Tasks List
 1. Geçerli testnet key ile ilk order sonucu (filled/partial/cancelled) ve slippage doğrulamasını canlı testte tamamla
-2. Hardening checklist trendini grafik + alarm geçmişi ile zenginleştir
+2. Hardening checklist trendini alarm geçmişiyle birlikte operasyonel eşiklere bağla
 3. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
-4. Permission drift için kritik alarm eşikleri ve alert routing (admin-only override) ekle
-5. Release gate’i CI ortam değişkenleri ile stage/prod ayrımlı hale getir
+4. Permission drift için kritik alarm eşikleri + bildirim yönlendirmesi ekle
+5. Release gate scriptini stage/prod CI pipeline adımlarına environment-aware bağla
