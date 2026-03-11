@@ -17,8 +17,19 @@ def open_paper_position(
     leverage: int,
     stop_loss: float,
     take_profit: float,
+    execution_policy: dict,
     response_payload: dict,
 ) -> PaperPosition:
+    enriched_payload = {
+        **response_payload,
+        "execution_policy": execution_policy,
+        "state_machine": {
+            "previous": "created",
+            "current": "filled",
+            "path": ["created", "submitted", "acknowledged", "filled"],
+        },
+    }
+
     execution_event = ExecutionEvent(
         bot_profile_id=bot.id,
         exchange=bot.exchange,
@@ -27,7 +38,7 @@ def open_paper_position(
         quantity=quantity,
         mock_price=market_price,
         execution_status="filled",
-        response_payload=response_payload,
+        response_payload=enriched_payload,
         note="Paper trading execution",
     )
     db.add(execution_event)
@@ -60,6 +71,7 @@ def open_paper_position(
                 "quantity": quantity,
                 "direction": direction,
                 "execution_event_id": execution_event.id,
+                "execution_policy": execution_policy,
             },
         )
     )

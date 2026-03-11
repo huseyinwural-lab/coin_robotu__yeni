@@ -4,9 +4,10 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from core.config import settings
-from db import Base, engine, run_auto_migrations
+from db import Base, engine
 from routers import (
     admin_control,
+    admin_phase3,
     audit_logs,
     auth,
     bot_profiles,
@@ -18,8 +19,10 @@ from routers import (
     strategy_templates,
 )
 from services.bootstrap import seed_default_admin
+from services.migration_service import run_alembic_upgrade
 from services.pipeline.runtime import pipeline_runtime
 from services.realtime.socket_gateway import create_socket_app
+from services.state_rebuild_service import run_state_rebuild
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,8 +37,8 @@ api_router = APIRouter(prefix="/api")
 @api_router.get("/")
 def api_root():
     return {
-        "message": "Algorithmic trading platform phase-2 pipeline is running",
-        "phase": "2-b",
+        "message": "Algorithmic trading platform phase-3 hardening core is running",
+        "phase": "3-iter1",
         "execution_mode": "paper",
     }
 
@@ -48,6 +51,7 @@ api_router.include_router(strategy_templates.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(exchange.router)
 api_router.include_router(admin_control.router)
+api_router.include_router(admin_phase3.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(paper_positions.router)
 
@@ -64,11 +68,18 @@ fastapi_app.add_middleware(
 
 @fastapi_app.on_event("startup")
 async def startup_event():
+    run_alembic_upgrade()
     Base.metadata.create_all(bind=engine)
-    run_auto_migrations()
     seed_default_admin()
+    from db import SessionLocal
+
+    db_session = SessionLocal()
+    try:
+        run_state_rebuild(db_session, trigger_source="startup")
+    finally:
+        db_session.close()
     await pipeline_runtime.start()
-    logger.info("Platform startup complete with Phase-2 pipeline runtime")
+    logger.info("Platform startup complete with Phase-3 hardening runtime")
 
 
 @fastapi_app.on_event("shutdown")

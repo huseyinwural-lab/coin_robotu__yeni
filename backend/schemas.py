@@ -237,3 +237,117 @@ class PipelineMonitoringResponse(BaseModel):
     latency_ms: float
     queue_depth: int
     active_bots_running: int
+
+
+class ExecutionPolicyBase(BaseModel):
+    strategy_type: str
+    execution_style: str
+    order_preference: str
+    timeout_seconds: int = Field(ge=1, le=120)
+    fallback_behavior: str
+    partial_fill_tolerance_pct: float = Field(ge=0, le=100)
+    execution_urgency: str
+    retry_limit: int = Field(ge=0, le=10)
+    is_active: bool = True
+
+
+class ExecutionPolicyCreate(ExecutionPolicyBase):
+    pass
+
+
+class ExecutionPolicyUpdate(ExecutionPolicyBase):
+    pass
+
+
+class ExecutionPolicyResponse(ExecutionPolicyBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class RiskExposureGroupBase(BaseModel):
+    name: str
+    label: str
+    symbols: list[str]
+    max_group_open_positions: int = Field(ge=1, le=200)
+    max_group_directional_positions: int = Field(ge=1, le=200)
+    max_group_risk_pct: float = Field(ge=1, le=100)
+
+
+class RiskExposureGroupCreate(RiskExposureGroupBase):
+    pass
+
+
+class RiskExposureGroupUpdate(RiskExposureGroupBase):
+    pass
+
+
+class RiskExposureGroupResponse(RiskExposureGroupBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class FailedEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    event_type: str
+    entity_type: str
+    entity_id: str
+    payload: dict
+    error_message: str
+    status: str
+    retry_count: int
+    max_retry: int
+    next_retry_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    resolved_at: datetime | None
+
+
+class StateRebuildLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    rebuild_type: str
+    status: str
+    trigger_source: str
+    details: dict
+    started_at: datetime
+    finished_at: datetime | None
+
+
+class BacktestResultCardBase(BaseModel):
+    strategy_type: str
+    market_type: str
+    timeframe: str
+    sample_size: int = Field(ge=1)
+    win_rate: float = Field(ge=0, le=100)
+    max_drawdown: float = Field(ge=0, le=100)
+    profit_factor: float = Field(ge=0)
+    sharpe_like_score: float
+    performance_summary: str
+    risk_label: str
+    period_start: str
+    period_end: str
+
+
+class BacktestResultCardCreate(BacktestResultCardBase):
+    pass
+
+
+class BacktestResultCardUpdate(BacktestResultCardBase):
+    pass
+
+
+class BacktestResultCardResponse(BacktestResultCardBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    created_at: datetime
+    updated_at: datetime

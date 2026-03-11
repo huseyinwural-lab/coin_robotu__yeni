@@ -173,3 +173,84 @@ class PositionLedgerEvent(Base):
     event_type: Mapped[str] = mapped_column(String(30))
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ExecutionPolicy(Base):
+    __tablename__ = "execution_policies"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    strategy_type: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    execution_style: Mapped[str] = mapped_column(String(20), default="balanced")
+    order_preference: Mapped[str] = mapped_column(String(20), default="limit_first")
+    timeout_seconds: Mapped[int] = mapped_column(Integer, default=8)
+    fallback_behavior: Mapped[str] = mapped_column(String(30), default="market_fallback")
+    partial_fill_tolerance_pct: Mapped[float] = mapped_column(Float, default=50)
+    execution_urgency: Mapped[str] = mapped_column(String(20), default="medium")
+    retry_limit: Mapped[int] = mapped_column(Integer, default=2)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class RiskExposureGroup(Base):
+    __tablename__ = "risk_exposure_groups"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    label: Mapped[str] = mapped_column(String(120))
+    symbols: Mapped[list[str]] = mapped_column(JSON, default=list)
+    max_group_open_positions: Mapped[int] = mapped_column(Integer, default=4)
+    max_group_directional_positions: Mapped[int] = mapped_column(Integer, default=3)
+    max_group_risk_pct: Mapped[float] = mapped_column(Float, default=20)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class FailedEvent(Base):
+    __tablename__ = "failed_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_type: Mapped[str] = mapped_column(String(50), index=True)
+    entity_type: Mapped[str] = mapped_column(String(50))
+    entity_id: Mapped[str] = mapped_column(String(120), index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    error_message: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_retry: Mapped[int] = mapped_column(Integer, default=5)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class StateRebuildLog(Base):
+    __tablename__ = "state_rebuild_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    rebuild_type: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20), default="started")
+    trigger_source: Mapped[str] = mapped_column(String(30), default="startup")
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BacktestResultCard(Base):
+    __tablename__ = "backtest_result_cards"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    strategy_type: Mapped[str] = mapped_column(String(50), index=True)
+    market_type: Mapped[str] = mapped_column(String(20), default="spot")
+    timeframe: Mapped[str] = mapped_column(String(10), default="15m")
+    sample_size: Mapped[int] = mapped_column(Integer, default=100)
+    win_rate: Mapped[float] = mapped_column(Float, default=0)
+    max_drawdown: Mapped[float] = mapped_column(Float, default=0)
+    profit_factor: Mapped[float] = mapped_column(Float, default=1)
+    sharpe_like_score: Mapped[float] = mapped_column(Float, default=0)
+    performance_summary: Mapped[str] = mapped_column(Text, default="")
+    risk_label: Mapped[str] = mapped_column(String(20), default="medium")
+    period_start: Mapped[str] = mapped_column(String(30), default="")
+    period_end: Mapped[str] = mapped_column(String(30), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

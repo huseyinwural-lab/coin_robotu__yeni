@@ -1,4 +1,17 @@
-import { Activity, BarChart3, ClipboardList, Globe, ShieldAlert, TestTube2, TrendingUp, UserCog } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  BarChartBig,
+  ClipboardList,
+  Globe,
+  History,
+  Settings2,
+  ShieldAlert,
+  TestTube2,
+  TrendingUp,
+  UserCog,
+} from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +29,11 @@ const userNavItems = [
 const adminOnlyItems = [
   { to: "/app/admin", label: "Admin Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
   { to: "/app/market-universe", label: "Market Universe", icon: Globe, testId: "nav-market-universe-link" },
+  { to: "/app/execution-policies", label: "Execution Policies", icon: Settings2, testId: "nav-execution-policies-link" },
+  { to: "/app/exposure-groups", label: "Exposure Groups", icon: ShieldAlert, testId: "nav-exposure-groups-link" },
+  { to: "/app/failed-events", label: "Failed Events", icon: AlertTriangle, testId: "nav-failed-events-link" },
+  { to: "/app/state-rebuild", label: "State Rebuild Logs", icon: History, testId: "nav-state-rebuild-link" },
+  { to: "/app/backtest-cards", label: "Backtest Cards", icon: BarChartBig, testId: "nav-backtest-cards-link" },
   { to: "/app/monitoring", label: "Monitoring", icon: Activity, testId: "nav-monitoring-link" },
   { to: "/app/audit-logs", label: "Audit Logs", icon: ClipboardList, testId: "nav-audit-logs-link" },
 ];
