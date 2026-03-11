@@ -839,6 +839,61 @@ class DecisionResultResponse(BaseModel):
     decision_hash: str
 
 
+class RuntimeDispatchRequest(BaseModel):
+    strategy_id: str
+    decision_context: DecisionContextInput
+
+
+class RuntimeEventEnvelopeResponse(BaseModel):
+    event_id: str
+    event_type: str
+    correlation_id: str
+    causation_id: str | None
+    partition_key: str
+    created_at: str
+    schema_version: str
+    ordering: int
+    payload: dict
+    payload_hash: str
+
+
+class ExecutionIntentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    intent_id: str
+    strategy_id: str
+    strategy_version_id: str
+    symbol: str
+    side: str
+    order_type: str
+    quantity: float
+    price_reference: dict
+    decision_hash: str
+    context_hash: str
+    intent_hash: str
+    correlation_id: str
+    status: str
+    created_at: datetime
+
+
+class ExecutionIntentEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    intent_id: str
+    event_type: str
+    event_status: str
+    external_order_id: str | None
+    payload: dict
+    created_at: datetime
+
+
+class RuntimeDispatchResponse(BaseModel):
+    decision_result: DecisionResultResponse
+    execution_intent: dict | None
+    emitted_events: list[RuntimeEventEnvelopeResponse]
+
+
 class UserPortfolioOverviewResponse(BaseModel):
     current_capital: float
     available_balance: float

@@ -1,0 +1,103 @@
+{
+  "summary": "Faz-6.3 Runtime Skeleton complete testing. All 28 backend tests passed. Frontend /admin/strategies page runtime controls working correctly: Dispatch Runtime creates intents and emits events, Worker Run Once processes events idempotently, Hot/Cold trace stores functional.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_faz63_runtime_skeleton.py",
+    "/app/test_reports/pytest/pytest_results_iter22_faz63_runtime.xml",
+    "/app/test_reports/artifacts_iter22/admin_strategies_top.jpeg",
+    "/app/test_reports/artifacts_iter22/admin_strategies_runtime_views.jpeg",
+    "/app/test_reports/artifacts_iter22/admin_dispatch_result.jpeg",
+    "/app/test_reports/artifacts_iter22/admin_worker_result.jpeg",
+    "/app/test_reports/artifacts_iter22/admin_runtime_views_bottom.jpeg"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Redis event bus envelope contains all required fields: event_id, event_type, correlation_id, causation_id, partition_key, created_at, schema_version, payload, payload_hash",
+    "Event types chain working: decision.produced -> execution.intent.created/rejected -> execution.order.submission_requested -> execution.order.submitted -> execution.order.updated/finalized",
+    "DecisionResult -> ExecutionIntent mapper: REJECT/HOLD no intent + rejected event, BUY/SELL/CLOSE creates immutable intent",
+    "ExecutionIntent immutability enforced via SQLAlchemy @event.listens_for(ExecutionIntent, 'before_update') raising ValueError('execution_intent_immutable')",
+    "Status transitions tracked via execution_intent_events table (event_type, event_status, external_order_id, payload)",
+    "Worker idempotency via PROCESSED_EVENTS_SET Redis set + is_event_processed/mark_event_processed functions",
+    "Paper/mock adapter boundary generates lifecycle states: NEW -> PARTIALLY_FILLED -> FILLED/CANCELED/REJECTED",
+    "DecisionTraceHot stores context_payload, decision_payload, intent_payload with 48-hour expires_at TTL",
+    "DecisionTraceCold stores lifecycle_summary and terminal_state after worker processes",
+    "InMemoryRedis fallback available when Redis unavailable"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_faz63_runtime_skeleton.py"
+  ],
+  "success_rate": {
+    "backend": "100% (28/28 tests passed)",
+    "frontend": "100% (All runtime controls working: Dispatch, Worker, Hot/Cold traces)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!"
+  },
+  "seed_data_creation": "Multiple strategy definitions and intents created during testing (codes: faz63-test-*, reg-*, det-*)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Faz-6.3 Runtime Skeleton features fully tested. Key behaviors verified: (1) Redis event bus contract with all required envelope fields, (2) Event types chain from decision.produced through finalized, (3) DecisionResult mapper creating intents for BUY/SELL/CLOSE only, (4) ExecutionIntent immutability with before_update blocker, (5) Worker idempotency via processed events set, (6) Paper adapter lifecycle states, (7) Hot/Cold trace storage, (8) Regression 6.1/6.2 endpoints still working. Runtime uses MOCKED paper exchange adapter by design.",
+  "features_verified": {
+    "event_bus_contract": {
+      "envelope_fields": ["event_id", "event_type", "correlation_id", "causation_id", "partition_key", "created_at", "schema_version", "payload", "payload_hash"],
+      "ordering": "Auto-incrementing via Redis INCR on runtime:events:ordering",
+      "storage": "rpush to runtime:events:{event_type} and runtime:events:all"
+    },
+    "event_types_chain": {
+      "decision.produced": "Emitted on every dispatch",
+      "execution.intent.created": "Emitted when BUY/SELL/CLOSE action creates intent",
+      "execution.intent.rejected": "Emitted for REJECT/HOLD actions with reason_codes",
+      "execution.order.submission_requested": "Emitted after intent created for worker processing",
+      "execution.order.submitted": "Emitted by worker after paper adapter submit",
+      "execution.order.updated": "Emitted for non-terminal lifecycle states",
+      "execution.order.finalized": "Emitted for terminal states (FILLED/CANCELED/REJECTED)"
+    },
+    "decision_to_intent_mapper": {
+      "REJECT": "No intent, emits execution.intent.rejected",
+      "HOLD": "No intent, emits execution.intent.rejected with hold_noop",
+      "BUY": "Creates immutable intent with side=BUY",
+      "SELL": "Creates immutable intent with side=SELL",
+      "CLOSE": "Creates immutable intent with side=CLOSE"
+    },
+    "execution_intent_immutability": {
+      "enforcement": "SQLAlchemy before_update event listener raises ValueError('execution_intent_immutable')",
+      "status_tracking": "Via execution_intent_events table with event_type and event_status"
+    },
+    "endpoints": {
+      "POST /api/strategy-domain/admin/runtime/dispatch": "Dispatches decision to runtime bus, returns decision_result, execution_intent, emitted_events",
+      "POST /api/strategy-domain/admin/runtime/worker/run-once": "Processes one submission_requested event idempotently",
+      "GET /api/strategy-domain/admin/runtime/intents": "Lists ExecutionIntents (limit 100)",
+      "GET /api/strategy-domain/admin/runtime/intents/{id}/events": "Lists ExecutionIntentEvents for intent",
+      "GET /api/strategy-domain/admin/runtime/hot-traces": "Lists DecisionTraceHot (limit 100)",
+      "GET /api/strategy-domain/admin/runtime/cold-traces": "Lists DecisionTraceCold (limit 100)"
+    },
+    "paper_mock_adapter": {
+      "submit_order": "Generates deterministic lifecycle based on intent_hash seed",
+      "lifecycle_states": ["NEW", "PARTIALLY_FILLED", "FILLED", "CANCELED", "REJECTED"],
+      "external_order_id": "paper-{intent_hash[:16]}"
+    },
+    "hot_cold_storage": {
+      "hot_trace": "Written on dispatch with 48-hour TTL via expires_at",
+      "cold_trace": "Written by worker with terminal_state and lifecycle_summary"
+    },
+    "regression_6.1_6.2": {
+      "GET /admin/strategies": "Working",
+      "POST /admin/strategies": "Working",
+      "GET /admin/strategies/{id}": "Working",
+      "POST /admin/strategies/{id}/versions": "Working",
+      "POST /admin/strategies/{id}/activate/{version_id}": "Working",
+      "POST /admin/strategies/{id}/archive": "Working",
+      "GET /admin/registry/active": "Working",
+      "POST /admin/kernel/evaluate": "Working"
+    }
+  },
+  "mocked_api_note": "Paper/mock exchange adapter intentionally used for runtime skeleton phase. No live exchange submit. Uses PaperExchangeAdapter class with deterministic lifecycle generation based on intent_hash seed."
+}

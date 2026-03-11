@@ -6,10 +6,15 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
-from models import StrategyDefinition, StrategyVersion, User
+from models import DecisionTraceCold, DecisionTraceHot, ExecutionIntent, ExecutionIntentEvent, StrategyDefinition, StrategyVersion, User
 from schemas import (
     DecisionContextInput,
     DecisionResultResponse,
+    ExecutionIntentEventResponse,
+    ExecutionIntentResponse,
+    RuntimeDispatchRequest,
+    RuntimeDispatchResponse,
+    RuntimeEventEnvelopeResponse,
     StrategyDefinitionCreate,
     StrategyDefinitionResponse,
     StrategyDetailResponse,
@@ -18,6 +23,7 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.decision_kernel_service import build_context_hash, build_decision_hash, evaluate_decision_context
+from services.runtime_execution_service import dispatch_decision_result, process_submission_event_once
 from services.strategy_domain_service import (
     activate_strategy_version,
     archive_strategy,
@@ -211,3 +217,67 @@ def admin_evaluate_kernel(
 
     decision = evaluate_decision_context(context_payload)
     return DecisionResultResponse(decision_id=str(uuid.uuid4()), **decision)
+
+
+@router.post("/admin/runtime/dispatch", response_model=RuntimeDispatchResponse)
+def admin_dispatch_runtime(
+    payload: RuntimeDispatchRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    context = payload.decision_context.model_dump()
+    decision = admin_evaluate_kernel(context, current_admin=current_admin, db=db)
+
+    decision_dict = decision.model_dump()
+    correlation_id = payload.decision_context.correlation_id
+    decision_result, execution_intent, emitted = dispatch_decision_result(
+        db,
+        strategy_id=payload.strategy_id,
+        correlation_id=correlation_id,
+        decision_result=decision_dict,
+        context_payload=context,
+    )
+    return RuntimeDispatchResponse(
+        decision_result=DecisionResultResponse(**decision_result),
+        execution_intent=execution_intent,
+        emitted_events=[RuntimeEventEnvelopeResponse(**item) for item in emitted],
+    )
+
+
+@router.post("/admin/runtime/worker/run-once")
+def admin_run_worker_once(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    result = process_submission_event_once(db)
+    return result or {"status": "no_event"}
+
+
+@router.get("/admin/runtime/intents", response_model=list[ExecutionIntentResponse])
+def admin_list_execution_intents(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    return db.query(ExecutionIntent).order_by(ExecutionIntent.created_at.desc()).limit(100).all()
+
+
+@router.get("/admin/runtime/intents/{intent_id}/events", response_model=list[ExecutionIntentEventResponse])
+def admin_intent_events(intent_id: str, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    return (
+        db.query(ExecutionIntentEvent)
+        .filter(ExecutionIntentEvent.intent_id == intent_id)
+        .order_by(ExecutionIntentEvent.created_at.asc())
+        .all()
+    )
+
+
+@router.get("/admin/runtime/hot-traces")
+def admin_hot_traces(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    rows = db.query(DecisionTraceHot).order_by(DecisionTraceHot.created_at.desc()).limit(100).all()
+    return [{"trace_id": row.trace_id, "correlation_id": row.correlation_id, "context_hash": row.context_hash, "decision_hash": row.decision_hash, "intent_hash": row.intent_hash, "expires_at": row.expires_at, "created_at": row.created_at} for row in rows]
+
+
+@router.get("/admin/runtime/cold-traces")
+def admin_cold_traces(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    rows = db.query(DecisionTraceCold).order_by(DecisionTraceCold.created_at.desc()).limit(100).all()
+    return [{"archive_id": row.archive_id, "correlation_id": row.correlation_id, "context_hash": row.context_hash, "decision_hash": row.decision_hash, "intent_hash": row.intent_hash, "terminal_state": row.terminal_state, "created_at": row.created_at} for row in rows]

@@ -38,6 +38,11 @@ export const AdminStrategiesPage = () => {
   const [versionForm, setVersionForm] = useState(versionSeed);
   const [decisionResult, setDecisionResult] = useState(null);
   const [kernelContextText, setKernelContextText] = useState(JSON.stringify(kernelContextSeed(), null, 2));
+  const [runtimeDispatchResult, setRuntimeDispatchResult] = useState(null);
+  const [workerResult, setWorkerResult] = useState(null);
+  const [runtimeIntents, setRuntimeIntents] = useState([]);
+  const [hotTraces, setHotTraces] = useState([]);
+  const [coldTraces, setColdTraces] = useState([]);
 
   const selectedActiveVersion = useMemo(
     () => detail?.versions?.find((item) => item.version_id === detail?.strategy?.active_version_id) || detail?.versions?.[0],
@@ -147,6 +152,55 @@ export const AdminStrategiesPage = () => {
     }
   };
 
+  const loadRuntimeViews = useCallback(async () => {
+    try {
+      const [intentsRes, hotRes, coldRes] = await Promise.all([
+        apiClient.get("/strategy-domain/admin/runtime/intents"),
+        apiClient.get("/strategy-domain/admin/runtime/hot-traces"),
+        apiClient.get("/strategy-domain/admin/runtime/cold-traces"),
+      ]);
+      setRuntimeIntents(intentsRes.data || []);
+      setHotTraces(hotRes.data || []);
+      setColdTraces(coldRes.data || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Runtime görünümü yüklenemedi");
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRuntimeViews();
+  }, [loadRuntimeViews]);
+
+  const dispatchRuntime = async () => {
+    if (!selectedStrategyId) {
+      toast.error("Önce strategy seçin");
+      return;
+    }
+    try {
+      const contextPayload = JSON.parse(kernelContextText);
+      const { data } = await apiClient.post("/strategy-domain/admin/runtime/dispatch", {
+        strategy_id: selectedStrategyId,
+        decision_context: contextPayload,
+      });
+      setRuntimeDispatchResult(data);
+      toast.success("Decision runtime bus’a dispatch edildi");
+      await loadRuntimeViews();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Runtime dispatch başarısız");
+    }
+  };
+
+  const runWorkerOnce = async () => {
+    try {
+      const { data } = await apiClient.post("/strategy-domain/admin/runtime/worker/run-once");
+      setWorkerResult(data);
+      toast.success("Worker run-once çalıştı");
+      await loadRuntimeViews();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Worker run-once başarısız");
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="admin-strategies-page">
       <header className="border border-orange-700 bg-slate-900 p-4" data-testid="admin-strategies-header">
@@ -220,6 +274,11 @@ export const AdminStrategiesPage = () => {
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-kernel-evaluate-title">Deterministic Kernel Evaluate</p>
         <textarea className="h-52 w-full border border-slate-700 bg-slate-950 p-2 text-sm" value={kernelContextText} onChange={(e) => setKernelContextText(e.target.value)} data-testid="admin-kernel-context-textarea" />
         <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={evaluateKernel} data-testid="admin-kernel-evaluate-button">Evaluate Context</Button>
+        <div className="flex flex-wrap gap-2" data-testid="admin-runtime-actions-row">
+          <Button className="bg-emerald-500 text-black hover:bg-emerald-600" onClick={dispatchRuntime} data-testid="admin-runtime-dispatch-button">Dispatch Runtime</Button>
+          <Button variant="outline" className="border-slate-500 text-slate-200" onClick={runWorkerOnce} data-testid="admin-runtime-worker-run-once-button">Worker Run Once</Button>
+          <Button variant="outline" className="border-slate-500 text-slate-200" onClick={loadRuntimeViews} data-testid="admin-runtime-refresh-button">Refresh Runtime Views</Button>
+        </div>
 
         {decisionResult && (
           <div className="border border-slate-700 p-3" data-testid="admin-kernel-result-card">
@@ -230,6 +289,58 @@ export const AdminStrategiesPage = () => {
             <p className="text-xs text-slate-400 break-all" data-testid="admin-kernel-result-decision-hash">decision_hash: {decisionResult.decision_hash}</p>
           </div>
         )}
+
+        {runtimeDispatchResult && (
+          <div className="border border-slate-700 p-3" data-testid="admin-runtime-dispatch-result-card">
+            <p className="text-sm" data-testid="admin-runtime-dispatch-intent-id">intent_id: {runtimeDispatchResult?.execution_intent?.intent_id || "-"}</p>
+            <p className="text-sm" data-testid="admin-runtime-dispatch-events-count">emitted_events: {(runtimeDispatchResult?.emitted_events || []).length}</p>
+          </div>
+        )}
+
+        {workerResult && (
+          <div className="border border-slate-700 p-3" data-testid="admin-runtime-worker-result-card">
+            <p className="text-sm" data-testid="admin-runtime-worker-result-status">status: {workerResult.status}</p>
+            <p className="text-xs text-slate-400" data-testid="admin-runtime-worker-result-event-id">event_id: {workerResult.event_id || "-"}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3" data-testid="admin-runtime-views-grid">
+        <div className="border border-slate-800 bg-slate-900 p-4" data-testid="admin-runtime-intents-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-runtime-intents-title">Execution Intents</p>
+          <div className="mt-3 space-y-2" data-testid="admin-runtime-intents-list">
+            {runtimeIntents.map((item) => (
+              <div key={item.intent_id} className="border border-slate-700 p-2" data-testid={`admin-runtime-intent-row-${item.intent_id}`}>
+                <p className="text-xs" data-testid={`admin-runtime-intent-symbol-${item.intent_id}`}>{item.symbol} · {item.side}</p>
+                <p className="text-xs text-slate-400" data-testid={`admin-runtime-intent-hash-${item.intent_id}`}>{item.intent_hash}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border border-slate-800 bg-slate-900 p-4" data-testid="admin-runtime-hot-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-runtime-hot-title">Hot Trace Store</p>
+          <div className="mt-3 space-y-2" data-testid="admin-runtime-hot-list">
+            {hotTraces.map((item) => (
+              <div key={item.trace_id} className="border border-slate-700 p-2" data-testid={`admin-runtime-hot-row-${item.trace_id}`}>
+                <p className="text-xs" data-testid={`admin-runtime-hot-correlation-${item.trace_id}`}>{item.correlation_id}</p>
+                <p className="text-xs text-slate-400" data-testid={`admin-runtime-hot-decision-hash-${item.trace_id}`}>{item.decision_hash}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border border-slate-800 bg-slate-900 p-4" data-testid="admin-runtime-cold-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-runtime-cold-title">Cold Trace Archive</p>
+          <div className="mt-3 space-y-2" data-testid="admin-runtime-cold-list">
+            {coldTraces.map((item) => (
+              <div key={item.archive_id} className="border border-slate-700 p-2" data-testid={`admin-runtime-cold-row-${item.archive_id}`}>
+                <p className="text-xs" data-testid={`admin-runtime-cold-terminal-${item.archive_id}`}>{item.terminal_state}</p>
+                <p className="text-xs text-slate-400" data-testid={`admin-runtime-cold-intent-hash-${item.archive_id}`}>{item.intent_hash || "-"}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   );

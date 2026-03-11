@@ -1,0 +1,40 @@
+{
+  "evidence_type": "blocked",
+  "lifecycle_proof_status": "blocked",
+  "proof_id": "da196389-6fca-4185-93d8-88f73f45afae_20260311131544",
+  "exchange": "binance",
+  "market_type": "futures",
+  "environment": "testnet",
+  "reason_codes": [
+    "stale_validation_snapshot"
+  ],
+  "readiness": {
+    "readiness_status": "blocked",
+    "has_api_key": true,
+    "has_api_secret": true,
+    "validation_success": false,
+    "can_trade": false,
+    "is_testnet_environment": true,
+    "is_validation_stale": true,
+    "validation_timestamp": "2026-03-11 10:41:16.483945+00:00",
+    "validation_snapshot_id": "09d41fcc-9e99-457f-b238-08441a4aa7ab",
+    "stale_after_minutes": 10,
+    "last_error_reason": "stale_validation_snapshot",
+    "exchange": "binance",
+    "market_type": "futures",
+    "environment": "testnet",
+    "capability_match": true
+  },
+  "generated_at": "2026-03-11T13:15:44.620710+00:00",
+  "schema_version": "1.0",
+  "metadata": {
+    "schema_version": "1.0",
+    "artifact_type": "exchange_evidence",
+    "created_at": "2026-03-11T13:15:44.624204+00:00",
+    "artifact_id": "69f231d4-6fe0-4c0d-9a4a-39409ab0d49b",
+    "sha256": "45c6a414ed192d6d5203eac78ec233cab1f0f6f8577a9c0b6b214b8cdb56076d"
+  },
+  "artifact_type": "exchange_evidence",
+  "created_at": "2026-03-11T13:15:44.624204+00:00",
+  "sha256": "45c6a414ed192d6d5203eac78ec233cab1f0f6f8577a9c0b6b214b8cdb56076d"
+}

@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 class InMemoryRedis:
     def __init__(self):
         self._store: dict[str, str] = {}
+        self._lists: dict[str, list[str]] = {}
+        self._sets: dict[str, set[str]] = {}
 
     def set(self, key: str, value: str):
         self._store[key] = value
@@ -32,6 +34,50 @@ class InMemoryRedis:
         current += amount
         self._store[key] = str(current)
         return current
+
+    def rpush(self, key: str, value: str):
+        self._lists.setdefault(key, [])
+        self._lists[key].append(value)
+        return len(self._lists[key])
+
+    def lpop(self, key: str):
+        values = self._lists.get(key, [])
+        if not values:
+            return None
+        return values.pop(0)
+
+    def brpoplpush(self, source: str, destination: str, timeout: int = 0):
+        values = self._lists.get(source, [])
+        if not values:
+            return None
+        item = values.pop()
+        self._lists.setdefault(destination, [])
+        self._lists[destination].insert(0, item)
+        return item
+
+    def lrem(self, key: str, count: int, value: str):
+        values = self._lists.get(key, [])
+        removed = 0
+        if count >= 0:
+            indices = [idx for idx, item in enumerate(values) if item == value]
+            for idx in indices[:count if count > 0 else len(indices)]:
+                values[idx] = None
+                removed += 1
+            self._lists[key] = [item for item in values if item is not None]
+        return removed
+
+    def sadd(self, key: str, value: str):
+        self._sets.setdefault(key, set())
+        before = len(self._sets[key])
+        self._sets[key].add(value)
+        return 1 if len(self._sets[key]) > before else 0
+
+    def sismember(self, key: str, value: str):
+        return value in self._sets.get(key, set())
+
+    def expire(self, key: str, ttl_seconds: int):
+        _ = (key, ttl_seconds)
+        return True
 
 
 def _build_engine():
@@ -345,6 +391,84 @@ def _ensure_sqlite_phase4_columns():
                         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         version_hash VARCHAR(128) NOT NULL,
                         UNIQUE(strategy_id, version_number)
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS execution_intents (
+                        intent_id VARCHAR PRIMARY KEY,
+                        strategy_id VARCHAR NOT NULL,
+                        strategy_version_id VARCHAR NOT NULL,
+                        symbol VARCHAR(20) NOT NULL DEFAULT 'BTCUSDT',
+                        side VARCHAR(20) NOT NULL DEFAULT 'BUY',
+                        order_type VARCHAR(20) NOT NULL DEFAULT 'MARKET',
+                        quantity FLOAT NOT NULL DEFAULT 0,
+                        price_reference JSON NOT NULL DEFAULT '{}',
+                        decision_hash VARCHAR(128) NOT NULL,
+                        context_hash VARCHAR(128) NOT NULL,
+                        intent_hash VARCHAR(128) NOT NULL UNIQUE,
+                        correlation_id VARCHAR(120) NOT NULL,
+                        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS execution_intent_events (
+                        id VARCHAR PRIMARY KEY,
+                        intent_id VARCHAR NOT NULL,
+                        event_type VARCHAR(60) NOT NULL,
+                        event_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                        external_order_id VARCHAR(80),
+                        payload JSON NOT NULL DEFAULT '{}',
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS decision_trace_hot (
+                        trace_id VARCHAR PRIMARY KEY,
+                        correlation_id VARCHAR(120) NOT NULL,
+                        strategy_version_id VARCHAR NOT NULL,
+                        context_hash VARCHAR(128) NOT NULL,
+                        decision_hash VARCHAR(128) NOT NULL,
+                        intent_hash VARCHAR(128),
+                        context_payload JSON NOT NULL DEFAULT '{}',
+                        decision_payload JSON NOT NULL DEFAULT '{}',
+                        intent_payload JSON NOT NULL DEFAULT '{}',
+                        expires_at DATETIME NOT NULL,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS decision_trace_cold (
+                        archive_id VARCHAR PRIMARY KEY,
+                        correlation_id VARCHAR(120) NOT NULL,
+                        strategy_version_id VARCHAR NOT NULL,
+                        context_hash VARCHAR(128) NOT NULL,
+                        decision_hash VARCHAR(128) NOT NULL,
+                        intent_hash VARCHAR(128),
+                        artifact_id VARCHAR(80),
+                        lifecycle_summary JSON NOT NULL DEFAULT '{}',
+                        terminal_state VARCHAR(30) NOT NULL DEFAULT 'pending',
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                     )
                     """
                 )

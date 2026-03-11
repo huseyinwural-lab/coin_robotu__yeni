@@ -618,6 +618,68 @@ class StrategyVersion(Base):
     version_hash: Mapped[str] = mapped_column(String(128), index=True)
 
 
+class ExecutionIntent(Base):
+    __tablename__ = "execution_intents"
+
+    intent_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    strategy_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_definitions.strategy_id"), index=True)
+    strategy_version_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_versions.version_id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(20), default="BTCUSDT")
+    side: Mapped[str] = mapped_column(String(20), default="BUY")
+    order_type: Mapped[str] = mapped_column(String(20), default="MARKET")
+    quantity: Mapped[float] = mapped_column(Float, default=0)
+    price_reference: Mapped[dict] = mapped_column(JSON, default=dict)
+    decision_hash: Mapped[str] = mapped_column(String(128), index=True)
+    context_hash: Mapped[str] = mapped_column(String(128), index=True)
+    intent_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    correlation_id: Mapped[str] = mapped_column(String(120), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ExecutionIntentEvent(Base):
+    __tablename__ = "execution_intent_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    intent_id: Mapped[str] = mapped_column(String, ForeignKey("execution_intents.intent_id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(60), index=True)
+    event_status: Mapped[str] = mapped_column(String(20), default="pending")
+    external_order_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DecisionTraceHot(Base):
+    __tablename__ = "decision_trace_hot"
+
+    trace_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    correlation_id: Mapped[str] = mapped_column(String(120), index=True)
+    strategy_version_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_versions.version_id"), index=True)
+    context_hash: Mapped[str] = mapped_column(String(128), index=True)
+    decision_hash: Mapped[str] = mapped_column(String(128), index=True)
+    intent_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    context_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    decision_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    intent_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DecisionTraceCold(Base):
+    __tablename__ = "decision_trace_cold"
+
+    archive_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    correlation_id: Mapped[str] = mapped_column(String(120), index=True)
+    strategy_version_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_versions.version_id"), index=True)
+    context_hash: Mapped[str] = mapped_column(String(128), index=True)
+    decision_hash: Mapped[str] = mapped_column(String(128), index=True)
+    intent_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    artifact_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    lifecycle_summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    terminal_state: Mapped[str] = mapped_column(String(30), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 @event.listens_for(ExecutionMetric, "before_update", propagate=True)
 def _block_execution_metric_update(_, __, ___):
     raise ValueError("execution_metric_immutable")
@@ -626,3 +688,8 @@ def _block_execution_metric_update(_, __, ___):
 @event.listens_for(StrategyVersion, "before_update", propagate=True)
 def _block_strategy_version_update(_, __, ___):
     raise ValueError("strategy_version_immutable")
+
+
+@event.listens_for(ExecutionIntent, "before_update", propagate=True)
+def _block_execution_intent_update(_, __, ___):
+    raise ValueError("execution_intent_immutable")

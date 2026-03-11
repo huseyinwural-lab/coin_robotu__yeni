@@ -1,0 +1,36 @@
+{
+  "evidence_type": "fallback_replay",
+  "non_live_evidence": true,
+  "lifecycle_proof_status": "fallback_generated",
+  "proof_id": "da196389-6fca-4185-93d8-88f73f45afae_20260311131545",
+  "exchange": "binance",
+  "market_type": "futures",
+  "environment": "testnet",
+  "replay_run": {
+    "run_id": "cb774c5d-e585-4fe9-b828-181117ebc015",
+    "candles_processed": 180,
+    "executions_count": 130,
+    "filled_count": 46,
+    "canceled_count": 84,
+    "avg_simulated_latency_ms": 190.5454,
+    "avg_simulated_slippage_pct": 0.184209,
+    "status": "completed"
+  },
+  "lifecycle_distribution": {
+    "SIM_NEW": 130,
+    "SIM_FILLED": 46,
+    "SIM_CANCELED": 84
+  },
+  "generated_at": "2026-03-11T13:15:45.319375+00:00",
+  "schema_version": "1.0",
+  "metadata": {
+    "schema_version": "1.0",
+    "artifact_type": "fallback_replay_evidence",
+    "created_at": "2026-03-11T13:15:45.572874+00:00",
+    "artifact_id": "ace35cbd-c1c1-42e1-85cf-cddfbb51cec3",
+    "sha256": "f04494833598e1021291d1893cb7744a1b88f33f65f28f04754d717eaf5f83a5"
+  },
+  "artifact_type": "fallback_replay_evidence",
+  "created_at": "2026-03-11T13:15:45.572874+00:00",
+  "sha256": "f04494833598e1021291d1893cb7744a1b88f33f65f28f04754d717eaf5f83a5"
+}
