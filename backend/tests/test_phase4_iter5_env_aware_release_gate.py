@@ -370,7 +370,7 @@ class TestPhase4Iter5UserExchangeEndpoints:
 
     def test_exchange_validate_endpoint(self):
         """GET /api/exchange/validate returns validation result"""
-        response = self.session.get(f"{BASE_URL}/api/exchange/validate")
+        response = self.session.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=testnet")
         # May return error if no valid credentials
         assert response.status_code in [200, 400, 403, 503]
         data = response.json()

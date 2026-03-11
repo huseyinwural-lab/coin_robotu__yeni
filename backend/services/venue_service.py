@@ -66,10 +66,6 @@ def seed_binance_venue_registry(db: Session):
                     **payload,
                 )
             )
-        else:
-            for key, value in payload.items():
-                setattr(row, key, value)
-            row.updated_at = datetime.now(timezone.utc)
 
     allowed_defaults = [
         ("spot", "testnet", True),
@@ -98,9 +94,6 @@ def seed_binance_venue_registry(db: Session):
                     updated_at=datetime.now(timezone.utc),
                 )
             )
-        else:
-            row.enabled = enabled
-            row.updated_at = datetime.now(timezone.utc)
 
     db.commit()
 

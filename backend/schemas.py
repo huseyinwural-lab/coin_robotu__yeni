@@ -689,6 +689,18 @@ class ExchangeRegistryUpdate(BaseModel):
     adapter_version: str
 
 
+class ExchangeRegistryCreate(BaseModel):
+    exchange_code: str
+    exchange_name: str
+    status: str = "active"
+    supported_market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
+    supports_testnet: bool = True
+    supports_live: bool = False
+    health_status: str = "healthy"
+    rate_limit_status: str = "ok"
+    adapter_version: str = "v1"
+
+
 class ExchangeCapabilityResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -715,6 +727,19 @@ class ExchangeCapabilityUpdate(BaseModel):
     supports_hedge_mode: bool
 
 
+class ExchangeCapabilityCreate(BaseModel):
+    exchange_code: str
+    market_type: str
+    supports_spot: bool
+    supports_futures: bool
+    supports_test_order: bool
+    supports_quote_qty: bool
+    supports_reduce_only: bool
+    supports_leverage: bool
+    supports_margin_mode: bool
+    supports_hedge_mode: bool
+
+
 class AllowedMarketResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -728,6 +753,13 @@ class AllowedMarketResponse(BaseModel):
 
 class AllowedMarketToggle(BaseModel):
     enabled: bool
+
+
+class AllowedMarketCreate(BaseModel):
+    exchange_code: str
+    market_type: str
+    environment: str
+    enabled: bool = True
 
 
 class UserVenueAssignmentResponse(BaseModel):

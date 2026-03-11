@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
@@ -28,8 +28,20 @@ adapter = BinanceMockAdapter(redis_client)
 
 
 @router.get("/validate", response_model=ExchangeValidateResponse)
-def validate_exchange(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    payload, response_code = validate_exchange_credentials_for_user(db, current_user.id)
+def validate_exchange(
+    exchange: str = Query(...),
+    market_type: str = Query(...),
+    environment: str = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    payload, response_code = validate_exchange_credentials_for_user(
+        db,
+        current_user.id,
+        exchange=exchange,
+        market_type=market_type,
+        environment=environment,
+    )
     create_audit_log(
         db,
         action="exchange_validate_checked",
@@ -38,7 +50,7 @@ def validate_exchange(current_user: User = Depends(get_current_user), db: Sessio
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
         severity="warning" if response_code >= 400 else "info",
-        details=payload,
+        details={**payload, "requested_exchange": exchange, "requested_market_type": market_type, "requested_environment": environment},
     )
     if response_code >= 400:
         raise HTTPException(status_code=response_code, detail=payload)

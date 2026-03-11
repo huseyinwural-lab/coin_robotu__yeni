@@ -1,0 +1,88 @@
+{
+  "summary": "Phase-5 Iteration-2 Venue Expansion testing complete. All 34 backend tests passed (venue CRUD, validate endpoint with required params, user options, access check). Frontend verified: Admin Exchanges page renders with full CRUD for exchanges/capabilities/allowed-markets/user-assignments; User Exchange Settings page has venue selectors in Risk Settings and Test & Validation tabs; venue access check works after admin assignment.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Static assets loading", "issue": "Console shows 404 errors for favicon/static assets during page load - not API failures", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase5_iter2_venue_expansion.py",
+    "/app/test_reports/pytest/pytest_results_iter17_venue_expansion.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/exchange/validate now correctly REQUIRES exchange, market_type, environment query params (returns 422 if missing)",
+    "Validate response contract includes all required fields: exchange, market_type, environment, capability_match, reason_codes",
+    "User venue assignment upsert works correctly - admin can assign users to venues",
+    "User venue options endpoint returns filtered list based on assignments and allowed markets",
+    "No regression on existing key save, readiness cards, and test-order blocked state when key invalid/missing"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase5_iter2_venue_expansion.py"
+  ],
+  "success_rate": {
+    "backend": "100% (34/34 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!",
+    "user": "TEST_phase4iter4@example.com / TestPassword123!"
+  },
+  "seed_data_creation": "User venue assignment created for TEST_phase4iter4@example.com to binance (spot+futures, testnet)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase-5 Iteration-2 venue expansion features fully tested. Admin CRUD for exchanges/capabilities/allowed-markets/user-assignments all working. GET /api/exchange/validate requires exchange+market_type+environment params. User venue selectors exist in Risk Settings and Test & Validation tabs. Test user assigned to binance venue - access check shows venue_ready. No PostgreSQL/MongoDB issues found.",
+  "features_verified": {
+    "admin_exchanges_crud": {
+      "list_exchanges": "GET /api/venues/admin/exchanges returns list with binance seeded",
+      "create_exchange": "POST /api/venues/admin/exchanges creates new exchange (tested with TEST_kraken)",
+      "update_exchange": "PATCH /api/venues/admin/exchanges/{code} updates status/health/rate_limit/adapter_version",
+      "delete_exchange": "DELETE /api/venues/admin/exchanges/{code} cascade deletes capabilities/markets/assignments"
+    },
+    "admin_capabilities_crud": {
+      "list_capabilities": "GET /api/venues/admin/capabilities returns list with binance spot+futures",
+      "create_capability": "POST /api/venues/admin/capabilities creates new capability row",
+      "update_capability": "PUT /api/venues/admin/capabilities/{id} updates boolean flags",
+      "delete_capability": "DELETE /api/venues/admin/capabilities/{id} deletes capability"
+    },
+    "admin_allowed_markets_crud": {
+      "list_allowed_markets": "GET /api/venues/admin/allowed-markets returns list",
+      "create_allowed_market": "POST /api/venues/admin/allowed-markets creates new market config",
+      "toggle_allowed_market": "PUT /api/venues/admin/allowed-markets/{id} toggles enabled flag",
+      "delete_allowed_market": "DELETE /api/venues/admin/allowed-markets/{id} deletes market config"
+    },
+    "admin_user_assignments": {
+      "list_assignments": "GET /api/venues/admin/user-assignments returns list (supports ?user_id filter)",
+      "upsert_assignment": "PUT /api/venues/admin/user-assignments creates/updates user venue assignment",
+      "delete_assignment": "DELETE /api/venues/admin/user-assignments/{id} deletes assignment"
+    },
+    "exchange_validate_endpoint": {
+      "requires_exchange_param": "Returns 422 when exchange query param missing",
+      "requires_market_type_param": "Returns 422 when market_type query param missing",
+      "requires_environment_param": "Returns 422 when environment query param missing",
+      "response_contract": "Includes exchange, market_type, environment, capability_match, reason_codes"
+    },
+    "user_venue_endpoints": {
+      "venue_options": "GET /api/venues/options returns filtered venue options based on user assignments",
+      "access_check": "GET /api/venues/access-check returns allowed, venue_state, capability_match, reason_codes"
+    },
+    "frontend_ui": {
+      "admin_exchanges_page": "Full CRUD UI for exchanges, capabilities, allowed markets, user assignments",
+      "user_risk_settings_tab": "Venue selectors (exchange/market_type/environment) present and functional",
+      "user_test_validation_tab": "Venue selectors present, venue access panel shows real-time access check",
+      "test_order_blocked_state": "Properly shows awaiting_valid_key when credentials invalid"
+    },
+    "no_regression": {
+      "key_save": "PUT /api/phase4/exchange-settings still works",
+      "readiness_cards": "GET /api/exchange/readiness-checklist returns all expected fields",
+      "test_order_blocked": "POST /api/exchange/test-order returns 400 with failure_code when invalid"
+    }
+  },
+  "mocked_api_note": "No mocked APIs for venue CRUD - all endpoints are real PostgreSQL operations"
+}

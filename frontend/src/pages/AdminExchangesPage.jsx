@@ -1,0 +1,496 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { apiClient } from "@/lib/api";
+
+const exchangeSeedForm = {
+  exchange_code: "",
+  exchange_name: "",
+  status: "active",
+  spot: true,
+  futures: true,
+  supports_testnet: true,
+  supports_live: false,
+  health_status: "healthy",
+  rate_limit_status: "ok",
+  adapter_version: "v1",
+};
+
+const capabilitySeedForm = {
+  exchange_code: "binance",
+  market_type: "spot",
+  supports_spot: true,
+  supports_futures: false,
+  supports_test_order: true,
+  supports_quote_qty: true,
+  supports_reduce_only: false,
+  supports_leverage: false,
+  supports_margin_mode: false,
+  supports_hedge_mode: false,
+};
+
+const allowedMarketSeedForm = {
+  exchange_code: "binance",
+  market_type: "spot",
+  environment: "testnet",
+  enabled: true,
+};
+
+const assignmentSeedForm = {
+  user_id: "",
+  exchange_code: "binance",
+  spot_allowed: true,
+  futures_allowed: true,
+  testnet_allowed: true,
+  live_allowed: false,
+};
+
+const boolLabel = (value) => (value ? "true" : "false");
+
+export const AdminExchangesPage = () => {
+  const [loading, setLoading] = useState(true);
+  const [exchanges, setExchanges] = useState([]);
+  const [capabilities, setCapabilities] = useState([]);
+  const [allowedMarkets, setAllowedMarkets] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [approvedUsers, setApprovedUsers] = useState([]);
+  const [healthSummary, setHealthSummary] = useState(null);
+
+  const [exchangeDrafts, setExchangeDrafts] = useState({});
+  const [capabilityDrafts, setCapabilityDrafts] = useState({});
+
+  const [exchangeForm, setExchangeForm] = useState(exchangeSeedForm);
+  const [capabilityForm, setCapabilityForm] = useState(capabilitySeedForm);
+  const [allowedMarketForm, setAllowedMarketForm] = useState(allowedMarketSeedForm);
+  const [assignmentForm, setAssignmentForm] = useState(assignmentSeedForm);
+
+  const exchangeCodes = useMemo(() => exchanges.map((item) => item.exchange_code), [exchanges]);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [
+        exchangesRes,
+        capabilitiesRes,
+        allowedMarketsRes,
+        assignmentsRes,
+        usersRes,
+        healthRes,
+      ] = await Promise.all([
+        apiClient.get("/venues/admin/exchanges"),
+        apiClient.get("/venues/admin/capabilities"),
+        apiClient.get("/venues/admin/allowed-markets"),
+        apiClient.get("/venues/admin/user-assignments"),
+        apiClient.get("/auth/admin/user-approval-requests?status=approved"),
+        apiClient.get("/venues/admin/health-summary"),
+      ]);
+
+      const nextExchanges = exchangesRes.data || [];
+      const nextCapabilities = capabilitiesRes.data || [];
+
+      setExchanges(nextExchanges);
+      setCapabilities(nextCapabilities);
+      setAllowedMarkets(allowedMarketsRes.data || []);
+      setAssignments(assignmentsRes.data || []);
+      setApprovedUsers(usersRes.data || []);
+      setHealthSummary(healthRes.data || null);
+
+      setExchangeDrafts(
+        Object.fromEntries(
+          nextExchanges.map((row) => [
+            row.exchange_code,
+            {
+              status: row.status,
+              health_status: row.health_status,
+              rate_limit_status: row.rate_limit_status,
+              adapter_version: row.adapter_version,
+            },
+          ]),
+        ),
+      );
+
+      setCapabilityDrafts(
+        Object.fromEntries(
+          nextCapabilities.map((row) => [
+            row.id,
+            {
+              supports_test_order: row.supports_test_order,
+              supports_quote_qty: row.supports_quote_qty,
+              supports_reduce_only: row.supports_reduce_only,
+              supports_leverage: row.supports_leverage,
+              supports_margin_mode: row.supports_margin_mode,
+              supports_hedge_mode: row.supports_hedge_mode,
+            },
+          ]),
+        ),
+      );
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Venue yönetim verileri yüklenemedi");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  const updateExchangeDraft = (exchangeCode, key, value) => {
+    setExchangeDrafts((prev) => ({ ...prev, [exchangeCode]: { ...(prev[exchangeCode] || {}), [key]: value } }));
+  };
+
+  const updateCapabilityDraft = (id, key, value) => {
+    setCapabilityDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), [key]: value } }));
+  };
+
+  const createExchange = async (event) => {
+    event.preventDefault();
+    try {
+      await apiClient.post("/venues/admin/exchanges", {
+        exchange_code: exchangeForm.exchange_code,
+        exchange_name: exchangeForm.exchange_name,
+        status: exchangeForm.status,
+        supported_market_types: [exchangeForm.spot ? "spot" : "", exchangeForm.futures ? "futures" : ""].filter(Boolean),
+        supports_testnet: exchangeForm.supports_testnet,
+        supports_live: exchangeForm.supports_live,
+        health_status: exchangeForm.health_status,
+        rate_limit_status: exchangeForm.rate_limit_status,
+        adapter_version: exchangeForm.adapter_version,
+      });
+      toast.success("Exchange kaydı eklendi");
+      setExchangeForm(exchangeSeedForm);
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Exchange oluşturulamadı");
+    }
+  };
+
+  const updateExchange = async (exchangeCode) => {
+    try {
+      await apiClient.patch(`/venues/admin/exchanges/${exchangeCode}`, exchangeDrafts[exchangeCode]);
+      toast.success("Exchange güncellendi");
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Exchange güncellenemedi");
+    }
+  };
+
+  const deleteExchange = async (exchangeCode) => {
+    if (!window.confirm(`${exchangeCode} silinsin mi?`)) {
+      return;
+    }
+    try {
+      await apiClient.delete(`/venues/admin/exchanges/${exchangeCode}`);
+      toast.success("Exchange silindi");
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Exchange silinemedi");
+    }
+  };
+
+  const createCapability = async (event) => {
+    event.preventDefault();
+    try {
+      await apiClient.post("/venues/admin/capabilities", capabilityForm);
+      toast.success("Capability eklendi");
+      setCapabilityForm({ ...capabilitySeedForm, exchange_code: exchangeCodes[0] || "binance" });
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Capability oluşturulamadı");
+    }
+  };
+
+  const updateCapability = async (id) => {
+    try {
+      await apiClient.put(`/venues/admin/capabilities/${id}`, capabilityDrafts[id]);
+      toast.success("Capability güncellendi");
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Capability güncellenemedi");
+    }
+  };
+
+  const deleteCapability = async (id) => {
+    if (!window.confirm("Capability kaydı silinsin mi?")) {
+      return;
+    }
+    try {
+      await apiClient.delete(`/venues/admin/capabilities/${id}`);
+      toast.success("Capability silindi");
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Capability silinemedi");
+    }
+  };
+
+  const createAllowedMarket = async (event) => {
+    event.preventDefault();
+    try {
+      await apiClient.post("/venues/admin/allowed-markets", allowedMarketForm);
+      toast.success("Allowed market eklendi");
+      setAllowedMarketForm({ ...allowedMarketSeedForm, exchange_code: exchangeCodes[0] || "binance" });
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Allowed market oluşturulamadı");
+    }
+  };
+
+  const toggleAllowedMarket = async (row) => {
+    try {
+      await apiClient.put(`/venues/admin/allowed-markets/${row.id}`, { enabled: !row.enabled });
+      toast.success("Allowed market güncellendi");
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Allowed market güncellenemedi");
+    }
+  };
+
+  const deleteAllowedMarket = async (id) => {
+    if (!window.confirm("Allowed market kaydı silinsin mi?")) {
+      return;
+    }
+    try {
+      await apiClient.delete(`/venues/admin/allowed-markets/${id}`);
+      toast.success("Allowed market silindi");
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Allowed market silinemedi");
+    }
+  };
+
+  const upsertAssignment = async (event) => {
+    event.preventDefault();
+    try {
+      await apiClient.put("/venues/admin/user-assignments", assignmentForm);
+      toast.success("User assignment kaydedildi");
+      setAssignmentForm((prev) => ({ ...assignmentSeedForm, exchange_code: prev.exchange_code || exchangeCodes[0] || "binance" }));
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "User assignment kaydedilemedi");
+    }
+  };
+
+  const deleteAssignment = async (id) => {
+    if (!window.confirm("Assignment kaydı silinsin mi?")) {
+      return;
+    }
+    try {
+      await apiClient.delete(`/venues/admin/user-assignments/${id}`);
+      toast.success("User assignment silindi");
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "User assignment silinemedi");
+    }
+  };
+
+  return (
+    <section className="space-y-4" data-testid="admin-exchanges-page">
+      <header className="border border-orange-700 bg-slate-900 p-4" data-testid="admin-exchanges-header">
+        <h2 className="text-4xl font-black uppercase tracking-tight text-orange-300" data-testid="admin-exchanges-title">Venue Registry & Assignments</h2>
+        <p className="mt-2 text-sm text-slate-300" data-testid="admin-exchanges-description">
+          Exchange registry, capability matrix, allowed market policy ve kullanıcı assignment yönetimi.
+        </p>
+      </header>
+
+      <div className="grid gap-3 md:grid-cols-3" data-testid="admin-exchange-health-grid">
+        <div className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-exchange-health-status-card">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-exchange-health-title">Exchange Health</p>
+          {(Object.entries(healthSummary?.exchange_health || {})).map(([key, value]) => (
+            <p key={key} className="mt-1 text-sm" data-testid={`admin-exchange-health-item-${key}`}>{key}: {value}</p>
+          ))}
+        </div>
+        <div className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-exchange-market-availability-card">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-exchange-market-availability-title">Market Availability</p>
+          {(Object.entries(healthSummary?.market_availability || {})).slice(0, 6).map(([key, value]) => (
+            <p key={key} className="mt-1 text-sm" data-testid={`admin-exchange-market-availability-item-${key.replaceAll(":", "-")}`}>{key}: {boolLabel(value)}</p>
+          ))}
+        </div>
+        <div className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-exchange-capability-mismatch-card">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-exchange-capability-mismatch-title">Capability Mismatch</p>
+          {(healthSummary?.capability_mismatch || []).length === 0 && (
+            <p className="mt-1 text-sm text-emerald-300" data-testid="admin-exchange-capability-mismatch-empty">Mismatch yok</p>
+          )}
+          {(healthSummary?.capability_mismatch || []).map((item) => (
+            <p key={item} className="mt-1 text-sm text-yellow-300" data-testid={`admin-exchange-capability-mismatch-item-${item.replace(":", "-")}`}>{item}</p>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-exchanges-main-grid">
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-exchange-registry-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-exchange-registry-title">Exchange Registry CRUD</p>
+          <form className="grid gap-2 md:grid-cols-2" onSubmit={createExchange} data-testid="admin-exchange-create-form">
+            <Input value={exchangeForm.exchange_code} onChange={(event) => setExchangeForm((prev) => ({ ...prev, exchange_code: event.target.value }))} placeholder="exchange_code" data-testid="admin-exchange-create-code-input" required />
+            <Input value={exchangeForm.exchange_name} onChange={(event) => setExchangeForm((prev) => ({ ...prev, exchange_name: event.target.value }))} placeholder="exchange_name" data-testid="admin-exchange-create-name-input" required />
+            <label className="flex items-center gap-2 text-sm" data-testid="admin-exchange-create-spot-row"><input type="checkbox" checked={exchangeForm.spot} onChange={(event) => setExchangeForm((prev) => ({ ...prev, spot: event.target.checked }))} data-testid="admin-exchange-create-spot-checkbox" />spot</label>
+            <label className="flex items-center gap-2 text-sm" data-testid="admin-exchange-create-futures-row"><input type="checkbox" checked={exchangeForm.futures} onChange={(event) => setExchangeForm((prev) => ({ ...prev, futures: event.target.checked }))} data-testid="admin-exchange-create-futures-checkbox" />futures</label>
+            <label className="flex items-center gap-2 text-sm" data-testid="admin-exchange-create-testnet-row"><input type="checkbox" checked={exchangeForm.supports_testnet} onChange={(event) => setExchangeForm((prev) => ({ ...prev, supports_testnet: event.target.checked }))} data-testid="admin-exchange-create-testnet-checkbox" />supports_testnet</label>
+            <label className="flex items-center gap-2 text-sm" data-testid="admin-exchange-create-live-row"><input type="checkbox" checked={exchangeForm.supports_live} onChange={(event) => setExchangeForm((prev) => ({ ...prev, supports_live: event.target.checked }))} data-testid="admin-exchange-create-live-checkbox" />supports_live</label>
+            <Button className="md:col-span-2 bg-orange-500 text-black hover:bg-orange-600" data-testid="admin-exchange-create-submit-button">Exchange Ekle</Button>
+          </form>
+
+          {loading && <p className="text-sm text-slate-400" data-testid="admin-exchange-registry-loading">Yükleniyor...</p>}
+          <div className="space-y-3" data-testid="admin-exchange-registry-list">
+            {exchanges.map((row) => (
+              <div key={row.id} className="border border-slate-700 p-3" data-testid={`admin-exchange-row-${row.exchange_code}`}>
+                <p className="text-sm font-semibold" data-testid={`admin-exchange-row-title-${row.exchange_code}`}>{row.exchange_code} · {row.exchange_name}</p>
+                <p className="text-xs text-slate-400" data-testid={`admin-exchange-row-markets-${row.exchange_code}`}>{(row.supported_market_types || []).join(", ") || "-"}</p>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  <select value={exchangeDrafts[row.exchange_code]?.status || "active"} onChange={(event) => updateExchangeDraft(row.exchange_code, "status", event.target.value)} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid={`admin-exchange-status-select-${row.exchange_code}`}>
+                    <option value="active">active</option>
+                    <option value="maintenance">maintenance</option>
+                    <option value="disabled">disabled</option>
+                  </select>
+                  <select value={exchangeDrafts[row.exchange_code]?.health_status || "healthy"} onChange={(event) => updateExchangeDraft(row.exchange_code, "health_status", event.target.value)} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid={`admin-exchange-health-select-${row.exchange_code}`}>
+                    <option value="healthy">healthy</option>
+                    <option value="degraded">degraded</option>
+                    <option value="down">down</option>
+                  </select>
+                  <select value={exchangeDrafts[row.exchange_code]?.rate_limit_status || "ok"} onChange={(event) => updateExchangeDraft(row.exchange_code, "rate_limit_status", event.target.value)} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid={`admin-exchange-rate-limit-select-${row.exchange_code}`}>
+                    <option value="ok">ok</option>
+                    <option value="warning">warning</option>
+                    <option value="throttled">throttled</option>
+                  </select>
+                  <Input value={exchangeDrafts[row.exchange_code]?.adapter_version || "v1"} onChange={(event) => updateExchangeDraft(row.exchange_code, "adapter_version", event.target.value)} data-testid={`admin-exchange-adapter-version-input-${row.exchange_code}`} />
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={() => updateExchange(row.exchange_code)} data-testid={`admin-exchange-save-button-${row.exchange_code}`}>Kaydet</Button>
+                  <Button variant="outline" className="border-red-500 text-red-300" onClick={() => deleteExchange(row.exchange_code)} data-testid={`admin-exchange-delete-button-${row.exchange_code}`}>Sil</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-capability-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-capability-title">Capability CRUD</p>
+          <form className="grid gap-2 md:grid-cols-2" onSubmit={createCapability} data-testid="admin-capability-create-form">
+            <select value={capabilityForm.exchange_code} onChange={(event) => setCapabilityForm((prev) => ({ ...prev, exchange_code: event.target.value }))} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid="admin-capability-create-exchange-select">
+              {(exchangeCodes.length ? exchangeCodes : ["binance"]).map((code) => <option key={code} value={code}>{code}</option>)}
+            </select>
+            <select value={capabilityForm.market_type} onChange={(event) => setCapabilityForm((prev) => ({ ...prev, market_type: event.target.value }))} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid="admin-capability-create-market-type-select">
+              <option value="spot">spot</option>
+              <option value="futures">futures</option>
+            </select>
+            {[
+              "supports_spot",
+              "supports_futures",
+              "supports_test_order",
+              "supports_quote_qty",
+              "supports_reduce_only",
+              "supports_leverage",
+              "supports_margin_mode",
+              "supports_hedge_mode",
+            ].map((key) => (
+              <label key={key} className="flex items-center gap-2 text-sm" data-testid={`admin-capability-create-row-${key}`}>
+                <input type="checkbox" checked={Boolean(capabilityForm[key])} onChange={(event) => setCapabilityForm((prev) => ({ ...prev, [key]: event.target.checked }))} data-testid={`admin-capability-create-checkbox-${key}`} />{key}
+              </label>
+            ))}
+            <Button className="md:col-span-2 bg-orange-500 text-black hover:bg-orange-600" data-testid="admin-capability-create-submit-button">Capability Ekle</Button>
+          </form>
+
+          <div className="space-y-3" data-testid="admin-capability-list">
+            {capabilities.map((row) => (
+              <div key={row.id} className="border border-slate-700 p-3" data-testid={`admin-capability-row-${row.id}`}>
+                <p className="text-sm font-semibold" data-testid={`admin-capability-row-title-${row.id}`}>{row.exchange_code}:{row.market_type}</p>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  {["supports_test_order", "supports_quote_qty", "supports_reduce_only", "supports_leverage", "supports_margin_mode", "supports_hedge_mode"].map((key) => (
+                    <label key={key} className="flex items-center gap-2 text-sm" data-testid={`admin-capability-edit-row-${row.id}-${key}`}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(capabilityDrafts[row.id]?.[key])}
+                        onChange={(event) => updateCapabilityDraft(row.id, key, event.target.checked)}
+                        data-testid={`admin-capability-edit-checkbox-${row.id}-${key}`}
+                      />
+                      {key}
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={() => updateCapability(row.id)} data-testid={`admin-capability-save-button-${row.id}`}>Kaydet</Button>
+                  <Button variant="outline" className="border-red-500 text-red-300" onClick={() => deleteCapability(row.id)} data-testid={`admin-capability-delete-button-${row.id}`}>Sil</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-allowed-assignment-grid">
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-allowed-market-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-allowed-market-title">Allowed Markets CRUD</p>
+          <form className="grid gap-2 md:grid-cols-2" onSubmit={createAllowedMarket} data-testid="admin-allowed-market-create-form">
+            <select value={allowedMarketForm.exchange_code} onChange={(event) => setAllowedMarketForm((prev) => ({ ...prev, exchange_code: event.target.value }))} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid="admin-allowed-market-create-exchange-select">
+              {(exchangeCodes.length ? exchangeCodes : ["binance"]).map((code) => <option key={code} value={code}>{code}</option>)}
+            </select>
+            <select value={allowedMarketForm.market_type} onChange={(event) => setAllowedMarketForm((prev) => ({ ...prev, market_type: event.target.value }))} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid="admin-allowed-market-create-market-type-select">
+              <option value="spot">spot</option>
+              <option value="futures">futures</option>
+            </select>
+            <select value={allowedMarketForm.environment} onChange={(event) => setAllowedMarketForm((prev) => ({ ...prev, environment: event.target.value }))} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid="admin-allowed-market-create-environment-select">
+              <option value="testnet">testnet</option>
+              <option value="live">live</option>
+            </select>
+            <label className="flex items-center gap-2 text-sm" data-testid="admin-allowed-market-create-enabled-row">
+              <input type="checkbox" checked={allowedMarketForm.enabled} onChange={(event) => setAllowedMarketForm((prev) => ({ ...prev, enabled: event.target.checked }))} data-testid="admin-allowed-market-create-enabled-checkbox" />enabled
+            </label>
+            <Button className="md:col-span-2 bg-orange-500 text-black hover:bg-orange-600" data-testid="admin-allowed-market-create-submit-button">Allowed Market Ekle</Button>
+          </form>
+
+          <div className="space-y-3" data-testid="admin-allowed-market-list">
+            {allowedMarkets.map((row) => (
+              <div key={row.id} className="border border-slate-700 p-3" data-testid={`admin-allowed-market-row-${row.id}`}>
+                <p className="text-sm" data-testid={`admin-allowed-market-name-${row.id}`}>{row.exchange_code}:{row.market_type}:{row.environment}</p>
+                <p className="text-xs text-slate-400" data-testid={`admin-allowed-market-enabled-${row.id}`}>enabled={boolLabel(row.enabled)}</p>
+                <div className="mt-2 flex gap-2">
+                  <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={() => toggleAllowedMarket(row)} data-testid={`admin-allowed-market-toggle-button-${row.id}`}>{row.enabled ? "Disable" : "Enable"}</Button>
+                  <Button variant="outline" className="border-red-500 text-red-300" onClick={() => deleteAllowedMarket(row.id)} data-testid={`admin-allowed-market-delete-button-${row.id}`}>Sil</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-user-assignment-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-user-assignment-title">User Assignment Matrix</p>
+          <form className="grid gap-2 md:grid-cols-2" onSubmit={upsertAssignment} data-testid="admin-user-assignment-form">
+            <select value={assignmentForm.user_id} onChange={(event) => setAssignmentForm((prev) => ({ ...prev, user_id: event.target.value }))} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid="admin-user-assignment-user-select" required>
+              <option value="">Kullanıcı seç</option>
+              {approvedUsers.map((user) => (
+                <option key={user.id} value={user.id}>{user.email}</option>
+              ))}
+            </select>
+            <select value={assignmentForm.exchange_code} onChange={(event) => setAssignmentForm((prev) => ({ ...prev, exchange_code: event.target.value }))} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid="admin-user-assignment-exchange-select">
+              {(exchangeCodes.length ? exchangeCodes : ["binance"]).map((code) => <option key={code} value={code}>{code}</option>)}
+            </select>
+            {[
+              ["spot_allowed", "spot_allowed"],
+              ["futures_allowed", "futures_allowed"],
+              ["testnet_allowed", "testnet_allowed"],
+              ["live_allowed", "live_allowed"],
+            ].map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-sm" data-testid={`admin-user-assignment-${key}-row`}>
+                <input type="checkbox" checked={Boolean(assignmentForm[key])} onChange={(event) => setAssignmentForm((prev) => ({ ...prev, [key]: event.target.checked }))} data-testid={`admin-user-assignment-${key}-checkbox`} />{label}
+              </label>
+            ))}
+            <Button className="md:col-span-2 bg-orange-500 text-black hover:bg-orange-600" data-testid="admin-user-assignment-save-button">Assignment Kaydet</Button>
+          </form>
+
+          <div className="space-y-3" data-testid="admin-user-assignment-list">
+            {assignments.map((row) => (
+              <div key={row.id} className="border border-slate-700 p-3" data-testid={`admin-user-assignment-row-${row.id}`}>
+                <p className="text-sm" data-testid={`admin-user-assignment-user-${row.id}`}>user_id: {row.user_id}</p>
+                <p className="text-xs text-slate-400" data-testid={`admin-user-assignment-venue-${row.id}`}>{row.exchange_code} · spot={boolLabel(row.spot_allowed)} futures={boolLabel(row.futures_allowed)} testnet={boolLabel(row.testnet_allowed)} live={boolLabel(row.live_allowed)}</p>
+                <div className="mt-2 flex gap-2">
+                  <Button variant="outline" className="border-red-500 text-red-300" onClick={() => deleteAssignment(row.id)} data-testid={`admin-user-assignment-delete-button-${row.id}`}>Sil</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};

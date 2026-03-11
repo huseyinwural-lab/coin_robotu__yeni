@@ -7,6 +7,7 @@ import { PanelLayout } from "@/components/PanelLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminLoginPage } from "@/pages/AdminLoginPage";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
+import { AdminExchangesPage } from "@/pages/AdminExchangesPage";
 import { AdminUserApprovalsPage } from "@/pages/AdminUserApprovalsPage";
 import { AuditLogsPage } from "@/pages/AuditLogsPage";
 import { BacktestCardsPage } from "@/pages/BacktestCardsPage";
@@ -63,6 +64,7 @@ function App() {
           >
             <Route path="dashboard" element={<AdminDashboardPage />} />
             <Route path="user-approvals" element={<AdminUserApprovalsPage />} />
+            <Route path="exchanges" element={<AdminExchangesPage />} />
             <Route path="market-universe" element={<MarketUniversePage />} />
             <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />

@@ -35,6 +35,7 @@ from models import (
     UserRiskSetting,
 )
 from services.pipeline.cache_store import read_candles
+from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
 BINANCE_FUTURES_TESTNET_REST = "https://testnet.binancefuture.com"
 BINANCE_FUTURES_TESTNET_WS = "wss://stream.binancefuture.com/ws"
@@ -424,14 +425,19 @@ def permission_status_for_user(db: Session, user_id: str) -> dict:
     }
 
 
-def _normalize_permissions(account_payload: dict, mode: str) -> list[str]:
+def _normalize_permissions(account_payload: dict, market_type: str, environment: str) -> list[str]:
     raw_permissions = account_payload.get("permissions") if isinstance(account_payload, dict) else None
     if isinstance(raw_permissions, list) and raw_permissions:
         return sorted({str(item).upper() for item in raw_permissions})
 
     permissions: set[str] = set()
     if bool(account_payload.get("canTrade")):
-        permissions.add("FUTURES" if mode == "testnet" else "SPOT")
+        if market_type == "futures":
+            permissions.add("FUTURES")
+        elif market_type == "spot":
+            permissions.add("SPOT")
+        else:
+            permissions.add("FUTURES" if environment == "testnet" else "SPOT")
     if bool(account_payload.get("canDeposit")):
         permissions.add("DEPOSIT")
     if bool(account_payload.get("canWithdraw")):
@@ -526,69 +532,79 @@ def _record_permission_snapshot_and_drift(
         route_permission_drift_alert(db, drift_event)
 
 
-def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[dict, int]:
+def validate_exchange_credentials_for_user(
+    db: Session,
+    user_id: str,
+    *,
+    exchange: str,
+    market_type: str,
+    environment: str,
+) -> tuple[dict, int]:
+    requested_exchange = exchange.strip().lower()
+    requested_market_type = market_type.strip().lower()
+    requested_environment = environment.strip().lower()
     settings_row = get_or_create_exchange_settings(db, user_id)
-    api_key = decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else ""
-    api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else ""
 
-    if not api_key or not api_secret:
-        settings_row.last_validation_success = False
-        settings_row.last_reason_codes = ["missing_credentials"]
-        settings_row.validation_snapshot_id = str(uuid.uuid4())
-        settings_row.validation_checked_at = datetime.now(timezone.utc)
-        db.commit()
-        return {
-            "exchange": settings_row.exchange,
-            "environment": settings_row.mode,
-            "is_valid": False,
-            "permissions": [],
-            "can_trade": False,
-            "can_withdraw": False,
-            "reason_codes": ["missing_credentials"],
-        }, 400
+    seed_binance_venue_registry(db)
+    allowed, venue_state, capability_match, venue_reason_codes = check_user_venue_access(
+        db,
+        user_id,
+        requested_exchange,
+        requested_market_type,
+        requested_environment,
+    )
 
-    try:
-        payload, status_code, _ = adapter.account_probe(api_key, api_secret)
-    except httpx.HTTPError:
-        settings_row.last_validation_success = False
-        settings_row.last_reason_codes = ["exchange_unreachable"]
-        settings_row.validation_snapshot_id = str(uuid.uuid4())
-        settings_row.validation_checked_at = datetime.now(timezone.utc)
-        db.commit()
-        return {
-            "exchange": settings_row.exchange,
-            "environment": settings_row.mode,
-            "is_valid": False,
-            "permissions": [],
-            "can_trade": False,
-            "can_withdraw": False,
-            "reason_codes": ["exchange_unreachable"],
-        }, 503
-
-    reason_codes = _extract_reason_codes(payload if isinstance(payload, dict) else {}, status_code)
-    if status_code >= 400:
+    def _validation_failure(reason_codes: list[str], code: int, *, capability: bool = capability_match) -> tuple[dict, int]:
         settings_row.last_validation_success = False
         settings_row.last_reason_codes = reason_codes
         settings_row.validation_snapshot_id = str(uuid.uuid4())
         settings_row.validation_checked_at = datetime.now(timezone.utc)
         db.commit()
-        http_status = 403 if "ip_restriction" in reason_codes or "missing_trade_permission" in reason_codes else 400
         return {
-            "exchange": settings_row.exchange,
-            "environment": settings_row.mode,
+            "exchange": requested_exchange,
+            "market_type": requested_market_type,
+            "environment": requested_environment,
             "is_valid": False,
             "permissions": [],
             "can_trade": False,
             "can_withdraw": False,
             "reason_codes": reason_codes,
-        }, http_status
+            "capability_match": capability,
+        }, code
 
-    permissions = _normalize_permissions(payload, settings_row.mode)
+    if not allowed:
+        return _validation_failure(venue_reason_codes or [venue_state], 403)
+
+    if requested_exchange != settings_row.exchange.lower() or requested_environment != settings_row.mode.lower():
+        return _validation_failure(["settings_mismatch"], 400)
+
+    if requested_exchange != "binance":
+        return _validation_failure(["adapter_not_configured"], 400)
+
+    api_key = decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else ""
+    api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else ""
+
+    if not api_key or not api_secret:
+        return _validation_failure(["missing_credentials"], 400)
+
+    try:
+        payload, status_code, _ = adapter.account_probe(api_key, api_secret)
+    except httpx.HTTPError:
+        return _validation_failure(["exchange_unreachable"], 503)
+
+    reason_codes = _extract_reason_codes(payload if isinstance(payload, dict) else {}, status_code)
+    if status_code >= 400:
+        http_status = 403 if "ip_restriction" in reason_codes or "missing_trade_permission" in reason_codes else 400
+        return _validation_failure(reason_codes, http_status)
+
+    permissions = _normalize_permissions(payload, requested_market_type, requested_environment)
     can_trade = bool(payload.get("canTrade", False))
     can_withdraw = bool(payload.get("canWithdraw", False))
     trade_capable = _is_trade_capable(permissions)
+    market_tag = "FUTURES" if requested_market_type == "futures" else "SPOT"
+    market_capable = market_tag in {item.upper() for item in permissions}
 
-    if not can_trade or not trade_capable:
+    if not can_trade or not trade_capable or not market_capable:
         _record_permission_snapshot_and_drift(
             db,
             settings_row=settings_row,
@@ -598,13 +614,15 @@ def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[d
             reason_codes=["missing_trade_permission"],
         )
         return {
-            "exchange": settings_row.exchange,
-            "environment": settings_row.mode,
+            "exchange": requested_exchange,
+            "market_type": requested_market_type,
+            "environment": requested_environment,
             "is_valid": True,
             "permissions": permissions,
-            "can_trade": can_trade,
+            "can_trade": can_trade and market_capable,
             "can_withdraw": can_withdraw,
             "reason_codes": ["missing_trade_permission"],
+            "capability_match": capability_match,
         }, 403
 
     _record_permission_snapshot_and_drift(
@@ -616,13 +634,15 @@ def validate_exchange_credentials_for_user(db: Session, user_id: str) -> tuple[d
         reason_codes=[],
     )
     return {
-        "exchange": settings_row.exchange,
-        "environment": settings_row.mode,
+        "exchange": requested_exchange,
+        "market_type": requested_market_type,
+        "environment": requested_environment,
         "is_valid": True,
         "permissions": permissions,
         "can_trade": True,
         "can_withdraw": can_withdraw,
         "reason_codes": [],
+        "capability_match": capability_match,
     }, 200
 
 
@@ -1130,11 +1150,17 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
 
 
 def run_exchange_test_order_market(db: Session, user: User) -> ExecutionMetric:
-    validation, status_code = validate_exchange_credentials_for_user(db, user.id)
+    settings_row = get_or_create_exchange_settings(db, user.id)
+    validation, status_code = validate_exchange_credentials_for_user(
+        db,
+        user.id,
+        exchange=settings_row.exchange,
+        market_type="futures",
+        environment=settings_row.mode,
+    )
     if status_code != 200:
         raise ValueError("Exchange doğrulaması başarısız. Önce /api/exchange/validate başarılı olmalı.")
 
-    settings_row = get_or_create_exchange_settings(db, user.id)
     api_key = decrypt_secret(settings_row.api_key_encrypted)
     api_secret = decrypt_secret(settings_row.api_secret_encrypted)
 

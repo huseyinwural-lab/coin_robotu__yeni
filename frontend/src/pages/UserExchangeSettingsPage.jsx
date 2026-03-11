@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { MetricCard } from "@/components/MetricCard";
@@ -11,6 +11,12 @@ const initialForm = {
   mode: "testnet",
   api_key: "",
   api_secret: "",
+};
+
+const fallbackVenue = {
+  exchange: "binance",
+  market_type: "futures",
+  environment: "testnet",
 };
 
 export const UserExchangeSettingsPage = () => {
@@ -31,10 +37,40 @@ export const UserExchangeSettingsPage = () => {
   const [riskSettings, setRiskSettings] = useState(null);
   const [riskPreview, setRiskPreview] = useState(null);
   const [portfolioOverview, setPortfolioOverview] = useState(null);
+  const [venueOptions, setVenueOptions] = useState([]);
+  const [selectedVenue, setSelectedVenue] = useState(fallbackVenue);
+  const [venueAccess, setVenueAccess] = useState(null);
+
+  const exchangeOptions = useMemo(() => {
+    const list = [...new Set(venueOptions.map((item) => item.exchange))];
+    return list.length ? list : [fallbackVenue.exchange];
+  }, [venueOptions]);
+
+  const marketTypeOptions = useMemo(() => {
+    const list = [
+      ...new Set(
+        venueOptions
+          .filter((item) => item.exchange === selectedVenue.exchange)
+          .map((item) => item.market_type),
+      ),
+    ];
+    return list.length ? list : [fallbackVenue.market_type];
+  }, [selectedVenue.exchange, venueOptions]);
+
+  const environmentOptions = useMemo(() => {
+    const list = [
+      ...new Set(
+        venueOptions
+          .filter((item) => item.exchange === selectedVenue.exchange && item.market_type === selectedVenue.market_type)
+          .map((item) => item.environment),
+      ),
+    ];
+    return list.length ? list : [fallbackVenue.environment];
+  }, [selectedVenue.exchange, selectedVenue.market_type, venueOptions]);
 
   const loadAll = useCallback(async () => {
     try {
-      const [settingsRes, permissionRes, tickerRes, readinessRes, riskRes, previewRes, overviewRes] = await Promise.all([
+      const [settingsRes, permissionRes, tickerRes, readinessRes, riskRes, previewRes, overviewRes, venueOptionsRes] = await Promise.all([
         apiClient.get("/phase4/exchange-settings"),
         apiClient.get("/phase4/permission-status"),
         apiClient.get("/market/ticker?symbol=BTCUSDT"),
@@ -42,6 +78,7 @@ export const UserExchangeSettingsPage = () => {
         apiClient.get("/user-risk/settings"),
         apiClient.get("/user-risk/preview"),
         apiClient.get("/user-risk/overview"),
+        apiClient.get("/venues/options"),
       ]);
       setSettings(settingsRes.data);
       setPermission(permissionRes.data);
@@ -50,6 +87,22 @@ export const UserExchangeSettingsPage = () => {
       setRiskSettings(riskRes.data);
       setRiskPreview(previewRes.data);
       setPortfolioOverview(overviewRes.data);
+      const allowedVenueOptions = (venueOptionsRes.data || []).filter((item) => item.exchange !== "-");
+      setVenueOptions(allowedVenueOptions);
+      setSelectedVenue((prev) => {
+        const previousStillAvailable = allowedVenueOptions.find(
+          (item) => item.exchange === prev.exchange && item.market_type === prev.market_type && item.environment === prev.environment,
+        );
+        if (previousStillAvailable) {
+          return prev;
+        }
+        return allowedVenueOptions[0] || fallbackVenue;
+      });
+      setForm((prev) => ({
+        ...prev,
+        exchange: settingsRes.data?.exchange || prev.exchange,
+        mode: settingsRes.data?.mode || prev.mode,
+      }));
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Exchange ayarları yüklenemedi");
     }
@@ -73,13 +126,77 @@ export const UserExchangeSettingsPage = () => {
     loadAll();
   }, [loadAll]);
 
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      exchange: selectedVenue.exchange,
+      mode: selectedVenue.environment,
+    }));
+  }, [selectedVenue.environment, selectedVenue.exchange]);
+
+  useEffect(() => {
+    const runAccessCheck = async () => {
+      try {
+        const { data } = await apiClient.get("/venues/access-check", {
+          params: {
+            exchange: selectedVenue.exchange,
+            market_type: selectedVenue.market_type,
+            environment: selectedVenue.environment,
+          },
+        });
+        setVenueAccess(data);
+      } catch {
+        setVenueAccess(null);
+      }
+    };
+    runAccessCheck();
+  }, [selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type]);
+
+  const onExchangeChange = (nextExchange) => {
+    const markets = [
+      ...new Set(
+        venueOptions.filter((item) => item.exchange === nextExchange).map((item) => item.market_type),
+      ),
+    ];
+    const nextMarket = markets[0] || fallbackVenue.market_type;
+    const environments = [
+      ...new Set(
+        venueOptions
+          .filter((item) => item.exchange === nextExchange && item.market_type === nextMarket)
+          .map((item) => item.environment),
+      ),
+    ];
+    const nextEnvironment = environments[0] || fallbackVenue.environment;
+    setSelectedVenue({ exchange: nextExchange, market_type: nextMarket, environment: nextEnvironment });
+  };
+
+  const onMarketTypeChange = (nextMarketType) => {
+    const environments = [
+      ...new Set(
+        venueOptions
+          .filter((item) => item.exchange === selectedVenue.exchange && item.market_type === nextMarketType)
+          .map((item) => item.environment),
+      ),
+    ];
+    const nextEnvironment = environments[0] || fallbackVenue.environment;
+    setSelectedVenue((prev) => ({ ...prev, market_type: nextMarketType, environment: nextEnvironment }));
+  };
+
+  const onEnvironmentChange = (nextEnvironment) => {
+    setSelectedVenue((prev) => ({ ...prev, environment: nextEnvironment }));
+  };
+
   const saveSettings = async (event) => {
     event.preventDefault();
     setIsSaving(true);
     try {
       const { data } = await apiClient.put("/phase4/exchange-settings", form);
       setSettings(data);
-      setForm(initialForm);
+      setForm(() => ({
+        ...initialForm,
+        exchange: selectedVenue.exchange,
+        mode: selectedVenue.environment,
+      }));
       toast.success("API key bilgileri şifreli olarak kaydedildi");
       await loadAll();
     } catch (error) {
@@ -111,7 +228,13 @@ export const UserExchangeSettingsPage = () => {
   const runPermission = async () => {
     setIsValidating(true);
     try {
-      const { data } = await apiClient.get("/exchange/validate");
+      const { data } = await apiClient.get("/exchange/validate", {
+        params: {
+          exchange: selectedVenue.exchange,
+          market_type: selectedVenue.market_type,
+          environment: selectedVenue.environment,
+        },
+      });
       setValidateResult(data);
       toast.success("Exchange doğrulaması tamamlandı");
       await loadAll();
@@ -125,6 +248,15 @@ export const UserExchangeSettingsPage = () => {
   };
 
   const runFirstTestOrder = async () => {
+    const venueEligible = selectedVenue.exchange === "binance"
+      && selectedVenue.market_type === "futures"
+      && selectedVenue.environment === "testnet";
+    if (!venueEligible) {
+      setTestOrderBanner("unsupported_venue_for_test_order: İlk kontrollü test emri sadece binance/futures/testnet için açık.");
+      toast.error("İlk kontrollü test emri yalnızca binance/futures/testnet için desteklenir");
+      return;
+    }
+
     setIsTesting(true);
     setTestOrderBanner("");
     try {
@@ -179,6 +311,10 @@ export const UserExchangeSettingsPage = () => {
         ? "ready"
         : readiness?.readiness_status || "blocked";
 
+  const testOrderEligible = selectedVenue.exchange === "binance"
+    && selectedVenue.market_type === "futures"
+    && selectedVenue.environment === "testnet";
+
   return (
     <section className="space-y-4" data-testid="user-exchange-settings-page">
       <header className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-settings-header">
@@ -209,6 +345,28 @@ export const UserExchangeSettingsPage = () => {
 
       {activeTab === "risk" && (
         <div className="space-y-4" data-testid="user-risk-settings-tab-content">
+          <div className="grid gap-2 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-risk-venue-selection-grid">
+            <select value={selectedVenue.exchange} onChange={(event) => onExchangeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-risk-venue-exchange-select">
+              {exchangeOptions.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+            <select value={selectedVenue.market_type} onChange={(event) => onMarketTypeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-risk-venue-market-type-select">
+              {marketTypeOptions.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+            <select value={selectedVenue.environment} onChange={(event) => onEnvironmentChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-risk-venue-environment-select">
+              {environmentOptions.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+            <p className="md:col-span-3 text-xs text-slate-400" data-testid="user-risk-selected-venue-summary">Seçili venue: {selectedVenue.exchange} / {selectedVenue.market_type} / {selectedVenue.environment}</p>
+            {venueOptions.length === 0 && (
+              <p className="md:col-span-3 text-xs text-yellow-300" data-testid="user-risk-no-assignment-warning">Henüz venue assignment yok. Admin panelden kullanıcıya venue atanmalı.</p>
+            )}
+          </div>
+
           <div className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="user-risk-settings-form-grid">
             <Input type="number" min={1} max={50} value={riskSettings?.allocation_pct ?? 20} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), allocation_pct: event.target.value }))} data-testid="user-risk-allocation-input" placeholder="İşleme Ayrılan Ana Para (%)" />
             <Input type="number" min={1} max={25} value={riskSettings?.trade_risk_pct ?? 10} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), trade_risk_pct: event.target.value }))} data-testid="user-risk-trade-risk-input" placeholder="İşlemdeki Paranın Risk Oranı (%)" />
@@ -244,6 +402,28 @@ export const UserExchangeSettingsPage = () => {
       {activeTab === "test" && (
         <div className="space-y-4" data-testid="user-test-validation-tab-content">
 
+      <div className="grid gap-2 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-test-venue-selection-grid">
+        <select value={selectedVenue.exchange} onChange={(event) => onExchangeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-venue-exchange-select">
+          {exchangeOptions.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+        <select value={selectedVenue.market_type} onChange={(event) => onMarketTypeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-venue-market-type-select">
+          {marketTypeOptions.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+        <select value={selectedVenue.environment} onChange={(event) => onEnvironmentChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-venue-environment-select">
+          {environmentOptions.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+        <p className="md:col-span-3 text-xs text-slate-400" data-testid="user-test-selected-venue-summary">Seçili venue: {selectedVenue.exchange} / {selectedVenue.market_type} / {selectedVenue.environment}</p>
+        {venueOptions.length === 0 && (
+          <p className="md:col-span-3 text-xs text-yellow-300" data-testid="user-test-no-assignment-warning">Henüz venue assignment yok. Admin panelden kullanıcıya venue atanmalı.</p>
+        )}
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="user-exchange-settings-metrics-grid">
         <MetricCard label="Exchange" value={settings?.exchange || "-"} tone="orange" testId="user-exchange-metric-exchange" />
         <MetricCard label="Mode" value={settings?.mode || "-"} tone="orange" testId="user-exchange-metric-mode" />
@@ -257,6 +437,14 @@ export const UserExchangeSettingsPage = () => {
         <MetricCard label="Action State" value={actionState} tone={readinessTone} testId="user-exchange-action-state" />
         <MetricCard label="Last Validation" value={readiness?.validation_timestamp || "-"} tone="blue" testId="user-exchange-last-validation-at" />
         <MetricCard label="Last Error" value={readiness?.last_error_reason || "-"} tone="red" testId="user-exchange-last-error-reason" />
+      </div>
+
+      <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-venue-access-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-venue-access-title">Venue Access Check</p>
+        <p className="mt-2 text-sm text-slate-300" data-testid="user-venue-access-allowed">allowed={String(venueAccess?.allowed ?? false)}</p>
+        <p className="mt-1 text-sm text-slate-300" data-testid="user-venue-access-state">venue_state={venueAccess?.venue_state || "-"}</p>
+        <p className="mt-1 text-sm text-slate-300" data-testid="user-venue-access-capability">capability_match={String(venueAccess?.capability_match ?? false)}</p>
+        <p className="mt-1 text-sm text-slate-300" data-testid="user-venue-access-reasons">reason_codes={(venueAccess?.reason_codes || []).join(",") || "-"}</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3" data-testid="user-exchange-validate-grid">
@@ -297,8 +485,16 @@ export const UserExchangeSettingsPage = () => {
       </div>
 
       <form className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" onSubmit={saveSettings} data-testid="user-exchange-settings-form">
-        <Input value={form.exchange} onChange={(event) => setForm((prev) => ({ ...prev, exchange: event.target.value }))} data-testid="user-exchange-settings-exchange-input" />
-        <Input value={form.mode} onChange={(event) => setForm((prev) => ({ ...prev, mode: event.target.value }))} data-testid="user-exchange-settings-mode-input" />
+        <select value={selectedVenue.exchange} onChange={(event) => onExchangeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-exchange-settings-exchange-select">
+          {exchangeOptions.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+        <select value={selectedVenue.environment} onChange={(event) => onEnvironmentChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-exchange-settings-environment-select">
+          {environmentOptions.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
         <Input value={form.api_key} onChange={(event) => setForm((prev) => ({ ...prev, api_key: event.target.value }))} placeholder="API Key" data-testid="user-exchange-settings-api-key-input" required />
         <Input value={form.api_secret} onChange={(event) => setForm((prev) => ({ ...prev, api_secret: event.target.value }))} placeholder="API Secret" data-testid="user-exchange-settings-api-secret-input" required />
         <Button className="md:col-span-2 bg-orange-500 text-black hover:bg-orange-600" data-testid="user-exchange-settings-save-button" disabled={isSaving}>
@@ -315,11 +511,17 @@ export const UserExchangeSettingsPage = () => {
             className="bg-black text-orange-400 hover:bg-zinc-900"
             onClick={runFirstTestOrder}
             data-testid="user-exchange-first-test-order-button"
-            disabled={isTesting || readiness?.readiness_status !== "ready_for_test_order"}
+            disabled={isTesting || readiness?.readiness_status !== "ready_for_test_order" || !testOrderEligible}
           >
             {isTesting ? "Gönderiliyor..." : "İlk Kontrollü Test Emri"}
           </Button>
         </div>
+
+        {!testOrderEligible && (
+          <p className="mt-2 text-xs text-yellow-300" data-testid="user-test-order-venue-constraint-text">
+            Test order şu an yalnızca binance/futures/testnet kombinasyonu için destekleniyor.
+          </p>
+        )}
 
         <div className="mt-4 space-y-1" data-testid="user-exchange-permission-controls-list">
           {(permission?.controls || []).map((item) => (

@@ -21,6 +21,7 @@ from routers import (
     risk_policies,
     user_risk,
     strategy_templates,
+    venues,
 )
 from services.bootstrap import seed_default_admin
 from services.migration_service import run_alembic_upgrade
@@ -60,6 +61,7 @@ api_router.include_router(user_risk.router)
 api_router.include_router(strategy_templates.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(exchange.router)
+api_router.include_router(venues.router)
 api_router.include_router(market.router)
 api_router.include_router(admin_control.router)
 api_router.include_router(admin_phase3.router)
