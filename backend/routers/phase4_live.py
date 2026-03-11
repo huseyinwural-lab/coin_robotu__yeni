@@ -245,7 +245,20 @@ def send_first_test_order(current_user: User = Depends(get_current_user), db: Se
 def latest_user_execution_quality(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     latest = latest_execution_quality(db, current_user.id)
     if latest is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Henüz test emri kaydı yok")
+        return ExecutionQualitySummaryResponse(
+            execution_id="awaiting_execution_evidence",
+            symbol="BTCUSDT",
+            status="awaiting_valid_key",
+            strategy_type="-",
+            volatility_regime="-",
+            volatility_pct=0,
+            expected_price=0,
+            fill_price=None,
+            slippage=None,
+            execution_latency=None,
+            execution_quality_score=0,
+            timestamp=datetime.now(timezone.utc),
+        )
     return _quality_response(latest)
 
 

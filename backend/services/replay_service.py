@@ -95,7 +95,6 @@ def run_replay_pipeline(
     if len(candles) < 60:
         raise ValueError("insufficient_history")
 
-    equity = 1000.0
 
     run = ReplayRun(
         id=str(uuid.uuid4()),
@@ -136,7 +135,6 @@ def run_replay_pipeline(
 
         sizing = compute_position_sizing(db, user_id, market_price)
         qty = max(float(sizing["quantity"]), 0.0001)
-        equity = max(float(sizing["equity"]), 100.0)
 
         if risk_tags:
             lifecycle = ["SIM_NEW", "SIM_CANCELED"]

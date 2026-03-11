@@ -118,19 +118,8 @@ export const UserExchangeSettingsPage = () => {
       toast.error(error?.response?.data?.detail || "Exchange ayarları yüklenemedi");
     }
 
-    try {
-      const { data } = await apiClient.get("/phase4/execution-quality/latest");
-      setLatestQuality(data);
-    } catch (_) {
-      setLatestQuality(null);
-    }
-
-    try {
-      const { data } = await apiClient.get("/exchange/lifecycle-evidence/latest");
-      setLifecycleEvidence(data);
-    } catch (_) {
-      setLifecycleEvidence(null);
-    }
+    setLatestQuality((prev) => prev || null);
+    setLifecycleEvidence((prev) => prev || null);
   }, [selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type]);
 
   useEffect(() => {

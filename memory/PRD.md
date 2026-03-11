@@ -468,10 +468,39 @@
   - `/app/test_reports/pytest/pytest_results_iter17_venue_expansion.xml`
   - Frontend smoke: admin exchanges sayfası ve landing yüklenmesi doğrulandı
 
+### 2026-03-11 (Faz-5 İterasyon-3 — Execution Altyapısı + Dual-Mode + Replay Backend)
+- Kullanıcı karar seti uygulandı: **1B, 2B, 3A, 4A**
+- **A — Execution Proof altyapısı (key yokken bloksuz ilerleme):**
+  - `/api/exchange/test-order` venue-context query paramları destekler hale getirildi: `exchange`, `market_type`, `environment`, `leverage`, `margin_mode`, `position_side`
+  - Test-order response’a immutable context alanları eklendi: `exchange`, `market_type`, `environment`
+  - `execution_metrics` tablosuna context kolonları eklendi: `exchange`, `market_type`, `environment`
+  - Lifecycle event isimleri A2’ye hizalandı: `request_sent`, `exchange_ack`, `partial_fill`, `final_fill` (+ `final_cancel`)
+  - Hata sınıflandırması normalize edildi ve venue-context ile döndürülüyor: `invalid_key`, `permission_denied`, `ip_restricted`, `insufficient_balance`, `exchange_rejected`, `testnet_unreachable`, `stale_validation`, `unknown_exchange_error`
+- **B — Spot/Futures Dual-Mode:**
+  - User panelde `Risk Settings` ve `Test & Validation` sekmeleri market type’a göre ayrıştırıldı
+  - Spot mod: futures alanları gizli; quoteQty semantiği açıklaması
+  - Futures mod: `leverage`, `margin_mode`, `position_side`, liquidation-risk görünürlüğü
+  - `/api/user-risk/preview` market-aware hale getirildi (`market_type`, `leverage`, `margin_mode`, `position_side`)
+  - Futures preview alanları eklendi: `estimated_liquidation_buffer_pct`, `margin_usage_pct`
+- **C — Backtest/Replay başlangıcı (Backend-only):**
+  - Yeni servis: `backend/services/replay_service.py`
+  - Yeni endpointler:
+    - `POST /api/backtest/replay/run`
+    - `GET /api/backtest/replay/run/{run_id}`
+  - Replay pipeline contractı uygulandı: `historical_data -> signal_engine -> risk_engine -> position_sizing -> simulated_execution -> metrics`
+  - Binance Futures historical klines adapter: `1m`, `5m`, `15m`, `1h`
+  - Simulator lifecycle: `SIM_NEW`, `SIM_FILLED`, `SIM_CANCELED`; metrics persistence aktif
+- Operasyonel iyileştirme:
+  - `/api/phase4/execution-quality/latest` artık boş durumda 404 yerine `awaiting_valid_key` fallback response dönüyor (UI console 404 gürültüsü azaltıldı)
+- Testler:
+  - `/app/test_reports/iteration_18.json` (backend+frontend pass)
+  - `/app/backend/tests/test_phase5_iter3_execution_dualmode_replay.py` (22/22 pass)
+  - Smoke ve API self-testler: dual-mode UI + replay run/detail + venue-context test-order doğrulandı
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
-- Spot+Futures dual-mode davranışını tamamla (seçime göre form alanları/risk preview/test-order uygunluk kuralları)
+- Gerçek execution evidence’de immutable alanları canlı order üzerinden finalize et (exchange_order_id/client_order_id/submitted/ack/fill/slippage/validation_snapshot)
 - Canlı PostgreSQL + Redis ortamında fallback’siz doğrulama
 - Bot profile/risk/strategy için delete endpointleri + soft delete stratejisi
 - Admin user-management modülünü approval sonrasına genişletme (disable/enable, filtreleme, audit trail)
@@ -494,7 +523,7 @@
 
 ## 7) Next Tasks List
 1. Geçerli testnet key ile gerçek order evidence (NEW/PARTIAL/FILLED/CANCELED) finalize et
-2. Spot+Futures dual-mode UI mantığını leverage/preview/test-order akışına tam bağla
-3. Faz-5 İterasyon-3: Backtest/Replay engine’i canlı risk+execution katmanına bağla
+2. Replay backend sonuçlarını risk-policy denetim kayıtlarıyla ilişkilendir (audit + policy feedback)
+3. Backtest/Replay için admin/user sonuç filtreleme ve export endpointleri
 4. Hardening trend eşiklerini active alerts ile operasyonel policy’ye bağla
 5. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
