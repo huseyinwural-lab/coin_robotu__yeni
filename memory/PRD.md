@@ -243,6 +243,39 @@
   - `/app/test_reports/iteration_11.json` (backend 23/23 pass, frontend 100%)
   - `/app/backend/tests/test_phase4_iter2_release_gate_pipeline.py`
 
+### 2026-03-11 (Faz-4 İterasyon-3 — Controlled Test Order Contract + Drift Monitoring + CI Gate)
+- Endpoint contract kararları uygulandı (geriye uyumlu):
+  - `GET /api/exchange/validate`
+  - `POST /api/exchange/test-order`
+  - `GET /api/market/ticker`
+- `validate` çıktısı dinamik permission modeliyle üretildi:
+  - `exchange`, `environment`, `is_valid`, `permissions`, `can_trade`, `can_withdraw`, `reason_codes`
+  - hata mapping: missing/invalid key `400`, permission/IP kısıtı `403`
+- User exchange settings üzerinden key girişi korunarak test-order eligibility doğrulandı (chatten key paylaşımı gerekmez).
+- Execution metrikleri için yeni kalıcı tablo eklendi:
+  - `execution_metrics` (order_id, exchange_order_id, price_avg, executed_qty, slippage_pct, execution_time_ms, status, state_machine_path, strategy/volatility alanları)
+- Slippage referansı market ticker mid-price ile hesaplandı:
+  - `mid_price = (bid + ask) / 2`
+  - snapshot timestamp kaydı
+- Permission drift izleme altyapısı eklendi:
+  - `permission_drift_events` tablosu
+  - `/api/phase4/admin/permission-drift-trend?days=7|30` aggregation + summary
+- Admin `/admin/monitoring` genişletildi:
+  - Permission Drift Trend line chart
+  - 7/30 gün toggle
+  - summary: affected users, latest timestamp, critical drift count
+- Release gate deploy runner eklendi:
+  - `/app/scripts/run_release_gate_check.sh` (executable)
+  - backend CLI orchestrator: `backend/cli/release_gate_check.py`
+  - `BLOCKED` durumunda non-zero exit code ile deploy bloklama kuralı
+- Migration:
+  - `20260311_0007_execution_metrics_and_permission_drift.py`
+- Testler:
+  - `/app/test_reports/iteration_12.json` (backend 24/24 pass, frontend 100%)
+  - `/app/backend/tests/test_phase4_iter3_endpoints.py`
+  - `/app/test_reports/pytest/pytest_results_iter12_phase4_iter3.xml`
+  - Not: valid Binance testnet key olmadan gerçek fill doğrulaması bu turda **BLOCKED** bırakıldı (beklenen güvenli davranış)
+
 ## 6) Prioritized Backlog
 ### P0 (Sonraki kritik adımlar)
 - Kullanıcıdan geçerli Binance Testnet key alıp ilk kontrollü test order’ı gerçekten gönderme ve filled/cancelled sonucu doğrulama
@@ -270,5 +303,5 @@
 1. Geçerli testnet key ile ilk order sonucu (filled/partial/cancelled) ve slippage doğrulamasını canlı testte tamamla
 2. Hardening checklist trendini grafik + alarm geçmişi ile zenginleştir
 3. User approval paneline arama/sıralama + toplu onay (bulk action) ekle
-4. Permission drift trend grafiğini admin panelde devreye al
-5. Release gate’i deploy öncesi otomasyon pipeline’ına bağla
+4. Permission drift için kritik alarm eşikleri ve alert routing (admin-only override) ekle
+5. Release gate’i CI ortam değişkenleri ile stage/prod ayrımlı hale getir
