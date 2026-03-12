@@ -92,6 +92,27 @@ export const AdminUserApprovalsPage = () => {
     }
   };
 
+  const handleSingleApprove = async (userId) => {
+    try {
+      await apiClient.post("/admin/user-approvals/bulk-approve", { ids: [userId] });
+      toast.success("Kullanıcı onaylandı");
+      loadRequests();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Onay işlemi başarısız");
+    }
+  };
+
+  const handleSingleReject = async (userId) => {
+    const reason = rejectReason.trim() || "manual_reject";
+    try {
+      await apiClient.post("/admin/user-approvals/bulk-reject", { ids: [userId], reason });
+      toast.success("Kullanıcı reddedildi");
+      loadRequests();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Reddetme işlemi başarısız");
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="admin-user-approvals-page">
       <header className="border border-black/40 bg-orange-300 p-4" data-testid="admin-user-approvals-header">
@@ -179,6 +200,7 @@ export const AdminUserApprovalsPage = () => {
               <TableHead data-testid="admin-approvals-head-email">E-posta</TableHead>
               <TableHead data-testid="admin-approvals-head-status">Durum</TableHead>
               <TableHead data-testid="admin-approvals-head-requested">Talep Zamanı</TableHead>
+              <TableHead data-testid="admin-approvals-head-action">Aksiyon</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -196,11 +218,31 @@ export const AdminUserApprovalsPage = () => {
                 <TableCell data-testid={`admin-approval-requested-at-${item.id}`}>
                   {new Date(item.approval_requested_at).toLocaleString()}
                 </TableCell>
+                <TableCell data-testid={`admin-approval-actions-${item.id}`}>
+                  <div className="flex flex-wrap gap-2" data-testid={`admin-approval-action-buttons-${item.id}`}>
+                    <Button
+                      size="sm"
+                      className="border border-black bg-black text-orange-400 hover:bg-zinc-800"
+                      onClick={() => handleSingleApprove(item.id)}
+                      data-testid={`admin-approval-approve-button-${item.id}`}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="border border-black bg-red-600 text-white hover:bg-red-700"
+                      onClick={() => handleSingleReject(item.id)}
+                      data-testid={`admin-approval-reject-button-${item.id}`}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
             {!loading && requests.length === 0 && (
               <TableRow data-testid="admin-approval-empty-row">
-                <TableCell colSpan={4} className="text-center text-sm text-black/70" data-testid="admin-approval-empty-text">
+                <TableCell colSpan={5} className="text-center text-sm text-black/70" data-testid="admin-approval-empty-text">
                   Bekleyen kullanıcı talebi bulunmuyor.
                 </TableCell>
               </TableRow>
