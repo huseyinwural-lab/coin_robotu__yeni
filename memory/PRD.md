@@ -1500,3 +1500,73 @@
 - Phase 5.6 tamamlandı.
 - Sonraki faz: **Phase 5.6A Strategy Decay & Lifecycle Governance**
 - Ardından: **Phase 5.6B Correlation Cluster Engine**
+
+## 23) 2026-03-12 — Phase 5.6A Strategy Decay & Lifecycle Governance (Tamamlandı)
+
+### Kapsam
+- Backend governance çekirdeği tamamlandı:
+  - `core/strategies/governance/strategy_health_monitor.py`
+  - `core/strategies/governance/strategy_decay_detector.py`
+  - `core/strategies/governance/strategy_throttle_engine.py`
+  - `core/strategies/governance/strategy_auto_disable.py`
+  - `core/strategies/governance/strategy_lifecycle_registry.py`
+- Governance audit event standardı eklendi:
+  - `core/observability/strategy_governance_audit.py`
+
+### Lifecycle ve Enforcement
+- Lifecycle source-of-truth: `strategy_lifecycle_registry`
+  - Durumlar: `ACTIVE`, `THROTTLED`, `DISABLED`
+  - Invalid transition koruması mevcut
+- Disabled strategy hard block aktif:
+  - `STRATEGY_DISABLED_HARD_BLOCK`
+- Throttle-first escalation aktif:
+  - confidence clamp
+  - trade frequency reduction
+  - max position reduction
+  - frequency aşımında `STRATEGY_THROTTLE_FREQUENCY`
+
+### API ve Admin
+- Yeni endpointler:
+  - `GET /api/admin/futures/strategy-health`
+  - `GET /api/admin/futures/strategy-governance`
+- Governance endpoint alanları:
+  - `strategy_health_score`, `throttle_state`, `disable_state`, `decay_events`
+  - `health_components`, `decay_reason_codes`, `lifecycle_state`
+  - `last_transition_at`, `drawdown_state`
+  - `strategy_compare_mode` + `weekly_auto_summary` (structured)
+
+### UI
+- Yeni panel: `/admin/futures/strategy-governance`
+- Widgetlar:
+  - strategy health heatmap
+  - strategy throttle status
+  - strategy disable events
+  - pnl decay timeline
+  - confidence vs result drift
+  - lifecycle panel
+- Compare mode dahil edildi (2 strategy seçimi + apply)
+
+### 5’li analytics entegrasyonu (governance ile hizalı)
+1. strategy performance
+2. execution quality
+3. signal distribution
+4. drift alerts
+5. false allow/reject
+
+### Test
+- Yeni test dosyaları:
+  - `test_strategy_health_monitor.py`
+  - `test_strategy_decay_detector.py`
+  - `test_strategy_throttle_engine.py`
+  - `test_strategy_auto_disable.py`
+  - `test_strategy_lifecycle_registry.py`
+  - `test_strategy_governance_audit.py`
+  - `test_strategy_governance_endpoint.py`
+- Lokal pytest: **52 passed**
+- Testing agent raporu: `/app/test_reports/iteration_38.json` => **PASS**
+  - Backend 49/49 PASS
+  - Frontend panel ve compare mode PASS
+
+### Güncel sıra
+- Phase 5.6A tamamlandı.
+- Sonraki blok: **Phase 5.6B Correlation Cluster Engine**
