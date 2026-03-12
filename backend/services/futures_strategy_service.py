@@ -7,10 +7,20 @@ from core.portfolio.strategy_attribution_engine import build_strategy_attributio
 from core.portfolio.strategy_exposure_tracker import StrategyExposureTracker
 from core.portfolio.strategy_interaction_guard import StrategyInteractionGuard
 from core.portfolio.strategy_registry import build_strategy_registry
+from core.observability.strategy_governance_audit import build_strategy_governance_audit_events
 from core.execution.futures_paper_executor import FuturesPaperExecutor
 from core.futures.funding_bias_engine import calculate_funding_bias
 from core.strategies.analytics.strategy_drift_detector import detect_strategy_drift
+from core.strategies.governance import (
+    apply_lifecycle_transitions,
+    build_strategy_health_snapshot,
+    build_strategy_throttle_state,
+    detect_strategy_decay,
+    enforce_strategy_lifecycle_on_decisions,
+    evaluate_strategy_auto_disable,
+)
 from core.strategy.futures.futures_strategy_engine import FuturesStrategyEngine
+from services.audit_service import create_audit_log
 from services.futures_microstructure_service import build_microstructure_status
 from services.futures_risk_monitor_service import build_futures_risk_status
 from services.pipeline.cache_store import read_candles
@@ -323,6 +333,95 @@ def _build_strategy_architecture_checklist_15(status: dict) -> list[dict]:
     ]
 
 
+def _weekly_strategy_summary(history: list[dict], selected: list[str]) -> dict:
+    selected = [item for item in selected if item]
+    selected_set = set(selected)
+    if not selected_set:
+        return {"window_days": 7, "strategy_summaries": [], "comparative_deltas": {}}
+
+    recent = history[-168:]
+    by_strategy: dict[str, dict[str, float]] = {}
+    for entry in recent:
+        metrics = entry.get("strategy_metrics") or []
+        for metric in metrics:
+            strategy = str(metric.get("strategy") or "unknown")
+            if strategy not in selected_set:
+                continue
+            agg = by_strategy.setdefault(
+                strategy,
+                {
+                    "samples": 0.0,
+                    "pnl": 0.0,
+                    "execution_quality": 0.0,
+                    "win_rate": 0.0,
+                    "signal_frequency": 0.0,
+                    "health_score": 0.0,
+                },
+            )
+            agg["samples"] += 1
+            agg["pnl"] += _safe_float(metric.get("paper_pnl"))
+            agg["execution_quality"] += _safe_float(metric.get("execution_quality"), 0.5)
+            agg["signal_frequency"] += _safe_float(metric.get("signal_total"), 0.0)
+            agg["health_score"] += _safe_float(metric.get("execution_quality"), 0.5) * 100
+
+        for attr in entry.get("strategy_attribution") or []:
+            strategy = str(attr.get("strategy") or "unknown")
+            if strategy not in selected_set:
+                continue
+            agg = by_strategy.setdefault(
+                strategy,
+                {
+                    "samples": 0.0,
+                    "pnl": 0.0,
+                    "execution_quality": 0.0,
+                    "win_rate": 0.0,
+                    "signal_frequency": 0.0,
+                    "health_score": 0.0,
+                },
+            )
+            agg["win_rate"] += _safe_float(attr.get("win_rate"), 0.5)
+
+    summaries: list[dict] = []
+    for strategy in selected:
+        agg = by_strategy.get(strategy) or {
+            "samples": 0.0,
+            "pnl": 0.0,
+            "execution_quality": 0.0,
+            "win_rate": 0.0,
+            "signal_frequency": 0.0,
+            "health_score": 0.0,
+        }
+        samples = max(1.0, agg["samples"])
+        summaries.append(
+            {
+                "strategy": strategy,
+                "avg_pnl": round(agg["pnl"] / samples, 6),
+                "avg_execution_quality": round(agg["execution_quality"] / samples, 4),
+                "avg_signal_frequency": round(agg["signal_frequency"] / samples, 2),
+                "avg_win_rate": round(agg["win_rate"] / samples, 4),
+                "avg_health_score": round(agg["health_score"] / samples, 2),
+                "sample_count": int(agg["samples"]),
+            }
+        )
+
+    deltas = {}
+    if len(summaries) == 2:
+        first, second = summaries
+        deltas = {
+            "pnl_delta": round(first["avg_pnl"] - second["avg_pnl"], 6),
+            "execution_quality_delta": round(first["avg_execution_quality"] - second["avg_execution_quality"], 4),
+            "signal_frequency_delta": round(first["avg_signal_frequency"] - second["avg_signal_frequency"], 2),
+            "win_rate_delta": round(first["avg_win_rate"] - second["avg_win_rate"], 4),
+            "health_score_delta": round(first["avg_health_score"] - second["avg_health_score"], 2),
+        }
+
+    return {
+        "window_days": 7,
+        "strategy_summaries": summaries,
+        "comparative_deltas": deltas,
+    }
+
+
 def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: list[str] | None = None) -> dict:
     universe = build_effective_universe(db, cache)
     active_symbols = symbols or universe.get("futures_symbols") or ["BTCUSDT", "ETHUSDT"]
@@ -359,6 +458,15 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             row["strategy"] = strategy_id
             row["strategy_type"] = row.get("strategy_type") or strategy_id
         decisions.extend(cycle_rows)
+
+    lifecycle_registry = _safe_json(cache.get(f"futures:strategy:lifecycle:{user_id}"), {}) if cache else {}
+    throttle_payload = _safe_json(cache.get(f"futures:strategy:throttle:{user_id}"), {}) if cache else {}
+    throttle_by_strategy = throttle_payload.get("by_strategy") if isinstance(throttle_payload, dict) else {}
+    decisions, governance_enforcement = enforce_strategy_lifecycle_on_decisions(
+        decisions,
+        lifecycle_registry=lifecycle_registry,
+        throttle_by_strategy=throttle_by_strategy,
+    )
 
     decisions, interaction_blocked = StrategyInteractionGuard().apply(decisions)
     exposure_tracker = StrategyExposureTracker()
@@ -570,6 +678,16 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             reason = str(row.get("reason_code") or "UNKNOWN")
             reject_reason_map[reason] = reject_reason_map.get(reason, 0) + 1
 
+    governance_blocked_rows = [
+        row
+        for row in decisions
+        if row.get("decision") == "REJECT"
+        and any(
+            reason in {"STRATEGY_DISABLED_HARD_BLOCK", "STRATEGY_THROTTLE_FREQUENCY"}
+            for reason in (row.get("reasons") or [])
+        )
+    ]
+
     avg_confidence = (
         sum(float(row.get("confidence") or 0.0) for row in decisions) / len(decisions)
         if decisions
@@ -629,6 +747,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     history_entry = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "strategy_metrics": list(strategy_metrics_map.values()),
+        "strategy_attribution": attribution.get("strategy_attribution", []),
         "reject_reason_distribution": reject_reason_map,
         "false_allow_count": false_allow_count,
         "false_reject_count": false_reject_count,
@@ -637,6 +756,55 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     history = _append_strategy_history(cache, user_id, history_entry) if cache else [history_entry]
     rolling_tuning_score = _rolling_tuning_score_7d(history)
     gate_reason_trend_7d = _gate_reason_trend_7d(history)
+
+    previous_decay_state = _safe_json(cache.get(f"futures:strategy:decay-state:{user_id}"), {}) if cache else {}
+    health_snapshot = build_strategy_health_snapshot(
+        history=history,
+        strategy_metrics=list(strategy_metrics_map.values()),
+        strategy_attribution=attribution.get("strategy_attribution", []),
+    )
+    decay_result = detect_strategy_decay(
+        health_snapshot.get("strategies", []),
+        previous_state=previous_decay_state,
+    )
+    throttle_result = build_strategy_throttle_state(
+        health_snapshot.get("strategies", []),
+        decay_result.get("strategy_decay_events", []),
+        previous_state=throttle_by_strategy,
+    )
+    disable_result = evaluate_strategy_auto_disable(
+        health_snapshot.get("strategies", []),
+        decay_state=decay_result.get("decay_state", {}),
+        lifecycle_registry=lifecycle_registry,
+    )
+    lifecycle_result = apply_lifecycle_transitions(
+        strategy_ids=list(strategy_registry.keys()),
+        existing_registry=lifecycle_registry,
+        throttle_by_strategy=throttle_result.get("by_strategy", {}),
+        disable_by_strategy=disable_result.get("by_strategy", {}),
+    )
+    governance_events = build_strategy_governance_audit_events(
+        health_rows=health_snapshot.get("strategies", []),
+        decay_events=decay_result.get("strategy_decay_events", []),
+        throttle_rows=throttle_result.get("strategy_throttle_state", []),
+        disable_events=disable_result.get("disable_events", []),
+        lifecycle_transitions=lifecycle_result.get("transitions", []),
+    )
+
+    for event in governance_events[:20]:
+        try:
+            create_audit_log(
+                db,
+                action=event.get("event") or "STRATEGY_GOVERNANCE_EVENT",
+                entity_type="futures_strategy_governance",
+                entity_id=str(event.get("strategy") or "unknown"),
+                actor_user_id=user_id,
+                actor_role="system",
+                severity="critical" if event.get("event") == "STRATEGY_DISABLED" else "warning",
+                details=event,
+            )
+        except Exception:
+            continue
 
     strategy_signal_distribution = [
         {
@@ -669,6 +837,30 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         "false_allow_reject_comparison_by_strategy": false_compare_by_strategy,
         "rolling_7d_tuning_score": rolling_tuning_score,
         "gate_reason_trend_7d": gate_reason_trend_7d,
+        "strategy_health_score": health_snapshot.get("strategies", []),
+        "strategy_health_components": [
+            {
+                "strategy": item.get("strategy"),
+                "health_components": item.get("health_components", {}),
+                "observation_count": item.get("observation_count", 0),
+                "data_state": item.get("data_state", "HEALTHY"),
+            }
+            for item in (health_snapshot.get("strategies") or [])
+        ],
+        "strategy_decay_events": decay_result.get("strategy_decay_events", []),
+        "strategy_throttle_state": throttle_result.get("strategy_throttle_state", []),
+        "strategy_disable_state": disable_result.get("strategy_disable_state", []),
+        "strategy_lifecycle_state": [
+            {
+                "strategy": item.get("strategy"),
+                "lifecycle_state": item.get("lifecycle_state", "ACTIVE"),
+                "last_transition_at": item.get("last_transition_at"),
+                "last_transition_reason": item.get("last_transition_reason"),
+            }
+            for item in (lifecycle_result.get("registry", {}) or {}).values()
+        ],
+        "strategy_lifecycle_registry": lifecycle_result.get("registry", {}),
+        "governance_audit_events": governance_events,
         "strategy_signal_distribution": strategy_signal_distribution,
         "strategy_drift_alerts": drift.get("strategy_drift_alerts", []),
         "signal_feed": signal_feed,
@@ -683,10 +875,28 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             "execution_suitability": microstructure_status.get("execution_suitability", {}),
         },
         "interaction_guard": {
-            "blocked_total": len(interaction_blocked) + len(exposure_blocked),
+            "blocked_total": len(interaction_blocked) + len(exposure_blocked) + int(governance_enforcement.get("disabled_blocked_total", 0)) + int(governance_enforcement.get("throttled_rejected_total", 0)),
             "interaction_blocked_total": len(interaction_blocked),
             "exposure_blocked_total": len(exposure_blocked),
-            "blocked": [*interaction_blocked, *exposure_blocked],
+            "governance_disabled_blocked_total": int(governance_enforcement.get("disabled_blocked_total", 0)),
+            "governance_throttled_rejected_total": int(governance_enforcement.get("throttled_rejected_total", 0)),
+            "blocked": [*interaction_blocked, *exposure_blocked, *governance_blocked_rows],
+        },
+        "strategy_governance": {
+            "strategy_health_score": health_snapshot.get("strategies", []),
+            "throttle_state": throttle_result.get("strategy_throttle_state", []),
+            "disable_state": disable_result.get("strategy_disable_state", []),
+            "decay_events": decay_result.get("strategy_decay_events", []),
+            "lifecycle_state": [
+                {
+                    "strategy": item.get("strategy"),
+                    "lifecycle_state": item.get("lifecycle_state", "ACTIVE"),
+                    "last_transition_at": item.get("last_transition_at"),
+                    "last_transition_reason": item.get("last_transition_reason"),
+                }
+                for item in (lifecycle_result.get("registry", {}) or {}).values()
+            ],
+            "governance_enforcement": governance_enforcement,
         },
         "exposure_tracking": exposure,
         "strategy_attribution": attribution.get("strategy_attribution", []),
@@ -701,6 +911,12 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
 
     if cache:
         cache.set(f"futures:strategy:status:{user_id}", json.dumps(snapshot))
+        cache.set(f"futures:strategy:health:{user_id}", json.dumps(health_snapshot))
+        cache.set(f"futures:strategy:governance:{user_id}", json.dumps(snapshot.get("strategy_governance") or {}))
+        cache.set(f"futures:strategy:decay-state:{user_id}", json.dumps(decay_result.get("decay_state") or {}))
+        cache.set(f"futures:strategy:throttle:{user_id}", json.dumps(throttle_result))
+        cache.set(f"futures:strategy:lifecycle:{user_id}", json.dumps(lifecycle_result.get("registry") or {}))
+        cache.set(f"futures:strategy:governance:audit:{user_id}", json.dumps(governance_events[-250:]))
         cache.set("metrics:futures_strategy_signal_total", str(snapshot["metrics"]["futures_strategy_signal_total"]))
         cache.set("metrics:futures_strategy_allowed_total", str(snapshot["metrics"]["futures_strategy_allowed_total"]))
         cache.set("metrics:futures_strategy_rejected_total", str(snapshot["metrics"]["futures_strategy_rejected_total"]))
@@ -796,6 +1012,130 @@ def get_futures_strategy_execution_quality(db: Session, cache, user_id: str, ref
         "false_allow_reject_comparison_by_strategy": status.get("false_allow_reject_comparison_by_strategy", []),
         "gate_reason_trend_7d": gate_trend,
         "architecture_checklist_15": status.get("architecture_checklist_15", []),
+    }
+
+
+def get_futures_strategy_health(db: Session, cache, user_id: str, refresh: bool = False) -> dict:
+    status = get_futures_strategy_status(db, cache, user_id, refresh=refresh)
+    health_rows = status.get("strategy_health_score") or []
+    components = status.get("strategy_health_components") or []
+    lifecycle = status.get("strategy_lifecycle_state") or []
+    lifecycle_map = {str(item.get("strategy")): item for item in lifecycle}
+
+    return {
+        "generated_at": status.get("generated_at"),
+        "strategy_health_score": health_rows,
+        "health_components": components,
+        "lifecycle_state": lifecycle,
+        "drawdown_state": [
+            {
+                "strategy": row.get("strategy"),
+                "drawdown_state": row.get("drawdown_state", "NORMAL"),
+                "last_transition_at": (lifecycle_map.get(str(row.get("strategy"))) or {}).get("last_transition_at"),
+            }
+            for row in health_rows
+        ],
+    }
+
+
+def get_futures_strategy_governance(
+    db: Session,
+    cache,
+    user_id: str,
+    refresh: bool = False,
+    compare_a: str | None = None,
+    compare_b: str | None = None,
+) -> dict:
+    status = get_futures_strategy_status(db, cache, user_id, refresh=refresh)
+    governance = status.get("strategy_governance") or {}
+
+    registry = status.get("strategy_registry") or []
+    selected: list[str] = []
+    if compare_a and compare_a in registry:
+        selected.append(compare_a)
+    if compare_b and compare_b in registry and compare_b not in selected:
+        selected.append(compare_b)
+    if not selected:
+        selected = registry[:2]
+    elif len(selected) == 1:
+        backup = next((item for item in registry if item != selected[0]), selected[0] if selected else "")
+        if backup:
+            selected.append(backup)
+
+    history = _safe_json(cache.get(f"futures:strategy:history:{user_id}"), []) if cache else []
+    weekly_summary = _weekly_strategy_summary(history, selected)
+
+    lifecycle_state = governance.get("lifecycle_state") or status.get("strategy_lifecycle_state") or []
+    lifecycle_map = {str(item.get("strategy")): item for item in lifecycle_state}
+    decay_events = governance.get("decay_events") or status.get("strategy_decay_events") or []
+    health_rows = governance.get("strategy_health_score") or status.get("strategy_health_score") or []
+    health_component_map = {
+        str(item.get("strategy")): item.get("health_components", {})
+        for item in (status.get("strategy_health_components") or [])
+    }
+
+    return {
+        "generated_at": status.get("generated_at"),
+        "strategy_health_score": health_rows,
+        "throttle_state": governance.get("throttle_state") or status.get("strategy_throttle_state") or [],
+        "disable_state": governance.get("disable_state") or status.get("strategy_disable_state") or [],
+        "decay_events": decay_events,
+        "health_components": [
+            {
+                "strategy": row.get("strategy"),
+                "health_components": health_component_map.get(str(row.get("strategy")), row.get("health_components", {})),
+            }
+            for row in health_rows
+        ],
+        "decay_reason_codes": [
+            {
+                "strategy": item.get("strategy"),
+                "decay_reason_codes": item.get("decay_reason_codes") or [],
+            }
+            for item in decay_events
+        ],
+        "lifecycle_state": lifecycle_state,
+        "last_transition_at": [
+            {
+                "strategy": row.get("strategy"),
+                "last_transition_at": (lifecycle_map.get(str(row.get("strategy"))) or {}).get("last_transition_at"),
+            }
+            for row in health_rows
+        ],
+        "drawdown_state": [
+            {
+                "strategy": row.get("strategy"),
+                "drawdown_state": row.get("drawdown_state", "NORMAL"),
+            }
+            for row in health_rows
+        ],
+        "governance_audit_events": status.get("governance_audit_events")
+        or (_safe_json(cache.get(f"futures:strategy:governance:audit:{user_id}"), []) if cache else []),
+        "strategy_compare_mode": {
+            "selected_strategies": selected,
+            "metrics": [
+                {
+                    "strategy": row.get("strategy"),
+                    "pnl": row.get("strategy_pnl_rolling", 0.0),
+                    "execution_quality": row.get("strategy_execution_quality", 0.0),
+                    "signal_frequency": (
+                        next(
+                            (
+                                item.get("signal_total")
+                                for item in (status.get("strategy_signal_distribution") or [])
+                                if item.get("strategy") == row.get("strategy")
+                            ),
+                            0,
+                        )
+                    ),
+                    "win_rate": row.get("strategy_win_rate_rolling", 0.0),
+                    "health_score": row.get("strategy_health_score", 0.0),
+                }
+                for row in health_rows
+                if row.get("strategy") in set(selected)
+            ],
+            "weekly_auto_summary": weekly_summary,
+        },
     }
 
 
