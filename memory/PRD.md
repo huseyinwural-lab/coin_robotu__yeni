@@ -1100,3 +1100,58 @@
 - **P1:** Futures reversion/breakout + dynamic leverage model
 - **P2:** Spot/futures capital allocation engine formalizasyonu
 - **P2:** User platform (portföy, performans, kullanıcı paneli derinleştirme)
+
+## 16) 2026-03-12 — P1 Futures Strategy Integration (Paper Mode)
+
+### Uygulanan kapsam (Phase 5.3A→5.3G)
+- **Strategy contract** eklendi:
+  - `core/strategy/futures/strategy_contract.py`
+  - `FuturesStrategy` + `StrategySignal(symbol, side, confidence, regime, reason)`
+- **İlk futures strateji implementasyonu** tamamlandı:
+  - `core/strategy/futures/futures_trend_follow_v1.py`
+  - Koşullar: trend_strength, regime=TRENDING, funding_alignment, spread_state!=SHOCK
+  - Çıktı sadece signal; execution içermez.
+- **Futures Strategy Engine** eklendi:
+  - `core/strategy/futures/futures_strategy_engine.py`
+  - Chain: `strategy_signal -> microstructure_guard -> risk_engine -> liquidation_gate -> adl_gate -> policy_engine -> paper_decision`
+- **Paper execution simulator** eklendi:
+  - `core/execution/futures_paper_executor.py`
+  - Synthetic lifecycle: `paper_position_opened`, `paper_position_closed`, `paper_pnl`
+  - Gerçek order gönderimi yok.
+- **Orkestrasyon servisi** eklendi:
+  - `services/futures_strategy_service.py`
+  - `run_futures_strategy_paper_cycle` + `get_futures_strategy_status`
+  - Metrikler:
+    - `futures_strategy_signal_total`
+    - `futures_strategy_allowed_total`
+    - `futures_strategy_rejected_total`
+    - `futures_strategy_confidence`
+    - `futures_strategy_paper_pnl`
+- **Admin API** eklendi:
+  - `POST /api/admin/futures/strategy/run-paper-cycle`
+  - `GET /api/admin/futures/strategy/status`
+
+### Frontend (Admin Strategy Section)
+- `AdminFuturesRiskMonitorPage` genişletildi (route: `/admin/futures/risk-monitor`):
+  - Strategy signal feed
+  - Strategy decision trace
+  - Paper PnL chart
+  - Strategy reject reasons
+  - Confidence distribution
+  - Strategy metrics kartları (signal/allow/reject/confidence/pnl)
+
+### Test ve doğrulama
+- Yeni test dosyaları:
+  - `tests/test_futures_trend_follow_v1.py`
+  - `tests/test_strategy_engine.py`
+  - `tests/test_paper_executor.py`
+  - `tests/test_strategy_admin_endpoint.py`
+- Self-test:
+  - `15/15 PASS`
+- Testing agent:
+  - `/app/test_reports/iteration_31.json`
+  - Backend + Frontend + Regression: **PASS**
+
+### Notlar
+- Bu faz **paper-only** çalışır; testnet/live execution açılmadı.
+- Full kapsamlı `Phase 5.1B Microstructure Guard` dedektör seti henüz tamamlanmadı; bu iterasyonda spread-shock tabanlı microstructure gate zincire bağlandı.

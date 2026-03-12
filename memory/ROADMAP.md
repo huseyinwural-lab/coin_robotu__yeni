@@ -9,10 +9,11 @@
   - `/api/admin/futures/adl/status`
 - Admin panel: `/admin/futures/liquidation-protection`
 
-## P1 (Sıradaki)
-1. `futures_trend_follow_v1` (paper-only) strateji implementasyonu
-2. Yeni futures stratejilerinin risk foundation ile entegrasyonu
-3. Dynamic leverage modelinin policy engine ile uyumlu aktif edilmesi
+## P1 (İlerleme)
+1. ✅ `futures_trend_follow_v1` (paper-only) strategy contract + engine + paper executor + admin strategy görünürlüğü
+2. ⏳ Phase 5.1B Market Microstructure Guard (detector set + endpoint + panel)
+3. ⏳ Phase 5.2 risk core + paper decision flow’un tek trace altında tam standardizasyonu
+4. ⏳ Futures reversion/breakout stratejileri + dynamic leverage model
 
 ## P2 (Backlog)
 1. Spot/Futures capital allocation engine formalizasyonu
