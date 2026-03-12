@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -6,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 
 export const UserSignalsPage = () => {
+  const navigate = useNavigate();
   const [signals, setSignals] = useState([]);
   const [portfolio, setPortfolio] = useState(null);
   const [trades, setTrades] = useState([]);
@@ -49,6 +51,57 @@ export const UserSignalsPage = () => {
     return <LoadingSkeleton rows={6} testId="user-signals-loading-skeleton" />;
   }
 
+  const openExecuteFromSignal = (signal) => {
+    const side = signal.status === "pending" ? "buy" : "buy";
+    navigate(`/user/execute?source=signal&symbol=${encodeURIComponent(signal.symbol)}&side=${encodeURIComponent(side)}&market_type=spot&preset=spot_basic`);
+  };
+
+  const applyPresetFromSignal = (signal) => {
+    navigate(`/user/execute?source=signal&symbol=${encodeURIComponent(signal.symbol)}&side=buy&market_type=spot&preset=spot_basic`);
+  };
+
+  const buildIntentPayload = (signal) => ({
+    source_type: "signal",
+    source_ref_id: signal.signal_id,
+    market_type: "spot",
+    symbol: signal.symbol,
+    side: "buy",
+    order_type: "market",
+    position_size_mode: "fixed_notional",
+    position_size_value: 30,
+    take_profit_mode: "percent",
+    take_profit_value: 2,
+    stop_loss_mode: "percent",
+    stop_loss_value: 1,
+    execution_mode: "signal_follow",
+  });
+
+  const previewIntentFromSignal = async (signal) => {
+    try {
+      const { data } = await apiClient.post("/user/execution/intent/preview", buildIntentPayload(signal));
+      toast.success(`Preview: ${data.validation_status}`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Preview başarısız");
+    }
+  };
+
+  const followSignalToQueue = async (signal) => {
+    try {
+      const { data } = await apiClient.post("/user/execution/intent/preview", buildIntentPayload(signal));
+      if (data.validation_status !== "valid") {
+        toast.error("Signal policy tarafından reddedildi");
+        return;
+      }
+      await apiClient.post("/user/execution/intent/submit", {
+        intent_token: data.intent_token,
+        preview_hash: data.preview_hash,
+      });
+      toast.success("Follow Signal kuyruğa eklendi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Follow signal başarısız");
+    }
+  };
+
   return (
     <section className="grid grid-cols-12 gap-4" data-testid="user-signals-page">
       <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-signals-header">
@@ -80,6 +133,10 @@ export const UserSignalsPage = () => {
               <div className="mt-2 flex gap-2" data-testid="user-signals-mobile-actions">
                 <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid="user-signals-mobile-approve">Approve</Button>
                 <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid="user-signals-mobile-reject">Reject</Button>
+                <Button variant="outline" onClick={() => openExecuteFromSignal(signal)} data-testid="user-signals-mobile-open-execute">Execute</Button>
+                <Button variant="outline" onClick={() => applyPresetFromSignal(signal)} data-testid="user-signals-mobile-apply-preset">Apply Preset</Button>
+                <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid="user-signals-mobile-preview-intent">Preview Intent</Button>
+                <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid="user-signals-mobile-follow-signal">Follow Signal</Button>
               </div>
             )}
           </article>
@@ -111,6 +168,10 @@ export const UserSignalsPage = () => {
                     <div className="flex gap-2">
                       <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid="user-signals-approve-button">Approve</Button>
                       <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid="user-signals-reject-button">Reject</Button>
+                      <Button variant="outline" onClick={() => openExecuteFromSignal(signal)} data-testid="user-signals-open-execute-button">Open in Execute</Button>
+                      <Button variant="outline" onClick={() => applyPresetFromSignal(signal)} data-testid="user-signals-apply-preset-button">Apply Preset</Button>
+                      <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid="user-signals-preview-intent-button">Preview Intent</Button>
+                      <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid="user-signals-follow-signal-button">Follow Signal</Button>
                     </div>
                   ) : (
                     <span className="text-xs text-slate-400" data-testid="user-signals-final-status-text">{signal.status}</span>

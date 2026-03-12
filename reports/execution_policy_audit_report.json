@@ -1,0 +1,22 @@
+{
+  "report_version": "iteration50_v1",
+  "generated_at": "2026-03-12T19:40:00Z",
+  "policy_registry_path": "/app/config/execution_policy_registry.json",
+  "default_execution_mode": "ASSISTED",
+  "symbols_allowlist": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT",
+    "SOLUSDT"
+  ],
+  "audit_required_events": [
+    "EXECUTION_INTENT_PREVIEWED",
+    "EXECUTION_INTENT_SUBMITTED",
+    "EXECUTION_INTENT_REJECTED",
+    "EXECUTION_INTENT_QUEUED",
+    "EXECUTION_INTENT_APPROVED",
+    "EXECUTION_ORDER_RELEASED"
+  ],
+  "latest_policy_violations": [],
+  "notes": "Execution policy audit baseline generated for iteration-50 rollout."
+}

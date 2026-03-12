@@ -55,6 +55,9 @@ import { UserPortfolioPage } from "@/pages/UserPortfolioPage";
 import { UserTradesPage } from "@/pages/UserTradesPage";
 import { UserScannerPage } from "@/pages/UserScannerPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
+import { UserReportsPage } from "@/pages/UserReportsPage";
+import { UserExecutePage } from "@/pages/UserExecutePage";
+import { AdminExecutionQueuePage } from "@/pages/AdminExecutionQueuePage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -84,6 +87,8 @@ function App() {
           <Route path="/trades" element={<Navigate to="/user/trades" replace />} />
           <Route path="/scanner" element={<Navigate to="/user/scanner" replace />} />
           <Route path="/signals" element={<Navigate to="/user/signals" replace />} />
+          <Route path="/reports" element={<Navigate to="/user/reports" replace />} />
+          <Route path="/execute" element={<Navigate to="/user/execute" replace />} />
 
           <Route
             path="/admin"
@@ -121,6 +126,7 @@ function App() {
             <Route path="runtime/recovery" element={<AdminRuntimeRecoveryPage />} />
             <Route path="market-universe" element={<MarketUniversePage />} />
             <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
+            <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />
             <Route path="correlation-matrix" element={<CorrelationMatrixPage />} />
             <Route path="execution-states" element={<ExecutionStatesPage />} />
@@ -146,6 +152,8 @@ function App() {
             <Route path="trades" element={<UserTradesPage />} />
             <Route path="scanner" element={<UserScannerPage />} />
             <Route path="signals" element={<UserSignalsPage />} />
+            <Route path="reports" element={<UserReportsPage />} />
+            <Route path="execute" element={<UserExecutePage />} />
             <Route path="bots" element={<BotProfilesPage />} />
             <Route path="risk-policies" element={<RiskPoliciesPage />} />
             <Route path="strategies" element={<StrategyTemplatesPage />} />

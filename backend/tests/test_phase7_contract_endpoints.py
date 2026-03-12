@@ -79,8 +79,9 @@ def test_user_scanner_contract_endpoint(user_headers):
     assert {"mode", "total_results", "pending_signals", "latest_run_id", "latest_generated_at"}.issubset(set(payload.keys()))
 
 
-def test_user_reports_weekly_stub_returns_501(user_headers):
+def test_user_reports_weekly_live_returns_200(user_headers):
     response = requests.get(f"{BASE_URL}/api/user/reports/weekly", headers=user_headers, timeout=20)
-    assert response.status_code == 501
+    assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "not_implemented"
+    assert "report_id" in payload
+    assert "download_links" in payload

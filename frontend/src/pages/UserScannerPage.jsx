@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -6,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 
 export const UserScannerPage = () => {
+  const navigate = useNavigate();
   const [mode, setMode] = useState("ASSISTED");
   const [overview, setOverview] = useState(null);
   const [scannerResults, setScannerResults] = useState([]);
@@ -47,6 +49,53 @@ export const UserScannerPage = () => {
   if (isLoading) {
     return <LoadingSkeleton rows={6} testId="user-scanner-loading-skeleton" />;
   }
+
+  const openExecuteFromScanner = (item) => {
+    const side = item.signal === "short" ? "sell" : "buy";
+    navigate(`/user/execute?source=scanner&symbol=${encodeURIComponent(item.symbol)}&side=${encodeURIComponent(side)}&market_type=spot&preset=spot_basic`);
+  };
+
+  const buildIntentPayload = (item) => ({
+    source_type: "scanner",
+    source_ref_id: item.id,
+    market_type: "spot",
+    symbol: item.symbol,
+    side: item.signal === "short" ? "sell" : "buy",
+    order_type: "market",
+    position_size_mode: "fixed_notional",
+    position_size_value: 30,
+    take_profit_mode: "percent",
+    take_profit_value: 2,
+    stop_loss_mode: "percent",
+    stop_loss_value: 1,
+    execution_mode: "signal_follow",
+  });
+
+  const previewIntentFromScanner = async (item) => {
+    try {
+      const { data } = await apiClient.post("/user/execution/intent/preview", buildIntentPayload(item));
+      toast.success(`Preview: ${data.validation_status}`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Preview başarısız");
+    }
+  };
+
+  const queueIntentFromScanner = async (item) => {
+    try {
+      const { data } = await apiClient.post("/user/execution/intent/preview", buildIntentPayload(item));
+      if (data.validation_status !== "valid") {
+        toast.error("Policy preview reddetti");
+        return;
+      }
+      await apiClient.post("/user/execution/intent/submit", {
+        intent_token: data.intent_token,
+        preview_hash: data.preview_hash,
+      });
+      toast.success("Queue Assisted Order gönderildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Queue başarısız");
+    }
+  };
 
   return (
     <section className="grid grid-cols-12 gap-4" data-testid="user-scanner-page">
@@ -91,6 +140,11 @@ export const UserScannerPage = () => {
             <p className="text-sm font-semibold" data-testid="user-scanner-mobile-symbol">{item.symbol}</p>
             <p className="text-xs text-slate-500" data-testid="user-scanner-mobile-signal">Signal: {item.signal}</p>
             <p className="text-xs text-slate-500" data-testid="user-scanner-mobile-confidence">Confidence: {item.confidence}</p>
+            <div className="mt-2 flex gap-2" data-testid="user-scanner-mobile-actions">
+              <Button variant="outline" onClick={() => openExecuteFromScanner(item)} data-testid="user-scanner-open-execute-button">Open in Execute</Button>
+              <Button variant="outline" onClick={() => previewIntentFromScanner(item)} data-testid="user-scanner-preview-intent-button">Preview Intent</Button>
+              <Button variant="outline" onClick={() => queueIntentFromScanner(item)} data-testid="user-scanner-queue-intent-button">Queue Order</Button>
+            </div>
           </article>
         ))}
       </div>
@@ -104,6 +158,7 @@ export const UserScannerPage = () => {
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Confidence</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Score</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Strategy</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Actions</th>
             </tr>
           </thead>
           <tbody data-testid="user-scanner-results-table-body">
@@ -114,6 +169,13 @@ export const UserScannerPage = () => {
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{item.confidence}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{item.signal_score}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{item.strategy_code}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>
+                  <div className="flex gap-2" data-testid="user-scanner-table-actions">
+                    <Button variant="outline" onClick={() => openExecuteFromScanner(item)} data-testid="user-scanner-table-open-execute-button">Open in Execute</Button>
+                    <Button variant="outline" onClick={() => previewIntentFromScanner(item)} data-testid="user-scanner-table-preview-intent-button">Preview Intent</Button>
+                    <Button variant="outline" onClick={() => queueIntentFromScanner(item)} data-testid="user-scanner-table-queue-intent-button">Queue Order</Button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

@@ -41,8 +41,11 @@ from routers import (
     ops_alerts,
     report_archive,
     risk_policies,
+    admin_execution,
     user_approvals,
+    user_execution,
     user_platform,
+    user_reports,
     user_scanner_signals,
     user_risk,
     strategy_templates,
@@ -89,6 +92,8 @@ api_router.include_router(risk_policies.router)
 api_router.include_router(user_risk.router)
 api_router.include_router(user_platform.router)
 api_router.include_router(user_scanner_signals.router)
+api_router.include_router(user_execution.router)
+api_router.include_router(user_reports.router)
 api_router.include_router(strategy_templates.router)
 api_router.include_router(strategy_domain.router)
 api_router.include_router(audit_logs.router)
@@ -119,6 +124,7 @@ api_router.include_router(admin_futures_scaling_validation.router)
 api_router.include_router(admin_phase3.router)
 api_router.include_router(admin_strategy_risk_capital.router)
 api_router.include_router(admin_strategy_observability.router)
+api_router.include_router(admin_execution.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(spot_strategy.router)
 api_router.include_router(paper_positions.router)

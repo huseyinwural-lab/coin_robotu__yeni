@@ -111,16 +111,18 @@
         "week": "string(optional)"
       },
       "response_schema": {
-        "status": "string",
-        "report_id": "string|null",
-        "week": "string|null",
-        "pnl": "number|null",
-        "win_rate": "number|null",
+        "report_id": "string",
+        "week": "string",
+        "summary": "object",
+        "pnl": "number",
+        "win_rate": "number",
+        "max_drawdown": "number",
+        "strategy_contribution": "object",
         "download_links": "object",
-        "detail": "string"
+        "status": "string"
       },
       "auth_scope": "user",
-      "status_codes": [501, 401, 403]
+      "status_codes": [200, 401, 403]
     }
   ]
 }

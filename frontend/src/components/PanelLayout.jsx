@@ -8,6 +8,7 @@ import {
   ClipboardList,
   CircuitBoard,
   Cpu,
+  FileText,
   Gauge,
   Globe,
   History,
@@ -25,6 +26,7 @@ import {
   TestTube2,
   TrendingUp,
   UserCog,
+  Wrench,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -40,6 +42,8 @@ const userNavItems = [
   { to: "/user/trades", label: "Trades", icon: Activity, testId: "nav-user-trades-link" },
   { to: "/user/scanner", label: "Scanner", icon: Gauge, testId: "nav-user-scanner-link" },
   { to: "/user/signals", label: "Signals", icon: Radio, testId: "nav-user-signals-link" },
+  { to: "/user/reports", label: "Reports", icon: FileText, testId: "nav-user-reports-link" },
+  { to: "/user/execute", label: "Execute", icon: Wrench, testId: "nav-user-execute-link" },
   { to: "/user/bots", label: "Bot Profilleri", icon: TrendingUp, testId: "nav-bot-profiles-link" },
   { to: "/user/risk-policies", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
   { to: "/user/strategies", label: "Strategy Template", icon: ClipboardList, testId: "nav-strategy-templates-link" },
@@ -77,6 +81,7 @@ const adminOnlyItems = [
   { to: "/admin/runtime/recovery", label: "Runtime Recovery", icon: History, testId: "nav-runtime-recovery-link" },
   { to: "/admin/market-universe", label: "Market Universe", icon: Globe, testId: "nav-market-universe-link" },
   { to: "/admin/execution-policies", label: "Execution Policies", icon: Settings2, testId: "nav-execution-policies-link" },
+  { to: "/admin/execution-queue", label: "Execution Queue", icon: Wrench, testId: "nav-execution-queue-link" },
   { to: "/admin/exposure-groups", label: "Exposure Groups", icon: ShieldAlert, testId: "nav-exposure-groups-link" },
   { to: "/admin/correlation-matrix", label: "Correlation Matrix", icon: CircuitBoard, testId: "nav-correlation-matrix-link" },
   { to: "/admin/execution-states", label: "Execution States", icon: Cpu, testId: "nav-execution-states-link" },

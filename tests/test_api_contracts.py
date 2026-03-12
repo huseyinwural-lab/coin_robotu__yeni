@@ -142,11 +142,11 @@ def test_contract_endpoints_match_snapshot_schema(user_token, contract_snapshot)
         _assert_schema(response.json(), contract["response_schema"])
 
 
-def test_reports_weekly_stub_contract_501(user_token, contract_snapshot):
+def test_reports_weekly_live_contract(user_token, contract_snapshot):
     headers = {"Authorization": f"Bearer {user_token}"}
     contract = _contract_lookup(contract_snapshot, "/api/user/reports/weekly")
 
     response = requests.get(f"{BASE_URL}/api/user/reports/weekly", headers=headers, timeout=20)
-    assert response.status_code == 501
+    assert response.status_code == 200
     assert response.status_code in contract["status_codes"]
     _assert_schema(response.json(), contract["response_schema"])

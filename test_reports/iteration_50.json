@@ -1,0 +1,155 @@
+{
+  "summary": "Iteration 50 PG-01 + Phase-7A Execution Backend Complete - All features tested: weekly reports live, execution intent flow, admin execution queue, policy validation, CI gates PASS",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "chart rendering",
+        "issue": "Console warning: chart width/height -1 on initial dashboard load (non-blocking)",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration50_pg01_execution_backend.py",
+    "/app/backend/tests/test_iteration50_comprehensive.py",
+    "/app/test_reports/pytest/pytest_results_iter50_pg01.xml",
+    "/app/test_reports/pytest/pytest_results_iter50_comprehensive.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration50_comprehensive.py"
+  ],
+  "success_rate": {
+    "backend": "100% (20/20 pytest tests passed)",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "user": "iter50comp_wuztkmzp@example.com / Iter50CompTest!",
+    "admin": "admin@platform.dev / Admin12345!"
+  },
+  "seed_data_creation": "Test users created via registration + admin approval flow during tests",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 50 Phase-7A execution backend complete. All execution intent flows (preview->submit->queue->admin approve->release) working. Policy validation with reason codes verified.",
+  "features_verified": {
+    "PG01_Weekly_Reports_Live": {
+      "status": "PASS",
+      "endpoint": "GET /api/user/reports/weekly",
+      "returns_200": true,
+      "report_id": true,
+      "summary": true,
+      "download_links": true,
+      "empty_week_handling": true
+    },
+    "PG01_Artifact_Download": {
+      "status": "PASS",
+      "endpoint": "/api/user/reports/weekly/download/{report_id}/{artifact}",
+      "owner_scope": true,
+      "supported_artifacts": ["weekly_performance_report.pdf", "weekly_trades.csv", "weekly_strategy_stats.json"]
+    },
+    "Execution_Policy_Registry": {
+      "status": "PASS",
+      "file": "/app/config/execution_policy_registry.json",
+      "symbols_allowlist": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"],
+      "market_types": ["spot", "futures"]
+    },
+    "Pre_Trade_Validation": {
+      "status": "PASS",
+      "reject_reason_codes_tested": [
+        "symbol_not_allowed",
+        "leverage_cap_exceeded",
+        "margin_mode_not_allowed",
+        "min_notional_not_met"
+      ],
+      "risk_flags_tested": ["stop_loss_missing_warning"]
+    },
+    "Intent_API_Flow": {
+      "status": "PASS",
+      "preview_returns_intent_token": true,
+      "preview_returns_preview_hash": true,
+      "preview_without_submit_rejected": true,
+      "preview_hash_mismatch_rejected": true,
+      "full_flow_queue_mode": "ASSISTED"
+    },
+    "Assisted_Queue_Binding": {
+      "status": "PASS",
+      "submit_queues_not_direct_release": true,
+      "admin_approve_releases": true
+    },
+    "Admin_Execution_Queue": {
+      "status": "PASS",
+      "list_endpoint": "GET /api/admin/execution-queue",
+      "approve_endpoint": "POST /api/admin/execution-queue/{id}/approve",
+      "reject_endpoint": "POST /api/admin/execution-queue/{id}/reject"
+    },
+    "Admin_Execution_Policies_View": {
+      "status": "PASS",
+      "endpoint": "GET /api/admin/execution-policies",
+      "returns_registry": true,
+      "returns_recent_violations": true
+    },
+    "User_Pages_Rendering": {
+      "status": "PASS",
+      "user_reports_page": true,
+      "user_execute_page": true,
+      "user_scanner_page": true,
+      "user_signals_page": true
+    },
+    "Deep_Link_Prefill": {
+      "status": "PASS",
+      "scanner_to_execute": true,
+      "symbol_prefilled": true,
+      "side_prefilled": true,
+      "preset_applied": true
+    },
+    "CI_Execution_Contract_Gate": {
+      "status": "PASS",
+      "script": "/app/scripts/ci_execution_contract_gate.sh",
+      "checked_endpoints": 4
+    },
+    "CI_Contract_Gate": {
+      "status": "PASS",
+      "script": "/app/scripts/ci_contract_gate.sh",
+      "checked_contracts": 6
+    }
+  },
+  "pytest_results": {
+    "test_pg01_reports_live_and_artifacts": "PASSED",
+    "test_execution_preview_submit_admin_release_flow": "PASSED",
+    "test_weekly_report_returns_200": "PASSED",
+    "test_weekly_report_empty_week_handling": "PASSED",
+    "test_weekly_report_artifact_download": "PASSED",
+    "test_allowed_symbols_in_policy": "PASSED",
+    "test_policy_validates_symbol_not_allowed": "PASSED",
+    "test_policy_validates_leverage_cap_exceeded": "PASSED",
+    "test_policy_validates_margin_mode_not_allowed": "PASSED",
+    "test_policy_validates_min_notional_not_met": "PASSED",
+    "test_policy_stop_loss_missing_warning_futures": "PASSED",
+    "test_preview_creates_intent_token": "PASSED",
+    "test_submit_without_preview_rejected": "PASSED",
+    "test_submit_with_preview_hash_mismatch_rejected": "PASSED",
+    "test_full_preview_submit_queue_flow": "PASSED",
+    "test_cancel_intent_works": "PASSED",
+    "test_admin_execution_queue_list": "PASSED",
+    "test_admin_execution_queue_approve_reject": "PASSED",
+    "test_admin_execution_policies_returns_registry": "PASSED",
+    "test_execution_presets_list": "PASSED"
+  },
+  "screenshots": [
+    "iter50_admin_execution_queue.jpeg",
+    "iter50_execution_policies.jpeg",
+    "iter50_user_reports_success.jpeg",
+    "iter50_user_execute_success.jpeg",
+    "iter50_execute_preview_success.jpeg",
+    "iter50_user_scanner_success.jpeg",
+    "iter50_user_signals_success.jpeg",
+    "iter50_deeplink_success.jpeg"
+  ]
+}

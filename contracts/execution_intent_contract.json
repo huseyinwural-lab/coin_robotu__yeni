@@ -6,7 +6,16 @@
     "preview_required": true,
     "tokenless_submit_rejected": true,
     "approval_required_before_release": true,
-    "release_without_approval": false
+    "release_without_approval": false,
+    "state_machine": [
+      "PREVIEWED",
+      "SUBMITTED",
+      "QUEUED",
+      "REJECTED",
+      "APPROVED",
+      "RELEASED",
+      "CANCELLED"
+    ]
   },
   "endpoints": [
     {
@@ -27,11 +36,12 @@
         "execution_mode": "manual|bot_assisted|signal_follow"
       },
       "response_schema": {
-        "validation_status": "string",
+        "validation_status": "valid|rejected",
         "reject_reason_codes": "array",
         "normalized_order_payload": "object",
         "risk_flags": "array",
-        "intent_token": "string"
+        "intent_token": "string",
+        "preview_hash": "string"
       },
       "status_codes": [200, 400, 401, 403]
     },
@@ -46,7 +56,7 @@
       "response_schema": {
         "intent_status": "QUEUED_FOR_APPROVAL|REJECTED_BY_POLICY|REJECTED_BY_PERMISSION|REQUIRES_PARAMETER_FIX|READY_FOR_RELEASE",
         "reason_codes": "array",
-        "queue_id": "string|null"
+        "queue_state": "string"
       },
       "status_codes": [200, 400, 401, 403]
     },

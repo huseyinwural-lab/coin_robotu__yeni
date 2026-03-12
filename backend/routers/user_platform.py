@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from core.users.user_exchange_connector import (
@@ -31,7 +30,6 @@ from schemas import (
     UserPortfolioSnapshotResponse,
     UserRiskSettingsResponse,
     UserRiskSettingsUpdate,
-    UserWeeklyReportStubResponse,
     UserTradeResponse,
 )
 from services.audit_service import create_audit_log
@@ -194,16 +192,3 @@ def get_user_dashboard(current_user: User = Depends(require_user), db: Session =
         heartbeat=heartbeat,
     )
 
-
-@router.get("/reports/weekly", response_model=UserWeeklyReportStubResponse)
-def get_weekly_report_stub(current_user: User = Depends(require_user)):
-    payload = UserWeeklyReportStubResponse(
-        status="not_implemented",
-        report_id=None,
-        week=None,
-        pnl=None,
-        win_rate=None,
-        download_links={},
-        detail="weekly reporting engine not implemented in this iteration",
-    )
-    return JSONResponse(status_code=501, content=payload.model_dump())

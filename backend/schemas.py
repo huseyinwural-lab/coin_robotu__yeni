@@ -1347,6 +1347,111 @@ class UserWeeklyReportStubResponse(BaseModel):
     detail: str
 
 
+class UserWeeklyReportResponse(BaseModel):
+    report_id: str
+    week: str
+    summary: dict
+    pnl: float
+    win_rate: float
+    max_drawdown: float
+    strategy_contribution: dict
+    download_links: dict[str, str]
+    status: str
+
+
+class ExecutionIntentPreviewRequest(BaseModel):
+    source_type: str = "manual"
+    source_ref_id: str | None = None
+    market_type: str
+    symbol: str
+    side: str
+    order_type: str
+    position_size_mode: str = "fixed_notional"
+    position_size_value: float = Field(default=10, gt=0)
+    margin_mode: str | None = None
+    leverage: int | None = None
+    take_profit_mode: str = "none"
+    take_profit_value: float = 0
+    stop_loss_mode: str = "none"
+    stop_loss_value: float = 0
+    execution_mode: str = "manual"
+    strategy_binding: str | None = None
+    holding_profile: str = "intraday"
+
+
+class ExecutionIntentPreviewResponse(BaseModel):
+    intent_id: str
+    intent_token: str
+    preview_hash: str
+    validation_status: str
+    reject_reason_codes: list[str]
+    normalized_order_payload: dict
+    risk_flags: list[str]
+    queue_mode: str
+    approval_required: bool
+    intent_status: str
+
+
+class ExecutionIntentSubmitRequest(BaseModel):
+    intent_token: str
+    preview_hash: str | None = None
+
+
+class ExecutionIntentSubmitResponse(BaseModel):
+    intent_id: str
+    intent_status: str
+    reason_codes: list[str]
+    queue_state: str
+
+
+class ExecutionIntentCancelRequest(BaseModel):
+    intent_token: str
+
+
+class ExecutionIntentCancelResponse(BaseModel):
+    intent_id: str
+    intent_status: str
+    cancelled: bool
+
+
+class ExecutionPresetResponse(BaseModel):
+    preset_code: str
+    default_order_type: str
+    default_tp_mode: str
+    default_sl_mode: str
+    default_risk_percent: float
+    default_margin_mode: str | None
+    default_leverage: int | None
+    editable_fields: list[str]
+    locked_fields: list[str]
+
+
+class ExecutionIntentQueueItemResponse(BaseModel):
+    id: str
+    intent_token: str
+    user_id: str
+    user_email: str | None = None
+    symbol: str
+    market_type: str
+    side: str
+    notional: float
+    status: str
+    risk_flags: list[str]
+    reject_reason_codes: list[str]
+    normalized_order_payload: dict
+    created_at: datetime
+
+
+class AdminExecutionQueueDecisionRequest(BaseModel):
+    note: str = ""
+
+
+class AdminExecutionQueueDecisionResponse(BaseModel):
+    intent_id: str
+    status: str
+    admin_note: str
+
+
 class AlertPolicyResponse(BaseModel):
     admin_notification_enabled: bool
     ops_webhook_url: str

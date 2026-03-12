@@ -1,0 +1,112 @@
+{
+  "version": "execution_policy_v1",
+  "default_execution_mode": "ASSISTED",
+  "symbols_allowlist": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT",
+    "SOLUSDT"
+  ],
+  "market_type": {
+    "spot": {
+      "allowed_order_types": ["market", "limit"],
+      "allowed_margin_modes": [],
+      "max_leverage_by_symbol": {
+        "BTCUSDT": 1,
+        "ETHUSDT": 1,
+        "BNBUSDT": 1,
+        "SOLUSDT": 1
+      },
+      "min_notional_by_symbol": {
+        "BTCUSDT": 10,
+        "ETHUSDT": 10,
+        "BNBUSDT": 10,
+        "SOLUSDT": 10
+      }
+    },
+    "futures": {
+      "allowed_order_types": ["market", "limit", "stop_limit"],
+      "allowed_margin_modes": ["isolated", "cross"],
+      "max_leverage_by_symbol": {
+        "BTCUSDT": 20,
+        "ETHUSDT": 20,
+        "BNBUSDT": 15,
+        "SOLUSDT": 12
+      },
+      "min_notional_by_symbol": {
+        "BTCUSDT": 20,
+        "ETHUSDT": 20,
+        "BNBUSDT": 15,
+        "SOLUSDT": 15
+      }
+    }
+  },
+  "tp_sl_rules": {
+    "min_rr_ratio": 1.0,
+    "max_tp_percent": 25,
+    "max_sl_percent": 10,
+    "futures_requires_sl_warning": true
+  },
+  "assisted_mode_rules": {
+    "approval_required": true,
+    "direct_release_allowed": false,
+    "queue_target": "execution_intents"
+  },
+  "manual_entry_rules": {
+    "allow_manual": true,
+    "require_preview": true,
+    "tokenless_submit_reject": true
+  },
+  "preset_definitions": {
+    "spot_basic": {
+      "default_order_type": "market",
+      "default_tp_mode": "percent",
+      "default_sl_mode": "percent",
+      "default_risk_percent": 2,
+      "default_margin_mode": null,
+      "default_leverage": null,
+      "editable_fields": ["symbol", "side", "position_size_value", "take_profit_value", "stop_loss_value"],
+      "locked_fields": ["market_type"]
+    },
+    "futures_safe": {
+      "default_order_type": "limit",
+      "default_tp_mode": "percent",
+      "default_sl_mode": "percent",
+      "default_risk_percent": 1.5,
+      "default_margin_mode": "isolated",
+      "default_leverage": 3,
+      "editable_fields": ["symbol", "side", "position_size_value", "take_profit_value", "stop_loss_value"],
+      "locked_fields": ["market_type", "margin_mode"]
+    },
+    "futures_intraday": {
+      "default_order_type": "market",
+      "default_tp_mode": "percent",
+      "default_sl_mode": "percent",
+      "default_risk_percent": 2.5,
+      "default_margin_mode": "cross",
+      "default_leverage": 5,
+      "editable_fields": ["symbol", "side", "position_size_value", "take_profit_value", "stop_loss_value", "leverage"],
+      "locked_fields": ["market_type"]
+    },
+    "futures_swing": {
+      "default_order_type": "limit",
+      "default_tp_mode": "price",
+      "default_sl_mode": "price",
+      "default_risk_percent": 1.8,
+      "default_margin_mode": "isolated",
+      "default_leverage": 4,
+      "editable_fields": ["symbol", "side", "entry_price", "take_profit_value", "stop_loss_value"],
+      "locked_fields": ["market_type"]
+    },
+    "manual_custom_limited": {
+      "default_order_type": "limit",
+      "default_tp_mode": "none",
+      "default_sl_mode": "percent",
+      "default_risk_percent": 1,
+      "default_margin_mode": "isolated",
+      "default_leverage": 2,
+      "editable_fields": ["symbol", "side", "order_type", "position_size_value", "entry_price", "take_profit_mode", "take_profit_value", "stop_loss_mode", "stop_loss_value"],
+      "locked_fields": ["market_type"]
+    }
+  }
+}

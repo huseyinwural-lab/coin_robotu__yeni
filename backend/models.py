@@ -212,6 +212,35 @@ class PendingSignal(Base):
     decision_note: Mapped[str] = mapped_column(Text, default="")
 
 
+class UserExecutionIntent(Base):
+    __tablename__ = "user_execution_intents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    source_type: Mapped[str] = mapped_column(String(30), default="manual")
+    source_ref_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="PREVIEWED", index=True)
+    intent_token: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    preview_hash: Mapped[str] = mapped_column(String(120), index=True)
+    queue_mode: Mapped[str] = mapped_column(String(20), default="ASSISTED")
+    approval_required: Mapped[bool] = mapped_column(Boolean, default=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    market_type: Mapped[str] = mapped_column(String(20), default="spot")
+    side: Mapped[str] = mapped_column(String(10), default="buy")
+    notional: Mapped[float] = mapped_column(Float, default=0)
+    normalized_order_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    reject_reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    risk_flags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    admin_user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    admin_note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class StrategyObservabilityEvent(Base):
     __tablename__ = "strategy_observability_events"
 
