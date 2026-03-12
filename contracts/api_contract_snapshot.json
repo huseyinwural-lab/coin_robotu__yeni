@@ -1,0 +1,126 @@
+{
+  "snapshot_version": "phase7_ct_ux_v1",
+  "generated_at": "2026-03-12T19:05:00Z",
+  "contracts": [
+    {
+      "endpoint": "/api/user/dashboard",
+      "method": "GET",
+      "request_schema": null,
+      "response_schema": {
+        "bot_count": "integer",
+        "running_bot_count": "integer",
+        "risk_policy_count": "integer",
+        "current_capital": "number",
+        "available_balance": "number",
+        "open_positions_count": "integer",
+        "pending_signals_count": "integer",
+        "heartbeat": "string|null"
+      },
+      "auth_scope": "user",
+      "status_codes": [200, 401, 403]
+    },
+    {
+      "endpoint": "/api/user/portfolio",
+      "method": "GET",
+      "request_schema": null,
+      "response_schema": {
+        "current_capital": "number",
+        "available_balance": "number",
+        "open_notional": "number",
+        "open_unrealized_pnl": "number",
+        "closed_pnl": "number",
+        "open_positions_count": "integer",
+        "closed_positions_count": "integer",
+        "allocation_capital": "number",
+        "next_trade_base_capital": "number",
+        "compounding_enabled": "boolean"
+      },
+      "auth_scope": "user",
+      "status_codes": [200, 401, 403]
+    },
+    {
+      "endpoint": "/api/user/trades",
+      "method": "GET",
+      "request_schema": {
+        "limit": "integer(optional)"
+      },
+      "response_schema": {
+        "type": "array",
+        "item": {
+          "source": "string",
+          "trade_id": "string",
+          "symbol": "string",
+          "side": "string",
+          "status": "string",
+          "quantity": "number",
+          "entry_price": "number",
+          "exit_price": "number|null",
+          "realized_pnl": "number|null",
+          "unrealized_pnl": "number|null",
+          "opened_at": "datetime|null",
+          "closed_at": "datetime|null"
+        }
+      },
+      "auth_scope": "user",
+      "status_codes": [200, 401, 403]
+    },
+    {
+      "endpoint": "/api/user/scanner",
+      "method": "GET",
+      "request_schema": null,
+      "response_schema": {
+        "mode": "string",
+        "total_results": "integer",
+        "pending_signals": "integer",
+        "latest_run_id": "string|null",
+        "latest_generated_at": "datetime|null"
+      },
+      "auth_scope": "user",
+      "status_codes": [200, 401, 403]
+    },
+    {
+      "endpoint": "/api/user/signals",
+      "method": "GET",
+      "request_schema": {
+        "limit": "integer(optional)"
+      },
+      "response_schema": {
+        "type": "array",
+        "item": {
+          "id": "string",
+          "signal_id": "string",
+          "user_id": "string",
+          "symbol": "string",
+          "strategy_code": "string",
+          "confidence": "number",
+          "mode": "string",
+          "status": "string",
+          "order_position_id": "string|null",
+          "created_at": "datetime",
+          "decided_at": "datetime|null",
+          "decision_note": "string"
+        }
+      },
+      "auth_scope": "user",
+      "status_codes": [200, 401, 403]
+    },
+    {
+      "endpoint": "/api/user/reports/weekly",
+      "method": "GET",
+      "request_schema": {
+        "week": "string(optional)"
+      },
+      "response_schema": {
+        "status": "string",
+        "report_id": "string|null",
+        "week": "string|null",
+        "pnl": "number|null",
+        "win_rate": "number|null",
+        "download_links": "object",
+        "detail": "string"
+      },
+      "auth_scope": "user",
+      "status_codes": [501, 401, 403]
+    }
+  ]
+}

@@ -1318,6 +1318,35 @@ class UserSignalDecisionResponse(BaseModel):
     decision_note: str
 
 
+class UserDashboardResponse(BaseModel):
+    bot_count: int
+    running_bot_count: int
+    risk_policy_count: int
+    current_capital: float
+    available_balance: float
+    open_positions_count: int
+    pending_signals_count: int
+    heartbeat: str | None
+
+
+class UserScannerOverviewResponse(BaseModel):
+    mode: str
+    total_results: int
+    pending_signals: int
+    latest_run_id: str | None
+    latest_generated_at: datetime | None
+
+
+class UserWeeklyReportStubResponse(BaseModel):
+    status: str
+    report_id: str | None
+    week: str | None
+    pnl: float | None
+    win_rate: float | None
+    download_links: dict[str, str]
+    detail: str
+
+
 class AlertPolicyResponse(BaseModel):
     admin_notification_enabled: bool
     ops_webhook_url: str

@@ -12,8 +12,9 @@ from core.users.user_scanner_signal_service import (
 )
 from db import get_db
 from deps import require_user
-from models import User
+from models import PendingSignal, User, UserScannerResult
 from schemas import (
+    UserScannerOverviewResponse,
     UserScannerResultResponse,
     UserScannerRunRequest,
     UserScannerRunResponse,
@@ -89,6 +90,30 @@ def scanner_results(
     db: Session = Depends(get_db),
 ):
     return list_user_scanner_results(db, current_user.id, limit=limit)
+
+
+@router.get("/scanner", response_model=UserScannerOverviewResponse)
+def scanner_overview(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    mode_row = get_or_create_signal_mode(db, current_user.id)
+    latest_result = (
+        db.query(UserScannerResult)
+        .filter(UserScannerResult.user_id == current_user.id)
+        .order_by(UserScannerResult.generated_at.desc())
+        .first()
+    )
+    total_results = len(list_user_scanner_results(db, current_user.id, limit=200))
+    pending_signals = (
+        db.query(PendingSignal)
+        .filter(PendingSignal.user_id == current_user.id, PendingSignal.status == "pending")
+        .count()
+    )
+    return UserScannerOverviewResponse(
+        mode=mode_row.mode,
+        total_results=total_results,
+        pending_signals=pending_signals,
+        latest_run_id=latest_result.run_id if latest_result else None,
+        latest_generated_at=latest_result.generated_at if latest_result else None,
+    )
 
 
 @router.get("/signals", response_model=list[UserSignalResponse])

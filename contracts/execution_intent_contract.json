@@ -1,0 +1,88 @@
+{
+  "contract_version": "phase7a_preparation_v1",
+  "generated_at": "2026-03-12T19:05:00Z",
+  "default_mode": "ASSISTED",
+  "rules": {
+    "preview_required": true,
+    "tokenless_submit_rejected": true,
+    "approval_required_before_release": true,
+    "release_without_approval": false
+  },
+  "endpoints": [
+    {
+      "endpoint": "/api/user/execution/intent/preview",
+      "method": "POST",
+      "auth_scope": "user",
+      "request_schema": {
+        "symbol": "string",
+        "market_type": "spot|futures",
+        "side": "buy|sell|long|short",
+        "order_type": "market|limit|stop_limit",
+        "position_size_mode": "fixed_notional|risk_percent",
+        "position_size_value": "number",
+        "margin_mode": "isolated|cross(optional)",
+        "leverage": "integer(optional)",
+        "take_profit": "object(optional)",
+        "stop_loss": "object(optional)",
+        "execution_mode": "manual|bot_assisted|signal_follow"
+      },
+      "response_schema": {
+        "validation_status": "string",
+        "reject_reason_codes": "array",
+        "normalized_order_payload": "object",
+        "risk_flags": "array",
+        "intent_token": "string"
+      },
+      "status_codes": [200, 400, 401, 403]
+    },
+    {
+      "endpoint": "/api/user/execution/intent/submit",
+      "method": "POST",
+      "auth_scope": "user",
+      "request_schema": {
+        "intent_token": "string",
+        "approval_mode": "ASSISTED"
+      },
+      "response_schema": {
+        "intent_status": "QUEUED_FOR_APPROVAL|REJECTED_BY_POLICY|REJECTED_BY_PERMISSION|REQUIRES_PARAMETER_FIX|READY_FOR_RELEASE",
+        "reason_codes": "array",
+        "queue_id": "string|null"
+      },
+      "status_codes": [200, 400, 401, 403]
+    },
+    {
+      "endpoint": "/api/user/execution/intent/cancel",
+      "method": "POST",
+      "auth_scope": "user",
+      "request_schema": {
+        "intent_token": "string"
+      },
+      "response_schema": {
+        "status": "string",
+        "cancelled": "boolean"
+      },
+      "status_codes": [200, 400, 401, 403, 404]
+    },
+    {
+      "endpoint": "/api/user/execution/presets",
+      "method": "GET",
+      "auth_scope": "user",
+      "request_schema": null,
+      "response_schema": {
+        "type": "array",
+        "item": {
+          "preset_code": "spot_basic|futures_safe|futures_intraday|futures_swing|manual_custom_limited",
+          "default_order_type": "string",
+          "default_tp_mode": "string",
+          "default_sl_mode": "string",
+          "default_risk_percent": "number",
+          "default_margin_mode": "string|null",
+          "default_leverage": "integer|null",
+          "editable_fields": "array",
+          "locked_fields": "array"
+        }
+      },
+      "status_codes": [200, 401, 403]
+    }
+  ]
+}

@@ -1,46 +1,70 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { MetricCard } from "@/components/MetricCard";
+import { ResponsiveMiniLineChart } from "@/components/ResponsiveMiniLineChart";
 import { apiClient } from "@/lib/api";
 
 export const UserPortfolioPage = () => {
   const [portfolio, setPortfolio] = useState(null);
   const [performance, setPerformance] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
+      setIsLoading(true);
       const [portfolioRes, performanceRes] = await Promise.all([
         apiClient.get("/user/portfolio"),
         apiClient.get("/user/performance"),
       ]);
       setPortfolio(portfolioRes.data);
       setPerformance(performanceRes.data);
+      setIsLoading(false);
     };
     load();
   }, []);
 
+  const chartData = useMemo(
+    () => [
+      { metric: "Open", value: portfolio?.open_notional ?? 0 },
+      { metric: "Avail", value: portfolio?.available_balance ?? 0 },
+      { metric: "ClosedPnl", value: portfolio?.closed_pnl ?? 0 },
+      { metric: "ROI", value: performance?.roi_pct ?? 0 },
+    ],
+    [performance, portfolio],
+  );
+
+  if (isLoading) {
+    return <LoadingSkeleton rows={5} testId="user-portfolio-loading-skeleton" />;
+  }
+
   return (
-    <section className="space-y-4" data-testid="user-portfolio-page">
-      <header className="border border-slate-800 bg-slate-900 p-4" data-testid="user-portfolio-header">
+    <section className="grid grid-cols-12 gap-4" data-testid="user-portfolio-page">
+      <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-portfolio-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-portfolio-title">Portfolio</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-portfolio-description">
-          Güncel ana para, açık notional ve performans metriklerini kullanıcı scope’unda izleyin.
+          12 kolon responsive düzen: mobilde taşmadan, desktop’ta yoğun veri görünümü.
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="user-portfolio-summary-grid">
-        <MetricCard label="Current Capital" value={portfolio?.current_capital ?? "-"} tone="orange" testId="user-portfolio-current-capital" />
-        <MetricCard label="Available Balance" value={portfolio?.available_balance ?? "-"} tone="blue" testId="user-portfolio-available-balance" />
-        <MetricCard label="Open Notional" value={portfolio?.open_notional ?? "-"} tone="orange" testId="user-portfolio-open-notional" />
-        <MetricCard label="Open Positions" value={portfolio?.open_positions_count ?? "-"} tone="blue" testId="user-portfolio-open-count" />
-        <MetricCard label="Closed PnL" value={portfolio?.closed_pnl ?? "-"} tone="orange" testId="user-portfolio-closed-pnl" />
+      <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-portfolio-summary-grid">
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Capital" value={portfolio?.current_capital ?? "-"} tone="orange" testId="user-portfolio-current-capital" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Balance" value={portfolio?.available_balance ?? "-"} tone="blue" testId="user-portfolio-available-balance" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Open Notional" value={portfolio?.open_notional ?? "-"} tone="orange" testId="user-portfolio-open-notional" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Open Pos" value={portfolio?.open_positions_count ?? "-"} tone="blue" testId="user-portfolio-open-count" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Closed PnL" value={portfolio?.closed_pnl ?? "-"} tone="orange" testId="user-portfolio-closed-pnl" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Compounding" value={portfolio?.compounding_enabled ? "ON" : "OFF"} tone="blue" testId="user-portfolio-compounding" /></div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="user-portfolio-performance-grid">
-        <MetricCard label="Win Rate" value={performance?.win_rate ?? "-"} tone="blue" testId="user-performance-win-rate" />
-        <MetricCard label="ROI %" value={performance?.roi_pct ?? "-"} tone="orange" testId="user-performance-roi" />
-        <MetricCard label="Profit Factor" value={performance?.profit_factor ?? "-"} tone="blue" testId="user-performance-profit-factor" />
-        <MetricCard label="Execution Quality" value={performance?.avg_execution_quality ?? "-"} tone="orange" testId="user-performance-execution-quality" />
+      <div className="col-span-12 lg:col-span-8" data-testid="user-portfolio-chart-col">
+        <ResponsiveMiniLineChart data={chartData} xKey="metric" yKey="value" title="Portfolio Curve" testId="user-portfolio-responsive-chart" />
+      </div>
+
+      <div className="col-span-12 lg:col-span-4 grid grid-cols-12 gap-3" data-testid="user-portfolio-performance-grid">
+        <div className="col-span-6 lg:col-span-12"><MetricCard label="Win Rate" value={performance?.win_rate ?? "-"} tone="blue" testId="user-performance-win-rate" /></div>
+        <div className="col-span-6 lg:col-span-12"><MetricCard label="ROI %" value={performance?.roi_pct ?? "-"} tone="orange" testId="user-performance-roi" /></div>
+        <div className="col-span-6 lg:col-span-12"><MetricCard label="Profit Factor" value={performance?.profit_factor ?? "-"} tone="blue" testId="user-performance-profit-factor" /></div>
+        <div className="col-span-6 lg:col-span-12"><MetricCard label="Exec Quality" value={performance?.avg_execution_quality ?? "-"} tone="orange" testId="user-performance-execution-quality" /></div>
       </div>
     </section>
   );

@@ -1,0 +1,39 @@
+{
+  "audit_version": "phase7_ux03_v1",
+  "generated_at": "2026-03-12T19:12:00Z",
+  "standard": "WCAG 2.1 AA",
+  "pages_checked": [
+    "/user/dashboard",
+    "/user/portfolio",
+    "/user/trades",
+    "/user/scanner",
+    "/user/signals"
+  ],
+  "checks": {
+    "keyboard_navigation": {
+      "status": "PASS",
+      "notes": "Sidebar links, compact toggles ve action butonları klavye ile erişilebilir."
+    },
+    "focus_visibility": {
+      "status": "PASS",
+      "notes": "Global focus-visible outline eklendi (`App.css`)."
+    },
+    "aria_labels": {
+      "status": "PASS",
+      "notes": "Navigation, table ve kritik action elementlerine aria-label atandı."
+    },
+    "color_contrast": {
+      "status": "PASS",
+      "notes": "Theme kontrastı ve focus ring rengi 4.5:1 hedefini destekleyecek şekilde güçlendirildi."
+    },
+    "mobile_readability": {
+      "status": "PASS",
+      "notes": "Mobilde table->card collapse ve taşma engelleme uygulandı."
+    }
+  },
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "warnings": 0
+  }
+}

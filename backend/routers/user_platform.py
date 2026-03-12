@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from core.users.user_exchange_connector import (
@@ -17,10 +18,11 @@ from core.users.user_risk_settings import (
     get_or_create_user_risk_settings,
     serialize_user_risk_settings,
 )
-from db import get_db
+from db import get_db, redis_client
 from deps import require_user
-from models import User
+from models import BotProfile, PendingSignal, RiskPolicy, User
 from schemas import (
+    UserDashboardResponse,
     UserExchangeConnectRequest,
     UserExchangeConnectResponse,
     UserPerformanceSnapshotResponse,
@@ -29,6 +31,7 @@ from schemas import (
     UserPortfolioSnapshotResponse,
     UserRiskSettingsResponse,
     UserRiskSettingsUpdate,
+    UserWeeklyReportStubResponse,
     UserTradeResponse,
 )
 from services.audit_service import create_audit_log
@@ -160,3 +163,47 @@ def get_trades(
 ):
     rows = build_user_trade_history(db, current_user.id, limit=limit)
     return [UserTradeResponse(**row) for row in rows]
+
+
+@router.get("/dashboard", response_model=UserDashboardResponse)
+def get_user_dashboard(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    portfolio = build_user_portfolio_snapshot(db, current_user.id)
+    bot_count = db.query(BotProfile).filter(BotProfile.user_id == current_user.id).count()
+    running_bot_count = (
+        db.query(BotProfile)
+        .filter(BotProfile.user_id == current_user.id, BotProfile.is_enabled.is_(True), BotProfile.is_running.is_(True))
+        .count()
+    )
+    risk_policy_count = db.query(RiskPolicy).filter(RiskPolicy.user_id == current_user.id).count()
+    pending_signals_count = (
+        db.query(PendingSignal)
+        .filter(PendingSignal.user_id == current_user.id, PendingSignal.status == "pending")
+        .count()
+    )
+    heartbeat_raw = redis_client.get("heartbeat:market-data")
+    heartbeat = heartbeat_raw.decode("utf-8") if isinstance(heartbeat_raw, bytes) else heartbeat_raw
+
+    return UserDashboardResponse(
+        bot_count=bot_count,
+        running_bot_count=running_bot_count,
+        risk_policy_count=risk_policy_count,
+        current_capital=portfolio["current_capital"],
+        available_balance=portfolio["available_balance"],
+        open_positions_count=portfolio["open_positions_count"],
+        pending_signals_count=pending_signals_count,
+        heartbeat=heartbeat,
+    )
+
+
+@router.get("/reports/weekly", response_model=UserWeeklyReportStubResponse)
+def get_weekly_report_stub(current_user: User = Depends(require_user)):
+    payload = UserWeeklyReportStubResponse(
+        status="not_implemented",
+        report_id=None,
+        week=None,
+        pnl=None,
+        win_rate=None,
+        download_links={},
+        detail="weekly reporting engine not implemented in this iteration",
+    )
+    return JSONResponse(status_code=501, content=payload.model_dump())

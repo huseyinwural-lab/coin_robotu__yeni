@@ -14,6 +14,9 @@ import {
   KeyRound,
   LineChart,
   ListChecks,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Radio,
   Scale,
   Settings2,
@@ -22,6 +25,7 @@ import {
   TestTube2,
   TrendingUp,
   UserCog,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -91,6 +95,8 @@ export const PanelLayout = () => {
   const adminRoles = new Set(["super_admin", "admin", "ops"]);
   const [gateBadge, setGateBadge] = useState(null);
   const [nowTick, setNowTick] = useState(Date.now());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isAdmin = adminRoles.has(user?.role);
   const navItems = isAdmin ? adminOnlyItems : userNavItems;
   const roleThemeClass = isAdmin ? "admin-ops-theme" : "user-theme";
@@ -146,8 +152,39 @@ export const PanelLayout = () => {
 
   return (
     <div className={`${roleThemeClass} h-screen overflow-hidden bg-slate-950 text-slate-100`} data-testid="panel-layout-wrapper">
-      <div className="grid h-full grid-cols-1 md:grid-cols-[240px_1fr]">
-        <aside className={`flex h-full min-h-0 flex-col overflow-hidden border-r p-4 ${sidebarClass}`} data-testid="sidebar-panel">
+      <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur" data-testid="panel-sticky-header" aria-label="Panel üst navigasyon">
+        <div className="flex items-center gap-2" data-testid="panel-sticky-header-left">
+          <Button
+            type="button"
+            variant="outline"
+            className="md:hidden"
+            onClick={() => setSidebarOpen((previous) => !previous)}
+            data-testid="mobile-sidebar-toggle-button"
+            aria-label="Mobil menüyü aç/kapat"
+          >
+            {sidebarOpen ? <X size={16} /> : <Menu size={16} />}
+          </Button>
+          <p className="text-sm font-semibold uppercase tracking-widest" data-testid="panel-sticky-header-title">Trading Panel</p>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="hidden md:inline-flex"
+          onClick={() => setSidebarCollapsed((previous) => !previous)}
+          data-testid="desktop-sidebar-collapse-button"
+          aria-label="Sidebar daralt/genişlet"
+        >
+          {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </Button>
+      </div>
+
+      <div className="grid h-[calc(100vh-57px)] grid-cols-1 md:grid-cols-[var(--sidebar-width)_1fr]" style={{ "--sidebar-width": sidebarCollapsed ? "92px" : "260px" }}>
+        <aside
+          className={`fixed inset-y-[57px] left-0 z-50 w-64 -translate-x-full border-r p-4 transition-transform md:static md:inset-auto md:z-auto md:h-full md:min-h-0 md:w-auto md:translate-x-0 ${sidebarClass} ${sidebarOpen ? "translate-x-0" : ""}`}
+          data-testid="sidebar-panel"
+          aria-label="Ana gezinme menüsü"
+        >
           <div className="mb-6">
             <p className="text-xs uppercase tracking-[0.18em] text-slate-400" data-testid="brand-kicker">Trading Engine</p>
             <h1 className={`text-xl font-bold uppercase tracking-tight ${brandTitleClass}`} data-testid="brand-title">Industrial Cockpit</h1>
@@ -159,7 +196,7 @@ export const PanelLayout = () => {
             )}
           </div>
 
-          <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1" data-testid="sidebar-navigation">
+          <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1" data-testid="sidebar-navigation" aria-label="Sidebar linkleri">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -167,16 +204,18 @@ export const PanelLayout = () => {
                   key={item.to}
                   to={item.to}
                   data-testid={item.testId}
+                  aria-label={`${item.label} sayfasına git`}
                   className={({ isActive }) =>
-                    `flex items-center gap-2 border px-3 py-2 text-sm transition-colors ${
+                    `flex items-center gap-2 border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
                       isActive
                         ? activeNavClass
                         : "border-slate-700 text-slate-200 hover:border-slate-500 hover:text-white"
                     }`
                   }
+                  onClick={() => setSidebarOpen(false)}
                 >
                   <Icon size={16} />
-                  <span>{item.label}</span>
+                  <span className={sidebarCollapsed ? "hidden md:inline" : "inline"}>{item.label}</span>
                 </NavLink>
               );
             })}
@@ -190,15 +229,26 @@ export const PanelLayout = () => {
               navigate(isAdmin ? "/admin/login" : "/user/login");
             }}
             data-testid="logout-button"
+            aria-label="Çıkış yap"
           >
             Çıkış Yap
           </Button>
         </aside>
 
-        <main className="h-full overflow-y-auto p-4 md:p-5" data-testid="panel-content-area">
+        <main className="h-full overflow-y-auto p-4 md:p-5" data-testid="panel-content-area" aria-label="Panel içerik alanı">
           <Outlet />
         </main>
       </div>
+
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          data-testid="mobile-sidebar-overlay"
+          aria-label="Menüyü kapat"
+        />
+      )}
     </div>
   );
 };

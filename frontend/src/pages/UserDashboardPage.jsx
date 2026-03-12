@@ -1,64 +1,80 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { MetricCard } from "@/components/MetricCard";
+import { ResponsiveMiniLineChart } from "@/components/ResponsiveMiniLineChart";
 import { apiClient } from "@/lib/api";
 
 export const UserDashboardPage = () => {
-  const [summary, setSummary] = useState(null);
-  const [qualityScore, setQualityScore] = useState("-");
+  const [dashboard, setDashboard] = useState(null);
   const [portfolio, setPortfolio] = useState(null);
-  const [signals, setSignals] = useState([]);
+  const [performance, setPerformance] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchSummary = async () => {
-      const { data } = await apiClient.get("/dashboard/summary");
-      setSummary(data);
-
-      const [portfolioRes, signalsRes] = await Promise.all([
+    const load = async () => {
+      setIsLoading(true);
+      const [dashboardRes, portfolioRes, performanceRes] = await Promise.all([
+        apiClient.get("/user/dashboard"),
         apiClient.get("/user/portfolio"),
-        apiClient.get("/user/signals", { params: { limit: 50 } }),
+        apiClient.get("/user/performance"),
       ]);
+      setDashboard(dashboardRes.data);
       setPortfolio(portfolioRes.data);
-      setSignals(signalsRes.data || []);
-
-      try {
-        const qualityRes = await apiClient.get("/phase4/execution-quality/latest");
-        setQualityScore(qualityRes.data.execution_quality_score);
-      } catch (_) {
-        setQualityScore("-");
-      }
+      setPerformance(performanceRes.data);
+      setIsLoading(false);
     };
-    fetchSummary();
+    load();
   }, []);
 
-  const pendingCount = signals.filter((item) => item.status === "pending").length;
+  const chartData = useMemo(
+    () => [
+      { metric: "Capital", value: dashboard?.current_capital ?? 0 },
+      { metric: "Balance", value: dashboard?.available_balance ?? 0 },
+      { metric: "PnL", value: portfolio?.closed_pnl ?? 0 },
+      { metric: "Win", value: performance?.win_rate ?? 0 },
+    ],
+    [dashboard, performance, portfolio],
+  );
+
+  if (isLoading) {
+    return <LoadingSkeleton rows={6} testId="user-dashboard-loading-skeleton" />;
+  }
 
   return (
-    <section className="space-y-4" data-testid="user-dashboard-page">
-      <header className="border border-slate-800 bg-slate-900 p-4" data-testid="user-dashboard-header">
+    <section className="grid grid-cols-12 gap-4" data-testid="user-dashboard-page">
+      <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-dashboard-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-dashboard-title">User Dashboard</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-dashboard-description">
-          Assisted queue, portföy görünümü ve kişisel risk metrikleri.
+          Responsive ve erişilebilir özet görünümü. Assisted kuyruk, portföy ve performans tek ekranda.
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="user-dashboard-metrics-grid">
-        <MetricCard label="Bot Sayısı" value={summary?.metrics?.bots ?? "-"} testId="user-metric-bots" />
-        <MetricCard label="Aktif Bot" value={summary?.metrics?.running_bots ?? "-"} testId="user-metric-active-bots" />
-        <MetricCard label="Risk Policy" value={summary?.metrics?.risk_policies ?? "-"} testId="user-metric-risk-policies" />
-        <MetricCard label="Open Positions" value={portfolio?.open_positions_count ?? "-"} tone="orange" testId="user-metric-open-positions" />
-        <MetricCard label="Pending Signals" value={pendingCount} tone="orange" testId="user-metric-pending-signals" />
+      <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-dashboard-metrics-grid" aria-label="Dashboard metrikleri">
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Bot" value={dashboard?.bot_count ?? "-"} testId="user-dashboard-metric-bot-count" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Running" value={dashboard?.running_bot_count ?? "-"} testId="user-dashboard-metric-running-bot-count" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Risk Policy" value={dashboard?.risk_policy_count ?? "-"} testId="user-dashboard-metric-risk-policy-count" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Open Positions" value={dashboard?.open_positions_count ?? "-"} tone="orange" testId="user-dashboard-metric-open-positions" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Pending" value={dashboard?.pending_signals_count ?? "-"} tone="orange" testId="user-dashboard-metric-pending-signals" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Heartbeat" value={dashboard?.heartbeat ?? "-"} tone="blue" testId="user-dashboard-metric-heartbeat" /></div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="user-dashboard-portfolio-summary-grid">
-        <MetricCard label="Current Capital" value={portfolio?.current_capital ?? "-"} tone="blue" testId="user-metric-current-capital" />
-        <MetricCard label="Available Balance" value={portfolio?.available_balance ?? "-"} tone="orange" testId="user-metric-available-balance" />
-        <MetricCard label="Execution Quality" value={qualityScore} tone="orange" testId="user-metric-execution-quality" />
+      <div className="col-span-12 lg:col-span-8" data-testid="user-dashboard-chart-col">
+        <ResponsiveMiniLineChart
+          data={chartData}
+          xKey="metric"
+          yKey="value"
+          title="Dashboard Snapshot"
+          testId="user-dashboard-responsive-chart"
+        />
       </div>
 
-      <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-dashboard-heartbeat-panel">
-        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-heartbeat-label">Redis Heartbeat</p>
-        <p className="mt-2 font-mono text-sm text-slate-100" data-testid="user-heartbeat-value">{summary?.heartbeat ?? "-"}</p>
+      <div className="col-span-12 lg:col-span-4 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-dashboard-summary-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-dashboard-summary-title">Quick Summary</p>
+        <p className="mt-2 text-sm" data-testid="user-dashboard-current-capital">Current Capital: {dashboard?.current_capital ?? "-"}</p>
+        <p className="mt-1 text-sm" data-testid="user-dashboard-available-balance">Available Balance: {dashboard?.available_balance ?? "-"}</p>
+        <p className="mt-1 text-sm" data-testid="user-dashboard-closed-pnl">Closed PnL: {portfolio?.closed_pnl ?? "-"}</p>
+        <p className="mt-1 text-sm" data-testid="user-dashboard-win-rate">Win Rate: {performance?.win_rate ?? "-"}</p>
       </div>
     </section>
   );

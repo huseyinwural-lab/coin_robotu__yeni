@@ -104,6 +104,18 @@
   color: #0b2611 !important;
 }
 
+.user-theme :focus-visible,
+.admin-ops-theme :focus-visible {
+  outline: 2px solid #065f46 !important;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.user-theme [aria-label],
+.admin-ops-theme [aria-label] {
+  scroll-margin-top: 84px;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
