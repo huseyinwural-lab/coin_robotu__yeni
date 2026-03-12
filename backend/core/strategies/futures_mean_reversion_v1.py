@@ -29,12 +29,14 @@ class FuturesMeanReversionV1:
         if side in {"LONG", "SHORT"} and funding["funding_alignment_bias"] in {side, "NEUTRAL"}:
             signal = side
             confidence = min(0.95, deviation["confidence"] * 0.7 + range_result["range_confidence"] * 0.2 + funding["funding_alignment_confidence"] * 0.1)
+        reason = "MEAN_REVERSION_SETUP" if signal in {"LONG", "SHORT"} else "MEAN_REVERSION_FILTERED"
 
         return {
             "signal": signal,
             "confidence": round(confidence, 4),
             "context": {
                 "strategy_type": self.strategy_type,
+                "reason": reason,
                 "range_state": range_result["range_state"],
                 "range_confidence": range_result["range_confidence"],
                 "normalized_distance": deviation["normalized_distance"],

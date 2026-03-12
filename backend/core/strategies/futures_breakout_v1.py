@@ -24,12 +24,14 @@ class FuturesBreakoutV1:
         if breakout["confirmed"] and expansion["expansion_state"] in {"EXPANSION_BUILDING", "EXPANSION_CONFIRMED"}:
             signal = breakout["breakout_side"]
             confidence = min(0.96, breakout["confidence"] * 0.65 + expansion["expansion_score"] * 0.35)
+        reason = "BREAKOUT_CONFIRMED" if signal in {"LONG", "SHORT"} else "BREAKOUT_FILTERED"
 
         return {
             "signal": signal,
             "confidence": round(confidence, 4),
             "context": {
                 "strategy_type": self.strategy_type,
+                "reason": reason,
                 "expansion_state": expansion["expansion_state"],
                 "expansion_score": expansion["expansion_score"],
                 "volume_confirmation": breakout["volume_confirmation"],

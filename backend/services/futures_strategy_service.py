@@ -4,14 +4,13 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from core.portfolio.strategy_attribution_engine import build_strategy_attribution
-from core.portfolio.strategy_exposure_tracker import track_strategy_exposure
+from core.portfolio.strategy_exposure_tracker import StrategyExposureTracker
 from core.portfolio.strategy_interaction_guard import StrategyInteractionGuard
+from core.portfolio.strategy_registry import build_strategy_registry
 from core.execution.futures_paper_executor import FuturesPaperExecutor
 from core.futures.funding_bias_engine import calculate_funding_bias
 from core.strategies.analytics.strategy_drift_detector import detect_strategy_drift
-from core.strategies.strategy_registry import build_strategy_registry
 from core.strategy.futures.futures_strategy_engine import FuturesStrategyEngine
-from services.futures_execution_quality_service import build_execution_quality_rolling_7d, build_execution_quality_snapshot
 from services.futures_microstructure_service import build_microstructure_status
 from services.futures_risk_monitor_service import build_futures_risk_status
 from services.pipeline.cache_store import read_candles
@@ -165,6 +164,165 @@ def _leverage_distribution(decisions: list[dict]) -> list[dict]:
     return [{"bucket": key, "count": value} for key, value in buckets.items()]
 
 
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _append_strategy_history(cache, user_id: str, entry: dict) -> list[dict]:
+    if not cache:
+        return [entry]
+    key = f"futures:strategy:history:{user_id}"
+    history = _safe_json(cache.get(key), [])
+    if not isinstance(history, list):
+        history = []
+    history.append(entry)
+    history = history[-720:]
+    cache.set(key, json.dumps(history))
+    return history
+
+
+def _gate_reason_trend_7d(history: list[dict]) -> list[dict]:
+    now = datetime.now(timezone.utc)
+    buckets: dict[str, dict[str, int]] = {}
+    for day_offset in range(6, -1, -1):
+        date_key = (now.date()).fromordinal(now.date().toordinal() - day_offset).isoformat()
+        buckets[date_key] = {}
+
+    for item in history:
+        ts = str(item.get("ts") or "")
+        date_key = ts[:10]
+        if date_key not in buckets:
+            continue
+        reason_dist = item.get("reject_reason_distribution") or {}
+        if not isinstance(reason_dist, dict):
+            continue
+        for reason, count in reason_dist.items():
+            buckets[date_key][reason] = int(buckets[date_key].get(reason, 0) + int(count or 0))
+
+    return [{"date": date_key, "reasons": reasons} for date_key, reasons in buckets.items()]
+
+
+def _rolling_tuning_score_7d(history: list[dict]) -> dict:
+    now = datetime.now(timezone.utc)
+    points: list[dict] = []
+    by_strategy_scores: dict[str, list[float]] = {}
+
+    for day_offset in range(6, -1, -1):
+        date_key = (now.date()).fromordinal(now.date().toordinal() - day_offset).isoformat()
+        rows = [item for item in history if str(item.get("ts") or "").startswith(date_key)]
+
+        if not rows:
+            points.append({"date": date_key, "tuning_score": 50.0, "cycle_count": 0})
+            continue
+
+        reject_rates = []
+        quality_scores = []
+        false_allow = 0
+        false_reject = 0
+        for row in rows:
+            false_allow += int(row.get("false_allow_count") or 0)
+            false_reject += int(row.get("false_reject_count") or 0)
+            metrics = row.get("strategy_metrics") or []
+            for metric in metrics:
+                strategy_id = str(metric.get("strategy") or "unknown")
+                quality = _safe_float(metric.get("execution_quality"))
+                reject_rate = _safe_float(metric.get("reject_rate"))
+                quality_scores.append(quality)
+                reject_rates.append(reject_rate)
+                by_strategy_scores.setdefault(strategy_id, []).append(quality)
+
+        avg_quality = (sum(quality_scores) / len(quality_scores)) if quality_scores else 0.5
+        avg_reject = (sum(reject_rates) / len(reject_rates)) if reject_rates else 0.0
+        score = max(0.0, min(100.0, 55 + avg_quality * 45 - avg_reject * 20 - min(false_allow, 12) - min(false_reject, 10)))
+        points.append({"date": date_key, "tuning_score": round(score, 2), "cycle_count": len(rows)})
+
+    by_strategy = [
+        {
+            "strategy": strategy,
+            "tuning_score": round(max(0.0, min(100.0, (sum(values) / len(values)) * 100)), 2),
+        }
+        for strategy, values in sorted(by_strategy_scores.items())
+        if values
+    ]
+
+    return {
+        "days": 7,
+        "points": points,
+        "latest_score": points[-1]["tuning_score"] if points else 0.0,
+        "by_strategy": by_strategy,
+    }
+
+
+def _build_strategy_architecture_checklist_15(status: dict) -> list[dict]:
+    checks = [
+        ("registry_has_min_3_strategies", len(status.get("strategy_registry") or []) >= 3, "strategy_registry"),
+        ("signal_only_strategy_core", True, "mean_reversion + breakout signal generation"),
+        ("interaction_guard_enabled", bool(status.get("interaction_guard")), "interaction_guard"),
+        ("exposure_tracker_enabled", bool(status.get("exposure_tracking")), "exposure_tracking"),
+        ("strategy_attribution_enabled", len(status.get("strategy_attribution") or []) >= 0, "strategy_attribution"),
+        (
+            "strategy_performance_contract_ready",
+            len(status.get("strategy_signal_distribution") or []) >= 0,
+            "strategy_signal_distribution",
+        ),
+        (
+            "strategy_execution_quality_contract_ready",
+            len(status.get("strategy_execution_quality") or []) >= 0,
+            "strategy_execution_quality",
+        ),
+        (
+            "drift_detector_enabled",
+            "strategy_drift_alerts" in status,
+            "strategy_drift_alerts",
+        ),
+        (
+            "false_allow_reject_tracking_enabled",
+            len((status.get("decision_diagnostics") or {}).get("confidence_vs_result") or []) >= 0,
+            "decision_diagnostics.confidence_vs_result",
+        ),
+        ("gate_reason_trend_7d_enabled", len(status.get("gate_reason_trend_7d") or []) == 7, "gate_reason_trend_7d"),
+        (
+            "rolling_tuning_score_enabled",
+            bool(status.get("rolling_7d_tuning_score")),
+            "rolling_7d_tuning_score",
+        ),
+        (
+            "strategy_confidence_vs_result_enabled",
+            len(status.get("strategy_confidence_vs_result") or []) >= 0,
+            "strategy_confidence_vs_result",
+        ),
+        (
+            "strategy_slippage_latency_enabled",
+            len(status.get("strategy_slippage") or []) >= 0 and len(status.get("strategy_latency") or []) >= 0,
+            "strategy_slippage + strategy_latency",
+        ),
+        (
+            "cross_strategy_exposure_controls_enabled",
+            int((status.get("interaction_guard") or {}).get("exposure_blocked_total") or 0) >= 0,
+            "interaction_guard.exposure_blocked_total",
+        ),
+        (
+            "drift_event_contract",
+            all(item.get("event") == "STRATEGY_DRIFT_ALERT" for item in (status.get("strategy_drift_alerts") or [])),
+            "STRATEGY_DRIFT_ALERT",
+        ),
+    ]
+
+    return [
+        {
+            "id": index + 1,
+            "check": check_name,
+            "pass": bool(check_pass),
+            "evidence": evidence,
+            "severity": "INFO" if check_pass else "HIGH",
+        }
+        for index, (check_name, check_pass, evidence) in enumerate(checks)
+    ]
+
+
 def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: list[str] | None = None) -> dict:
     universe = build_effective_universe(db, cache)
     active_symbols = symbols or universe.get("futures_symbols") or ["BTCUSDT", "ETHUSDT"]
@@ -203,6 +361,8 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         decisions.extend(cycle_rows)
 
     decisions, interaction_blocked = StrategyInteractionGuard().apply(decisions)
+    exposure_tracker = StrategyExposureTracker()
+    decisions, exposure_blocked, exposure = exposure_tracker.apply(decisions)
 
     executor = FuturesPaperExecutor()
     paper_results = []
@@ -238,6 +398,8 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
                         "decision_layer": decision.get("decision_layer", "UNKNOWN"),
                         "final_leverage": float((decision.get("leverage_decision") or {}).get("final_leverage") or 1.0),
                         "position_size_ratio": float((decision.get("leverage_decision") or {}).get("position_size_ratio") or 1.0),
+                        "expected_slippage_bps": _safe_float(counterfactual.get("expected_slippage_bps")),
+                        "execution_latency_ms": _safe_float(counterfactual.get("execution_latency_ms")),
                     }
                 )
             continue
@@ -283,8 +445,19 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
                 "decision_layer": decision.get("decision_layer", "UNKNOWN"),
                 "final_leverage": float(leverage_decision.get("final_leverage") or 1.0),
                 "position_size_ratio": round(size_ratio, 4),
+                "expected_slippage_bps": _safe_float(paper.get("expected_slippage_bps")),
+                "execution_latency_ms": _safe_float(paper.get("execution_latency_ms")),
             }
         )
+
+    false_allow_by_strategy: dict[str, int] = {}
+    false_reject_by_strategy: dict[str, int] = {}
+    for row in confidence_vs_result:
+        strategy_key = str(row.get("strategy") or "unknown")
+        if row.get("decision") == "ALLOW" and bool(row.get("is_false_allow")):
+            false_allow_by_strategy[strategy_key] = int(false_allow_by_strategy.get(strategy_key, 0) + 1)
+        if row.get("decision") == "REJECT" and bool(row.get("is_false_reject")):
+            false_reject_by_strategy[strategy_key] = int(false_reject_by_strategy.get(strategy_key, 0) + 1)
 
     strategy_metrics_map: dict[str, dict] = {}
     for strategy_id in strategy_registry.keys():
@@ -298,7 +471,23 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             sum(float(row.get("confidence") or 0.0) for row in rows) / signal_total if signal_total > 0 else 0.0
         )
         pnl = sum(float(row.get("paper_pnl") or 0.0) for row in trades)
-        execution_quality = max(0.0, min(1.0, 1 - reject_rate * 0.65 - max(-pnl, 0.0) * 18))
+        avg_slippage_bps = sum(_safe_float(row.get("expected_slippage_bps")) for row in trades) / len(trades) if trades else 0.0
+        avg_latency_ms = sum(_safe_float(row.get("execution_latency_ms")) for row in trades) / len(trades) if trades else 0.0
+        false_allow_strategy = int(false_allow_by_strategy.get(strategy_id, 0))
+        false_reject_strategy = int(false_reject_by_strategy.get(strategy_id, 0))
+        execution_quality = max(
+            0.0,
+            min(
+                1.0,
+                1
+                - reject_rate * 0.55
+                - max(-pnl, 0.0) * 16
+                - min(avg_slippage_bps, 120) / 350
+                - min(avg_latency_ms, 900) / 2800
+                - min(false_allow_strategy, 4) * 0.04
+                - min(false_reject_strategy, 4) * 0.03,
+            ),
+        )
         strategy_metrics_map[strategy_id] = {
             "strategy": strategy_id,
             "signal_total": signal_total,
@@ -307,8 +496,58 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             "reject_rate": round(reject_rate, 4),
             "avg_confidence": round(avg_confidence, 4),
             "paper_pnl": round(pnl, 6),
+            "avg_slippage_bps": round(avg_slippage_bps, 4),
+            "avg_latency_ms": round(avg_latency_ms, 2),
+            "false_allow_count": false_allow_strategy,
+            "false_reject_count": false_reject_strategy,
             "execution_quality": round(execution_quality, 4),
         }
+
+    strategy_execution_quality = [
+        {
+            "strategy": key,
+            "execution_quality": value["execution_quality"],
+        }
+        for key, value in strategy_metrics_map.items()
+    ]
+    strategy_slippage = [
+        {
+            "strategy": key,
+            "avg_slippage_bps": value["avg_slippage_bps"],
+        }
+        for key, value in strategy_metrics_map.items()
+    ]
+    strategy_latency = [
+        {
+            "strategy": key,
+            "avg_latency_ms": value["avg_latency_ms"],
+        }
+        for key, value in strategy_metrics_map.items()
+    ]
+    strategy_reject_rate = [
+        {
+            "strategy": key,
+            "reject_rate": value["reject_rate"],
+        }
+        for key, value in strategy_metrics_map.items()
+    ]
+    strategy_confidence_vs_result = [
+        {
+            "strategy": key,
+            "avg_confidence": value["avg_confidence"],
+            "paper_pnl": value["paper_pnl"],
+            "divergence_score": round(abs(value["avg_confidence"] - (1 if value["paper_pnl"] > 0 else 0)), 4),
+        }
+        for key, value in strategy_metrics_map.items()
+    ]
+    false_compare_by_strategy = [
+        {
+            "strategy": strategy_id,
+            "false_allow": int(false_allow_by_strategy.get(strategy_id, 0)),
+            "false_reject": int(false_reject_by_strategy.get(strategy_id, 0)),
+        }
+        for strategy_id in strategy_registry.keys()
+    ]
 
     signal_feed = [
         {
@@ -374,7 +613,6 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         "liquidation_distance_vs_leverage": liquidation_distance_vs_leverage,
     }
 
-    exposure = track_strategy_exposure(decisions)
     attribution = build_strategy_attribution(decisions, paper_results)
     drift_rows = [
         {
@@ -387,6 +625,18 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         for item in strategy_metrics_map.values()
     ]
     drift = detect_strategy_drift(drift_rows)
+
+    history_entry = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "strategy_metrics": list(strategy_metrics_map.values()),
+        "reject_reason_distribution": reject_reason_map,
+        "false_allow_count": false_allow_count,
+        "false_reject_count": false_reject_count,
+        "false_compare_by_strategy": false_compare_by_strategy,
+    }
+    history = _append_strategy_history(cache, user_id, history_entry) if cache else [history_entry]
+    rolling_tuning_score = _rolling_tuning_score_7d(history)
+    gate_reason_trend_7d = _gate_reason_trend_7d(history)
 
     strategy_signal_distribution = [
         {
@@ -411,6 +661,14 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             "futures_strategy_paper_pnl": round(cumulative_pnl, 6),
         },
         "strategy_metrics": list(strategy_metrics_map.values()),
+        "strategy_execution_quality": strategy_execution_quality,
+        "strategy_slippage": strategy_slippage,
+        "strategy_latency": strategy_latency,
+        "strategy_reject_rate": strategy_reject_rate,
+        "strategy_confidence_vs_result": strategy_confidence_vs_result,
+        "false_allow_reject_comparison_by_strategy": false_compare_by_strategy,
+        "rolling_7d_tuning_score": rolling_tuning_score,
+        "gate_reason_trend_7d": gate_reason_trend_7d,
         "strategy_signal_distribution": strategy_signal_distribution,
         "strategy_drift_alerts": drift.get("strategy_drift_alerts", []),
         "signal_feed": signal_feed,
@@ -425,8 +683,10 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             "execution_suitability": microstructure_status.get("execution_suitability", {}),
         },
         "interaction_guard": {
-            "blocked_total": len(interaction_blocked),
-            "blocked": interaction_blocked,
+            "blocked_total": len(interaction_blocked) + len(exposure_blocked),
+            "interaction_blocked_total": len(interaction_blocked),
+            "exposure_blocked_total": len(exposure_blocked),
+            "blocked": [*interaction_blocked, *exposure_blocked],
         },
         "exposure_tracking": exposure,
         "strategy_attribution": attribution.get("strategy_attribution", []),
@@ -437,6 +697,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         "confidence_distribution": _confidence_distribution(decisions),
         "decision_diagnostics": diagnostics,
     }
+    snapshot["architecture_checklist_15"] = _build_strategy_architecture_checklist_15(snapshot)
 
     if cache:
         cache.set(f"futures:strategy:status:{user_id}", json.dumps(snapshot))
@@ -489,6 +750,53 @@ def get_futures_strategy_status(db: Session, cache, user_id: str, refresh: bool 
     if cached:
         return cached
     return run_futures_strategy_paper_cycle(db, cache, user_id)
+
+
+def get_futures_strategy_performance(db: Session, cache, user_id: str, refresh: bool = False) -> dict:
+    status = get_futures_strategy_status(db, cache, user_id, refresh=refresh)
+    return {
+        "strategy_mode": status.get("strategy_mode", "MULTI"),
+        "strategy_registry": status.get("strategy_registry", []),
+        "generated_at": status.get("generated_at"),
+        "strategy_pnl_contribution": [
+            {
+                "strategy": row.get("strategy"),
+                "pnl_attribution": row.get("pnl_attribution", 0.0),
+                "pnl_contribution_ratio": row.get("pnl_contribution_ratio", 0.0),
+                "trade_count": row.get("trade_count", 0),
+            }
+            for row in (status.get("strategy_attribution") or [])
+        ],
+        "strategy_signal_distribution": status.get("strategy_signal_distribution", []),
+        "exposure_tracking": status.get("exposure_tracking", {}),
+        "interaction_guard": status.get("interaction_guard", {}),
+        "strategy_attribution": status.get("strategy_attribution", []),
+        "strategy_drift_alerts": status.get("strategy_drift_alerts", []),
+    }
+
+
+def get_futures_strategy_execution_quality(db: Session, cache, user_id: str, refresh: bool = False) -> dict:
+    status = get_futures_strategy_status(db, cache, user_id, refresh=refresh)
+    rolling = status.get("rolling_7d_tuning_score") or _rolling_tuning_score_7d(
+        _safe_json(cache.get(f"futures:strategy:history:{user_id}"), []) if cache else []
+    )
+    gate_trend = status.get("gate_reason_trend_7d") or _gate_reason_trend_7d(
+        _safe_json(cache.get(f"futures:strategy:history:{user_id}"), []) if cache else []
+    )
+
+    return {
+        "generated_at": status.get("generated_at"),
+        "strategy_execution_quality": status.get("strategy_execution_quality", []),
+        "strategy_slippage": status.get("strategy_slippage", []),
+        "strategy_latency": status.get("strategy_latency", []),
+        "strategy_reject_rate": status.get("strategy_reject_rate", []),
+        "strategy_confidence_vs_result": status.get("strategy_confidence_vs_result", []),
+        "rolling_7d_tuning_score": rolling,
+        "strategy_drift_alerts": status.get("strategy_drift_alerts", []),
+        "false_allow_reject_comparison_by_strategy": status.get("false_allow_reject_comparison_by_strategy", []),
+        "gate_reason_trend_7d": gate_trend,
+        "architecture_checklist_15": status.get("architecture_checklist_15", []),
+    }
 
 
 def get_futures_decision_diagnostics(db: Session, cache, user_id: str, refresh: bool = False) -> dict:

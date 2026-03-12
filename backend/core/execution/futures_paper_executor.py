@@ -21,6 +21,7 @@ class FuturesPaperExecutor:
         expected_slippage_bps = max(1.0, round(spread_bps * 0.35, 4))
         slippage_factor = expected_slippage_bps / 10_000
         synthetic_entry_price = mark_price * (1 + slippage_factor if side == "LONG" else 1 - slippage_factor)
+        execution_latency_ms = max(22.0, round(95 + spread_bps * 1.8 + (1 - confidence) * 120, 2))
 
         exit_reason = "stop_loss"
         exit_move = -0.003
@@ -47,6 +48,8 @@ class FuturesPaperExecutor:
             "entry_price": round(synthetic_entry_price, 6),
             "exit_price": round(synthetic_exit_price, 6),
             "expected_slippage_bps": expected_slippage_bps,
+            "realized_slippage_bps": expected_slippage_bps,
+            "execution_latency_ms": execution_latency_ms,
             "exit_reason": exit_reason,
             "lifecycle": lifecycle,
             "events": [

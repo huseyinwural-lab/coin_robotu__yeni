@@ -46,6 +46,7 @@ const adminOnlyItems = [
   { to: "/admin/strategy-observability", label: "Strategy Observability", icon: Activity, testId: "nav-admin-strategy-observability-link" },
   { to: "/admin/futures/risk-monitor", label: "Futures Risk Monitor", icon: ShieldAlert, testId: "nav-admin-futures-risk-monitor-link" },
   { to: "/admin/futures/liquidation-protection", label: "Liquidation Protection", icon: ShieldCheck, testId: "nav-admin-futures-liquidation-protection-link" },
+  { to: "/admin/futures/strategy-analytics", label: "Strategy Analytics", icon: BarChart3, testId: "nav-admin-futures-strategy-analytics-link" },
   { to: "/admin/futures/microstructure-guard", label: "Microstructure Guard", icon: Activity, testId: "nav-admin-futures-microstructure-guard-link" },
   { to: "/admin/futures/testnet-control", label: "Testnet Control", icon: Radio, testId: "nav-admin-futures-testnet-control-link" },
   { to: "/admin/exchanges", label: "Exchanges", icon: Globe, testId: "nav-admin-exchanges-link" },
