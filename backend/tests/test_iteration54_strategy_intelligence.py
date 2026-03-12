@@ -17,8 +17,24 @@ Tests for:
 import os
 import pytest
 import requests
+import sys
+from pathlib import Path
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+
+def _resolve_base_url() -> str:
+    direct = os.environ.get("REACT_APP_BACKEND_URL", "").strip().rstrip("/")
+    if direct:
+        return direct
+    env_file = Path(__file__).resolve().parents[2] / "frontend" / ".env"
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        if raw_line.startswith("REACT_APP_BACKEND_URL="):
+            return raw_line.split("=", 1)[1].strip().rstrip("/")
+    raise RuntimeError("REACT_APP_BACKEND_URL missing")
+
+
+BASE_URL = _resolve_base_url()
 ADMIN_EMAIL = "admin@platform.dev"
 ADMIN_PASSWORD = "Admin12345!"
 
@@ -27,7 +43,7 @@ ADMIN_PASSWORD = "Admin12345!"
 def admin_token():
     """Get admin JWT token"""
     response = requests.post(
-        f"{BASE_URL}/api/auth/login",
+        f"{BASE_URL}/api/auth/login/admin",
         json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
     )
     if response.status_code == 200:
@@ -37,69 +53,45 @@ def admin_token():
 
 @pytest.fixture(scope="module")
 def test_user(admin_token):
-    """Create and approve a test user"""
-    # First try existing test user from iteration 53
-    email = "test_user_iter53@example.com"
+    """Create and approve a fresh test user"""
+    import random
+    import string
+
+    email = f"test_user_iter54_{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}@example.com"
     password = "TestPass123!"
-    
-    login_resp = requests.post(
-        f"{BASE_URL}/api/auth/login",
-        json={"email": email, "password": password}
-    )
-    if login_resp.status_code == 200:
-        return {
-            "id": login_resp.json()["user"]["id"],
-            "email": email,
-            "password": password,
-            "token": login_resp.json()["access_token"]
-        }
-    
-    # Try a new user
-    email = "test_user_iter54@example.com"
-    
-    # Try login first
-    login_resp = requests.post(
-        f"{BASE_URL}/api/auth/login",
-        json={"email": email, "password": password}
-    )
-    if login_resp.status_code == 200:
-        return {
-            "id": login_resp.json()["user"]["id"],
-            "email": email,
-            "password": password,
-            "token": login_resp.json()["access_token"]
-        }
-    
-    # Register new user - response is flat, not wrapped in "user"
+
     reg_resp = requests.post(
         f"{BASE_URL}/api/auth/register",
-        json={"email": email, "password": password}
+        json={"email": email, "password": password},
     )
     if reg_resp.status_code not in [200, 201]:
         pytest.skip(f"User registration failed: {reg_resp.text}")
-    
+
     reg_data = reg_resp.json()
     user_id = reg_data.get("id")
     if not user_id:
         pytest.skip(f"User registration response missing id: {reg_data}")
-    
-    # Approve user
+
     headers = {"Authorization": f"Bearer {admin_token}"}
-    requests.post(f"{BASE_URL}/api/admin/user-approvals/{user_id}/approve", headers=headers)
-    
-    # Login
+    approve = requests.post(
+        f"{BASE_URL}/api/auth/admin/user-approval-requests/{user_id}/approve",
+        headers=headers,
+    )
+    if approve.status_code not in [200, 201]:
+        pytest.skip(f"User approval failed: {approve.text}")
+
     login_resp = requests.post(
-        f"{BASE_URL}/api/auth/login",
-        json={"email": email, "password": password}
+        f"{BASE_URL}/api/auth/login/user",
+        json={"email": email, "password": password},
     )
     if login_resp.status_code != 200:
-        pytest.skip("User login failed after approval")
-    
+        pytest.skip(f"User login failed after approval: {login_resp.text}")
+
     return {
         "id": user_id,
         "email": email,
         "password": password,
-        "token": login_resp.json()["access_token"]
+        "token": login_resp.json().get("access_token"),
     }
 
 
@@ -159,7 +151,7 @@ class TestStrategyConflictEngine:
         
         # Verify required fields
         assert "conflict_detected" in result
-        assert result["conflict_detected"] == True
+        assert result["conflict_detected"]
         assert "winning_strategy" in result
         assert "losing_strategy" in result
         assert "resolution_reason" in result
@@ -182,7 +174,7 @@ class TestStrategyConflictEngine:
             strategy_stats={}
         )
         
-        assert result["conflict_detected"] == False
+        assert not result["conflict_detected"]
         assert result["resolution_reason"] == "no_conflict"
         print("SUCCESS: No conflict detected when no opposing signals")
 
@@ -355,7 +347,6 @@ class TestAdminStrategyIntelligenceEndpoints:
         assert "timestamp" in data
         
         print(f"SUCCESS: Manual override created - id={data['override_id']}")
-        return data["override_id"]
     
     def test_get_manual_overrides(self, admin_token):
         """Test GET /api/admin/manual-overrides endpoint"""
