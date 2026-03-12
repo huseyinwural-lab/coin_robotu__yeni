@@ -229,6 +229,15 @@ export const UserExecutePage = () => {
                 <p data-testid="user-execute-meta-strategy-state">strategy_state: {preview.meta_strategy_summary?.state ?? "-"}</p>
               </div>
             </div>
+            <div className="border border-slate-800 p-3" data-testid="user-execute-strategy-intelligence-panel">
+              <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-strategy-intelligence-title">Strategy Intelligence</p>
+              <div className="mt-2 grid gap-1 text-xs" data-testid="user-execute-strategy-intelligence-content">
+                <p data-testid="user-execute-strategy-conflict-warning">strategy_conflict_warning: {preview.strategy_conflict_warning || "none"}</p>
+                <p data-testid="user-execute-allocation-adjustment-notice">allocation_adjustment_notice: {preview.allocation_adjustment_notice || "none"}</p>
+                <p data-testid="user-execute-risk-reduction-score">risk_reduction_score: {preview.risk_reduction_score ?? 0}</p>
+                <p data-testid="user-execute-hedge-suggestion">hedge_suggestion: {preview.hedge_suggestion?.hedge_symbol ? `${preview.hedge_suggestion.hedge_symbol} ${preview.hedge_suggestion.hedge_direction} ${preview.hedge_suggestion.hedge_size}` : "none"}</p>
+              </div>
+            </div>
             <div className="border border-slate-800 p-3" data-testid="user-execute-preview-explain-panel">
               <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-preview-explain-title">Preview Explain</p>
               {previewTraceLoading && <p className="text-xs text-slate-400" data-testid="user-execute-preview-explain-loading">Açıklama yükleniyor...</p>}

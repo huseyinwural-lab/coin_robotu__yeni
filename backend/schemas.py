@@ -1344,6 +1344,9 @@ class DecisionTraceItemResponse(BaseModel):
     position_action_reason: str | None = None
     risk_adjustment_reason: str | None = None
     strategy_override_reason: str | None = None
+    hedge_recommendation: str | None = None
+    risk_reduction_score: float | None = None
+    correlation_basis: str | None = None
     reason_codes: list[str]
     reason_details: list[DecisionReasonDetailResponse]
     feature_snapshot: dict
@@ -1482,6 +1485,10 @@ class ExecutionIntentPreviewResponse(BaseModel):
     price: float | None = None
     stop_price: float | None = None
     take_profit_price: float | None = None
+    strategy_conflict_warning: str | None = None
+    allocation_adjustment_notice: str | None = None
+    hedge_suggestion: dict = Field(default_factory=dict)
+    risk_reduction_score: float | None = None
 
 
 class ExecutionIntentSubmitRequest(BaseModel):
@@ -1567,6 +1574,9 @@ class PositionStateResponse(BaseModel):
     strategy_id: str | None
     cluster_id: str | None
     status: str
+    recommended_action: str | None = None
+    risk_reduction_score: float | None = None
+    hedge_suggestion: dict = Field(default_factory=dict)
     updated_at: datetime
 
 
@@ -1576,6 +1586,77 @@ class AdminPositionsMonitorResponse(BaseModel):
     cluster_exposure: dict[str, float]
     risk_level: str
     forced_liquidation_risk: float
+
+
+class StrategyConflictResponse(BaseModel):
+    conflict_detected: bool
+    winning_strategy: str | None = None
+    losing_strategy: str | None = None
+    resolution_reason: str
+    conflict_count: int = 0
+
+
+class CapitalRebalanceEventResponse(BaseModel):
+    strategy_id: str
+    old_strategy_weight: float
+    new_strategy_weight: float
+    capital_shift: float
+    throttle_signal: bool
+    allocation_drift: float
+    strategy_performance_delta: float
+    risk_adjusted_return: float
+
+
+class HedgeSuggestionResponse(BaseModel):
+    hedge_symbol: str | None = None
+    hedge_size: float = 0
+    hedge_direction: str | None = None
+    risk_reduction_score: float = 0
+    correlation_basis: str = ""
+    recommended_action: str = "monitor"
+
+
+class AdminStrategyIntelligenceResponse(BaseModel):
+    generated_at: datetime
+    strategy_conflicts: list[StrategyConflictResponse]
+    capital_rebalance_events: list[CapitalRebalanceEventResponse]
+    hedge_suggestions: list[HedgeSuggestionResponse]
+    allocation_drift: float
+    strategy_performance_delta: float
+    risk_adjusted_return: float
+
+
+class ManualOverrideRequest(BaseModel):
+    action_type: str
+    reason: str
+    payload: dict = Field(default_factory=dict)
+
+
+class ManualOverrideResponse(BaseModel):
+    override_id: str
+    admin_id: str
+    action_type: str
+    reason: str
+    payload: dict
+    timestamp: datetime
+
+
+class RiskSimulationRequest(BaseModel):
+    user_id: str
+    intent_payload: dict
+    apply_override: bool = False
+    override_action_type: str | None = None
+    override_reason: str | None = None
+
+
+class RiskSimulationResponse(BaseModel):
+    simulated_at: datetime
+    simulation_payload: dict
+    strategy_conflict: dict
+    allocation_adjustment: dict
+    hedge_suggestion: dict
+    projected_risk_score: float
+    projected_gate_decision: str
 
 
 class PortfolioRiskLimitsResponse(BaseModel):

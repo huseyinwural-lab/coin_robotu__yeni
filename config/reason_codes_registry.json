@@ -200,6 +200,22 @@
     "STRATEGY_OVERRIDE_FOR_RISK_REDUCTION": {
       "title": "Strategy Override",
       "description": "Strateji disable olsa da risk azaltıcı aksiyon için override uygulandı."
+    },
+    "STRATEGY_CONFLICT_LOSER": {
+      "title": "Strategy Conflict Loser",
+      "description": "Cross-strategy conflict resolver bu stratejiyi kaybeden olarak işaretledi."
+    },
+    "ALLOCATION_REBALANCED": {
+      "title": "Allocation Rebalanced",
+      "description": "Dynamic capital rebalance sonucu işlem boyutu yeniden ayarlandı."
+    },
+    "HEDGE_SUGGESTION_GENERATED": {
+      "title": "Hedge Suggestion Generated",
+      "description": "Hedge suggestion engine portföy için hedge önerisi üretti."
+    },
+    "RISK_SIMULATION_OVERRIDE": {
+      "title": "Risk Simulation Override",
+      "description": "Admin risk simulation modunda manual override uyguladı."
     }
   }
 }

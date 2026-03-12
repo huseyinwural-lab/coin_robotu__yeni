@@ -87,6 +87,9 @@ export const UserPositionsPage = () => {
               <th className="px-3 py-2">Leverage</th>
               <th className="px-3 py-2">Strategy</th>
               <th className="px-3 py-2">Cluster</th>
+              <th className="px-3 py-2">Recommended Action</th>
+              <th className="px-3 py-2">Risk Reduction Score</th>
+              <th className="px-3 py-2">Hedge Suggestion</th>
               <th className="px-3 py-2">Actions</th>
             </tr>
           </thead>
@@ -101,6 +104,9 @@ export const UserPositionsPage = () => {
                 <td className="px-3 py-2" data-testid={`user-positions-leverage-${row.position_id}`}>{row.leverage}</td>
                 <td className="px-3 py-2" data-testid={`user-positions-strategy-${row.position_id}`}>{row.strategy_id || "-"}</td>
                 <td className="px-3 py-2" data-testid={`user-positions-cluster-${row.position_id}`}>{row.cluster_id || "UNCLUSTERED"}</td>
+                <td className="px-3 py-2" data-testid={`user-positions-recommended-action-${row.position_id}`}>{row.recommended_action || "monitor"}</td>
+                <td className="px-3 py-2" data-testid={`user-positions-risk-reduction-score-${row.position_id}`}>{row.risk_reduction_score ?? 0}</td>
+                <td className="px-3 py-2" data-testid={`user-positions-hedge-suggestion-${row.position_id}`}>{row.hedge_suggestion?.hedge_symbol ? `${row.hedge_suggestion.hedge_symbol} ${row.hedge_suggestion.hedge_direction} ${row.hedge_suggestion.hedge_size}` : "none"}</td>
                 <td className="px-3 py-2">
                   <div className="grid gap-2" data-testid={`user-positions-actions-${row.position_id}`}>
                     <div className="flex flex-wrap gap-2" data-testid={`user-positions-primary-actions-${row.position_id}`}>

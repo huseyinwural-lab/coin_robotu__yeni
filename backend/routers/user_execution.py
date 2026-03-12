@@ -25,6 +25,7 @@ from services.execution_intent_service import (
     submit_execution_intent,
 )
 from services.position_management_service import list_user_positions
+from services.strategy_intelligence_service import evaluate_hedge_suggestion
 
 router = APIRouter(prefix="/user/execution", tags=["user_execution"])
 
@@ -77,6 +78,10 @@ def preview_intent(
         price=float(intent.price) if intent.price is not None else None,
         stop_price=float(intent.stop_price) if intent.stop_price is not None else None,
         take_profit_price=float(intent.take_profit_price) if intent.take_profit_price is not None else None,
+        strategy_conflict_warning=validation.get("strategy_conflict_warning"),
+        allocation_adjustment_notice=validation.get("allocation_adjustment_notice"),
+        hedge_suggestion=validation.get("hedge_suggestion") or {},
+        risk_reduction_score=validation.get("risk_reduction_score"),
     )
 
 
@@ -140,6 +145,10 @@ def preview_position_action(
         price=float(intent.price) if intent.price is not None else None,
         stop_price=float(intent.stop_price) if intent.stop_price is not None else None,
         take_profit_price=float(intent.take_profit_price) if intent.take_profit_price is not None else None,
+        strategy_conflict_warning=validation.get("strategy_conflict_warning"),
+        allocation_adjustment_notice=validation.get("allocation_adjustment_notice"),
+        hedge_suggestion=validation.get("hedge_suggestion") or {},
+        risk_reduction_score=validation.get("risk_reduction_score"),
     )
 
 
@@ -277,6 +286,7 @@ def user_positions(
     db: Session = Depends(get_db),
 ):
     rows = list_user_positions(db, current_user.id, include_closed=include_closed)
+    hedge_suggestion = evaluate_hedge_suggestion(db, user_id=current_user.id, volatility=4.0)
     return [
         PositionStateResponse(
             position_id=row.position_id,
@@ -289,6 +299,13 @@ def user_positions(
             strategy_id=row.strategy_id,
             cluster_id=row.cluster_id,
             status=row.status,
+            recommended_action=(
+                "reduce_or_hedge"
+                if (float(row.unrealized_pnl or 0) < 0 and int(row.leverage or 1) >= 3)
+                else (hedge_suggestion.get("recommended_action") or "monitor")
+            ),
+            risk_reduction_score=float(hedge_suggestion.get("risk_reduction_score") or 0),
+            hedge_suggestion=hedge_suggestion,
             updated_at=row.updated_at,
         )
         for row in rows

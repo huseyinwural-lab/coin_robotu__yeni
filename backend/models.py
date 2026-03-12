@@ -272,6 +272,9 @@ class UserDecisionTrace(Base):
     position_action_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
     risk_adjustment_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
     strategy_override_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    hedge_recommendation: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    risk_reduction_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    correlation_basis: Mapped[str | None] = mapped_column(String(160), nullable=True)
     reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
     reason_details: Mapped[list[dict]] = mapped_column(JSON, default=list)
     feature_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -863,6 +866,17 @@ class Position(Base):
     status: Mapped[str] = mapped_column(String(20), default="open", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ManualOverrideLog(Base):
+    __tablename__ = "manual_override_log"
+
+    override_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    admin_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    action_type: Mapped[str] = mapped_column(String(80), index=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
 class StrategyAllocation(Base):

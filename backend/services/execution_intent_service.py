@@ -10,6 +10,11 @@ from services.execution_precheck_service import list_execution_presets, validate
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.portfolio_risk_service import portfolio_risk_check
 from services.position_management_service import sync_position_state
+from services.strategy_intelligence_service import (
+    evaluate_capital_rebalance,
+    evaluate_conflict_warning,
+    evaluate_hedge_suggestion,
+)
 
 ALLOWED_SUBMIT_SOURCE_STATES = {"PREVIEWED"}
 POSITION_ACTION_TYPES = {
@@ -71,6 +76,22 @@ def _to_float(value, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _side_to_direction(side: str) -> str:
+    side_lower = str(side or "buy").lower()
+    if side_lower in {"sell", "short"}:
+        return "sell"
+    return "buy"
+
+
+def _extract_hedge_context(normalized_payload: dict) -> tuple[str | None, float | None, str | None]:
+    hedge = (normalized_payload or {}).get("hedge_suggestion") or {}
+    hedge_symbol = hedge.get("hedge_symbol")
+    if not hedge_symbol:
+        return None, None, None
+    recommendation = f"{hedge_symbol}:{hedge.get('hedge_direction')}:{hedge.get('hedge_size')}"
+    return recommendation, float(hedge.get("risk_reduction_score") or 0), hedge.get("correlation_basis")
 
 
 def _resolve_position_for_action(db: Session, user_id: str, position_id: str) -> PaperPosition:
@@ -302,6 +323,50 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         elif risk_decision == "REQUIRE_APPROVAL":
             precheck_flags.append("portfolio_risk_manual_approval_required")
 
+    conflict_result = evaluate_conflict_warning(
+        db,
+        user_id=user_id,
+        strategy_id=strategy_binding,
+        symbol=symbol,
+        signal_direction=_side_to_direction(normalized.get("side") or payload.get("side") or "buy"),
+        confidence_score=signal_confidence,
+    )
+    if (
+        intent_type == "OPEN_POSITION"
+        and bool(conflict_result.get("conflict_detected"))
+        and str(conflict_result.get("winning_strategy") or "")
+        and str(conflict_result.get("winning_strategy")) != strategy_binding
+    ):
+        validation["validation_status"] = "rejected"
+        precheck_reasons.append("strategy_conflict_loser")
+
+    rebalance_result = evaluate_capital_rebalance(db, user_id=user_id, apply_changes=False)
+    strategy_rebalance_event = next(
+        (
+            event
+            for event in (rebalance_result.get("events") or [])
+            if str(event.get("strategy_id") or "") == strategy_binding
+        ),
+        None,
+    )
+    if strategy_rebalance_event and bool(strategy_rebalance_event.get("throttle_signal")) and adjusted_notional > 0:
+        adjusted_notional = round(adjusted_notional * 0.75, 6)
+        if normalized.get("position_size_mode") == "fixed_notional":
+            normalized["position_size_value"] = adjusted_notional
+        if normalized.get("size") is not None and notional > 0:
+            normalized["size"] = round(float(normalized.get("size") or 0) * 0.75, 6)
+        precheck_flags.append("allocation_rebalanced")
+        if not risk_adjustment_reason:
+            risk_adjustment_reason = "allocation_rebalance_adjustment"
+
+    hedge_suggestion = evaluate_hedge_suggestion(
+        db,
+        user_id=user_id,
+        volatility=float(payload.get("volatility_pct") or 0),
+    )
+    if hedge_suggestion.get("hedge_symbol"):
+        precheck_flags.append("hedge_suggestion_generated")
+
     final_reject_codes = sorted(set(precheck_reasons))
     final_risk_flags = sorted(set(precheck_flags + (risk_impact.get("risk_flags") or [])))
     gate_decision = str(risk_impact.get("decision") or "ALLOW")
@@ -319,6 +384,9 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         "single_trade_risk_pct": risk_impact.get("single_trade_risk_pct"),
         "portfolio_state": risk_impact.get("portfolio_state") or {},
     }
+    normalized["strategy_conflict"] = conflict_result
+    normalized["capital_rebalance"] = rebalance_result
+    normalized["hedge_suggestion"] = hedge_suggestion
 
     if normalized.get("size") is not None:
         action_size = _to_float(normalized.get("size"), action_size)
@@ -397,7 +465,17 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
             "preview_hash": validation.get("preview_hash"),
             "meta_strategy_summary": meta_summary,
             "portfolio_risk_impact": risk_impact,
+            "strategy_conflict": conflict_result,
+            "capital_rebalance": rebalance_result,
+            "hedge_suggestion": hedge_suggestion,
         },
+        hedge_recommendation=(
+            f"{hedge_suggestion.get('hedge_symbol')}:{hedge_suggestion.get('hedge_direction')}:{hedge_suggestion.get('hedge_size')}"
+            if hedge_suggestion.get("hedge_symbol")
+            else None
+        ),
+        risk_reduction_score=float(hedge_suggestion.get("risk_reduction_score") or 0),
+        correlation_basis=hedge_suggestion.get("correlation_basis"),
     )
 
     validation["reject_reason_codes"] = final_reject_codes
@@ -414,6 +492,10 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     validation["price"] = intent.price
     validation["stop_price"] = intent.stop_price
     validation["take_profit_price"] = intent.take_profit_price
+    validation["strategy_conflict_warning"] = conflict_result.get("strategy_conflict_warning")
+    validation["allocation_adjustment_notice"] = rebalance_result.get("allocation_adjustment_notice")
+    validation["hedge_suggestion"] = hedge_suggestion
+    validation["risk_reduction_score"] = float(hedge_suggestion.get("risk_reduction_score") or 0)
 
     db.commit()
     db.refresh(intent)
@@ -440,6 +522,8 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
 
     intent.status = "QUEUED"
     position_action_reason = intent.intent_type if intent.intent_type in POSITION_ACTION_TYPES else None
+    rebalance_apply_result = evaluate_capital_rebalance(db, user_id=user_id, apply_changes=True)
+    hedge_recommendation, hedge_risk_reduction, correlation_basis = _extract_hedge_context(intent.normalized_order_payload or {})
     record_decision_trace(
         db,
         user_id=user_id,
@@ -459,6 +543,9 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         risk_adjustment_reason=(
             "position_size_adjusted_by_portfolio_risk" if "portfolio_risk_adjusted" in (intent.risk_flags or []) else None
         ),
+        hedge_recommendation=hedge_recommendation,
+        risk_reduction_score=hedge_risk_reduction,
+        correlation_basis=correlation_basis,
         feature_snapshot={
             "symbol": intent.symbol,
             "market_type": intent.market_type,
@@ -472,6 +559,7 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
             "intent_token": intent.intent_token,
             "preview_hash": intent.preview_hash,
             "queue_mode": intent.queue_mode,
+            "capital_rebalance": rebalance_apply_result,
         },
     )
     db.commit()
@@ -492,6 +580,7 @@ def cancel_execution_intent(db: Session, user_id: str, intent_token: str) -> Use
 
     intent.status = "CANCELLED"
     intent.cancelled_at = datetime.now(timezone.utc)
+    hedge_recommendation, hedge_risk_reduction, correlation_basis = _extract_hedge_context(intent.normalized_order_payload or {})
     record_decision_trace(
         db,
         user_id=user_id,
@@ -504,6 +593,9 @@ def cancel_execution_intent(db: Session, user_id: str, intent_token: str) -> Use
         portfolio_risk_score=float(intent.risk_score or 0),
         meta_engine_decision=intent.meta_engine_decision,
         position_action_reason=intent.intent_type if intent.intent_type in POSITION_ACTION_TYPES else None,
+        hedge_recommendation=hedge_recommendation,
+        risk_reduction_score=hedge_risk_reduction,
+        correlation_basis=correlation_basis,
         feature_snapshot={
             "symbol": intent.symbol,
             "market_type": intent.market_type,
@@ -745,6 +837,7 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
         else None
     )
     position_action_reason = intent.intent_type if intent.intent_type in POSITION_ACTION_TYPES else None
+    hedge_recommendation, hedge_risk_reduction, correlation_basis = _extract_hedge_context(intent.normalized_order_payload or {})
 
     record_decision_trace(
         db,
@@ -764,6 +857,9 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
         position_action_reason=position_action_reason,
         risk_adjustment_reason=risk_adjustment_reason,
         strategy_override_reason=strategy_override_reason,
+        hedge_recommendation=hedge_recommendation,
+        risk_reduction_score=hedge_risk_reduction,
+        correlation_basis=correlation_basis,
         feature_snapshot={
             "symbol": symbol,
             "market_type": str(normalized.get("market_type") or "spot"),
@@ -799,6 +895,9 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
         position_action_reason=position_action_reason,
         risk_adjustment_reason=risk_adjustment_reason,
         strategy_override_reason=strategy_override_reason,
+        hedge_recommendation=hedge_recommendation,
+        risk_reduction_score=hedge_risk_reduction,
+        correlation_basis=correlation_basis,
         feature_snapshot={
             "entry_price": float(position.entry_price or 0),
             "quantity": float(position.quantity or 0),
@@ -836,6 +935,7 @@ def reject_execution_intent(db: Session, intent_id: str, admin_user_id: str, adm
     intent.status = "REJECTED"
     intent.admin_user_id = admin_user_id
     intent.admin_note = admin_note
+    hedge_recommendation, hedge_risk_reduction, correlation_basis = _extract_hedge_context(intent.normalized_order_payload or {})
     record_decision_trace(
         db,
         user_id=intent.user_id,
@@ -855,6 +955,9 @@ def reject_execution_intent(db: Session, intent_id: str, admin_user_id: str, adm
         risk_adjustment_reason=(
             "position_size_adjusted_by_portfolio_risk" if "portfolio_risk_adjusted" in (intent.risk_flags or []) else None
         ),
+        hedge_recommendation=hedge_recommendation,
+        risk_reduction_score=hedge_risk_reduction,
+        correlation_basis=correlation_basis,
         feature_snapshot={
             "symbol": intent.symbol,
             "market_type": intent.market_type,

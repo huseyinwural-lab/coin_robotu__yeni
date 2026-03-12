@@ -1,0 +1,21 @@
+{
+  "version": "strategy_conflict_rules_v1",
+  "rules": {
+    "confidence_priority": true,
+    "performance_priority": true,
+    "risk_priority": true,
+    "meta_override": true
+  },
+  "policy_order": [
+    "meta_override",
+    "confidence_priority",
+    "performance_priority",
+    "risk_priority"
+  ],
+  "descriptions": {
+    "confidence_priority": "higher_confidence_wins",
+    "performance_priority": "higher_performance_score_wins",
+    "risk_priority": "lower_drawdown_or_lower_decay_wins",
+    "meta_override": "ACTIVE > THROTTLED > DISABLED"
+  }
+}

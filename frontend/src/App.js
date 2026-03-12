@@ -62,6 +62,7 @@ import { AdminExecutionQueuePage } from "@/pages/AdminExecutionQueuePage";
 import { AdminStrategyAllocationPage } from "@/pages/AdminStrategyAllocationPage";
 import { AdminPortfolioRiskPage } from "@/pages/AdminPortfolioRiskPage";
 import { AdminPositionsMonitorPage } from "@/pages/AdminPositionsMonitorPage";
+import { AdminStrategyIntelligencePage } from "@/pages/AdminStrategyIntelligencePage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -134,6 +135,7 @@ function App() {
             <Route path="strategy-allocation" element={<AdminStrategyAllocationPage />} />
             <Route path="portfolio-risk" element={<AdminPortfolioRiskPage />} />
             <Route path="positions-monitor" element={<AdminPositionsMonitorPage />} />
+            <Route path="strategy-intelligence" element={<AdminStrategyIntelligencePage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />
             <Route path="correlation-matrix" element={<CorrelationMatrixPage />} />
             <Route path="execution-states" element={<ExecutionStatesPage />} />

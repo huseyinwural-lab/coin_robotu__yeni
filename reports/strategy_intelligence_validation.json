@@ -1,0 +1,151 @@
+{
+  "generated_at": "2026-03-12T22:04:33.241987+00:00",
+  "iteration": "54",
+  "base_url": "https://explainer-engine-2.preview.emergentagent.com",
+  "execute_preview": {
+    "validation_status": "valid",
+    "strategy_conflict_warning": null,
+    "allocation_adjustment_notice": "allocation_drift yüksek: disabled_test_strategy -> new_weight=0.081341",
+    "hedge_suggestion": {
+      "hedge_symbol": null,
+      "hedge_size": 0.0,
+      "hedge_direction": null,
+      "risk_reduction_score": 0.0,
+      "correlation_basis": "insufficient_exposure",
+      "recommended_action": "no_hedge_needed"
+    },
+    "risk_reduction_score": 0.0
+  },
+  "positions_sample": [
+    {
+      "position_id": "391fef14-a93f-4d86-9330-7b5b1d16eb98",
+      "symbol": "BTCUSDT",
+      "size": 1.151037,
+      "entry_price": 104.2538,
+      "current_price": 104.2538,
+      "unrealized_pnl": 0.0,
+      "leverage": 1,
+      "strategy_id": "spot_pullback_v1",
+      "cluster_id": "TEST_CLUSTER_IT52",
+      "status": "open",
+      "recommended_action": "open_hedge",
+      "risk_reduction_score": 0.91,
+      "hedge_suggestion": {
+        "hedge_symbol": "BTCUSDT",
+        "hedge_size": 22.2,
+        "hedge_direction": "sell",
+        "risk_reduction_score": 0.91,
+        "correlation_basis": "cluster=TEST_CLUSTER_IT52; corr=0.74; vol=4.0",
+        "recommended_action": "open_hedge",
+        "dominant_cluster": "TEST_CLUSTER_IT52"
+      },
+      "updated_at": "2026-03-12T22:04:32.780584"
+    }
+  ],
+  "admin_strategy_intelligence": {
+    "conflicts": 0,
+    "rebalance_events": 100,
+    "hedge_suggestions": 12,
+    "allocation_drift": 0.0,
+    "risk_adjusted_return": 2.5
+  },
+  "risk_simulation": {
+    "projected_risk_score": 0.0,
+    "projected_gate_decision": "ALLOW",
+    "strategy_conflict": {
+      "conflict_detected": false,
+      "winning_strategy": "spot_pullback_v1",
+      "losing_strategy": null,
+      "resolution_reason": "no_conflict",
+      "conflict_count": 0,
+      "strategy_conflict_warning": null
+    },
+    "allocation_adjustment": {
+      "allocation_drift": 0.0,
+      "notice": null,
+      "events": [
+        {
+          "strategy_id": "meta_test_v1",
+          "old_strategy_weight": 0.293807,
+          "new_strategy_weight": 0.293807,
+          "capital_shift": 0.0,
+          "throttle_signal": false,
+          "allocation_drift": 0.0,
+          "strategy_performance_delta": 500.0,
+          "risk_adjusted_return": 2.5
+        },
+        {
+          "strategy_id": "meta_disabled_v1",
+          "old_strategy_weight": 0.081341,
+          "new_strategy_weight": 0.081341,
+          "capital_shift": 0.0,
+          "throttle_signal": false,
+          "allocation_drift": 0.0,
+          "strategy_performance_delta": 63.4526,
+          "risk_adjusted_return": 2.5
+        },
+        {
+          "strategy_id": "test_strategy_state",
+          "old_strategy_weight": 0.293807,
+          "new_strategy_weight": 0.293807,
+          "capital_shift": 0.0,
+          "throttle_signal": false,
+          "allocation_drift": 0.0,
+          "strategy_performance_delta": 500.0,
+          "risk_adjusted_return": 2.5
+        },
+        {
+          "strategy_id": "manual_execution",
+          "old_strategy_weight": 0.081341,
+          "new_strategy_weight": 0.081341,
+          "capital_shift": 0.0,
+          "throttle_signal": false,
+          "allocation_drift": 0.0,
+          "strategy_performance_delta": 63.4526,
+          "risk_adjusted_return": 2.5
+        },
+        {
+          "strategy_id": "throttled_test_strategy",
+          "old_strategy_weight": 0.081341,
+          "new_strategy_weight": 0.081341,
+          "capital_shift": 0.0,
+          "throttle_signal": false,
+          "allocation_drift": 0.0,
+          "strategy_performance_delta": 63.4526,
+          "risk_adjusted_return": 2.5
+        },
+        {
+          "strategy_id": "disabled_test_strategy",
+          "old_strategy_weight": 0.081341,
+          "new_strategy_weight": 0.081341,
+          "capital_shift": 0.0,
+          "throttle_signal": false,
+          "allocation_drift": 0.0,
+          "strategy_performance_delta": 63.4526,
+          "risk_adjusted_return": 2.5
+        },
+        {
+          "strategy_id": "spot_pullback_v1",
+          "old_strategy_weight": 0.087022,
+          "new_strategy_weight": 0.087022,
+          "capital_shift": 0.0,
+          "throttle_signal": false,
+          "allocation_drift": 0.0,
+          "strategy_performance_delta": 75.1076,
+          "risk_adjusted_return": 2.5
+        }
+      ]
+    },
+    "hedge_suggestion": {
+      "hedge_symbol": "BTCUSDT",
+      "hedge_size": 22.2,
+      "hedge_direction": "sell",
+      "risk_reduction_score": 0.9265,
+      "correlation_basis": "cluster=L1; corr=0.74; vol=5.1",
+      "recommended_action": "open_hedge",
+      "dominant_cluster": "L1"
+    }
+  },
+  "manual_override_count": 2,
+  "validation_status": "PASS"
+}

@@ -94,6 +94,9 @@ def record_decision_trace(
     position_action_reason: str | None = None,
     risk_adjustment_reason: str | None = None,
     strategy_override_reason: str | None = None,
+    hedge_recommendation: str | None = None,
+    risk_reduction_score: float | None = None,
+    correlation_basis: str | None = None,
 ) -> UserDecisionTrace:
     current = _now()
     purge_expired_traces(db, now=current)
@@ -114,6 +117,9 @@ def record_decision_trace(
         position_action_reason=str(position_action_reason) if position_action_reason else None,
         risk_adjustment_reason=str(risk_adjustment_reason) if risk_adjustment_reason else None,
         strategy_override_reason=str(strategy_override_reason) if strategy_override_reason else None,
+        hedge_recommendation=str(hedge_recommendation) if hedge_recommendation else None,
+        risk_reduction_score=risk_reduction_score,
+        correlation_basis=str(correlation_basis) if correlation_basis else None,
         reason_codes=normalized_codes,
         reason_details=build_reason_details(normalized_codes),
         feature_snapshot=feature_snapshot or {},
@@ -143,6 +149,9 @@ def serialize_trace(row: UserDecisionTrace) -> dict:
         "position_action_reason": row.position_action_reason or "none",
         "risk_adjustment_reason": row.risk_adjustment_reason or "none",
         "strategy_override_reason": row.strategy_override_reason or "none",
+        "hedge_recommendation": row.hedge_recommendation or "none",
+        "risk_reduction_score": row.risk_reduction_score,
+        "correlation_basis": row.correlation_basis or "none",
         "reason_codes": reason_codes,
         "reason_details": reason_details,
         "feature_snapshot": row.feature_snapshot or {},
