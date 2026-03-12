@@ -1429,3 +1429,74 @@
 ### Güncel sıra
 - Phase 5.5 + 5.5A tamamlandı.
 - Sonraki teslim: Phase 5.6 Futures Strategy Expansion (mean reversion + breakout + multi-strategy orchestration) ve her fazda zorunlu 5 analytics/gov ekinin sürdürülmesi.
+
+## 22) 2026-03-12 — Phase 5.6 Futures Strategy Expansion (Tamamlandı)
+
+### 5.6.1 Strategy Core
+- Mean Reversion stratejisi aktif: `core/strategies/futures_mean_reversion_v1.py`
+  - Bağlı bileşenler: `range_detector`, `deviation_detector`, `funding_alignment`
+- Breakout stratejisi aktif: `core/strategies/futures_breakout_v1.py`
+  - Bağlı bileşenler: `volatility_expansion`, `breakout_confirmation`
+- Her iki strateji yalnızca signal üretir; execution/risk işlemleri strategy katmanına konulmadı.
+
+### 5.6.2 Multi-Strategy Orchestration
+- Registry katmanı: `core/portfolio/strategy_registry.py`
+  - Aktif stratejiler: `trend_follow_v1`, `mean_reversion_v1`, `breakout_v1`
+- Interaction guard güçlendirildi: `core/portfolio/strategy_interaction_guard.py`
+  - `STRATEGY_INTERACTION_CONFLICT` ve `STRATEGY_INTERACTION_STACKED` blokları
+- Exposure tracker genişletildi: `core/portfolio/strategy_exposure_tracker.py`
+  - `max_symbol_exposure`, `max_strategy_exposure`, `max_cluster_exposure`
+- Attribution engine genişletildi: `core/portfolio/strategy_attribution_engine.py`
+  - PnL/trade/win-rate/reject-rate/slippage/latency attribution
+
+### 5.6.3 Analytics Entegrasyonu
+- Strategy analytics metrikleri status snapshot’a eklendi:
+  - `strategy_execution_quality`
+  - `strategy_slippage`
+  - `strategy_latency`
+  - `strategy_reject_rate`
+  - `strategy_confidence_vs_result`
+- Yeni endpointler:
+  - `GET /api/admin/futures/strategy-performance`
+  - `GET /api/admin/futures/strategy-execution-quality`
+
+### 5.6.4 Strategy Drift Alarmı
+- `core/strategies/analytics/strategy_drift_detector.py` pipeline’a bağlı
+- Event contract: `STRATEGY_DRIFT_ALERT`
+- Triggerlar: `PNL_DETERIORATION`, `CONFIDENCE_RESULT_DIVERGENCE`, `EXECUTION_QUALITY_DROP`
+
+### 5.6.5 Admin Görünürlük
+- Yeni admin sayfası: `/admin/futures/strategy-analytics`
+  - Strategy PnL Contribution
+  - Strategy Execution Quality
+  - Signal Distribution
+  - Strategy Drift Alerts
+  - False Allow/Reject
+  - Gate reason trend (7d)
+  - 15-point strategy checklist
+- Route + nav entegrasyonu tamamlandı (`App.js`, `PanelLayout.jsx`)
+
+### Fazlar arası zorunlu 5’li analytics (5.6 içinde de uygulandı)
+1. Rolling 7d tuning score
+2. Drift alarmları
+3. False allow / false reject karşılaştırması
+4. Gate reason trend (7d)
+5. 15 maddelik architecture checklist
+
+### Test
+- Yeni backend test dosyaları:
+  - `test_mean_reversion_strategy.py`
+  - `test_breakout_strategy.py`
+  - `test_strategy_registry.py`
+  - `test_strategy_interaction_guard.py`
+  - `test_strategy_exposure_tracker.py`
+  - `test_strategy_attribution.py`
+  - `test_strategy_execution_quality.py`
+- Testing agent raporu: `/app/test_reports/iteration_37.json` => **PASS**
+  - Backend: 37/37 PASS
+  - Frontend: Strategy analytics sayfası ve widgetlar PASS
+
+### Güncel sıra
+- Phase 5.6 tamamlandı.
+- Sonraki faz: **Phase 5.6A Strategy Decay & Lifecycle Governance**
+- Ardından: **Phase 5.6B Correlation Cluster Engine**
