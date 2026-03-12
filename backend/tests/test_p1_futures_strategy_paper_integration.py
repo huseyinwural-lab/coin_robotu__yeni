@@ -18,7 +18,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://risk-first-platform.preview.emergentagent.com")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://portfolio-pro-494.preview.emergentagent.com")
 
 # Import core modules for unit tests
 from core.strategy.futures.strategy_contract import FuturesStrategy, StrategySignal

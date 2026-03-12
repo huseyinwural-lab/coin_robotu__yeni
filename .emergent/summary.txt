@@ -4,73 +4,68 @@ The user wants to build a multi-user, web-based, algorithmic trading platform. T
 **PRODUCT REQUIREMENTS:**
 - **Tech Stack:** Python/FastAPI (Backend), React/TailwindCSS/Shadcn UI (Frontend), PostgreSQL (Database), Redis (Cache/Event Bus).
 - **Core Goal:** Build a sustainable, scalable, and modular platform following a risk-first, admin-first development methodology.
-- **Current Major Goal:** The project is deep into the development of the **Futures Strategy Engine**. Having built an extensive, multi-layered risk and execution foundation (Phases 5.1 through 5.5A), the current focus is on expanding the strategic capabilities of the engine.
-- **User-Provided PRDs:** The user provides extremely detailed PRDs for each phase (e.g., messages #5, #120, #195, #293, #386, #489, #692), dictating architecture, implementation details, and the overall roadmap.
+- **Current Major Goal:** Having completed the entire institutional-grade futures trading engine (Phases 5.1 through 5.8A), the current focus is on building the **Phase 6 - User Platform**.
+- **User-Provided PRDs:** The user provides extremely detailed PRDs for each phase (e.g., messages #158, #264, #360, #442, #558, #644, #714), dictating architecture, implementation details, and the overall roadmap.
 
 **User's preferred language**: The user communicates exclusively in **Turkish**. The next agent MUST continue the conversation in Turkish.
 
 **what currently exists?**
-The project is a sophisticated algorithmic trading platform with a comprehensive admin portal and two major trading engines. The system is connected to the **Binance Futures Testnet**.
-
-- **Spot Strategy Engine:** A complete, multi-strategy engine for spot trading operating in paper-trading mode. It includes dynamic, market-regime-aware scoring and a full observability dashboard.
-- **Futures Strategy Engine Foundation (Phases 5.1-5.5A):** An institutional-grade foundation for futures trading has been completed. This is a complex, multi-layered system designed for safety and observability *before* strategy execution. Key completed components include:
-    - **Risk & Protection:** , , and .
-    - **Decision & Execution:** A standardized  model with a unified reason code taxonomy, a , and a  that enables real order execution on the Binance Testnet through a safety-gated mechanism.
-    - **Analytics:**  to measure slippage, latency, and fill rates from the testnet adapter.
-    - **Strategies:** The first strategy, , is fully integrated into the paper-trading and testnet decision pipeline.
+The project is an institutional-grade algorithmic trading platform with a comprehensive backend engine and admin interface, connected to the **Binance Futures Testnet**. The entire backend futures trading engine is complete, featuring a multi-layered risk and execution architecture. This includes:
+- **Strategy Layer:** Multiple strategies (, , ) managed by a multi-strategy orchestration layer.
+- **Strategy Governance (Phase 5.6A):** A system to detect performance decay and automatically throttle or disable underperforming strategies.
+- **Correlation Risk (Phase 5.6B):** An engine to identify and manage concentrated risk in highly correlated assets.
+- **Capital Enforcement (Phase 5.7):** A layer to enforce strategy-level capital budgets and dynamic position sizing.
+- **Tail Risk Guard (Phase 5.7A):** A global safety net to protect against extreme market events like liquidation cascades and volatility spikes, using a .
+- **Live Readiness (Phase 5.8):** An operational correctness layer that ensures the engine's internal state is synchronized with the exchange's state (positions, orders, balances).
+- **Capital Scaling Validation (Phase 5.8A):** A simulation engine to validate model robustness and performance at different capital levels (1M, 10M, 100M).
+- **Admin Portal:** Extensive dashboards for monitoring every risk and performance layer of the engine.
 
 **Last working item**:
-- **Last item agent was working:** The agent was in the middle of implementing **Phase 5.6 — Futures Strategy Expansion**. The primary goal is to add two new strategies ( and ) and build the critical **multi-strategy orchestration layer** to manage their interactions, prevent conflicting trades, and track exposure cohesively.
-- **Status:** IN PROGRESS
+The agent was preparing to start **Phase 6 - User Platform**, which involves building the client-facing part of the application. The user has provided a detailed PRD and approved the implementation plan.
+- **Last item agent was working:** The agent reviewed the existing authentication files (, ) to understand the security implementation before starting to build the **User Account Layer**, as per the user's PRD for Phase 6.
+- **Status:** NOT STARTED
 - **Agent Testing Done:** N
-- **Which testing method agent to use?** both. First, complete the backend unit and integration tests for the new strategies and orchestration modules. Then, build the required admin panel enhancements and test the frontend. Finally, run a full regression using the testing agent.
+- **Which testing method agent to use?** Both. First, implement the backend services and APIs for the user platform, along with their unit and integration tests. Then, build the frontend dashboard, portfolio, and trade history pages and test them. Finally, run a full regression test using the testing agent.
 - **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-- **Issue 1: Complete Phase 5.6 - Futures Strategy Expansion (P0)**
-    - **Description:** The backend modules for the new strategies and the orchestration layer have been created, along with their initial test files. The implementation is not yet complete or tested.
-    - **Status:** IN PROGRESS
-    - **Is recurring issue?** N
-    - **Should Test frontend/backend/both after fix?** both
+There are no outstanding bugs. The primary pending work is the next phase of development.
+
+- **Issue 1: Implement Phase 6 - User Platform (P0)**
+  - **Description:** Build the entire user-facing application, including user registration, portfolio management, performance dashboards, and trade history with explainability.
+  - **Status:** NOT STARTED
+  - **Is recurring issue?** N
+  - **Should Test frontend/backend/both after fix?** both
 
 **In progress Task List**:
-- **Task 1: Phase 5.6 — Futures Strategy Expansion (P0)**
-    - **Where to resume:** The agent has created the core files for the new strategies (, ) and the orchestration modules (, , , ). The next step is to complete the implementation of these modules, write the logic for their corresponding test files, and execute the tests to ensure the backend is working correctly before moving on to the admin UI.
-    - **What will be achieved with this?** The platform will be able to run multiple futures strategies concurrently in a safe, controlled, and observable manner.
-    - **Status:** IN PROGRESS
-    - **Should Test frontend/backend/both after fix?** both
-    - **Blocked on something:** No.
+- **Task 1: Phase 6 — User Platform (P0)**
+  - **Where to resume:** The user has approved the detailed PRD for Phase 6 (Message #714) and provided specific security requirements (Message #717). The next step is to begin **Faz 1 — User Account Layer** by creating the files and logic for **Görev 1 — User Registry** () and integrating it with the existing JWT authentication system.
+  - **What will be achieved with this?** This will create the foundational layer for user accounts, upon which the entire client-facing dashboard, portfolio tracking, and performance visualization will be built.
+  - **Status:** NOT STARTED
+  - **Should Test frontend/backend/both after fix?** both
+  - **Blocked on something:** No.
 
 **Upcoming and Future Tasks**
-The user has provided a locked-in, multi-phase roadmap (Messages #489, #635). A new, critical requirement (Message #636) is that **each** of the following phases must also include the implementation of a specific 5-point analytics suite.
-
-*   **Upcoming Tasks (P1):**
-    *   **Phase 5.6A: Strategy Decay & Lifecycle Governance:** Build detectors for performance decay, confidence drift, and enable auto-throttling/disabling of failing strategies.
-    *   **Phase 5.6B: Correlation Cluster Engine:** Implement detection of correlated assets to manage concentrated risk across different symbols.
-
-*   **Future Tasks (P2 and beyond):**
-    *   **Phase 5.7: Capital Enforcement v2:** Enforce the spot/futures capital allocation split (initially 70/30).
-    *   **Phase 5.7A: Portfolio Drawdown & Tail Risk Guard:** Add a final safety layer to prevent catastrophic portfolio-level losses.
-    *   **Phase 5.8: Live Readiness Control System:** Create a comprehensive, multi-gate checklist and scoring system to approve a go-live decision.
-    *   **Phase 5.8A: Capital Scaling Validation:** Simulate system performance and market impact at different capital levels (1M, 10M, 100M).
-    *   **Phase 6: User-Facing Platform:** Develop the user dashboard, portfolio views, and performance metrics.
-    *   **Phase 7: UI/UX Hardening:** Final visual polish, UX improvements, and responsive design enhancements.
+- **Upcoming Tasks (P1):**
+    - **Phase 7: UI/UX Hardening:** Post-Phase 6, the focus will shift to final visual polish, design system refinement, mobile compatibility, and performance optimization for the entire application.
+- **Future Tasks (P2):**
+    - No future tasks are defined beyond Phase 7. Completing Phase 7 will mark the delivery of the full product as per the current roadmap.
 
 **Completed work in this session**
-- **Phase 5.1A: Futures Liquidation Protection & ADL Risk Shield:** Built the foundational safety layers to prevent liquidations.
-- **Phase 5.1B: Market Microstructure Guard:** Implemented a gate to check for poor market liquidity (spread shocks, thin orderbooks) before trading.
-- **Phase 5.2: Futures Decision Trace Standard:** Standardized logging and added a diagnostics engine for analyzing trade decisions.
-- **Phase 5.3: First Strategy Integration:** Implemented  within a paper-trading decision flow.
-- **Phase 5.4: Dynamic Leverage Model:** Created a model to adjust leverage dynamically based on confidence, market quality, and risk.
-- **Phase 5.5: Controlled Testnet Hook:** Built the full execution pipeline to the Binance Testnet, including order management, safety guards, and a release gate.
-- **Phase 5.5A: Execution Quality Analytics:** Added modules to track and analyze realized slippage, fill latency, and other execution metrics from the testnet.
+The agent has successfully built, tested, and delivered the entire institutional-grade backend trading engine as per the user's phased PRDs.
+- **Phase 5.6 & 5.6A:** Futures Strategy Expansion and Lifecycle Governance (DONE)
+- **Phase 5.6B:** Correlation Cluster Engine for risk management (DONE)
+- **Phase 5.7:** Capital Enforcement v2 for strategy-level budgeting (DONE)
+- **Phase 5.7A:** Tail Risk Guard for global market protection (DONE)
+- **Phase 5.8:** Live Readiness Control System for operational correctness (DONE)
+- **Phase 5.8A:** Capital Scaling Validation for model robustness checks (DONE)
 
 **Earlier issues found/mentioned but not fixed**
 - **Issue 1: MongoDB URL in .env**
-    - **Debug checklist:** Check .
-    - **Why to solve this issue and what will be achieved with this?** The  variable is a remnant from before the migration to PostgreSQL. Removing it would eliminate confusion and align the configuration with the current tech stack.
-    - **Should Test frontend/backend/both after fix:** Backend (to ensure no regressions).
-    - **Is recurring issue?** N
+  - **Debug checklist:** Check .
+  - **Why to solve this issue and what will be achieved with this?** The  variable is a remnant from before the migration to PostgreSQL. Removing it is a low-priority configuration hygiene task that would eliminate confusion and align the configuration with the current tech stack.
+  - **Should Test frontend/backend/both after fix:** Backend (a quick check to ensure services restart correctly).
+  - **Is recurring issue?** N
 
 **Known issue recurrence from previous fork**
 - None.
@@ -79,55 +74,55 @@ The user has provided a locked-in, multi-phase roadmap (Messages #489, #635). A 
 
 
 **Key Technical Concepts**
-- **Architecture:** Phased, Admin-First, Risk-First, Event-Driven.
-- **Futures Engine Core:** A sequence of guards and engines that a trade signal must pass through:  ->  ->  ->  ->  ->  -> .
-- **Multi-Strategy Orchestration:** A new layer being built to manage signal conflicts, track cross-strategy exposure, and attribute PnL correctly.
-- **Controlled Execution:** A  system ensures the Testnet execution path is only enabled after passing specific safety checks. The default state is paper-only.
+- **Architecture:** Phased, Admin-First, Risk-First, with a strict separation between the backend Engine and the frontend User Platform.
+- **Core Engine:** A sequence of guards and engines for strategy governance, correlation risk, capital enforcement, tail risk, and live readiness.
+- **Global Risk Score:** A composite score that combines risk signals from all layers (strategy health, cluster risk, capital drift, tail risk) to drive automated, system-wide safety actions (e.g., throttling, pausing the engine).
+- **User Platform Layer:** A new, separate layer responsible for user-facing concerns: presenting portfolio data, performance metrics, and trade explanations without directly interfering with core engine operations.
 
 **key DB schema**
-- : Core user table with roles and status.
-- : Detailed logs for every signal decision from all engines.
-- : Standardized trace logs for the entire futures decision pipeline.
-- : Stores realized slippage, latency, and other execution quality data from testnet fills.
+- : Core user table with roles, status, and API access credentials. (To be enhanced in Phase 6).
+- , , : Existing tables for detailed logging.
+- New audit tables are implicitly created by the various  modules for governance, risk, and readiness events.
 
 **changes in tech stack**
-- No changes to the core stack, but significant evolution of the internal application architecture with the addition of numerous risk, execution, and strategy modules.
+- No changes to the core tech stack.
 
 **All files of reference**
-*   : Contains all futures strategy implementations.
-*   : (New) Contains the multi-strategy orchestration logic.
-*   : Contains all the risk, protection, and guard modules.
-*   : Contains the testnet adapter, order management, and slippage tracking logic.
-*   : Location for all admin monitoring and control panels.
-*   Message : The master roadmap for all remaining futures work.
-*   Message : The user's directive to add a 5-point analytics suite to all future development phases.
+- **User PRDs:** Messages #158, #264, #360, #442, #558, #644, and especially **#714 (for the current Phase 6)** are the primary sources of truth.
+- **Auth Files:**  and  define the existing JWT security that must be extended for the  role.
+- **New Core Directories (Backend):**
+    -  (to be created)
+    -  (to be created)
+- **New Page Directories (Frontend):**
+    - 
+    - 
+    - 
 
 **Critical Info for New Agent**
-- **MUST communicate in Turkish.**
-- **Follow the User's PRDs and Roadmap:** The project's direction is dictated entirely by the user's detailed documents and locked-in roadmap (Message #489). Do not deviate. The current task is **Phase 5.6**.
-- **Admin First, Risk First:** Continue the established pattern of building backend logic and its corresponding admin observability panel concurrently. Safety and monitoring are paramount.
-- **New Cross-Cutting Requirement:** As of Message #636, every new phase must include a specific 5-point analytics suite (7d tuning score, drift alarms, false allow/reject panels, etc.). You must incorporate this into the plan for Phase 5.6A and all subsequent phases.
-- **Default to Paper, Guard Testnet:** The system is designed to be safe. The Testnet execution path is off by default and guarded by a release gate.
+- **MUST communicate in Turkish.** The user is the project architect and provides all instructions and clarifications in Turkish.
+- **Follow the User's PRD for Phase 6 (Message #714):** The user's plan is non-negotiable. The current task is to start building the User Platform as specified.
+- **Architectural Separation is Key:** The User Platform is a distinct layer. It should consume data from the engine via APIs and not contain any core trading or risk logic. The engine is the source of truth for all trading operations.
+- **Enforce Strict Security:** Implement the security requirements from Message #717. Use the existing JWT system but create a clear  role. Ensure users can only access their own data and that all authorization checks are performed on the backend.
 
 **documents and test reports created in this job**
-- : Contains a consolidation of user requirements. Should be kept updated.
-- : Contains JSON reports from the testing agent.
+- : Consolidates user requirements; should be updated upon task completion.
+- : Contains JSON reports from the testing agent for all completed phases (e.g.,  for Phase 5.6).
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **Msg 695:** User gives a one-word confirmation (a) to start work on Phase 5.6.
-2.  **Msg 692:** User provides the detailed PRD for the current task, **Phase 5.6 - Futures Strategy Expansion**, and re-confirms the next tasks in the roadmap.
-3.  **Msg 639:** User gives a one-word confirmation (a) to the plan of incorporating new analytics into all future phases.
-4.  **Msg 636:** **(CRITICAL)** User provides a new, persistent instruction: add a specific 5-point analytics suite (tuning score, drift alarms, etc.) to *every* future phase.
-5.  **Msg 634:** User asks for a clean list of all remaining tasks.
-6.  **Msg 632:** Agent finished Phase 5.5 and called the  tool.
-7.  **Messages 600-631:** Agent is implementing tests for the .
-8.  **Messages 552-599:** Agent is implementing the admin panel and API for the Testnet Control page.
-9.  **Msg 491:** User provides an analytical closing of the previous checkpoint, confirming the plan to start Phase 5.5.
-10. **Msg 490:** Agent confirms the locked-in roadmap and agrees to start with Phase 5.5.
+- **#717:** User confirms to use the existing JWT auth infrastructure, but with strict role separation ( vs ) and backend enforcement to ensure users can only see their own data.
+- **#714:** User provides the complete, detailed PRD for **Phase 6 - User Platform**.
+- **#647:** User provides weights for the .
+- **#644:** User provides the PRD for **Phase 5.8A - Capital Scaling Validation**.
+- **#561:** User confirms equal weights for the .
+- **#558:** User provides the PRD for **Phase 5.8 - Live Readiness Control System**.
+- **#445:** User provides weights for the .
+- **#442:** User provides the PRD for **Phase 5.7A - Tail Risk Guard**.
+- **#363:** User provides  and  values for capital allocation.
+- **#360:** User provides the PRD for **Phase 5.7 - Capital Enforcement v2**.
 
 **Project Health Check:**
-- **Broken:** Nothing is broken.
-- **Mocked:** No part of the application is mocked. The paper trading and testnet connections are intentional, fully functional modes of operation.
+- **Broken:** None. The backend engine and admin UI are fully functional and tested.
+- **Mocked:** None. The system operates in fully functional paper-trading and testnet modes.
 
 **3rd Party Integrations**
 - **PostgreSQL:** Primary database.
@@ -136,12 +131,13 @@ The user has provided a locked-in, multi-phase roadmap (Messages #489, #635). A 
 - **Resend:** For sending email alerts from the system.
 
 **Testing status**
-- **Testing agent used after significant changes:** YES, consistently used after major phases.
-- **Test files created:** Extensive unit and integration tests exist for almost every module in . The agent was in the process of creating more for Phase 5.6.
+- **Testing agent used after significant changes:** YES. The agent has rigorously tested each completed phase using a combination of self-testing and the testing agent.
+- **Test files created:** Extensive unit, integration, and endpoint tests exist for all backend risk and governance modules in .
 - **Known regressions:** None.
 
 **Credentials to test flow:**
 - **Admin Login:**  / 
+- **User Login:** New user credentials will need to be created as part of the Phase 6 implementation.
 
 **What agent forgot to execute**
-- The agent has not forgotten any tasks. It has been meticulously following the user's detailed, evolving, multi-phase plan.</analysis>
+- The agent has meticulously followed the user's complex, multi-phase roadmap. The only minor, outstanding item is a low-priority configuration cleanup (removing  from ) that was noted in the initial handoff but correctly deprioritized in favor of critical feature development.</analysis>
