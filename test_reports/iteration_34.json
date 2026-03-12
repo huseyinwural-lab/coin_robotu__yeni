@@ -1,0 +1,116 @@
+{
+  "summary": "Phase 5.4 Dynamic Leverage Model testing complete. 25/25 pytest tests PASSED. All leverage modules deterministic. Paper decision flow includes dynamic_leverage_engine step. Decision trace contract has all 7 leverage fields. GET /api/admin/futures/leverage/status returns full contract. Frontend /admin/futures/risk-monitor leverage observability widgets all render correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/admin/futures/risk-monitor",
+        "issues": [
+          "Console warns: chart width/height -1 (ResponsiveContainer sizing issue when container not visible during initial render) - cosmetic, charts render correctly after scroll"
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p54_dynamic_leverage_model.py",
+    "/app/test_reports/pytest/pytest_results_iter34_p54_dynamic_leverage.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ConfidenceScaler: Deterministic - low (<0.4) → 0.7x, mid (0.4-0.7) → 1.0x, high (>0.7) → 1.2x multiplier",
+    "MicrostructureScaler: Deterministic - combines severity, spread_state, depth_state into liquidity_adjusted_leverage (0.2-1.0) and size_clamp_ratio (0.35-1.0)",
+    "LiquidationScaler: Deterministic - distance thresholds: <8 → 0.45x/0.35, <12 → 0.65x/0.6, <18 → 0.85x/0.8, else → 1.0x/1.0",
+    "FundingScaler: Deterministic - applies funding_adjustment_factor based on bias direction vs trade side alignment",
+    "PortfolioLeverageGuard: Deterministic - portfolio_leverage >=2.5 → 0.55x, >=2.0 → 0.75x, else → 1.0x adjustment",
+    "LeverageEngine: Deterministic - combines all 5 scalers → final_leverage (1.0-5.0) and position_size_ratio (0.0-1.0)",
+    "Paper decision flow: Chain includes dynamic_leverage_engine step after adl_shield and before policy_engine",
+    "Decision trace contract: 7 leverage fields - leverage_decision, confidence_multiplier, microstructure_multiplier, liquidation_multiplier, funding_multiplier, final_leverage, position_size_ratio",
+    "GET /api/admin/futures/leverage/status: Returns 12 contract fields including leverage_distribution, size_clamp_events, confidence_vs_leverage, liquidation_distance_vs_leverage",
+    "System remains paper-only - no live trading execution"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_p54_dynamic_leverage_model.py"
+  ],
+  "success_rate": {
+    "backend": "100% (25/25 pytest tests passed)",
+    "frontend": "100% (All 9 leverage observability UI widgets render correctly)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!"
+  },
+  "seed_data_creation": "None - leverage data generated from live paper cycle",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 5.4 Dynamic Leverage Model fully verified. 6 leverage modules (confidence_scaler, microstructure_scaler, liquidation_scaler, funding_scaler, portfolio_leverage_guard, leverage_engine) all deterministic. Paper decision flow chain includes dynamic_leverage_engine step. Decision trace contract has all 7 leverage fields. GET /api/admin/futures/leverage/status returns full contract. Frontend /admin/futures/risk-monitor has 9 leverage widgets: observability header, summary grid (symbol, final_leverage, size_ratio, size_clamp_events), leverage_distribution, confidence_vs_leverage scatter, liquidation_distance_vs_leverage chart. Regression: /api/admin/futures/strategy/status, /api/admin/futures/decision-diagnostics all working.",
+  "features_verified": {
+    "leverage_modules_deterministic": {
+      "confidence_scaler": "PASS - Low/mid/high confidence maps to 0.7/1.0/1.2 multiplier deterministically",
+      "microstructure_scaler": "PASS - Combines severity/spread/depth into liquidity_adjusted_leverage deterministically",
+      "liquidation_scaler": "PASS - Distance thresholds (<8/<12/<18/else) map to fixed multipliers deterministically",
+      "funding_scaler": "PASS - Bias direction vs trade side alignment maps to adjustment factors deterministically",
+      "portfolio_leverage_guard": "PASS - Portfolio leverage thresholds map to adjustment factors deterministically",
+      "leverage_engine": "PASS - Full engine combines all scalers deterministically"
+    },
+    "paper_decision_flow_includes_leverage": {
+      "trace_step": "PASS - dynamic_leverage_engine in trace chain",
+      "leverage_decision_output": "PASS - leverage_decision dict in result",
+      "leverage_trace_extension_output": "PASS - leverage_trace_extension with all 7 fields"
+    },
+    "decision_trace_contract_leverage_fields": {
+      "leverage_decision": "PASS",
+      "confidence_multiplier": "PASS",
+      "microstructure_multiplier": "PASS",
+      "liquidation_multiplier": "PASS",
+      "funding_multiplier": "PASS",
+      "final_leverage": "PASS",
+      "position_size_ratio": "PASS"
+    },
+    "api_endpoints": {
+      "leverage_status": {
+        "endpoint": "GET /api/admin/futures/leverage/status",
+        "status": "200 PASS",
+        "contract_fields": ["symbol", "strategy", "confidence", "microstructure_quality", "liquidation_distance", "funding_bias", "final_leverage", "size_ratio", "leverage_distribution", "size_clamp_events", "confidence_vs_leverage", "liquidation_distance_vs_leverage"]
+      },
+      "strategy_status_regression": {
+        "endpoint": "GET /api/admin/futures/strategy/status",
+        "status": "200 PASS",
+        "leverage_in_trace": "PASS - decision_trace_model contains leverage fields"
+      },
+      "decision_diagnostics_regression": {
+        "endpoint": "GET /api/admin/futures/decision-diagnostics",
+        "status": "200 PASS",
+        "leverage_fields": ["leverage_distribution", "size_clamp_events", "confidence_vs_leverage", "liquidation_distance_vs_leverage"]
+      }
+    },
+    "frontend_leverage_widgets": {
+      "leverage_observability_header": "PASS - 'Dynamic Leverage Observability' visible",
+      "leverage_summary_grid": "PASS - 4-column grid visible",
+      "leverage_symbol_card": "PASS - Shows BTCUSDT",
+      "leverage_final_card": "PASS - Shows final_leverage value",
+      "size_ratio_card": "PASS - Shows size_ratio value (0.65)",
+      "size_clamp_events_card": "PASS - Shows count (2)",
+      "leverage_distribution_panel": "PASS - Shows bucket distribution (1.0-1.9: 2, etc)",
+      "confidence_vs_leverage_panel": "PASS - Scatter chart visible with data points",
+      "liquidation_distance_vs_leverage_panel": "PASS - Line chart with BTCUSDT/ETHUSDT"
+    }
+  },
+  "sample_api_responses": {
+    "leverage_status": {
+      "symbol": "BTCUSDT",
+      "strategy": "futures_trend_follow_v1",
+      "confidence": 0.0,
+      "microstructure_quality": 0.0,
+      "liquidation_distance": 0.0,
+      "funding_bias": "NEUTRAL",
+      "final_leverage": 1.0,
+      "size_ratio": 0.65,
+      "leverage_distribution": [{"bucket": "1.0-1.9", "count": 2}],
+      "size_clamp_events": 2
+    }
+  }
+}

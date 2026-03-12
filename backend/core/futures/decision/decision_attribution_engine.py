@@ -63,7 +63,7 @@ class DecisionAttributionEngine:
         liquidation_reason: str,
         adl_pass: bool,
         adl_reason: str,
-        adl_pressure_side: str,
+        adl_pressure_side: str = "NONE",
         policy_pass: bool,
         gate_pass: bool,
     ) -> dict:

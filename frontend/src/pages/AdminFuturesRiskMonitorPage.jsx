@@ -14,6 +14,7 @@ export const AdminFuturesRiskMonitorPage = () => {
   const [adlStatus, setAdlStatus] = useState(null);
   const [strategyStatus, setStrategyStatus] = useState(null);
   const [decisionDiagnostics, setDecisionDiagnostics] = useState(null);
+  const [leverageStatus, setLeverageStatus] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -25,18 +26,20 @@ export const AdminFuturesRiskMonitorPage = () => {
         // no-op, cached status can still be rendered
       }
 
-      const [riskResponse, liquidationResponse, adlResponse, strategyResponse, diagnosticsResponse] = await Promise.all([
+      const [riskResponse, liquidationResponse, adlResponse, strategyResponse, diagnosticsResponse, leverageResponse] = await Promise.all([
         apiClient.get("/admin/futures/risk/status"),
         apiClient.get("/admin/futures/liquidation-protection/status"),
         apiClient.get("/admin/futures/adl/status"),
         apiClient.get("/admin/futures/strategy/status"),
         apiClient.get("/admin/futures/decision-diagnostics"),
+        apiClient.get("/admin/futures/leverage/status"),
       ]);
       setRiskStatus(riskResponse.data || null);
       setLiquidationStatus(liquidationResponse.data || null);
       setAdlStatus(adlResponse.data || null);
       setStrategyStatus(strategyResponse.data || null);
       setDecisionDiagnostics(diagnosticsResponse.data || null);
+      setLeverageStatus(leverageResponse.data || null);
     } catch (error) {
       const message = error?.response?.data?.detail || "Futures risk monitor verisi alınamadı";
       setErrorMessage(message);
@@ -53,7 +56,7 @@ export const AdminFuturesRiskMonitorPage = () => {
   const heatmapRows = useMemo(() => liquidationStatus?.symbol_risk_heatmap || [], [liquidationStatus]);
   const criticalPositions = useMemo(() => liquidationStatus?.critical_positions || [], [liquidationStatus]);
   const gateRejections = useMemo(() => liquidationStatus?.gate_rejections || [], [liquidationStatus]);
-  const hasData = useMemo(() => Boolean(riskStatus || liquidationStatus || adlStatus || strategyStatus || decisionDiagnostics), [riskStatus, liquidationStatus, adlStatus, strategyStatus, decisionDiagnostics]);
+  const hasData = useMemo(() => Boolean(riskStatus || liquidationStatus || adlStatus || strategyStatus || decisionDiagnostics || leverageStatus), [riskStatus, liquidationStatus, adlStatus, strategyStatus, decisionDiagnostics, leverageStatus]);
   const adlRiskPercent = useMemo(() => Math.min(100, Math.max(0, Number((adlStatus?.portfolio_adl_risk || 0) * 100))), [adlStatus]);
   const strategySignals = useMemo(() => strategyStatus?.signal_feed || [], [strategyStatus]);
   const strategyDecisions = useMemo(() => strategyStatus?.decision_trace || [], [strategyStatus]);
@@ -78,6 +81,9 @@ export const AdminFuturesRiskMonitorPage = () => {
     const map = decisionDiagnostics?.decision_layer_distribution || {};
     return Object.entries(map).map(([layer, count]) => ({ layer, count }));
   }, [decisionDiagnostics]);
+  const leverageDistribution = useMemo(() => leverageStatus?.leverage_distribution || [], [leverageStatus]);
+  const confidenceVsLeverage = useMemo(() => leverageStatus?.confidence_vs_leverage || [], [leverageStatus]);
+  const liquidationDistanceVsLeverage = useMemo(() => leverageStatus?.liquidation_distance_vs_leverage || [], [leverageStatus]);
 
   return (
     <section className="space-y-4" data-testid="admin-futures-risk-monitor-page">
@@ -404,6 +410,79 @@ export const AdminFuturesRiskMonitorPage = () => {
                 {confidenceDistribution.length === 0 && <p className="text-xs" data-testid="futures-strategy-confidence-distribution-empty">Confidence dağılımı yok.</p>}
               </div>
             </div>
+          </div>
+
+          <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-leverage-observability-header-panel">
+            <h3 className="text-lg font-bold" data-testid="futures-leverage-observability-header-title">Dynamic Leverage Observability</h3>
+            <p className="mt-2 text-sm" data-testid="futures-leverage-observability-header-description">
+              final leverage ve size ratio artık confidence + microstructure + liquidation + funding ile üretilir.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-4" data-testid="futures-leverage-summary-grid">
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-leverage-symbol-card">
+              <p className="text-xs uppercase">Symbol</p>
+              <p className="text-xl font-bold" data-testid="futures-leverage-symbol-value">{leverageStatus?.symbol || "-"}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-leverage-final-card">
+              <p className="text-xs uppercase">Final Leverage</p>
+              <p className="text-xl font-bold" data-testid="futures-leverage-final-value">{leverageStatus?.final_leverage ?? 1}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-size-ratio-card">
+              <p className="text-xs uppercase">Size Ratio</p>
+              <p className="text-xl font-bold" data-testid="futures-size-ratio-value">{leverageStatus?.size_ratio ?? 1}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-size-clamp-events-card">
+              <p className="text-xs uppercase">Size Clamp Events</p>
+              <p className="text-xl font-bold" data-testid="futures-size-clamp-events-value">{leverageStatus?.size_clamp_events ?? 0}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2" data-testid="futures-leverage-charts-grid-top">
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-leverage-distribution-panel">
+              <h4 className="text-base font-bold" data-testid="futures-leverage-distribution-title">Leverage Distribution</h4>
+              <div className="mt-2 space-y-1" data-testid="futures-leverage-distribution-list">
+                {leverageDistribution.map((item, index) => (
+                  <p key={`${item.bucket}-${index}`} className="text-xs" data-testid={`futures-leverage-distribution-item-${index}`}>
+                    {item.bucket}: {item.count}
+                  </p>
+                ))}
+                {leverageDistribution.length === 0 && <p className="text-xs" data-testid="futures-leverage-distribution-empty">Leverage dağılımı yok.</p>}
+              </div>
+            </div>
+
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-confidence-vs-leverage-panel">
+              <h4 className="text-base font-bold" data-testid="futures-confidence-vs-leverage-title">Confidence vs Leverage</h4>
+              <div className="mt-3 h-56" data-testid="futures-confidence-vs-leverage-chart-wrapper">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#111" opacity={0.2} />
+                    <XAxis type="number" dataKey="confidence" name="confidence" domain={[0, 1]} stroke="#111" />
+                    <YAxis type="number" dataKey="final_leverage" name="final_leverage" domain={[1, 5]} stroke="#111" />
+                    <Tooltip />
+                    <Scatter data={confidenceVsLeverage} fill="#111" data-testid="futures-confidence-vs-leverage-scatter" />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
+              {confidenceVsLeverage.length === 0 && <p className="mt-2 text-xs" data-testid="futures-confidence-vs-leverage-empty">Confidence-leverage verisi yok.</p>}
+            </div>
+          </div>
+
+          <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-liquidation-distance-vs-leverage-panel">
+            <h4 className="text-base font-bold" data-testid="futures-liquidation-distance-vs-leverage-title">Liquidation Distance vs Leverage</h4>
+            <div className="mt-3 h-56" data-testid="futures-liquidation-distance-vs-leverage-chart-wrapper">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={liquidationDistanceVsLeverage}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#111" opacity={0.2} />
+                  <XAxis dataKey="symbol" stroke="#111" />
+                  <YAxis stroke="#111" />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="liquidation_distance" stroke="#111" strokeWidth={2} dot />
+                  <Line type="monotone" dataKey="final_leverage" stroke="#333" strokeWidth={2} dot />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            {liquidationDistanceVsLeverage.length === 0 && <p className="mt-2 text-xs" data-testid="futures-liquidation-distance-vs-leverage-empty">Liquidation-leverage verisi yok.</p>}
           </div>
 
           <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-decision-diagnostics-header-panel">

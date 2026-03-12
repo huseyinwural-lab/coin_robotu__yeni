@@ -114,6 +114,26 @@ def _decision_layer_distribution(decisions: list[dict]) -> dict:
     return distribution
 
 
+def _leverage_distribution(decisions: list[dict]) -> list[dict]:
+    buckets = {
+        "1.0-1.9": 0,
+        "2.0-2.9": 0,
+        "3.0-3.9": 0,
+        "4.0-5.0": 0,
+    }
+    for row in decisions:
+        leverage = float((row.get("leverage_decision") or {}).get("final_leverage") or 1.0)
+        if leverage < 2.0:
+            buckets["1.0-1.9"] += 1
+        elif leverage < 3.0:
+            buckets["2.0-2.9"] += 1
+        elif leverage < 4.0:
+            buckets["3.0-3.9"] += 1
+        else:
+            buckets["4.0-5.0"] += 1
+    return [{"bucket": key, "count": value} for key, value in buckets.items()]
+
+
 def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: list[str] | None = None) -> dict:
     universe = build_effective_universe(db, cache)
     active_symbols = symbols or universe.get("futures_symbols") or ["BTCUSDT", "ETHUSDT"]
@@ -172,14 +192,20 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
                         "result_pnl": round(counterfactual_pnl, 6),
                         "is_false_reject": counterfactual_pnl > 0,
                         "decision_layer": decision.get("decision_layer", "UNKNOWN"),
+                        "final_leverage": float((decision.get("leverage_decision") or {}).get("final_leverage") or 1.0),
+                        "position_size_ratio": float((decision.get("leverage_decision") or {}).get("position_size_ratio") or 1.0),
                     }
                 )
             continue
 
         market_state = market_map.get(decision["symbol"], {})
-        size_ratio = float((decision.get("execution_suitability") or {}).get("max_allowed_size_ratio", 1.0))
+        leverage_decision = decision.get("leverage_decision") or {}
+        leverage_size_ratio = float(leverage_decision.get("position_size_ratio") or 1.0)
+        execution_size_ratio = float((decision.get("execution_suitability") or {}).get("max_allowed_size_ratio", 1.0))
+        size_ratio = max(0.0, min(leverage_size_ratio, execution_size_ratio, 1.0))
         paper = executor.simulate(strategy_signal=decision, market_state=market_state)
         paper["size_ratio_applied"] = round(size_ratio, 4)
+        paper["final_leverage"] = float(leverage_decision.get("final_leverage") or 1.0)
         pnl = float(paper.get("paper_pnl", 0.0))
         if pnl < 0:
             false_allow_count += 1
@@ -201,6 +227,8 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
                 "result_pnl": round(pnl, 6),
                 "is_false_allow": pnl < 0,
                 "decision_layer": decision.get("decision_layer", "UNKNOWN"),
+                "final_leverage": float(leverage_decision.get("final_leverage") or 1.0),
+                "position_size_ratio": round(size_ratio, 4),
             }
         )
 
@@ -228,12 +256,41 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     )
 
     decision_layer_distribution = _decision_layer_distribution(decisions)
+    leverage_distribution = _leverage_distribution(decisions)
+    size_clamp_events = len(
+        [
+            row
+            for row in decisions
+            if float((row.get("leverage_decision") or {}).get("position_size_ratio") or 1.0) < 1.0
+        ]
+    )
+    confidence_vs_leverage = [
+        {
+            "symbol": row.get("symbol"),
+            "confidence": float(row.get("confidence") or 0.0),
+            "final_leverage": float((row.get("leverage_decision") or {}).get("final_leverage") or 1.0),
+            "decision": row.get("decision"),
+        }
+        for row in decisions
+    ]
+    liquidation_distance_vs_leverage = [
+        {
+            "symbol": row.get("symbol"),
+            "liquidation_distance": float(risk_snapshot.get("avg_distance_to_liquidation") or 0.0),
+            "final_leverage": float((row.get("leverage_decision") or {}).get("final_leverage") or 1.0),
+        }
+        for row in decisions
+    ]
     diagnostics = {
         "false_allow_count": false_allow_count,
         "false_reject_count": false_reject_count,
         "gate_reason_distribution": reject_reason_map,
         "confidence_vs_result": confidence_vs_result,
         "decision_layer_distribution": decision_layer_distribution,
+        "leverage_distribution": leverage_distribution,
+        "size_clamp_events": size_clamp_events,
+        "confidence_vs_leverage": confidence_vs_leverage,
+        "liquidation_distance_vs_leverage": liquidation_distance_vs_leverage,
     }
 
     snapshot = {
@@ -277,6 +334,28 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         cache.set("metrics:futures_gate_reason_distribution", json.dumps(reject_reason_map))
         cache.set("metrics:futures_strategy_confidence_vs_result", json.dumps(confidence_vs_result))
 
+        leverage_events = [
+            {
+                "symbol": row.get("symbol"),
+                "strategy": snapshot["strategy"],
+                "confidence": float(row.get("confidence") or 0.0),
+                "microstructure_quality": round(max(0.0, min(1.0, 1 - float((row.get("microstructure_gate") or {}).get("risk_score", 0.0))),), 4),
+                "liquidation_distance": float(risk_snapshot.get("avg_distance_to_liquidation") or 0.0),
+                "funding_bias": ((market_map.get(row.get("symbol"), {}) or {}).get("funding_bias", {}) or {}).get("bias_direction", "NEUTRAL"),
+                "final_leverage": float((row.get("leverage_decision") or {}).get("final_leverage") or 1.0),
+                "size_ratio": float((row.get("leverage_decision") or {}).get("position_size_ratio") or 1.0),
+                "decision": row.get("decision"),
+                "decision_layer": row.get("decision_layer"),
+            }
+            for row in decisions
+        ]
+        cache.set(f"futures:leverage:status:{user_id}", json.dumps({
+            "events": leverage_events,
+            "diagnostics": diagnostics,
+            "updated_at": snapshot["generated_at"],
+            "strategy": snapshot["strategy"],
+        }))
+
     return snapshot
 
 
@@ -300,5 +379,51 @@ def get_futures_decision_diagnostics(db: Session, cache, user_id: str, refresh: 
         "gate_reason_distribution": diagnostics.get("gate_reason_distribution", {}),
         "confidence_vs_result": diagnostics.get("confidence_vs_result", []),
         "decision_layer_distribution": diagnostics.get("decision_layer_distribution", {}),
+        "leverage_distribution": diagnostics.get("leverage_distribution", []),
+        "size_clamp_events": diagnostics.get("size_clamp_events", 0),
+        "confidence_vs_leverage": diagnostics.get("confidence_vs_leverage", []),
+        "liquidation_distance_vs_leverage": diagnostics.get("liquidation_distance_vs_leverage", []),
         "updated_at": status.get("generated_at"),
+    }
+
+
+def get_futures_leverage_status(db: Session, cache, user_id: str, refresh: bool = False) -> dict:
+    if refresh:
+        run_futures_strategy_paper_cycle(db, cache, user_id)
+
+    raw = cache.get(f"futures:leverage:status:{user_id}") if cache else None
+    payload = _safe_json(raw, None)
+    if not payload:
+        run_futures_strategy_paper_cycle(db, cache, user_id)
+        raw = cache.get(f"futures:leverage:status:{user_id}") if cache else None
+        payload = _safe_json(raw, None)
+    payload = payload or {"events": [], "diagnostics": {}, "updated_at": None, "strategy": "futures_trend_follow_v1"}
+
+    events = payload.get("events") or []
+    primary = events[0] if events else {
+        "symbol": "BTCUSDT",
+        "strategy": payload.get("strategy", "futures_trend_follow_v1"),
+        "confidence": 0.0,
+        "microstructure_quality": 0.0,
+        "liquidation_distance": 0.0,
+        "funding_bias": "NEUTRAL",
+        "final_leverage": 1.0,
+        "size_ratio": 1.0,
+    }
+    diagnostics = payload.get("diagnostics") or {}
+
+    return {
+        "symbol": primary.get("symbol", "BTCUSDT"),
+        "strategy": primary.get("strategy", "futures_trend_follow_v1"),
+        "confidence": round(float(primary.get("confidence", 0.0)), 4),
+        "microstructure_quality": round(float(primary.get("microstructure_quality", 0.0)), 4),
+        "liquidation_distance": round(float(primary.get("liquidation_distance", 0.0)), 4),
+        "funding_bias": str(primary.get("funding_bias", "NEUTRAL")),
+        "final_leverage": round(float(primary.get("final_leverage", 1.0)), 4),
+        "size_ratio": round(float(primary.get("size_ratio", 1.0)), 4),
+        "leverage_distribution": diagnostics.get("leverage_distribution", []),
+        "size_clamp_events": diagnostics.get("size_clamp_events", 0),
+        "confidence_vs_leverage": diagnostics.get("confidence_vs_leverage", []),
+        "liquidation_distance_vs_leverage": diagnostics.get("liquidation_distance_vs_leverage", []),
+        "updated_at": payload.get("updated_at"),
     }

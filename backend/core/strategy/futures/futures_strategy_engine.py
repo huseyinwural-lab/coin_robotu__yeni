@@ -114,6 +114,8 @@ class FuturesStrategyEngine:
             "liquidation_gate": decision_flow.get("liquidation_gate", {}),
             "adl_gate": decision_flow.get("adl_gate", {}),
             "execution_suitability": decision_flow.get("execution_suitability", {}),
+            "leverage_decision": decision_flow.get("leverage_decision", {}),
+            "leverage_trace_extension": decision_flow.get("leverage_trace_extension", {}),
             "reasons": decision_flow.get("reasons", []),
             "decision_trace_model": decision_flow.get("decision_trace_model", {}),
             "signal": signal_payload,

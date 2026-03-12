@@ -1,6 +1,7 @@
 from core.futures.decision.decision_attribution_engine import DecisionAttributionEngine
 from core.futures.decision.decision_trace_model import build_decision_trace
 from core.futures.decision.reason_codes import ReasonCode
+from core.futures.leverage.leverage_engine import LeverageEngine
 from core.futures.adl.adl_gate import ADLGate
 from core.futures.liquidation_protection.liquidation_gate import LiquidationGate
 from core.risk.futures_risk_engine import evaluate_futures_risk
@@ -27,6 +28,7 @@ def run_futures_paper_decision_flow(
         "risk_engine",
         "liquidation_protection",
         "adl_shield",
+        "dynamic_leverage_engine",
         "policy_engine",
         "hard_gate",
         "attribution",
@@ -50,6 +52,26 @@ def run_futures_paper_decision_flow(
         portfolio_adl_risk=float(adl_state.get("portfolio_adl_risk") or 0.0),
         trade_side=str(signal.get("side") or "NONE"),
     )
+
+    micro_aggregate = (microstructure_result or {}).get("aggregate") or {}
+    spread_state = ((microstructure_result or {}).get("spread") or {}).get("spread_state", "NORMAL")
+    depth_state = ((microstructure_result or {}).get("thinning") or {}).get("thinning_state", "NORMAL")
+    leverage_result = LeverageEngine().evaluate(
+        symbol=str(signal.get("symbol") or "UNKNOWN"),
+        strategy=strategy_id,
+        side=signal_side,
+        base_leverage=float(getattr(position, "leverage", 1.0)),
+        confidence=float(signal.get("confidence") or 0.0),
+        microstructure_risk_score=float(micro_aggregate.get("microstructure_risk_score") or 0.0),
+        execution_suitability=execution_suitability,
+        spread_state=str(spread_state),
+        depth_state=str(depth_state),
+        distance_to_liquidation=float(portfolio_state.get("distance_to_liquidation", 100.0)),
+        funding_bias=funding_bias,
+        portfolio_leverage=float(portfolio_state.get("portfolio_leverage", 0.0)),
+    )
+    leverage_decision = leverage_result["decision"]
+    leverage_trace_extension = leverage_result["decision_trace_extension"]
 
     microstructure_pass = bool(micro_gate.get("gate_pass", True)) and bool(execution_suitability.get("execution_suitable", True))
     risk_pass = risk["risk_check_result"] != "reject"
@@ -112,6 +134,13 @@ def run_futures_paper_decision_flow(
         risk_result="PASS" if risk_pass else "REJECT",
         liquidation_result="PASS" if liquidation_pass else "REJECT",
         adl_result="PASS" if adl_pass else "REJECT",
+        leverage_decision=str(leverage_trace_extension.get("leverage_decision", "dynamic")),
+        confidence_multiplier=float(leverage_trace_extension.get("confidence_multiplier", 1.0)),
+        microstructure_multiplier=float(leverage_trace_extension.get("microstructure_multiplier", 1.0)),
+        liquidation_multiplier=float(leverage_trace_extension.get("liquidation_multiplier", 1.0)),
+        funding_multiplier=float(leverage_trace_extension.get("funding_multiplier", 1.0)),
+        final_leverage=float(leverage_trace_extension.get("final_leverage", 1.0)),
+        position_size_ratio=float(leverage_trace_extension.get("position_size_ratio", 1.0)),
         final_decision=decision,
         reason_code=reason_code,
         decision_layer=attribution["decision_layer"],
@@ -132,6 +161,8 @@ def run_futures_paper_decision_flow(
         "liquidation_gate": gate,
         "adl_gate": adl_gate,
         "execution_suitability": execution_suitability,
+        "leverage_decision": leverage_decision,
+        "leverage_trace_extension": leverage_trace_extension,
         "decision_layer": attribution["decision_layer"],
         "decision_trace_model": decision_trace,
         "reason_code": reason_code,

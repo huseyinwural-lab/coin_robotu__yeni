@@ -222,6 +222,7 @@ class TestFuturesStrategyEngine:
             "risk_engine",
             "liquidation_protection",
             "adl_shield",
+            "dynamic_leverage_engine",
             "policy_engine",
             "hard_gate",
             "attribution",

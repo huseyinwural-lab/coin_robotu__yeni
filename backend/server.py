@@ -10,6 +10,7 @@ from routers import (
     admin_control,
     admin_futures_adl_status,
     admin_futures_decision_diagnostics,
+    admin_futures_leverage_status,
     admin_futures_liquidation_status,
     admin_futures_microstructure_status,
     admin_futures_risk_status,
@@ -95,6 +96,7 @@ api_router.include_router(admin_futures_liquidation_status.router)
 api_router.include_router(admin_futures_adl_status.router)
 api_router.include_router(admin_futures_microstructure_status.router)
 api_router.include_router(admin_futures_decision_diagnostics.router)
+api_router.include_router(admin_futures_leverage_status.router)
 api_router.include_router(admin_futures_strategy_status.router)
 api_router.include_router(admin_phase3.router)
 api_router.include_router(admin_strategy_risk_capital.router)
