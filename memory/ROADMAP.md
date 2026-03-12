@@ -53,18 +53,23 @@
   - Execution Advanced Actions tamamlandı
   - Position management intent pipeline (close/partial/reverse/stop/tp) canlı
   - User `/user/positions` + admin `/admin/positions-monitor` sayfaları canlı
+- Iteration-54 kapanışı:
+  - Phase-9B Strategy Intelligence tamamlandı
+  - conflict resolver + dynamic rebalance + hedge suggestion engine canlı
+  - admin `/admin/strategy-intelligence` + risk simulation + manual override audit canlı
+  - user execute/positions intelligence blokları canlı
 
 ## P1 (Sıradaki)
-1. Iteration-54 / Phase-9B Strategy Intelligence:
-   - çapraz-strateji conflict resolver (aynı symbol/karşıt yön netting)
-   - dynamic capital rebalance (intraday)
-   - portfolio-level hedging öneri katmanı
-2. Risk governance:
-   - admin manual override audit trail
-   - rule simulation/sandbox mode
-3. Position intelligence:
+1. Phase-9B hardening & optimization:
+   - conflict resolver policy tuning (win-rate / slippage bazlı)
+   - rebalance cadence governance (time-window + max-shift caps)
+   - hedge önerisi execution-ready intent üretimi
+2. Position intelligence:
    - liquidation early-warning notifier
    - strategy-level position heatmap
+3. Institutional controls:
+   - override approval workflow (4-eyes principle)
+   - simulation scenario library (stress/volatility/regime templates)
 
 ## P2 (Backlog)
 1. Legacy endpoint cleanup ve teknik borç azaltımı

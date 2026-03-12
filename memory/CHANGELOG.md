@@ -1,6 +1,39 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-12
+### Iteration-54 — Phase-9B Strategy Intelligence
+- Yeni servisler eklendi:
+  - `strategy_conflict_engine.py` (cross-strategy conflict detection + resolution)
+  - `capital_rebalance_engine.py` (dynamic allocation rebalance)
+  - `hedging_suggestion_engine.py` (hedge recommendation üretimi)
+  - `strategy_intelligence_service.py` (intelligence orchestration + manual override audit)
+- Yeni config:
+  - `/app/config/strategy_conflict_rules.json`
+- Yeni governance bileşenleri:
+  - `manual_override_log` tablosu (`ManualOverrideLog`)
+  - `POST /api/admin/risk-simulation`
+  - `POST/GET /api/admin/manual-overrides`
+- Yeni admin intelligence paneli:
+  - `/admin/strategy-intelligence`
+  - conflict/rebalance/hedge/drift görünümü + simulation mode + manual override list
+- User intelligence entegrasyonları:
+  - `/user/execute` preview: `strategy_conflict_warning`, `allocation_adjustment_notice`, `hedge_suggestion`, `risk_reduction_score`
+  - `/user/positions`: `recommended_action`, `risk_reduction_score`, `hedge_suggestion`
+- Explainability genişletmesi:
+  - trace alanları: `hedge_recommendation`, `risk_reduction_score`, `correlation_basis`
+- Migration:
+  - `20260312_0030_strategy_intelligence_layer.py`
+- Testler:
+  - `test_strategy_conflict_resolver.py` PASS
+  - `test_dynamic_capital_rebalance.py` PASS
+  - `test_hedge_suggestion_engine.py` PASS
+  - `test_risk_simulation_mode.py` PASS
+  - `test_iteration54_strategy_intelligence.py` PASS
+  - testing agent raporu: `/app/test_reports/iteration_54.json`
+- Artefact üretildi:
+  - `/app/reports/strategy_intelligence_validation.json`
+
+## 2026-03-12
 ### Iteration-53 — Execution Advanced Actions
 - Execution intent modeli position actions için genişletildi:
   - `intent_type`, `position_id`, `size`, `reduce_only`, `price`, `stop_price`, `take_profit_price`

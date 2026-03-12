@@ -2683,3 +2683,91 @@
 - **Execution Advanced Actions: COMPLETE**
 - **Position Management: ACTIVE**
 - **MOCKED API: YOK**
+
+## 40) 2026-03-12 — Iteration-54 (Phase-9B Strategy Intelligence)
+
+### Hedef
+- Stratejiler arası sinyal çatışmalarını merkezi çözmek.
+- Sermaye tahsisini performans/risk metriklerine göre dinamik yeniden dengelemek.
+- Portföy riskini azaltmak için hedge önerilerini otomatik üretmek.
+
+### Faz 1 — Cross-Strategy Conflict Resolver
+- Yeni servis: `backend/services/strategy_conflict_engine.py`
+  - input: active_signals + strategy/symbol/direction/confidence
+  - output: `conflict_detected`, `winning_strategy`, `losing_strategy`, `resolution_reason`
+- Yeni config: `/app/config/strategy_conflict_rules.json`
+  - `confidence_priority`, `performance_priority`, `risk_priority`, `meta_override`
+
+### Faz 2 — Dynamic Capital Rebalance
+- Yeni servis: `backend/services/capital_rebalance_engine.py`
+  - output: `new_strategy_weight`, `capital_shift`, `throttle_signal`
+  - metrikler: `allocation_drift`, `strategy_performance_delta`, `risk_adjusted_return`
+- Intelligence orchestration servisi:
+  - `backend/services/strategy_intelligence_service.py`
+  - conflict + rebalance + hedge + manual override yönetimi
+
+### Faz 3 — Hedging Suggestion Engine
+- Yeni servis: `backend/services/hedging_suggestion_engine.py`
+  - output: `hedge_symbol`, `hedge_size`, `hedge_direction`, `risk_reduction_score`, `correlation_basis`
+
+### Faz 4 — Admin Intelligence Panel
+- Yeni backend router: `backend/routers/admin_strategy_intelligence.py`
+  - `GET /api/admin/strategy-intelligence`
+  - `POST /api/admin/risk-simulation`
+  - `POST /api/admin/manual-overrides`
+  - `GET /api/admin/manual-overrides`
+- Yeni admin sayfası:
+  - `/admin/strategy-intelligence` (`AdminStrategyIntelligencePage.jsx`)
+  - gösterimler: conflicts, rebalance events, hedge suggestions, allocation drift, simulation mode, manual override audit
+
+### Faz 5 — User Intelligence Panel
+- `/user/execute` preview alanına eklendi:
+  - `strategy_conflict_warning`
+  - `allocation_adjustment_notice`
+  - `hedge_suggestion`
+  - `risk_reduction_score`
+- `/user/positions` alanları eklendi:
+  - `recommended_action`
+  - `risk_reduction_score`
+  - `hedge_suggestion`
+
+### Faz 6 — Explainability Entegrasyonu
+- `UserDecisionTrace` yeni alanları:
+  - `hedge_recommendation`
+  - `risk_reduction_score`
+  - `correlation_basis`
+- Phase-53 alanları korunarak trace genişletildi:
+  - `position_action_reason`, `risk_adjustment_reason`, `strategy_override_reason`
+
+### Faz 7 — Risk Governance
+- Yeni tablo/model:
+  - `manual_override_log` (`ManualOverrideLog`)
+  - alanlar: `override_id`, `admin_id`, `action_type`, `reason`, `timestamp`
+- Simulation mode endpoint aktif:
+  - `POST /api/admin/risk-simulation`
+
+### Migration
+- `20260312_0030_strategy_intelligence_layer.py`
+  - decision trace hedge alanları
+  - `manual_override_log` tablosu
+
+### Test ve Artefact
+- Yeni testler:
+  - `test_strategy_conflict_resolver.py`
+  - `test_dynamic_capital_rebalance.py`
+  - `test_hedge_suggestion_engine.py`
+  - `test_risk_simulation_mode.py`
+- Ek kapsamlı suite:
+  - `test_iteration54_strategy_intelligence.py`
+- Test raporu:
+  - `/app/test_reports/iteration_54.json`
+- Validasyon artefact:
+  - `/app/reports/strategy_intelligence_validation.json`
+
+### Durum
+- **Phase-9B Strategy Intelligence: COMPLETE**
+- **Conflict resolver: ACTIVE**
+- **Dynamic rebalance: ACTIVE**
+- **Hedge suggestion engine: ACTIVE**
+- **Simulation mode + manual override audit: ACTIVE**
+- **MOCKED API: YOK**
