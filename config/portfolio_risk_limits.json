@@ -1,0 +1,12 @@
+{
+  "version": "portfolio_risk_limits_v1",
+  "limits": {
+    "max_portfolio_leverage": 3.0,
+    "max_symbol_exposure": 35.0,
+    "max_cluster_exposure": 50.0,
+    "max_strategy_exposure": 40.0,
+    "max_single_trade_risk": 10.0,
+    "max_intraday_drawdown": 5.0,
+    "max_total_drawdown": 15.0
+  }
+}

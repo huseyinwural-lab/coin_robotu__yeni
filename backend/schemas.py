@@ -1247,6 +1247,9 @@ class UserTradeResponse(BaseModel):
     unrealized_pnl: float | None
     opened_at: datetime | None
     closed_at: datetime | None
+    strategy_weight: float | None = None
+    allocation_source: str | None = None
+    meta_engine_decision: str | None = None
 
 
 class UserSignalModeResponse(BaseModel):
@@ -1304,6 +1307,9 @@ class UserSignalResponse(BaseModel):
     created_at: datetime
     decided_at: datetime | None
     decision_note: str
+    strategy_weight: float | None = None
+    allocation_source: str | None = None
+    meta_engine_decision: str | None = None
 
 
 class UserSignalDecisionRequest(BaseModel):
@@ -1331,6 +1337,10 @@ class DecisionTraceItemResponse(BaseModel):
     entity_id: str
     strategy_code: str | None
     decision_status: str
+    portfolio_risk_score: float | None = None
+    strategy_allocation_reason: str | None = None
+    cluster_risk_flag: str | None = None
+    meta_engine_decision: str | None = None
     reason_codes: list[str]
     reason_details: list[DecisionReasonDetailResponse]
     feature_snapshot: dict
@@ -1451,6 +1461,10 @@ class ExecutionIntentPreviewResponse(BaseModel):
     queue_mode: str
     approval_required: bool
     intent_status: str
+    meta_strategy_summary: dict = Field(default_factory=dict)
+    portfolio_risk_impact: dict = Field(default_factory=dict)
+    gate_decision: str = "ALLOW"
+    meta_engine_decision: str = "ALLOW"
 
 
 class ExecutionIntentSubmitRequest(BaseModel):
@@ -1500,7 +1514,74 @@ class ExecutionIntentQueueItemResponse(BaseModel):
     risk_flags: list[str]
     reject_reason_codes: list[str]
     normalized_order_payload: dict
+    risk_score: float | None = None
+    gate_decision: str | None = None
+    meta_engine_decision: str | None = None
+    cluster_id: str | None = None
     created_at: datetime
+
+
+class PortfolioRiskLimitsResponse(BaseModel):
+    max_portfolio_leverage: float
+    max_symbol_exposure: float
+    max_cluster_exposure: float
+    max_strategy_exposure: float
+    max_single_trade_risk: float
+    max_intraday_drawdown: float
+    max_total_drawdown: float
+
+
+class PortfolioRiskLimitsUpdate(BaseModel):
+    max_portfolio_leverage: float = Field(gt=0)
+    max_symbol_exposure: float = Field(gt=0)
+    max_cluster_exposure: float = Field(gt=0)
+    max_strategy_exposure: float = Field(gt=0)
+    max_single_trade_risk: float = Field(gt=0)
+    max_intraday_drawdown: float = Field(gt=0)
+    max_total_drawdown: float = Field(gt=0)
+
+
+class RiskClusterUpsertRequest(BaseModel):
+    cluster_id: str
+    symbols: list[str]
+    cluster_type: str
+    correlation_score: float
+    risk_weight: float = Field(gt=0)
+
+
+class RiskClusterResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    cluster_id: str
+    symbols: list[str]
+    cluster_type: str
+    correlation_score: float
+    risk_weight: float
+    updated_at: datetime
+
+
+class StrategyAllocationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    strategy_id: str
+    capital_weight: float
+    max_capital: float
+    current_capital: float
+    confidence_score: float
+    performance_score: float
+    state: str
+    expected_return: float
+    realized_return: float
+    signal_decay: float
+    execution_quality_score: float
+    updated_at: datetime
+
+
+class StrategyAllocationUpdateRequest(BaseModel):
+    capital_weight: float | None = Field(default=None, gt=0)
+    max_capital: float | None = Field(default=None, ge=0)
+    current_capital: float | None = Field(default=None, ge=0)
+    state: str | None = None
 
 
 class AdminExecutionQueueDecisionRequest(BaseModel):

@@ -78,6 +78,8 @@ export const UserSignalsPage = () => {
     stop_loss_mode: "percent",
     stop_loss_value: 1,
     execution_mode: "signal_follow",
+    strategy_binding: signal.strategy_code,
+    signal_confidence: signal.confidence,
   });
 
   const previewIntentFromSignal = async (signal) => {
@@ -157,6 +159,8 @@ export const UserSignalsPage = () => {
             <div className="border border-slate-800 p-3" data-testid="user-signals-latest-trace-card">
               <p className="text-xs text-slate-500" data-testid="user-signals-latest-trace-status">Decision: {signalTrace.latest_trace.decision_status}</p>
               <p className="text-xs text-slate-500" data-testid="user-signals-latest-trace-type">Type: {signalTrace.latest_trace.trace_type}</p>
+              <p className="text-xs text-slate-500" data-testid="user-signals-latest-trace-meta-decision">Meta: {signalTrace.latest_trace.meta_engine_decision || "-"}</p>
+              <p className="text-xs text-slate-500" data-testid="user-signals-latest-trace-allocation-reason">Allocation Reason: {signalTrace.latest_trace.strategy_allocation_reason || "-"}</p>
               <div className="mt-2 space-y-2" data-testid="user-signals-reason-details-list">
                 {(signalTrace.latest_trace.reason_details || []).map((reason) => (
                   <article key={reason.code} className="border border-slate-800 p-2" data-testid={`user-signals-reason-item-${reason.code}`}>
@@ -189,6 +193,9 @@ export const UserSignalsPage = () => {
             <p className="text-sm font-semibold" data-testid={`user-signals-mobile-symbol-${signal.id}`}>{signal.symbol}</p>
             <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-status-${signal.id}`}>{signal.status}</p>
             <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-strategy-${signal.id}`}>{signal.strategy_code}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-strategy-weight-${signal.id}`}>weight: {signal.strategy_weight ?? "-"}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-allocation-source-${signal.id}`}>source: {signal.allocation_source ?? "-"}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-meta-decision-${signal.id}`}>meta: {signal.meta_engine_decision ?? "-"}</p>
             <div className="mt-2 flex flex-wrap gap-2" data-testid={`user-signals-mobile-actions-${signal.id}`}>
               <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-mobile-why-button-${signal.id}`}>Why this signal?</Button>
               {signal.status === "pending" && (
@@ -216,6 +223,9 @@ export const UserSignalsPage = () => {
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Symbol</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Strategy</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Confidence</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Weight</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Allocation</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Meta</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Status</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Time</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Actions</th>
@@ -227,6 +237,9 @@ export const UserSignalsPage = () => {
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-symbol-${signal.id}`}>{signal.symbol}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-strategy-${signal.id}`}>{signal.strategy_code}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-confidence-${signal.id}`}>{signal.confidence}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-weight-${signal.id}`}>{signal.strategy_weight ?? "-"}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-allocation-${signal.id}`}>{signal.allocation_source ?? "-"}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-meta-${signal.id}`}>{signal.meta_engine_decision ?? "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-status-${signal.id}`}>{signal.status}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-time-${signal.id}`}>{new Date(signal.created_at).toLocaleString()}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>

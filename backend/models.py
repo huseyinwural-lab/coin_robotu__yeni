@@ -206,6 +206,9 @@ class PendingSignal(Base):
     confidence: Mapped[float] = mapped_column(Float, default=0)
     mode: Mapped[str] = mapped_column(String(20), default="ASSISTED")
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    strategy_weight: Mapped[float] = mapped_column(Float, default=1.0)
+    allocation_source: Mapped[str] = mapped_column(String(40), default="default_allocation")
+    meta_engine_decision: Mapped[str] = mapped_column(String(30), default="ALLOW")
     order_position_id: Mapped[str | None] = mapped_column(String, ForeignKey("paper_positions.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -231,6 +234,10 @@ class UserExecutionIntent(Base):
     normalized_order_payload: Mapped[dict] = mapped_column(JSON, default=dict)
     reject_reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
     risk_flags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    risk_score: Mapped[float] = mapped_column(Float, default=0)
+    gate_decision: Mapped[str] = mapped_column(String(30), default="ALLOW")
+    meta_engine_decision: Mapped[str] = mapped_column(String(30), default="ALLOW")
+    cluster_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -251,6 +258,10 @@ class UserDecisionTrace(Base):
     entity_id: Mapped[str] = mapped_column(String(120), index=True)
     strategy_code: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     decision_status: Mapped[str] = mapped_column(String(40), default="UNKNOWN", index=True)
+    portfolio_risk_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    strategy_allocation_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    cluster_risk_flag: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    meta_engine_decision: Mapped[str | None] = mapped_column(String(30), nullable=True)
     reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
     reason_details: Mapped[list[dict]] = mapped_column(JSON, default=list)
     feature_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -797,6 +808,49 @@ class StrategyDefinition(Base):
     status: Mapped[str] = mapped_column(String(20), default="draft")
     active_version_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class RiskCluster(Base):
+    __tablename__ = "risk_clusters"
+
+    cluster_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    symbols: Mapped[list[str]] = mapped_column(JSON, default=list)
+    cluster_type: Mapped[str] = mapped_column(String(60), default="custom")
+    correlation_score: Mapped[float] = mapped_column(Float, default=0)
+    risk_weight: Mapped[float] = mapped_column(Float, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class PortfolioExposureSnapshot(Base):
+    __tablename__ = "portfolio_exposure_snapshot"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    position_size: Mapped[float] = mapped_column(Float, default=0)
+    notional: Mapped[float] = mapped_column(Float, default=0)
+    strategy_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    cluster_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    exposure_weight: Mapped[float] = mapped_column(Float, default=0)
+
+
+class StrategyAllocation(Base):
+    __tablename__ = "strategy_allocations"
+
+    strategy_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    capital_weight: Mapped[float] = mapped_column(Float, default=1)
+    max_capital: Mapped[float] = mapped_column(Float, default=10000)
+    current_capital: Mapped[float] = mapped_column(Float, default=0)
+    confidence_score: Mapped[float] = mapped_column(Float, default=0)
+    performance_score: Mapped[float] = mapped_column(Float, default=0)
+    state: Mapped[str] = mapped_column(String(20), default="ACTIVE", index=True)
+    expected_return: Mapped[float] = mapped_column(Float, default=0)
+    realized_return: Mapped[float] = mapped_column(Float, default=0)
+    signal_decay: Mapped[float] = mapped_column(Float, default=0)
+    execution_quality_score: Mapped[float] = mapped_column(Float, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 

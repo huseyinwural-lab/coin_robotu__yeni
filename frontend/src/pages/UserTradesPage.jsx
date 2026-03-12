@@ -68,6 +68,8 @@ export const UserTradesPage = () => {
           <div className="mt-3 grid gap-2" data-testid="user-trades-trace-content">
             <p className="text-xs text-slate-500" data-testid="user-trades-trace-status">Decision: {tradeTrace.latest_trace.decision_status}</p>
             <p className="text-xs text-slate-500" data-testid="user-trades-trace-type">Type: {tradeTrace.latest_trace.trace_type}</p>
+            <p className="text-xs text-slate-500" data-testid="user-trades-trace-meta-decision">Meta: {tradeTrace.latest_trace.meta_engine_decision || "-"}</p>
+            <p className="text-xs text-slate-500" data-testid="user-trades-trace-allocation-reason">Allocation Reason: {tradeTrace.latest_trace.strategy_allocation_reason || "-"}</p>
             <div className="space-y-2" data-testid="user-trades-trace-reason-list">
               {(tradeTrace.latest_trace.reason_details || []).map((reason) => (
                 <article key={reason.code} className="border border-slate-800 p-2" data-testid={`user-trades-trace-reason-${reason.code}`}>
@@ -87,6 +89,9 @@ export const UserTradesPage = () => {
             <p className="text-sm" data-testid={`user-trades-mobile-side-${row.trade_id}`}>{row.side} · {row.status}</p>
             <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-qty-${row.trade_id}`}>Qty: {row.quantity}</p>
             <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-entry-${row.trade_id}`}>Entry: {row.entry_price}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-weight-${row.trade_id}`}>weight: {row.strategy_weight ?? "-"}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-allocation-${row.trade_id}`}>allocation: {row.allocation_source ?? "-"}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-meta-${row.trade_id}`}>meta: {row.meta_engine_decision ?? "-"}</p>
             <Button className="mt-2" variant="outline" onClick={() => openTradeTrace(row)} data-testid={`user-trades-mobile-trace-button-${row.trade_id}`}>Decision Trace</Button>
           </article>
         ))}
@@ -103,6 +108,9 @@ export const UserTradesPage = () => {
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-qty">Qty</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-entry">Entry</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-pnl">Realized PnL</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-weight">Weight</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-allocation">Allocation</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-meta">Meta</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-trace">Trace</th>
             </tr>
           </thead>
@@ -116,6 +124,9 @@ export const UserTradesPage = () => {
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-quantity-${row.trade_id}`}>{row.quantity}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-entry-${row.trade_id}`}>{row.entry_price}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-realized-pnl-${row.trade_id}`}>{row.realized_pnl ?? "-"}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-weight-${row.trade_id}`}>{row.strategy_weight ?? "-"}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-allocation-${row.trade_id}`}>{row.allocation_source ?? "-"}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-meta-${row.trade_id}`}>{row.meta_engine_decision ?? "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>
                   <Button variant="outline" onClick={() => openTradeTrace(row)} data-testid={`user-trades-trace-button-${row.trade_id}`}>Decision Trace</Button>
                 </td>

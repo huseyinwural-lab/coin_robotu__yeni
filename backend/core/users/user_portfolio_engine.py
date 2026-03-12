@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from core.users.user_portfolio_mapper import map_user_portfolio
 from core.users.user_risk_settings import get_or_create_user_risk_settings
-from models import ExecutionMetric, PaperPosition
+from models import ExecutionMetric, PaperPosition, PendingSignal, UserDecisionTrace
 
 
 def _safe_float(value: float | None) -> float:
@@ -110,8 +110,60 @@ def build_user_trade_history(db: Session, user_id: str, limit: int = 50) -> list
         .all()
     )
 
+    position_ids = [row.id for row in position_rows]
+    pending_map: dict[str, PendingSignal] = {}
+    if position_ids:
+        pending_rows = (
+            db.query(PendingSignal)
+            .filter(PendingSignal.user_id == user_id, PendingSignal.order_position_id.in_(position_ids))
+            .all()
+        )
+        pending_map = {str(row.order_position_id): row for row in pending_rows if row.order_position_id}
+
+    trace_map: dict[str, UserDecisionTrace] = {}
+    if position_ids:
+        trade_traces = (
+            db.query(UserDecisionTrace)
+            .filter(
+                UserDecisionTrace.user_id == user_id,
+                UserDecisionTrace.trace_scope == "trade",
+                UserDecisionTrace.entity_id.in_(position_ids),
+            )
+            .order_by(UserDecisionTrace.created_at.desc())
+            .all()
+        )
+        for trace in trade_traces:
+            trace_map.setdefault(trace.entity_id, trace)
+
     items: list[dict] = []
     for row in position_rows:
+        pending = pending_map.get(row.id)
+        trace = trace_map.get(row.id)
+        trace_feature = (trace.feature_snapshot or {}) if trace else {}
+        trace_context = (trace.context_payload or {}) if trace else {}
+
+        strategy_weight = (
+            float(pending.strategy_weight)
+            if pending and pending.strategy_weight is not None
+            else float(trace_feature.get("strategy_weight"))
+            if trace_feature.get("strategy_weight") is not None
+            else None
+        )
+        allocation_source = (
+            pending.allocation_source
+            if pending and pending.allocation_source
+            else trace_context.get("allocation_source")
+            if trace_context.get("allocation_source")
+            else None
+        )
+        meta_engine_decision = (
+            pending.meta_engine_decision
+            if pending and pending.meta_engine_decision
+            else trace.meta_engine_decision
+            if trace and trace.meta_engine_decision
+            else trace_context.get("meta_engine_decision")
+        )
+
         items.append(
             {
                 "source": "paper_position",
@@ -126,6 +178,9 @@ def build_user_trade_history(db: Session, user_id: str, limit: int = 50) -> list
                 "unrealized_pnl": float(row.unrealized_pnl),
                 "opened_at": row.opened_at,
                 "closed_at": row.closed_at,
+                "strategy_weight": strategy_weight,
+                "allocation_source": allocation_source,
+                "meta_engine_decision": meta_engine_decision,
                 "event_timestamp": row.closed_at or row.opened_at,
             }
         )
@@ -145,6 +200,9 @@ def build_user_trade_history(db: Session, user_id: str, limit: int = 50) -> list
                 "unrealized_pnl": None,
                 "opened_at": row.submitted_at or row.created_at,
                 "closed_at": row.final_at,
+                "strategy_weight": None,
+                "allocation_source": "execution_metric",
+                "meta_engine_decision": None,
                 "event_timestamp": row.final_at or row.created_at,
             }
         )

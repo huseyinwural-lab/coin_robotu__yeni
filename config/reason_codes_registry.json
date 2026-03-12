@@ -132,6 +132,50 @@
     "RISK_REWARD_RATIO_TOO_LOW": {
       "title": "Risk Reward Ratio Too Low",
       "description": "Risk/ödül oranı policy minimumunun altında."
+    },
+    "STRATEGY_DISABLED_BY_META_ENGINE": {
+      "title": "Strategy Disabled",
+      "description": "Meta strategy engine drift nedeniyle stratejiyi devre dışı bıraktı."
+    },
+    "PORTFOLIO_RISK_ADJUSTED": {
+      "title": "Portfolio Risk Adjusted",
+      "description": "İşlem boyutu portföy risk gate tarafından düşürüldü."
+    },
+    "PORTFOLIO_RISK_MANUAL_APPROVAL_REQUIRED": {
+      "title": "Manual Approval Required",
+      "description": "Portföy risk skoru nedeniyle manuel onay zorunlu."
+    },
+    "MAX_PORTFOLIO_LEVERAGE_BREACH": {
+      "title": "Portfolio Leverage Breach",
+      "description": "Toplam portföy leverage limiti aşıldı."
+    },
+    "MAX_SYMBOL_EXPOSURE_BREACH": {
+      "title": "Symbol Exposure Breach",
+      "description": "Tekil sembol exposure limiti aşıldı."
+    },
+    "MAX_CLUSTER_EXPOSURE_BREACH": {
+      "title": "Cluster Exposure Breach",
+      "description": "Risk cluster exposure limiti aşıldı."
+    },
+    "MAX_STRATEGY_EXPOSURE_BREACH": {
+      "title": "Strategy Exposure Breach",
+      "description": "Strateji bazlı exposure limiti aşıldı."
+    },
+    "MAX_SINGLE_TRADE_RISK_BREACH": {
+      "title": "Single Trade Risk Breach",
+      "description": "Tek işlem risk limiti aşıldı."
+    },
+    "MAX_INTRADAY_DRAWDOWN_BREACH": {
+      "title": "Intraday Drawdown Breach",
+      "description": "Gün içi drawdown limiti aşıldı."
+    },
+    "MAX_TOTAL_DRAWDOWN_BREACH": {
+      "title": "Total Drawdown Breach",
+      "description": "Toplam drawdown limiti aşıldı."
+    },
+    "HIGH_MARKET_VOLATILITY": {
+      "title": "High Market Volatility",
+      "description": "Piyasa volatilitesi yükseldi, risk katsayısı artırıldı."
     }
   }
 }

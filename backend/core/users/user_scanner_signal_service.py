@@ -14,6 +14,7 @@ from models import (
     UserSignalMode,
 )
 from services.explainability_service import record_decision_trace
+from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.pipeline.cache_store import get_json
 from services.pipeline.spot_strategy_service import scan_spot_universe_for_signals
 
@@ -131,6 +132,20 @@ def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = 
         score = float(item.get("signal_score") or 0)
         symbol = str(item.get("symbol", "BTCUSDT")).upper()
         strategy_code = str(item.get("strategy_code") or "spot_pullback_v1")
+        requested_notional = max(10.0, round(score, 4))
+
+        meta_summary = run_meta_strategy_engine(
+            db,
+            user_id=user_id,
+            strategy_id=strategy_code,
+            symbol=symbol,
+            signal_confidence=max(confidence, round(score / 100, 4)),
+            requested_notional=requested_notional,
+        )
+        meta_decision = str(meta_summary.get("meta_engine_decision") or "ALLOW")
+        allocation_source = str(meta_summary.get("allocation_source") or "weight_based")
+        strategy_weight = float(meta_summary.get("strategy_weight") or 1.0)
+        allocation_reason = str(meta_summary.get("strategy_allocation_reason") or "normal_allocation")
 
         scanner_row = UserScannerResult(
             id=str(uuid.uuid4()),
@@ -167,6 +182,8 @@ def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = 
         db.flush()
 
         pending_status = "pending" if mode in {"ASSISTED", "AUTO"} else "info"
+        if meta_decision == "DISABLED":
+            pending_status = "info"
         if pending_status == "pending":
             queued_count += 1
 
@@ -179,7 +196,11 @@ def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = 
             confidence=signal_event.confidence,
             mode=mode,
             status=pending_status,
+            strategy_weight=strategy_weight,
+            allocation_source=allocation_source,
+            meta_engine_decision=meta_decision,
             created_at=datetime.now(timezone.utc),
+            decision_note=allocation_reason if meta_decision != "ALLOW" else "",
         )
         db.add(pending_row)
 
@@ -192,17 +213,22 @@ def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = 
             strategy_code=strategy_code,
             decision_status="PENDING_REVIEW" if pending_status == "pending" else "INFO_ONLY",
             reason_codes=reason_codes or ["signal_generated_without_reason_code"],
+            strategy_allocation_reason=allocation_reason,
+            meta_engine_decision=meta_decision,
             feature_snapshot={
                 "confidence": float(signal_event.confidence or 0),
                 "signal_score": score,
                 "mode": mode,
                 "signal": signal_value,
+                "strategy_weight": strategy_weight,
             },
             context_payload={
                 "run_id": run_id,
                 "symbol": symbol,
                 "signal_event_id": signal_event.id,
                 "pending_status": pending_status,
+                "allocation_source": allocation_source,
+                "meta_strategy_summary": meta_summary,
             },
         )
 
@@ -239,6 +265,9 @@ def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = 
             confidence=0.55,
             mode=mode,
             status=pending_status,
+            strategy_weight=1.0,
+            allocation_source="fallback",
+            meta_engine_decision="ALLOW",
             created_at=datetime.now(timezone.utc),
             decision_note="fallback_signal_created",
         )
@@ -252,16 +281,20 @@ def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = 
             strategy_code=fallback_strategy,
             decision_status="PENDING_REVIEW" if pending_status == "pending" else "INFO_ONLY",
             reason_codes=["fallback_signal_low_activity"],
+            strategy_allocation_reason="fallback_signal_created",
+            meta_engine_decision="ALLOW",
             feature_snapshot={
                 "confidence": 0.55,
                 "mode": mode,
                 "signal": "long",
+                "strategy_weight": 1.0,
             },
             context_payload={
                 "run_id": run_id,
                 "symbol": fallback_symbol,
                 "signal_event_id": fallback_signal.id,
                 "pending_status": pending_status,
+                "allocation_source": "fallback",
             },
         )
 
@@ -361,16 +394,21 @@ def approve_pending_signal(db: Session, user_id: str, pending_signal_id: str, no
         strategy_code=row.strategy_code,
         decision_status="APPROVED",
         reason_codes=["user_signal_approved"],
+        strategy_allocation_reason=row.decision_note or "user_signal_approved",
+        meta_engine_decision=row.meta_engine_decision,
         feature_snapshot={
             "confidence": float(row.confidence or 0),
             "mode": row.mode,
             "decision_note": decision_note,
+            "strategy_weight": float(row.strategy_weight or 1),
         },
         context_payload={
             "pending_signal_id": row.id,
             "signal_id": row.signal_id,
             "position_id": position.id,
             "symbol": row.symbol,
+            "allocation_source": row.allocation_source,
+            "meta_engine_decision": row.meta_engine_decision,
         },
     )
     record_decision_trace(
@@ -382,15 +420,20 @@ def approve_pending_signal(db: Session, user_id: str, pending_signal_id: str, no
         strategy_code=row.strategy_code,
         decision_status="OPENED",
         reason_codes=["trade_opened_from_signal"],
+        strategy_allocation_reason=row.decision_note or "trade_opened_from_signal",
+        meta_engine_decision=row.meta_engine_decision,
         feature_snapshot={
             "entry_price": float(position.entry_price or 0),
             "quantity": float(position.quantity or 0),
             "side": position.side,
+            "strategy_weight": float(row.strategy_weight or 1),
         },
         context_payload={
             "pending_signal_id": row.id,
             "signal_id": row.signal_id,
             "symbol": row.symbol,
+            "allocation_source": row.allocation_source,
+            "meta_engine_decision": row.meta_engine_decision,
         },
     )
 
@@ -424,15 +467,20 @@ def reject_pending_signal(db: Session, user_id: str, pending_signal_id: str, not
         strategy_code=row.strategy_code,
         decision_status="REJECTED",
         reason_codes=["user_signal_rejected"],
+        strategy_allocation_reason=decision_note,
+        meta_engine_decision=row.meta_engine_decision,
         feature_snapshot={
             "confidence": float(row.confidence or 0),
             "mode": row.mode,
             "decision_note": decision_note,
+            "strategy_weight": float(row.strategy_weight or 1),
         },
         context_payload={
             "pending_signal_id": row.id,
             "signal_id": row.signal_id,
             "symbol": row.symbol,
+            "allocation_source": row.allocation_source,
+            "meta_engine_decision": row.meta_engine_decision,
         },
     )
 

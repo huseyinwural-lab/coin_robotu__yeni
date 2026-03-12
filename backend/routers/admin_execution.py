@@ -40,6 +40,10 @@ def execution_queue(
             risk_flags=row.risk_flags or [],
             reject_reason_codes=row.reject_reason_codes or [],
             normalized_order_payload=row.normalized_order_payload or {},
+            risk_score=float(row.risk_score or 0),
+            gate_decision=row.gate_decision,
+            meta_engine_decision=row.meta_engine_decision,
+            cluster_id=row.cluster_id,
             created_at=row.created_at,
         )
         for row in rows

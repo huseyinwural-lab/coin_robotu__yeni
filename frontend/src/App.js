@@ -58,6 +58,8 @@ import { UserSignalsPage } from "@/pages/UserSignalsPage";
 import { UserReportsPage } from "@/pages/UserReportsPage";
 import { UserExecutePage } from "@/pages/UserExecutePage";
 import { AdminExecutionQueuePage } from "@/pages/AdminExecutionQueuePage";
+import { AdminStrategyAllocationPage } from "@/pages/AdminStrategyAllocationPage";
+import { AdminPortfolioRiskPage } from "@/pages/AdminPortfolioRiskPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -127,6 +129,8 @@ function App() {
             <Route path="market-universe" element={<MarketUniversePage />} />
             <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
             <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
+            <Route path="strategy-allocation" element={<AdminStrategyAllocationPage />} />
+            <Route path="portfolio-risk" element={<AdminPortfolioRiskPage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />
             <Route path="correlation-matrix" element={<CorrelationMatrixPage />} />
             <Route path="execution-states" element={<ExecutionStatesPage />} />

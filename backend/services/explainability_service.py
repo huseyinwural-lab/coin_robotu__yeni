@@ -87,6 +87,10 @@ def record_decision_trace(
     reason_codes: list[str] | None = None,
     feature_snapshot: dict | None = None,
     context_payload: dict | None = None,
+    portfolio_risk_score: float | None = None,
+    strategy_allocation_reason: str | None = None,
+    cluster_risk_flag: str | None = None,
+    meta_engine_decision: str | None = None,
 ) -> UserDecisionTrace:
     current = _now()
     purge_expired_traces(db, now=current)
@@ -100,6 +104,10 @@ def record_decision_trace(
         entity_id=str(entity_id),
         strategy_code=str(strategy_code) if strategy_code else None,
         decision_status=str(decision_status or "UNKNOWN").upper(),
+        portfolio_risk_score=portfolio_risk_score,
+        strategy_allocation_reason=str(strategy_allocation_reason) if strategy_allocation_reason else None,
+        cluster_risk_flag=str(cluster_risk_flag) if cluster_risk_flag else None,
+        meta_engine_decision=str(meta_engine_decision) if meta_engine_decision else None,
         reason_codes=normalized_codes,
         reason_details=build_reason_details(normalized_codes),
         feature_snapshot=feature_snapshot or {},
@@ -122,6 +130,10 @@ def serialize_trace(row: UserDecisionTrace) -> dict:
         "entity_id": row.entity_id,
         "strategy_code": row.strategy_code,
         "decision_status": row.decision_status,
+        "portfolio_risk_score": row.portfolio_risk_score,
+        "strategy_allocation_reason": row.strategy_allocation_reason,
+        "cluster_risk_flag": row.cluster_risk_flag,
+        "meta_engine_decision": row.meta_engine_decision,
         "reason_codes": reason_codes,
         "reason_details": reason_details,
         "feature_snapshot": row.feature_snapshot or {},

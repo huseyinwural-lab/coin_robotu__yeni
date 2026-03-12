@@ -82,6 +82,8 @@ const adminOnlyItems = [
   { to: "/admin/market-universe", label: "Market Universe", icon: Globe, testId: "nav-market-universe-link" },
   { to: "/admin/execution-policies", label: "Execution Policies", icon: Settings2, testId: "nav-execution-policies-link" },
   { to: "/admin/execution-queue", label: "Execution Queue", icon: Wrench, testId: "nav-execution-queue-link" },
+  { to: "/admin/strategy-allocation", label: "Strategy Allocation", icon: BarChartBig, testId: "nav-strategy-allocation-link" },
+  { to: "/admin/portfolio-risk", label: "Portfolio Risk", icon: ShieldAlert, testId: "nav-portfolio-risk-link" },
   { to: "/admin/exposure-groups", label: "Exposure Groups", icon: ShieldAlert, testId: "nav-exposure-groups-link" },
   { to: "/admin/correlation-matrix", label: "Correlation Matrix", icon: CircuitBoard, testId: "nav-correlation-matrix-link" },
   { to: "/admin/execution-states", label: "Execution States", icon: Cpu, testId: "nav-execution-states-link" },

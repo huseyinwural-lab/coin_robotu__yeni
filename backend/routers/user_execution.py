@@ -63,6 +63,10 @@ def preview_intent(
         queue_mode=intent.queue_mode,
         approval_required=bool(intent.approval_required),
         intent_status=intent.status,
+        meta_strategy_summary=validation.get("meta_strategy_summary") or {},
+        portfolio_risk_impact=validation.get("portfolio_risk_impact") or {},
+        gate_decision=str(validation.get("gate_decision") or intent.gate_decision or "ALLOW"),
+        meta_engine_decision=str(validation.get("meta_engine_decision") or intent.meta_engine_decision or "ALLOW"),
     )
 
 
@@ -147,6 +151,10 @@ def list_intents(
             risk_flags=row.risk_flags or [],
             reject_reason_codes=row.reject_reason_codes or [],
             normalized_order_payload=row.normalized_order_payload or {},
+            risk_score=float(row.risk_score or 0),
+            gate_decision=row.gate_decision,
+            meta_engine_decision=row.meta_engine_decision,
+            cluster_id=row.cluster_id,
             created_at=row.created_at,
         )
         for row in rows

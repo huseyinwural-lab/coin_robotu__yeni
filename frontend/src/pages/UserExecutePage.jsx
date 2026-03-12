@@ -199,6 +199,8 @@ export const UserExecutePage = () => {
             <p data-testid="user-execute-validation-status">validation_status: {preview.validation_status}</p>
             <p data-testid="user-execute-queue-mode">queue_mode: {preview.queue_mode}</p>
             <p data-testid="user-execute-approval-required">approval_required: {String(preview.approval_required)}</p>
+            <p data-testid="user-execute-gate-decision">gate_decision: {preview.gate_decision}</p>
+            <p data-testid="user-execute-meta-engine-decision">meta_engine_decision: {preview.meta_engine_decision}</p>
             <div data-testid="user-execute-reason-codes">
               <p className="text-xs uppercase tracking-widest text-slate-500">reason_codes</p>
               {(preview.reject_reason_codes || []).length === 0 ? <p className="text-slate-400">none</p> : preview.reject_reason_codes.map((code) => <p key={code}>{code}</p>)}
@@ -206,6 +208,26 @@ export const UserExecutePage = () => {
             <div data-testid="user-execute-risk-flags">
               <p className="text-xs uppercase tracking-widest text-slate-500">risk_flags</p>
               {(preview.risk_flags || []).length === 0 ? <p className="text-slate-400">none</p> : preview.risk_flags.map((flag) => <p key={flag}>{flag}</p>)}
+            </div>
+            <div className="border border-slate-800 p-3" data-testid="user-execute-portfolio-risk-impact-panel">
+              <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-portfolio-risk-impact-title">Portfolio Risk Impact</p>
+              <div className="mt-2 grid gap-1 text-xs" data-testid="user-execute-portfolio-risk-impact-content">
+                <p data-testid="user-execute-risk-score">risk_score: {preview.portfolio_risk_impact?.risk_score ?? 0}</p>
+                <p data-testid="user-execute-current-portfolio-leverage">current_portfolio_leverage: {preview.portfolio_risk_impact?.current_portfolio_leverage ?? 0}</p>
+                <p data-testid="user-execute-symbol-exposure">symbol_exposure_pct: {preview.portfolio_risk_impact?.symbol_exposure_pct ?? 0}</p>
+                <p data-testid="user-execute-cluster-exposure">cluster_exposure_pct: {preview.portfolio_risk_impact?.cluster_exposure_pct ?? 0}</p>
+                <p data-testid="user-execute-strategy-exposure">strategy_exposure_pct: {preview.portfolio_risk_impact?.strategy_exposure_pct ?? 0}</p>
+                <p data-testid="user-execute-single-trade-risk">single_trade_risk_pct: {preview.portfolio_risk_impact?.single_trade_risk_pct ?? 0}</p>
+              </div>
+            </div>
+            <div className="border border-slate-800 p-3" data-testid="user-execute-meta-strategy-panel">
+              <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-meta-strategy-title">Meta Strategy Attribution</p>
+              <div className="mt-2 grid gap-1 text-xs" data-testid="user-execute-meta-strategy-content">
+                <p data-testid="user-execute-meta-strategy-weight">strategy_weight: {preview.meta_strategy_summary?.strategy_weight ?? "-"}</p>
+                <p data-testid="user-execute-meta-strategy-source">allocation_source: {preview.meta_strategy_summary?.allocation_source ?? "-"}</p>
+                <p data-testid="user-execute-meta-strategy-reason">allocation_reason: {preview.meta_strategy_summary?.strategy_allocation_reason ?? "-"}</p>
+                <p data-testid="user-execute-meta-strategy-state">strategy_state: {preview.meta_strategy_summary?.state ?? "-"}</p>
+              </div>
             </div>
             <div className="border border-slate-800 p-3" data-testid="user-execute-preview-explain-panel">
               <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-preview-explain-title">Preview Explain</p>
