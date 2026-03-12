@@ -21,6 +21,7 @@ from core.strategies.governance import (
 )
 from core.strategy.futures.futures_strategy_engine import FuturesStrategyEngine
 from services.audit_service import create_audit_log
+from services.futures_correlation_service import apply_cluster_order_guard_to_decisions, get_futures_cluster_risk
 from services.futures_microstructure_service import build_microstructure_status
 from services.futures_risk_monitor_service import build_futures_risk_status
 from services.pipeline.cache_store import read_candles
@@ -467,6 +468,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         lifecycle_registry=lifecycle_registry,
         throttle_by_strategy=throttle_by_strategy,
     )
+    decisions, cluster_guard_events = apply_cluster_order_guard_to_decisions(db, cache, user_id, decisions)
 
     decisions, interaction_blocked = StrategyInteractionGuard().apply(decisions)
     exposure_tracker = StrategyExposureTracker()
@@ -683,7 +685,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         for row in decisions
         if row.get("decision") == "REJECT"
         and any(
-            reason in {"STRATEGY_DISABLED_HARD_BLOCK", "STRATEGY_THROTTLE_FREQUENCY"}
+            reason in {"STRATEGY_DISABLED_HARD_BLOCK", "STRATEGY_THROTTLE_FREQUENCY", "CLUSTER_TRADE_REJECTED"}
             for reason in (row.get("reasons") or [])
         )
     ]
@@ -863,6 +865,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         "governance_audit_events": governance_events,
         "strategy_signal_distribution": strategy_signal_distribution,
         "strategy_drift_alerts": drift.get("strategy_drift_alerts", []),
+        "cluster_order_guard_events": cluster_guard_events,
         "signal_feed": signal_feed,
         "decision_trace": decisions,
         "decision_trace_contract_records": decision_trace_records,
@@ -875,11 +878,16 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             "execution_suitability": microstructure_status.get("execution_suitability", {}),
         },
         "interaction_guard": {
-            "blocked_total": len(interaction_blocked) + len(exposure_blocked) + int(governance_enforcement.get("disabled_blocked_total", 0)) + int(governance_enforcement.get("throttled_rejected_total", 0)),
+            "blocked_total": len(interaction_blocked)
+            + len(exposure_blocked)
+            + int(governance_enforcement.get("disabled_blocked_total", 0))
+            + int(governance_enforcement.get("throttled_rejected_total", 0))
+            + len(cluster_guard_events),
             "interaction_blocked_total": len(interaction_blocked),
             "exposure_blocked_total": len(exposure_blocked),
             "governance_disabled_blocked_total": int(governance_enforcement.get("disabled_blocked_total", 0)),
             "governance_throttled_rejected_total": int(governance_enforcement.get("throttled_rejected_total", 0)),
+            "cluster_rejected_total": len(cluster_guard_events),
             "blocked": [*interaction_blocked, *exposure_blocked, *governance_blocked_rows],
         },
         "strategy_governance": {
@@ -897,6 +905,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
                 for item in (lifecycle_result.get("registry", {}) or {}).values()
             ],
             "governance_enforcement": governance_enforcement,
+            "cluster_order_guard_events": cluster_guard_events,
         },
         "exposure_tracking": exposure,
         "strategy_attribution": attribution.get("strategy_attribution", []),
@@ -1065,6 +1074,35 @@ def get_futures_strategy_governance(
     history = _safe_json(cache.get(f"futures:strategy:history:{user_id}"), []) if cache else []
     weekly_summary = _weekly_strategy_summary(history, selected)
 
+    cluster_risk_payload = _safe_json(cache.get(f"futures:correlation:cluster-risk:{user_id}"), {}) if cache else {}
+    if not cluster_risk_payload:
+        cluster_risk_payload = get_futures_cluster_risk(db, cache, user_id, refresh=False)
+    cluster_exposures = cluster_risk_payload.get("cluster_exposures") or []
+    symbol_to_strategy = {
+        str(item.get("symbol") or "").upper(): str(item.get("strategy") or "unknown")
+        for item in (status.get("decision_trace") or [])
+        if item.get("decision") == "REJECT" and "CLUSTER_TRADE_REJECTED" in (item.get("reasons") or [])
+    }
+    overlay_rows = []
+    for row in cluster_exposures:
+        positions = row.get("positions") or []
+        risk_source_symbol = None
+        if positions:
+            top_position = max(positions, key=lambda item: abs(_safe_float(item.get("position_notional"), 0.0)))
+            risk_source_symbol = str(top_position.get("symbol") or "").upper()
+        if not risk_source_symbol and (row.get("symbols") or []):
+            risk_source_symbol = f"{row['symbols'][0]}USDT"
+        triggered_strategy = symbol_to_strategy.get(risk_source_symbol or "", "unknown")
+        overlay_rows.append(
+            {
+                "cluster_id": row.get("cluster_id"),
+                "cluster_exposure": row.get("cluster_exposure", 0.0),
+                "triggered_strategy": triggered_strategy,
+                "risk_source_symbol": risk_source_symbol,
+                "risk_state": row.get("risk_state", "NORMAL"),
+            }
+        )
+
     lifecycle_state = governance.get("lifecycle_state") or status.get("strategy_lifecycle_state") or []
     lifecycle_map = {str(item.get("strategy")): item for item in lifecycle_state}
     decay_events = governance.get("decay_events") or status.get("strategy_decay_events") or []
@@ -1111,6 +1149,7 @@ def get_futures_strategy_governance(
         ],
         "governance_audit_events": status.get("governance_audit_events")
         or (_safe_json(cache.get(f"futures:strategy:governance:audit:{user_id}"), []) if cache else []),
+        "cluster_risk_overlay": overlay_rows,
         "strategy_compare_mode": {
             "selected_strategies": selected,
             "metrics": [

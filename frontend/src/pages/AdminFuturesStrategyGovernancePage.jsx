@@ -54,6 +54,7 @@ export const AdminFuturesStrategyGovernancePage = () => {
   const decayEvents = useMemo(() => governancePayload?.decay_events || [], [governancePayload]);
   const lifecycleRows = useMemo(() => governancePayload?.lifecycle_state || [], [governancePayload]);
   const compareMetrics = useMemo(() => governancePayload?.strategy_compare_mode?.metrics || [], [governancePayload]);
+  const clusterOverlayRows = useMemo(() => governancePayload?.cluster_risk_overlay || [], [governancePayload]);
   const weeklySummary = useMemo(
     () => governancePayload?.strategy_compare_mode?.weekly_auto_summary || { strategy_summaries: [], comparative_deltas: {} },
     [governancePayload],
@@ -279,6 +280,18 @@ export const AdminFuturesStrategyGovernancePage = () => {
                 </p>
               ))}
               {lifecycleRows.length === 0 && <p className="text-xs" data-testid="strategy-governance-lifecycle-empty">Lifecycle verisi yok.</p>}
+            </div>
+          </div>
+
+          <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-governance-cluster-overlay-panel">
+            <h3 className="text-lg font-bold" data-testid="strategy-governance-cluster-overlay-title">Cluster Risk Overlay</h3>
+            <div className="mt-3 space-y-1" data-testid="strategy-governance-cluster-overlay-list">
+              {clusterOverlayRows.map((row, index) => (
+                <p className="text-xs" key={`${row?.cluster_id}-${index}`} data-testid={`strategy-governance-cluster-overlay-item-${index}`}>
+                  {row?.cluster_id}: exposure={row?.cluster_exposure} · triggered_strategy={row?.triggered_strategy} · risk_source_symbol={row?.risk_source_symbol}
+                </p>
+              ))}
+              {clusterOverlayRows.length === 0 && <p className="text-xs" data-testid="strategy-governance-cluster-overlay-empty">Cluster overlay verisi yok.</p>}
             </div>
           </div>
         </>
