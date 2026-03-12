@@ -63,6 +63,7 @@ import { AdminStrategyAllocationPage } from "@/pages/AdminStrategyAllocationPage
 import { AdminPortfolioRiskPage } from "@/pages/AdminPortfolioRiskPage";
 import { AdminPositionsMonitorPage } from "@/pages/AdminPositionsMonitorPage";
 import { AdminStrategyIntelligencePage } from "@/pages/AdminStrategyIntelligencePage";
+import { AdminCrossDashboardConsistencyPage } from "@/pages/AdminCrossDashboardConsistencyPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -104,6 +105,7 @@ function App() {
             }
           >
             <Route path="dashboard" element={<AdminDashboardPage />} />
+            <Route path="cross-dashboard-consistency" element={<AdminCrossDashboardConsistencyPage />} />
             <Route path="users" element={<Navigate to="/admin/users/customers" replace />} />
             <Route path="users/admins" element={<AdminUsersPage scope="admin" />} />
             <Route path="users/customers" element={<AdminUsersPage scope="user" />} />

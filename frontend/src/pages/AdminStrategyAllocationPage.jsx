@@ -10,9 +10,12 @@ export const AdminStrategyAllocationPage = () => {
   const [rows, setRows] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState("");
 
   const load = async () => {
     setIsLoading(true);
+    setLoadError("");
     try {
       const { data } = await apiClient.get("/admin/strategy-allocation");
       setRows(data || []);
@@ -26,8 +29,11 @@ export const AdminStrategyAllocationPage = () => {
         };
       });
       setDrafts(initialDrafts);
+      setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Strategy allocation verisi yüklenemedi");
+      const message = error?.response?.data?.detail || "Strategy allocation verisi yüklenemedi";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -74,12 +80,36 @@ export const AdminStrategyAllocationPage = () => {
     return <LoadingSkeleton rows={8} testId="admin-strategy-allocation-loading-skeleton" />;
   }
 
+  if (loadError && rows.length === 0) {
+    return (
+      <section className="space-y-4" data-testid="admin-strategy-allocation-broken-state">
+        <div className="border border-rose-500/40 bg-rose-900/20 p-4" data-testid="admin-strategy-allocation-broken-alert">
+          <p className="text-sm font-semibold text-rose-200" data-testid="admin-strategy-allocation-broken-title">Strategy allocation verisi alınamadı</p>
+          <p className="mt-1 text-sm text-rose-100" data-testid="admin-strategy-allocation-broken-message">{loadError}</p>
+          <Button className="mt-3" onClick={load} data-testid="admin-strategy-allocation-broken-retry-button">Tekrar Dene</Button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="grid grid-cols-12 gap-4" data-testid="admin-strategy-allocation-page">
       <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-allocation-header">
-        <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="admin-strategy-allocation-title">Strategy Allocation Dashboard</h2>
-        <p className="mt-2 text-sm text-slate-400" data-testid="admin-strategy-allocation-description">Capital usage, confidence, throttle/disability kontrol paneli.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3" data-testid="admin-strategy-allocation-header-row">
+          <div data-testid="admin-strategy-allocation-header-left">
+            <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="admin-strategy-allocation-title">Strategy Allocation Dashboard</h2>
+            <p className="mt-2 text-sm text-slate-400" data-testid="admin-strategy-allocation-description">Capital usage, confidence, throttle/disability kontrol paneli.</p>
+            <p className="mt-1 text-xs text-slate-500" data-testid="admin-strategy-allocation-last-updated">Son güncelleme: {lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleString() : "-"}</p>
+          </div>
+          <Button onClick={load} data-testid="admin-strategy-allocation-refresh-button">Yenile</Button>
+        </div>
       </header>
+
+      {loadError && (
+        <div className="col-span-12 border border-amber-500/40 bg-amber-950/20 p-3 text-sm text-amber-200" data-testid="admin-strategy-allocation-warning-alert">
+          Son yenileme sırasında hata oluştu: {loadError}
+        </div>
+      )}
 
       <div className="col-span-12 grid gap-3 md:grid-cols-3" data-testid="admin-strategy-allocation-summary-grid">
         <article className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-allocation-summary-total">
@@ -138,6 +168,11 @@ export const AdminStrategyAllocationPage = () => {
                 </tr>
               );
             })}
+            {rows.length === 0 && (
+              <tr className="border-t border-slate-800" data-testid="admin-strategy-allocation-empty-row">
+                <td colSpan={10} className="px-3 py-4 text-center text-sm text-slate-400" data-testid="admin-strategy-allocation-empty-text">Strategy allocation kaydı bulunamadı.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

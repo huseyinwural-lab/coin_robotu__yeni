@@ -57,6 +57,7 @@ const userNavItems = [
 
 const adminOnlyItems = [
   { to: "/admin/dashboard", label: "Admin Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
+  { to: "/admin/cross-dashboard-consistency", label: "Cross Dashboard Consistency", icon: BarChart3, testId: "nav-admin-cross-dashboard-consistency-link" },
   { to: "/admin/users/admins", label: "Admin Kullanıcıları", icon: UserCog, testId: "nav-admin-users-admins-link" },
   { to: "/admin/users/customers", label: "User Kullanıcıları", icon: UserCog, testId: "nav-admin-users-customers-link" },
   { to: "/admin/user-approvals", label: "Kullanıcı Onayları", icon: ListChecks, testId: "nav-admin-user-approvals-link" },

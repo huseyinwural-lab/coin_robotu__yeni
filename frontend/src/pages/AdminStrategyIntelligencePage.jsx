@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -10,6 +10,8 @@ export const AdminStrategyIntelligencePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [dashboard, setDashboard] = useState(null);
   const [manualOverrides, setManualOverrides] = useState([]);
+  const [loadError, setLoadError] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [simulationForm, setSimulationForm] = useState({
     user_id: "",
     symbol: "BTCUSDT",
@@ -23,8 +25,9 @@ export const AdminStrategyIntelligencePage = () => {
   });
   const [simulationResult, setSimulationResult] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setIsLoading(true);
+    setLoadError("");
     try {
       const [dashRes, overridesRes] = await Promise.all([
         apiClient.get("/admin/strategy-intelligence"),
@@ -32,16 +35,22 @@ export const AdminStrategyIntelligencePage = () => {
       ]);
       setDashboard(dashRes.data || null);
       setManualOverrides(overridesRes.data || []);
+      setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Strategy intelligence verisi yüklenemedi");
+      const message = error?.response?.data?.detail || "Strategy intelligence verisi yüklenemedi";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
+
+  const conflicts = useMemo(() => dashboard?.strategy_conflicts || [], [dashboard]);
+  const hedgeSuggestions = useMemo(() => dashboard?.hedge_suggestions || [], [dashboard]);
 
   const submitSimulation = async () => {
     if (!simulationForm.user_id.trim()) {
@@ -93,16 +102,40 @@ export const AdminStrategyIntelligencePage = () => {
     }
   };
 
-  if (isLoading || !dashboard) {
+  if (isLoading) {
     return <LoadingSkeleton rows={10} testId="admin-strategy-intelligence-loading-skeleton" />;
+  }
+
+  if (!dashboard) {
+    return (
+      <section className="space-y-4" data-testid="admin-strategy-intelligence-broken-state">
+        <div className="border border-rose-500/40 bg-rose-900/20 p-4" data-testid="admin-strategy-intelligence-broken-alert">
+          <p className="text-sm font-semibold text-rose-200" data-testid="admin-strategy-intelligence-broken-title">Strategy intelligence verisi alınamadı</p>
+          <p className="mt-1 text-sm text-rose-100" data-testid="admin-strategy-intelligence-broken-message">{loadError || "Servis geçici olarak yanıt vermiyor."}</p>
+          <Button className="mt-3" onClick={load} data-testid="admin-strategy-intelligence-broken-retry-button">Tekrar Dene</Button>
+        </div>
+      </section>
+    );
   }
 
   return (
     <section className="grid grid-cols-12 gap-4" data-testid="admin-strategy-intelligence-page">
       <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-intelligence-header">
-        <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="admin-strategy-intelligence-title">Strategy Intelligence</h2>
-        <p className="mt-2 text-sm text-slate-400" data-testid="admin-strategy-intelligence-description">Conflict resolver, dynamic rebalance, hedge suggestions ve simulation mode paneli.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3" data-testid="admin-strategy-intelligence-header-row">
+          <div data-testid="admin-strategy-intelligence-header-left">
+            <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="admin-strategy-intelligence-title">Strategy Intelligence</h2>
+            <p className="mt-2 text-sm text-slate-400" data-testid="admin-strategy-intelligence-description">Conflict resolver, dynamic rebalance, hedge suggestions ve simulation mode paneli.</p>
+            <p className="mt-1 text-xs text-slate-500" data-testid="admin-strategy-intelligence-last-updated">Son güncelleme: {lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleString() : "-"}</p>
+          </div>
+          <Button onClick={load} data-testid="admin-strategy-intelligence-refresh-button">Yenile</Button>
+        </div>
       </header>
+
+      {loadError && (
+        <div className="col-span-12 border border-amber-500/40 bg-amber-950/20 p-3 text-sm text-amber-200" data-testid="admin-strategy-intelligence-warning-alert">
+          Son yenileme sırasında hata oluştu: {loadError}
+        </div>
+      )}
 
       <div className="col-span-12 grid gap-3 md:grid-cols-4" data-testid="admin-strategy-intelligence-summary-grid">
         <article className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-intelligence-conflict-count-card">
@@ -126,20 +159,21 @@ export const AdminStrategyIntelligencePage = () => {
       <section className="col-span-12 lg:col-span-6 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-intelligence-conflicts-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-intelligence-conflicts-title">Strategy Conflicts</p>
         <div className="mt-2 space-y-2" data-testid="admin-strategy-intelligence-conflicts-list">
-          {(dashboard.strategy_conflicts || []).slice(0, 8).map((item, index) => (
+          {conflicts.slice(0, 8).map((item, index) => (
             <article key={`${item.winning_strategy}-${index}`} className="border border-slate-800 p-2" data-testid={`admin-strategy-intelligence-conflict-item-${index}`}>
               <p className="text-sm" data-testid={`admin-strategy-intelligence-conflict-winner-${index}`}>winner: {item.winning_strategy || "-"}</p>
               <p className="text-xs text-slate-400" data-testid={`admin-strategy-intelligence-conflict-loser-${index}`}>loser: {item.losing_strategy || "-"}</p>
               <p className="text-xs text-slate-400" data-testid={`admin-strategy-intelligence-conflict-reason-${index}`}>reason: {item.resolution_reason}</p>
             </article>
           ))}
+          {conflicts.length === 0 && <p className="text-sm text-slate-400" data-testid="admin-strategy-intelligence-conflicts-empty">Aktif strategy conflict bulunmuyor.</p>}
         </div>
       </section>
 
       <section className="col-span-12 lg:col-span-6 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-intelligence-hedge-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-intelligence-hedge-title">Hedge Suggestions</p>
         <div className="mt-2 space-y-2" data-testid="admin-strategy-intelligence-hedge-list">
-          {(dashboard.hedge_suggestions || []).slice(0, 8).map((item, index) => (
+          {hedgeSuggestions.slice(0, 8).map((item, index) => (
             <article key={`${item.hedge_symbol || "none"}-${index}`} className="border border-slate-800 p-2" data-testid={`admin-strategy-intelligence-hedge-item-${index}`}>
               <p className="text-sm" data-testid={`admin-strategy-intelligence-hedge-symbol-${index}`}>symbol: {item.hedge_symbol || "none"}</p>
               <p className="text-xs text-slate-400" data-testid={`admin-strategy-intelligence-hedge-size-${index}`}>size: {item.hedge_size}</p>
@@ -147,6 +181,7 @@ export const AdminStrategyIntelligencePage = () => {
               <p className="text-xs text-slate-400" data-testid={`admin-strategy-intelligence-hedge-risk-score-${index}`}>risk_reduction_score: {item.risk_reduction_score}</p>
             </article>
           ))}
+          {hedgeSuggestions.length === 0 && <p className="text-sm text-slate-400" data-testid="admin-strategy-intelligence-hedge-empty">Aktif hedge önerisi bulunmuyor.</p>}
         </div>
       </section>
 
@@ -192,6 +227,7 @@ export const AdminStrategyIntelligencePage = () => {
               <p className="text-xs text-slate-500" data-testid={`admin-strategy-intelligence-manual-override-time-${item.override_id}`}>{new Date(item.timestamp).toLocaleString()}</p>
             </article>
           ))}
+          {manualOverrides.length === 0 && <p className="text-sm text-slate-400" data-testid="admin-strategy-intelligence-manual-overrides-empty">Manual override kaydı bulunmuyor.</p>}
         </div>
       </section>
     </section>
