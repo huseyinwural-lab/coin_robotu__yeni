@@ -231,8 +231,11 @@ def execution_intent_decision_trace(
             "market_type": intent.market_type,
             "side": intent.side,
             "notional": float(intent.notional or 0),
+            "size": float(intent.size or 0),
+            "intent_type": intent.intent_type,
         },
         context_payload={
+            "position_id": intent.position_id,
             "queue_mode": intent.queue_mode,
             "risk_flags": intent.risk_flags or [],
             "normalized_order_payload": intent.normalized_order_payload or {},

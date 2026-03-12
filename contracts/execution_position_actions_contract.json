@@ -1,0 +1,31 @@
+{
+  "contract": "execution_position_actions_v1",
+  "description": "Execution intent contract for advanced position management actions",
+  "intent_types": [
+    "CLOSE_POSITION",
+    "PARTIAL_CLOSE",
+    "REVERSE_POSITION",
+    "MOVE_STOP",
+    "MOVE_TAKE_PROFIT"
+  ],
+  "required_fields": [
+    "intent_type",
+    "position_id",
+    "symbol",
+    "size",
+    "reduce_only",
+    "price",
+    "stop_price",
+    "take_profit_price"
+  ],
+  "field_definitions": {
+    "intent_type": "string (enum)",
+    "position_id": "string (existing open position id)",
+    "symbol": "string",
+    "size": "number > 0",
+    "reduce_only": "boolean",
+    "price": "number | null",
+    "stop_price": "number | null",
+    "take_profit_price": "number | null"
+  }
+}

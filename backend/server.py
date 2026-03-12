@@ -26,6 +26,7 @@ from routers import (
     admin_strategy_risk_capital,
     admin_strategy_observability,
     admin_phase9_meta,
+    admin_positions_monitor,
     admin_users,
     alerts,
     audit_logs,
@@ -129,6 +130,7 @@ api_router.include_router(admin_strategy_risk_capital.router)
 api_router.include_router(admin_strategy_observability.router)
 api_router.include_router(admin_execution.router)
 api_router.include_router(admin_phase9_meta.router)
+api_router.include_router(admin_positions_monitor.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(spot_strategy.router)
 api_router.include_router(paper_positions.router)

@@ -10,6 +10,8 @@ from schemas import (
     ExecutionIntentPreviewRequest,
     ExecutionIntentPreviewResponse,
     ExecutionIntentQueueItemResponse,
+    PositionActionPreviewRequest,
+    PositionStateResponse,
     ExecutionIntentSubmitRequest,
     ExecutionIntentSubmitResponse,
     ExecutionPresetResponse,
@@ -22,6 +24,7 @@ from services.execution_intent_service import (
     preview_execution_intent,
     submit_execution_intent,
 )
+from services.position_management_service import list_user_positions
 
 router = APIRouter(prefix="/user/execution", tags=["user_execution"])
 
@@ -56,6 +59,8 @@ def preview_intent(
         intent_id=intent.id,
         intent_token=intent.intent_token,
         preview_hash=intent.preview_hash,
+        intent_type=intent.intent_type,
+        position_id=intent.position_id,
         validation_status=validation.get("validation_status"),
         reject_reason_codes=validation.get("reject_reason_codes") or [],
         normalized_order_payload=validation.get("normalized_order_payload") or {},
@@ -67,6 +72,103 @@ def preview_intent(
         portfolio_risk_impact=validation.get("portfolio_risk_impact") or {},
         gate_decision=str(validation.get("gate_decision") or intent.gate_decision or "ALLOW"),
         meta_engine_decision=str(validation.get("meta_engine_decision") or intent.meta_engine_decision or "ALLOW"),
+        size=float(intent.size or 0),
+        reduce_only=bool(intent.reduce_only),
+        price=float(intent.price) if intent.price is not None else None,
+        stop_price=float(intent.stop_price) if intent.stop_price is not None else None,
+        take_profit_price=float(intent.take_profit_price) if intent.take_profit_price is not None else None,
+    )
+
+
+@router.post("/position-actions/preview", response_model=ExecutionIntentPreviewResponse)
+def preview_position_action(
+    payload: PositionActionPreviewRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    mapped_payload = {
+        "source_type": "position_action",
+        "source_ref_id": payload.position_id,
+        "intent_type": payload.intent_type,
+        "position_id": payload.position_id,
+        "market_type": "spot",
+        "symbol": payload.symbol,
+        "side": "sell",
+        "order_type": "market",
+        "position_size_mode": "fixed_notional",
+        "position_size_value": payload.size,
+        "execution_mode": "position_action",
+        "size": payload.size,
+        "reduce_only": payload.reduce_only,
+        "price": payload.price,
+        "stop_price": payload.stop_price,
+        "take_profit_price": payload.take_profit_price,
+    }
+    intent, validation = preview_execution_intent(db, current_user.id, mapped_payload)
+    create_audit_log(
+        db,
+        action="POSITION_ACTION_PREVIEWED",
+        entity_type="execution_intent",
+        entity_id=intent.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "intent_type": intent.intent_type,
+            "position_id": intent.position_id,
+            "validation_status": validation.get("validation_status"),
+        },
+    )
+    return ExecutionIntentPreviewResponse(
+        intent_id=intent.id,
+        intent_token=intent.intent_token,
+        preview_hash=intent.preview_hash,
+        intent_type=intent.intent_type,
+        position_id=intent.position_id,
+        validation_status=validation.get("validation_status"),
+        reject_reason_codes=validation.get("reject_reason_codes") or [],
+        normalized_order_payload=validation.get("normalized_order_payload") or {},
+        risk_flags=validation.get("risk_flags") or [],
+        queue_mode=intent.queue_mode,
+        approval_required=bool(intent.approval_required),
+        intent_status=intent.status,
+        meta_strategy_summary=validation.get("meta_strategy_summary") or {},
+        portfolio_risk_impact=validation.get("portfolio_risk_impact") or {},
+        gate_decision=str(validation.get("gate_decision") or intent.gate_decision or "ALLOW"),
+        meta_engine_decision=str(validation.get("meta_engine_decision") or intent.meta_engine_decision or "ALLOW"),
+        size=float(intent.size or 0),
+        reduce_only=bool(intent.reduce_only),
+        price=float(intent.price) if intent.price is not None else None,
+        stop_price=float(intent.stop_price) if intent.stop_price is not None else None,
+        take_profit_price=float(intent.take_profit_price) if intent.take_profit_price is not None else None,
+    )
+
+
+@router.post("/position-actions/submit", response_model=ExecutionIntentSubmitResponse)
+def submit_position_action(
+    payload: ExecutionIntentSubmitRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
+    except ValueError as exc:
+        message = str(exc)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
+
+    create_audit_log(
+        db,
+        action="POSITION_ACTION_SUBMITTED",
+        entity_type="execution_intent",
+        entity_id=intent.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"intent_type": intent.intent_type, "position_id": intent.position_id, "intent_token": intent.intent_token},
+    )
+    return ExecutionIntentSubmitResponse(
+        intent_id=intent.id,
+        intent_status="QUEUED_FOR_APPROVAL",
+        reason_codes=[],
+        queue_state=intent.status,
     )
 
 
@@ -143,10 +245,17 @@ def list_intents(
             id=row.id,
             intent_token=row.intent_token,
             user_id=row.user_id,
+            intent_type=row.intent_type,
+            position_id=row.position_id,
             symbol=row.symbol,
             market_type=row.market_type,
             side=row.side,
             notional=float(row.notional or 0),
+            size=float(row.size or 0),
+            reduce_only=bool(row.reduce_only),
+            price=float(row.price) if row.price is not None else None,
+            stop_price=float(row.stop_price) if row.stop_price is not None else None,
+            take_profit_price=float(row.take_profit_price) if row.take_profit_price is not None else None,
             status=row.status,
             risk_flags=row.risk_flags or [],
             reject_reason_codes=row.reject_reason_codes or [],
@@ -156,6 +265,31 @@ def list_intents(
             meta_engine_decision=row.meta_engine_decision,
             cluster_id=row.cluster_id,
             created_at=row.created_at,
+        )
+        for row in rows
+    ]
+
+
+@router.get("/positions", response_model=list[PositionStateResponse])
+def user_positions(
+    include_closed: bool = Query(default=False),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    rows = list_user_positions(db, current_user.id, include_closed=include_closed)
+    return [
+        PositionStateResponse(
+            position_id=row.position_id,
+            symbol=row.symbol,
+            size=float(row.size or 0),
+            entry_price=float(row.entry_price or 0),
+            current_price=float(row.current_price or 0),
+            unrealized_pnl=float(row.unrealized_pnl or 0),
+            leverage=int(row.leverage or 1),
+            strategy_id=row.strategy_id,
+            cluster_id=row.cluster_id,
+            status=row.status,
+            updated_at=row.updated_at,
         )
         for row in rows
     ]

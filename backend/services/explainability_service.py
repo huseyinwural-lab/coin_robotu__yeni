@@ -91,6 +91,9 @@ def record_decision_trace(
     strategy_allocation_reason: str | None = None,
     cluster_risk_flag: str | None = None,
     meta_engine_decision: str | None = None,
+    position_action_reason: str | None = None,
+    risk_adjustment_reason: str | None = None,
+    strategy_override_reason: str | None = None,
 ) -> UserDecisionTrace:
     current = _now()
     purge_expired_traces(db, now=current)
@@ -108,6 +111,9 @@ def record_decision_trace(
         strategy_allocation_reason=str(strategy_allocation_reason) if strategy_allocation_reason else None,
         cluster_risk_flag=str(cluster_risk_flag) if cluster_risk_flag else None,
         meta_engine_decision=str(meta_engine_decision) if meta_engine_decision else None,
+        position_action_reason=str(position_action_reason) if position_action_reason else None,
+        risk_adjustment_reason=str(risk_adjustment_reason) if risk_adjustment_reason else None,
+        strategy_override_reason=str(strategy_override_reason) if strategy_override_reason else None,
         reason_codes=normalized_codes,
         reason_details=build_reason_details(normalized_codes),
         feature_snapshot=feature_snapshot or {},
@@ -134,6 +140,9 @@ def serialize_trace(row: UserDecisionTrace) -> dict:
         "strategy_allocation_reason": row.strategy_allocation_reason,
         "cluster_risk_flag": row.cluster_risk_flag,
         "meta_engine_decision": row.meta_engine_decision,
+        "position_action_reason": row.position_action_reason,
+        "risk_adjustment_reason": row.risk_adjustment_reason,
+        "strategy_override_reason": row.strategy_override_reason,
         "reason_codes": reason_codes,
         "reason_details": reason_details,
         "feature_snapshot": row.feature_snapshot or {},

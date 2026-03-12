@@ -176,6 +176,30 @@
     "HIGH_MARKET_VOLATILITY": {
       "title": "High Market Volatility",
       "description": "Piyasa volatilitesi yükseldi, risk katsayısı artırıldı."
+    },
+    "POSITION_ACTION_SIZE_INVALID": {
+      "title": "Invalid Position Action Size",
+      "description": "Pozisyon aksiyonu için gönderilen size geçersiz."
+    },
+    "STOP_PRICE_REQUIRED": {
+      "title": "Stop Price Required",
+      "description": "MOVE_STOP aksiyonu için stop_price zorunlu."
+    },
+    "TAKE_PROFIT_PRICE_REQUIRED": {
+      "title": "Take Profit Price Required",
+      "description": "MOVE_TAKE_PROFIT aksiyonu için take_profit_price zorunlu."
+    },
+    "POSITION_ACTION_RELEASED": {
+      "title": "Position Action Released",
+      "description": "Pozisyon yönetim aksiyonu onaylanıp uygulandı."
+    },
+    "RISK_GATE_OVERRIDE_FOR_RISK_REDUCTION": {
+      "title": "Risk Gate Override",
+      "description": "Risk azaltıcı aksiyon olduğu için risk gate override uygulandı."
+    },
+    "STRATEGY_OVERRIDE_FOR_RISK_REDUCTION": {
+      "title": "Strategy Override",
+      "description": "Strateji disable olsa da risk azaltıcı aksiyon için override uygulandı."
     }
   }
 }

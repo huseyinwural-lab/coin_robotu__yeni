@@ -1341,6 +1341,9 @@ class DecisionTraceItemResponse(BaseModel):
     strategy_allocation_reason: str | None = None
     cluster_risk_flag: str | None = None
     meta_engine_decision: str | None = None
+    position_action_reason: str | None = None
+    risk_adjustment_reason: str | None = None
+    strategy_override_reason: str | None = None
     reason_codes: list[str]
     reason_details: list[DecisionReasonDetailResponse]
     feature_snapshot: dict
@@ -1433,6 +1436,8 @@ class UserWeeklyReportResponse(BaseModel):
 class ExecutionIntentPreviewRequest(BaseModel):
     source_type: str = "manual"
     source_ref_id: str | None = None
+    intent_type: str = "OPEN_POSITION"
+    position_id: str | None = None
     market_type: str
     symbol: str
     side: str
@@ -1448,12 +1453,19 @@ class ExecutionIntentPreviewRequest(BaseModel):
     execution_mode: str = "manual"
     strategy_binding: str | None = None
     holding_profile: str = "intraday"
+    size: float | None = Field(default=None, gt=0)
+    reduce_only: bool = False
+    price: float | None = None
+    stop_price: float | None = None
+    take_profit_price: float | None = None
 
 
 class ExecutionIntentPreviewResponse(BaseModel):
     intent_id: str
     intent_token: str
     preview_hash: str
+    intent_type: str = "OPEN_POSITION"
+    position_id: str | None = None
     validation_status: str
     reject_reason_codes: list[str]
     normalized_order_payload: dict
@@ -1465,6 +1477,11 @@ class ExecutionIntentPreviewResponse(BaseModel):
     portfolio_risk_impact: dict = Field(default_factory=dict)
     gate_decision: str = "ALLOW"
     meta_engine_decision: str = "ALLOW"
+    size: float | None = None
+    reduce_only: bool = False
+    price: float | None = None
+    stop_price: float | None = None
+    take_profit_price: float | None = None
 
 
 class ExecutionIntentSubmitRequest(BaseModel):
@@ -1506,10 +1523,17 @@ class ExecutionIntentQueueItemResponse(BaseModel):
     intent_token: str
     user_id: str
     user_email: str | None = None
+    intent_type: str = "OPEN_POSITION"
+    position_id: str | None = None
     symbol: str
     market_type: str
     side: str
     notional: float
+    size: float | None = None
+    reduce_only: bool = False
+    price: float | None = None
+    stop_price: float | None = None
+    take_profit_price: float | None = None
     status: str
     risk_flags: list[str]
     reject_reason_codes: list[str]
@@ -1519,6 +1543,39 @@ class ExecutionIntentQueueItemResponse(BaseModel):
     meta_engine_decision: str | None = None
     cluster_id: str | None = None
     created_at: datetime
+
+
+class PositionActionPreviewRequest(BaseModel):
+    intent_type: str
+    position_id: str
+    symbol: str
+    size: float = Field(gt=0)
+    reduce_only: bool = True
+    price: float | None = None
+    stop_price: float | None = None
+    take_profit_price: float | None = None
+
+
+class PositionStateResponse(BaseModel):
+    position_id: str
+    symbol: str
+    size: float
+    entry_price: float
+    current_price: float
+    unrealized_pnl: float
+    leverage: int
+    strategy_id: str | None
+    cluster_id: str | None
+    status: str
+    updated_at: datetime
+
+
+class AdminPositionsMonitorResponse(BaseModel):
+    generated_at: datetime
+    open_positions: list[PositionStateResponse]
+    cluster_exposure: dict[str, float]
+    risk_level: str
+    forced_liquidation_risk: float
 
 
 class PortfolioRiskLimitsResponse(BaseModel):

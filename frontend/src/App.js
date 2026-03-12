@@ -57,9 +57,11 @@ import { UserScannerPage } from "@/pages/UserScannerPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
 import { UserReportsPage } from "@/pages/UserReportsPage";
 import { UserExecutePage } from "@/pages/UserExecutePage";
+import { UserPositionsPage } from "@/pages/UserPositionsPage";
 import { AdminExecutionQueuePage } from "@/pages/AdminExecutionQueuePage";
 import { AdminStrategyAllocationPage } from "@/pages/AdminStrategyAllocationPage";
 import { AdminPortfolioRiskPage } from "@/pages/AdminPortfolioRiskPage";
+import { AdminPositionsMonitorPage } from "@/pages/AdminPositionsMonitorPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -131,6 +133,7 @@ function App() {
             <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
             <Route path="strategy-allocation" element={<AdminStrategyAllocationPage />} />
             <Route path="portfolio-risk" element={<AdminPortfolioRiskPage />} />
+            <Route path="positions-monitor" element={<AdminPositionsMonitorPage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />
             <Route path="correlation-matrix" element={<CorrelationMatrixPage />} />
             <Route path="execution-states" element={<ExecutionStatesPage />} />
@@ -163,7 +166,8 @@ function App() {
             <Route path="strategies" element={<StrategyTemplatesPage />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
             <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />
-            <Route path="positions" element={<PaperPositionsPage />} />
+            <Route path="positions" element={<UserPositionsPage />} />
+            <Route path="paper-positions" element={<PaperPositionsPage />} />
             <Route path="exchange-mock" element={<ExchangeMockPage />} />
           </Route>
 

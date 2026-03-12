@@ -49,7 +49,8 @@ const userNavItems = [
   { to: "/user/strategies", label: "Strategy Template", icon: ClipboardList, testId: "nav-strategy-templates-link" },
   { to: "/user/backtest-insights", label: "Backtest Insights", icon: LineChart, testId: "nav-backtest-insights-link" },
   { to: "/user/exchange-settings", label: "Exchange Settings", icon: KeyRound, testId: "nav-user-exchange-settings-link" },
-  { to: "/user/positions", label: "Paper Positions", icon: Activity, testId: "nav-paper-positions-link" },
+  { to: "/user/positions", label: "Positions", icon: Activity, testId: "nav-user-positions-link" },
+  { to: "/user/paper-positions", label: "Paper Positions", icon: Activity, testId: "nav-paper-positions-link" },
   { to: "/user/exchange-mock", label: "Exchange Mock", icon: TestTube2, testId: "nav-exchange-mock-link" },
 ];
 
@@ -84,6 +85,7 @@ const adminOnlyItems = [
   { to: "/admin/execution-queue", label: "Execution Queue", icon: Wrench, testId: "nav-execution-queue-link" },
   { to: "/admin/strategy-allocation", label: "Strategy Allocation", icon: BarChartBig, testId: "nav-strategy-allocation-link" },
   { to: "/admin/portfolio-risk", label: "Portfolio Risk", icon: ShieldAlert, testId: "nav-portfolio-risk-link" },
+  { to: "/admin/positions-monitor", label: "Positions Monitor", icon: Activity, testId: "nav-positions-monitor-link" },
   { to: "/admin/exposure-groups", label: "Exposure Groups", icon: ShieldAlert, testId: "nav-exposure-groups-link" },
   { to: "/admin/correlation-matrix", label: "Correlation Matrix", icon: CircuitBoard, testId: "nav-correlation-matrix-link" },
   { to: "/admin/execution-states", label: "Execution States", icon: Cpu, testId: "nav-execution-states-link" },

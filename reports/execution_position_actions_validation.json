@@ -1,0 +1,62 @@
+{
+  "generated_at": "2026-03-12T21:24:25.469704+00:00",
+  "iteration": "53",
+  "base_url": "https://explainer-engine-2.preview.emergentagent.com",
+  "open_position_intent": {
+    "intent_id": "0a86e2be-3f59-4569-9651-5e3fd089d8f7",
+    "status": "PREVIEWED"
+  },
+  "position_action": {
+    "intent_type": "PARTIAL_CLOSE",
+    "intent_id": "c7c2de1e-b13c-4c88-9509-1df61b82dace",
+    "gate_decision": "ALLOW",
+    "meta_engine_decision": "ALLOW",
+    "risk_score": 0.012
+  },
+  "decision_trace_latest": {
+    "trace_id": "11a27d52-9ff2-4112-9588-60a08dde5357",
+    "trace_scope": "execution",
+    "trace_type": "execution_admin_approval",
+    "entity_id": "c7c2de1e-b13c-4c88-9509-1df61b82dace",
+    "strategy_code": "spot_pullback_v1",
+    "decision_status": "RELEASED",
+    "portfolio_risk_score": 0.012,
+    "strategy_allocation_reason": "normal_allocation",
+    "cluster_risk_flag": null,
+    "meta_engine_decision": "ALLOW",
+    "position_action_reason": "PARTIAL_CLOSE",
+    "risk_adjustment_reason": null,
+    "strategy_override_reason": null,
+    "reason_codes": [
+      "execution_intent_released"
+    ],
+    "reason_details": [
+      {
+        "code": "execution_intent_released",
+        "title": "Execution Intent Released",
+        "description": "Admin onayı sonrası intent release edilerek işleme alındı."
+      }
+    ],
+    "feature_snapshot": {
+      "symbol": "BTCUSDT",
+      "market_type": "spot",
+      "side": "long",
+      "quantity": 0.43076100000000006,
+      "intent_type": "PARTIAL_CLOSE"
+    },
+    "context_payload": {
+      "admin_user_id": "10be2653-76d1-47da-9bcb-485169519eb2",
+      "admin_note": "iter53_partial",
+      "intent_token": "2ba73066-4bd1-4714-97f3-0e5feb3559d4",
+      "position_id": "738c239e-61a8-49d0-800e-95347cd3ee66"
+    },
+    "created_at": "2026-03-12T21:24:25.049019",
+    "expires_at": "2026-06-10T21:24:25.049019"
+  },
+  "admin_positions_monitor": {
+    "risk_level": "LOW",
+    "forced_liquidation_risk": 0.5895,
+    "open_positions_count": 2
+  },
+  "validation_status": "PASS"
+}

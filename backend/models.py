@@ -222,6 +222,8 @@ class UserExecutionIntent(Base):
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
     source_type: Mapped[str] = mapped_column(String(30), default="manual")
     source_ref_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    intent_type: Mapped[str] = mapped_column(String(40), default="OPEN_POSITION", index=True)
+    position_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(30), default="PREVIEWED", index=True)
     intent_token: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     preview_hash: Mapped[str] = mapped_column(String(120), index=True)
@@ -231,6 +233,11 @@ class UserExecutionIntent(Base):
     market_type: Mapped[str] = mapped_column(String(20), default="spot")
     side: Mapped[str] = mapped_column(String(10), default="buy")
     notional: Mapped[float] = mapped_column(Float, default=0)
+    size: Mapped[float] = mapped_column(Float, default=0)
+    reduce_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    take_profit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     normalized_order_payload: Mapped[dict] = mapped_column(JSON, default=dict)
     reject_reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
     risk_flags: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -262,6 +269,9 @@ class UserDecisionTrace(Base):
     strategy_allocation_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
     cluster_risk_flag: Mapped[str | None] = mapped_column(String(80), nullable=True)
     meta_engine_decision: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    position_action_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    risk_adjustment_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    strategy_override_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
     reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
     reason_details: Mapped[list[dict]] = mapped_column(JSON, default=list)
     feature_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -835,6 +845,24 @@ class PortfolioExposureSnapshot(Base):
     strategy_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     cluster_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     exposure_weight: Mapped[float] = mapped_column(Float, default=0)
+
+
+class Position(Base):
+    __tablename__ = "positions"
+
+    position_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    size: Mapped[float] = mapped_column(Float, default=0)
+    entry_price: Mapped[float] = mapped_column(Float, default=0)
+    current_price: Mapped[float] = mapped_column(Float, default=0)
+    unrealized_pnl: Mapped[float] = mapped_column(Float, default=0)
+    leverage: Mapped[int] = mapped_column(Integer, default=1)
+    strategy_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    cluster_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class StrategyAllocation(Base):
