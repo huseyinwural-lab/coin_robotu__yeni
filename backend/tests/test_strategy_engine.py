@@ -70,4 +70,4 @@ def test_strategy_engine_allow_path_returns_trace():
         },
     )
     assert result["decision"] == "ALLOW"
-    assert "paper_decision_allow" in result["trace"]
+    assert "paper_execution" in result["trace"]

@@ -214,9 +214,20 @@ class TestFuturesStrategyEngine:
             },
         )
         assert result["decision"] == "ALLOW"
-        assert "paper_decision_allow" in result["trace"]
+        assert "paper_execution" in result["trace"]
         # Verify full chain in trace
-        expected_trace = ["strategy_signal", "microstructure_guard", "risk_engine", "liquidation_gate", "adl_gate", "policy_engine", "paper_decision_allow"]
+        expected_trace = [
+            "signal",
+            "microstructure_guard",
+            "risk_engine",
+            "liquidation_protection",
+            "adl_shield",
+            "policy_engine",
+            "hard_gate",
+            "attribution",
+            "decision_trace",
+            "paper_execution",
+        ]
         assert result["trace"] == expected_trace
 
     def test_engine_rejects_with_strategy_none_signal(self):
@@ -306,8 +317,7 @@ class TestFuturesStrategyEngine:
             },
         )
         assert result["decision"] == "REJECT"
-        # Policy engine rejects with POLICY_CRITICAL or POLICY_EMERGENCY
-        assert "POLICY_" in result["reason_code"]
+        assert result["reason_code"] == "POLICY_BLOCK"
 
     def test_engine_run_cycle_multiple_symbols(self):
         """run_cycle processes multiple market states"""

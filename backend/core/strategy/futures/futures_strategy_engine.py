@@ -1,5 +1,6 @@
 from dataclasses import asdict
 
+from core.futures.decision.decision_trace_model import build_decision_trace
 from core.futures.position_model import FuturesPosition
 from core.strategy.futures_paper_decision_flow import run_futures_paper_decision_flow
 from core.strategy.futures.strategy_contract import FuturesStrategy
@@ -15,6 +16,20 @@ class FuturesStrategyEngine:
         signal_payload = asdict(signal)
 
         if signal.side == "NONE":
+            trace_model = build_decision_trace(
+                symbol=signal.symbol,
+                strategy=strategy_id,
+                side=signal.side,
+                signal_confidence=signal.confidence,
+                regime=signal.regime,
+                microstructure_result="PASS",
+                risk_result="PASS",
+                liquidation_result="PASS",
+                adl_result="PASS",
+                final_decision="REJECT",
+                reason_code="SIGNAL_WEAK",
+                decision_layer="STRATEGY",
+            )
             return {
                 "strategy_id": strategy_id,
                 "symbol": signal.symbol,
@@ -22,9 +37,11 @@ class FuturesStrategyEngine:
                 "confidence": signal.confidence,
                 "regime": signal.regime,
                 "decision": "REJECT",
-                "reason_code": signal.reason,
-                "trace": ["strategy_signal", "decision_reject"],
+                "reason_code": "SIGNAL_WEAK",
+                "decision_layer": "STRATEGY",
+                "trace": ["signal", "attribution", "decision_trace", "decision_reject"],
                 "signal": signal_payload,
+                "decision_trace_model": trace_model,
             }
 
         latest_price = float(market_state.get("latest_price") or 0.0)
@@ -79,6 +96,7 @@ class FuturesStrategyEngine:
             },
             funding_bias=market_state.get("funding_bias") or {},
             microstructure_result=microstructure_result,
+            strategy_id=strategy_id,
         )
 
         response = {
@@ -89,12 +107,15 @@ class FuturesStrategyEngine:
             "regime": signal.regime,
             "decision": decision_flow["decision"],
             "reason_code": decision_flow["reason_code"],
-            "trace": ["strategy_signal", *decision_flow["trace"]],
+            "decision_layer": decision_flow.get("decision_layer", "GATE"),
+            "trace": decision_flow["trace"],
             "risk_reason": decision_flow.get("risk", {}).get("risk_reason", []),
             "microstructure_gate": decision_flow.get("gate", {}),
+            "liquidation_gate": decision_flow.get("liquidation_gate", {}),
             "adl_gate": decision_flow.get("adl_gate", {}),
             "execution_suitability": decision_flow.get("execution_suitability", {}),
             "reasons": decision_flow.get("reasons", []),
+            "decision_trace_model": decision_flow.get("decision_trace_model", {}),
             "signal": signal_payload,
         }
         if response["decision"] == "REJECT" and response["reason_code"] == "ALLOW":

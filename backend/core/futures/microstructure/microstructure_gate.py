@@ -17,7 +17,7 @@ class MicrostructureGate:
         if str(spread_result.get("spread_state") or "NORMAL").upper() == "SHOCK":
             reasons.append("MICROSTRUCTURE_SPREAD_SHOCK")
         if str(thinning_result.get("thinning_state") or "NORMAL").upper() == "CRITICAL":
-            reasons.append("MICROSTRUCTURE_ORDERBOOK_THINNING_CRITICAL")
+            reasons.append("MICROSTRUCTURE_DEPTH_COLLAPSE")
         if str(vacuum_result.get("vacuum_state") or "LOW").upper() == "HIGH":
             reasons.append("MICROSTRUCTURE_LIQUIDITY_VACUUM_HIGH")
         if str(quote_result.get("quote_stability_state") or "STABLE").upper() == "CHAOTIC":

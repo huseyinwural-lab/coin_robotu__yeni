@@ -106,6 +106,14 @@ def _confidence_distribution(decisions: list[dict]) -> list[dict]:
     return [{"bucket": key, "count": value} for key, value in buckets.items()]
 
 
+def _decision_layer_distribution(decisions: list[dict]) -> dict:
+    distribution: dict[str, int] = {}
+    for row in decisions:
+        layer = str(row.get("decision_layer") or "UNKNOWN")
+        distribution[layer] = distribution.get(layer, 0) + 1
+    return distribution
+
+
 def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: list[str] | None = None) -> dict:
     universe = build_effective_universe(db, cache)
     active_symbols = symbols or universe.get("futures_symbols") or ["BTCUSDT", "ETHUSDT"]
@@ -138,21 +146,61 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     paper_results = []
     cumulative_pnl = 0.0
     paper_pnl_series = []
+    false_allow_count = 0
+    false_reject_count = 0
+    confidence_vs_result = []
+    decision_trace_records = []
     for decision in decisions:
+        if decision.get("decision_trace_model"):
+            decision_trace_records.append(decision["decision_trace_model"])
+
         if decision["decision"] != "ALLOW":
+            market_state = market_map.get(decision["symbol"], {})
+            if decision.get("side") in {"LONG", "SHORT"}:
+                counterfactual = executor.simulate(
+                    strategy_signal={"side": decision.get("side"), "confidence": decision.get("confidence", 0.0)},
+                    market_state=market_state,
+                )
+                counterfactual_pnl = float(counterfactual.get("paper_pnl", 0.0))
+                if counterfactual_pnl > 0:
+                    false_reject_count += 1
+                confidence_vs_result.append(
+                    {
+                        "symbol": decision["symbol"],
+                        "confidence": round(float(decision.get("confidence") or 0.0), 4),
+                        "decision": "REJECT",
+                        "result_pnl": round(counterfactual_pnl, 6),
+                        "is_false_reject": counterfactual_pnl > 0,
+                        "decision_layer": decision.get("decision_layer", "UNKNOWN"),
+                    }
+                )
             continue
+
         market_state = market_map.get(decision["symbol"], {})
         size_ratio = float((decision.get("execution_suitability") or {}).get("max_allowed_size_ratio", 1.0))
         paper = executor.simulate(strategy_signal=decision, market_state=market_state)
         paper["size_ratio_applied"] = round(size_ratio, 4)
-        cumulative_pnl += float(paper.get("paper_pnl", 0.0))
+        pnl = float(paper.get("paper_pnl", 0.0))
+        if pnl < 0:
+            false_allow_count += 1
+        cumulative_pnl += pnl
         paper_results.append({"symbol": decision["symbol"], "side": decision["side"], **paper})
         paper_pnl_series.append(
             {
                 "index": len(paper_pnl_series) + 1,
                 "symbol": decision["symbol"],
-                "paper_pnl": round(float(paper.get("paper_pnl", 0.0)), 6),
+                "paper_pnl": round(pnl, 6),
                 "cumulative_pnl": round(cumulative_pnl, 6),
+            }
+        )
+        confidence_vs_result.append(
+            {
+                "symbol": decision["symbol"],
+                "confidence": round(float(decision.get("confidence") or 0.0), 4),
+                "decision": "ALLOW",
+                "result_pnl": round(pnl, 6),
+                "is_false_allow": pnl < 0,
+                "decision_layer": decision.get("decision_layer", "UNKNOWN"),
             }
         )
 
@@ -179,6 +227,15 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         else 0.0
     )
 
+    decision_layer_distribution = _decision_layer_distribution(decisions)
+    diagnostics = {
+        "false_allow_count": false_allow_count,
+        "false_reject_count": false_reject_count,
+        "gate_reason_distribution": reject_reason_map,
+        "confidence_vs_result": confidence_vs_result,
+        "decision_layer_distribution": decision_layer_distribution,
+    }
+
     snapshot = {
         "strategy": "futures_trend_follow_v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -191,6 +248,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         },
         "signal_feed": signal_feed,
         "decision_trace": decisions,
+        "decision_trace_contract_records": decision_trace_records,
         "paper_trades": paper_results,
         "paper_pnl_series": paper_pnl_series,
         "microstructure": {
@@ -204,6 +262,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             for reason, count in sorted(reject_reason_map.items(), key=lambda item: item[1], reverse=True)
         ],
         "confidence_distribution": _confidence_distribution(decisions),
+        "decision_diagnostics": diagnostics,
     }
 
     if cache:
@@ -213,6 +272,10 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         cache.set("metrics:futures_strategy_rejected_total", str(snapshot["metrics"]["futures_strategy_rejected_total"]))
         cache.set("metrics:futures_strategy_confidence", str(snapshot["metrics"]["futures_strategy_confidence"]))
         cache.set("metrics:futures_strategy_paper_pnl", str(snapshot["metrics"]["futures_strategy_paper_pnl"]))
+        cache.set("metrics:futures_false_allow_total", str(false_allow_count))
+        cache.set("metrics:futures_false_reject_total", str(false_reject_count))
+        cache.set("metrics:futures_gate_reason_distribution", json.dumps(reject_reason_map))
+        cache.set("metrics:futures_strategy_confidence_vs_result", json.dumps(confidence_vs_result))
 
     return snapshot
 
@@ -226,3 +289,16 @@ def get_futures_strategy_status(db: Session, cache, user_id: str, refresh: bool 
     if cached:
         return cached
     return run_futures_strategy_paper_cycle(db, cache, user_id)
+
+
+def get_futures_decision_diagnostics(db: Session, cache, user_id: str, refresh: bool = False) -> dict:
+    status = get_futures_strategy_status(db, cache, user_id, refresh=refresh)
+    diagnostics = status.get("decision_diagnostics") or {}
+    return {
+        "false_allow_count": diagnostics.get("false_allow_count", 0),
+        "false_reject_count": diagnostics.get("false_reject_count", 0),
+        "gate_reason_distribution": diagnostics.get("gate_reason_distribution", {}),
+        "confidence_vs_result": diagnostics.get("confidence_vs_result", []),
+        "decision_layer_distribution": diagnostics.get("decision_layer_distribution", {}),
+        "updated_at": status.get("generated_at"),
+    }

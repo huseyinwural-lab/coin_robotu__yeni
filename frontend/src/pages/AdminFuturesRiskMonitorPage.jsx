@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ export const AdminFuturesRiskMonitorPage = () => {
   const [liquidationStatus, setLiquidationStatus] = useState(null);
   const [adlStatus, setAdlStatus] = useState(null);
   const [strategyStatus, setStrategyStatus] = useState(null);
+  const [decisionDiagnostics, setDecisionDiagnostics] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -24,16 +25,18 @@ export const AdminFuturesRiskMonitorPage = () => {
         // no-op, cached status can still be rendered
       }
 
-      const [riskResponse, liquidationResponse, adlResponse, strategyResponse] = await Promise.all([
+      const [riskResponse, liquidationResponse, adlResponse, strategyResponse, diagnosticsResponse] = await Promise.all([
         apiClient.get("/admin/futures/risk/status"),
         apiClient.get("/admin/futures/liquidation-protection/status"),
         apiClient.get("/admin/futures/adl/status"),
         apiClient.get("/admin/futures/strategy/status"),
+        apiClient.get("/admin/futures/decision-diagnostics"),
       ]);
       setRiskStatus(riskResponse.data || null);
       setLiquidationStatus(liquidationResponse.data || null);
       setAdlStatus(adlResponse.data || null);
       setStrategyStatus(strategyResponse.data || null);
+      setDecisionDiagnostics(diagnosticsResponse.data || null);
     } catch (error) {
       const message = error?.response?.data?.detail || "Futures risk monitor verisi alınamadı";
       setErrorMessage(message);
@@ -50,13 +53,31 @@ export const AdminFuturesRiskMonitorPage = () => {
   const heatmapRows = useMemo(() => liquidationStatus?.symbol_risk_heatmap || [], [liquidationStatus]);
   const criticalPositions = useMemo(() => liquidationStatus?.critical_positions || [], [liquidationStatus]);
   const gateRejections = useMemo(() => liquidationStatus?.gate_rejections || [], [liquidationStatus]);
-  const hasData = useMemo(() => Boolean(riskStatus || liquidationStatus || adlStatus || strategyStatus), [riskStatus, liquidationStatus, adlStatus, strategyStatus]);
+  const hasData = useMemo(() => Boolean(riskStatus || liquidationStatus || adlStatus || strategyStatus || decisionDiagnostics), [riskStatus, liquidationStatus, adlStatus, strategyStatus, decisionDiagnostics]);
   const adlRiskPercent = useMemo(() => Math.min(100, Math.max(0, Number((adlStatus?.portfolio_adl_risk || 0) * 100))), [adlStatus]);
   const strategySignals = useMemo(() => strategyStatus?.signal_feed || [], [strategyStatus]);
   const strategyDecisions = useMemo(() => strategyStatus?.decision_trace || [], [strategyStatus]);
   const strategyRejects = useMemo(() => strategyStatus?.reject_reason_breakdown || [], [strategyStatus]);
   const confidenceDistribution = useMemo(() => strategyStatus?.confidence_distribution || [], [strategyStatus]);
   const paperPnlSeries = useMemo(() => strategyStatus?.paper_pnl_series || [], [strategyStatus]);
+  const gateReasonDistribution = useMemo(() => {
+    const map = decisionDiagnostics?.gate_reason_distribution || {};
+    return Object.entries(map).map(([reason_code, count]) => ({ reason_code, count }));
+  }, [decisionDiagnostics]);
+  const confidenceVsOutcome = useMemo(
+    () => (decisionDiagnostics?.confidence_vs_result || []).map((item, index) => ({
+      idx: index + 1,
+      confidence: Number(item.confidence || 0),
+      result_pnl: Number(item.result_pnl || 0),
+      symbol: item.symbol,
+      decision: item.decision,
+    })),
+    [decisionDiagnostics],
+  );
+  const decisionLayerDistribution = useMemo(() => {
+    const map = decisionDiagnostics?.decision_layer_distribution || {};
+    return Object.entries(map).map(([layer, count]) => ({ layer, count }));
+  }, [decisionDiagnostics]);
 
   return (
     <section className="space-y-4" data-testid="admin-futures-risk-monitor-page">
@@ -381,6 +402,65 @@ export const AdminFuturesRiskMonitorPage = () => {
                   </p>
                 ))}
                 {confidenceDistribution.length === 0 && <p className="text-xs" data-testid="futures-strategy-confidence-distribution-empty">Confidence dağılımı yok.</p>}
+              </div>
+            </div>
+          </div>
+
+          <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-decision-diagnostics-header-panel">
+            <h3 className="text-lg font-bold" data-testid="futures-decision-diagnostics-header-title">Decision Diagnostics</h3>
+            <p className="mt-2 text-sm" data-testid="futures-decision-diagnostics-header-description">
+              False allow/reject ve reason/layer attribution tuning görünürlüğü.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-5" data-testid="futures-decision-diagnostics-metrics-grid">
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-false-allow-counter-card">
+              <p className="text-xs uppercase">False Allow</p>
+              <p className="text-xl font-bold" data-testid="futures-false-allow-counter-value">{decisionDiagnostics?.false_allow_count ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-false-reject-counter-card">
+              <p className="text-xs uppercase">False Reject</p>
+              <p className="text-xl font-bold" data-testid="futures-false-reject-counter-value">{decisionDiagnostics?.false_reject_count ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3 md:col-span-3" data-testid="futures-gate-reason-distribution-card">
+              <p className="text-xs uppercase" data-testid="futures-gate-reason-distribution-title">Gate Reason Distribution</p>
+              <div className="mt-1 flex flex-wrap gap-3" data-testid="futures-gate-reason-distribution-items">
+                {gateReasonDistribution.map((item, index) => (
+                  <p key={`${item.reason_code}-${index}`} className="text-xs" data-testid={`futures-gate-reason-distribution-item-${index}`}>
+                    {item.reason_code}: {item.count}
+                  </p>
+                ))}
+                {gateReasonDistribution.length === 0 && <p className="text-xs" data-testid="futures-gate-reason-distribution-empty">Dağılım verisi yok.</p>}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2" data-testid="futures-decision-diagnostics-charts-grid">
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-confidence-vs-outcome-scatter-panel">
+              <h4 className="text-base font-bold" data-testid="futures-confidence-vs-outcome-scatter-title">Confidence vs Outcome Scatter</h4>
+              <div className="mt-3 h-56" data-testid="futures-confidence-vs-outcome-scatter-wrapper">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#111" opacity={0.2} />
+                    <XAxis type="number" dataKey="confidence" name="confidence" domain={[0, 1]} stroke="#111" />
+                    <YAxis type="number" dataKey="result_pnl" name="result_pnl" stroke="#111" />
+                    <Tooltip cursor={{ strokeDasharray: "3 3" }} />
+                    <Scatter data={confidenceVsOutcome} fill="#111" data-testid="futures-confidence-vs-outcome-scatter-dots" />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
+              {confidenceVsOutcome.length === 0 && <p className="mt-2 text-xs" data-testid="futures-confidence-vs-outcome-scatter-empty">Scatter verisi yok.</p>}
+            </div>
+
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-decision-layer-distribution-panel">
+              <h4 className="text-base font-bold" data-testid="futures-decision-layer-distribution-title">Decision Layer Distribution</h4>
+              <div className="mt-2 space-y-1" data-testid="futures-decision-layer-distribution-list">
+                {decisionLayerDistribution.map((item, index) => (
+                  <p key={`${item.layer}-${index}`} className="text-xs" data-testid={`futures-decision-layer-distribution-item-${index}`}>
+                    {item.layer}: {item.count}
+                  </p>
+                ))}
+                {decisionLayerDistribution.length === 0 && <p className="text-xs" data-testid="futures-decision-layer-distribution-empty">Layer dağılımı yok.</p>}
               </div>
             </div>
           </div>
