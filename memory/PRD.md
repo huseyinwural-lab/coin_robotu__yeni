@@ -1638,3 +1638,68 @@
 ### Güncel sıra
 - Phase 5.6B tamamlandı.
 - Sonraki blok: **Phase 5.7 — Capital Enforcement v2**
+
+## 25) 2026-03-12 — Phase 5.7 Capital Enforcement v2 (Tamamlandı)
+
+### Capital Core
+- `core/risk/capital/portfolio_capital_registry.py`
+  - `portfolio_equity`, `available_capital`, `allocated_capital`, `used_margin`, `risk_budget_total`
+- `core/risk/capital/strategy_capital_allocator.py`
+  - Varsayılan oranlar: `max=0.20`, `soft_warning=0.15`
+  - Strategy bazlı budget/used/available + risk state
+- `core/risk/capital/capital_drift_detector.py`
+  - Event: `CAPITAL_BUDGET_DRIFT`
+  - Triggerlar: budget exceed, warning exceed, growth anomaly
+- `core/risk/capital/capital_risk_governor.py`
+  - Event: `CAPITAL_LIMIT_HIT`
+  - Aksiyonlar: `REJECT_TRADE`, `REDUCE_POSITION_SIZE`, `risk_downshift`
+- `core/risk/capital/position_size_policy.py`
+  - Position size: capital availability + strategy risk weight + volatility + cluster modifier
+- `core/risk/capital/capital_order_guard.py`
+  - Event: `CAPITAL_TRADE_REJECTED`
+  - Order pipeline’da reject/reduce enforcement
+
+### Observability
+- `core/observability/capital_governance_audit.py`
+  - `CAPITAL_LIMIT_HIT`, `CAPITAL_BUDGET_DRIFT`, `CAPITAL_TRADE_REJECTED`, `CAPITAL_REALLOCATION`
+
+### Service + Pipeline Entegrasyonu
+- `services/futures_capital_service.py`
+  - Capital snapshot, budget/usage/drift API payloadları
+  - Trade pipeline için `apply_capital_order_guard_to_decisions`
+- `services/futures_strategy_service.py`
+  - Cluster guard sonrası capital guard enforcement eklendi
+  - Snapshot’a capital budget/usage/drift alanları eklendi
+
+### API
+- Yeni endpointler:
+  - `GET /api/admin/futures/capital-budget`
+  - `GET /api/admin/futures/capital-usage`
+  - `GET /api/admin/futures/capital-drift`
+- Router: `routers/admin_futures_capital.py`
+
+### UI
+- Yeni panel: `/admin/futures/capital-governance`
+  - strategy capital allocation
+  - capital usage bars
+  - capital drift alerts
+  - portfolio risk budget
+  - capital budget drift monitor
+
+### Test
+- Yeni test dosyaları:
+  - `test_portfolio_capital_registry.py`
+  - `test_strategy_capital_allocator.py`
+  - `test_capital_drift_detector.py`
+  - `test_capital_risk_governor.py`
+  - `test_position_size_policy.py`
+  - `test_capital_order_guard.py`
+  - `test_capital_endpoint.py`
+- Lokal pytest: **15 passed**
+- Testing agent raporu: `/app/test_reports/iteration_40.json` => **PASS**
+  - Backend 100%
+  - Frontend 100%
+
+### Güncel sıra
+- Phase 5.7 tamamlandı.
+- Sonraki blok: **Phase 5.7A — Tail Risk Guard**
