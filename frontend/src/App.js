@@ -51,6 +51,10 @@ import { StrategyTemplatesPage } from "@/pages/StrategyTemplatesPage";
 import { UserLoginPage } from "@/pages/UserLoginPage";
 import { UserExchangeSettingsPage } from "@/pages/UserExchangeSettingsPage";
 import { UserDashboardPage } from "@/pages/UserDashboardPage";
+import { UserPortfolioPage } from "@/pages/UserPortfolioPage";
+import { UserTradesPage } from "@/pages/UserTradesPage";
+import { UserScannerPage } from "@/pages/UserScannerPage";
+import { UserSignalsPage } from "@/pages/UserSignalsPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -74,6 +78,12 @@ function App() {
           <Route path="/login" element={<Navigate to="/user/login" replace />} />
           <Route path="/user/login" element={<UserLoginPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
+
+          <Route path="/dashboard" element={<Navigate to="/user/dashboard" replace />} />
+          <Route path="/portfolio" element={<Navigate to="/user/portfolio" replace />} />
+          <Route path="/trades" element={<Navigate to="/user/trades" replace />} />
+          <Route path="/scanner" element={<Navigate to="/user/scanner" replace />} />
+          <Route path="/signals" element={<Navigate to="/user/signals" replace />} />
 
           <Route
             path="/admin"
@@ -132,6 +142,10 @@ function App() {
             }
           >
             <Route path="dashboard" element={<UserDashboardPage />} />
+            <Route path="portfolio" element={<UserPortfolioPage />} />
+            <Route path="trades" element={<UserTradesPage />} />
+            <Route path="scanner" element={<UserScannerPage />} />
+            <Route path="signals" element={<UserSignalsPage />} />
             <Route path="bots" element={<BotProfilesPage />} />
             <Route path="risk-policies" element={<RiskPoliciesPage />} />
             <Route path="strategies" element={<StrategyTemplatesPage />} />

@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from core.users.user_exchange_connector import exchange_connection_view, upsert_user_exchange_connection
+from core.users.user_exchange_connector import (
+    exchange_connection_view,
+    get_or_create_user_exchange_setting,
+    upsert_user_exchange_connection,
+)
 from core.users.user_portfolio_engine import (
     build_user_performance_snapshot,
     build_user_portfolio_snapshot,
@@ -62,6 +66,21 @@ def connect_user_exchange(
         },
     )
     return UserExchangeConnectResponse(**response_payload)
+
+
+@router.get("/exchange", response_model=UserExchangeConnectResponse)
+def get_user_exchange(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    settings_row = get_or_create_user_exchange_setting(db, current_user.id)
+    return UserExchangeConnectResponse(**exchange_connection_view(settings_row))
+
+
+@router.put("/exchange", response_model=UserExchangeConnectResponse)
+def update_user_exchange(
+    payload: UserExchangeConnectRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return connect_user_exchange(payload=payload, current_user=current_user, db=db)
 
 
 @router.post("/portfolio/map", response_model=UserPortfolioMapResponse)

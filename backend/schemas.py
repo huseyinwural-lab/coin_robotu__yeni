@@ -1249,6 +1249,75 @@ class UserTradeResponse(BaseModel):
     closed_at: datetime | None
 
 
+class UserSignalModeResponse(BaseModel):
+    mode: str
+    updated_at: datetime | None
+
+
+class UserSignalModeUpdateRequest(BaseModel):
+    mode: str = "ASSISTED"
+
+
+class UserScannerRunRequest(BaseModel):
+    mode: str | None = None
+    max_results: int = Field(default=20, ge=5, le=100)
+
+
+class UserScannerRunResponse(BaseModel):
+    run_id: str
+    mode: str
+    result_count: int
+    actionable_count: int
+    queued_count: int
+    pending_total: int
+    generated_at: datetime
+
+
+class UserScannerResultResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    run_id: str
+    user_id: str
+    symbol: str
+    strategy_code: str
+    signal: str
+    confidence: float
+    signal_score: float
+    reason_codes: list[str]
+    payload: dict
+    generated_at: datetime
+
+
+class UserSignalResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    signal_id: str
+    user_id: str
+    symbol: str
+    strategy_code: str
+    confidence: float
+    mode: str
+    status: str
+    order_position_id: str | None
+    created_at: datetime
+    decided_at: datetime | None
+    decision_note: str
+
+
+class UserSignalDecisionRequest(BaseModel):
+    note: str = ""
+
+
+class UserSignalDecisionResponse(BaseModel):
+    id: str
+    status: str
+    order_position_id: str | None
+    decided_at: datetime | None
+    decision_note: str
+
+
 class AlertPolicyResponse(BaseModel):
     admin_notification_enabled: bool
     ops_webhook_url: str

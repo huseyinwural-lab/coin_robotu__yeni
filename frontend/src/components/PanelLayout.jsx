@@ -32,6 +32,10 @@ import { apiClient } from "@/lib/api";
 
 const userNavItems = [
   { to: "/user/dashboard", label: "User Dashboard", icon: BarChart3, testId: "nav-user-dashboard-link" },
+  { to: "/user/portfolio", label: "Portfolio", icon: BarChartBig, testId: "nav-user-portfolio-link" },
+  { to: "/user/trades", label: "Trades", icon: Activity, testId: "nav-user-trades-link" },
+  { to: "/user/scanner", label: "Scanner", icon: Gauge, testId: "nav-user-scanner-link" },
+  { to: "/user/signals", label: "Signals", icon: Radio, testId: "nav-user-signals-link" },
   { to: "/user/bots", label: "Bot Profilleri", icon: TrendingUp, testId: "nav-bot-profiles-link" },
   { to: "/user/risk-policies", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
   { to: "/user/strategies", label: "Strategy Template", icon: ClipboardList, testId: "nav-strategy-templates-link" },

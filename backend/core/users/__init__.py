@@ -18,6 +18,15 @@ from .user_exchange_connector import (
 from .user_portfolio_mapper import map_user_portfolio
 from .user_portfolio_engine import build_user_performance_snapshot, build_user_portfolio_snapshot, build_user_trade_history
 from .user_risk_settings import apply_user_risk_settings, get_or_create_user_risk_settings, serialize_user_risk_settings
+from .user_scanner_signal_service import (
+    approve_pending_signal,
+    get_or_create_signal_mode,
+    list_user_scanner_results,
+    list_user_signals,
+    reject_pending_signal,
+    run_user_scanner,
+    update_signal_mode,
+)
 
 __all__ = [
     "UserLoginSession",
@@ -40,4 +49,11 @@ __all__ = [
     "build_user_portfolio_snapshot",
     "build_user_performance_snapshot",
     "build_user_trade_history",
+    "get_or_create_signal_mode",
+    "update_signal_mode",
+    "run_user_scanner",
+    "list_user_scanner_results",
+    "list_user_signals",
+    "approve_pending_signal",
+    "reject_pending_signal",
 ]

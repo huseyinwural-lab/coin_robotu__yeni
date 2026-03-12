@@ -1,0 +1,166 @@
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from core.users.user_scanner_signal_service import (
+    approve_pending_signal,
+    get_or_create_signal_mode,
+    list_user_scanner_results,
+    list_user_signals,
+    reject_pending_signal,
+    run_user_scanner,
+    update_signal_mode,
+)
+from db import get_db
+from deps import require_user
+from models import User
+from schemas import (
+    UserScannerResultResponse,
+    UserScannerRunRequest,
+    UserScannerRunResponse,
+    UserSignalDecisionRequest,
+    UserSignalDecisionResponse,
+    UserSignalModeResponse,
+    UserSignalModeUpdateRequest,
+    UserSignalResponse,
+)
+from services.audit_service import create_audit_log
+
+router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
+
+
+@router.get("/signal-mode", response_model=UserSignalModeResponse)
+def get_signal_mode(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    row = get_or_create_signal_mode(db, current_user.id)
+    return UserSignalModeResponse(mode=row.mode, updated_at=row.updated_at)
+
+
+@router.put("/signal-mode", response_model=UserSignalModeResponse)
+def put_signal_mode(
+    payload: UserSignalModeUpdateRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    row = update_signal_mode(db, current_user.id, payload.mode)
+    create_audit_log(
+        db,
+        action="user_signal_mode_updated",
+        entity_type="user_signal_mode",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"mode": row.mode},
+    )
+    return UserSignalModeResponse(mode=row.mode, updated_at=row.updated_at)
+
+
+@router.post("/scanner/run", response_model=UserScannerRunResponse)
+def scanner_run(
+    payload: UserScannerRunRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    result = run_user_scanner(
+        db,
+        current_user.id,
+        requested_mode=payload.mode,
+        max_results=payload.max_results,
+    )
+    create_audit_log(
+        db,
+        action="user_scanner_run",
+        entity_type="user_scanner",
+        entity_id=result["run_id"],
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "mode": result["mode"],
+            "result_count": result["result_count"],
+            "actionable_count": result["actionable_count"],
+            "queued_count": result["queued_count"],
+        },
+    )
+    return UserScannerRunResponse(**result)
+
+
+@router.get("/scanner/results", response_model=list[UserScannerResultResponse])
+def scanner_results(
+    limit: int = Query(default=50, ge=5, le=200),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return list_user_scanner_results(db, current_user.id, limit=limit)
+
+
+@router.get("/signals", response_model=list[UserSignalResponse])
+def signals(
+    limit: int = Query(default=100, ge=5, le=300),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return list_user_signals(db, current_user.id, limit=limit)
+
+
+@router.post("/signal/{signal_id}/approve", response_model=UserSignalDecisionResponse)
+def approve_signal(
+    signal_id: str,
+    payload: UserSignalDecisionRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = approve_pending_signal(db, current_user.id, signal_id, note=payload.note)
+    except ValueError as exc:
+        message = str(exc)
+        if message == "pending_signal_not_found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
+
+    create_audit_log(
+        db,
+        action="user_pending_signal_approved",
+        entity_type="pending_signal",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"order_position_id": row.order_position_id},
+    )
+    return UserSignalDecisionResponse(
+        id=row.id,
+        status=row.status,
+        order_position_id=row.order_position_id,
+        decided_at=row.decided_at,
+        decision_note=row.decision_note,
+    )
+
+
+@router.post("/signal/{signal_id}/reject", response_model=UserSignalDecisionResponse)
+def reject_signal(
+    signal_id: str,
+    payload: UserSignalDecisionRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = reject_pending_signal(db, current_user.id, signal_id, note=payload.note)
+    except ValueError as exc:
+        message = str(exc)
+        if message == "pending_signal_not_found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
+
+    create_audit_log(
+        db,
+        action="user_pending_signal_rejected",
+        entity_type="pending_signal",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"decision_note": row.decision_note},
+    )
+    return UserSignalDecisionResponse(
+        id=row.id,
+        status=row.status,
+        order_position_id=row.order_position_id,
+        decided_at=row.decided_at,
+        decision_note=row.decision_note,
+    )

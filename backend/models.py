@@ -170,6 +170,48 @@ class SignalEvent(Base):
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class UserSignalMode(Base):
+    __tablename__ = "user_signal_modes"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), unique=True, index=True)
+    mode: Mapped[str] = mapped_column(String(20), default="ASSISTED")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UserScannerResult(Base):
+    __tablename__ = "user_scanner_results"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    run_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    strategy_code: Mapped[str] = mapped_column(String(80), default="spot_pullback_v1")
+    signal: Mapped[str] = mapped_column(String(20), default="none")
+    confidence: Mapped[float] = mapped_column(Float, default=0)
+    signal_score: Mapped[float] = mapped_column(Float, default=0)
+    reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class PendingSignal(Base):
+    __tablename__ = "pending_signals"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    signal_id: Mapped[str] = mapped_column(String, ForeignKey("signal_events.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    strategy_code: Mapped[str] = mapped_column(String(80))
+    confidence: Mapped[float] = mapped_column(Float, default=0)
+    mode: Mapped[str] = mapped_column(String(20), default="ASSISTED")
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    order_position_id: Mapped[str | None] = mapped_column(String, ForeignKey("paper_positions.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_note: Mapped[str] = mapped_column(Text, default="")
+
+
 class StrategyObservabilityEvent(Base):
     __tablename__ = "strategy_observability_events"
 

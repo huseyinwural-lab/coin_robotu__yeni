@@ -43,6 +43,7 @@ from routers import (
     risk_policies,
     user_approvals,
     user_platform,
+    user_scanner_signals,
     user_risk,
     strategy_templates,
     strategy_domain,
@@ -87,6 +88,7 @@ api_router.include_router(bot_profiles.router)
 api_router.include_router(risk_policies.router)
 api_router.include_router(user_risk.router)
 api_router.include_router(user_platform.router)
+api_router.include_router(user_scanner_signals.router)
 api_router.include_router(strategy_templates.router)
 api_router.include_router(strategy_domain.router)
 api_router.include_router(audit_logs.router)
