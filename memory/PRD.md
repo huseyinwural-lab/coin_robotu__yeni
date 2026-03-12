@@ -2445,3 +2445,66 @@
 - **PG-01 LIVE: COMPLETE**
 - **Phase-7A backend/admin: COMPLETE**
 - **Phase-7A user/deep-link: COMPLETE**
+
+## 37) 2026-03-12 — Iteration-51 (Phase-8 Explainability Engine)
+
+### Kapsam Kilidi (A / A / A / A)
+- Full scope bu iterasyonda tamamlandı.
+- Decision trace retention: **90 gün**.
+- Gerçek kullanıcı akışları (signal/trade/execution) üzerinden explainability bağlandı.
+- Trace coverage penceresi: **7 gün** raporlanır hale getirildi.
+
+### Backend — Explainability Motoru
+- Yeni model eklendi: `UserDecisionTrace` (`user_decision_traces` tablosu)
+  - scope: `signal | trade | execution`
+  - alanlar: `trace_type`, `entity_id`, `strategy_code`, `decision_status`, `reason_codes`, `reason_details`, `feature_snapshot`, `context_payload`, `created_at`, `expires_at`
+- Yeni migration:
+  - `backend/migrations/versions/20260312_0027_user_decision_traces.py`
+- Yeni servis:
+  - `backend/services/explainability_service.py`
+  - reason-code açıklama eşlemesi
+  - trace capture helper
+  - 90 gün retention cleanup
+  - strategy explain özeti
+  - 7 günlük coverage hesaplama
+- Yeni API endpointleri:
+  - `GET /api/user/signals/{signal_id}/decision-trace`
+  - `GET /api/user/trades/{trade_id}/decision-trace`
+  - `GET /api/user/execution/intents/{intent_id}/decision-trace`
+  - `GET /api/user/strategies/{strategy_code}/explain`
+  - `GET /api/user/explainability/coverage?days=7`
+- Capture pipeline entegrasyonu:
+  - scanner signal üretimi sırasında trace yazımı
+  - signal approve/reject sırasında trace yazımı
+  - execution preview/submit/cancel/approve/reject sırasında trace yazımı
+
+### Frontend — Explainability Panelleri
+- `UserSignalsPage.jsx`:
+  - **Why this signal?** paneli
+  - signal trace + strategy explain özeti
+- `UserTradesPage.jsx`:
+  - **Decision Trace** paneli
+  - trade bazlı reason detayları
+- `UserExecutePage.jsx`:
+  - **Preview Explain** paneli
+  - preview sonrası execution trace gösterimi
+
+### Konfigürasyon
+- `config/reason_codes_registry.json` genişletildi:
+  - signal/trade/execution explainability reason-code açıklamaları
+  - execution precheck reject kodları için başlık/açıklama eşlemeleri
+
+### Test Durumu
+- Backend pytest:
+  - `backend/tests/test_phase8_explainability_engine.py` → PASS
+  - `backend/tests/test_iteration50_pg01_execution_backend.py` → PASS (regression)
+- Self API smoke (register/approve/login/scanner/trace/coverage) → PASS
+- UI smoke screenshot (landing load) → PASS
+- Testing agent:
+  - `/app/test_reports/iteration_51.json` → backend %100, frontend %100
+  - Kritik/minor bulgu: yok
+
+### Durum
+- **Phase-8 Explainability Engine: COMPLETE**
+- **Retention (90 gün): ACTIVE**
+- **Trace Coverage Endpoint: ACTIVE**
