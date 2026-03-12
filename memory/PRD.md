@@ -1570,3 +1570,71 @@
 ### Güncel sıra
 - Phase 5.6A tamamlandı.
 - Sonraki blok: **Phase 5.6B Correlation Cluster Engine**
+
+## 24) 2026-03-12 — Phase 5.6B Correlation Cluster Engine (Tamamlandı)
+
+### Correlation Data Layer
+- `core/risk/correlation/correlation_matrix_engine.py`
+  - 15m candle, window=96, cache TTL=60s
+  - Deterministik rolling pearson matrix
+  - Genişletilebilir symbol set (BTC/ETH/SOL/AVAX/BNB/LINK/MATIC/ARB)
+
+### Cluster Builder
+- `core/risk/correlation/correlation_cluster_builder.py`
+  - Threshold: `corr >= 0.75`
+  - Deterministik connected-component cluster üretimi
+  - Overlap kontrolü (tek cluster üyeliği)
+
+### Cluster Exposure + Governance
+- `core/risk/correlation/cluster_exposure_calculator.py`
+  - `cluster_exposure`, `cluster_direction`, `cluster_leverage`, `cluster_position_count`
+- `core/risk/correlation/cluster_risk_governor.py`
+  - `cluster_exposure_limit=0.35`, `cluster_position_limit=3`, `cluster_direction_limit=0.85`
+  - Event: `CLUSTER_RISK_LIMIT_HIT`
+- `core/risk/correlation/cluster_order_guard.py`
+  - `REJECT` veya `REDUCE_SIZE` davranışı
+  - Event: `CLUSTER_TRADE_REJECTED`
+
+### Observability & Audit
+- `core/observability/cluster_governance_audit.py`
+  - `CLUSTER_CREATED`, `CLUSTER_UPDATED`, `CLUSTER_RISK_LIMIT_HIT`, `CLUSTER_TRADE_REJECTED`
+
+### Trading Engine Enforcement
+- `services/futures_strategy_service.py` içine cluster order guard enforcement eklendi
+  - Correlation risk ihlali trade pipeline’da deterministik REJECT
+  - Near-limit durumda position size reduction
+
+### API
+- Yeni endpointler:
+  - `GET /api/admin/futures/correlation-matrix`
+  - `GET /api/admin/futures/correlation-clusters`
+  - `GET /api/admin/futures/cluster-risk`
+- Servis katmanı:
+  - `services/futures_correlation_service.py`
+
+### Admin Paneller
+- Yeni panel: `/admin/futures/cluster-risk`
+  - correlation heatmap
+  - cluster exposure bars
+  - cluster risk alerts
+  - cluster position map
+- Governance panel entegrasyonu:
+  - `/admin/futures/strategy-governance` içine `cluster_risk_overlay` widget eklendi
+  - Alanlar: `cluster_id`, `cluster_exposure`, `triggered_strategy`, `risk_source_symbol`, `risk_state`
+
+### Test
+- Yeni test dosyaları:
+  - `test_correlation_matrix_engine.py`
+  - `test_cluster_builder.py`
+  - `test_cluster_exposure_calculator.py`
+  - `test_cluster_risk_governor.py`
+  - `test_cluster_order_guard.py`
+  - `test_cluster_endpoint.py`
+- Lokal pytest: **84 passed**
+- Testing agent raporu: `/app/test_reports/iteration_39.json` => **PASS**
+  - Backend 100%
+  - Frontend 100%
+
+### Güncel sıra
+- Phase 5.6B tamamlandı.
+- Sonraki blok: **Phase 5.7 — Capital Enforcement v2**
