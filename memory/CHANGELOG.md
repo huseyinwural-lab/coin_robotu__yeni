@@ -1,6 +1,36 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-12
+### Iteration-53 — Execution Advanced Actions
+- Execution intent modeli position actions için genişletildi:
+  - `intent_type`, `position_id`, `size`, `reduce_only`, `price`, `stop_price`, `take_profit_price`
+- Yeni intent tipleri aktif:
+  - `CLOSE_POSITION`, `PARTIAL_CLOSE`, `REVERSE_POSITION`, `MOVE_STOP`, `MOVE_TAKE_PROFIT`
+- Yeni execution contract eklendi:
+  - `/app/contracts/execution_position_actions_contract.json`
+- Yeni `positions` state modeli + sync servisi eklendi:
+  - `backend/services/position_management_service.py`
+- Yeni endpointler:
+  - `POST /api/user/execution/position-actions/preview`
+  - `POST /api/user/execution/position-actions/submit`
+  - `GET /api/user/execution/positions`
+  - `GET /api/admin/positions-monitor`
+- Frontend:
+  - `/user/positions` (tam pozisyon yönetimi aksiyonları)
+  - `/admin/positions-monitor` (open positions + cluster/risk görünümü)
+  - `/admin/execution-queue` intent_type + position_id kolon güncellemesi
+- Explainability genişletmesi:
+  - `position_action_reason`, `risk_adjustment_reason`, `strategy_override_reason`
+- Testler:
+  - `test_close_position_intent.py` PASS
+  - `test_partial_close.py` PASS
+  - `test_reverse_position.py` PASS
+  - `test_stop_update.py` PASS
+  - testing agent raporu: `/app/test_reports/iteration_53.json`
+- Artefact üretildi:
+  - `/app/reports/execution_position_actions_validation.json`
+
+## 2026-03-12
 ### Iteration-52 — Phase-9A Strategy Meta Engine + Portfolio Risk Layer
 - Yeni servisler eklendi:
   - `portfolio_risk_service.py` (risk score, risk flags, gate decision, position adjustment)

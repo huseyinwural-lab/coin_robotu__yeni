@@ -2599,3 +2599,87 @@
 - **Cluster exposure kontrolü: ACTIVE**
 - **Strategy allocation + meta engine: ACTIVE**
 - **MOCKED API: YOK**
+
+## 39) 2026-03-12 — Iteration-53 (Execution Advanced Actions)
+
+### Hedef
+- User tarafında açık pozisyon yönetimini intent pipeline üzerinden tamamlamak.
+- Tüm pozisyon aksiyonlarını meta strategy + portfolio risk gate + explainability ile çalıştırmak.
+
+### Faz 1 — Execution Intent Genişletmesi
+- `UserExecutionIntent` modeli genişletildi:
+  - `intent_type`, `position_id`, `size`, `reduce_only`, `price`, `stop_price`, `take_profit_price`
+- Yeni intent tipleri aktif:
+  - `CLOSE_POSITION`
+  - `PARTIAL_CLOSE`
+  - `REVERSE_POSITION`
+  - `MOVE_STOP`
+  - `MOVE_TAKE_PROFIT`
+- Yeni sözleşme dosyası:
+  - `/app/contracts/execution_position_actions_contract.json`
+
+### Faz 2 — Execution Pipeline Entegrasyonu
+- Yeni akış canlı:
+  - `position_action_request -> meta_strategy_engine -> portfolio_risk_engine -> execution_preview -> execution_submit -> exchange_release`
+- Yeni endpointler:
+  - `POST /api/user/execution/position-actions/preview`
+  - `POST /api/user/execution/position-actions/submit`
+
+### Faz 3 — Position State Modeli
+- Yeni tablo/model:
+  - `positions` (`Position` modeli)
+  - alanlar: `position_id`, `symbol`, `size`, `entry_price`, `current_price`, `unrealized_pnl`, `leverage`, `strategy_id`, `cluster_id`, `created_at`, `updated_at`
+- Yeni servis:
+  - `backend/services/position_management_service.py`
+  - paper positions ile state sync + forced liquidation risk hesaplama
+
+### Faz 4 — User UI
+- Yeni sayfa:
+  - `/user/positions` (`UserPositionsPage.jsx`)
+- Gösterilen alanlar:
+  - symbol, size, entry, unrealized pnl, leverage, strategy, risk cluster
+- Aksiyonlar:
+  - close
+  - partial close
+  - reverse
+  - edit stop
+  - edit take profit
+
+### Faz 5 — Explainability Entegrasyonu
+- `decision_trace` yeni alanları:
+  - `position_action_reason`
+  - `risk_adjustment_reason`
+  - `strategy_override_reason`
+- Execution trace serialization bu alanları `none` fallback ile döndürür.
+
+### Faz 6 — Admin Panel
+- Yeni sayfa:
+  - `/admin/positions-monitor` (`AdminPositionsMonitorPage.jsx`)
+- Gösterimler:
+  - open positions
+  - cluster exposure
+  - risk level
+  - forced liquidation risk
+- `/admin/execution-queue` UI intent_type + position_id kolonları ile güncellendi.
+
+### Faz 7 — Test ve Artefact
+- Yeni testler:
+  - `test_close_position_intent.py`
+  - `test_partial_close.py`
+  - `test_reverse_position.py`
+  - `test_stop_update.py`
+- Iteration test raporu:
+  - `/app/test_reports/iteration_53.json`
+- Validasyon artefact:
+  - `/app/reports/execution_position_actions_validation.json`
+
+### Migration
+- `20260312_0029_execution_position_actions.py`
+  - execution intent action alanları
+  - decision trace explainability alanları
+  - positions tablosu
+
+### Durum
+- **Execution Advanced Actions: COMPLETE**
+- **Position Management: ACTIVE**
+- **MOCKED API: YOK**
