@@ -21,6 +21,7 @@ from core.strategies.governance import (
 )
 from core.strategy.futures.futures_strategy_engine import FuturesStrategyEngine
 from services.audit_service import create_audit_log
+from services.futures_capital_service import apply_capital_order_guard_to_decisions
 from services.futures_correlation_service import apply_cluster_order_guard_to_decisions, get_futures_cluster_risk
 from services.futures_microstructure_service import build_microstructure_status
 from services.futures_risk_monitor_service import build_futures_risk_status
@@ -469,6 +470,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         throttle_by_strategy=throttle_by_strategy,
     )
     decisions, cluster_guard_events = apply_cluster_order_guard_to_decisions(db, cache, user_id, decisions)
+    decisions, capital_guard_events, capital_snapshot = apply_capital_order_guard_to_decisions(db, cache, user_id, decisions)
 
     decisions, interaction_blocked = StrategyInteractionGuard().apply(decisions)
     exposure_tracker = StrategyExposureTracker()
@@ -685,7 +687,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         for row in decisions
         if row.get("decision") == "REJECT"
         and any(
-            reason in {"STRATEGY_DISABLED_HARD_BLOCK", "STRATEGY_THROTTLE_FREQUENCY", "CLUSTER_TRADE_REJECTED"}
+            reason in {"STRATEGY_DISABLED_HARD_BLOCK", "STRATEGY_THROTTLE_FREQUENCY", "CLUSTER_TRADE_REJECTED", "CAPITAL_TRADE_REJECTED"}
             for reason in (row.get("reasons") or [])
         )
     ]
@@ -866,6 +868,10 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         "strategy_signal_distribution": strategy_signal_distribution,
         "strategy_drift_alerts": drift.get("strategy_drift_alerts", []),
         "cluster_order_guard_events": cluster_guard_events,
+        "capital_order_guard_events": capital_guard_events,
+        "capital_budget_snapshot": (capital_snapshot.get("strategy_capital_budget") or []),
+        "capital_usage_snapshot": (capital_snapshot.get("strategy_capital_usage") or []),
+        "capital_drift_state": ((capital_snapshot.get("capital_drift") or {}).get("capital_drift_events") or []),
         "signal_feed": signal_feed,
         "decision_trace": decisions,
         "decision_trace_contract_records": decision_trace_records,
@@ -882,12 +888,14 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             + len(exposure_blocked)
             + int(governance_enforcement.get("disabled_blocked_total", 0))
             + int(governance_enforcement.get("throttled_rejected_total", 0))
-            + len(cluster_guard_events),
+            + len(cluster_guard_events)
+            + len(capital_guard_events),
             "interaction_blocked_total": len(interaction_blocked),
             "exposure_blocked_total": len(exposure_blocked),
             "governance_disabled_blocked_total": int(governance_enforcement.get("disabled_blocked_total", 0)),
             "governance_throttled_rejected_total": int(governance_enforcement.get("throttled_rejected_total", 0)),
             "cluster_rejected_total": len(cluster_guard_events),
+            "capital_rejected_total": len(capital_guard_events),
             "blocked": [*interaction_blocked, *exposure_blocked, *governance_blocked_rows],
         },
         "strategy_governance": {
@@ -906,6 +914,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             ],
             "governance_enforcement": governance_enforcement,
             "cluster_order_guard_events": cluster_guard_events,
+            "capital_order_guard_events": capital_guard_events,
         },
         "exposure_tracking": exposure,
         "strategy_attribution": attribution.get("strategy_attribution", []),
