@@ -1,0 +1,33 @@
+{
+  "iteration": 50,
+  "scope": "PG-01 Live Weekly Reporting",
+  "status": "PASS",
+  "generated_at": "2026-03-12T19:45:00Z",
+  "endpoint": "GET /api/user/reports/weekly",
+  "checks": {
+    "returns_200": true,
+    "returns_report_id": true,
+    "returns_summary": true,
+    "returns_download_links": true,
+    "empty_week_handling": true,
+    "owner_scope_isolation": true,
+    "artifact_generation": {
+      "path": "/app/artifacts/reports/{user_id}/{report_id}/",
+      "files": [
+        "weekly_performance_report.pdf",
+        "weekly_trades.csv",
+        "weekly_strategy_stats.json",
+        "report_manifest.json"
+      ],
+      "sha256_manifest": true
+    }
+  },
+  "test_evidence": {
+    "pytest": [
+      "/app/backend/tests/test_iteration50_pg01_execution_backend.py",
+      "/app/tests/test_api_contracts.py"
+    ],
+    "testing_agent_report": "/app/test_reports/iteration_50.json"
+  },
+  "mocked_api": false
+}

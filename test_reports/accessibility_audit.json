@@ -7,7 +7,9 @@
     "/user/portfolio",
     "/user/trades",
     "/user/scanner",
-    "/user/signals"
+    "/user/signals",
+    "/user/reports",
+    "/user/execute"
   ],
   "checks": {
     "keyboard_navigation": {

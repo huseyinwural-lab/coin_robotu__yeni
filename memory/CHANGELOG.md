@@ -1,6 +1,30 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-12
+### Iteration-50 — PG-01 Live Reporting + Phase-7A Execution Panel
+- PG-01 canlıya alındı:
+  - `GET /api/user/reports/weekly` artık 200 döner.
+  - Artefact üretimi: `/app/artifacts/reports/{user_id}/{report_id}/...`
+  - Dosyalar: `weekly_performance_report.pdf`, `weekly_trades.csv`, `weekly_strategy_stats.json`, `report_manifest.json`
+- Execution backend/admin kuruldu:
+  - Policy registry: `/app/config/execution_policy_registry.json`
+  - Intent API: preview/submit/cancel + presets
+  - Admin queue: `/api/admin/execution-queue` approve/reject akışları
+  - Audit event seti aktif
+- User yüzü açıldı:
+  - `/user/reports` (+ `/reports`)
+  - `/user/execute` (+ `/execute`)
+  - Scanner/Signals -> Execute deep-link aksiyonları
+- Contract/CI kalite kapıları:
+  - `ci_contract_gate.sh` + `ci_execution_contract_gate.sh`
+  - `validate_execution_contract.py`
+- Artefact raporları üretildi:
+  - `/app/test_reports/iteration_50.json`
+  - `/app/test_reports/pg01_validation_report.json`
+  - `/app/test_reports/execution_panel_validation_report.json`
+  - `/app/reports/execution_policy_audit_report.json`
+
+## 2026-03-12
 ### Phase-7 Iteration — CT + UX Closure (PG-01 Hariç)
 - Contract katmanı eklendi:
   - `/app/contracts/api_contract_snapshot.json`

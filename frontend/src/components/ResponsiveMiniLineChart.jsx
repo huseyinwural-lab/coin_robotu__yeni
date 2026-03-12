@@ -1,14 +1,5 @@
-import { useEffect, useState } from "react";
-
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-
 export const ResponsiveMiniLineChart = ({ data, xKey, yKey, title, testId }) => {
-  const [isChartReady, setIsChartReady] = useState(false);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setIsChartReady(true), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+  const maxValue = Math.max(...(data || []).map((item) => Number(item[yKey] || 0)), 1);
 
   return (
     <div
@@ -16,22 +7,26 @@ export const ResponsiveMiniLineChart = ({ data, xKey, yKey, title, testId }) => 
       data-testid={testId}
       aria-label={`${title} grafiği`}
       role="img"
-      style={{ touchAction: "pan-x pinch-zoom" }}
     >
       <p className="mb-2 text-xs uppercase tracking-widest text-slate-500" data-testid={`${testId}-title`}>{title}</p>
-      <div className="h-44 w-full" data-testid={`${testId}-canvas`}>
-        {isChartReady ? (
-          <ResponsiveContainer width="100%" height="100%" minWidth={240} minHeight={160}>
-            <LineChart data={data}>
-              <XAxis dataKey={xKey} tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey={yKey} stroke="#34d399" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="h-full w-full animate-pulse rounded bg-slate-800/60" data-testid={`${testId}-loading-placeholder`} />
-        )}
+      <div className="grid gap-2" data-testid={`${testId}-canvas`}>
+        {(data || []).map((item) => {
+          const value = Number(item[yKey] || 0);
+          const widthPct = Math.max(4, (Math.abs(value) / maxValue) * 100);
+          return (
+            <div key={`${item[xKey]}`} className="grid grid-cols-[120px_1fr_80px] items-center gap-2" data-testid={`${testId}-row`}>
+              <span className="truncate text-xs text-slate-400" data-testid={`${testId}-row-label`}>{item[xKey]}</span>
+              <div className="h-3 w-full rounded bg-slate-800" data-testid={`${testId}-row-track`}>
+                <div
+                  className={`h-3 rounded ${value >= 0 ? "bg-emerald-400" : "bg-rose-400"}`}
+                  style={{ width: `${widthPct}%` }}
+                  data-testid={`${testId}-row-bar`}
+                />
+              </div>
+              <span className="text-right text-xs text-slate-300" data-testid={`${testId}-row-value`}>{value}</span>
+            </div>
+          );
+        })}
       </div>
       <p className="mt-2 text-[11px] text-slate-500" data-testid={`${testId}-mobile-legend`}>Legend: {yKey}</p>
     </div>

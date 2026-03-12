@@ -2353,3 +2353,95 @@
 - **UX-02 COMPLETE**
 - **UX-03 COMPLETE**
 - **PG-01 IMPLEMENTATION: NOT STARTED (bilinçli kapsam dışı)**
+
+## 36) 2026-03-12 — Iteration-50 (PG-01 Live + Phase-7A Execution Panel)
+
+### Kapsam Kilidi (B / A / A / A)
+- Uygulama sırası: **Paket-1 (backend/admin)** → **Paket-2 (user)** → kalite kapanış.
+- Queue modeli: bağımsız **`user_execution_intents`**.
+- Symbol rollout: `BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT` allowlist.
+- Rapor artefact yolu: `/app/artifacts/reports/{user_id}/{report_id}/...`.
+
+### PG-01 — Weekly Reporting Canlı Geçiş
+- `/api/user/reports/weekly` 501 stub’dan canlı akışa alındı (200 response).
+- Backend servis eklendi: `backend/services/user_weekly_reporting_service.py`
+- Üretilen artefact’lar:
+  - `weekly_performance_report.pdf` (hafif text/pdf fallback)
+  - `weekly_trades.csv`
+  - `weekly_strategy_stats.json`
+  - `report_manifest.json`
+- Manifest alanları:
+  - `report_id`, `user_id`, `week_start`, `week_end`, `created_at`, `artifact_files`, `sha256`, `generator_version`
+- Owner-scope koruması:
+  - `GET /api/user/reports/weekly/download/{report_id}/{artifact_name}` user scope check ile çalışır.
+
+### Phase-7A Paket-1 — Execution Backend/Admin
+- Policy registry eklendi:
+  - `/app/config/execution_policy_registry.json`
+- Precheck service eklendi:
+  - `backend/services/execution_precheck_service.py`
+- Intent service eklendi:
+  - `backend/services/execution_intent_service.py`
+- User execution API’leri canlı:
+  - `POST /api/user/execution/intent/preview`
+  - `POST /api/user/execution/intent/submit`
+  - `POST /api/user/execution/intent/cancel`
+  - `GET  /api/user/execution/presets`
+- Kurallar aktif:
+  - preview olmadan submit reject
+  - preview hash mismatch reject
+  - submit sonrası assisted queue (direct release yok)
+- Admin operasyon API’leri:
+  - `GET /api/admin/execution-queue`
+  - `POST /api/admin/execution-queue/{intent_id}/approve`
+  - `POST /api/admin/execution-queue/{intent_id}/reject`
+  - `GET /api/admin/execution-policies`
+- Audit event seti yazılıyor:
+  - `EXECUTION_INTENT_PREVIEWED`
+  - `EXECUTION_INTENT_SUBMITTED`
+  - `EXECUTION_INTENT_REJECTED`
+  - `EXECUTION_INTENT_QUEUED`
+  - `EXECUTION_INTENT_APPROVED`
+  - `EXECUTION_ORDER_RELEASED`
+
+### Phase-7A Paket-2 — User + Deep-Link
+- Yeni sayfalar:
+  - `/user/reports` (+ alias `/reports`)
+  - `/user/execute` (+ alias `/execute`)
+- Admin sayfası:
+  - `/admin/execution-queue`
+- Scanner/Signals deep-link entegrasyonu:
+  - Open in Execute
+  - Preview Intent
+  - Queue/Follow Signal aksiyonları
+
+### Contract Compliance + CI Gate
+- Execution contract validator + gate eklendi:
+  - `backend/cli/validate_execution_contract.py`
+  - `/app/scripts/ci_execution_contract_gate.sh`
+- CI zinciri güncellendi (`ci_stage_gate.sh`, `ci_prod_gate.sh`) ve execution gate dahil edildi.
+
+### Artefact ve Raporlar
+- `/app/test_reports/iteration_50.json`
+- `/app/test_reports/pg01_validation_report.json`
+- `/app/test_reports/execution_panel_validation_report.json`
+- `/app/reports/execution_policy_audit_report.json`
+
+### Test Durumu
+- Local:
+  - `/app/tests/test_api_contracts.py`
+  - `/app/tests/test_execution_contracts.py`
+  - `backend/tests/test_iteration50_pg01_execution_backend.py`
+  - `backend/tests/test_phase6_closure_backend.py`
+  - Sonuç: PASS
+- CI scripts:
+  - `ci_formula_gate.sh` PASS
+  - `ci_contract_gate.sh` PASS
+  - `ci_execution_contract_gate.sh` PASS
+- Testing agent:
+  - `/app/test_reports/iteration_50.json` PASS
+
+### Durum
+- **PG-01 LIVE: COMPLETE**
+- **Phase-7A backend/admin: COMPLETE**
+- **Phase-7A user/deep-link: COMPLETE**
