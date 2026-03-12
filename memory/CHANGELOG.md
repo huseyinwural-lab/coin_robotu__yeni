@@ -47,3 +47,15 @@
 ### P1 Test Sonuçları
 - Self test: `15/15 PASS`
 - Testing agent: `/app/test_reports/iteration_31.json` -> **PASS** (backend + frontend + regression)
+
+## 2026-03-12
+### Phase 5.1B — Market Microstructure Guard
+- Yeni microstructure modülleri eklendi (`core/futures/microstructure/*`)
+- Yeni endpoint: `GET /api/admin/futures/microstructure/status`
+- Strategy paper decision flow microstructure guard ile birleştirildi
+- Yeni admin sayfası: `/admin/futures/microstructure-guard`
+- Risk monitor/strategy akışı regression korunarak çalışır halde bırakıldı
+
+### 5.1B Test Sonuçları
+- Self test: `31/31 PASS`
+- Testing agent: `/app/test_reports/iteration_32.json` -> **PASS**

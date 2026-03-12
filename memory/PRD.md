@@ -1155,3 +1155,67 @@
 ### Notlar
 - Bu faz **paper-only** çalışır; testnet/live execution açılmadı.
 - Full kapsamlı `Phase 5.1B Microstructure Guard` dedektör seti henüz tamamlanmadı; bu iterasyonda spread-shock tabanlı microstructure gate zincire bağlandı.
+
+## 17) 2026-03-12 — P2/Phase 5.1B Market Microstructure Guard (Tamamlandı)
+
+### Backend Microstructure katmanı
+- Yeni modüller eklendi (`core/futures/microstructure/`):
+  - `microstructure_snapshot.py`
+  - `spread_shock_detector.py`
+  - `orderbook_thinning_detector.py`
+  - `liquidity_vacuum_detector.py`
+  - `quote_stability_detector.py`
+  - `slippage_anomaly_estimator.py`
+  - `liquidity_disappearance_heuristic.py`
+  - `microstructure_risk_aggregator.py`
+  - `microstructure_gate.py`
+  - `execution_suitability_evaluator.py`
+- Yeni servis:
+  - `services/futures_microstructure_service.py`
+  - Portfolio state + symbols at risk + gate rejections + execution suitability hesaplanır.
+- Yeni admin endpoint:
+  - `GET /api/admin/futures/microstructure/status`
+
+### Strategy pipeline entegrasyonu
+- `core/strategy/futures_paper_decision_flow.py` güncellendi:
+  - Zincir artık `signal -> microstructure_guard -> risk_engine -> liquidation_gate -> adl_gate -> policy_engine -> paper_decision`
+- `core/strategy/futures/futures_strategy_engine.py` microstructure guard çıktısını decision flow’a geçirir.
+- `services/futures_strategy_service.py` microstructure statüsünü cycle içinde üretip strategy kararına bağlar.
+
+### Frontend Admin panel
+- Yeni sayfa: `/admin/futures/microstructure-guard`
+  - spread shock panel
+  - depth thinning heatmap
+  - quote stability stream
+  - slippage anomaly counters
+  - microstructure risk symbols
+  - execution suitability summary
+  - gate rejection chart
+- Navigasyona `Microstructure Guard` bağlantısı eklendi.
+
+### Observability metrikleri
+- `futures_microstructure_risk_score`
+- `futures_spread_shock_total`
+- `futures_orderbook_thinning_total`
+- `futures_liquidity_vacuum_score`
+- `futures_quote_instability_total`
+- `futures_slippage_anomaly_total`
+- `futures_microstructure_gate_rejection_total`
+- `futures_execution_suitability_state`
+
+### Test ve doğrulama
+- Yeni test dosyaları:
+  - `tests/test_spread_shock_detector.py`
+  - `tests/test_orderbook_thinning_detector.py`
+  - `tests/test_liquidity_vacuum_detector.py`
+  - `tests/test_quote_stability_detector.py`
+  - `tests/test_slippage_anomaly_estimator.py`
+  - `tests/test_microstructure_risk_aggregator.py`
+  - `tests/test_microstructure_gate.py`
+  - `tests/test_microstructure_admin_endpoint.py`
+- Self-test: `31/31 PASS`
+- Testing agent: `/app/test_reports/iteration_32.json` => **PASS** (backend + frontend + regression)
+
+### Güncel durum notu
+- Phase 5.1B tamamlandı.
+- Sistem paper-only kalmaya devam ediyor; live/testnet execution açılmadı.
