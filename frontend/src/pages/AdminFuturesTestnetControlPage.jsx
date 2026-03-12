@@ -10,17 +10,23 @@ export const AdminFuturesTestnetControlPage = () => {
   const [errorMessage, setErrorMessage] = useState("");
   const [status, setStatus] = useState(null);
   const [gate, setGate] = useState(null);
+  const [executionQuality, setExecutionQuality] = useState(null);
+  const [rolling7d, setRolling7d] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
     try {
-      const [statusResponse, gateResponse] = await Promise.all([
+      const [statusResponse, gateResponse, qualityResponse, rollingResponse] = await Promise.all([
         apiClient.get("/admin/futures/testnet/status"),
         apiClient.get("/admin/futures/testnet/release-gate"),
+        apiClient.get("/admin/futures/testnet/execution-quality"),
+        apiClient.get("/admin/futures/testnet/execution-quality/rolling-7d"),
       ]);
       setStatus(statusResponse.data || null);
       setGate(gateResponse.data || null);
+      setExecutionQuality(qualityResponse.data || null);
+      setRolling7d(rollingResponse.data || null);
     } catch (error) {
       const message = error?.response?.data?.detail || "Testnet kontrol verisi alınamadı";
       setErrorMessage(message);
@@ -36,6 +42,16 @@ export const AdminFuturesTestnetControlPage = () => {
 
   const retryMatrix = useMemo(() => status?.retry_policy || [], [status]);
   const preflightChecks = useMemo(() => status?.preflight_template?.checks || [], [status]);
+  const gateReasonTrend = useMemo(() => executionQuality?.gate_reason_trend_7d || [], [executionQuality]);
+  const driftAlerts = useMemo(() => executionQuality?.symbol_drift_alerts || [], [executionQuality]);
+  const falseCompare = useMemo(() => executionQuality?.false_allow_reject_comparison_by_layer || [], [executionQuality]);
+  const checklist15 = useMemo(() => {
+    const qualityList = executionQuality?.architecture_checklist_15 || [];
+    if (qualityList.length > 0) {
+      return qualityList;
+    }
+    return status?.architecture_checklist_15 || [];
+  }, [executionQuality, status]);
 
   return (
     <section className="space-y-4" data-testid="admin-futures-testnet-control-page">
@@ -175,6 +191,77 @@ export const AdminFuturesTestnetControlPage = () => {
               <h3 className="text-lg font-bold" data-testid="testnet-parity-title">Paper/Testnet Parity</h3>
               <p className="text-sm" data-testid="testnet-parity-drift-value">drift_bps: {status?.parity_check?.drift_bps ?? 0}</p>
               <p className="text-sm" data-testid="testnet-parity-status-value">status: {status?.parity_check?.status || "PASS"}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4" data-testid="testnet-execution-quality-summary-grid">
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="execution-quality-reject-rate-card">
+              <p className="text-xs uppercase">Reject Rate</p>
+              <p className="text-xl font-bold" data-testid="execution-quality-reject-rate-value">{executionQuality?.reject_rate ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="execution-quality-latency-card">
+              <p className="text-xs uppercase">Fill Latency (ms)</p>
+              <p className="text-xl font-bold" data-testid="execution-quality-latency-value">{executionQuality?.fill_latency_ms ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="execution-quality-partial-fill-card">
+              <p className="text-xs uppercase">Partial Fill Rate</p>
+              <p className="text-xl font-bold" data-testid="execution-quality-partial-fill-value">{executionQuality?.partial_fill_quality?.partial_fill_rate ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="execution-quality-rolling-score-card">
+              <p className="text-xs uppercase">Rolling 7d Tuning Score</p>
+              <p className="text-xl font-bold" data-testid="execution-quality-rolling-score-value">{executionQuality?.rolling_7d_tuning_score?.score ?? rolling7d?.latest_score ?? 0}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2" data-testid="execution-quality-trend-grid">
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="execution-gate-reason-trend-panel">
+              <h3 className="text-lg font-bold" data-testid="execution-gate-reason-trend-title">Gate Reason Trend (7d)</h3>
+              <div className="mt-2 space-y-1" data-testid="execution-gate-reason-trend-list">
+                {gateReasonTrend.map((item, index) => (
+                  <p key={`${item.date}-${index}`} className="text-xs" data-testid={`execution-gate-reason-trend-item-${index}`}>
+                    {item.date}: {JSON.stringify(item.reasons || {})}
+                  </p>
+                ))}
+                {gateReasonTrend.length === 0 && <p className="text-xs" data-testid="execution-gate-reason-trend-empty">Trend verisi yok.</p>}
+              </div>
+            </div>
+
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="execution-symbol-drift-alert-panel">
+              <h3 className="text-lg font-bold" data-testid="execution-symbol-drift-alert-title">Symbol Drift Alarmı</h3>
+              <div className="mt-2 space-y-1" data-testid="execution-symbol-drift-alert-list">
+                {driftAlerts.map((item, index) => (
+                  <p key={`${item.symbol}-${index}`} className="text-xs" data-testid={`execution-symbol-drift-alert-item-${index}`}>
+                    {item.symbol}: drift={item.avg_drift_bps}bps ({item.severity})
+                  </p>
+                ))}
+                {driftAlerts.length === 0 && <p className="text-xs" data-testid="execution-symbol-drift-alert-empty">Drift alarmı yok.</p>}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2" data-testid="execution-diagnostics-comparison-grid">
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="execution-false-compare-panel">
+              <h3 className="text-lg font-bold" data-testid="execution-false-compare-title">False Allow / False Reject Karşılaştırma</h3>
+              <div className="mt-2 space-y-1" data-testid="execution-false-compare-list">
+                {falseCompare.map((item, index) => (
+                  <p key={`${item.layer}-${index}`} className="text-xs" data-testid={`execution-false-compare-item-${index}`}>
+                    {item.layer}: {item.count ?? `${item.false_allow}/${item.false_reject}`}
+                  </p>
+                ))}
+                {falseCompare.length === 0 && <p className="text-xs" data-testid="execution-false-compare-empty">Karşılaştırma verisi yok.</p>}
+              </div>
+            </div>
+
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="execution-architecture-checklist-panel">
+              <h3 className="text-lg font-bold" data-testid="execution-architecture-checklist-title">Futures’ta En Sık 15 Mimari Hata — Checklist</h3>
+              <div className="mt-2 space-y-1" data-testid="execution-architecture-checklist-list">
+                {checklist15.map((item, index) => (
+                  <p key={`${item.check}-${index}`} className="text-xs" data-testid={`execution-architecture-check-item-${index}`}>
+                    {item.id}. {item.check}: {String(item.pass)}
+                  </p>
+                ))}
+                {checklist15.length === 0 && <p className="text-xs" data-testid="execution-architecture-checklist-empty">Checklist verisi yok.</p>}
+              </div>
             </div>
           </div>
         </>

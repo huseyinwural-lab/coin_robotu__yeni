@@ -10,6 +10,12 @@ from core.execution.futures_slippage_tracker import FuturesSlippageTracker
 from core.execution.futures_testnet_release_gate import FuturesTestnetReleaseGate
 from core.observability.futures_execution_audit import build_futures_execution_audit_event
 from models import TestnetExecutionLog, UserExchangeSetting
+from services.futures_execution_quality_service import (
+    build_execution_quality_rolling_7d,
+    build_execution_quality_snapshot,
+    enrich_with_architecture_checklist,
+)
+from services.futures_strategy_service import get_futures_decision_diagnostics
 from services.live_mode_service import adapter, get_or_create_live_config, release_gate_view
 
 
@@ -57,11 +63,12 @@ def build_testnet_release_gate_status(db: Session) -> dict:
     }
 
 
-def build_testnet_status(db: Session) -> dict:
+def build_testnet_status(db: Session, cache, user_id: str) -> dict:
     connectivity = adapter.ping()
     gate = build_testnet_release_gate_status(db)
     config = get_or_create_live_config(db)
     latest = _latest_execution_row(db)
+    decision_diagnostics = get_futures_decision_diagnostics(db, cache, user_id, refresh=False)
 
     expected_price = float(getattr(latest, "expected_price", 0.0) or 0.0) if latest else 0.0
     fill_price = float(getattr(latest, "fill_price", 0.0) or 0.0) if latest else 0.0
@@ -125,7 +132,26 @@ def build_testnet_status(db: Session) -> dict:
         },
     )
 
-    return {
+    execution_quality = build_execution_quality_snapshot(
+        db,
+        user_id,
+        days=7,
+        false_allow_count=int(decision_diagnostics.get("false_allow_count", 0)),
+        false_reject_count=int(decision_diagnostics.get("false_reject_count", 0)),
+    )
+
+    layer_map = decision_diagnostics.get("decision_layer_distribution") or {}
+    false_allow_reject_comparison_by_layer = [
+        {
+            "layer": layer,
+            "false_allow": int(layer_map.get(layer, 0)) if layer == "GATE" else 0,
+            "false_reject": int(layer_map.get(layer, 0)) if layer != "GATE" else 0,
+        }
+        for layer in sorted(layer_map.keys())
+    ]
+    execution_quality["false_allow_reject_comparison_by_layer"] = false_allow_reject_comparison_by_layer
+
+    snapshot = {
         "default_mode": "paper",
         "testnet_enabled": bool(config.live_mode_enabled),
         "safe_mode_enabled": bool(config.safe_mode_enabled),
@@ -143,6 +169,38 @@ def build_testnet_status(db: Session) -> dict:
         "reconciler_state": str(getattr(latest, "status", "unknown_needs_reconcile") if latest else "unknown_needs_reconcile").lower(),
         "parity_check": parity,
         "secret_isolation": gate["secret_isolation"],
+        "execution_quality": execution_quality,
         "audit_sample": audit_sample,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    return enrich_with_architecture_checklist(snapshot)
+
+
+def build_testnet_execution_quality(db: Session, cache, user_id: str) -> dict:
+    decision_diagnostics = get_futures_decision_diagnostics(db, cache, user_id, refresh=False)
+    snapshot = build_execution_quality_snapshot(
+        db,
+        user_id,
+        days=7,
+        false_allow_count=int(decision_diagnostics.get("false_allow_count", 0)),
+        false_reject_count=int(decision_diagnostics.get("false_reject_count", 0)),
+    )
+    snapshot["false_allow_reject_comparison_by_layer"] = [
+        {
+            "layer": layer,
+            "count": int(count),
+        }
+        for layer, count in (decision_diagnostics.get("decision_layer_distribution") or {}).items()
+    ]
+    snapshot["architecture_checklist_15"] = []
+    return snapshot
+
+
+def build_testnet_execution_quality_rolling_7d(db: Session, cache, user_id: str) -> dict:
+    decision_diagnostics = get_futures_decision_diagnostics(db, cache, user_id, refresh=False)
+    return build_execution_quality_rolling_7d(
+        db,
+        user_id,
+        false_allow_count=int(decision_diagnostics.get("false_allow_count", 0)),
+        false_reject_count=int(decision_diagnostics.get("false_reject_count", 0)),
+    )
