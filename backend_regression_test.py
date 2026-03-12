@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 
 # Get backend URL from environment variable
-BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://portfolio-pro-494.preview.emergentagent.com")
+BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://portfolio-engine-6.preview.emergentagent.com")
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials
