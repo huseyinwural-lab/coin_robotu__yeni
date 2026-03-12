@@ -25,6 +25,10 @@ class Settings:
     ]
     default_admin_email: str | None = os.environ.get("DEFAULT_ADMIN_EMAIL")
     default_admin_password: str | None = os.environ.get("DEFAULT_ADMIN_PASSWORD")
+    scaling_weight_pnl_stability: float = float(os.environ.get("SCALING_WEIGHT_PNL_STABILITY", "0.25"))
+    scaling_weight_slippage_impact: float = float(os.environ.get("SCALING_WEIGHT_SLIPPAGE_IMPACT", "0.25"))
+    scaling_weight_execution_quality: float = float(os.environ.get("SCALING_WEIGHT_EXECUTION_QUALITY", "0.25"))
+    scaling_weight_liquidity_stress: float = float(os.environ.get("SCALING_WEIGHT_LIQUIDITY_STRESS", "0.25"))
 
 
 settings = Settings()

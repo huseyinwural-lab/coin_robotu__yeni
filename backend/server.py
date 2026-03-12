@@ -13,6 +13,7 @@ from routers import (
     admin_futures_capital,
     admin_futures_tail_risk,
     admin_futures_live_readiness,
+    admin_futures_scaling_validation,
     admin_futures_strategy_analytics,
     admin_futures_decision_diagnostics,
     admin_futures_leverage_status,
@@ -110,6 +111,7 @@ api_router.include_router(admin_futures_correlation.router)
 api_router.include_router(admin_futures_capital.router)
 api_router.include_router(admin_futures_tail_risk.router)
 api_router.include_router(admin_futures_live_readiness.router)
+api_router.include_router(admin_futures_scaling_validation.router)
 api_router.include_router(admin_phase3.router)
 api_router.include_router(admin_strategy_risk_capital.router)
 api_router.include_router(admin_strategy_observability.router)
