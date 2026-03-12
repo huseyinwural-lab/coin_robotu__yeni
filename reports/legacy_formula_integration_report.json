@@ -1,0 +1,63 @@
+{
+  "report_version": "v1.0.0",
+  "generated_at": "2026-03-12T18:33:02.453741+00:00",
+  "total_legacy_formulas": 7,
+  "rows": [
+    {
+      "legacy_formula_id": "volatility_breakout_v2",
+      "mapped_strategy": "volatility",
+      "integration_status": "SHADOW_INTEGRATED",
+      "performance_tag": "shadow_validation_pending",
+      "source_origin": "TRADER1.mtx, BILIMSELCALISMA1",
+      "migration_decision": "kept_shadow_only"
+    },
+    {
+      "legacy_formula_id": "adaptive_level_breakout_v2",
+      "mapped_strategy": "breakout",
+      "integration_status": "SHADOW_INTEGRATED",
+      "performance_tag": "shadow_validation_pending",
+      "source_origin": "TRADER2.mtx, BILIMSELCALISMA2",
+      "migration_decision": "kept_shadow_only"
+    },
+    {
+      "legacy_formula_id": "momentum_volume_breakout_v3",
+      "mapped_strategy": "momentum",
+      "integration_status": "SHADOW_INTEGRATED",
+      "performance_tag": "shadow_validation_pending",
+      "source_origin": "TRADER3.mtx, BILIMSELCALISMA3",
+      "migration_decision": "kept_shadow_only"
+    },
+    {
+      "legacy_formula_id": "oscillator_composite_reversion_v2",
+      "mapped_strategy": "mean_reversion",
+      "integration_status": "SHADOW_INTEGRATED",
+      "performance_tag": "shadow_validation_pending",
+      "source_origin": "TRADER4.mtx, BILIMSELCALISMA4",
+      "migration_decision": "kept_shadow_only"
+    },
+    {
+      "legacy_formula_id": "crypto_universe_prefilter_v1",
+      "mapped_strategy": "market_neutral",
+      "integration_status": "EXCLUDED",
+      "performance_tag": "not_applicable",
+      "source_origin": "kripto-tarama.mex",
+      "migration_decision": "excluded_non_strategy_role"
+    },
+    {
+      "legacy_formula_id": "volatility_contraction_prefilter",
+      "mapped_strategy": "market_neutral",
+      "integration_status": "EXCLUDED",
+      "performance_tag": "not_applicable",
+      "source_origin": "TRADER-FORMUL.mex",
+      "migration_decision": "excluded_non_strategy_role"
+    },
+    {
+      "legacy_formula_id": "relative_strength_cluster_scanner_v2",
+      "mapped_strategy": "market_neutral",
+      "integration_status": "EXCLUDED",
+      "performance_tag": "not_applicable",
+      "source_origin": "2018_MART_IST.mex, 2018-MAYIS-IST.mex",
+      "migration_decision": "excluded_non_strategy_role"
+    }
+  ]
+}

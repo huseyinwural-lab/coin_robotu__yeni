@@ -1,0 +1,79 @@
+{
+  "registry_version": "phase6_postclose_v1",
+  "generated_at": "2026-03-12T18:33:02.453684+00:00",
+  "source": [
+    "/app/backend/core/portfolio/strategy_registry.py",
+    "/app/backend/core/strategies/legacy/legacy_formula_registry.json"
+  ],
+  "active_formulas": [
+    {
+      "formula_id": "adaptive_level_breakout_v2",
+      "source_type": "legacy_formula",
+      "status": "DISABLED",
+      "role": "strategy",
+      "canonical_name": "adaptive_level_breakout_v2",
+      "strategy_class": "breakout"
+    },
+    {
+      "formula_id": "breakout_v1",
+      "source_type": "native",
+      "status": "ACTIVE",
+      "role": "strategy",
+      "canonical_name": "breakout_v1",
+      "strategy_class": "breakout"
+    },
+    {
+      "formula_id": "mean_reversion_v1",
+      "source_type": "native",
+      "status": "ACTIVE",
+      "role": "strategy",
+      "canonical_name": "mean_reversion_v1",
+      "strategy_class": "mean_reversion"
+    },
+    {
+      "formula_id": "momentum_volume_breakout_v3",
+      "source_type": "legacy_formula",
+      "status": "DISABLED",
+      "role": "strategy",
+      "canonical_name": "momentum_volume_breakout_v3",
+      "strategy_class": "momentum"
+    },
+    {
+      "formula_id": "oscillator_composite_reversion_v2",
+      "source_type": "legacy_formula",
+      "status": "DISABLED",
+      "role": "strategy",
+      "canonical_name": "oscillator_composite_reversion_v2",
+      "strategy_class": "mean_reversion"
+    },
+    {
+      "formula_id": "trend_follow_v1",
+      "source_type": "native",
+      "status": "ACTIVE",
+      "role": "strategy",
+      "canonical_name": "trend_follow_v1",
+      "strategy_class": "market_neutral"
+    },
+    {
+      "formula_id": "volatility_breakout_v2",
+      "source_type": "legacy_formula",
+      "status": "DISABLED",
+      "role": "strategy",
+      "canonical_name": "volatility_breakout_v2",
+      "strategy_class": "volatility"
+    }
+  ],
+  "allowed_formula_ids": [
+    "adaptive_level_breakout_v2",
+    "breakout_v1",
+    "mean_reversion_v1",
+    "momentum_volume_breakout_v3",
+    "oscillator_composite_reversion_v2",
+    "trend_follow_v1",
+    "volatility_breakout_v2"
+  ],
+  "blocked_namespaces": [
+    "/app/research",
+    "research"
+  ]
+}

@@ -1,0 +1,30 @@
+[
+  {
+    "formula_id": "crypto_universe_prefilter_v1",
+    "exclusion_reason": "non_trade_strategy_role",
+    "risk_class": "operational",
+    "source_registry": "/app/backend/core/strategies/legacy/legacy_formula_registry.json",
+    "timestamp": "2026-03-12T18:33:02.453699+00:00"
+  },
+  {
+    "formula_id": "volatility_contraction_prefilter",
+    "exclusion_reason": "non_trade_strategy_role",
+    "risk_class": "operational",
+    "source_registry": "/app/backend/core/strategies/legacy/legacy_formula_registry.json",
+    "timestamp": "2026-03-12T18:33:02.453699+00:00"
+  },
+  {
+    "formula_id": "relative_strength_cluster_scanner_v2",
+    "exclusion_reason": "scanner_output_not_direct_execution",
+    "risk_class": "latency_sensitive",
+    "source_registry": "/app/backend/core/strategies/legacy/legacy_formula_registry.json",
+    "timestamp": "2026-03-12T18:33:02.453699+00:00"
+  },
+  {
+    "formula_id": "relative_strength_cluster_scanner_v2_alt",
+    "exclusion_reason": "alias_not_canonical",
+    "risk_class": "governance",
+    "source_registry": "derived_from_registry_consistency_rule",
+    "timestamp": "2026-03-12T18:33:02.453699+00:00"
+  }
+]

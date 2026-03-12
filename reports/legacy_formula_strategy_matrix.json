@@ -1,0 +1,26 @@
+{
+  "matrix_version": "v1.0.0",
+  "generated_at": "2026-03-12T18:33:02.453733+00:00",
+  "formula_to_strategy": {
+    "volatility_breakout_v2": "volatility",
+    "adaptive_level_breakout_v2": "breakout",
+    "momentum_volume_breakout_v3": "momentum",
+    "oscillator_composite_reversion_v2": "mean_reversion"
+  },
+  "strategy_classes": {
+    "momentum": [
+      "momentum_volume_breakout_v3"
+    ],
+    "mean_reversion": [
+      "oscillator_composite_reversion_v2"
+    ],
+    "breakout": [
+      "adaptive_level_breakout_v2"
+    ],
+    "volatility": [
+      "volatility_breakout_v2"
+    ],
+    "market_neutral": []
+  },
+  "orphan_formulas": []
+}

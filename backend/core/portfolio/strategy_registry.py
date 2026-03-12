@@ -1,3 +1,4 @@
+from core.execution.production_formula_gate import filter_catalog_by_active_registry
 from core.strategies.futures_breakout_v1 import FuturesBreakoutV1
 from core.strategies.futures_mean_reversion_v1 import FuturesMeanReversionV1
 from core.strategies.legacy import (
@@ -44,7 +45,7 @@ class FuturesTrendFollowAdapter:
         }
 
 
-def build_strategy_catalog() -> dict[str, dict]:
+def _build_catalog_unfiltered() -> dict[str, dict]:
     return {
         "trend_follow_v1": {
             "instance": FuturesTrendFollowAdapter(),
@@ -109,13 +110,18 @@ def build_strategy_catalog() -> dict[str, dict]:
     }
 
 
+def build_strategy_catalog() -> dict[str, dict]:
+    catalog = _build_catalog_unfiltered()
+    return filter_catalog_by_active_registry(catalog)
+
+
 def build_strategy_registry() -> dict:
     catalog = build_strategy_catalog()
     return {strategy_id: item["instance"] for strategy_id, item in catalog.items()}
 
 
 def get_strategy_metadata_map() -> dict[str, dict]:
-    catalog = build_strategy_catalog()
+    catalog = _build_catalog_unfiltered()
     metadata: dict[str, dict] = {}
     for strategy_id, item in catalog.items():
         metadata[strategy_id] = {

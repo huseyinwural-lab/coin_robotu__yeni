@@ -1,0 +1,22 @@
+{
+  "allowed_readers": [
+    "backend.services.research_runner_service",
+    "backend.cli.generate_research_legacy_artifacts"
+  ],
+  "denied_modules": [
+    "backend.core.*",
+    "backend.routers.*",
+    "backend.services.*"
+  ],
+  "allowlist_exceptions": [
+    "backend.services.research_runner_service",
+    "backend.cli.generate_research_legacy_artifacts",
+    "backend.cli.production_formula_gate_check"
+  ],
+  "registry_source": [
+    "/app/backend/core/strategies/legacy/legacy_formula_registry.json",
+    "/app/strategies/active_formula_registry.json"
+  ],
+  "generation_timestamp": "2026-03-12T18:33:02.453744+00:00",
+  "isolation_policy_version": "v1.0.0"
+}
