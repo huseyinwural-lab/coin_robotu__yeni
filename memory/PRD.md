@@ -2771,3 +2771,43 @@
 - **Hedge suggestion engine: ACTIVE**
 - **Simulation mode + manual override audit: ACTIVE**
 - **MOCKED API: YOK**
+
+## 41) 2026-03-12 — Iteration-56 (Platform Kapanış Paketi Faz-1A: Admin Operational Visibility)
+
+### Kapsam
+- Kullanıcı onayı ile Faz-1 öncelik sırası uygulandı:
+  1. Positions Monitor
+  2. Portfolio Risk
+  3. Execution Queue
+- Teslim formatı: Faz sonunda ara rapor + test.
+
+### Frontend İyileştirmeleri
+- `AdminPositionsMonitorPage.jsx`
+  - Loading / broken / warning / empty state ayrımı netleştirildi.
+  - Refresh aksiyonu eklendi.
+  - Cluster exposure boş durum mesajı ve positions table empty row eklendi.
+  - Son güncelleme zamanı görünürlüğü eklendi.
+- `AdminPortfolioRiskPage.jsx`
+  - 3 API çağrısında (limits/clusters/dashboard) sağlam hata yönetimi.
+  - Broken state + retry akışı eklendi.
+  - Refresh aksiyonu eklendi.
+  - Cluster tablosu için empty row, exposure listeleri için empty state, risk alerts paneli eklendi.
+  - Cluster formu için zorunlu alan validasyonları eklendi.
+- `AdminExecutionQueuePage.jsx`
+  - `status_filter` (all/QUEUED/RELEASED/REJECTED/CANCELLED) UI eklendi.
+  - Queue summary kartları eklendi (Toplam/Queued/Rejected/Risk-Flag).
+  - Loading / broken / warning / empty state ayrımı netleştirildi.
+  - Created timestamp kolonu eklendi.
+  - Approve/Reject sırasında işlemdeki satır için buton disable davranışı eklendi.
+- `PanelLayout.jsx`
+  - Admin sol menü için scroll davranışı güçlendirildi (`aside` flex-col + overflow-hidden, nav overflow-y-auto).
+
+### Test Sonuçları
+- Testing agent raporu: `/app/test_reports/iteration_56.json`
+  - Backend: **21/21 PASS**
+  - Frontend: ilgili admin sayfaları + sidebar scroll davranışı **PASS**
+- Smoke screenshot: `phase1-admin-smoke.png` (admin positions monitor görüntüsü alındı).
+
+### Durum
+- **Platform Kapanış Paketi Faz-1A (öncelikli admin görünürlük seti): COMPLETE**
+- **MOCKED API: YOK**
