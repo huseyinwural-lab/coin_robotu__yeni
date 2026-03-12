@@ -96,70 +96,70 @@ export const AdminCrossDashboardConsistencyPage = () => {
       const inventory = inventoryRes.data?.panels || [];
       const contracts = inventoryRes.data?.contracts || {};
 
-      const contractChecksByPanel = await Promise.all(
-        inventory.map(async (panel) => {
-          const endpointChecks = await Promise.all(
-            (panel.api_endpoints || []).map(async (endpoint) => {
-              const contract = contracts[endpoint] || null;
-              const requestOptions = endpointCallOptions[endpoint] || {};
-              const startedAt = Date.now();
-              try {
-                const response = await apiClient.get(endpoint, {
-                  timeout: 10000,
-                  ...requestOptions,
-                });
-                const payload = response?.data;
-                const contractValidation = validateContract(payload, contract);
-                const isEmpty = deriveEmptyState(payload, contract?.empty_rule);
-                const runtimeState = contractValidation.hasContractError ? "broken" : isEmpty ? "empty" : "success";
-                return {
-                  panelKey: panel.panel_key,
-                  panelTitle: panel.title,
-                  endpoint,
-                  runtimeState,
-                  durationMs: Date.now() - startedAt,
-                  statusCode: response.status,
-                  timeout: false,
-                  ...contractValidation,
-                };
-              } catch (error) {
-                const isTimeout = error?.code === "ECONNABORTED";
-                return {
-                  panelKey: panel.panel_key,
-                  panelTitle: panel.title,
-                  endpoint,
-                  runtimeState: "broken",
-                  durationMs: Date.now() - startedAt,
-                  statusCode: error?.response?.status || null,
-                  timeout: isTimeout,
-                  missingFields: [],
-                  nullFields: [],
-                  fieldMismatches: [],
-                  hasContractError: true,
-                  errorMessage: error?.response?.data?.detail || error?.message || "endpoint_error",
-                };
-              }
-            })
-          );
+      const contractChecksByPanel = [];
 
-          const hasBroken = endpointChecks.some((item) => item.runtimeState === "broken");
-          const hasSuccess = endpointChecks.some((item) => item.runtimeState === "success");
-          const runtimeState = hasBroken ? "broken" : hasSuccess ? "success" : "empty";
-          const contractPass = endpointChecks.every((item) => !item.hasContractError);
-          const overallPass = Boolean(panel.state_contract_pass) && contractPass && runtimeState !== "broken";
+      for (const panel of inventory) {
+        const endpointChecks = await Promise.all(
+          (panel.api_endpoints || []).map(async (endpoint) => {
+            const contract = contracts[endpoint] || null;
+            const requestOptions = endpointCallOptions[endpoint] || {};
+            const startedAt = Date.now();
+            try {
+              const response = await apiClient.get(endpoint, {
+                timeout: 15000,
+                ...requestOptions,
+              });
+              const payload = response?.data;
+              const contractValidation = validateContract(payload, contract);
+              const isEmpty = deriveEmptyState(payload, contract?.empty_rule);
+              const runtimeState = contractValidation.hasContractError ? "broken" : isEmpty ? "empty" : "success";
+              return {
+                panelKey: panel.panel_key,
+                panelTitle: panel.title,
+                endpoint,
+                runtimeState,
+                durationMs: Date.now() - startedAt,
+                statusCode: response.status,
+                timeout: false,
+                ...contractValidation,
+              };
+            } catch (error) {
+              const isTimeout = error?.code === "ECONNABORTED";
+              return {
+                panelKey: panel.panel_key,
+                panelTitle: panel.title,
+                endpoint,
+                runtimeState: "broken",
+                durationMs: Date.now() - startedAt,
+                statusCode: error?.response?.status || null,
+                timeout: isTimeout,
+                missingFields: [],
+                nullFields: [],
+                fieldMismatches: [],
+                hasContractError: true,
+                errorMessage: error?.response?.data?.detail || error?.message || "endpoint_error",
+              };
+            }
+          })
+        );
 
-          return {
-            panel: {
-              ...panel,
-              runtime_state: runtimeState,
-              contract_pass: contractPass,
-              overall_pass: overallPass,
-              endpoint_count: endpointChecks.length,
-            },
-            endpointChecks,
-          };
-        })
-      );
+        const hasBroken = endpointChecks.some((item) => item.runtimeState === "broken");
+        const hasSuccess = endpointChecks.some((item) => item.runtimeState === "success");
+        const runtimeState = hasBroken ? "broken" : hasSuccess ? "success" : "empty";
+        const contractPass = endpointChecks.every((item) => !item.hasContractError);
+        const overallPass = Boolean(panel.state_contract_pass) && contractPass && runtimeState !== "broken";
+
+        contractChecksByPanel.push({
+          panel: {
+            ...panel,
+            runtime_state: runtimeState,
+            contract_pass: contractPass,
+            overall_pass: overallPass,
+            endpoint_count: endpointChecks.length,
+          },
+          endpointChecks,
+        });
+      }
 
       setPanelRows(contractChecksByPanel.map((item) => item.panel));
       setContractRows(contractChecksByPanel.flatMap((item) => item.endpointChecks));

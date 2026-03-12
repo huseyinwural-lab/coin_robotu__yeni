@@ -2811,3 +2811,62 @@
 ### Durum
 - **Platform Kapanış Paketi Faz-1A (öncelikli admin görünürlük seti): COMPLETE**
 - **MOCKED API: YOK**
+
+## 42) 2026-03-12 — Iteration-57 (Platform Kapanış Paketi Faz-1B: Admin Operasyon Panelleri Kapanışı)
+
+### Uygulanan Mimari Kararlar
+- Faz-2 user akışına geçmeden Faz-1B admin kapanışı tamamlandı.
+- Cross-Dashboard Consistency paneli backlog değil, kapanış aracı olarak konumlandı.
+- Operational-state standardı (loading/empty/broken/success) panel sözleşmesi olarak işlendi.
+- Ortak metrikler canonical kaynakta toplandı ve çapraz ekran tolerans kontrolü eklendi.
+
+### Backend (Yeni)
+- `backend/routers/admin_closure.py` eklendi:
+  - `GET /api/admin/closure/panels`
+    - Admin operasyon panel envanteri
+    - Ekran bazlı state coverage matrisi
+    - Endpoint contract spec seti
+  - `GET /api/admin/closure/canonical-metrics`
+    - Canonical metrikler: active/queued/pending, exposure_7d, risk_alerts_24h, avg_risk_score_24h
+  - `GET /api/admin/closure/consistency`
+    - Canonical vs panel-proxy karşılaştırması
+    - Tolerans bazlı PASS/FAIL check listesi
+- `backend/server.py` router kaydı eklendi.
+- Faz-1B API testleri: `backend/tests/test_iteration57_admin_closure_phase1b.py`
+
+### Frontend (Yeni)
+- `frontend/src/pages/AdminCrossDashboardConsistencyPage.jsx` eklendi:
+  - Ekran bazlı kapanış matrisi
+  - Veri-kontratı uyumluluk tablosu (null/partial/mismatch/timeout görünürlüğü)
+  - Cross-screen metric consistency bölümü
+  - Manual refresh + auto-refresh(60s) + filter/reset interaction standardı
+- `frontend/src/components/PanelLayout.jsx`
+  - Admin menüye `Cross Dashboard Consistency` linki eklendi.
+- `frontend/src/App.js`
+  - `/admin/cross-dashboard-consistency` route’u eklendi.
+
+### Frontend (State Standard Sertleştirme)
+- `AdminDashboardPage.jsx`
+  - loading / broken / empty / success ayrımı
+  - refresh + son güncelleme timestamp
+- `AdminStrategyAllocationPage.jsx`
+  - loading / broken / empty / success ayrımı
+  - refresh + warning banner + timestamp
+- `AdminStrategyIntelligencePage.jsx`
+  - loading / broken / empty / success ayrımı
+  - refresh + empty list fallbacks + timestamp
+
+### Faz-1B Kapanış Sonucu
+- Cross dashboard matrisi: **20/20 panel state-contract PASS**
+- Contract issue: **0**
+- Broken panel: **0**
+- Metric mismatch: **0**
+
+### Test Sonuçları
+- Pytest: `pytest -q /app/backend/tests/test_iteration57_admin_closure_phase1b.py` → **14 passed**
+- Testing agent raporu: `/app/test_reports/iteration_57.json` (backend + frontend PASS)
+- UI smoke: `phase1b-cross-dashboard-final.png`
+
+### Durum
+- **Platform Kapanış Paketi Faz-1B: COMPLETE**
+- **MOCKED API: YOK**

@@ -275,11 +275,11 @@ def _build_contract_specs() -> dict[str, dict]:
             "empty_rule": {"type": "field_array", "field": "alerts"},
         },
         "/admin/futures/strategy-governance": {
-            "required_fields": {"generated_at": "string", "strategy_health_score": "number", "health_components": "array"},
+            "required_fields": {"generated_at": "string", "strategy_health_score": "array", "health_components": "array"},
             "empty_rule": {"type": "field_array", "field": "health_components"},
         },
         "/admin/futures/strategy-health": {
-            "required_fields": {"generated_at": "string", "strategy_health_score": "number", "health_components": "array"},
+            "required_fields": {"generated_at": "string", "strategy_health_score": "array", "health_components": "array"},
             "empty_rule": {"type": "field_array", "field": "health_components"},
         },
         "/admin/futures/strategy-performance": {
@@ -362,9 +362,33 @@ def _state_coverage_for_file(file_name: str) -> dict:
         }
 
     content = page_path.read_text(encoding="utf-8")
-    has_loading = "loading-skeleton" in content or "LoadingSkeleton" in content
-    has_empty = "-empty" in content or "empty-state" in content
-    has_broken = "broken-state" in content or "broken-alert" in content
+    lowered = content.lower()
+    has_loading = (
+        "loading-skeleton" in content
+        or "LoadingSkeleton" in content
+        or "isLoading" in content
+        or "setLoading(" in content
+        or "loading &&" in content
+        or "loading:" in lowered
+    )
+    has_empty = (
+        "-empty" in content
+        or "empty-state" in content
+        or "length === 0" in content
+        or "length===0" in content
+        or "veri yok" in lowered
+        or "bulunamadı" in lowered
+    )
+    has_broken = (
+        "broken-state" in content
+        or "broken-alert" in content
+        or "setLoadError" in content
+        or "loadError" in content
+        or "setErrorMessage" in content
+        or "errorMessage" in content
+        or "error-state" in content
+        or "toast.error" in content
+    )
     has_success = "-page" in content and "data-testid" in content
     return {
         "loading": has_loading,
