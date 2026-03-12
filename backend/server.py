@@ -44,6 +44,7 @@ from routers import (
     admin_execution,
     user_approvals,
     user_execution,
+    user_explainability,
     user_platform,
     user_reports,
     user_scanner_signals,
@@ -93,6 +94,7 @@ api_router.include_router(user_risk.router)
 api_router.include_router(user_platform.router)
 api_router.include_router(user_scanner_signals.router)
 api_router.include_router(user_execution.router)
+api_router.include_router(user_explainability.router)
 api_router.include_router(user_reports.router)
 api_router.include_router(strategy_templates.router)
 api_router.include_router(strategy_domain.router)

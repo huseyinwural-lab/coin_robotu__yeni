@@ -1,0 +1,137 @@
+{
+  "version": "reason_codes_v1",
+  "codes": {
+    "TREND_ALIGNMENT": {
+      "title": "Trend Alignment",
+      "description": "Signal, trend doğrulaması ile hizalı."
+    },
+    "BREAKOUT_SIGNAL": {
+      "title": "Breakout Signal",
+      "description": "Fiyat, belirlenen kırılım seviyesini aştı."
+    },
+    "MEAN_REVERSION_ZONE": {
+      "title": "Mean Reversion Zone",
+      "description": "Fiyat ortalamaya dönüş bölgesinde."
+    },
+    "VOLATILITY_EXPANSION": {
+      "title": "Volatility Expansion",
+      "description": "Volatilite genişlemesi sinyali tespit edildi."
+    },
+    "RISK_LIMIT_REJECT": {
+      "title": "Risk Limit Reject",
+      "description": "İşlem risk limiti nedeniyle reddedildi."
+    },
+    "LEVERAGE_LIMIT_REACHED": {
+      "title": "Leverage Limit Reached",
+      "description": "Leverage policy üst sınırını aşıyor."
+    },
+    "CORRELATION_RISK": {
+      "title": "Correlation Risk",
+      "description": "Portföy korelasyon riski yükseldi."
+    },
+    "LOW_CONFIDENCE_SIGNAL": {
+      "title": "Low Confidence Signal",
+      "description": "Sinyal güven skoru düşük kaldı."
+    },
+    "SIGNAL_CONTEXT_UNAVAILABLE": {
+      "title": "Signal Context Unavailable",
+      "description": "Sinyal için detaylı context kaydı bulunamadı; fallback açıklama gösteriliyor."
+    },
+    "SIGNAL_GENERATED_WITHOUT_REASON_CODE": {
+      "title": "Signal Generated",
+      "description": "Sinyal üretildi ancak kaynak reason code boş geldi."
+    },
+    "FALLBACK_SIGNAL_LOW_ACTIVITY": {
+      "title": "Fallback Signal",
+      "description": "Aktivite düşük olduğu için fallback sinyal üretildi."
+    },
+    "USER_SIGNAL_APPROVED": {
+      "title": "Signal Approved",
+      "description": "Kullanıcı sinyali onaylayarak işleme çevirdi."
+    },
+    "USER_SIGNAL_REJECTED": {
+      "title": "Signal Rejected",
+      "description": "Kullanıcı sinyali reddetti."
+    },
+    "TRADE_OPENED_FROM_SIGNAL": {
+      "title": "Trade Opened From Signal",
+      "description": "Onaylanan sinyal sonucu paper trade açıldı."
+    },
+    "TRADE_OPENED_FROM_EXECUTION": {
+      "title": "Trade Opened From Execution",
+      "description": "Onaylanan execution intent sonucu pozisyon açıldı."
+    },
+    "PAPER_TRADE_SNAPSHOT": {
+      "title": "Paper Trade Snapshot",
+      "description": "Trade için fallback snapshot gösteriliyor."
+    },
+    "EXECUTION_METRIC_SNAPSHOT": {
+      "title": "Execution Metric Snapshot",
+      "description": "Execution metric kaydından fallback açıklama üretildi."
+    },
+    "EXECUTION_PREVIEW_VALID": {
+      "title": "Execution Preview Valid",
+      "description": "Execution preview policy kontrollerinden geçti."
+    },
+    "EXECUTION_INTENT_SUBMITTED": {
+      "title": "Execution Intent Submitted",
+      "description": "Intent submit edilerek onay kuyruğuna gönderildi."
+    },
+    "EXECUTION_INTENT_RELEASED": {
+      "title": "Execution Intent Released",
+      "description": "Admin onayı sonrası intent release edilerek işleme alındı."
+    },
+    "EXECUTION_INTENT_REJECTED": {
+      "title": "Execution Intent Rejected",
+      "description": "Intent admin/policy tarafından reddedildi."
+    },
+    "EXECUTION_INTENT_CANCELLED": {
+      "title": "Execution Intent Cancelled",
+      "description": "Kullanıcı intent’i iptal etti."
+    },
+    "EXECUTION_INTENT_SNAPSHOT": {
+      "title": "Execution Intent Snapshot",
+      "description": "Intent için fallback snapshot açıklaması kullanıldı."
+    },
+    "INVALID_MARKET_TYPE": {
+      "title": "Invalid Market Type",
+      "description": "Seçilen market type execution policy tarafından desteklenmiyor."
+    },
+    "SYMBOL_NOT_ALLOWED": {
+      "title": "Symbol Not Allowed",
+      "description": "Symbol allow-list dışında kaldı."
+    },
+    "ORDER_TYPE_NOT_ALLOWED": {
+      "title": "Order Type Not Allowed",
+      "description": "Seçilen order tipi policy tarafından engellendi."
+    },
+    "MIN_NOTIONAL_NOT_MET": {
+      "title": "Minimum Notional Not Met",
+      "description": "Pozisyon büyüklüğü minimum notional koşulunu sağlamıyor."
+    },
+    "MARGIN_MODE_NOT_ALLOWED": {
+      "title": "Margin Mode Not Allowed",
+      "description": "Seçilen margin mode policy ile uyumsuz."
+    },
+    "LEVERAGE_CAP_EXCEEDED": {
+      "title": "Leverage Cap Exceeded",
+      "description": "Leverage sınırı aşıldı."
+    },
+    "EXECUTION_MODE_NOT_ALLOWED": {
+      "title": "Execution Mode Not Allowed",
+      "description": "Execution mode policy tarafından izinli değil."
+    },
+    "TAKE_PROFIT_PERCENT_TOO_HIGH": {
+      "title": "Take Profit Too High",
+      "description": "Take profit yüzdesi izin verilen üst sınırı aşıyor."
+    },
+    "STOP_LOSS_PERCENT_TOO_HIGH": {
+      "title": "Stop Loss Too High",
+      "description": "Stop loss yüzdesi izin verilen üst sınırı aşıyor."
+    },
+    "RISK_REWARD_RATIO_TOO_LOW": {
+      "title": "Risk Reward Ratio Too Low",
+      "description": "Risk/ödül oranı policy minimumunun altında."
+    }
+  }
+}

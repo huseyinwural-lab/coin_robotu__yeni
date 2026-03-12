@@ -14,6 +14,10 @@ export const UserSignalsPage = () => {
   const [busyId, setBusyId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
+  const [selectedSignalId, setSelectedSignalId] = useState("");
+  const [signalTrace, setSignalTrace] = useState(null);
+  const [strategyExplain, setStrategyExplain] = useState(null);
+  const [explainLoadingId, setExplainLoadingId] = useState("");
 
   const load = async () => {
     setIsLoading(true);
@@ -102,6 +106,23 @@ export const UserSignalsPage = () => {
     }
   };
 
+  const openSignalExplain = async (signal) => {
+    setSelectedSignalId(signal.id);
+    setExplainLoadingId(signal.id);
+    try {
+      const [traceRes, strategyRes] = await Promise.all([
+        apiClient.get(`/user/signals/${signal.id}/decision-trace`),
+        apiClient.get(`/user/strategies/${encodeURIComponent(signal.strategy_code)}/explain`, { params: { lookback_days: 30 } }),
+      ]);
+      setSignalTrace(traceRes.data || null);
+      setStrategyExplain(strategyRes.data || null);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Signal açıklaması yüklenemedi");
+    } finally {
+      setExplainLoadingId("");
+    }
+  };
+
   return (
     <section className="grid grid-cols-12 gap-4" data-testid="user-signals-page">
       <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-signals-header">
@@ -123,22 +144,67 @@ export const UserSignalsPage = () => {
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-trades-count-card"><p className="text-xs text-slate-500">Trades</p><p className="text-xl font-semibold" data-testid="user-signals-trades-count-value">{trades.length}</p></div>
       </div>
 
+      <aside className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-signals-explain-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-signals-explain-panel-title">Why this signal?</p>
+        {!selectedSignalId && (
+          <p className="mt-2 text-sm text-slate-400" data-testid="user-signals-explain-empty-state">Bir sinyal seçerek açıklama panelini açın.</p>
+        )}
+        {Boolean(selectedSignalId && explainLoadingId === selectedSignalId) && (
+          <p className="mt-2 text-sm text-slate-300" data-testid="user-signals-explain-loading-state">Açıklama yükleniyor...</p>
+        )}
+        {Boolean(selectedSignalId && signalTrace?.latest_trace) && (
+          <div className="mt-3 grid gap-3 lg:grid-cols-2" data-testid="user-signals-explain-content">
+            <div className="border border-slate-800 p-3" data-testid="user-signals-latest-trace-card">
+              <p className="text-xs text-slate-500" data-testid="user-signals-latest-trace-status">Decision: {signalTrace.latest_trace.decision_status}</p>
+              <p className="text-xs text-slate-500" data-testid="user-signals-latest-trace-type">Type: {signalTrace.latest_trace.trace_type}</p>
+              <div className="mt-2 space-y-2" data-testid="user-signals-reason-details-list">
+                {(signalTrace.latest_trace.reason_details || []).map((reason) => (
+                  <article key={reason.code} className="border border-slate-800 p-2" data-testid={`user-signals-reason-item-${reason.code}`}>
+                    <p className="text-sm font-semibold" data-testid={`user-signals-reason-title-${reason.code}`}>{reason.title}</p>
+                    <p className="text-xs text-slate-400" data-testid={`user-signals-reason-description-${reason.code}`}>{reason.description}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <div className="border border-slate-800 p-3" data-testid="user-signals-strategy-explain-card">
+              <p className="text-xs text-slate-500" data-testid="user-signals-strategy-code">Strategy: {strategyExplain?.strategy_code || "-"}</p>
+              <p className="text-xs text-slate-500" data-testid="user-signals-strategy-trace-count">Trace Count: {strategyExplain?.trace_count ?? 0}</p>
+              <div className="mt-2 space-y-2" data-testid="user-signals-strategy-top-reasons">
+                {(strategyExplain?.top_reason_codes || []).slice(0, 3).map((reason) => (
+                  <article key={reason.code} className="border border-slate-800 p-2" data-testid={`user-signals-strategy-reason-${reason.code}`}>
+                    <p className="text-sm" data-testid={`user-signals-strategy-reason-title-${reason.code}`}>{reason.title} · {reason.count}</p>
+                    <p className="text-xs text-slate-400" data-testid={`user-signals-strategy-reason-desc-${reason.code}`}>{reason.description}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </aside>
+
       <div className="col-span-12 grid gap-3 md:hidden" data-testid="user-signals-mobile-cards">
         {signals.map((signal) => (
-          <article key={signal.id} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-mobile-card">
-            <p className="text-sm font-semibold" data-testid="user-signals-mobile-symbol">{signal.symbol}</p>
-            <p className="text-xs text-slate-500" data-testid="user-signals-mobile-status">{signal.status}</p>
-            <p className="text-xs text-slate-500" data-testid="user-signals-mobile-strategy">{signal.strategy_code}</p>
-            {signal.status === "pending" && (
-              <div className="mt-2 flex gap-2" data-testid="user-signals-mobile-actions">
-                <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid="user-signals-mobile-approve">Approve</Button>
-                <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid="user-signals-mobile-reject">Reject</Button>
-                <Button variant="outline" onClick={() => openExecuteFromSignal(signal)} data-testid="user-signals-mobile-open-execute">Execute</Button>
-                <Button variant="outline" onClick={() => applyPresetFromSignal(signal)} data-testid="user-signals-mobile-apply-preset">Apply Preset</Button>
-                <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid="user-signals-mobile-preview-intent">Preview Intent</Button>
-                <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid="user-signals-mobile-follow-signal">Follow Signal</Button>
-              </div>
-            )}
+          <article key={signal.id} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid={`user-signals-mobile-card-${signal.id}`}>
+            <p className="text-sm font-semibold" data-testid={`user-signals-mobile-symbol-${signal.id}`}>{signal.symbol}</p>
+            <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-status-${signal.id}`}>{signal.status}</p>
+            <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-strategy-${signal.id}`}>{signal.strategy_code}</p>
+            <div className="mt-2 flex flex-wrap gap-2" data-testid={`user-signals-mobile-actions-${signal.id}`}>
+              <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-mobile-why-button-${signal.id}`}>Why this signal?</Button>
+              {signal.status === "pending" && (
+                <>
+                  <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-mobile-approve-${signal.id}`}>Approve</Button>
+                  <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-mobile-reject-${signal.id}`}>Reject</Button>
+                  <Button variant="outline" onClick={() => openExecuteFromSignal(signal)} data-testid={`user-signals-mobile-open-execute-${signal.id}`}>Execute</Button>
+                  <Button variant="outline" onClick={() => applyPresetFromSignal(signal)} data-testid={`user-signals-mobile-apply-preset-${signal.id}`}>Apply Preset</Button>
+                  <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid={`user-signals-mobile-preview-intent-${signal.id}`}>Preview Intent</Button>
+                  <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid={`user-signals-mobile-follow-signal-${signal.id}`}>Follow Signal</Button>
+                </>
+              )}
+              {signal.status !== "pending" && (
+                <span className="text-xs text-slate-400" data-testid={`user-signals-mobile-final-status-${signal.id}`}>{signal.status}</span>
+              )}
+            </div>
           </article>
         ))}
       </div>
@@ -157,25 +223,28 @@ export const UserSignalsPage = () => {
           </thead>
           <tbody data-testid="user-signals-table-body">
             {signals.map((signal) => (
-              <tr key={signal.id} className="border-t border-slate-800" data-testid="user-signals-table-row">
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{signal.symbol}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{signal.strategy_code}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{signal.confidence}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{signal.status}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{new Date(signal.created_at).toLocaleString()}</td>
+              <tr key={signal.id} className="border-t border-slate-800" data-testid={`user-signals-table-row-${signal.id}`}>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-symbol-${signal.id}`}>{signal.symbol}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-strategy-${signal.id}`}>{signal.strategy_code}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-confidence-${signal.id}`}>{signal.confidence}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-status-${signal.id}`}>{signal.status}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-time-${signal.id}`}>{new Date(signal.created_at).toLocaleString()}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>
-                  {signal.status === "pending" ? (
-                    <div className="flex gap-2">
-                      <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid="user-signals-approve-button">Approve</Button>
-                      <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid="user-signals-reject-button">Reject</Button>
-                      <Button variant="outline" onClick={() => openExecuteFromSignal(signal)} data-testid="user-signals-open-execute-button">Open in Execute</Button>
-                      <Button variant="outline" onClick={() => applyPresetFromSignal(signal)} data-testid="user-signals-apply-preset-button">Apply Preset</Button>
-                      <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid="user-signals-preview-intent-button">Preview Intent</Button>
-                      <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid="user-signals-follow-signal-button">Follow Signal</Button>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-slate-400" data-testid="user-signals-final-status-text">{signal.status}</span>
-                  )}
+                  <div className="flex flex-wrap gap-2" data-testid={`user-signals-actions-${signal.id}`}>
+                    <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-why-button-${signal.id}`}>Why this signal?</Button>
+                    {signal.status === "pending" ? (
+                      <>
+                        <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-approve-button-${signal.id}`}>Approve</Button>
+                        <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-reject-button-${signal.id}`}>Reject</Button>
+                        <Button variant="outline" onClick={() => openExecuteFromSignal(signal)} data-testid={`user-signals-open-execute-button-${signal.id}`}>Open in Execute</Button>
+                        <Button variant="outline" onClick={() => applyPresetFromSignal(signal)} data-testid={`user-signals-apply-preset-button-${signal.id}`}>Apply Preset</Button>
+                        <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid={`user-signals-preview-intent-button-${signal.id}`}>Preview Intent</Button>
+                        <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid={`user-signals-follow-signal-button-${signal.id}`}>Follow Signal</Button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-slate-400" data-testid={`user-signals-final-status-text-${signal.id}`}>{signal.status}</span>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

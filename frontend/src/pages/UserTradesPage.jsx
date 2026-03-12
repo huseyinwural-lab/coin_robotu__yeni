@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,9 @@ export const UserTradesPage = () => {
   const [trades, setTrades] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
+  const [selectedTradeId, setSelectedTradeId] = useState("");
+  const [tradeTrace, setTradeTrace] = useState(null);
+  const [traceLoading, setTraceLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -18,6 +22,19 @@ export const UserTradesPage = () => {
     };
     load();
   }, []);
+
+  const openTradeTrace = async (trade) => {
+    setSelectedTradeId(trade.trade_id);
+    setTraceLoading(true);
+    try {
+      const { data } = await apiClient.get(`/user/trades/${trade.trade_id}/decision-trace`);
+      setTradeTrace(data || null);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Trade decision trace yüklenemedi");
+    } finally {
+      setTraceLoading(false);
+    }
+  };
 
   if (isLoading) {
     return <LoadingSkeleton rows={6} testId="user-trades-loading-skeleton" />;
@@ -43,13 +60,34 @@ export const UserTradesPage = () => {
         </div>
       </header>
 
+      <aside className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-trades-trace-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-trades-trace-panel-title">Decision Trace</p>
+        {!selectedTradeId && <p className="mt-2 text-sm text-slate-400" data-testid="user-trades-trace-empty">Bir trade seçerek trace detayını açın.</p>}
+        {Boolean(selectedTradeId && traceLoading) && <p className="mt-2 text-sm text-slate-300" data-testid="user-trades-trace-loading">Trace yükleniyor...</p>}
+        {Boolean(selectedTradeId && tradeTrace?.latest_trace) && (
+          <div className="mt-3 grid gap-2" data-testid="user-trades-trace-content">
+            <p className="text-xs text-slate-500" data-testid="user-trades-trace-status">Decision: {tradeTrace.latest_trace.decision_status}</p>
+            <p className="text-xs text-slate-500" data-testid="user-trades-trace-type">Type: {tradeTrace.latest_trace.trace_type}</p>
+            <div className="space-y-2" data-testid="user-trades-trace-reason-list">
+              {(tradeTrace.latest_trace.reason_details || []).map((reason) => (
+                <article key={reason.code} className="border border-slate-800 p-2" data-testid={`user-trades-trace-reason-${reason.code}`}>
+                  <p className="text-sm" data-testid={`user-trades-trace-reason-title-${reason.code}`}>{reason.title}</p>
+                  <p className="text-xs text-slate-400" data-testid={`user-trades-trace-reason-desc-${reason.code}`}>{reason.description}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+      </aside>
+
       <div className="col-span-12 grid gap-3 md:hidden" data-testid="user-trades-mobile-cards" aria-label="Mobil trade kartları">
         {trades.map((row) => (
-          <article key={`${row.source}-${row.trade_id}`} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-trades-mobile-card">
-            <p className="text-xs text-slate-500" data-testid="user-trades-mobile-symbol">{row.symbol}</p>
-            <p className="text-sm" data-testid="user-trades-mobile-side">{row.side} · {row.status}</p>
-            <p className="text-xs text-slate-400" data-testid="user-trades-mobile-qty">Qty: {row.quantity}</p>
-            <p className="text-xs text-slate-400" data-testid="user-trades-mobile-entry">Entry: {row.entry_price}</p>
+          <article key={`${row.source}-${row.trade_id}`} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid={`user-trades-mobile-card-${row.trade_id}`}>
+            <p className="text-xs text-slate-500" data-testid={`user-trades-mobile-symbol-${row.trade_id}`}>{row.symbol}</p>
+            <p className="text-sm" data-testid={`user-trades-mobile-side-${row.trade_id}`}>{row.side} · {row.status}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-qty-${row.trade_id}`}>Qty: {row.quantity}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-entry-${row.trade_id}`}>Entry: {row.entry_price}</p>
+            <Button className="mt-2" variant="outline" onClick={() => openTradeTrace(row)} data-testid={`user-trades-mobile-trace-button-${row.trade_id}`}>Decision Trace</Button>
           </article>
         ))}
       </div>
@@ -65,18 +103,22 @@ export const UserTradesPage = () => {
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-qty">Qty</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-entry">Entry</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-pnl">Realized PnL</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-trace">Trace</th>
             </tr>
           </thead>
           <tbody data-testid="user-trades-table-body">
             {trades.map((row) => (
-              <tr key={`${row.source}-${row.trade_id}`} className="border-t border-slate-800" data-testid="user-trades-table-row">
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-row-source">{row.source}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-row-symbol">{row.symbol}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-row-side">{row.side}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-row-status">{row.status}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-row-quantity">{row.quantity}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-row-entry">{row.entry_price}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-row-realized-pnl">{row.realized_pnl ?? "-"}</td>
+              <tr key={`${row.source}-${row.trade_id}`} className="border-t border-slate-800" data-testid={`user-trades-table-row-${row.trade_id}`}>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-source-${row.trade_id}`}>{row.source}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-symbol-${row.trade_id}`}>{row.symbol}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-side-${row.trade_id}`}>{row.side}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-status-${row.trade_id}`}>{row.status}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-quantity-${row.trade_id}`}>{row.quantity}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-entry-${row.trade_id}`}>{row.entry_price}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-realized-pnl-${row.trade_id}`}>{row.realized_pnl ?? "-"}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>
+                  <Button variant="outline" onClick={() => openTradeTrace(row)} data-testid={`user-trades-trace-button-${row.trade_id}`}>Decision Trace</Button>
+                </td>
               </tr>
             ))}
           </tbody>

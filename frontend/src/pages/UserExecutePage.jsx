@@ -34,6 +34,8 @@ export const UserExecutePage = () => {
   const [presets, setPresets] = useState([]);
   const [selectedPreset, setSelectedPreset] = useState("");
   const [preview, setPreview] = useState(null);
+  const [previewTrace, setPreviewTrace] = useState(null);
+  const [previewTraceLoading, setPreviewTraceLoading] = useState(false);
 
   const isFutures = form.market_type === "futures";
 
@@ -80,9 +82,19 @@ export const UserExecutePage = () => {
   );
 
   const runPreview = async () => {
+    setPreviewTrace(null);
     try {
       const { data } = await apiClient.post("/user/execution/intent/preview", form);
       setPreview(data);
+      setPreviewTraceLoading(true);
+      try {
+        const traceRes = await apiClient.get(`/user/execution/intents/${data.intent_id}/decision-trace`);
+        setPreviewTrace(traceRes.data?.latest_trace || null);
+      } catch (_error) {
+        setPreviewTrace(null);
+      } finally {
+        setPreviewTraceLoading(false);
+      }
       if (data.validation_status === "valid") {
         toast.success("Preview başarılı");
       } else {
@@ -116,6 +128,7 @@ export const UserExecutePage = () => {
     try {
       await apiClient.post("/user/execution/intent/cancel", { intent_token: preview.intent_token });
       toast.success("Intent iptal edildi");
+      setPreviewTrace(null);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Intent iptal edilemedi");
     }
@@ -193,6 +206,25 @@ export const UserExecutePage = () => {
             <div data-testid="user-execute-risk-flags">
               <p className="text-xs uppercase tracking-widest text-slate-500">risk_flags</p>
               {(preview.risk_flags || []).length === 0 ? <p className="text-slate-400">none</p> : preview.risk_flags.map((flag) => <p key={flag}>{flag}</p>)}
+            </div>
+            <div className="border border-slate-800 p-3" data-testid="user-execute-preview-explain-panel">
+              <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-preview-explain-title">Preview Explain</p>
+              {previewTraceLoading && <p className="text-xs text-slate-400" data-testid="user-execute-preview-explain-loading">Açıklama yükleniyor...</p>}
+              {!previewTraceLoading && !previewTrace && <p className="text-xs text-slate-400" data-testid="user-execute-preview-explain-empty">Preview trace bulunamadı.</p>}
+              {!previewTraceLoading && previewTrace && (
+                <div className="space-y-2 text-xs" data-testid="user-execute-preview-explain-content">
+                  <p data-testid="user-execute-preview-explain-status">decision_status: {previewTrace.decision_status}</p>
+                  <p data-testid="user-execute-preview-explain-type">trace_type: {previewTrace.trace_type}</p>
+                  <div data-testid="user-execute-preview-explain-reasons">
+                    {(previewTrace.reason_details || []).map((reason) => (
+                      <article key={reason.code} className="border border-slate-800 p-2" data-testid={`user-execute-preview-explain-reason-${reason.code}`}>
+                        <p className="text-sm" data-testid={`user-execute-preview-explain-reason-title-${reason.code}`}>{reason.title}</p>
+                        <p className="text-xs text-slate-400" data-testid={`user-execute-preview-explain-reason-desc-${reason.code}`}>{reason.description}</p>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

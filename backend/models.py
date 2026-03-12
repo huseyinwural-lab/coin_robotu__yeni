@@ -1,6 +1,6 @@
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, event
 from sqlalchemy.orm import Mapped, mapped_column
@@ -239,6 +239,28 @@ class UserExecutionIntent(Base):
     admin_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UserDecisionTrace(Base):
+    __tablename__ = "user_decision_traces"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    trace_scope: Mapped[str] = mapped_column(String(20), default="signal", index=True)
+    trace_type: Mapped[str] = mapped_column(String(40), default="decision")
+    entity_id: Mapped[str] = mapped_column(String(120), index=True)
+    strategy_code: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    decision_status: Mapped[str] = mapped_column(String(40), default="UNKNOWN", index=True)
+    reason_codes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    reason_details: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    feature_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    context_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc) + timedelta(days=90),
+        index=True,
+    )
 
 
 class StrategyObservabilityEvent(Base):

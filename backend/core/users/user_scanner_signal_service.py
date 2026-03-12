@@ -13,6 +13,7 @@ from models import (
     UserScannerResult,
     UserSignalMode,
 )
+from services.explainability_service import record_decision_trace
 from services.pipeline.cache_store import get_json
 from services.pipeline.spot_strategy_service import scan_spot_universe_for_signals
 
@@ -169,18 +170,40 @@ def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = 
         if pending_status == "pending":
             queued_count += 1
 
-        db.add(
-            PendingSignal(
-                id=str(uuid.uuid4()),
-                signal_id=signal_event.id,
-                user_id=user_id,
-                symbol=symbol,
-                strategy_code=strategy_code,
-                confidence=signal_event.confidence,
-                mode=mode,
-                status=pending_status,
-                created_at=datetime.now(timezone.utc),
-            )
+        pending_row = PendingSignal(
+            id=str(uuid.uuid4()),
+            signal_id=signal_event.id,
+            user_id=user_id,
+            symbol=symbol,
+            strategy_code=strategy_code,
+            confidence=signal_event.confidence,
+            mode=mode,
+            status=pending_status,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(pending_row)
+
+        record_decision_trace(
+            db,
+            user_id=user_id,
+            trace_scope="signal",
+            trace_type="scanner_signal_generated",
+            entity_id=pending_row.id,
+            strategy_code=strategy_code,
+            decision_status="PENDING_REVIEW" if pending_status == "pending" else "INFO_ONLY",
+            reason_codes=reason_codes or ["signal_generated_without_reason_code"],
+            feature_snapshot={
+                "confidence": float(signal_event.confidence or 0),
+                "signal_score": score,
+                "mode": mode,
+                "signal": signal_value,
+            },
+            context_payload={
+                "run_id": run_id,
+                "symbol": symbol,
+                "signal_event_id": signal_event.id,
+                "pending_status": pending_status,
+            },
         )
 
     if actionable_count == 0 and selected:
@@ -207,19 +230,39 @@ def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = 
         if pending_status == "pending":
             queued_count += 1
         actionable_count += 1
-        db.add(
-            PendingSignal(
-                id=str(uuid.uuid4()),
-                signal_id=fallback_signal.id,
-                user_id=user_id,
-                symbol=fallback_symbol,
-                strategy_code=fallback_strategy,
-                confidence=0.55,
-                mode=mode,
-                status=pending_status,
-                created_at=datetime.now(timezone.utc),
-                decision_note="fallback_signal_created",
-            )
+        fallback_pending = PendingSignal(
+            id=str(uuid.uuid4()),
+            signal_id=fallback_signal.id,
+            user_id=user_id,
+            symbol=fallback_symbol,
+            strategy_code=fallback_strategy,
+            confidence=0.55,
+            mode=mode,
+            status=pending_status,
+            created_at=datetime.now(timezone.utc),
+            decision_note="fallback_signal_created",
+        )
+        db.add(fallback_pending)
+        record_decision_trace(
+            db,
+            user_id=user_id,
+            trace_scope="signal",
+            trace_type="scanner_fallback_signal",
+            entity_id=fallback_pending.id,
+            strategy_code=fallback_strategy,
+            decision_status="PENDING_REVIEW" if pending_status == "pending" else "INFO_ONLY",
+            reason_codes=["fallback_signal_low_activity"],
+            feature_snapshot={
+                "confidence": 0.55,
+                "mode": mode,
+                "signal": "long",
+            },
+            context_payload={
+                "run_id": run_id,
+                "symbol": fallback_symbol,
+                "signal_event_id": fallback_signal.id,
+                "pending_status": pending_status,
+            },
         )
 
     db.commit()
@@ -303,10 +346,54 @@ def approve_pending_signal(db: Session, user_id: str, pending_signal_id: str, no
         )
     )
 
+    decision_note = note or "approved"
     row.status = "approved"
     row.order_position_id = position.id
     row.decided_at = datetime.now(timezone.utc)
-    row.decision_note = note or "approved"
+    row.decision_note = decision_note
+
+    record_decision_trace(
+        db,
+        user_id=user_id,
+        trace_scope="signal",
+        trace_type="user_signal_decision",
+        entity_id=row.id,
+        strategy_code=row.strategy_code,
+        decision_status="APPROVED",
+        reason_codes=["user_signal_approved"],
+        feature_snapshot={
+            "confidence": float(row.confidence or 0),
+            "mode": row.mode,
+            "decision_note": decision_note,
+        },
+        context_payload={
+            "pending_signal_id": row.id,
+            "signal_id": row.signal_id,
+            "position_id": position.id,
+            "symbol": row.symbol,
+        },
+    )
+    record_decision_trace(
+        db,
+        user_id=user_id,
+        trace_scope="trade",
+        trace_type="trade_opened_from_signal",
+        entity_id=position.id,
+        strategy_code=row.strategy_code,
+        decision_status="OPENED",
+        reason_codes=["trade_opened_from_signal"],
+        feature_snapshot={
+            "entry_price": float(position.entry_price or 0),
+            "quantity": float(position.quantity or 0),
+            "side": position.side,
+        },
+        context_payload={
+            "pending_signal_id": row.id,
+            "signal_id": row.signal_id,
+            "symbol": row.symbol,
+        },
+    )
+
     db.commit()
     db.refresh(row)
     return row
@@ -323,9 +410,32 @@ def reject_pending_signal(db: Session, user_id: str, pending_signal_id: str, not
     if row.status != "pending":
         raise ValueError("pending_signal_not_actionable")
 
+    decision_note = note or "rejected"
     row.status = "rejected"
     row.decided_at = datetime.now(timezone.utc)
-    row.decision_note = note or "rejected"
+    row.decision_note = decision_note
+
+    record_decision_trace(
+        db,
+        user_id=user_id,
+        trace_scope="signal",
+        trace_type="user_signal_decision",
+        entity_id=row.id,
+        strategy_code=row.strategy_code,
+        decision_status="REJECTED",
+        reason_codes=["user_signal_rejected"],
+        feature_snapshot={
+            "confidence": float(row.confidence or 0),
+            "mode": row.mode,
+            "decision_note": decision_note,
+        },
+        context_payload={
+            "pending_signal_id": row.id,
+            "signal_id": row.signal_id,
+            "symbol": row.symbol,
+        },
+    )
+
     db.commit()
     db.refresh(row)
     return row

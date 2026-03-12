@@ -1318,6 +1318,67 @@ class UserSignalDecisionResponse(BaseModel):
     decision_note: str
 
 
+class DecisionReasonDetailResponse(BaseModel):
+    code: str
+    title: str
+    description: str
+
+
+class DecisionTraceItemResponse(BaseModel):
+    trace_id: str
+    trace_scope: str
+    trace_type: str
+    entity_id: str
+    strategy_code: str | None
+    decision_status: str
+    reason_codes: list[str]
+    reason_details: list[DecisionReasonDetailResponse]
+    feature_snapshot: dict
+    context_payload: dict
+    created_at: datetime
+    expires_at: datetime
+
+
+class DecisionTraceTimelineResponse(BaseModel):
+    entity_scope: str
+    entity_id: str
+    trace_count: int
+    latest_trace: DecisionTraceItemResponse | None
+    timeline: list[DecisionTraceItemResponse]
+
+
+class StrategyExplainReasonStatResponse(BaseModel):
+    code: str
+    title: str
+    description: str
+    count: int
+
+
+class StrategyExplainResponse(BaseModel):
+    strategy_code: str
+    lookback_days: int
+    trace_count: int
+    decision_distribution: dict[str, int]
+    top_reason_codes: list[StrategyExplainReasonStatResponse]
+    latest_examples: list[DecisionTraceItemResponse]
+
+
+class TraceCoverageScopeResponse(BaseModel):
+    scope: str
+    total_events: int
+    traced_events: int
+    coverage_pct: float
+
+
+class TraceCoverageResponse(BaseModel):
+    window_days: int
+    generated_at: datetime
+    overall_total_events: int
+    overall_traced_events: int
+    overall_coverage_pct: float
+    scopes: list[TraceCoverageScopeResponse]
+
+
 class UserDashboardResponse(BaseModel):
     bot_count: int
     running_bot_count: int
