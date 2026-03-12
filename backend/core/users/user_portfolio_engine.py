@@ -1,0 +1,155 @@
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy.orm import Session
+
+from core.users.user_portfolio_mapper import map_user_portfolio
+from core.users.user_risk_settings import get_or_create_user_risk_settings
+from models import ExecutionMetric, PaperPosition
+
+
+def _safe_float(value: float | None) -> float:
+    return float(value or 0)
+
+
+def build_user_portfolio_snapshot(db: Session, user_id: str) -> dict:
+    mapped = map_user_portfolio(db, user_id=user_id, market_type="futures", leverage=1)
+    open_positions_count = int(mapped["open_positions_count"])
+    closed_positions_count = (
+        db.query(PaperPosition)
+        .filter(PaperPosition.user_id == user_id, PaperPosition.status != "open")
+        .count()
+    )
+    return {
+        "current_capital": mapped["current_capital"],
+        "available_balance": mapped["available_balance"],
+        "open_notional": mapped["open_notional"],
+        "open_unrealized_pnl": mapped["open_unrealized_pnl"],
+        "closed_pnl": mapped["closed_pnl"],
+        "open_positions_count": open_positions_count,
+        "closed_positions_count": int(closed_positions_count),
+        "allocation_capital": mapped["allocation_capital"],
+        "next_trade_base_capital": mapped["next_trade_base_capital"],
+        "compounding_enabled": mapped["compounding_enabled"],
+    }
+
+
+def build_user_performance_snapshot(db: Session, user_id: str, lookback_days: int = 30) -> dict:
+    risk_row = get_or_create_user_risk_settings(db, user_id)
+    now = datetime.now(timezone.utc)
+    from_ts = now - timedelta(days=lookback_days)
+
+    closed_rows = (
+        db.query(PaperPosition)
+        .filter(
+            PaperPosition.user_id == user_id,
+            PaperPosition.status != "open",
+            PaperPosition.closed_at.is_not(None),
+            PaperPosition.closed_at >= from_ts,
+        )
+        .all()
+    )
+    open_rows = (
+        db.query(PaperPosition)
+        .filter(PaperPosition.user_id == user_id, PaperPosition.status == "open")
+        .all()
+    )
+    execution_rows = (
+        db.query(ExecutionMetric)
+        .filter(ExecutionMetric.user_id == user_id, ExecutionMetric.created_at >= from_ts)
+        .all()
+    )
+
+    realized_pnl_total = round(sum(_safe_float(item.realized_pnl) for item in closed_rows), 2)
+    unrealized_pnl_total = round(sum(_safe_float(item.unrealized_pnl) for item in open_rows), 2)
+    wins = len([item for item in closed_rows if _safe_float(item.realized_pnl) > 0])
+    losses = len([item for item in closed_rows if _safe_float(item.realized_pnl) < 0])
+    total_closed = len(closed_rows)
+    win_rate = round((wins / total_closed) * 100, 2) if total_closed else 0.0
+
+    gross_profit = sum(_safe_float(item.realized_pnl) for item in closed_rows if _safe_float(item.realized_pnl) > 0)
+    gross_loss_abs = abs(sum(_safe_float(item.realized_pnl) for item in closed_rows if _safe_float(item.realized_pnl) < 0))
+    if gross_loss_abs == 0:
+        profit_factor = round(gross_profit, 2) if gross_profit > 0 else 0.0
+    else:
+        profit_factor = round(gross_profit / gross_loss_abs, 2)
+
+    roi_pct = round((realized_pnl_total / max(float(risk_row.base_capital), 1)) * 100, 2)
+    avg_execution_quality = round(
+        sum(_safe_float(item.execution_quality_score) for item in execution_rows) / max(len(execution_rows), 1),
+        2,
+    )
+
+    return {
+        "lookback_days": lookback_days,
+        "total_closed_trades": total_closed,
+        "winning_trades": wins,
+        "losing_trades": losses,
+        "win_rate": win_rate,
+        "realized_pnl_total": realized_pnl_total,
+        "unrealized_pnl_total": unrealized_pnl_total,
+        "roi_pct": roi_pct,
+        "profit_factor": profit_factor,
+        "avg_execution_quality": avg_execution_quality,
+        "execution_count": len(execution_rows),
+    }
+
+
+def build_user_trade_history(db: Session, user_id: str, limit: int = 50) -> list[dict]:
+    position_rows = (
+        db.query(PaperPosition)
+        .filter(PaperPosition.user_id == user_id)
+        .order_by(PaperPosition.opened_at.desc())
+        .limit(max(limit, 100))
+        .all()
+    )
+    execution_rows = (
+        db.query(ExecutionMetric)
+        .filter(ExecutionMetric.user_id == user_id)
+        .order_by(ExecutionMetric.created_at.desc())
+        .limit(max(limit, 100))
+        .all()
+    )
+
+    items: list[dict] = []
+    for row in position_rows:
+        items.append(
+            {
+                "source": "paper_position",
+                "trade_id": row.id,
+                "symbol": row.symbol,
+                "side": row.side,
+                "status": row.status,
+                "quantity": float(row.quantity),
+                "entry_price": float(row.entry_price),
+                "exit_price": None,
+                "realized_pnl": float(row.realized_pnl),
+                "unrealized_pnl": float(row.unrealized_pnl),
+                "opened_at": row.opened_at,
+                "closed_at": row.closed_at,
+                "event_timestamp": row.closed_at or row.opened_at,
+            }
+        )
+
+    for row in execution_rows:
+        items.append(
+            {
+                "source": "execution_metric",
+                "trade_id": row.order_id,
+                "symbol": row.symbol,
+                "side": row.side,
+                "status": row.final_status,
+                "quantity": float(row.executed_qty or 0),
+                "entry_price": float(row.mid_price),
+                "exit_price": float(row.price_avg) if row.price_avg is not None else None,
+                "realized_pnl": None,
+                "unrealized_pnl": None,
+                "opened_at": row.submitted_at or row.created_at,
+                "closed_at": row.final_at,
+                "event_timestamp": row.final_at or row.created_at,
+            }
+        )
+
+    sorted_items = sorted(items, key=lambda item: item["event_timestamp"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    for item in sorted_items:
+        item.pop("event_timestamp", None)
+    return sorted_items[:limit]

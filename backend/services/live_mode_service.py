@@ -5,16 +5,19 @@ import os
 import statistics
 import time
 import uuid
-from base64 import urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_DOWN, ROUND_UP
 from urllib.parse import urlencode
 
 import httpx
-from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from core.users.user_exchange_connector import (
+    decrypt_exchange_secret,
+    encrypt_exchange_secret,
+    get_or_create_user_exchange_setting,
+)
 from db import redis_client
 from models import (
     AdminControl,
@@ -410,21 +413,12 @@ class BinanceFuturesTestnetAdapter:
         }
 
 
-def _build_crypto() -> Fernet:
-    digest = hashlib.sha256(settings.jwt_secret.encode()).digest()
-    return Fernet(urlsafe_b64encode(digest))
-
-
 def encrypt_secret(raw: str) -> str:
-    if not raw:
-        return ""
-    return _build_crypto().encrypt(raw.encode()).decode()
+    return encrypt_exchange_secret(raw)
 
 
 def decrypt_secret(raw_encrypted: str) -> str:
-    if not raw_encrypted:
-        return ""
-    return _build_crypto().decrypt(raw_encrypted.encode()).decode()
+    return decrypt_exchange_secret(raw_encrypted)
 
 
 def resolve_runtime_credentials(api_key: str | None, api_secret: str | None) -> tuple[str | None, str | None, str]:
@@ -446,26 +440,7 @@ def _enforce_controlled_limits(config: LiveActivationConfig):
 
 
 def get_or_create_exchange_settings(db: Session, user_id: str) -> UserExchangeSetting:
-    settings_row = db.query(UserExchangeSetting).filter(UserExchangeSetting.user_id == user_id).first()
-    if settings_row:
-        return settings_row
-
-    settings_row = UserExchangeSetting(
-        id=str(uuid.uuid4()),
-        user_id=user_id,
-        exchange="binance",
-        mode="testnet",
-        api_key_encrypted="",
-        api_secret_encrypted="",
-        permissions_snapshot=[],
-        can_trade_snapshot=None,
-        last_validation_success=None,
-        last_reason_codes=[],
-    )
-    db.add(settings_row)
-    db.commit()
-    db.refresh(settings_row)
-    return settings_row
+    return get_or_create_user_exchange_setting(db, user_id)
 
 
 def save_exchange_settings(
@@ -478,10 +453,14 @@ def save_exchange_settings(
     api_secret: str,
 ) -> UserExchangeSetting:
     settings_row = get_or_create_exchange_settings(db, user_id)
-    settings_row.exchange = exchange
-    settings_row.mode = mode
+    settings_row.exchange = exchange.strip().lower()
+    settings_row.mode = mode.strip().lower()
     settings_row.api_key_encrypted = encrypt_secret(api_key)
     settings_row.api_secret_encrypted = encrypt_secret(api_secret)
+    settings_row.last_validation_success = None
+    settings_row.last_reason_codes = []
+    settings_row.validation_snapshot_id = None
+    settings_row.validation_checked_at = None
     settings_row.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(settings_row)

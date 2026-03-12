@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from core.users.user_exchange_connector import credential_fingerprint, mask_secret
 from db import get_db
 from deps import get_current_user, require_admin
 from models import AdminControl, User
@@ -183,7 +184,12 @@ def update_exchange_settings(
         entity_id=settings_row.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
-        details={"exchange": settings_row.exchange, "mode": settings_row.mode},
+        details={
+            "exchange": settings_row.exchange,
+            "mode": settings_row.mode,
+            "masked_api_key": mask_secret(payload.api_key),
+            "credential_fingerprint": credential_fingerprint(payload.api_key, payload.api_secret),
+        },
     )
     return ExchangeSettingsResponse(**exchange_settings_view(settings_row))
 

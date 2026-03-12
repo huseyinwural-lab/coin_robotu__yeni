@@ -1160,6 +1160,95 @@ class UserPortfolioOverviewResponse(BaseModel):
     next_base_capital: float
 
 
+class UserExchangeConnectRequest(BaseModel):
+    exchange: str = "binance"
+    mode: str = "testnet"
+    api_key: str
+    api_secret: str
+
+
+class UserExchangeConnectResponse(BaseModel):
+    exchange: str
+    mode: str
+    has_api_key: bool
+    has_api_secret: bool
+    masked_api_key: str
+    credential_fingerprint: str
+    updated_at: datetime | None
+
+
+class UserPortfolioMapRequest(BaseModel):
+    market_type: str = "spot"
+    leverage: int = Field(default=1, ge=1, le=20)
+    margin_mode: str = "cross"
+    position_side: str = "BOTH"
+
+
+class UserPortfolioMapResponse(BaseModel):
+    market_type: str
+    margin_mode: str
+    position_side: str
+    leverage: int | None
+    current_capital: float
+    available_balance: float
+    open_notional: float
+    open_unrealized_pnl: float
+    closed_pnl: float
+    allocation_pct: float
+    trade_risk_pct: float
+    daily_loss_limit_pct: float
+    allocation_capital: float
+    max_trade_loss: float
+    daily_loss_limit_amount: float
+    recommended_order_notional: float
+    compounding_enabled: bool
+    next_trade_base_capital: float
+    open_positions_count: int
+    warnings: list[str]
+
+
+class UserPortfolioSnapshotResponse(BaseModel):
+    current_capital: float
+    available_balance: float
+    open_notional: float
+    open_unrealized_pnl: float
+    closed_pnl: float
+    open_positions_count: int
+    closed_positions_count: int
+    allocation_capital: float
+    next_trade_base_capital: float
+    compounding_enabled: bool
+
+
+class UserPerformanceSnapshotResponse(BaseModel):
+    lookback_days: int
+    total_closed_trades: int
+    winning_trades: int
+    losing_trades: int
+    win_rate: float
+    realized_pnl_total: float
+    unrealized_pnl_total: float
+    roi_pct: float
+    profit_factor: float
+    avg_execution_quality: float
+    execution_count: int
+
+
+class UserTradeResponse(BaseModel):
+    source: str
+    trade_id: str
+    symbol: str
+    side: str
+    status: str
+    quantity: float
+    entry_price: float
+    exit_price: float | None
+    realized_pnl: float | None
+    unrealized_pnl: float | None
+    opened_at: datetime | None
+    closed_at: datetime | None
+
+
 class AlertPolicyResponse(BaseModel):
     admin_notification_enabled: bool
     ops_webhook_url: str
