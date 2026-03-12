@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -11,19 +12,28 @@ export const AdminFuturesRiskMonitorPage = () => {
   const [riskStatus, setRiskStatus] = useState(null);
   const [liquidationStatus, setLiquidationStatus] = useState(null);
   const [adlStatus, setAdlStatus] = useState(null);
+  const [strategyStatus, setStrategyStatus] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
     try {
-      const [riskResponse, liquidationResponse, adlResponse] = await Promise.all([
+      try {
+        await apiClient.post("/admin/futures/strategy/run-paper-cycle");
+      } catch {
+        // no-op, cached status can still be rendered
+      }
+
+      const [riskResponse, liquidationResponse, adlResponse, strategyResponse] = await Promise.all([
         apiClient.get("/admin/futures/risk/status"),
         apiClient.get("/admin/futures/liquidation-protection/status"),
         apiClient.get("/admin/futures/adl/status"),
+        apiClient.get("/admin/futures/strategy/status"),
       ]);
       setRiskStatus(riskResponse.data || null);
       setLiquidationStatus(liquidationResponse.data || null);
       setAdlStatus(adlResponse.data || null);
+      setStrategyStatus(strategyResponse.data || null);
     } catch (error) {
       const message = error?.response?.data?.detail || "Futures risk monitor verisi alınamadı";
       setErrorMessage(message);
@@ -40,8 +50,13 @@ export const AdminFuturesRiskMonitorPage = () => {
   const heatmapRows = useMemo(() => liquidationStatus?.symbol_risk_heatmap || [], [liquidationStatus]);
   const criticalPositions = useMemo(() => liquidationStatus?.critical_positions || [], [liquidationStatus]);
   const gateRejections = useMemo(() => liquidationStatus?.gate_rejections || [], [liquidationStatus]);
-  const hasData = useMemo(() => Boolean(riskStatus || liquidationStatus || adlStatus), [riskStatus, liquidationStatus, adlStatus]);
+  const hasData = useMemo(() => Boolean(riskStatus || liquidationStatus || adlStatus || strategyStatus), [riskStatus, liquidationStatus, adlStatus, strategyStatus]);
   const adlRiskPercent = useMemo(() => Math.min(100, Math.max(0, Number((adlStatus?.portfolio_adl_risk || 0) * 100))), [adlStatus]);
+  const strategySignals = useMemo(() => strategyStatus?.signal_feed || [], [strategyStatus]);
+  const strategyDecisions = useMemo(() => strategyStatus?.decision_trace || [], [strategyStatus]);
+  const strategyRejects = useMemo(() => strategyStatus?.reject_reason_breakdown || [], [strategyStatus]);
+  const confidenceDistribution = useMemo(() => strategyStatus?.confidence_distribution || [], [strategyStatus]);
+  const paperPnlSeries = useMemo(() => strategyStatus?.paper_pnl_series || [], [strategyStatus]);
 
   return (
     <section className="space-y-4" data-testid="admin-futures-risk-monitor-page">
@@ -249,6 +264,125 @@ export const AdminFuturesRiskMonitorPage = () => {
           <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-decision-trace-panel">
             <h3 className="text-lg font-bold" data-testid="futures-decision-trace-title">Decision Trace</h3>
             <pre className="mt-2 overflow-x-auto text-xs text-black" data-testid="futures-decision-trace-json">{JSON.stringify(liquidationStatus?.decision_trace || riskStatus?.decision_trace || {}, null, 2)}</pre>
+          </div>
+
+          <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-strategy-header-panel">
+            <h3 className="text-lg font-bold" data-testid="futures-strategy-header-title">Futures Strategy (Paper Mode)</h3>
+            <p className="mt-2 text-sm" data-testid="futures-strategy-header-description">
+              futures_trend_follow_v1 · signal → gate → decision → synthetic PnL (real order yok)
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-5" data-testid="futures-strategy-metrics-grid">
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-strategy-signal-total-card">
+              <p className="text-xs uppercase">Signal Total</p>
+              <p className="text-xl font-bold" data-testid="futures-strategy-signal-total-value">{strategyStatus?.metrics?.futures_strategy_signal_total ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-strategy-allowed-total-card">
+              <p className="text-xs uppercase">Allowed</p>
+              <p className="text-xl font-bold" data-testid="futures-strategy-allowed-total-value">{strategyStatus?.metrics?.futures_strategy_allowed_total ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-strategy-rejected-total-card">
+              <p className="text-xs uppercase">Rejected</p>
+              <p className="text-xl font-bold" data-testid="futures-strategy-rejected-total-value">{strategyStatus?.metrics?.futures_strategy_rejected_total ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-strategy-confidence-card">
+              <p className="text-xs uppercase">Avg Confidence</p>
+              <p className="text-xl font-bold" data-testid="futures-strategy-confidence-value">{strategyStatus?.metrics?.futures_strategy_confidence ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="futures-strategy-paper-pnl-card">
+              <p className="text-xs uppercase">Paper PnL</p>
+              <p className="text-xl font-bold" data-testid="futures-strategy-paper-pnl-value">{strategyStatus?.metrics?.futures_strategy_paper_pnl ?? 0}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2" data-testid="futures-strategy-content-grid">
+            <div className="border border-black/25 bg-orange-100" data-testid="futures-strategy-signal-feed-wrapper">
+              <div className="border-b border-black/20 px-4 py-3" data-testid="futures-strategy-signal-feed-header">
+                <h4 className="text-base font-bold" data-testid="futures-strategy-signal-feed-title">Strategy Signal Feed</h4>
+              </div>
+              <Table data-testid="futures-strategy-signal-feed-table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead data-testid="futures-strategy-feed-head-symbol">Symbol</TableHead>
+                    <TableHead data-testid="futures-strategy-feed-head-side">Side</TableHead>
+                    <TableHead data-testid="futures-strategy-feed-head-confidence">Confidence</TableHead>
+                    <TableHead data-testid="futures-strategy-feed-head-reason">Reason</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {strategySignals.slice(0, 12).map((item, index) => (
+                    <TableRow key={`${item.symbol}-${index}`} data-testid={`futures-strategy-feed-row-${index}`}>
+                      <TableCell data-testid={`futures-strategy-feed-symbol-${index}`}>{item.symbol}</TableCell>
+                      <TableCell data-testid={`futures-strategy-feed-side-${index}`}>{item.side}</TableCell>
+                      <TableCell data-testid={`futures-strategy-feed-confidence-${index}`}>{item.confidence}</TableCell>
+                      <TableCell data-testid={`futures-strategy-feed-reason-${index}`}>{item.reason}</TableCell>
+                    </TableRow>
+                  ))}
+                  {strategySignals.length === 0 && (
+                    <TableRow data-testid="futures-strategy-feed-empty-row">
+                      <TableCell colSpan={4} className="text-center text-sm text-black/70" data-testid="futures-strategy-feed-empty-text">
+                        Strategy sinyali yok.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-strategy-decision-trace-panel">
+              <h4 className="text-base font-bold" data-testid="futures-strategy-decision-trace-title">Strategy Decision Trace</h4>
+              <div className="mt-2 space-y-1" data-testid="futures-strategy-decision-trace-list">
+                {strategyDecisions.slice(0, 12).map((item, index) => (
+                  <p key={`${item.symbol}-${index}`} className="text-xs" data-testid={`futures-strategy-decision-item-${index}`}>
+                    {item.symbol} · {item.side} · {item.decision} · {item.reason_code}
+                  </p>
+                ))}
+                {strategyDecisions.length === 0 && <p className="text-xs" data-testid="futures-strategy-decision-empty">Karar zinciri henüz oluşmadı.</p>}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-3" data-testid="futures-strategy-analytics-grid">
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-strategy-pnl-chart-panel">
+              <h4 className="text-base font-bold" data-testid="futures-strategy-pnl-chart-title">Paper PnL Chart</h4>
+              <div className="mt-3 h-48" data-testid="futures-strategy-pnl-chart-wrapper">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={paperPnlSeries}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#111" opacity={0.2} />
+                    <XAxis dataKey="index" stroke="#111" />
+                    <YAxis stroke="#111" />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="cumulative_pnl" stroke="#111" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              {paperPnlSeries.length === 0 && <p className="mt-2 text-xs" data-testid="futures-strategy-pnl-chart-empty">PnL verisi yok.</p>}
+            </div>
+
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-strategy-reject-reasons-panel">
+              <h4 className="text-base font-bold" data-testid="futures-strategy-reject-reasons-title">Strategy Reject Reasons</h4>
+              <div className="mt-2 space-y-1" data-testid="futures-strategy-reject-reasons-list">
+                {strategyRejects.map((item, index) => (
+                  <p key={`${item.reason_code}-${index}`} className="text-xs" data-testid={`futures-strategy-reject-reason-item-${index}`}>
+                    {item.reason_code}: {item.count}
+                  </p>
+                ))}
+                {strategyRejects.length === 0 && <p className="text-xs" data-testid="futures-strategy-reject-reasons-empty">Reject nedeni yok.</p>}
+              </div>
+            </div>
+
+            <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-strategy-confidence-distribution-panel">
+              <h4 className="text-base font-bold" data-testid="futures-strategy-confidence-distribution-title">Confidence Distribution</h4>
+              <div className="mt-2 space-y-1" data-testid="futures-strategy-confidence-distribution-list">
+                {confidenceDistribution.map((item, index) => (
+                  <p key={`${item.bucket}-${index}`} className="text-xs" data-testid={`futures-strategy-confidence-item-${index}`}>
+                    {item.bucket}: {item.count}
+                  </p>
+                ))}
+                {confidenceDistribution.length === 0 && <p className="text-xs" data-testid="futures-strategy-confidence-distribution-empty">Confidence dağılımı yok.</p>}
+              </div>
+            </div>
           </div>
         </>
       )}
