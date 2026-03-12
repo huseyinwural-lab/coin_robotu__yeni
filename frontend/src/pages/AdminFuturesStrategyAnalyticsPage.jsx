@@ -46,6 +46,10 @@ export const AdminFuturesStrategyAnalyticsPage = () => {
     () => executionQuality?.false_allow_reject_comparison_by_strategy || [],
     [executionQuality],
   );
+  const legacyRows = useMemo(
+    () => performance?.legacy_formula_observability || executionQuality?.legacy_formula_observability || [],
+    [executionQuality, performance],
+  );
   const gateTrend = useMemo(() => executionQuality?.gate_reason_trend_7d || [], [executionQuality]);
   const checklist15 = useMemo(() => executionQuality?.architecture_checklist_15 || [], [executionQuality]);
 
@@ -117,6 +121,47 @@ export const AdminFuturesStrategyAnalyticsPage = () => {
                 {performance?.interaction_guard?.blocked_total ?? 0}
               </p>
             </div>
+          </div>
+
+          <div className="border border-black/25 bg-orange-100" data-testid="strategy-analytics-legacy-shadow-table-wrapper">
+            <div className="border-b border-black/20 px-4 py-3" data-testid="strategy-analytics-legacy-shadow-header">
+              <h3 className="text-lg font-bold" data-testid="strategy-analytics-legacy-shadow-title">Legacy Formula Shadow Matrix</h3>
+            </div>
+            <Table data-testid="strategy-analytics-legacy-shadow-table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead data-testid="strategy-analytics-legacy-head-strategy">Component</TableHead>
+                  <TableHead data-testid="strategy-analytics-legacy-head-family">Family</TableHead>
+                  <TableHead data-testid="strategy-analytics-legacy-head-source">Source</TableHead>
+                  <TableHead data-testid="strategy-analytics-legacy-head-shadow">Shadow</TableHead>
+                  <TableHead data-testid="strategy-analytics-legacy-head-frequency">Signal Frequency</TableHead>
+                  <TableHead data-testid="strategy-analytics-legacy-head-shadow-pnl">Shadow PnL</TableHead>
+                  <TableHead data-testid="strategy-analytics-legacy-head-false-breakout">False Breakout Rate</TableHead>
+                  <TableHead data-testid="strategy-analytics-legacy-head-drift">Confidence Drift</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {legacyRows.map((row, index) => (
+                  <TableRow key={`${row.strategy}-${index}`} data-testid={`strategy-analytics-legacy-row-${index}`}>
+                    <TableCell data-testid={`strategy-analytics-legacy-strategy-${index}`}>{row.strategy}</TableCell>
+                    <TableCell data-testid={`strategy-analytics-legacy-family-${index}`}>{row.family_code || "-"}</TableCell>
+                    <TableCell data-testid={`strategy-analytics-legacy-source-${index}`}>{row.source_type || "-"}</TableCell>
+                    <TableCell data-testid={`strategy-analytics-legacy-shadow-${index}`}>{row.shadow_status || "-"}</TableCell>
+                    <TableCell data-testid={`strategy-analytics-legacy-frequency-${index}`}>{row.signal_frequency ?? 0}</TableCell>
+                    <TableCell data-testid={`strategy-analytics-legacy-shadow-pnl-${index}`}>{row.shadow_pnl ?? 0}</TableCell>
+                    <TableCell data-testid={`strategy-analytics-legacy-false-breakout-${index}`}>{row.false_breakout_rate ?? 0}</TableCell>
+                    <TableCell data-testid={`strategy-analytics-legacy-drift-${index}`}>{row.confidence_drift ?? 0}</TableCell>
+                  </TableRow>
+                ))}
+                {legacyRows.length === 0 && (
+                  <TableRow data-testid="strategy-analytics-legacy-empty-row">
+                    <TableCell colSpan={8} className="text-center text-sm" data-testid="strategy-analytics-legacy-empty-text">
+                      Legacy shadow metriği yok.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2" data-testid="strategy-analytics-primary-grid">

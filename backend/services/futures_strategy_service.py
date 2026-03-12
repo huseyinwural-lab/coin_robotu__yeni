@@ -3,10 +3,15 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from core.portfolio.legacy_prefilter_registry import build_legacy_prefilter_registry, get_legacy_prefilter_metadata
 from core.portfolio.strategy_attribution_engine import build_strategy_attribution
 from core.portfolio.strategy_exposure_tracker import StrategyExposureTracker
 from core.portfolio.strategy_interaction_guard import StrategyInteractionGuard
-from core.portfolio.strategy_registry import build_strategy_registry
+from core.portfolio.strategy_registry import (
+    build_strategy_registry,
+    get_legacy_shadow_strategy_ids,
+    get_strategy_metadata_map,
+)
 from core.observability.strategy_governance_audit import build_strategy_governance_audit_events
 from core.execution.futures_paper_executor import FuturesPaperExecutor
 from core.futures.funding_bias_engine import calculate_funding_bias
@@ -55,6 +60,7 @@ def _market_state(cache, symbol: str) -> dict:
     funding_raw = _safe_json(cache.get(f"futures:funding:{symbol}"), {}) if cache else {}
 
     closes = [float(item.get("close", 0.0)) for item in candles_15m if float(item.get("close", 0.0)) > 0]
+    opens = [float(item.get("open", 0.0)) for item in candles_15m if float(item.get("open", 0.0)) > 0]
     highs = [float(item.get("high", 0.0)) for item in candles_15m if float(item.get("high", 0.0)) > 0]
     lows = [float(item.get("low", 0.0)) for item in candles_15m if float(item.get("low", 0.0)) > 0]
     volumes = [float(item.get("volume", 0.0)) for item in candles_15m if float(item.get("volume", 0.0)) >= 0]
@@ -85,6 +91,18 @@ def _market_state(cache, symbol: str) -> dict:
     volume_recent = sum(volumes[-5:]) / len(volumes[-5:]) if len(volumes) >= 5 else 0.0
     volume_baseline = sum(volumes[-20:]) / len(volumes[-20:]) if len(volumes) >= 20 else max(volume_recent, 1.0)
     volume_spike_ratio = (volume_recent / volume_baseline) if volume_baseline > 0 else 1.0
+    volume_stability = 1.0
+    if len(volumes) >= 20 and volume_baseline > 0:
+        volume_stability = max(0.0, min(1.0, 1 - (sum(abs(v - volume_baseline) for v in volumes[-20:]) / (20 * volume_baseline))))
+
+    relative_range = (highs[-1] - lows[-1]) / max(latest_price, 1e-8) if highs and lows else 0.0
+    relative_volume = (volume_recent / max(volume_baseline, 1e-8)) if volume_baseline > 0 else 0.0
+    return_20 = 0.0
+    if len(closes) >= 21 and closes[-21] > 0:
+        return_20 = (closes[-1] - closes[-21]) / closes[-21]
+
+    liquidity_usd = latest_price * volume_baseline
+    cluster = "majors" if symbol in {"BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"} else "alts"
     if trend_strength > 0.0025 and avg_volatility <= 0.015:
         volatility_regime = "TRENDING"
     elif avg_volatility > 0.015:
@@ -111,6 +129,11 @@ def _market_state(cache, symbol: str) -> dict:
     return {
         "symbol": symbol,
         "latest_price": latest_price,
+        "opens": opens,
+        "closes": closes,
+        "highs": highs,
+        "lows": lows,
+        "volumes": volumes,
         "trend_strength": round(trend_strength, 6),
         "trend_direction": trend_direction,
         "volatility_regime": volatility_regime,
@@ -126,8 +149,120 @@ def _market_state(cache, symbol: str) -> dict:
         "range_high": round(range_high, 6),
         "range_low": round(range_low, 6),
         "volume_spike_ratio": round(volume_spike_ratio, 6),
+        "volume_recent": round(volume_recent, 6),
+        "volume_baseline": round(volume_baseline, 6),
+        "volume_stability": round(volume_stability, 6),
+        "relative_range": round(relative_range, 6),
+        "relative_volume": round(relative_volume, 6),
+        "liquidity_usd": round(liquidity_usd, 6),
+        "volatility": round(atr, 6),
+        "return_20": round(return_20, 6),
+        "cluster": cluster,
+        "futures_tradable": True,
+        "timeframe": "15m",
+        "controlled_entry_mode": True,
         "microstructure_suitable": str(spread_state) != "SHOCK",
     }
+
+
+def _seed_legacy_disabled_lifecycle(lifecycle_registry: dict, legacy_strategy_ids: list[str]) -> dict:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    registry = dict(lifecycle_registry or {})
+    for strategy_id in legacy_strategy_ids:
+        current = dict(registry.get(strategy_id) or {})
+        history = list(current.get("transition_history") or [])
+        if not current:
+            history.append({"from": None, "to": "DISABLED", "reason": "LEGACY_SHADOW_ONLY_BOOTSTRAP", "at": now_iso})
+        elif current.get("lifecycle_state") != "DISABLED":
+            history.append(
+                {
+                    "from": current.get("lifecycle_state"),
+                    "to": "DISABLED",
+                    "reason": "LEGACY_SHADOW_ONLY_LOCK",
+                    "at": now_iso,
+                }
+            )
+        registry[strategy_id] = {
+            "strategy": strategy_id,
+            "lifecycle_state": "DISABLED",
+            "last_transition_at": now_iso,
+            "last_transition_reason": "LEGACY_SHADOW_ONLY_LOCK",
+            "transition_history": history[-50:],
+        }
+    return registry
+
+
+def _build_prefilter_shadow_rows(market_states: list[dict]) -> list[dict]:
+    registry = build_legacy_prefilter_registry()
+    metadata = get_legacy_prefilter_metadata()
+    market_rows = [
+        {
+            "symbol": row.get("symbol"),
+            "liquidity_usd": row.get("liquidity_usd", 0.0),
+            "spread_bps": row.get("spread_bps", 0.0),
+            "volume_stability": row.get("volume_stability", 0.0),
+            "volatility": row.get("volatility", 0.0),
+            "futures_tradable": row.get("futures_tradable", False),
+            "relative_range": row.get("relative_range", 0.0),
+            "relative_volume": row.get("relative_volume", 0.0),
+            "volatility_compression": row.get("volatility_compression", 0.0),
+            "return_20": row.get("return_20", 0.0),
+            "cluster": row.get("cluster", "default"),
+        }
+        for row in market_states
+    ]
+
+    rows: list[dict] = []
+    for prefilter_id, prefilter in registry.items():
+        if prefilter_id == "crypto_universe_prefilter_v1":
+            result = prefilter.filter_universe(market_rows)
+            selected_count = len(result.get("selected_symbols") or [])
+            diagnostic = {
+                "selected_count": selected_count,
+                "rejected_count": len(result.get("rejected") or []),
+            }
+        elif prefilter_id == "volatility_contraction_prefilter":
+            result = prefilter.scan(market_rows)
+            selected_count = len(result.get("selected_symbols") or [])
+            avg_breakout = 0.0
+            rows_for_avg = result.get("rows") or []
+            if rows_for_avg:
+                avg_breakout = sum(float(item.get("breakout_potential") or 0.0) for item in rows_for_avg) / len(rows_for_avg)
+            diagnostic = {
+                "selected_count": selected_count,
+                "avg_breakout_potential": round(avg_breakout, 6),
+            }
+        else:
+            benchmark_mode = "cluster" if prefilter_id.endswith("_alt") else "btc"
+            result = prefilter.scan(market_rows, benchmark_mode=benchmark_mode)
+            selected_count = len(result.get("selected_symbols") or [])
+            avg_strength = 0.0
+            candidates = result.get("candidates") or []
+            if candidates:
+                avg_strength = sum(float(item.get("relative_strength") or 0.0) for item in candidates) / len(candidates)
+            diagnostic = {
+                "selected_count": selected_count,
+                "benchmark_mode": benchmark_mode,
+                "avg_relative_strength": round(avg_strength, 6),
+            }
+
+        meta = metadata.get(prefilter_id, {})
+        rows.append(
+            {
+                "strategy": prefilter_id,
+                "role": meta.get("role", "prefilter"),
+                "family_code": meta.get("family_code"),
+                "source_type": meta.get("source_type", "legacy_formula"),
+                "shadow_status": "SHADOW_ONLY",
+                "status": "DISABLED",
+                "signal_frequency": selected_count,
+                "shadow_pnl": 0.0,
+                "false_breakout_rate": 0.0,
+                "confidence_drift": 0.0,
+                "diagnostic": diagnostic,
+            }
+        )
+    return rows
 
 
 def _confidence_distribution(decisions: list[dict]) -> list[dict]:
@@ -449,6 +584,8 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     )
 
     strategy_registry = build_strategy_registry()
+    strategy_metadata_map = get_strategy_metadata_map()
+    legacy_shadow_strategy_ids = get_legacy_shadow_strategy_ids()
     engine = FuturesStrategyEngine(strategy_registry)
 
     decisions: list[dict] = []
@@ -464,6 +601,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         decisions.extend(cycle_rows)
 
     lifecycle_registry = _safe_json(cache.get(f"futures:strategy:lifecycle:{user_id}"), {}) if cache else {}
+    lifecycle_registry = _seed_legacy_disabled_lifecycle(lifecycle_registry, legacy_shadow_strategy_ids)
     throttle_payload = _safe_json(cache.get(f"futures:strategy:throttle:{user_id}"), {}) if cache else {}
     throttle_by_strategy = throttle_payload.get("by_strategy") if isinstance(throttle_payload, dict) else {}
     decisions, governance_enforcement = enforce_strategy_lifecycle_on_decisions(
@@ -665,6 +803,44 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         for strategy_id in strategy_registry.keys()
     ]
 
+    confidence_drift_map = {
+        str(item.get("strategy")): float(item.get("divergence_score") or 0.0)
+        for item in strategy_confidence_vs_result
+    }
+    shadow_pnl_by_strategy: dict[str, float] = {}
+    for row in confidence_vs_result:
+        strategy_key = str(row.get("strategy") or "unknown")
+        if row.get("decision") == "REJECT":
+            shadow_pnl_by_strategy[strategy_key] = shadow_pnl_by_strategy.get(strategy_key, 0.0) + float(
+                row.get("result_pnl") or 0.0
+            )
+
+    legacy_formula_observability: list[dict] = []
+    for strategy_id in legacy_shadow_strategy_ids:
+        metrics = strategy_metrics_map.get(strategy_id) or {}
+        signal_total = int(metrics.get("signal_total") or 0)
+        false_breakout_rate = 0.0
+        if signal_total > 0:
+            false_breakout_rate = (int(false_allow_by_strategy.get(strategy_id, 0)) + int(false_reject_by_strategy.get(strategy_id, 0))) / signal_total
+
+        meta = strategy_metadata_map.get(strategy_id, {})
+        legacy_formula_observability.append(
+            {
+                "strategy": strategy_id,
+                "role": meta.get("role", "strategy"),
+                "family_code": meta.get("family_code"),
+                "source_type": meta.get("source_type", "legacy_formula"),
+                "shadow_status": "SHADOW_ONLY",
+                "status": "DISABLED",
+                "signal_frequency": signal_total,
+                "shadow_pnl": round(float(shadow_pnl_by_strategy.get(strategy_id, 0.0)), 6),
+                "false_breakout_rate": round(float(false_breakout_rate), 6),
+                "confidence_drift": round(float(confidence_drift_map.get(strategy_id, 0.0)), 6),
+            }
+        )
+
+    legacy_formula_observability.extend(_build_prefilter_shadow_rows(market_states))
+
     signal_feed = [
         {
             "strategy": item.get("strategy"),
@@ -793,6 +969,25 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         decay_state=decay_result.get("decay_state", {}),
         lifecycle_registry=lifecycle_registry,
     )
+
+    disable_rows = list(disable_result.get("strategy_disable_state") or [])
+    disable_by_strategy = dict(disable_result.get("by_strategy") or {})
+    disable_map = {str(item.get("strategy")): item for item in disable_rows}
+    for strategy_id in legacy_shadow_strategy_ids:
+        disable_by_strategy[strategy_id] = {
+            "strategy": strategy_id,
+            "disable_state": "DISABLED",
+            "should_disable": True,
+            "reasons": ["LEGACY_SHADOW_ONLY"],
+        }
+        disable_map[strategy_id] = {
+            "strategy": strategy_id,
+            "disable_state": "DISABLED",
+            "reasons": ["LEGACY_SHADOW_ONLY"],
+        }
+    disable_result["by_strategy"] = disable_by_strategy
+    disable_result["strategy_disable_state"] = list(disable_map.values())
+
     lifecycle_result = apply_lifecycle_transitions(
         strategy_ids=list(strategy_registry.keys()),
         existing_registry=lifecycle_registry,
@@ -836,6 +1031,8 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         "strategy": "futures_trend_follow_v1",
         "strategy_mode": "MULTI",
         "strategy_registry": list(strategy_registry.keys()),
+        "strategy_metadata": list(strategy_metadata_map.values()),
+        "legacy_formula_observability": legacy_formula_observability,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "metrics": {
             "futures_strategy_signal_total": len(decisions),
@@ -1019,6 +1216,8 @@ def get_futures_strategy_performance(db: Session, cache, user_id: str, refresh: 
     return {
         "strategy_mode": status.get("strategy_mode", "MULTI"),
         "strategy_registry": status.get("strategy_registry", []),
+        "strategy_metadata": status.get("strategy_metadata", []),
+        "legacy_formula_observability": status.get("legacy_formula_observability", []),
         "generated_at": status.get("generated_at"),
         "strategy_pnl_contribution": [
             {
@@ -1048,6 +1247,7 @@ def get_futures_strategy_execution_quality(db: Session, cache, user_id: str, ref
 
     return {
         "generated_at": status.get("generated_at"),
+        "legacy_formula_observability": status.get("legacy_formula_observability", []),
         "strategy_execution_quality": status.get("strategy_execution_quality", []),
         "strategy_slippage": status.get("strategy_slippage", []),
         "strategy_latency": status.get("strategy_latency", []),
@@ -1070,6 +1270,7 @@ def get_futures_strategy_health(db: Session, cache, user_id: str, refresh: bool 
 
     return {
         "generated_at": status.get("generated_at"),
+        "legacy_formula_observability": status.get("legacy_formula_observability", []),
         "strategy_health_score": health_rows,
         "health_components": components,
         "lifecycle_state": lifecycle,
@@ -1151,6 +1352,7 @@ def get_futures_strategy_governance(
 
     return {
         "generated_at": status.get("generated_at"),
+        "legacy_formula_observability": status.get("legacy_formula_observability", []),
         "strategy_health_score": health_rows,
         "throttle_state": governance.get("throttle_state") or status.get("strategy_throttle_state") or [],
         "disable_state": governance.get("disable_state") or status.get("strategy_disable_state") or [],

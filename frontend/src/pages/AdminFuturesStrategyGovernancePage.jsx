@@ -55,6 +55,7 @@ export const AdminFuturesStrategyGovernancePage = () => {
   const lifecycleRows = useMemo(() => governancePayload?.lifecycle_state || [], [governancePayload]);
   const compareMetrics = useMemo(() => governancePayload?.strategy_compare_mode?.metrics || [], [governancePayload]);
   const clusterOverlayRows = useMemo(() => governancePayload?.cluster_risk_overlay || [], [governancePayload]);
+  const legacyRows = useMemo(() => governancePayload?.legacy_formula_observability || [], [governancePayload]);
   const weeklySummary = useMemo(
     () => governancePayload?.strategy_compare_mode?.weekly_auto_summary || { strategy_summaries: [], comparative_deltas: {} },
     [governancePayload],
@@ -132,6 +133,18 @@ export const AdminFuturesStrategyGovernancePage = () => {
               <p className="text-xl font-bold" data-testid="strategy-governance-summary-global-risk-value">
                 {governancePayload?.global_risk_score ?? 0} ({governancePayload?.global_risk_state || "NORMAL"})
               </p>
+            </div>
+          </div>
+
+          <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-governance-legacy-shadow-panel">
+            <h3 className="text-lg font-bold" data-testid="strategy-governance-legacy-shadow-title">Legacy Formula Shadow Visibility</h3>
+            <div className="mt-3 space-y-1" data-testid="strategy-governance-legacy-shadow-list">
+              {legacyRows.map((row, index) => (
+                <p className="text-xs" key={`${row?.strategy}-${index}`} data-testid={`strategy-governance-legacy-shadow-item-${index}`}>
+                  {row?.strategy}: family={row?.family_code} · source={row?.source_type} · shadow={row?.shadow_status} · freq={row?.signal_frequency} · false_breakout={row?.false_breakout_rate} · conf_drift={row?.confidence_drift}
+                </p>
+              ))}
+              {legacyRows.length === 0 && <p className="text-xs" data-testid="strategy-governance-legacy-shadow-empty">Legacy formula görünürlüğü yok.</p>}
             </div>
           </div>
 

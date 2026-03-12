@@ -1,0 +1,51 @@
+[
+  {
+    "family_code": "BC01",
+    "source_files": ["TRADER1.mtx", "BILIMSELCALISMA1"],
+    "canonical_name": "volatility_breakout_v2",
+    "role": "strategy",
+    "status": "CANONICALIZED"
+  },
+  {
+    "family_code": "BC02",
+    "source_files": ["TRADER2.mtx", "BILIMSELCALISMA2"],
+    "canonical_name": "adaptive_level_breakout_v2",
+    "role": "strategy",
+    "status": "CANONICALIZED"
+  },
+  {
+    "family_code": "BC03",
+    "source_files": ["TRADER3.mtx", "BILIMSELCALISMA3"],
+    "canonical_name": "momentum_volume_breakout_v3",
+    "role": "strategy",
+    "status": "CANONICALIZED"
+  },
+  {
+    "family_code": "BC04",
+    "source_files": ["TRADER4.mtx", "BILIMSELCALISMA4"],
+    "canonical_name": "oscillator_composite_reversion_v2",
+    "role": "strategy",
+    "status": "CANONICALIZED"
+  },
+  {
+    "family_code": "SCAN-CRYPTO-01",
+    "source_files": ["kripto-tarama.mex"],
+    "canonical_name": "crypto_universe_prefilter_v1",
+    "role": "prefilter",
+    "status": "CANONICALIZED"
+  },
+  {
+    "family_code": "SCAN-CONTRACTION-01",
+    "source_files": ["TRADER-FORMUL.mex"],
+    "canonical_name": "volatility_contraction_prefilter",
+    "role": "prefilter",
+    "status": "CANONICALIZED"
+  },
+  {
+    "family_code": "SCAN-RS-01",
+    "source_files": ["2018_MART_IST.mex", "2018-MAYIS-IST.mex"],
+    "canonical_name": "relative_strength_cluster_scanner_v2",
+    "role": "scanner",
+    "status": "CANONICALIZED"
+  }
+]

@@ -1,5 +1,14 @@
 from core.strategies.futures_breakout_v1 import FuturesBreakoutV1
 from core.strategies.futures_mean_reversion_v1 import FuturesMeanReversionV1
+from core.strategies.legacy import (
+    AdaptiveLevelBreakoutV2,
+    MomentumVolumeBreakoutV3,
+    OscillatorCompositeReversionV2,
+    VolatilityBreakoutV2,
+)
+
+
+LEGACY_SOURCE_TYPE = "legacy_formula"
 
 
 class FuturesTrendFollowAdapter:
@@ -35,9 +44,95 @@ class FuturesTrendFollowAdapter:
         }
 
 
-def build_strategy_registry() -> dict:
+def build_strategy_catalog() -> dict[str, dict]:
     return {
-        "trend_follow_v1": FuturesTrendFollowAdapter(),
-        "mean_reversion_v1": FuturesMeanReversionV1(),
-        "breakout_v1": FuturesBreakoutV1(),
+        "trend_follow_v1": {
+            "instance": FuturesTrendFollowAdapter(),
+            "family_code": "NATIVE-TREND-01",
+            "source_type": "native",
+            "shadow_only": False,
+            "status": "ACTIVE",
+            "role": "strategy",
+        },
+        "mean_reversion_v1": {
+            "instance": FuturesMeanReversionV1(),
+            "family_code": "NATIVE-MR-01",
+            "source_type": "native",
+            "shadow_only": False,
+            "status": "ACTIVE",
+            "role": "strategy",
+        },
+        "breakout_v1": {
+            "instance": FuturesBreakoutV1(),
+            "family_code": "NATIVE-BO-01",
+            "source_type": "native",
+            "shadow_only": False,
+            "status": "ACTIVE",
+            "role": "strategy",
+        },
+        "momentum_volume_breakout_v3": {
+            "instance": MomentumVolumeBreakoutV3(),
+            "family_code": "BC03",
+            "source_type": LEGACY_SOURCE_TYPE,
+            "shadow_only": True,
+            "status": "DISABLED",
+            "role": "strategy",
+            "canonical_name": "momentum_volume_breakout_v3",
+        },
+        "volatility_breakout_v2": {
+            "instance": VolatilityBreakoutV2(),
+            "family_code": "BC01",
+            "source_type": LEGACY_SOURCE_TYPE,
+            "shadow_only": True,
+            "status": "DISABLED",
+            "role": "strategy",
+            "canonical_name": "volatility_breakout_v2",
+        },
+        "adaptive_level_breakout_v2": {
+            "instance": AdaptiveLevelBreakoutV2(),
+            "family_code": "BC02",
+            "source_type": LEGACY_SOURCE_TYPE,
+            "shadow_only": True,
+            "status": "DISABLED",
+            "role": "strategy",
+            "canonical_name": "adaptive_level_breakout_v2",
+        },
+        "oscillator_composite_reversion_v2": {
+            "instance": OscillatorCompositeReversionV2(),
+            "family_code": "BC04",
+            "source_type": LEGACY_SOURCE_TYPE,
+            "shadow_only": True,
+            "status": "DISABLED",
+            "role": "strategy",
+            "canonical_name": "oscillator_composite_reversion_v2",
+        },
     }
+
+
+def build_strategy_registry() -> dict:
+    catalog = build_strategy_catalog()
+    return {strategy_id: item["instance"] for strategy_id, item in catalog.items()}
+
+
+def get_strategy_metadata_map() -> dict[str, dict]:
+    catalog = build_strategy_catalog()
+    metadata: dict[str, dict] = {}
+    for strategy_id, item in catalog.items():
+        metadata[strategy_id] = {
+            "strategy": strategy_id,
+            "family_code": item.get("family_code"),
+            "source_type": item.get("source_type", "native"),
+            "shadow_only": bool(item.get("shadow_only", False)),
+            "status": item.get("status", "ACTIVE"),
+            "role": item.get("role", "strategy"),
+            "canonical_name": item.get("canonical_name", strategy_id),
+        }
+    return metadata
+
+
+def get_legacy_shadow_strategy_ids() -> list[str]:
+    return [
+        strategy_id
+        for strategy_id, metadata in get_strategy_metadata_map().items()
+        if metadata.get("source_type") == LEGACY_SOURCE_TYPE and bool(metadata.get("shadow_only"))
+    ]

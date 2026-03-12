@@ -10,7 +10,8 @@ from core.portfolio.strategy_registry import build_strategy_registry
 
 def test_strategy_registry_contains_phase56_strategies():
     registry = build_strategy_registry()
-    assert set(registry.keys()) == {"trend_follow_v1", "mean_reversion_v1", "breakout_v1"}
+    required = {"trend_follow_v1", "mean_reversion_v1", "breakout_v1"}
+    assert required.issubset(set(registry.keys()))
 
 
 def test_strategy_registry_returns_signal_contract_like_payload():

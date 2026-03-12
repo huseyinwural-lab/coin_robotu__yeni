@@ -12,23 +12,26 @@ export const AdminFuturesTailRiskPage = () => {
   const [strategyGovernance, setStrategyGovernance] = useState(null);
   const [clusterRisk, setClusterRisk] = useState(null);
   const [capitalDrift, setCapitalDrift] = useState(null);
+  const [legacyRows, setLegacyRows] = useState([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
     try {
-      const [tailResponse, globalResponse, strategyResponse, clusterResponse, capitalResponse] = await Promise.all([
+      const [tailResponse, globalResponse, strategyResponse, clusterResponse, capitalResponse, statusResponse] = await Promise.all([
         apiClient.get("/admin/futures/tail-risk"),
         apiClient.get("/admin/futures/global-risk"),
         apiClient.get("/admin/futures/strategy-governance"),
         apiClient.get("/admin/futures/cluster-risk"),
         apiClient.get("/admin/futures/capital-drift"),
+        apiClient.get("/admin/futures/strategy/status"),
       ]);
       setTailPayload(tailResponse.data || null);
       setGlobalPayload(globalResponse.data || null);
       setStrategyGovernance(strategyResponse.data || null);
       setClusterRisk(clusterResponse.data || null);
       setCapitalDrift(capitalResponse.data || null);
+      setLegacyRows(statusResponse.data?.legacy_formula_observability || []);
     } catch (error) {
       const message = error?.response?.data?.detail || "Tail risk verisi alınamadı";
       setErrorMessage(message);
@@ -145,6 +148,18 @@ export const AdminFuturesTailRiskPage = () => {
               <p className="text-xs" data-testid="tail-risk-integration-capital-state">
                 capital_drift_state={capitalDrift?.drift_state || "NORMAL"} · capital_drift_events={(capitalDrift?.capital_drift_events || []).length}
               </p>
+            </div>
+          </div>
+
+          <div className="border border-black/25 bg-orange-100 p-4" data-testid="tail-risk-legacy-shadow-panel">
+            <h3 className="text-lg font-bold" data-testid="tail-risk-legacy-shadow-title">Legacy Formula (Tail Risk View)</h3>
+            <div className="mt-3 space-y-1" data-testid="tail-risk-legacy-shadow-list">
+              {legacyRows.map((row, index) => (
+                <p className="text-xs" key={`${row?.strategy}-${index}`} data-testid={`tail-risk-legacy-shadow-item-${index}`}>
+                  {row?.strategy}: family={row?.family_code} · source={row?.source_type} · shadow={row?.shadow_status} · signal_frequency={row?.signal_frequency} · shadow_pnl={row?.shadow_pnl} · false_breakout_rate={row?.false_breakout_rate} · confidence_drift={row?.confidence_drift}
+                </p>
+              ))}
+              {legacyRows.length === 0 && <p className="text-xs" data-testid="tail-risk-legacy-shadow-empty">Legacy formula metriği yok.</p>}
             </div>
           </div>
         </>

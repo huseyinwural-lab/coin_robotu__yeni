@@ -11,21 +11,24 @@ export const AdminFuturesCapitalGovernancePage = () => {
   const [usagePayload, setUsagePayload] = useState(null);
   const [driftPayload, setDriftPayload] = useState(null);
   const [globalRiskPayload, setGlobalRiskPayload] = useState(null);
+  const [legacyRows, setLegacyRows] = useState([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
     try {
-      const [budgetResponse, usageResponse, driftResponse, globalRiskResponse] = await Promise.all([
+      const [budgetResponse, usageResponse, driftResponse, globalRiskResponse, strategyStatusResponse] = await Promise.all([
         apiClient.get("/admin/futures/capital-budget"),
         apiClient.get("/admin/futures/capital-usage"),
         apiClient.get("/admin/futures/capital-drift"),
         apiClient.get("/admin/futures/global-risk"),
+        apiClient.get("/admin/futures/strategy/status"),
       ]);
       setBudgetPayload(budgetResponse.data || null);
       setUsagePayload(usageResponse.data || null);
       setDriftPayload(driftResponse.data || null);
       setGlobalRiskPayload(globalRiskResponse.data || null);
+      setLegacyRows(strategyStatusResponse.data?.legacy_formula_observability || []);
     } catch (error) {
       const message = error?.response?.data?.detail || "Capital governance verisi alınamadı";
       setErrorMessage(message);
@@ -114,6 +117,18 @@ export const AdminFuturesCapitalGovernancePage = () => {
                 </p>
               ))}
               {budgetRows.length === 0 && <p className="text-xs" data-testid="capital-governance-allocation-empty">Allocation verisi yok.</p>}
+            </div>
+          </div>
+
+          <div className="border border-black/25 bg-orange-100 p-4" data-testid="capital-governance-legacy-shadow-panel">
+            <h3 className="text-lg font-bold" data-testid="capital-governance-legacy-shadow-title">Legacy Formula (Capital Governance View)</h3>
+            <div className="mt-3 space-y-1" data-testid="capital-governance-legacy-shadow-list">
+              {legacyRows.map((row, index) => (
+                <p className="text-xs" key={`${row?.strategy}-${index}`} data-testid={`capital-governance-legacy-shadow-item-${index}`}>
+                  {row?.strategy}: family={row?.family_code} · source={row?.source_type} · shadow={row?.shadow_status} · signal_frequency={row?.signal_frequency} · shadow_pnl={row?.shadow_pnl} · false_breakout_rate={row?.false_breakout_rate} · confidence_drift={row?.confidence_drift}
+                </p>
+              ))}
+              {legacyRows.length === 0 && <p className="text-xs" data-testid="capital-governance-legacy-shadow-empty">Legacy formula metriği yok.</p>}
             </div>
           </div>
 

@@ -737,3 +737,118 @@ backend:
       - working: true
         agent: "testing"
         comment: "Full approval integration flow WORKING CORRECTLY. Test user (test_user_ad91fcf2@test.com) successfully approved via POST /api/auth/admin/user-approval-requests/{id}/approve and then appeared in GET /api/admin/users?scope=user list. Complete approval workflow from pending registration → admin approval → scope visibility functioning end-to-end."
+
+
+frontend:
+  - task: "Futures Strategy Analytics - Legacy Formula Shadow Matrix Table"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/AdminFuturesStrategyAnalyticsPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Legacy Formula Shadow Matrix table FULLY FUNCTIONAL. Comprehensive testing completed: 1) Admin login successful with admin@platform.dev / Admin12345!. 2) Successfully navigated to /admin/futures/strategy-analytics page. Page loaded with proper header 'Futures Strategy Analytics'. 3) Legacy Formula Shadow Matrix table wrapper found (data-testid='strategy-analytics-legacy-shadow-table-wrapper'). 4) ALL 8 REQUIRED TABLE COLUMNS VERIFIED: Component, Family, Source, Shadow, Signal Frequency, Shadow PnL, False Breakout Rate, Confidence Drift. All columns have proper data-testid attributes (strategy-analytics-legacy-head-strategy, strategy-analytics-legacy-head-family, strategy-analytics-legacy-head-source, strategy-analytics-legacy-head-shadow, strategy-analytics-legacy-head-frequency, strategy-analytics-legacy-head-shadow-pnl, strategy-analytics-legacy-head-false-breakout, strategy-analytics-legacy-head-drift). 5) Found 8 legacy formula rows in table. ALL 5 REQUIRED STRATEGIES VERIFIED: momentum_volume_breakout_v3 (family=BC03, source=legacy_formula, shadow=SHADOW_ONLY, frequency=2), volatility_breakout_v2 (family=BC01, source=legacy_formula, shadow=SHADOW_ONLY, frequency=2), adaptive_level_breakout_v2 (family=BC02, source=legacy_formula, shadow=SHADOW_ONLY, frequency=2), oscillator_composite_reversion_v2 (family=BC04, source=legacy_formula, shadow=SHADOW_ONLY, frequency=2), crypto_universe_prefilter_v1 (family=SCAN-CRYPTO-01, source=legacy_formula, shadow=SHADOW_ONLY, frequency=0). Additional rows found: volatility_contraction_prefilter, relative_strength_cluster_scanner_v2, relative_strength_cluster_scanner_v2_alt. 6) All table rows have proper data-testid attributes for cells (strategy-analytics-legacy-strategy-{index}, strategy-analytics-legacy-family-{index}, strategy-analytics-legacy-source-{index}, strategy-analytics-legacy-shadow-{index}, strategy-analytics-legacy-frequency-{index}, strategy-analytics-legacy-shadow-pnl-{index}, strategy-analytics-legacy-false-breakout-{index}, strategy-analytics-legacy-drift-{index}). 7) NO console errors detected. NO network errors detected. Feature is production-ready."
+
+  - task: "Futures Strategy Governance - Legacy Formula Shadow Visibility Panel"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/AdminFuturesStrategyGovernancePage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Legacy Formula Shadow Visibility panel FULLY FUNCTIONAL. Testing completed: 1) Successfully navigated to /admin/futures/strategy-governance page. 2) Legacy Formula Shadow Visibility panel found (data-testid='strategy-governance-legacy-shadow-panel'). 3) Panel title verified: 'Legacy Formula Shadow Visibility' (data-testid='strategy-governance-legacy-shadow-title'). 4) Found 8 legacy formula items in governance panel with proper data-testid attributes (strategy-governance-legacy-shadow-item-{index}). 5) All items display required fields: strategy name, family, source, shadow status, signal frequency, false_breakout_rate, confidence_drift. 6) Sample items verified: momentum_volume_breakout_v3 (family=BC03, source=legacy_formula, shadow=SHADOW_ONLY, freq=2), volatility_breakout_v2 (family=BC01, source=legacy_formula, shadow=SHADOW_ONLY, freq=2), adaptive_level_breakout_v2 (family=BC02, source=legacy_formula, shadow=SHADOW_ONLY, freq=2), oscillator_composite_reversion_v2 (family=BC04, source=legacy_formula, shadow=SHADOW_ONLY, freq=2), crypto_universe_prefilter_v1 (family=SCAN-CRYPTO-01, source=legacy_formula, shadow=SHADOW_ONLY, freq=0). 7) Panel properly handles empty state with data-testid='strategy-governance-legacy-shadow-empty'. NO console errors. NO network errors. Feature is production-ready."
+
+  - task: "Futures Capital Governance - Legacy Formula Panel"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/AdminFuturesCapitalGovernancePage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Legacy Formula (Capital Governance View) panel FULLY FUNCTIONAL. Testing completed: 1) Successfully navigated to /admin/futures/capital-governance page. 2) Legacy Formula (Capital Governance View) panel found (data-testid='capital-governance-legacy-shadow-panel'). 3) Panel title verified: 'Legacy Formula (Capital Governance View)' (data-testid='capital-governance-legacy-shadow-title'). 4) Found 8 legacy formula items in capital governance panel with proper data-testid attributes (capital-governance-legacy-shadow-item-{index}). 5) All items display required fields: strategy name, family, source, shadow status, signal_frequency, shadow_pnl, false_breakout_rate, confidence_drift. 6) Sample items verified: momentum_volume_breakout_v3 (family=BC03, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency=2, shadow_pnl=0, false_breakout_rate=0, confidence_drift=0), volatility_breakout_v2 (family=BC01, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency=2), adaptive_level_breakout_v2 (family=BC02, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency=2), oscillator_composite_reversion_v2 (family=BC04, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency=2), crypto_universe_prefilter_v1 (family=SCAN-CRYPTO-01, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency=0). 7) Panel properly handles empty state with data-testid='capital-governance-legacy-shadow-empty'. NO console errors. NO network errors. Feature is production-ready."
+
+  - task: "Futures Tail Risk - Legacy Formula Panel"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/AdminFuturesTailRiskPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Legacy Formula (Tail Risk View) panel FULLY FUNCTIONAL. Testing completed: 1) Successfully navigated to /admin/futures/tail-risk page. 2) Legacy Formula (Tail Risk View) panel found (data-testid='tail-risk-legacy-shadow-panel'). 3) Panel title verified: 'Legacy Formula (Tail Risk View)' (data-testid='tail-risk-legacy-shadow-title'). 4) Found 8 legacy formula items in tail risk panel with proper data-testid attributes (tail-risk-legacy-shadow-item-{index}). 5) All items display required fields: strategy name, family, source, shadow status, signal_frequency, shadow_pnl, false_breakout_rate, confidence_drift. 6) Sample items verified: momentum_volume_breakout_v3 (family=BC03, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency=2, shadow_pnl=0, false_breakout_rate=0, confidence_drift=0), volatility_breakout_v2 (family=BC01, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency=2), adaptive_level_breakout_v2 (family=BC02, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency=2), oscillator_composite_reversion_v2 (family=BC04, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency=2), crypto_universe_prefilter_v1 (family=SCAN-CRYPTO-01, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency=0). 7) Panel properly handles empty state with data-testid='tail-risk-legacy-shadow-empty'. NO console errors. NO network errors. Feature is production-ready."
+
+backend:
+  - task: "Futures Strategy Performance API - Legacy Formula Observability"
+    implemented: true
+    working: true
+    file: "backend/routers/futures_strategy.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Legacy Formula Observability API integration FULLY FUNCTIONAL. Backend endpoints verified: 1) GET /api/admin/futures/strategy-performance returns legacy_formula_observability array with 8 items. 2) GET /api/admin/futures/strategy-execution-quality also includes legacy_formula_observability field. 3) All legacy formula items include required fields: strategy, family_code, source_type, shadow_status, signal_frequency, shadow_pnl, false_breakout_rate, confidence_drift. 4) Frontend successfully fetches and displays data in Legacy Formula Shadow Matrix table on /admin/futures/strategy-analytics page. 5) All 5 required strategies returned: momentum_volume_breakout_v3, volatility_breakout_v2, adaptive_level_breakout_v2, oscillator_composite_reversion_v2, crypto_universe_prefilter_v1. Backend integration working correctly."
+
+  - task: "Futures Strategy Governance API - Legacy Formula Observability"
+    implemented: true
+    working: true
+    file: "backend/routers/futures_strategy.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Legacy Formula Observability API integration FULLY FUNCTIONAL. Backend endpoint verified: 1) GET /api/admin/futures/strategy-governance returns legacy_formula_observability array with 8 items. 2) Frontend successfully fetches and displays data in Legacy Formula Shadow Visibility panel on /admin/futures/strategy-governance page. 3) All items include required fields: strategy, family_code, source_type, shadow_status, signal_frequency, false_breakout_rate, confidence_drift. Backend integration working correctly."
+
+  - task: "Futures Capital Governance API - Legacy Formula Observability"
+    implemented: true
+    working: true
+    file: "backend/routers/futures_strategy.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Legacy Formula Observability API integration FULLY FUNCTIONAL. Backend endpoint verified: 1) GET /api/admin/futures/strategy/status returns legacy_formula_observability array with 8 items. 2) Frontend successfully fetches and displays data in Legacy Formula (Capital Governance View) panel on /admin/futures/capital-governance page. 3) All items include required fields: strategy, family_code, source_type, shadow_status, signal_frequency, shadow_pnl, false_breakout_rate, confidence_drift. Backend integration working correctly."
+
+  - task: "Futures Tail Risk API - Legacy Formula Observability"
+    implemented: true
+    working: true
+    file: "backend/routers/futures_strategy.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Legacy Formula Observability API integration FULLY FUNCTIONAL. Backend endpoint verified: 1) GET /api/admin/futures/strategy/status returns legacy_formula_observability array with 8 items. 2) Frontend successfully fetches and displays data in Legacy Formula (Tail Risk View) panel on /admin/futures/tail-risk page. 3) All items include required fields: strategy, family_code, source_type, shadow_status, signal_frequency, shadow_pnl, false_breakout_rate, confidence_drift. Backend integration working correctly."
+
+metadata:
+  last_updated: "2026-03-12"
+  test_sequence: 14
+  test_phase: "Legacy Formula Shadow Visibility Validation - Turkish Requirements"
+
+test_plan:
+  current_focus:
+    - "Legacy Formula Shadow visibility integration completed successfully - All Turkish requirements validated"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: "LEGACY FORMULA SHADOW VISIBILITY TEST COMPLETED - ALL TESTS PASSED (11/11 - 100% SUCCESS RATE). Comprehensive validation of Legacy Formula Shadow integration across all four futures pages: STRATEGY ANALYTICS PAGE (/admin/futures/strategy-analytics): 1) ✓ Admin login successful (admin@platform.dev / Admin12345!). 2) ✓ Legacy Formula Shadow Matrix table visible with proper title 'Legacy Formula Shadow Matrix'. 3) ✓ ALL 8 REQUIRED TABLE COLUMNS VERIFIED: Component, Family, Source, Shadow, Signal Frequency, Shadow PnL, False Breakout Rate, Confidence Drift. 4) ✓ Found 8 legacy formula rows in table. 5) ✓ ALL 5 REQUIRED STRATEGIES FOUND: momentum_volume_breakout_v3 (BC03), volatility_breakout_v2 (BC01), adaptive_level_breakout_v2 (BC02), oscillator_composite_reversion_v2 (BC04), crypto_universe_prefilter_v1 (SCAN-CRYPTO-01). All rows display: family codes, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency values, shadow_pnl=0, false_breakout_rate=0, confidence_drift=0. STRATEGY GOVERNANCE PAGE (/admin/futures/strategy-governance): 6) ✓ Legacy Formula Shadow Visibility panel found with title 'Legacy Formula Shadow Visibility'. 7) ✓ Found 8 legacy formula items displaying all required fields (family, source, shadow, freq, false_breakout, conf_drift). CAPITAL GOVERNANCE PAGE (/admin/futures/capital-governance): 8) ✓ Legacy Formula (Capital Governance View) panel found with proper title. 9) ✓ Found 8 legacy formula items displaying all required fields (family, source, shadow, signal_frequency, shadow_pnl, false_breakout_rate, confidence_drift). TAIL RISK PAGE (/admin/futures/tail-risk): 10) ✓ Legacy Formula (Tail Risk View) panel found with proper title. 11) ✓ Found 8 legacy formula items displaying all required fields. DATA-TESTID VERIFICATION: ALL CRITICAL ELEMENTS ACCESSIBLE: Table wrapper (strategy-analytics-legacy-shadow-table-wrapper), Table (strategy-analytics-legacy-shadow-table), Column headers (strategy-analytics-legacy-head-*), Table rows (strategy-analytics-legacy-row-{index}), Table cells (strategy-analytics-legacy-*-{index}), Governance panels (strategy-governance-legacy-shadow-panel, capital-governance-legacy-shadow-panel, tail-risk-legacy-shadow-panel), Panel titles and items (*-legacy-shadow-title, *-legacy-shadow-item-{index}). ERROR MONITORING: ZERO console errors detected. ZERO network errors detected. ALL API endpoints returning data correctly. SCREENSHOTS: legacy_shadow_strategy_analytics.png (shows complete Legacy Formula Shadow Matrix table with 8 rows and all columns), legacy_shadow_strategy_governance.png (shows Legacy Formula Shadow Visibility panel with 8 items), legacy_shadow_capital_governance.png (shows Legacy Formula (Capital Governance View) panel with 8 items), legacy_shadow_tail_risk.png (shows Legacy Formula (Tail Risk View) panel with 8 items). CONCLUSION: Legacy Formula Shadow integration is production-ready. All required table columns present. All required strategy rows visible. Legacy visibility panels working across all governance pages. All data-testid attributes functional for automated testing."
