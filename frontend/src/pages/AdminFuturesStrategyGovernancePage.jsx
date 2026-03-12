@@ -110,7 +110,7 @@ export const AdminFuturesStrategyGovernancePage = () => {
 
       {!loading && !errorMessage && (
         <>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4" data-testid="strategy-governance-summary-grid">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5" data-testid="strategy-governance-summary-grid">
             <div className="border border-black/25 bg-orange-100 p-3" data-testid="strategy-governance-summary-health-card">
               <p className="text-xs uppercase">Avg Health Score</p>
               <p className="text-xl font-bold" data-testid="strategy-governance-summary-health-value">{avgHealthScore}</p>
@@ -126,6 +126,12 @@ export const AdminFuturesStrategyGovernancePage = () => {
             <div className="border border-black/25 bg-orange-100 p-3" data-testid="strategy-governance-summary-decay-card">
               <p className="text-xs uppercase">Decay Events</p>
               <p className="text-xl font-bold" data-testid="strategy-governance-summary-decay-value">{decayEvents.length}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="strategy-governance-summary-global-risk-card">
+              <p className="text-xs uppercase">Global Risk</p>
+              <p className="text-xl font-bold" data-testid="strategy-governance-summary-global-risk-value">
+                {governancePayload?.global_risk_score ?? 0} ({governancePayload?.global_risk_state || "NORMAL"})
+              </p>
             </div>
           </div>
 

@@ -10,19 +10,22 @@ export const AdminFuturesClusterRiskPage = () => {
   const [matrixPayload, setMatrixPayload] = useState(null);
   const [clustersPayload, setClustersPayload] = useState(null);
   const [riskPayload, setRiskPayload] = useState(null);
+  const [globalRisk, setGlobalRisk] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
     try {
-      const [matrixResponse, clustersResponse, riskResponse] = await Promise.all([
+      const [matrixResponse, clustersResponse, riskResponse, globalRiskResponse] = await Promise.all([
         apiClient.get("/admin/futures/correlation-matrix"),
         apiClient.get("/admin/futures/correlation-clusters"),
         apiClient.get("/admin/futures/cluster-risk"),
+        apiClient.get("/admin/futures/global-risk"),
       ]);
       setMatrixPayload(matrixResponse.data || null);
       setClustersPayload(clustersResponse.data || null);
       setRiskPayload(riskResponse.data || null);
+      setGlobalRisk(globalRiskResponse.data || null);
     } catch (error) {
       const message = error?.response?.data?.detail || "Cluster risk verisi alınamadı";
       setErrorMessage(message);
@@ -71,7 +74,7 @@ export const AdminFuturesClusterRiskPage = () => {
 
       {!loading && !errorMessage && (
         <>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4" data-testid="cluster-risk-summary-grid">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5" data-testid="cluster-risk-summary-grid">
             <div className="border border-black/25 bg-orange-100 p-3" data-testid="cluster-risk-summary-symbol-card">
               <p className="text-xs uppercase">Symbols</p>
               <p className="text-xl font-bold" data-testid="cluster-risk-summary-symbol-value">{symbols.length}</p>
@@ -87,6 +90,12 @@ export const AdminFuturesClusterRiskPage = () => {
             <div className="border border-black/25 bg-orange-100 p-3" data-testid="cluster-risk-summary-state-card">
               <p className="text-xs uppercase">Risk State</p>
               <p className="text-xl font-bold" data-testid="cluster-risk-summary-state-value">{riskPayload?.risk_state || "NORMAL"}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="cluster-risk-summary-global-card">
+              <p className="text-xs uppercase">Global Risk</p>
+              <p className="text-xl font-bold" data-testid="cluster-risk-summary-global-value">
+                {globalRisk?.global_risk_score ?? 0} ({globalRisk?.risk_state || "NORMAL"})
+              </p>
             </div>
           </div>
 

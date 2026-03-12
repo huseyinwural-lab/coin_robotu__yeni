@@ -10,19 +10,22 @@ export const AdminFuturesCapitalGovernancePage = () => {
   const [budgetPayload, setBudgetPayload] = useState(null);
   const [usagePayload, setUsagePayload] = useState(null);
   const [driftPayload, setDriftPayload] = useState(null);
+  const [globalRiskPayload, setGlobalRiskPayload] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
     try {
-      const [budgetResponse, usageResponse, driftResponse] = await Promise.all([
+      const [budgetResponse, usageResponse, driftResponse, globalRiskResponse] = await Promise.all([
         apiClient.get("/admin/futures/capital-budget"),
         apiClient.get("/admin/futures/capital-usage"),
         apiClient.get("/admin/futures/capital-drift"),
+        apiClient.get("/admin/futures/global-risk"),
       ]);
       setBudgetPayload(budgetResponse.data || null);
       setUsagePayload(usageResponse.data || null);
       setDriftPayload(driftResponse.data || null);
+      setGlobalRiskPayload(globalRiskResponse.data || null);
     } catch (error) {
       const message = error?.response?.data?.detail || "Capital governance verisi alınamadı";
       setErrorMessage(message);
@@ -71,7 +74,7 @@ export const AdminFuturesCapitalGovernancePage = () => {
 
       {!loading && !errorMessage && (
         <>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4" data-testid="capital-governance-summary-grid">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5" data-testid="capital-governance-summary-grid">
             <div className="border border-black/25 bg-orange-100 p-3" data-testid="capital-governance-summary-equity-card">
               <p className="text-xs uppercase">Portfolio Equity</p>
               <p className="text-xl font-bold" data-testid="capital-governance-summary-equity-value">
@@ -93,6 +96,12 @@ export const AdminFuturesCapitalGovernancePage = () => {
             <div className="border border-black/25 bg-orange-100 p-3" data-testid="capital-governance-summary-drift-card">
               <p className="text-xs uppercase">Drift Alerts</p>
               <p className="text-xl font-bold" data-testid="capital-governance-summary-drift-value">{driftEvents.length}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="capital-governance-summary-global-risk-card">
+              <p className="text-xs uppercase">Global Risk</p>
+              <p className="text-xl font-bold" data-testid="capital-governance-summary-global-risk-value">
+                {globalRiskPayload?.global_risk_score ?? 0} ({globalRiskPayload?.risk_state || "NORMAL"})
+              </p>
             </div>
           </div>
 

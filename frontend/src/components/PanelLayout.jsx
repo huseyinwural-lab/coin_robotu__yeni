@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertOctagon,
   AlertTriangle,
   Archive,
   BarChart3,
@@ -50,6 +51,7 @@ const adminOnlyItems = [
   { to: "/admin/futures/strategy-governance", label: "Strategy Governance", icon: ShieldAlert, testId: "nav-admin-futures-strategy-governance-link" },
   { to: "/admin/futures/cluster-risk", label: "Cluster Risk", icon: CircuitBoard, testId: "nav-admin-futures-cluster-risk-link" },
   { to: "/admin/futures/capital-governance", label: "Capital Governance", icon: BarChartBig, testId: "nav-admin-futures-capital-governance-link" },
+  { to: "/admin/futures/tail-risk", label: "Tail Risk", icon: AlertOctagon, testId: "nav-admin-futures-tail-risk-link" },
   { to: "/admin/futures/microstructure-guard", label: "Microstructure Guard", icon: Activity, testId: "nav-admin-futures-microstructure-guard-link" },
   { to: "/admin/futures/testnet-control", label: "Testnet Control", icon: Radio, testId: "nav-admin-futures-testnet-control-link" },
   { to: "/admin/exchanges", label: "Exchanges", icon: Globe, testId: "nav-admin-exchanges-link" },
