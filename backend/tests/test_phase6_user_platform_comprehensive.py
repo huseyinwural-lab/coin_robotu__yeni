@@ -417,7 +417,7 @@ class TestUserIsolation:
         # Get User2's default settings
         user2_initial = requests.get(f"{BASE_URL}/api/user/risk-settings", headers=user2_headers)
         assert user2_initial.status_code == 200
-        user2_initial_allocation = user2_initial.json()["allocation_pct"]
+        assert 1 <= user2_initial.json()["allocation_pct"] <= 50
 
         # Update User1's settings with specific value
         user1_new_allocation = 45  # Unique value

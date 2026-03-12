@@ -2071,3 +2071,67 @@
 ### Sonraki Blok (Beklemede)
 - **Phase L1 Faz 4**: 18M research isolation + excluded set artefact’ları
 - **Phase L1 Faz 7**: faz kapanış rapor dosyaları (`legacy_formula_integration_report.json`, vb.)
+
+## 32) 2026-03-12 — Phase 6 P0 Backend Core (User Platform) Tamamlandı
+
+### Kapsam (User Onaylı)
+- Sprint odağı yalnızca **Phase 6 backend core** olarak uygulandı.
+- Kaynak doğrulama yaklaşımı: dökümana değil mevcut repo davranışına göre eksiklerin tamamlanması.
+- Doğrulama sırası: **self-test (curl/python)** → **testing agent**.
+
+### Uygulanan Çekirdek Modüller
+- Yeni core modülleri eklendi:
+  - `backend/core/users/user_exchange_connector.py`
+  - `backend/core/users/user_portfolio_mapper.py`
+  - `backend/core/users/user_portfolio_engine.py`
+  - `backend/core/users/user_risk_settings.py`
+- `backend/core/users/__init__.py` export seti Phase 6 user core fonksiyonlarını kapsayacak şekilde genişletildi.
+
+### Güvenlik ve Veri İzolasyonu
+- **User-only enforcement**:
+  - `backend/deps.py` içine `require_user` eklendi.
+  - `/api/user/*` endpointleri admin/ops/super_admin rollerine 403 döner.
+- **Owner-scope enforcement**:
+  - Yeni user endpointleri yalnızca token sahibi `current_user.id` ile çalışır; dışarıdan `user_id` almaz.
+
+### Exchange Connection Layer (AES + Masked Logging)
+- `user_exchange_connector` içinde AES-GCM tabanlı şifreleme eklendi:
+  - format: `aesgcm:v1:<nonce>:<ciphertext>`
+  - eski Fernet verileri için geriye dönük decrypt fallback korundu.
+- Mask/fingerprint yardımcıları eklendi:
+  - `mask_secret` (ör. `KEY_***789`)
+  - `credential_fingerprint` (12 karakter SHA256 kısa iz)
+- `services/live_mode_service.py` şifreleme/deşifreleme fonksiyonları yeni connector’a delege edildi.
+- `routers/phase4_live.py` exchange settings audit log detayına masked/fingerprint bilgisi eklendi (plaintext yok).
+
+### User API Katmanı (Admin’den Ayrık)
+- Yeni router: `backend/routers/user_platform.py`
+- Yeni endpointler:
+  - `POST /api/user/exchange/connect`
+  - `POST /api/user/portfolio/map`
+  - `GET /api/user/risk-settings`
+  - `PUT /api/user/risk-settings`
+  - `GET /api/user/portfolio`
+  - `GET /api/user/performance`
+  - `GET /api/user/trades`
+- Server entegrasyonu: `backend/server.py` içine `user_platform.router` eklendi.
+
+### Şema Güncellemeleri
+- `backend/schemas.py` içine user platform response/request modelleri eklendi:
+  - `UserExchangeConnectRequest/Response`
+  - `UserPortfolioMapRequest/Response`
+  - `UserPortfolioSnapshotResponse`
+  - `UserPerformanceSnapshotResponse`
+  - `UserTradeResponse`
+
+### Test ve Doğrulama
+- Self-test: register → approve → login → exchange_connect → portfolio_map → risk_settings_apply → portfolio/performance/trades akışı başarılı.
+- Yeni test dosyası (core):
+  - `backend/tests/test_phase6_user_platform_core_flow.py` (**2/2 PASS**)
+- Testing agent doğrulaması:
+  - `/app/test_reports/iteration_46.json` (**21/21 PASS, backend %100**)
+  - Ek kapsam testi: `backend/tests/test_phase6_user_platform_comprehensive.py` (**19/19 PASS**)
+
+### Güncel sıra
+- Phase 6 backend core P0 tamamlandı.
+- Sonraki blok: Phase 6 scanner/signal servisleri + user dashboard katmanı (P1).
