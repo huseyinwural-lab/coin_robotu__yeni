@@ -86,3 +86,14 @@
 ### 5.4 Test Sonuçları
 - Self test: `119 PASS`
 - Testing agent: `/app/test_reports/iteration_34.json` -> **PASS**
+
+## 2026-03-12
+### Phase 5.5 — Controlled Testnet Hook (Initial Delivery)
+- 10 execution çekirdek modülü + execution audit modülü eklendi
+- Yeni endpointler: `/api/admin/futures/testnet/status`, `/api/admin/futures/testnet/release-gate`
+- Yeni admin panel: `/admin/futures/testnet-control`
+- Testnet default-off + release-gate enforced + live endpoint blocked davranışı doğrulandı
+
+### 5.5 Test Sonuçları
+- Self test: yeni testnet paketi + regression PASS
+- Testing agent: `/app/test_reports/iteration_35.json` -> **PASS** (46/46)

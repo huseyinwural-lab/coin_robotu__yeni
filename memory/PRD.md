@@ -1341,3 +1341,50 @@
 ### Güncel durum
 - Phase 5.4 tamamlandı; sistem paper-only modda dinamik leverage + risk-adjusted size üretiyor.
 - Sonraki faz: Phase 5.5 Controlled Testnet Hook.
+
+## 20) 2026-03-12 — Phase 5.5 Controlled Testnet Hook (İlk Teslim Bloğu Tamamlandı)
+
+### Uygulanan çekirdek execution modülleri
+- `core/execution/futures_execution_contract.py`
+- `core/execution/futures_testnet_adapter.py`
+- `core/execution/futures_order_preflight.py`
+- `core/execution/futures_retry_policy.py`
+- `core/execution/futures_cancel_replace_guard.py`
+- `core/execution/futures_reduce_only_guard.py`
+- `core/execution/futures_slippage_tracker.py`
+- `core/execution/futures_execution_reconciler.py`
+- `core/execution/futures_testnet_release_gate.py`
+- `core/execution/futures_execution_parity_check.py`
+- `core/observability/futures_execution_audit.py`
+
+### Admin API + panel
+- Yeni endpointler:
+  - `GET /api/admin/futures/testnet/status`
+  - `GET /api/admin/futures/testnet/release-gate`
+- Yeni admin sayfası:
+  - `/admin/futures/testnet-control`
+- Sayfa bileşenleri:
+  - release gate reasons
+  - config/secret isolation
+  - preflight checks tablosu
+  - retry policy tablosu
+  - realized slippage paneli
+  - reconciler state paneli
+  - paper/testnet parity paneli
+
+### Güvenlik ve kabul kriterleri durumu
+- ✅ Testnet varsayılan kapalı (`default_mode=paper`, `testnet_enabled=false`)
+- ✅ Live endpoint erişimi kapalı (`live_endpoint_access=false`)
+- ✅ Release gate olmadan order path kapalı (`order_path_open=false` when blocked)
+- ✅ Preflight reject reason kodlu
+- ✅ Retry policy bounded + reason-aware
+- ✅ Reduce-only path audit code path mevcut
+- ✅ Reconcile state machine (`unknown_needs_reconcile` dahil)
+
+### Test
+- Self-test: 30 seçili test PASS (yeni testnet modülleri + regression)
+- Testing agent: `/app/test_reports/iteration_35.json` => **PASS**
+- Agent sonucu: 46/46 kapsam testi PASS, kritik/minor issue yok
+
+### Sonraki adım
+- Phase 5.5A Execution Quality Analytics (fill latency, reject-rate analytics, partial-fill quality, 7d rolling execution quality endpoint) tamamlanacak.
