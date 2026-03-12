@@ -1979,3 +1979,95 @@
 ### Güncel sıra
 - Phase 6 / Faz-1 kullanıcı ayrımı ve admin kullanıcı yönetimi UX düzeltmeleri tamamlandı.
 - Sonraki blok: **Phase 6 / Faz-1 Görev-2 (User Dashboard/Portfolio/Trades API katmanı ve explainability)**
+
+## 31) 2026-03-12 — Phase L1 Core (Faz 1-3-5-6) Legacy Formula → Native Engine Entegrasyonu
+
+### Kapsam Kararı (Onaylı)
+- Bu iterasyonda yalnızca çekirdek bloklar alındı: **Faz 1, Faz 2/3, Faz 5, Faz 6**.
+- **Faz 4 (research isolation)** ve **Faz 7 (kapanış artefact’ları)** bir sonraki iterasyona bırakıldı.
+
+### Formula Extraction ve Canonicalization
+- `formül.rar` indirildi ve çıkarıldı (şifresiz).
+- Matriks dosyalarından string extraction ile BC01-BC04 mantıkları doğrulandı.
+- Canonical registry üretildi:
+  - `backend/core/strategies/legacy/legacy_formula_registry.json`
+- Duplicate aile birleştirmesi canonical seviyede tekilleştirildi:
+  - BC01 -> `volatility_breakout_v2`
+  - BC02 -> `adaptive_level_breakout_v2`
+  - BC03 -> `momentum_volume_breakout_v3`
+  - BC04 -> `oscillator_composite_reversion_v2`
+
+### Native Strategy Conversion (4 Strategy)
+- Eklendi:
+  - `backend/core/strategies/legacy/momentum_volume_breakout_v3.py`
+  - `backend/core/strategies/legacy/volatility_breakout_v2.py`
+  - `backend/core/strategies/legacy/adaptive_level_breakout_v2.py`
+  - `backend/core/strategies/legacy/oscillator_composite_reversion_v2.py`
+- Ortak config/indicator yardımcıları:
+  - `backend/core/strategies/legacy/config.py`
+  - `backend/core/strategies/legacy/indicator_utils.py`
+- Uygulanan revizyonlar:
+  - threshold’ların config’e alınması
+  - ATR normalize range
+  - long/short symmetry
+  - close confirmation
+  - HHV/LLV çift yön kırılım
+  - false breakout filtreleri
+  - controlled-entry enforcement (oscillator composite)
+
+### Prefilter / Scanner Conversion (4 Entry)
+- Eklendi:
+  - `backend/core/strategies/prefilters/crypto_universe_prefilter_v1.py`
+  - `backend/core/strategies/prefilters/volatility_contraction_prefilter.py`
+  - `backend/core/strategies/prefilters/relative_strength_cluster_scanner_v2.py`
+  - Alt profile registry kaydı: `relative_strength_cluster_scanner_v2_alt`
+- XU100 bağımlılığı kaldırılmış modelleme kullanıldı (BTC/cluster benchmark).
+
+### Governance ve Runtime Entegrasyonu
+- Strategy catalog metadata ile legacy bileşenler registry’ye bağlandı:
+  - `backend/core/portfolio/strategy_registry.py`
+  - `backend/core/portfolio/legacy_prefilter_registry.py`
+- `futures_strategy_service` entegrasyonu:
+  - legacy strategy/prefilter observability üretimi
+  - lifecycle seed ile **DISABLED lock**
+  - `shadow_status=SHADOW_ONLY`
+  - legacy strategy `allowed_total=0` garantisi
+  - order pipeline’a doğrudan aktif açılış yok (shadow-only)
+
+### Admin Görünürlük (Görev 12)
+- Aşağıdaki sayfalara legacy görünürlük eklendi:
+  - `/admin/futures/strategy-analytics`
+  - `/admin/futures/strategy-governance`
+  - `/admin/futures/capital-governance`
+  - `/admin/futures/tail-risk`
+- Gösterilen alanlar:
+  - `family_code`
+  - `source_type=legacy_formula`
+  - `shadow_status`
+  - `signal_frequency`
+  - `shadow_pnl`
+  - `false_breakout_rate`
+  - `confidence_drift`
+
+### Validation (Faz 6)
+- Yeni testler eklendi:
+  - `test_legacy_formula_registry.py`
+  - `test_momentum_volume_breakout_v3.py`
+  - `test_volatility_breakout_v2.py`
+  - `test_adaptive_level_breakout_v2.py`
+  - `test_oscillator_composite_reversion_v2.py`
+  - `test_crypto_universe_prefilter_v1.py`
+  - `test_volatility_contraction_prefilter.py`
+  - `test_relative_strength_cluster_scanner_v2.py`
+  - `test_legacy_strategy_replay_validation.py`
+  - `test_legacy_prefilter_validation.py`
+- Çalıştırılan regresyonlar:
+  - `test_p56_futures_strategy_expansion.py`
+  - `test_strategy_governance_endpoint.py`
+- Sonuçlar:
+  - local pytest: **17 PASS + 39 PASS**
+  - testing agent: `/app/test_reports/iteration_45.json` -> **PASS**
+
+### Sonraki Blok (Beklemede)
+- **Phase L1 Faz 4**: 18M research isolation + excluded set artefact’ları
+- **Phase L1 Faz 7**: faz kapanış rapor dosyaları (`legacy_formula_integration_report.json`, vb.)

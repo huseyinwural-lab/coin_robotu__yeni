@@ -1,6 +1,16 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-12
+### Phase L1 Core (Faz 1-3-5-6) — Legacy Formula Native Entegrasyon
+- `formül.rar` extraction + canonicalization tamamlandı; `legacy_formula_registry.json` üretildi (BC01-BC04 + scanner aileleri).
+- 4 native legacy strategy eklendi: `momentum_volume_breakout_v3`, `volatility_breakout_v2`, `adaptive_level_breakout_v2`, `oscillator_composite_reversion_v2`.
+- 4 prefilter/scanner entry eklendi: `crypto_universe_prefilter_v1`, `volatility_contraction_prefilter`, `relative_strength_cluster_scanner_v2`, `relative_strength_cluster_scanner_v2_alt`.
+- Governance/runtime entegrasyonu: legacy set **DISABLED + SHADOW_ONLY** lock, lifecycle seed, `allowed_total=0` (aktif order yok).
+- Admin görünürlük eklendi (4 panel): strategy-analytics, strategy-governance, capital-governance, tail-risk.
+- Yeni metrik kolonları: `family_code`, `source_type`, `shadow_status`, `signal_frequency`, `shadow_pnl`, `false_breakout_rate`, `confidence_drift`.
+- Testler: yeni L1 test paketi + regresyonlar geçti; testing agent `iteration_45.json` PASS.
+
+## 2026-03-12
 ### Admin Kullanıcı Ayrımı + Admin Ekle + Açık Yeşil Koyu Buton Teması
 - Admin sidebar’a iki ayrı menü satırı eklendi:
   - `Admin Kullanıcıları` (`/admin/users/admins`)
