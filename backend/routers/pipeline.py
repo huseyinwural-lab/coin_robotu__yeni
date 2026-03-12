@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user
-from models import BotProfile, SignalEvent, User, UserRole
+from deps import get_current_user, is_admin_role, require_admin
+from models import BotProfile, SignalEvent, User
 from schemas import PipelineMonitoringResponse, SignalEventResponse
 from services.audit_service import create_audit_log
 from services.pipeline.runtime import pipeline_runtime
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 def _authorized_bot(db: Session, bot_id: str, current_user: User):
     query = db.query(BotProfile).filter(BotProfile.id == bot_id)
-    if current_user.role != UserRole.ADMIN:
+    if not is_admin_role(current_user.role):
         query = query.filter(BotProfile.user_id == current_user.id)
     bot = query.first()
     if bot is None:
@@ -56,9 +56,7 @@ def stop_bot(bot_id: str, current_user: User = Depends(get_current_user), db: Se
 
 
 @router.get("/monitoring", response_model=PipelineMonitoringResponse)
-def get_pipeline_monitoring(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+def get_pipeline_monitoring(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     return pipeline_runtime.monitoring_snapshot(db)
 
 
@@ -69,6 +67,6 @@ def list_signal_events(
     limit: int = Query(default=100, ge=10, le=300),
 ):
     query = db.query(SignalEvent)
-    if current_user.role != UserRole.ADMIN:
+    if not is_admin_role(current_user.role):
         query = query.filter(SignalEvent.user_id == current_user.id)
     return query.order_by(SignalEvent.generated_at.desc()).limit(limit).all()

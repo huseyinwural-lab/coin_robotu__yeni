@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
-from deps import get_current_user
-from models import AuditLog, BotProfile, PaperPosition, RiskPolicy, StrategyTemplate, SystemAlert, User, UserRole
+from deps import get_current_user, is_admin_role
+from models import AuditLog, BotProfile, PaperPosition, RiskPolicy, StrategyTemplate, SystemAlert, User
 from services.pipeline.runtime import pipeline_runtime
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 @router.get("/summary")
 def dashboard_summary(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     monitoring = pipeline_runtime.monitoring_snapshot(db)
-    if current_user.role == UserRole.ADMIN:
+    if is_admin_role(current_user.role):
         data = {
             "users": db.query(User).count(),
             "active_bots": db.query(BotProfile).filter(BotProfile.is_enabled.is_(True)).count(),

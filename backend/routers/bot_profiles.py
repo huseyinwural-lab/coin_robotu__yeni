@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user
-from models import BotProfile, User, UserRole
+from deps import get_current_user, is_admin_role
+from models import BotProfile, User
 from schemas import BotProfileCreate, BotProfileResponse, BotProfileUpdate
 from services.audit_service import create_audit_log
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/bot-profiles", tags=["bot_profiles"])
 
 def _authorized_bot_query(db: Session, bot_id: str, current_user: User):
     query = db.query(BotProfile).filter(BotProfile.id == bot_id)
-    if current_user.role != UserRole.ADMIN:
+    if not is_admin_role(current_user.role):
         query = query.filter(BotProfile.user_id == current_user.id)
     return query
 
@@ -20,7 +20,7 @@ def _authorized_bot_query(db: Session, bot_id: str, current_user: User):
 @router.get("", response_model=list[BotProfileResponse])
 def list_bot_profiles(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(BotProfile)
-    if current_user.role != UserRole.ADMIN:
+    if not is_admin_role(current_user.role):
         query = query.filter(BotProfile.user_id == current_user.id)
     return query.order_by(BotProfile.created_at.desc()).all()
 

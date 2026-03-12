@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user
-from models import RiskPolicy, User, UserRole
+from deps import get_current_user, is_admin_role
+from models import RiskPolicy, User
 from schemas import RiskPolicyCreate, RiskPolicyResponse, RiskPolicyUpdate
 from services.audit_service import create_audit_log
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/risk-policies", tags=["risk_policies"])
 
 def _authorized_risk_query(db: Session, policy_id: str, current_user: User):
     query = db.query(RiskPolicy).filter(RiskPolicy.id == policy_id)
-    if current_user.role != UserRole.ADMIN:
+    if not is_admin_role(current_user.role):
         query = query.filter(RiskPolicy.user_id == current_user.id)
     return query
 
@@ -20,7 +20,7 @@ def _authorized_risk_query(db: Session, policy_id: str, current_user: User):
 @router.get("", response_model=list[RiskPolicyResponse])
 def list_risk_policies(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(RiskPolicy)
-    if current_user.role != UserRole.ADMIN:
+    if not is_admin_role(current_user.role):
         query = query.filter(RiskPolicy.user_id == current_user.id)
     return query.order_by(RiskPolicy.created_at.desc()).all()
 

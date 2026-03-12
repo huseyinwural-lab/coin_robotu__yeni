@@ -1901,3 +1901,46 @@
 ### Güncel sıra
 - Phase 5.8A tamamlandı.
 - Sonraki blok: **Phase 6 — User Platform**
+
+## 29) 2026-03-12 — Phase 6 / Faz-1 Görev-1 User Registry + Auth Entegrasyonu (Tamamlandı)
+
+### User Registry Core
+- Yeni modül: `backend/core/users/user_registry.py`
+  - `register_user_account`
+  - `user_login_with_policy`
+  - `list_user_accounts_for_approval`
+  - `approve_user_account`
+  - `reject_user_account`
+- Kayıt davranışı kesinleştirildi:
+  - self-register kullanıcı için otomatik `role=user`
+  - varsayılan `approval_status=pending`, `is_active=false`
+
+### Auth Entegrasyonu
+- `backend/routers/auth.py` registry katmanını kullanacak şekilde refactor edildi.
+- `/api/auth/register`, `/api/auth/login`, `/api/auth/login/user`, `/api/auth/login/admin` davranışları korundu.
+- Approval endpointleri registry üzerinden merkezi hale getirildi.
+
+### Veri İzolasyonu ve Owner Scope Enforcement
+- `backend/deps.py` güçlendirildi:
+  - `is_admin_role` yardımcı fonksiyonu
+  - `enforce_owner_scope` yardımcı fonksiyonu
+  - `get_current_user` içinde user approval-state doğrulaması (defense-in-depth)
+- Owner-scope kontrolü admin-rollere göre normalize edildi (`super_admin/admin/ops`):
+  - `routers/bot_profiles.py`
+  - `routers/risk_policies.py`
+  - `routers/paper_positions.py`
+  - `routers/pipeline.py`
+  - `routers/exchange.py`
+  - `routers/dashboard.py`
+
+### Test
+- Yeni test dosyası:
+  - `backend/tests/test_phase6_user_registry_owner_scope.py`
+- Koşulan testler:
+  - `backend/tests/test_user_approval_flow.py`
+  - `backend/tests/test_phase6_user_registry_owner_scope.py`
+- Sonuç: **16 passed**
+
+### Güncel sıra
+- Phase 6 / Faz-1 Görev-1 tamamlandı.
+- Sonraki blok: **Phase 6 / Faz-1 Görev-2 (User Dashboard/Portfolio/Trades API katmanı ve explainability veri akışı)**

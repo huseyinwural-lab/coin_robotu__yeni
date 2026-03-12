@@ -1,6 +1,16 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-12
+### Phase 6 / Faz-1 Görev-1 — User Registry + Auth Integration + Data Isolation
+- `backend/core/users/user_registry.py` eklendi ve auth akışına entegre edildi.
+- Self-register kullanıcılar için varsayılan policy kesinleşti: `role=user`, `approval_status=pending`, `is_active=false`.
+- `/api/auth/*` login/register/approval akışı registry katmanına taşındı (davranış korunarak refactor).
+- Backend owner-scope enforcement normalize edildi (admin rolleri + user veri izolasyonu):
+  - `bot_profiles`, `risk_policies`, `paper_positions`, `pipeline`, `exchange`, `dashboard`
+- `get_current_user` içinde approval-state doğrulaması defense-in-depth olarak güçlendirildi.
+- Testler: `test_user_approval_flow.py` + yeni `test_phase6_user_registry_owner_scope.py` => **16 PASS**.
+
+## 2026-03-12
 ### Phase 5.1A — Futures Liquidation Protection + ADL Risk Shield
 - Liquidation protection çekirdeği güncellendi ve contract-sınıf tabanlı hale getirildi:
   - LiquidationRiskAggregator

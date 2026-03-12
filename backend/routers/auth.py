@@ -1,9 +1,13 @@
-from datetime import datetime, timezone
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from core.security import create_access_token, hash_password, verify_password
+from core.users.user_registry import (
+    approve_user_account,
+    list_user_accounts_for_approval,
+    register_user_account,
+    reject_user_account,
+    user_login_with_policy,
+)
 from db import get_db
 from deps import get_current_user, require_admin
 from models import User, UserRole
@@ -15,22 +19,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserResponse)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    existing_user = db.query(User).filter(User.email == payload.email).first()
-    if existing_user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
-
-    user = User(
-        email=payload.email,
-        password_hash=hash_password(payload.password),
-        role=UserRole.USER,
-        is_active=False,
-        approval_status="pending",
-        approval_requested_at=datetime.now(timezone.utc),
-        approved_at=None,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    user = register_user_account(db, payload)
 
     create_audit_log(
         db,
@@ -51,23 +40,8 @@ def _login_with_policy(
     target_role: UserRole | None = None,
     allowed_roles: set[UserRole] | None = None,
 ) -> AuthResponse:
-    user = db.query(User).filter(User.email == payload.email).first()
-    if user is None or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-
-    if target_role and user.role != target_role:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yanlış giriş paneli")
-    if allowed_roles and user.role not in allowed_roles:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yanlış giriş paneli")
-
-    if user.role == UserRole.USER and user.approval_status == "pending":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Hesabınız admin onayı bekliyor")
-    if user.role == UserRole.USER and user.approval_status == "rejected":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Onay talebiniz reddedildi")
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Hesap pasif durumda")
-
-    token = create_access_token(subject=user.id, role=user.role.value, email=user.email)
+    session = user_login_with_policy(db, payload, target_role=target_role, allowed_roles=allowed_roles)
+    user = session.user
     create_audit_log(
         db,
         action="user_login",
@@ -77,7 +51,7 @@ def _login_with_policy(
         actor_role=user.role.value,
         details={"email": user.email},
     )
-    return AuthResponse(access_token=token, token_type="bearer", user=user)
+    return AuthResponse(access_token=session.access_token, token_type="bearer", user=user)
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -106,10 +80,7 @@ def list_user_approval_requests(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    query = db.query(User).filter(User.role == UserRole.USER)
-    if status_filter in {"pending", "approved", "rejected"}:
-        query = query.filter(User.approval_status == status_filter)
-    return query.order_by(User.approval_requested_at.asc()).all()
+    return list_user_accounts_for_approval(db, status_filter)
 
 
 @router.post("/admin/user-approval-requests/{user_id}/approve", response_model=UserResponse)
@@ -118,15 +89,7 @@ def approve_user_request(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.id == user_id, User.role == UserRole.USER).first()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kullanıcı bulunamadı")
-
-    user.approval_status = "approved"
-    user.is_active = True
-    user.approved_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(user)
+    user = approve_user_account(db, user_id)
     create_audit_log(
         db,
         action="user_approval_approved",
@@ -145,15 +108,7 @@ def reject_user_request(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.id == user_id, User.role == UserRole.USER).first()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kullanıcı bulunamadı")
-
-    user.approval_status = "rejected"
-    user.is_active = False
-    user.approved_at = None
-    db.commit()
-    db.refresh(user)
+    user = reject_user_account(db, user_id)
     create_audit_log(
         db,
         action="user_approval_rejected",

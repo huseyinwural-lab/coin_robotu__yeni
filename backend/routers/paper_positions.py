@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user
-from models import PaperPosition, User, UserRole
+from deps import get_current_user, is_admin_role
+from models import PaperPosition, User
 from schemas import ManualClosePositionRequest, PaperPositionResponse
 from services.audit_service import create_audit_log
 from services.pipeline.execution_engine import manual_close_position
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/paper-positions", tags=["paper_positions"])
 
 def _authorized_position(db: Session, position_id: str, current_user: User):
     query = db.query(PaperPosition).filter(PaperPosition.id == position_id)
-    if current_user.role != UserRole.ADMIN:
+    if not is_admin_role(current_user.role):
         query = query.filter(PaperPosition.user_id == current_user.id)
     position = query.first()
     if position is None:
@@ -24,7 +24,7 @@ def _authorized_position(db: Session, position_id: str, current_user: User):
 @router.get("", response_model=list[PaperPositionResponse])
 def list_positions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(PaperPosition)
-    if current_user.role != UserRole.ADMIN:
+    if not is_admin_role(current_user.role):
         query = query.filter(PaperPosition.user_id == current_user.id)
     return query.order_by(PaperPosition.opened_at.desc()).limit(200).all()
 

@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
-from deps import get_current_user
+from deps import get_current_user, is_admin_role
 from exchange.binance_mock import BinanceMockAdapter
-from models import BotProfile, ExecutionCorrectionEvent, ExecutionEvent, ExecutionMetric, User, UserRole
+from models import BotProfile, ExecutionCorrectionEvent, ExecutionEvent, ExecutionMetric, User
 from schemas import (
     ExecutionCorrectionCreate,
     ExecutionCorrectionResponse,
@@ -549,7 +549,7 @@ def get_exchange_mock_state(current_user: User = Depends(get_current_user)):
 @router.get("/mock/events", response_model=list[ExecutionEventResponse])
 def list_mock_events(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     query = db.query(ExecutionEvent)
-    if current_user.role != UserRole.ADMIN:
+    if not is_admin_role(current_user.role):
         bot_ids = db.query(BotProfile.id).filter(BotProfile.user_id == current_user.id)
         query = query.filter(ExecutionEvent.bot_profile_id.in_(bot_ids))
     return query.order_by(ExecutionEvent.created_at.desc()).limit(50).all()
@@ -562,7 +562,7 @@ def execute_mock_order(
     db: Session = Depends(get_db),
 ):
     bot_query = db.query(BotProfile).filter(BotProfile.id == payload.bot_profile_id)
-    if current_user.role != UserRole.ADMIN:
+    if not is_admin_role(current_user.role):
         bot_query = bot_query.filter(BotProfile.user_id == current_user.id)
 
     bot_profile = bot_query.first()
