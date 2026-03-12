@@ -211,7 +211,7 @@ class TestOwnerScopeBotProfiles:
         assert list_response.status_code == 200
         bot_ids = [b["id"] for b in list_response.json()]
         assert bot_id not in bot_ids, "User B should not see User A's bot"
-        print(f"PASS: User B cannot see User A's bot in list")
+        print("PASS: User B cannot see User A's bot in list")
 
     def test_user_cannot_update_other_users_bot(self):
         """User B cannot update user A's bot"""
@@ -264,7 +264,7 @@ class TestOwnerScopeBotProfiles:
             },
         )
         assert update_response.status_code == 404, f"Expected 404, got {update_response.status_code}"
-        print(f"PASS: User B cannot update User A's bot (404)")
+        print("PASS: User B cannot update User A's bot (404)")
 
 
 # ============================================================
@@ -314,7 +314,7 @@ class TestOwnerScopeRiskPolicies:
         assert list_response.status_code == 200
         policy_ids = [p["id"] for p in list_response.json()]
         assert policy_id not in policy_ids, "User B should not see User A's risk policy"
-        print(f"PASS: User B cannot see User A's risk policy in list")
+        print("PASS: User B cannot see User A's risk policy in list")
 
     def test_user_cannot_update_other_users_policy(self):
         """User B cannot update user A's risk policy"""
@@ -363,7 +363,7 @@ class TestOwnerScopeRiskPolicies:
             },
         )
         assert update_response.status_code == 404, f"Expected 404, got {update_response.status_code}"
-        print(f"PASS: User B cannot update User A's risk policy (404)")
+        print("PASS: User B cannot update User A's risk policy (404)")
 
 
 # ============================================================
@@ -412,7 +412,7 @@ class TestOwnerScopePipeline:
             headers={"Authorization": f"Bearer {user_b_token}"},
         )
         assert start_response.status_code == 404, f"Expected 404, got {start_response.status_code}"
-        print(f"PASS: User B cannot start User A's bot (404)")
+        print("PASS: User B cannot start User A's bot (404)")
 
     def test_user_cannot_stop_other_users_bot(self):
         """User B cannot stop user A's bot"""
@@ -460,7 +460,7 @@ class TestOwnerScopePipeline:
             headers={"Authorization": f"Bearer {user_b_token}"},
         )
         assert stop_response.status_code == 404, f"Expected 404, got {stop_response.status_code}"
-        print(f"PASS: User B cannot stop User A's bot (404)")
+        print("PASS: User B cannot stop User A's bot (404)")
 
 
 # ============================================================
@@ -501,7 +501,7 @@ class TestRegressionAuthMe:
         assert data["email"] == email
         assert data["role"] == "user"
         assert data["approval_status"] == "approved"
-        print(f"PASS: /auth/me returns correct info for approved user")
+        print("PASS: /auth/me returns correct info for approved user")
 
 
 # ============================================================
@@ -548,7 +548,7 @@ class TestRegressionApprovalFlow:
         data = response.json()
         assert data["approval_status"] == "rejected"
         assert data["is_active"] is False
-        print(f"PASS: Reject user sets status=rejected, is_active=False")
+        print("PASS: Reject user sets status=rejected, is_active=False")
 
 
 # ============================================================
@@ -600,7 +600,7 @@ class TestOwnerScopeDashboard:
         data = dash_b.json()
         assert data["role"] == "user"
         assert data["metrics"]["bots"] == 0, f"User B should have 0 bots, got {data['metrics']['bots']}"
-        print(f"PASS: User B dashboard shows 0 bots (own data only)")
+        print("PASS: User B dashboard shows 0 bots (own data only)")
 
 
 if __name__ == "__main__":
