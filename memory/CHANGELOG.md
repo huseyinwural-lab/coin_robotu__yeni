@@ -1,6 +1,34 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-12
+### Iteration-51 — Phase-8 Explainability Engine
+- Explainability backend tamamlandı:
+  - Yeni model: `UserDecisionTrace` (`user_decision_traces`)
+  - Yeni migration: `20260312_0027_user_decision_traces.py`
+  - Yeni servis: `services/explainability_service.py`
+  - 90 günlük retention + trace cleanup aktif
+- Yeni kullanıcı endpointleri eklendi:
+  - `GET /api/user/signals/{signal_id}/decision-trace`
+  - `GET /api/user/trades/{trade_id}/decision-trace`
+  - `GET /api/user/execution/intents/{intent_id}/decision-trace`
+  - `GET /api/user/strategies/{strategy_code}/explain`
+  - `GET /api/user/explainability/coverage?days=7`
+- Trace capture entegrasyonu yapıldı:
+  - scanner/signal üretimi
+  - signal approve/reject
+  - execution preview/submit/cancel/approve/reject
+- Frontend explainability panelleri tamamlandı:
+  - `UserSignalsPage`: **Why this signal?**
+  - `UserTradesPage`: **Decision Trace**
+  - `UserExecutePage`: **Preview Explain**
+- Reason code registry genişletildi (`/app/config/reason_codes_registry.json`)
+- Testler:
+  - `backend/tests/test_phase8_explainability_engine.py` PASS
+  - `backend/tests/test_iteration51_explainability_comprehensive.py` PASS
+  - `backend/tests/test_iteration50_pg01_execution_backend.py` PASS (regression)
+  - Testing agent raporu: `/app/test_reports/iteration_51.json` (backend %100, frontend %100)
+
+## 2026-03-12
 ### Iteration-50 — PG-01 Live Reporting + Phase-7A Execution Panel
 - PG-01 canlıya alındı:
   - `GET /api/user/reports/weekly` artık 200 döner.

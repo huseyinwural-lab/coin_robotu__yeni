@@ -38,20 +38,22 @@
   - User `/user/reports` + `/user/execute` sayfaları
   - Scanner/Signals -> Execute deep-link entegrasyonu
   - Execution contract compliance gate + test artefact’ları
+- Iteration-51 kapanışı:
+  - Phase-8 Explainability Engine tamamlandı
+  - Signal/Trade/Execution decision-trace endpointleri canlı
+  - Strategy explain + 7 günlük trace coverage endpointi canlı
+  - 90 gün retention policy aktif
+  - User Signals/Trades/Execute explainability panelleri tamamlandı
 
 ## P1 (Sıradaki)
-1. Phase-8 Explainability Engine:
-   - decision_trace
-   - reason_codes
-   - strategy_explanation
-2. Phase-9 Strategy Meta Engine:
+1. Phase-9 Strategy Meta Engine:
    - strategy orchestration
    - portfolio allocation
    - risk cluster engine
-3. Execution panel advanced actions:
+2. Execution panel advanced actions:
    - close/partial close/reverse intent contract’larını canlı aksiyonlara taşıma
 
 ## P2 (Backlog)
-1. Explainability layer (reason-codes, decision trace, strategy explanation)
-2. Strategy engine architecture genişletmesi (meta-strategy wrapper ve kurumsal karar katmanı)
-3. Legacy endpoint cleanup ve teknik borç azaltımı
+1. Strategy engine architecture genişletmesi (meta-strategy wrapper ve kurumsal karar katmanı)
+2. Legacy endpoint cleanup ve teknik borç azaltımı
+3. Advanced PDF reporting görsel kalite upgrade
