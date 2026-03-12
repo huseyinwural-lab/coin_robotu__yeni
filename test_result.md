@@ -608,15 +608,15 @@ frontend:
 
 metadata:
   created_by: "testing_agent"
-  version: "2.1"
-  test_sequence: 12
+  version: "2.2"
+  test_sequence: 13
   run_ui: false
   last_updated: "2026-03-12"
-  test_phase: "Admin Users Page UI Validation - Admins/Customers Split"
+  test_phase: "Backend Regression and New Feature Testing - Turkish Requirements"
 
 test_plan:
   current_focus:
-    - "Admin Users Page UI validation completed successfully - All requirements verified"
+    - "Backend regression and new feature testing completed successfully - All Turkish requirements validated"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -649,3 +649,91 @@ agent_communication:
     message: "FAZ-4 STEP-1 STRATEGY OBSERVABILITY VALIDATION COMPLETED - ALL TESTS PASSED (12/12 - 100% SUCCESS RATE). Comprehensive frontend validation of Strategy Observability Center completed with admin@platform.dev credentials: CORE FUNCTIONALITY: 1) ✅ Admin login successful at /admin/login with admin@platform.dev / Admin12345! credentials. 2) ✅ Navigation to /admin/strategy-observability successful, page loaded without errors. Page header displays 'STRATEGY OBSERVABILITY CENTER' with proper description. WINDOW SELECTOR (Requirement #3): 3) ✅ Time window selector (24h/7d/30d) WORKING CORRECTLY - Successfully tested all three window options. Selected 7d (value updated to '7d'), selected 30d (value updated to '30d'), changed back to 24h (value updated to '24h'). Data reloads correctly on each window change. TOP_N INPUT AND REFRESH (Requirement #4): 4) ✅ top_n input (1-50) WORKING CORRECTLY - Current value: 10 (default). Tested changing to 5 (successful), tested minimum boundary value 1 (successful), tested maximum boundary value 50 (successful). Input validation enforces 1-50 range correctly. 5) ✅ Refresh button WORKING CORRECTLY - Clicked refresh button, data reloaded successfully, loading state updated to 'loading: false'. STRATEGY-LEVEL FIELDS (Requirement #5): 6) ✅ Score Metrics Panel contains required fields: signals_per_strategy displays correctly showing {spot_pullback_v1:90, spot_range_reversion_v1:420} (data-testid='score-metrics-signals-per-strategy'). selected_signals_per_strategy displays correctly showing {} empty object as expected when no signals selected (data-testid='score-metrics-selected-per-strategy'). 7) ✅ Strategy Report Panel contains required fields: signals_per_strategy displays correctly showing {spot_pullback_v1:90, spot_range_reversion_v1:420} (data-testid='strategy-report-signals-per-strategy'). selected_signals_per_strategy displays correctly showing {} empty object as expected (data-testid='strategy-report-selected-per-strategy'). ADDITIONAL UI VALIDATION: 8) Rejection analytics cards render correctly: Rejected by Trend: 9, Rejected by BTC: 0, Rejected by Freeze: 0, Rejected by Threshold: 0. 9) Top N Executable Signals table renders with proper structure (10 columns: Rank, Symbol, Strategy, Regime, Adjusted Score, Base Score, Delta, Trend, Rel Volume, Timestamp). Empty state displayed correctly: 'Bu zaman penceresinde executable signal yok.' REGRESSION TESTS (Requirement #6): 10) ✅ /admin/users page regression PASSED - Successfully navigated to /admin/users. Page header displays 'ADMIN USER MANAGEMENT'. Users table wrapper visible. Toolbar with filters (search, role, status, sort) visible. 36 users displayed in table. 11) ✅ /admin/system-alerts page regression PASSED - Successfully navigated to /admin/system-alerts. Page header displays 'SYSTEM ALERTS CONTROL CENTER'. Alerts table wrapper visible. Filters panel visible. 26 alerts displayed in table. BACKEND API VERIFICATION: GET /api/admin/strategy/top-signals working (window + top_n params), GET /api/admin/strategy/rejection-analytics working, GET /api/admin/strategy/score-metrics working (returns signals_per_strategy + selected_signals_per_strategy), GET /api/admin/strategy/report working (returns signals_per_strategy + selected_signals_per_strategy). ERROR MONITORING: 12) ✅ ZERO console errors detected throughout entire test flow. ZERO network errors (4xx/5xx) detected. All data-testid attributes present and functional for automated testing. CONCLUSION: Faz-4 Step-1 Strategy Observability feature is production-ready. All requirements validated successfully. Window selector (24h/7d/30d) working. top_n input (1-50) and refresh action working. Strategy-level fields (signals_per_strategy, selected_signals_per_strategy) visible in both Score Metrics and Strategy Report panels. Regression tests for /admin/users and /admin/system-alerts passed without issues."
   - agent: "testing"
     message: "FAZ-4 FINALIZATION VALIDATION COMPLETED - ALL TESTS PASSED (6/6 - 100% SUCCESS RATE). Comprehensive testing of all Faz-4 finalization requirements completed successfully with admin@platform.dev credentials. RESULTS: 1) ✅ Admin login successful at /admin/login with admin@platform.dev / Admin12345!. User correctly redirected to /admin/dashboard. 2) ✅ Successfully navigated to /admin/strategy-observability page. Page header 'Strategy Observability Center' displays correctly. 3) ✅ RISK & CAPITAL STATUS PANEL - ALL 6 REQUIRED FIELDS VERIFIED AND RENDERING CORRECTLY: Field 'equity' present and rendering (value: 10000) with data-testid='risk-capital-equity', Field 'open_risk_pct' present and rendering (value: 0) with data-testid='risk-capital-open-risk', Field 'daily_loss' present and rendering (value: 0 from daily_loss.daily_loss_amount) with data-testid='risk-capital-daily-loss', Field 'portfolio_drawdown_pct' present and rendering (value: 0) with data-testid='risk-capital-portfolio-drawdown', Field 'allocation' present and rendering (JSON with spot_pullback_v1 and spot_range_reversion_v1 strategy allocations) with data-testid='risk-capital-allocation-json', Field 'limits' present and rendering (JSON with max_open_risk_pct:3, max_daily_loss_pct:3, max_portfolio_drawdown_pct:15, max_strategy_drawdown_pct:5, max_positions_per_strategy:2, max_sector_exposure_pct:30, max_correlated_positions:2) with data-testid='risk-capital-limits-json'. Panel title 'Risk & Capital Status' displays correctly with data-testid='risk-capital-status-title'. 4) ✅ STRATEGY REPORT PANEL - BOTH REQUIRED FIELDS VERIFIED AND RENDERING CORRECTLY: Field 'strategy_profit_factor' present and rendering (value: {spot_pullback_v1:1.0261}) with data-testid='strategy-report-profit-factor-by-strategy', Field 'strategy_drawdown' present and rendering (value: {spot_pullback_v1:1.1784}) with data-testid='strategy-report-drawdown-by-strategy'. Panel title 'Strategy Observability Report' displays correctly with data-testid='strategy-report-title'. 5) ✅ WINDOW SELECTOR (24h/7d/30d), TOP_N INPUT (1-50), AND REFRESH FLOW - ALL WORKING CORRECTLY: Window selector tested - successfully changed from 24h → 7d → 30d → back to 24h. All selector values update correctly. Data reloads on each window change. top_n input tested - successfully changed to 5, tested minimum boundary value (1), tested maximum boundary value (50), changed back to 10. All input validation working correctly. Refresh button clicked, data reloaded successfully. 6) ✅ REGRESSION TESTS PASSED: /admin/users page opens correctly - title 'Admin User Management' displayed with data-testid='admin-users-title', users table wrapper visible with data-testid='admin-users-table-wrapper', page fully functional. /admin/system-alerts page opens correctly - title 'System Alerts Control Center' displayed with data-testid='admin-system-alerts-title', alerts table wrapper visible with data-testid='admin-system-alerts-table-wrapper', 26 alerts displayed in table, page fully functional. BACKEND API VERIFICATION: GET /api/admin/strategy/risk-capital/status working correctly - returns complete risk capital snapshot with equity, open_risk_pct, daily_loss, portfolio_drawdown_pct, allocation, limits. GET /api/admin/strategy/report working correctly - returns strategy observability report with strategy_profit_factor and strategy_drawdown fields populated. ERROR MONITORING: ZERO console errors detected throughout entire test flow. ZERO network errors (4xx/5xx) detected. All API calls successful. SCREENSHOTS CAPTURED: faz4_strategy_observability.png (shows complete Strategy Observability page with Risk & Capital Status panel displaying all 6 fields, Strategy Report panel displaying strategy_profit_factor and strategy_drawdown fields, all controls visible and functional), faz4_regression_system_alerts.png (shows System Alerts page working correctly with 26 alerts displayed). CONCLUSION: Faz-4 finalization requirements 100% validated and verified. Risk & Capital Status panel renders all 6 required fields (equity, open_risk_pct, daily_loss, portfolio_drawdown_pct, allocation, limits). Strategy Report panel renders both required fields (strategy_profit_factor, strategy_drawdown). Window selector, top_n input, and refresh functionality all working correctly. Regression tests for /admin/users and /admin/system-alerts passed without issues. All backend APIs functioning correctly. Feature is production-ready and ready for deployment."
+
+  - agent: "testing"
+    message: "BACKEND REGRESSION AND NEW FEATURE TEST COMPLETED - ALL TESTS PASSED (7/7 - 100% SUCCESS RATE). Turkish request validated: Backend regression ve yeni feature testi. Comprehensive testing performed: 1) ✅ Admin login: POST /api/auth/login/admin with admin@platform.dev / Admin12345! - SUCCESSFUL authentication and token received. 2) ✅ Yeni endpoint: POST /api/admin/users/admin-create - Admin role successfully created new admin user (test_admin_6c8a3666@test.com) and returned 201 status as required. 3) ✅ Scope ayrımı GET /api/admin/users?scope=admin - CORRECTLY returned 5 admin users with only admin roles (super_admin/admin/ops filter working). 4) ✅ Scope ayrımı GET /api/admin/users?scope=user - CORRECTLY returned 146 approved user accounts with role=user and approval_status=approved only. 5) ✅ Approval entegrasyonu - Yeni register user: POST /api/auth/register created test user (test_user_ad91fcf2@test.com) with 'pending' status as expected. 6) ✅ Approval entegrasyonu - Approve sonrası: User successfully approved and appeared in scope=user list, complete approval flow working. 7) ✅ Mevcut auth akışına regresyon: POST /api/auth/register creates pending users, POST /api/auth/login/user correctly returns 403 for pending users. ENDPOINT BREAKDOWN: POST /api/auth/login/admin (PASS), POST /api/admin/users/admin-create (PASS - 201), GET /api/admin/users?scope=admin (PASS - correct filtering), GET /api/admin/users?scope=user (PASS - correct filtering), POST /api/auth/register (PASS - pending), POST /api/auth/login/user (PASS - 403 for pending), Full approval flow (PASS - integration working). All Turkish requirements met. Backend authentication, authorization, user creation, scope filtering, and approval workflows functioning correctly. System ready for production."
+
+backend:
+  - task: "Admin Login Authentication Endpoint"
+    implemented: true
+    working: true
+    file: "backend/routers/auth.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "POST /api/auth/login/admin endpoint WORKING CORRECTLY. Successfully authenticated admin@platform.dev with Admin12345! credentials. Returned valid access token for subsequent API calls. Authentication middleware and JWT token generation functioning properly."
+
+  - task: "Admin Create Endpoint - New Feature"
+    implemented: true
+    working: true
+    file: "backend/routers/admin_users.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "POST /api/admin/users/admin-create endpoint WORKING CORRECTLY. Admin role successfully created new admin user (test_admin_6c8a3666@test.com) with role 'admin' and returned 201 status as required. Proper password hashing, role assignment, approval_status='approved', audit logging, and response structure validated. New feature fully functional."
+
+  - task: "User Scope Filtering - Admin Users"
+    implemented: true
+    working: true
+    file: "backend/routers/admin_users.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/admin/users?scope=admin endpoint WORKING CORRECTLY. Returned 5 admin users with only admin roles (super_admin/admin/ops). Scope filtering logic correctly excludes regular users and only returns administrative accounts. Query filtering and role-based access control functioning properly."
+
+  - task: "User Scope Filtering - Regular Users"
+    implemented: true
+    working: true
+    file: "backend/routers/admin_users.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/admin/users?scope=user endpoint WORKING CORRECTLY. Returned 146 approved user accounts with role=user and approval_status=approved only. Scope filtering logic correctly excludes admin roles and pending/rejected users. Multi-condition filtering (role AND approval_status) working as specified."
+
+  - task: "User Registration Pending Status"
+    implemented: true
+    working: true
+    file: "backend/routers/auth.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "POST /api/auth/register endpoint WORKING CORRECTLY. New user registration (test_user_ad91fcf2@test.com) automatically set approval_status='pending' as required. User account creation, password hashing, and default pending status assignment functioning correctly."
+
+  - task: "User Login Pending User Rejection"
+    implemented: true
+    working: true
+    file: "backend/routers/auth.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "POST /api/auth/login/user endpoint WORKING CORRECTLY. Pending user correctly rejected with 403 status as required. User login policy correctly enforcing approval_status check and preventing access for non-approved users. Authentication flow and authorization policies functioning as designed."
+
+  - task: "User Approval Integration Flow"
+    implemented: true
+    working: true
+    file: "backend/routers/auth.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Full approval integration flow WORKING CORRECTLY. Test user (test_user_ad91fcf2@test.com) successfully approved via POST /api/auth/admin/user-approval-requests/{id}/approve and then appeared in GET /api/admin/users?scope=user list. Complete approval workflow from pending registration → admin approval → scope visibility functioning end-to-end."
