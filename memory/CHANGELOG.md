@@ -1,6 +1,29 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-12
+### Phase-7 Iteration — CT + UX Closure (PG-01 Hariç)
+- Contract katmanı eklendi:
+  - `/app/contracts/api_contract_snapshot.json`
+  - `/app/tests/test_api_contracts.py`
+  - `/app/scripts/ci_contract_gate.sh`
+  - `backend/cli/validate_contract_snapshot.py`
+- User contract endpointleri tamamlandı:
+  - `GET /api/user/dashboard`
+  - `GET /api/user/scanner`
+  - `GET /api/user/reports/weekly` (**501 stub**)
+- UX hardening (user panel):
+  - sticky nav + mobile sidebar toggle + desktop collapse
+  - responsive 12-column düzen
+  - mobile card/table collapse + compact mode (trades/scanner/signals)
+  - loading skeleton + responsive chart bileşeni
+  - focus-visible ve aria etiketleri
+- Erişilebilirlik artefact’ı: `/app/test_reports/accessibility_audit.json`
+- Phase-7A hazırlık contract’ı: `/app/contracts/execution_intent_contract.json`
+- Testler:
+  - local: contract + phase7 endpoint testleri PASS
+  - testing agent: `/app/test_reports/iteration_49.json` PASS (backend/frontend %100)
+
+## 2026-03-12
 ### FB-01 + FB-02 — Research Isolation + Legacy Finalization
 - Research namespace oluşturuldu: `/app/research/{formulas,experiments,notebooks,excluded}`.
 - Artefact üretim pipeline’ı eklendi: `python -m cli.generate_research_legacy_artifacts`.

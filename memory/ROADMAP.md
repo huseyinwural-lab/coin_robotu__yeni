@@ -26,14 +26,20 @@
   - Production formula gate (runtime + static import check + CI fail-fast)
   - 18M decomposition + excluded dual report
   - Legacy strategy matrix + integration report
+- Phase-7 CT + UX kapanışı:
+  - API contract snapshot + contract CI gate
+  - `/api/user/reports/weekly` 501 stub contract
+  - Responsive user pages + sticky nav + compact mode
+  - Accessibility audit artefact
+  - Phase-7A execution contract preparation artefact
 
 ## P1 (Sıradaki)
-1. Phase 7 UI/UX hardening (UX-01/UX-02/UX-03):
-   - mobile responsive
-   - layout stabilization (sticky nav, compact table, loading skeleton)
-   - accessibility (WCAG 2.1 AA)
-2. Contract test paketleri (UI değişikliklerinde backend regresyonu önlemek için)
-3. PG-01 haftalık performans raporu (`weekly_performance_report.pdf`, `weekly_trades.csv`, `weekly_strategy_stats.json`)
+1. PG-01 weekly reporting engine implementasyonu:
+   - `/api/user/reports/weekly` canlı backend
+   - `/user/reports` UI
+   - hafif text/pdf fallback + CSV/JSON artefact üretimi
+2. Phase-7A Trade Execution Control Panel implementasyonu (admin/backend sonra user panel)
+3. Execution contract compliance test paketi (`execution_intent_contract.json` ile)
 
 ## P2 (Backlog)
 1. Explainability layer (reason-codes, decision trace, strategy explanation)

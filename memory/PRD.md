@@ -2275,3 +2275,81 @@
 - **FB-01 COMPLETE**
 - **FB-02 COMPLETE**
 - Sonraki faz: **Phase-7 UI/UX Hardening (UX-01/02/03)**
+
+## 35) 2026-03-12 — Phase-7 Iteration (CT + UX Closure, PG-01 Hariç)
+
+### Kapsam Kilidi (Nihai Seçimler)
+- Bu turda yalnızca **CT-01/02/03 + UX-01/02/03** kapatıldı.
+- `/api/user/reports/weekly` için canlı implementasyon yapılmadı; snapshot + runtime stub `501 Not Implemented` olarak sabitlendi.
+- Phase-7A execution implementasyonu bu turda yapılmadı; yalnızca contract hazırlık artefact’ı üretildi.
+
+### Contract Koruma Katmanı
+- Üretildi: `/app/contracts/api_contract_snapshot.json`
+- Snapshot endpoint kapsamı:
+  - `/api/user/dashboard`
+  - `/api/user/portfolio`
+  - `/api/user/trades`
+  - `/api/user/scanner`
+  - `/api/user/signals`
+  - `/api/user/reports/weekly` (stub, 501)
+- Yeni contract test paketi:
+  - `/app/tests/test_api_contracts.py`
+- CI contract gate eklendi:
+  - `/app/scripts/ci_contract_gate.sh`
+  - `backend/cli/validate_contract_snapshot.py`
+- Yardımcı snapshot script:
+  - `backend/cli/generate_api_contract_snapshot.py`
+
+### Backend Contract Endpoint Geliştirmeleri
+- Eklendi:
+  - `GET /api/user/dashboard`
+  - `GET /api/user/scanner`
+  - `GET /api/user/reports/weekly` → **501 Not Implemented** stub
+- İlgili response şemaları `backend/schemas.py` içinde eklendi.
+
+### UX Hardening (User Surface)
+- `PanelLayout`:
+  - sticky top header
+  - mobile sidebar toggle + overlay
+  - desktop sidebar collapse
+- User sayfaları responsive 12-column grid mantığına taşındı:
+  - `/user/dashboard`
+  - `/user/portfolio`
+  - `/user/trades`
+  - `/user/scanner`
+  - `/user/signals`
+- Mobile table collapse (card pattern) + compact mode:
+  - trades, scanner, signals
+- Loading skeleton eklendi (`LoadingSkeleton` component)
+- Responsive chart bileşeni eklendi (`ResponsiveMiniLineChart`)
+- Accessibility iyileştirmeleri:
+  - `aria-label` alanları
+  - global `focus-visible` stili
+
+### Erişilebilirlik Artefact’ı
+- Üretildi: `/app/test_reports/accessibility_audit.json`
+
+### Phase-7A Hazırlık Artefact’ı
+- Üretildi: `/app/contracts/execution_intent_contract.json`
+- İçerik: preview/submit/cancel/presets contract seti + zorunlu kurallar
+  - preview_required=true
+  - tokenless_submit_rejected=true
+  - assisted default + approval required
+
+### Test ve Doğrulama
+- Self-test: contract endpointleri + ci_contract_gate + UX smoke PASS
+- Pytest:
+  - `/app/tests/test_api_contracts.py` PASS
+  - `backend/tests/test_phase7_contract_endpoints.py` PASS
+- Testing agent:
+  - Rapor: `/app/test_reports/iteration_49.json`
+  - Sonuç: backend %100, frontend %100
+
+### Durum
+- **CT-01 COMPLETE**
+- **CT-02 COMPLETE**
+- **CT-03 COMPLETE**
+- **UX-01 COMPLETE**
+- **UX-02 COMPLETE**
+- **UX-03 COMPLETE**
+- **PG-01 IMPLEMENTATION: NOT STARTED (bilinçli kapsam dışı)**
