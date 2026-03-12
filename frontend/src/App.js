@@ -14,6 +14,7 @@ import { AdminFuturesStrategyGovernancePage } from "@/pages/AdminFuturesStrategy
 import { AdminFuturesClusterRiskPage } from "@/pages/AdminFuturesClusterRiskPage";
 import { AdminFuturesCapitalGovernancePage } from "@/pages/AdminFuturesCapitalGovernancePage";
 import { AdminFuturesTailRiskPage } from "@/pages/AdminFuturesTailRiskPage";
+import { AdminFuturesLiveReadinessPage } from "@/pages/AdminFuturesLiveReadinessPage";
 import { AdminFuturesMicrostructureGuardPage } from "@/pages/AdminFuturesMicrostructureGuardPage";
 import { AdminFuturesTestnetControlPage } from "@/pages/AdminFuturesTestnetControlPage";
 import { AdminProofsPage } from "@/pages/AdminProofsPage";
@@ -93,6 +94,7 @@ function App() {
             <Route path="futures/cluster-risk" element={<AdminFuturesClusterRiskPage />} />
             <Route path="futures/capital-governance" element={<AdminFuturesCapitalGovernancePage />} />
             <Route path="futures/tail-risk" element={<AdminFuturesTailRiskPage />} />
+            <Route path="futures/live-readiness" element={<AdminFuturesLiveReadinessPage />} />
             <Route path="futures/microstructure-guard" element={<AdminFuturesMicrostructureGuardPage />} />
             <Route path="futures/testnet-control" element={<AdminFuturesTestnetControlPage />} />
             <Route path="exchanges" element={<AdminExchangesPage />} />

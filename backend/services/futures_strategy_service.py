@@ -24,6 +24,7 @@ from services.audit_service import create_audit_log
 from services.futures_capital_service import apply_capital_order_guard_to_decisions
 from services.futures_correlation_service import apply_cluster_order_guard_to_decisions, get_futures_cluster_risk
 from services.futures_tail_risk_service import apply_tail_risk_order_guard_to_decisions
+from services.futures_live_readiness_service import apply_live_readiness_guard_to_decisions
 from services.futures_microstructure_service import build_microstructure_status
 from services.futures_risk_monitor_service import build_futures_risk_status
 from services.pipeline.cache_store import read_candles
@@ -473,6 +474,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     decisions, cluster_guard_events = apply_cluster_order_guard_to_decisions(db, cache, user_id, decisions)
     decisions, capital_guard_events, capital_snapshot = apply_capital_order_guard_to_decisions(db, cache, user_id, decisions)
     decisions, tail_risk_guard_events, global_risk_payload = apply_tail_risk_order_guard_to_decisions(db, cache, user_id, decisions)
+    decisions, live_readiness_guard_events, live_readiness_payload = apply_live_readiness_guard_to_decisions(db, cache, user_id, decisions)
 
     decisions, interaction_blocked = StrategyInteractionGuard().apply(decisions)
     exposure_tracker = StrategyExposureTracker()
@@ -696,6 +698,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
                 "CLUSTER_TRADE_REJECTED",
                 "CAPITAL_TRADE_REJECTED",
                 "TAIL_RISK_TRADE_REJECTED",
+                "LIVE_READINESS_BLOCK",
             }
             for reason in (row.get("reasons") or [])
         )
@@ -887,6 +890,10 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         "global_risk_state": global_risk_payload.get("risk_state", "NORMAL"),
         "global_risk_active_alerts": global_risk_payload.get("active_alerts") or [],
         "tail_risk_audit_events": global_risk_payload.get("tail_risk_audit_events") or [],
+        "live_readiness_score": live_readiness_payload.get("readiness_score", 0.0),
+        "live_readiness_state": live_readiness_payload.get("readiness_state", "BLOCKED"),
+        "live_readiness_alerts": live_readiness_payload.get("alerts") or [],
+        "live_readiness_guard_events": live_readiness_guard_events,
         "signal_feed": signal_feed,
         "decision_trace": decisions,
         "decision_trace_contract_records": decision_trace_records,
@@ -905,7 +912,8 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             + int(governance_enforcement.get("throttled_rejected_total", 0))
             + len(cluster_guard_events)
             + len(capital_guard_events)
-            + len(tail_risk_guard_events),
+            + len(tail_risk_guard_events)
+            + len(live_readiness_guard_events),
             "interaction_blocked_total": len(interaction_blocked),
             "exposure_blocked_total": len(exposure_blocked),
             "governance_disabled_blocked_total": int(governance_enforcement.get("disabled_blocked_total", 0)),
@@ -913,6 +921,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             "cluster_rejected_total": len(cluster_guard_events),
             "capital_rejected_total": len(capital_guard_events),
             "tail_risk_rejected_total": len(tail_risk_guard_events),
+            "live_readiness_rejected_total": len(live_readiness_guard_events),
             "blocked": [*interaction_blocked, *exposure_blocked, *governance_blocked_rows],
         },
         "strategy_governance": {
@@ -933,6 +942,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             "cluster_order_guard_events": cluster_guard_events,
             "capital_order_guard_events": capital_guard_events,
             "tail_risk_order_guard_events": tail_risk_guard_events,
+            "live_readiness_order_guard_events": live_readiness_guard_events,
         },
         "exposure_tracking": exposure,
         "strategy_attribution": attribution.get("strategy_attribution", []),
@@ -1181,6 +1191,9 @@ def get_futures_strategy_governance(
         "global_risk_score": status.get("global_risk_score", 0.0),
         "global_risk_state": status.get("global_risk_state", "NORMAL"),
         "global_risk_active_alerts": status.get("global_risk_active_alerts") or [],
+        "live_readiness_score": status.get("live_readiness_score", 0.0),
+        "live_readiness_state": status.get("live_readiness_state", "BLOCKED"),
+        "live_readiness_alerts": status.get("live_readiness_alerts") or [],
         "strategy_compare_mode": {
             "selected_strategies": selected,
             "metrics": [
