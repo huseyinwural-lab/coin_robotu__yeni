@@ -9,12 +9,29 @@ Tests:
 - Owner-scope: user1 and user2 data isolation
 - NA-06: Regression - core flow preservation
 """
-import pytest
-import requests
 import os
 import uuid
+from pathlib import Path
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+import pytest
+import requests
+
+
+def _resolve_base_url() -> str:
+    direct = os.environ.get("REACT_APP_BACKEND_URL", "").strip().rstrip("/")
+    if direct:
+        return direct
+
+    env_file = Path(__file__).resolve().parents[2] / "frontend" / ".env"
+    if env_file.exists():
+        for raw_line in env_file.read_text().splitlines():
+            line = raw_line.strip()
+            if line.startswith("REACT_APP_BACKEND_URL="):
+                return line.split("=", 1)[1].strip().rstrip("/")
+    raise RuntimeError("REACT_APP_BACKEND_URL not found")
+
+
+BASE_URL = _resolve_base_url()
 
 class TestPhase6ScannerSignalsAPI:
     """Phase 6 User Scanner & Signals API Tests"""
@@ -251,7 +268,6 @@ class TestPhase6ScannerSignalsAPI:
         data = response.json()
         assert isinstance(data, list), f"Expected list, got {type(data)}"
         print(f"Signals count: {len(data)}")
-        return data
     
     def test_na02_approve_pending_signal(self, user_token):
         """NA-02: POST /api/user/signal/{id}/approve approves pending signal"""

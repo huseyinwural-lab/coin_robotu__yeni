@@ -1,0 +1,88 @@
+{
+  "phase": "Phase 6 - User Platform",
+  "status": "COMPLETE",
+  "generated_at": "2026-03-12T18:12:00Z",
+  "summary": {
+    "backend_pass": true,
+    "frontend_pass": true,
+    "regression_pass": true,
+    "mocked_api": false
+  },
+  "validation_scope": {
+    "na_01_scanner_service": {
+      "endpoints": [
+        "POST /api/user/scanner/run",
+        "GET /api/user/scanner/results"
+      ],
+      "owner_scope_enforced": true,
+      "status": "PASS"
+    },
+    "na_02_signal_service_assisted_queue": {
+      "endpoints": [
+        "GET /api/user/signals",
+        "POST /api/user/signal/{id}/approve",
+        "POST /api/user/signal/{id}/reject"
+      ],
+      "pending_signal_queue_active": true,
+      "approve_reflects_portfolio_and_trades": true,
+      "reject_creates_no_order": true,
+      "status": "PASS"
+    },
+    "na_03_user_api_layer": {
+      "endpoints": [
+        "GET /api/user/portfolio",
+        "GET /api/user/performance",
+        "GET /api/user/trades",
+        "GET /api/user/scanner/results",
+        "GET /api/user/signals",
+        "GET /api/user/exchange",
+        "PUT /api/user/exchange"
+      ],
+      "user_only_enforced": true,
+      "admin_separation_enforced": true,
+      "status": "PASS"
+    },
+    "na_04_user_frontend_pages": {
+      "pages": [
+        "/user/dashboard",
+        "/user/portfolio",
+        "/user/trades",
+        "/user/scanner",
+        "/user/signals"
+      ],
+      "live_data_binding": true,
+      "status": "PASS"
+    },
+    "na_05_assisted_mode_ui_flow": {
+      "pending_list_visible": true,
+      "approve_reject_actions_working": true,
+      "portfolio_reflection": true,
+      "trade_history_reflection": true,
+      "status": "PASS"
+    },
+    "na_06_closeout_validation": {
+      "self_test_completed": true,
+      "testing_agent_completed": true,
+      "test_report": "/app/test_reports/iteration_47.json",
+      "status": "PASS"
+    }
+  },
+  "artifacts": {
+    "self_tests": [
+      "python self-test scripts executed on preview URL",
+      "pytest: /app/backend/tests/test_phase6_closure_backend.py",
+      "pytest: /app/backend/tests/test_phase6_user_platform_core_flow.py",
+      "pytest: /app/backend/tests/test_phase6_user_platform_comprehensive.py"
+    ],
+    "testing_agent_report": "/app/test_reports/iteration_47.json",
+    "ui_smoke_screenshot": "/root/.emergent/automation_output/20260312_181108"
+  },
+  "compliance_checks": {
+    "owner_scope_enforcement": "PASS",
+    "role_separation": "PASS",
+    "default_mode_assisted": "PASS",
+    "no_order_without_approve_or_reject": "PASS",
+    "exchange_key_storage_aes_encrypted": "PASS",
+    "masked_logging": "PASS"
+  }
+}

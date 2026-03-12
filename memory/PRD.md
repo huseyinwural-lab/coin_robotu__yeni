@@ -2135,3 +2135,77 @@
 ### Güncel sıra
 - Phase 6 backend core P0 tamamlandı.
 - Sonraki blok: Phase 6 scanner/signal servisleri + user dashboard katmanı (P1).
+
+## 33) 2026-03-12 — Phase 6 User Platform Toplu Kapanış (NA-01..NA-06) COMPLETE
+
+### Kullanıcı Onayı ile Kilitlenen Kapsam
+- NA-01 → NA-06 tek turda kapatıldı.
+- Route tercihi: `/user/*` korunarak ilerleme + alias yönlendirmeleri eklendi.
+- Varsayılan sinyal modu: **ASSISTED**.
+- Ek sınırlar uygulandı:
+  - `AUTO` varsayılan değil.
+  - `approve/reject` olmadan order submit yok.
+  - `phase6_validation_report.json` üretimi zorunlu.
+
+### NA-01 — Indicator Scanner Service (Backend)
+- Eklendi:
+  - `POST /api/user/scanner/run`
+  - `GET /api/user/scanner/results`
+- User context + owner-scope enforced.
+- Admin endpointlerinden ayrık (`require_user` + role check).
+
+### NA-02 — Strategy Signal Service + Assisted Queue
+- Eklendi:
+  - `GET /api/user/signals`
+  - `POST /api/user/signal/{id}/approve`
+  - `POST /api/user/signal/{id}/reject`
+  - `GET/PUT /api/user/signal-mode`
+- `pending_signals` kuyruğu aktif; varsayılan mod ASSISTED.
+- Approve sonrası paper position açılır ve portfolio/trades verisine yansır.
+- Reject sonrası order oluşturulmaz (`order_position_id = null`).
+
+### NA-03 — User API Katmanı Tamamlandı
+- User seti çalışır durumda:
+  - `/api/user/portfolio`
+  - `/api/user/performance`
+  - `/api/user/trades`
+  - `/api/user/scanner/results`
+  - `/api/user/signals`
+  - `/api/user/exchange` (GET/PUT)
+- Owner-scope ve admin ayrımı doğrulandı.
+
+### NA-04 / NA-05 — User Frontend Uçtan Uca
+- Sayfalar eklendi/bağlandı:
+  - `/user/dashboard`
+  - `/user/portfolio`
+  - `/user/trades`
+  - `/user/scanner`
+  - `/user/signals`
+- Alias route’lar:
+  - `/dashboard`, `/portfolio`, `/trades`, `/scanner`, `/signals` → `/user/*`
+- Assisted UI akışı: pending list + approve/reject + sonuçların portföy/trades’e yansıması.
+
+### Veri Modeli ve Migration
+- Model eklendi:
+  - `user_signal_modes`
+  - `user_scanner_results`
+  - `pending_signals`
+- Migration eklendi:
+  - `backend/migrations/versions/20260312_0025_user_scanner_signal_queue.py`
+
+### Doğrulama (NA-06)
+- Self-test: PASS (API + UI smoke).
+- Pytest:
+  - `test_phase6_closure_backend.py`
+  - `test_phase6_user_platform_core_flow.py`
+  - `test_phase6_user_platform_comprehensive.py`
+  - Toplam: **23 PASS**
+- Testing agent:
+  - Rapor: `/app/test_reports/iteration_47.json`
+  - Sonuç: **Backend %100 + Frontend %100 (30/30)**
+
+### Zorunlu Artefact
+- Üretildi: `/app/test_reports/phase6_validation_report.json`
+
+### Faz Durumu
+- **Phase 6 = COMPLETE**
