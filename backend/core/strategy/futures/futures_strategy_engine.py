@@ -12,16 +12,36 @@ class FuturesStrategyEngine:
 
     def evaluate_symbol(self, *, strategy_id: str, market_state: dict, risk_snapshot: dict) -> dict:
         strategy = self.strategy_registry[strategy_id]
-        signal = strategy.generate_signal(market_state)
-        signal_payload = asdict(signal)
+        raw_signal = strategy.generate_signal(market_state)
+        if isinstance(raw_signal, dict):
+            signal_payload = {
+                "symbol": str(market_state.get("symbol") or "UNKNOWN"),
+                "side": str(raw_signal.get("signal") or "NONE").upper(),
+                "confidence": float(raw_signal.get("confidence") or 0.0),
+                "regime": str(market_state.get("volatility_regime") or "UNKNOWN"),
+                "reason": str((raw_signal.get("context") or {}).get("reason") or "STRATEGY_SIGNAL"),
+                "strategy_type": str((raw_signal.get("context") or {}).get("strategy_type") or strategy_id),
+                "strategy_context": raw_signal.get("context") or {},
+                "strategy_signal_strength": float(raw_signal.get("confidence") or 0.0),
+            }
+        else:
+            signal_payload = asdict(raw_signal)
+            signal_payload["strategy_type"] = strategy_id
+            signal_payload["strategy_context"] = {}
+            signal_payload["strategy_signal_strength"] = float(signal_payload.get("confidence") or 0.0)
 
-        if signal.side == "NONE":
+        signal_side = str(signal_payload.get("side") or "NONE").upper()
+
+        if signal_side == "NONE":
             trace_model = build_decision_trace(
-                symbol=signal.symbol,
+                symbol=str(signal_payload.get("symbol") or market_state.get("symbol") or "UNKNOWN"),
                 strategy=strategy_id,
-                side=signal.side,
-                signal_confidence=signal.confidence,
-                regime=signal.regime,
+                side=signal_side,
+                signal_confidence=float(signal_payload.get("confidence") or 0.0),
+                regime=str(signal_payload.get("regime") or market_state.get("volatility_regime") or "UNKNOWN"),
+                strategy_type=str(signal_payload.get("strategy_type") or strategy_id),
+                strategy_signal_strength=float(signal_payload.get("strategy_signal_strength") or 0.0),
+                strategy_context=signal_payload.get("strategy_context") or {},
                 microstructure_result="PASS",
                 risk_result="PASS",
                 liquidation_result="PASS",
@@ -32,22 +52,24 @@ class FuturesStrategyEngine:
             )
             return {
                 "strategy_id": strategy_id,
-                "symbol": signal.symbol,
-                "side": signal.side,
-                "confidence": signal.confidence,
-                "regime": signal.regime,
+                "symbol": str(signal_payload.get("symbol") or market_state.get("symbol") or "UNKNOWN"),
+                "side": signal_side,
+                "confidence": float(signal_payload.get("confidence") or 0.0),
+                "regime": str(signal_payload.get("regime") or market_state.get("volatility_regime") or "UNKNOWN"),
                 "decision": "REJECT",
                 "reason_code": "SIGNAL_WEAK",
                 "decision_layer": "STRATEGY",
                 "trace": ["signal", "attribution", "decision_trace", "decision_reject"],
                 "signal": signal_payload,
+                "strategy_type": signal_payload.get("strategy_type", strategy_id),
+                "strategy_context": signal_payload.get("strategy_context", {}),
                 "decision_trace_model": trace_model,
             }
 
         latest_price = float(market_state.get("latest_price") or 0.0)
         position = FuturesPosition(
-            symbol=signal.symbol,
-            side=signal.side,
+            symbol=str(signal_payload.get("symbol") or market_state.get("symbol") or "UNKNOWN"),
+            side=signal_side,
             entry_price=max(latest_price, 0.01),
             mark_price=max(latest_price, 0.01),
             position_size=1.0,
@@ -62,7 +84,8 @@ class FuturesStrategyEngine:
         )
 
         microstructure_by_symbol = risk_snapshot.get("microstructure_by_symbol") or {}
-        microstructure_result = microstructure_by_symbol.get(signal.symbol) or {
+        signal_symbol = str(signal_payload.get("symbol") or market_state.get("symbol") or "UNKNOWN")
+        microstructure_result = microstructure_by_symbol.get(signal_symbol) or {
             "gate": {
                 "gate_pass": str(market_state.get("spread_state") or "NORMAL").upper() != "SHOCK",
                 "gate_reason": "MICROSTRUCTURE_SPREAD_SHOCK"
@@ -101,13 +124,15 @@ class FuturesStrategyEngine:
 
         response = {
             "strategy_id": strategy_id,
-            "symbol": signal.symbol,
-            "side": signal.side,
-            "confidence": signal.confidence,
-            "regime": signal.regime,
+            "symbol": signal_symbol,
+            "side": signal_side,
+            "confidence": float(signal_payload.get("confidence") or 0.0),
+            "regime": str(signal_payload.get("regime") or market_state.get("volatility_regime") or "UNKNOWN"),
             "decision": decision_flow["decision"],
             "reason_code": decision_flow["reason_code"],
             "decision_layer": decision_flow.get("decision_layer", "GATE"),
+            "strategy_type": signal_payload.get("strategy_type", strategy_id),
+            "strategy_context": signal_payload.get("strategy_context", {}),
             "trace": decision_flow["trace"],
             "risk_reason": decision_flow.get("risk", {}).get("risk_reason", []),
             "microstructure_gate": decision_flow.get("gate", {}),

@@ -3,10 +3,15 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from core.portfolio.strategy_attribution_engine import build_strategy_attribution
+from core.portfolio.strategy_exposure_tracker import track_strategy_exposure
+from core.portfolio.strategy_interaction_guard import StrategyInteractionGuard
 from core.execution.futures_paper_executor import FuturesPaperExecutor
 from core.futures.funding_bias_engine import calculate_funding_bias
+from core.strategies.analytics.strategy_drift_detector import detect_strategy_drift
+from core.strategies.strategy_registry import build_strategy_registry
 from core.strategy.futures.futures_strategy_engine import FuturesStrategyEngine
-from core.strategy.futures.futures_trend_follow_v1 import FuturesTrendFollowV1
+from services.futures_execution_quality_service import build_execution_quality_rolling_7d, build_execution_quality_snapshot
 from services.futures_microstructure_service import build_microstructure_status
 from services.futures_risk_monitor_service import build_futures_risk_status
 from services.pipeline.cache_store import read_candles
@@ -37,6 +42,9 @@ def _market_state(cache, symbol: str) -> dict:
     funding_raw = _safe_json(cache.get(f"futures:funding:{symbol}"), {}) if cache else {}
 
     closes = [float(item.get("close", 0.0)) for item in candles_15m if float(item.get("close", 0.0)) > 0]
+    highs = [float(item.get("high", 0.0)) for item in candles_15m if float(item.get("high", 0.0)) > 0]
+    lows = [float(item.get("low", 0.0)) for item in candles_15m if float(item.get("low", 0.0)) > 0]
+    volumes = [float(item.get("volume", 0.0)) for item in candles_15m if float(item.get("volume", 0.0)) >= 0]
     latest_price = float(ticker.get("last_price", closes[-1] if closes else 0.0))
     sma_fast = sum(closes[-5:]) / 5 if len(closes) >= 5 else latest_price
     sma_slow = sum(closes[-20:]) / 20 if len(closes) >= 20 else latest_price
@@ -50,6 +58,20 @@ def _market_state(cache, symbol: str) -> dict:
         if prev > 0:
             returns.append(abs((cur - prev) / prev))
     avg_volatility = sum(returns[-12:]) / len(returns[-12:]) if returns else 0.0
+    atr = avg_volatility
+    atr_baseline = sum(returns[-28:]) / len(returns[-28:]) if returns else avg_volatility
+    recent_range = (max(highs[-20:]) - min(lows[-20:])) if highs and lows else 0.0
+    range_mean = sum(closes[-20:]) / len(closes[-20:]) if len(closes) >= 5 else latest_price
+    range_high = max(highs[-20:]) if highs else latest_price
+    range_low = min(lows[-20:]) if lows else latest_price
+    volatility_compression = 0.0
+    if atr_baseline > 0:
+        volatility_compression = max(0.0, min(1.0, 1 - (atr / atr_baseline)))
+    range_persistence = max(0.0, min(1.0, 1 - (recent_range / max(range_mean, 1.0)))) if range_mean > 0 else 0.0
+
+    volume_recent = sum(volumes[-5:]) / len(volumes[-5:]) if len(volumes) >= 5 else 0.0
+    volume_baseline = sum(volumes[-20:]) / len(volumes[-20:]) if len(volumes) >= 20 else max(volume_recent, 1.0)
+    volume_spike_ratio = (volume_recent / volume_baseline) if volume_baseline > 0 else 1.0
     if trend_strength > 0.0025 and avg_volatility <= 0.015:
         volatility_regime = "TRENDING"
     elif avg_volatility > 0.015:
@@ -83,6 +105,15 @@ def _market_state(cache, symbol: str) -> dict:
         "spread_state": spread_state,
         "funding_bias": funding_bias,
         "funding_alignment": funding_alignment,
+        "atr": round(atr, 6),
+        "atr_baseline": round(atr_baseline, 6),
+        "volatility_compression": round(volatility_compression, 6),
+        "range_persistence": round(range_persistence, 6),
+        "range_mean": round(range_mean, 6),
+        "range_high": round(range_high, 6),
+        "range_low": round(range_low, 6),
+        "volume_spike_ratio": round(volume_spike_ratio, 6),
+        "microstructure_suitable": str(spread_state) != "SHOCK",
     }
 
 
@@ -140,6 +171,8 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     active_symbols = sorted({symbol.upper() for symbol in active_symbols})[:10]
 
     market_states = [_market_state(cache, symbol) for symbol in active_symbols]
+    market_map = {state["symbol"]: state for state in market_states}
+
     risk_snapshot = build_futures_risk_status(db, cache, user_id)
     microstructure_status = build_microstructure_status(db, cache, user_id)
     microstructure_by_symbol = {
@@ -154,14 +187,23 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         5.0,
     )
 
-    engine = FuturesStrategyEngine({"futures_trend_follow_v1": FuturesTrendFollowV1()})
-    decisions = engine.run_cycle(
-        strategy_id="futures_trend_follow_v1",
-        market_states=market_states,
-        risk_snapshot=risk_snapshot,
-    )
+    strategy_registry = build_strategy_registry()
+    engine = FuturesStrategyEngine(strategy_registry)
 
-    market_map = {state["symbol"]: state for state in market_states}
+    decisions: list[dict] = []
+    for strategy_id in strategy_registry.keys():
+        cycle_rows = engine.run_cycle(
+            strategy_id=strategy_id,
+            market_states=market_states,
+            risk_snapshot=risk_snapshot,
+        )
+        for row in cycle_rows:
+            row["strategy"] = strategy_id
+            row["strategy_type"] = row.get("strategy_type") or strategy_id
+        decisions.extend(cycle_rows)
+
+    decisions, interaction_blocked = StrategyInteractionGuard().apply(decisions)
+
     executor = FuturesPaperExecutor()
     paper_results = []
     cumulative_pnl = 0.0
@@ -170,6 +212,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     false_reject_count = 0
     confidence_vs_result = []
     decision_trace_records = []
+
     for decision in decisions:
         if decision.get("decision_trace_model"):
             decision_trace_records.append(decision["decision_trace_model"])
@@ -187,6 +230,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
                 confidence_vs_result.append(
                     {
                         "symbol": decision["symbol"],
+                        "strategy": decision.get("strategy"),
                         "confidence": round(float(decision.get("confidence") or 0.0), 4),
                         "decision": "REJECT",
                         "result_pnl": round(counterfactual_pnl, 6),
@@ -206,15 +250,24 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         paper = executor.simulate(strategy_signal=decision, market_state=market_state)
         paper["size_ratio_applied"] = round(size_ratio, 4)
         paper["final_leverage"] = float(leverage_decision.get("final_leverage") or 1.0)
+
         pnl = float(paper.get("paper_pnl", 0.0))
         if pnl < 0:
             false_allow_count += 1
         cumulative_pnl += pnl
-        paper_results.append({"symbol": decision["symbol"], "side": decision["side"], **paper})
+
+        paper_row = {
+            "symbol": decision["symbol"],
+            "side": decision["side"],
+            "strategy": decision.get("strategy"),
+            **paper,
+        }
+        paper_results.append(paper_row)
         paper_pnl_series.append(
             {
                 "index": len(paper_pnl_series) + 1,
                 "symbol": decision["symbol"],
+                "strategy": decision.get("strategy"),
                 "paper_pnl": round(pnl, 6),
                 "cumulative_pnl": round(cumulative_pnl, 6),
             }
@@ -222,6 +275,7 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         confidence_vs_result.append(
             {
                 "symbol": decision["symbol"],
+                "strategy": decision.get("strategy"),
                 "confidence": round(float(decision.get("confidence") or 0.0), 4),
                 "decision": "ALLOW",
                 "result_pnl": round(pnl, 6),
@@ -232,8 +286,36 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             }
         )
 
+    strategy_metrics_map: dict[str, dict] = {}
+    for strategy_id in strategy_registry.keys():
+        rows = [row for row in decisions if row.get("strategy") == strategy_id]
+        trades = [row for row in paper_results if row.get("strategy") == strategy_id]
+        signal_total = len(rows)
+        allowed_total = len([row for row in rows if row.get("decision") == "ALLOW"])
+        rejected_total = len([row for row in rows if row.get("decision") == "REJECT"])
+        reject_rate = (rejected_total / signal_total) if signal_total > 0 else 0.0
+        avg_confidence = (
+            sum(float(row.get("confidence") or 0.0) for row in rows) / signal_total if signal_total > 0 else 0.0
+        )
+        pnl = sum(float(row.get("paper_pnl") or 0.0) for row in trades)
+        execution_quality = max(0.0, min(1.0, 1 - reject_rate * 0.65 - max(-pnl, 0.0) * 18))
+        strategy_metrics_map[strategy_id] = {
+            "strategy": strategy_id,
+            "signal_total": signal_total,
+            "allowed_total": allowed_total,
+            "rejected_total": rejected_total,
+            "reject_rate": round(reject_rate, 4),
+            "avg_confidence": round(avg_confidence, 4),
+            "paper_pnl": round(pnl, 6),
+            "execution_quality": round(execution_quality, 4),
+        }
+
     signal_feed = [
         {
+            "strategy": item.get("strategy"),
+            "strategy_type": item.get("strategy_type", item.get("strategy")),
+            "strategy_signal_strength": float(item.get("confidence") or 0.0),
+            "strategy_context": item.get("strategy_context") or {},
             "symbol": item["signal"]["symbol"],
             "side": item["signal"]["side"],
             "confidence": item["signal"]["confidence"],
@@ -258,15 +340,12 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     decision_layer_distribution = _decision_layer_distribution(decisions)
     leverage_distribution = _leverage_distribution(decisions)
     size_clamp_events = len(
-        [
-            row
-            for row in decisions
-            if float((row.get("leverage_decision") or {}).get("position_size_ratio") or 1.0) < 1.0
-        ]
+        [row for row in decisions if float((row.get("leverage_decision") or {}).get("position_size_ratio") or 1.0) < 1.0]
     )
     confidence_vs_leverage = [
         {
             "symbol": row.get("symbol"),
+            "strategy": row.get("strategy"),
             "confidence": float(row.get("confidence") or 0.0),
             "final_leverage": float((row.get("leverage_decision") or {}).get("final_leverage") or 1.0),
             "decision": row.get("decision"),
@@ -276,11 +355,13 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     liquidation_distance_vs_leverage = [
         {
             "symbol": row.get("symbol"),
+            "strategy": row.get("strategy"),
             "liquidation_distance": float(risk_snapshot.get("avg_distance_to_liquidation") or 0.0),
             "final_leverage": float((row.get("leverage_decision") or {}).get("final_leverage") or 1.0),
         }
         for row in decisions
     ]
+
     diagnostics = {
         "false_allow_count": false_allow_count,
         "false_reject_count": false_reject_count,
@@ -293,8 +374,34 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         "liquidation_distance_vs_leverage": liquidation_distance_vs_leverage,
     }
 
+    exposure = track_strategy_exposure(decisions)
+    attribution = build_strategy_attribution(decisions, paper_results)
+    drift_rows = [
+        {
+            "strategy": item["strategy"],
+            "pnl": item["paper_pnl"],
+            "avg_confidence": item["avg_confidence"],
+            "execution_quality": item["execution_quality"],
+            "reject_rate": item["reject_rate"],
+        }
+        for item in strategy_metrics_map.values()
+    ]
+    drift = detect_strategy_drift(drift_rows)
+
+    strategy_signal_distribution = [
+        {
+            "strategy": strategy,
+            "signal_total": item["signal_total"],
+            "allowed_total": item["allowed_total"],
+            "rejected_total": item["rejected_total"],
+        }
+        for strategy, item in strategy_metrics_map.items()
+    ]
+
     snapshot = {
         "strategy": "futures_trend_follow_v1",
+        "strategy_mode": "MULTI",
+        "strategy_registry": list(strategy_registry.keys()),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "metrics": {
             "futures_strategy_signal_total": len(decisions),
@@ -303,6 +410,9 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             "futures_strategy_confidence": round(avg_confidence, 4),
             "futures_strategy_paper_pnl": round(cumulative_pnl, 6),
         },
+        "strategy_metrics": list(strategy_metrics_map.values()),
+        "strategy_signal_distribution": strategy_signal_distribution,
+        "strategy_drift_alerts": drift.get("strategy_drift_alerts", []),
         "signal_feed": signal_feed,
         "decision_trace": decisions,
         "decision_trace_contract_records": decision_trace_records,
@@ -314,6 +424,12 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             "gate_rejections": microstructure_status.get("gate_rejections", []),
             "execution_suitability": microstructure_status.get("execution_suitability", {}),
         },
+        "interaction_guard": {
+            "blocked_total": len(interaction_blocked),
+            "blocked": interaction_blocked,
+        },
+        "exposure_tracking": exposure,
+        "strategy_attribution": attribution.get("strategy_attribution", []),
         "reject_reason_breakdown": [
             {"reason_code": reason, "count": count}
             for reason, count in sorted(reject_reason_map.items(), key=lambda item: item[1], reverse=True)
@@ -337,9 +453,9 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         leverage_events = [
             {
                 "symbol": row.get("symbol"),
-                "strategy": snapshot["strategy"],
+                "strategy": row.get("strategy"),
                 "confidence": float(row.get("confidence") or 0.0),
-                "microstructure_quality": round(max(0.0, min(1.0, 1 - float((row.get("microstructure_gate") or {}).get("risk_score", 0.0))),), 4),
+                "microstructure_quality": round(max(0.0, min(1.0, 1 - float((row.get("microstructure_gate") or {}).get("risk_score", 0.0)))), 4),
                 "liquidation_distance": float(risk_snapshot.get("avg_distance_to_liquidation") or 0.0),
                 "funding_bias": ((market_map.get(row.get("symbol"), {}) or {}).get("funding_bias", {}) or {}).get("bias_direction", "NEUTRAL"),
                 "final_leverage": float((row.get("leverage_decision") or {}).get("final_leverage") or 1.0),
@@ -349,12 +465,17 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             }
             for row in decisions
         ]
-        cache.set(f"futures:leverage:status:{user_id}", json.dumps({
-            "events": leverage_events,
-            "diagnostics": diagnostics,
-            "updated_at": snapshot["generated_at"],
-            "strategy": snapshot["strategy"],
-        }))
+        cache.set(
+            f"futures:leverage:status:{user_id}",
+            json.dumps(
+                {
+                    "events": leverage_events,
+                    "diagnostics": diagnostics,
+                    "updated_at": snapshot["generated_at"],
+                    "strategy": snapshot["strategy"],
+                }
+            ),
+        )
 
     return snapshot
 

@@ -12,6 +12,9 @@ class FuturesDecisionTrace:
     side: str
     signal_confidence: float
     regime: str
+    strategy_type: str
+    strategy_signal_strength: float
+    strategy_context: dict
     microstructure_result: str
     risk_result: str
     liquidation_result: str
@@ -35,6 +38,9 @@ def build_decision_trace(
     side: str,
     signal_confidence: float,
     regime: str,
+    strategy_type: str = "unknown",
+    strategy_signal_strength: float = 0.0,
+    strategy_context: dict | None = None,
     microstructure_result: str,
     risk_result: str,
     liquidation_result: str,
@@ -58,6 +64,9 @@ def build_decision_trace(
         side=side,
         signal_confidence=round(float(signal_confidence), 4),
         regime=regime,
+        strategy_type=str(strategy_type),
+        strategy_signal_strength=round(float(strategy_signal_strength), 4),
+        strategy_context=strategy_context or {},
         microstructure_result=microstructure_result,
         risk_result=risk_result,
         liquidation_result=liquidation_result,
