@@ -59,3 +59,18 @@
 ### 5.1B Test Sonuçları
 - Self test: `31/31 PASS`
 - Testing agent: `/app/test_reports/iteration_32.json` -> **PASS**
+
+## 2026-03-12
+### Phase 5.2 — Futures Decision Trace Standard
+- Decision core eklendi: trace model + reason taxonomy + attribution engine
+- Paper decision flow tek standart chain ve tek reason_code üretimiyle güncellendi
+- Yeni endpoint: `GET /api/admin/futures/decision-diagnostics`
+- `/admin/futures/risk-monitor` içine diagnostics widgetları eklendi
+  - false allow/reject
+  - gate reason distribution
+  - confidence vs outcome scatter
+  - decision layer distribution
+
+### 5.2 Test Sonuçları
+- Self test: `74/74 PASS`
+- Testing agent: `/app/test_reports/iteration_33.json` -> **PASS**

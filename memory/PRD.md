@@ -1219,3 +1219,68 @@
 ### Güncel durum notu
 - Phase 5.1B tamamlandı.
 - Sistem paper-only kalmaya devam ediyor; live/testnet execution açılmadı.
+
+## 18) 2026-03-12 — Phase 5.2 Futures Decision Trace Standard (Tamamlandı)
+
+### Backend — Decision standardizasyonu
+- Yeni decision modülü eklendi (`core/futures/decision/`):
+  - `decision_trace_model.py` (tek trace contract)
+  - `reason_codes.py` (tek reason taxonomy + decision layer enum)
+  - `decision_attribution_engine.py` (deterministik attribution)
+- `futures_paper_decision_flow.py` güncellendi:
+  - Akış: `signal -> microstructure -> risk -> liquidation -> ADL -> policy -> gate -> attribution -> trace -> paper execution`
+  - Attribution zorunlu hale getirildi.
+  - Çıktılar: `reason_code`, `decision_layer`, `decision_trace_model`.
+- `futures_strategy_engine.py` ve `futures_strategy_service.py` güncellendi:
+  - Tüm kararlar tek trace modeliyle snapshot’a yazılır (`decision_trace_contract_records`).
+  - Diagnostics metrikleri hesaplanır ve cache’e yazılır.
+
+### Reason taxonomy (tek kaynak)
+- `SIGNAL_WEAK`
+- `MICROSTRUCTURE_SPREAD_SHOCK`
+- `MICROSTRUCTURE_DEPTH_COLLAPSE`
+- `MICROSTRUCTURE_SLIPPAGE_ANOMALY`
+- `RISK_LEVERAGE_LIMIT`
+- `RISK_MARGIN_USAGE`
+- `LIQUIDATION_DISTANCE_TOO_LOW`
+- `CASCADE_DETECTED`
+- `ADL_PRESSURE_LONG`
+- `ADL_PRESSURE_SHORT`
+- `POLICY_BLOCK`
+- `GATE_REJECT`
+- `ALLOW`
+
+### Diagnostics endpoint + admin görünürlük
+- Yeni endpoint: `GET /api/admin/futures/decision-diagnostics`
+- Dönen contract:
+  - `false_allow_count`
+  - `false_reject_count`
+  - `gate_reason_distribution`
+  - `confidence_vs_result`
+  - `decision_layer_distribution`
+- Admin panel (`/admin/futures/risk-monitor`) eklendi:
+  - false allow counter
+  - false reject counter
+  - gate reason distribution
+  - confidence vs outcome scatter
+  - decision layer distribution
+
+### Diagnostics metrikleri
+- `futures_false_allow_total`
+- `futures_false_reject_total`
+- `futures_gate_reason_distribution`
+- `futures_strategy_confidence_vs_result`
+
+### Test ve doğrulama
+- Yeni test dosyaları:
+  - `tests/test_decision_trace_model.py`
+  - `tests/test_reason_code_taxonomy.py`
+  - `tests/test_decision_attribution_engine.py`
+  - `tests/test_diagnostics_metrics.py`
+  - `tests/test_decision_diagnostics_endpoint.py`
+- Self-test: `74/74 PASS`
+- Testing agent raporu: `/app/test_reports/iteration_33.json` => **PASS**
+
+### Güncel durum
+- Phase 5.2 tamamlandı; decision chain artık tek contract + tek taxonomy + deterministik attribution ile izlenebilir.
+- Sistem paper-only modda kalmaya devam ediyor.
