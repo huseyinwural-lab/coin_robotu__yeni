@@ -1,0 +1,33 @@
+# CHANGELOG — Algorithmic Trading Platform
+
+## 2026-03-12
+### Phase 5.1A — Futures Liquidation Protection + ADL Risk Shield
+- Liquidation protection çekirdeği güncellendi ve contract-sınıf tabanlı hale getirildi:
+  - LiquidationRiskAggregator
+  - CascadeDetector
+  - ProtectionPolicyEngine
+  - EmergencyDeleverageExecutor
+  - MarginUtilizationGuard
+  - LiquidationGate
+- ADL risk katmanı sıfırdan eklendi:
+  - ADLRiskDetector
+  - ADLPressureAggregator
+  - ADLProtectionPolicy
+  - ADLExposureReducer
+  - ADLGate
+- Servis zinciri deterministik karar akışına güncellendi:
+  - snapshot -> liquidation -> cascade -> adl -> policy -> gate -> execution -> observability
+- Yeni endpoint: `GET /api/admin/futures/adl/status`
+- Genişleyen endpoint contractları:
+  - `GET /api/admin/futures/risk/status` -> `policy_state`, `liquidation_risk_score`, `adl_risk_score`, `decision_trace`
+  - `GET /api/admin/futures/liquidation-protection/status` -> ADL alanları + decision trace
+- Frontend admin sayfası (`/admin/futures/liquidation-protection`) tamamlandı:
+  - read-only badge
+  - loading / empty / error state
+  - ADL widgetları (gauge, pressure side, symbols, policy state)
+  - decision trace paneli
+- Sidebar'a `Liquidation Protection` linki eklendi.
+
+### Test Sonuçları
+- Self test: `pytest -q /app/backend/tests/test_phase5_liquidation_protection_adl.py` -> **7/7 PASS**
+- Testing agent: `/app/test_reports/iteration_30.json` -> **PASS** (backend + frontend + regression)

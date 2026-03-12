@@ -1036,3 +1036,67 @@
 - Multi-strategy regime-aware spot engine artık üç stratejiyi destekliyor.
 - Risk/capital/observability/exposure katmanları aktif.
 - Spot engine finalizasyonu teknik olarak tamamlandı; sonraki büyük faz Futures Strategy Engine.
+
+## 15) 2026-03-12 — Phase 5.1A Futures Liquidation Protection + ADL Risk Shield
+
+### Uygulanan kararlar (kullanıcı onayı: 1-a, 2-b, 3-a)
+- PRD’ye birebir sadık kalındı, kapsam daraltılmadı.
+- Sıralama backend-first yapıldı: önce çekirdek modüller + endpoint contract, sonra admin panel.
+- Test akışı: self-test + kapsamlı testing agent doğrulaması.
+
+### Backend (Phase 5.1A.1 çekirdek)
+- Liquidation protection modülleri güçlendirildi:
+  - `core/futures/liquidation_protection/liquidation_risk_aggregator.py`
+  - `core/futures/liquidation_protection/cascade_detector.py`
+  - `core/futures/liquidation_protection/protection_policy_engine.py`
+  - `core/futures/liquidation_protection/emergency_deleverage_executor.py`
+  - `core/futures/liquidation_protection/margin_utilization_guard.py`
+  - `core/futures/liquidation_protection/liquidation_gate.py`
+- ADL Risk Shield modülleri eklendi:
+  - `core/futures/adl/adl_risk_detector.py`
+  - `core/futures/adl/adl_pressure_aggregator.py`
+  - `core/futures/adl/adl_protection_policy.py`
+  - `core/futures/adl/adl_exposure_reducer.py`
+  - `core/futures/adl/adl_gate.py`
+- Deterministik karar zinciri servis akışına işlendi:
+  - position snapshot -> liquidation risk -> cascade -> adl risk -> policy engine -> gate -> execution plan -> admin observability
+- Yeni endpoint:
+  - `GET /api/admin/futures/adl/status`
+- Güncellenen endpoint contract:
+  - `GET /api/admin/futures/risk/status` artık `policy_state`, `liquidation_risk_score`, `adl_risk_score`, `decision_trace` döner.
+  - `GET /api/admin/futures/liquidation-protection/status` artık ADL alanlarını ve decision trace’i içerir.
+- Metrics genişletmesi:
+  - `futures_adl_risk_score`
+  - `futures_adl_pressure_side`
+  - `futures_adl_gate_reject_total`
+  - `futures_adl_reduce_total`
+  - `futures_adl_policy_state`
+
+### Frontend Admin Panel
+- `/admin/futures/liquidation-protection` sayfası read-only izleme paneli olarak tamamlandı.
+- Loading / empty / error state eklendi.
+- ADL widgetları eklendi:
+  - ADL risk gauge
+  - pressure side indicator
+  - ADL risk symbols
+  - ADL policy state
+- `Decision Trace` paneli eklendi.
+- Sidebar’a `Liquidation Protection` navigasyon linki eklendi.
+- Regression korunumu:
+  - `/admin/futures/risk-monitor` route çalışır durumda bırakıldı.
+
+### Test ve doğrulama
+- Yeni backend test dosyası:
+  - `/app/backend/tests/test_phase5_liquidation_protection_adl.py`
+- Self-test sonucu:
+  - `REACT_APP_BACKEND_URL=... pytest -q /app/backend/tests/test_phase5_liquidation_protection_adl.py` => **7/7 PASS**
+- Kapsamlı testing agent raporu:
+  - `/app/test_reports/iteration_30.json`
+  - Backend endpoint + contract + frontend panel + regression => **PASS**
+
+### Güncel Önceliklendirilmiş Backlog
+- **P0 (tamamlandı):** Phase 5.1A Liquidation Protection + ADL Risk Shield
+- **P1 (sıradaki):** `futures_trend_follow_v1` (paper-only) + risk foundation entegrasyonu
+- **P1:** Futures reversion/breakout + dynamic leverage model
+- **P2:** Spot/futures capital allocation engine formalizasyonu
+- **P2:** User platform (portföy, performans, kullanıcı paneli derinleştirme)
