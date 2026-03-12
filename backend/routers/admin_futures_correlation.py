@@ -62,3 +62,26 @@ def futures_cluster_risk(refresh: bool = False, current_admin: User = Depends(re
         },
     )
     return payload
+
+
+@router.get("/correlation-cluster-snapshot")
+def futures_correlation_cluster_snapshot(
+    refresh: bool = False,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    payload = get_futures_cluster_risk(db, pipeline_runtime.cache, current_admin.id, refresh=refresh)
+    create_audit_log(
+        db,
+        action="FUTURES_CLUSTER_SNAPSHOT_VIEWED",
+        entity_type="futures_cluster_snapshot",
+        entity_id=current_admin.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="info",
+        details={
+            "cluster_count": len(payload.get("correlation_clusters") or []),
+            "risk_state": payload.get("risk_state", "NORMAL"),
+        },
+    )
+    return payload

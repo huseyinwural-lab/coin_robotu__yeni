@@ -1703,3 +1703,73 @@
 ### Güncel sıra
 - Phase 5.7 tamamlandı.
 - Sonraki blok: **Phase 5.7A — Tail Risk Guard**
+
+## 26) 2026-03-12 — Phase 5.7A Tail Risk Guard (Tamamlandı)
+
+### Tail Risk Core
+- `core/risk/tail_risk/tail_risk_detector.py`
+  - `volatility_score`, `liquidation_pressure`, `liquidity_score`, `spread_anomaly`
+  - Deterministik `tail_risk_score` (0–100) + fallback
+- `core/risk/tail_risk/liquidation_cascade_guard.py`
+  - Event: `LIQUIDATION_CASCADE_ALERT`
+- `core/risk/tail_risk/extreme_volatility_guard.py`
+  - Event: `EXTREME_VOLATILITY_ALERT`
+- `core/risk/tail_risk/exchange_outage_guard.py`
+  - Event: `EXCHANGE_HEALTH_ALERT`
+
+### Global Risk Score
+- `core/risk/tail_risk/global_risk_score_engine.py`
+  - Ağırlıklar kilitlendi: strategy=0.25, cluster=0.25, capital=0.20, tail=0.30
+  - Eşikler:
+    - `>60` → `GLOBAL_RISK_ALERT` (downshift)
+    - `>80` → `GLOBAL_RISK_THROTTLE`
+    - `>90` → `TRADE_ENGINE_PAUSED`
+
+### Pipeline Enforcement
+- `core/risk/tail_risk/tail_risk_order_guard.py`
+  - `REJECT` / `REDUCE_SIZE` / pause davranışları
+  - Event: `TAIL_RISK_TRADE_REJECTED`
+- `services/futures_strategy_service.py` içine tail-risk order guard entegre edildi
+
+### Audit
+- `core/observability/tail_risk_audit.py`
+  - `TAIL_RISK_ALERT`, `LIQUIDATION_CASCADE_ALERT`, `EXTREME_VOLATILITY_ALERT`, `EXCHANGE_HEALTH_ALERT`, `GLOBAL_RISK_ALERT`, `TRADE_ENGINE_PAUSED`
+
+### API
+- Yeni endpointler:
+  - `GET /api/admin/futures/tail-risk`
+  - `GET /api/admin/futures/global-risk`
+- Geriye uyumluluk alias endpointi:
+  - `GET /api/admin/futures/correlation-cluster-snapshot`
+
+### UI
+- Yeni panel: `/admin/futures/tail-risk`
+  - tail risk score gauge
+  - global risk score/state
+  - liquidation pressure monitor
+  - volatility spike chart
+  - exchange health status
+  - cross-layer integration panel
+- Mevcut panellere entegrasyon:
+  - `/admin/futures/strategy-governance`
+  - `/admin/futures/cluster-risk`
+  - `/admin/futures/capital-governance`
+  - (global risk özet kartları eklendi)
+
+### Test
+- Yeni test dosyaları:
+  - `test_tail_risk_detector.py`
+  - `test_liquidation_cascade_guard.py`
+  - `test_extreme_volatility_guard.py`
+  - `test_exchange_outage_guard.py`
+  - `test_global_risk_score_engine.py`
+  - `test_tail_risk_order_guard.py`
+  - `test_tail_risk_endpoint.py`
+- Lokal pytest: **16 passed**
+- Testing agent raporu: `/app/test_reports/iteration_41.json` => **PASS**
+  - Backend 100%
+  - Frontend 100%
+
+### Güncel sıra
+- Phase 5.7A tamamlandı.
+- Sonraki blok: **Phase 5.8 — Live Readiness Control System**
