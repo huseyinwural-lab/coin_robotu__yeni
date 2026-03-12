@@ -74,3 +74,15 @@
 ### 5.2 Test Sonuçları
 - Self test: `74/74 PASS`
 - Testing agent: `/app/test_reports/iteration_33.json` -> **PASS**
+
+## 2026-03-12
+### Phase 5.4 — Dynamic Leverage Model
+- Leverage çekirdeği eklendi: confidence/microstructure/liquidation/funding/portfolio guard + birleşik leverage engine
+- Paper decision flow chain’e `dynamic_leverage_engine` adımı eklendi
+- Decision trace leverage alanlarıyla genişletildi (7 alan)
+- Yeni endpoint: `GET /api/admin/futures/leverage/status`
+- `/admin/futures/risk-monitor` leverage observability widgetları eklendi
+
+### 5.4 Test Sonuçları
+- Self test: `119 PASS`
+- Testing agent: `/app/test_reports/iteration_34.json` -> **PASS**

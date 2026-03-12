@@ -374,7 +374,7 @@ export const AdminFuturesRiskMonitorPage = () => {
             <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-strategy-pnl-chart-panel">
               <h4 className="text-base font-bold" data-testid="futures-strategy-pnl-chart-title">Paper PnL Chart</h4>
               <div className="mt-3 h-48" data-testid="futures-strategy-pnl-chart-wrapper">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={240} minHeight={160}>
                   <LineChart data={paperPnlSeries}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#111" opacity={0.2} />
                     <XAxis dataKey="index" stroke="#111" />
@@ -454,7 +454,7 @@ export const AdminFuturesRiskMonitorPage = () => {
             <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-confidence-vs-leverage-panel">
               <h4 className="text-base font-bold" data-testid="futures-confidence-vs-leverage-title">Confidence vs Leverage</h4>
               <div className="mt-3 h-56" data-testid="futures-confidence-vs-leverage-chart-wrapper">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={240} minHeight={180}>
                   <ScatterChart>
                     <CartesianGrid strokeDasharray="3 3" stroke="#111" opacity={0.2} />
                     <XAxis type="number" dataKey="confidence" name="confidence" domain={[0, 1]} stroke="#111" />
@@ -471,7 +471,7 @@ export const AdminFuturesRiskMonitorPage = () => {
           <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-liquidation-distance-vs-leverage-panel">
             <h4 className="text-base font-bold" data-testid="futures-liquidation-distance-vs-leverage-title">Liquidation Distance vs Leverage</h4>
             <div className="mt-3 h-56" data-testid="futures-liquidation-distance-vs-leverage-chart-wrapper">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={240} minHeight={180}>
                 <LineChart data={liquidationDistanceVsLeverage}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#111" opacity={0.2} />
                   <XAxis dataKey="symbol" stroke="#111" />
@@ -518,7 +518,7 @@ export const AdminFuturesRiskMonitorPage = () => {
             <div className="border border-black/25 bg-orange-100 p-4" data-testid="futures-confidence-vs-outcome-scatter-panel">
               <h4 className="text-base font-bold" data-testid="futures-confidence-vs-outcome-scatter-title">Confidence vs Outcome Scatter</h4>
               <div className="mt-3 h-56" data-testid="futures-confidence-vs-outcome-scatter-wrapper">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={240} minHeight={180}>
                   <ScatterChart>
                     <CartesianGrid strokeDasharray="3 3" stroke="#111" opacity={0.2} />
                     <XAxis type="number" dataKey="confidence" name="confidence" domain={[0, 1]} stroke="#111" />

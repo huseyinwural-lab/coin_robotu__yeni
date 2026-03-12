@@ -1284,3 +1284,60 @@
 ### Güncel durum
 - Phase 5.2 tamamlandı; decision chain artık tek contract + tek taxonomy + deterministik attribution ile izlenebilir.
 - Sistem paper-only modda kalmaya devam ediyor.
+
+## 19) 2026-03-12 — Phase 5.4 Dynamic Leverage Model (Tamamlandı)
+
+### Backend Leverage katmanı
+- Yeni modüller eklendi (`core/futures/leverage/`):
+  - `leverage_decision_model.py`
+  - `confidence_scaler.py`
+  - `microstructure_scaler.py`
+  - `liquidation_scaler.py`
+  - `funding_scaler.py`
+  - `portfolio_leverage_guard.py`
+  - `leverage_engine.py`
+- Deterministik akış:
+  - `base leverage -> confidence -> microstructure -> liquidation -> funding -> portfolio guard -> final leverage -> size ratio`
+
+### Decision flow ve trace entegrasyonu
+- `core/strategy/futures_paper_decision_flow.py` zinciri güncellendi:
+  - `signal -> microstructure -> risk -> liquidation -> adl -> dynamic_leverage_engine -> policy -> gate -> attribution -> trace -> paper execution`
+- Decision trace contract’i leverage alanlarıyla genişletildi:
+  - `leverage_decision`
+  - `confidence_multiplier`
+  - `microstructure_multiplier`
+  - `liquidation_multiplier`
+  - `funding_multiplier`
+  - `final_leverage`
+  - `position_size_ratio`
+
+### API ve observability
+- Yeni endpoint:
+  - `GET /api/admin/futures/leverage/status`
+- Dönüş contractı:
+  - `symbol, strategy, confidence, microstructure_quality, liquidation_distance, funding_bias, final_leverage, size_ratio`
+  - `leverage_distribution, size_clamp_events, confidence_vs_leverage, liquidation_distance_vs_leverage`
+- Diagnostics endpointi leverage metrikleriyle genişletildi.
+
+### Frontend /admin/futures/risk-monitor
+- Yeni leverage widgetları eklendi:
+  - leverage distribution
+  - size clamp events
+  - confidence vs leverage
+  - liquidation distance vs leverage
+
+### Test
+- Yeni test dosyaları:
+  - `tests/test_confidence_scaler.py`
+  - `tests/test_microstructure_scaler.py`
+  - `tests/test_liquidation_scaler.py`
+  - `tests/test_funding_scaler.py`
+  - `tests/test_portfolio_guard.py`
+  - `tests/test_leverage_engine.py`
+  - `tests/test_leverage_status_endpoint.py`
+- Self-test sonucu: **119 PASS**
+- Testing agent raporu: `/app/test_reports/iteration_34.json` => **PASS**
+
+### Güncel durum
+- Phase 5.4 tamamlandı; sistem paper-only modda dinamik leverage + risk-adjusted size üretiyor.
+- Sonraki faz: Phase 5.5 Controlled Testnet Hook.
