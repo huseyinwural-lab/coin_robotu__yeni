@@ -1388,3 +1388,44 @@
 
 ### Sonraki adım
 - Phase 5.5A Execution Quality Analytics (fill latency, reject-rate analytics, partial-fill quality, 7d rolling execution quality endpoint) tamamlanacak.
+
+## 21) 2026-03-12 — Phase 5.5A Execution Quality Analytics (Tamamlandı)
+
+### Teslim edilen analytics katmanı
+- Yeni servis: `services/futures_execution_quality_service.py`
+  - realized vs expected slippage özeti
+  - fill latency metrikleri
+  - reject-rate analytics
+  - partial-fill quality
+  - placement success ratio
+  - symbol-level execution quality score
+  - gate reason distribution + 7d trend
+  - symbol drift alarmı (paper-testnet parity bozulması)
+  - rolling 7d tuning score
+- Yeni endpointler:
+  - `GET /api/admin/futures/testnet/execution-quality`
+  - `GET /api/admin/futures/testnet/execution-quality/rolling-7d`
+
+### Fazlar arası zorunlu 5 geliştirme (bu fazda da uygulandı)
+1. Rolling 7d tuning score
+2. Symbol bazlı drift alarmı
+3. False allow / false reject karşılaştırma paneli
+4. Gate reason trend analizi
+5. “Futures’ta en sık 15 mimari hata” checklist’i
+
+### UI güncellemesi
+- `/admin/futures/testnet-control` genişletildi:
+  - rolling 7d tuning score kartı
+  - gate reason trend (7d)
+  - symbol drift alarm paneli
+  - false allow/reject karşılaştırma paneli
+  - 15 maddelik mimari checklist paneli
+
+### Test
+- Self-test: yeni + regresyon testleri PASS
+- Testing agent raporu: `/app/test_reports/iteration_36.json` => **PASS**
+  - Backend 25/25, Frontend panel doğrulamaları PASS
+
+### Güncel sıra
+- Phase 5.5 + 5.5A tamamlandı.
+- Sonraki teslim: Phase 5.6 Futures Strategy Expansion (mean reversion + breakout + multi-strategy orchestration) ve her fazda zorunlu 5 analytics/gov ekinin sürdürülmesi.
