@@ -1841,3 +1841,63 @@
 ### Güncel sıra
 - Phase 5.8 tamamlandı.
 - Sonraki blok: **Phase 5.8A — Capital Scaling Validation**
+
+## 28) 2026-03-12 — Phase 5.8A Capital Scaling Validation (Tamamlandı)
+
+### Simulation Core
+- `core/simulation/capital_scaling_simulator.py`
+  - 1M / 10M / 100M seviyelerinde deterministik replay
+  - Çıktılar: `pnl`, `slippage`, `execution_quality`, `liquidity_stress`
+- `core/simulation/liquidity_impact_model.py`
+  - `impact = order_size / market_depth` türevi + tier çarpanları
+- `core/simulation/slippage_simulator.py`
+  - volatility regime + spread + liquidity + impact ile `expected_slippage_bps`
+- `core/simulation/stress_replay_engine.py`
+  - Senaryolar: `high_volatility`, `low_liquidity`, `flash_crash`, `liquidation_cascade`
+- `core/simulation/scaling_robustness_engine.py`
+  - `scaling_robustness_score` (0–100)
+  - Durum: `scalable` / `caution` / `unstable`
+- `core/simulation/scaling_governance_adapter.py`
+  - capital cap recommendation + risk downshift + strategy disable önerileri
+
+### Config-driven Weights (hardcode değil)
+- `core/config.py` içinde env tabanlı ağırlıklar:
+  - `SCALING_WEIGHT_PNL_STABILITY`
+  - `SCALING_WEIGHT_SLIPPAGE_IMPACT`
+  - `SCALING_WEIGHT_EXECUTION_QUALITY`
+  - `SCALING_WEIGHT_LIQUIDITY_STRESS`
+- Varsayılan: `0.25 / 0.25 / 0.25 / 0.25`
+
+### Service + API
+- `services/futures_scaling_validation_service.py`
+  - scaling validation + report üretimi
+- Yeni endpointler:
+  - `GET /api/admin/futures/scaling-validation`
+  - `GET /api/admin/futures/scaling-report`
+- Router: `routers/admin_futures_scaling_validation.py`
+
+### UI
+- Yeni panel: `/admin/futures/scaling-validation`
+  - capital scaling comparison
+  - slippage vs capital
+  - pnl stability
+  - liquidity impact
+  - robustness score/state
+  - stress replay dashboard
+
+### Test
+- Yeni test dosyaları:
+  - `test_capital_scaling_simulator.py`
+  - `test_liquidity_impact_model.py`
+  - `test_slippage_simulator.py`
+  - `test_stress_replay_engine.py`
+  - `test_scaling_robustness_engine.py`
+  - `test_scaling_endpoint.py`
+- Lokal pytest: **11 passed**
+- Testing agent raporu: `/app/test_reports/iteration_43.json` => **PASS**
+  - Backend 100%
+  - Frontend 100%
+
+### Güncel sıra
+- Phase 5.8A tamamlandı.
+- Sonraki blok: **Phase 6 — User Platform**
