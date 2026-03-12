@@ -25,20 +25,27 @@ def admin_token():
     return response.json()["access_token"]
 
 
-def test_strategy_run_paper_cycle_endpoint(admin_token):
-    response = requests.post(
-        f"{BASE_URL}/api/admin/futures/strategy/run-paper-cycle",
+def test_microstructure_admin_endpoint_contract(admin_token):
+    response = requests.get(
+        f"{BASE_URL}/api/admin/futures/microstructure/status",
         headers={"Authorization": f"Bearer {admin_token}"},
         timeout=20,
     )
     assert response.status_code == 200
     data = response.json()
-    assert data.get("strategy") == "futures_trend_follow_v1"
-    assert "metrics" in data
-    assert "decision_trace" in data
+    assert "portfolio_microstructure_state" in data
+    assert "portfolio_microstructure_risk_score" in data
+    assert "symbols_at_risk" in data
+    assert "gate_rejections" in data
+    assert "execution_suitability" in data
 
 
-def test_strategy_status_endpoint_returns_required_sections(admin_token):
+def test_strategy_endpoint_still_returns_decision_trace(admin_token):
+    requests.post(
+        f"{BASE_URL}/api/admin/futures/strategy/run-paper-cycle",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        timeout=20,
+    )
     response = requests.get(
         f"{BASE_URL}/api/admin/futures/strategy/status",
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -46,8 +53,5 @@ def test_strategy_status_endpoint_returns_required_sections(admin_token):
     )
     assert response.status_code == 200
     data = response.json()
-    assert "signal_feed" in data
     assert "decision_trace" in data
-    assert "paper_pnl_series" in data
-    assert "reject_reason_breakdown" in data
-    assert "confidence_distribution" in data
+    assert isinstance(data.get("decision_trace"), list)

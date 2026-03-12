@@ -7,6 +7,7 @@ from core.execution.futures_paper_executor import FuturesPaperExecutor
 from core.futures.funding_bias_engine import calculate_funding_bias
 from core.strategy.futures.futures_strategy_engine import FuturesStrategyEngine
 from core.strategy.futures.futures_trend_follow_v1 import FuturesTrendFollowV1
+from services.futures_microstructure_service import build_microstructure_status
 from services.futures_risk_monitor_service import build_futures_risk_status
 from services.pipeline.cache_store import read_candles
 from services.pipeline.universe_engine import build_effective_universe
@@ -112,8 +113,16 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
 
     market_states = [_market_state(cache, symbol) for symbol in active_symbols]
     risk_snapshot = build_futures_risk_status(db, cache, user_id)
+    microstructure_status = build_microstructure_status(db, cache, user_id)
+    microstructure_by_symbol = {
+        str(item.get("symbol", "")).upper(): item
+        for item in (microstructure_status.get("symbols") or [])
+        if item.get("symbol")
+    }
+    risk_snapshot["microstructure_by_symbol"] = microstructure_by_symbol
     risk_snapshot["policy_leverage_cap"] = min(
         float((risk_snapshot.get("adl_policy") or {}).get("leverage_cap", 5)),
+        float((microstructure_status.get("execution_suitability") or {}).get("leverage_cap_override", 5)),
         5.0,
     )
 
@@ -132,7 +141,10 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
     for decision in decisions:
         if decision["decision"] != "ALLOW":
             continue
-        paper = executor.simulate(strategy_signal=decision, market_state=market_map.get(decision["symbol"], {}))
+        market_state = market_map.get(decision["symbol"], {})
+        size_ratio = float((decision.get("execution_suitability") or {}).get("max_allowed_size_ratio", 1.0))
+        paper = executor.simulate(strategy_signal=decision, market_state=market_state)
+        paper["size_ratio_applied"] = round(size_ratio, 4)
         cumulative_pnl += float(paper.get("paper_pnl", 0.0))
         paper_results.append({"symbol": decision["symbol"], "side": decision["side"], **paper})
         paper_pnl_series.append(
@@ -181,6 +193,12 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
         "decision_trace": decisions,
         "paper_trades": paper_results,
         "paper_pnl_series": paper_pnl_series,
+        "microstructure": {
+            "portfolio_microstructure_state": microstructure_status.get("portfolio_microstructure_state", "SAFE"),
+            "portfolio_microstructure_risk_score": microstructure_status.get("portfolio_microstructure_risk_score", 0.0),
+            "gate_rejections": microstructure_status.get("gate_rejections", []),
+            "execution_suitability": microstructure_status.get("execution_suitability", {}),
+        },
         "reject_reason_breakdown": [
             {"reason_code": reason, "count": count}
             for reason, count in sorted(reject_reason_map.items(), key=lambda item: item[1], reverse=True)

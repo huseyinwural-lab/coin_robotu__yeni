@@ -1,17 +1,13 @@
 from dataclasses import asdict
 
-from core.futures.adl.adl_gate import ADLGate
-from core.futures.liquidation_protection.liquidation_gate import LiquidationGate
 from core.futures.position_model import FuturesPosition
-from core.risk.futures_risk_engine import evaluate_futures_risk
+from core.strategy.futures_paper_decision_flow import run_futures_paper_decision_flow
 from core.strategy.futures.strategy_contract import FuturesStrategy
 
 
 class FuturesStrategyEngine:
     def __init__(self, strategy_registry: dict[str, FuturesStrategy]):
         self.strategy_registry = strategy_registry
-        self.liquidation_gate = LiquidationGate()
-        self.adl_gate = ADLGate()
 
     def evaluate_symbol(self, *, strategy_id: str, market_state: dict, risk_snapshot: dict) -> dict:
         strategy = self.strategy_registry[strategy_id]
@@ -48,131 +44,62 @@ class FuturesStrategyEngine:
             distance_to_liquidation=float(risk_snapshot.get("avg_distance_to_liquidation") or 100.0),
         )
 
-        microstructure_reject = str(market_state.get("spread_state") or "NORMAL").upper() == "SHOCK"
-        if microstructure_reject:
-            return {
-                "strategy_id": strategy_id,
-                "symbol": signal.symbol,
-                "side": signal.side,
-                "confidence": signal.confidence,
-                "regime": signal.regime,
-                "decision": "REJECT",
-                "reason_code": "MICROSTRUCTURE_SPREAD_SHOCK",
-                "trace": ["strategy_signal", "microstructure_guard", "decision_reject"],
-                "signal": signal_payload,
-            }
+        microstructure_by_symbol = risk_snapshot.get("microstructure_by_symbol") or {}
+        microstructure_result = microstructure_by_symbol.get(signal.symbol) or {
+            "gate": {
+                "gate_pass": str(market_state.get("spread_state") or "NORMAL").upper() != "SHOCK",
+                "gate_reason": "MICROSTRUCTURE_SPREAD_SHOCK"
+                if str(market_state.get("spread_state") or "NORMAL").upper() == "SHOCK"
+                else "PASS",
+                "all_reasons": [],
+                "risk_score": 0.0,
+            },
+            "execution_suitability": {
+                "execution_suitable": True,
+                "severity": "LOW",
+                "max_allowed_size_ratio": 1.0,
+                "leverage_cap_override": 5,
+                "side_risk": "NONE",
+            },
+        }
 
-        risk_result = evaluate_futures_risk(
-            position,
-            {
+        decision_flow = run_futures_paper_decision_flow(
+            signal=signal_payload,
+            position=position,
+            portfolio_state={
                 "portfolio_leverage": float(risk_snapshot.get("portfolio_leverage") or 0.0),
                 "margin_usage": float(risk_snapshot.get("margin_usage") or 0.0),
                 "distance_to_liquidation": float(risk_snapshot.get("avg_distance_to_liquidation") or 100.0),
             },
+            policy_state={
+                "cascade_status": str(risk_snapshot.get("cascade_status") or "NONE"),
+                "policy_action": str(risk_snapshot.get("policy_action") or "ALLOW"),
+                "policy_state": str(risk_snapshot.get("policy_state") or "SAFE"),
+                "adl_state": risk_snapshot.get("adl_state") or {},
+            },
+            funding_bias=market_state.get("funding_bias") or {},
+            microstructure_result=microstructure_result,
         )
-        if risk_result["risk_check_result"] == "reject":
-            return {
-                "strategy_id": strategy_id,
-                "symbol": signal.symbol,
-                "side": signal.side,
-                "confidence": signal.confidence,
-                "regime": signal.regime,
-                "decision": "REJECT",
-                "reason_code": "RISK_ENGINE_REJECT",
-                "risk_reason": risk_result.get("risk_reason", []),
-                "trace": ["strategy_signal", "microstructure_guard", "risk_engine", "decision_reject"],
-                "signal": signal_payload,
-            }
 
-        liquidation_gate = self.liquidation_gate.evaluate(
-            distance_to_liquidation=float(risk_snapshot.get("avg_distance_to_liquidation") or 100.0),
-            margin_usage=float(risk_snapshot.get("margin_usage") or 0.0),
-            cascade_confirmed=str(risk_snapshot.get("cascade_status") or "NONE").upper() == "CASCADE_CONFIRMED",
-            emergency_policy_active=str(risk_snapshot.get("policy_action") or "ALLOW").upper() in {"FREEZE", "FORCE_REDUCE"},
-            leverage=float(risk_snapshot.get("policy_leverage_cap") or 3),
-            leverage_cap=float(risk_snapshot.get("policy_leverage_cap") or 3),
-        )
-        if not liquidation_gate["gate_pass"]:
-            return {
-                "strategy_id": strategy_id,
-                "symbol": signal.symbol,
-                "side": signal.side,
-                "confidence": signal.confidence,
-                "regime": signal.regime,
-                "decision": "REJECT",
-                "reason_code": liquidation_gate["gate_reason"],
-                "trace": ["strategy_signal", "microstructure_guard", "risk_engine", "liquidation_gate", "decision_reject"],
-                "signal": signal_payload,
-            }
-
-        adl_state = risk_snapshot.get("adl_state", {})
-        adl_gate = self.adl_gate.evaluate(
-            adl_risk_level=str(adl_state.get("risk_level") or "LOW"),
-            adl_pressure_side=str(adl_state.get("dominant_side") or "NONE"),
-            portfolio_adl_risk=float(adl_state.get("portfolio_adl_risk") or 0.0),
-            trade_side=signal.side,
-        )
-        if not adl_gate["adl_gate_pass"]:
-            return {
-                "strategy_id": strategy_id,
-                "symbol": signal.symbol,
-                "side": signal.side,
-                "confidence": signal.confidence,
-                "regime": signal.regime,
-                "decision": "REJECT",
-                "reason_code": adl_gate["reason"],
-                "trace": [
-                    "strategy_signal",
-                    "microstructure_guard",
-                    "risk_engine",
-                    "liquidation_gate",
-                    "adl_gate",
-                    "decision_reject",
-                ],
-                "signal": signal_payload,
-            }
-
-        policy_state = str(risk_snapshot.get("policy_state") or "SAFE").upper()
-        if policy_state in {"CRITICAL", "EMERGENCY"}:
-            return {
-                "strategy_id": strategy_id,
-                "symbol": signal.symbol,
-                "side": signal.side,
-                "confidence": signal.confidence,
-                "regime": signal.regime,
-                "decision": "REJECT",
-                "reason_code": f"POLICY_{policy_state}",
-                "trace": [
-                    "strategy_signal",
-                    "microstructure_guard",
-                    "risk_engine",
-                    "liquidation_gate",
-                    "adl_gate",
-                    "policy_engine",
-                    "decision_reject",
-                ],
-                "signal": signal_payload,
-            }
-
-        return {
+        response = {
             "strategy_id": strategy_id,
             "symbol": signal.symbol,
             "side": signal.side,
             "confidence": signal.confidence,
             "regime": signal.regime,
-            "decision": "ALLOW",
-            "reason_code": "ALLOW",
-            "trace": [
-                "strategy_signal",
-                "microstructure_guard",
-                "risk_engine",
-                "liquidation_gate",
-                "adl_gate",
-                "policy_engine",
-                "paper_decision_allow",
-            ],
+            "decision": decision_flow["decision"],
+            "reason_code": decision_flow["reason_code"],
+            "trace": ["strategy_signal", *decision_flow["trace"]],
+            "risk_reason": decision_flow.get("risk", {}).get("risk_reason", []),
+            "microstructure_gate": decision_flow.get("gate", {}),
+            "adl_gate": decision_flow.get("adl_gate", {}),
+            "execution_suitability": decision_flow.get("execution_suitability", {}),
+            "reasons": decision_flow.get("reasons", []),
             "signal": signal_payload,
         }
+        if response["decision"] == "REJECT" and response["reason_code"] == "ALLOW":
+            response["reason_code"] = "REJECT_UNCLASSIFIED"
+        return response
 
     def run_cycle(self, *, strategy_id: str, market_states: list[dict], risk_snapshot: dict) -> list[dict]:
         if strategy_id not in self.strategy_registry:

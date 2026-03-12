@@ -27,11 +27,14 @@ ADMIN_PASSWORD = "Admin12345!"
 def admin_token():
     if not BASE_URL:
         pytest.skip("REACT_APP_BACKEND_URL tanımlı değil")
-    response = requests.post(
-        f"{BASE_URL}/api/auth/login",
-        json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
-        timeout=20,
-    )
+    try:
+        response = requests.post(
+            f"{BASE_URL}/api/auth/login",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+            timeout=20,
+        )
+    except requests.RequestException as exc:
+        pytest.skip(f"Auth endpoint erişilemedi: {exc}")
     if response.status_code != 200:
         pytest.skip(f"Admin login başarısız: {response.text}")
     return response.json()["access_token"]
