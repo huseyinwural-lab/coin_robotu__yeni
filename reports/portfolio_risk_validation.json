@@ -1,0 +1,85 @@
+{
+  "generated_at": "2026-03-12T21:05:08.092145+00:00",
+  "iteration": "52",
+  "phase": "Phase-9A Portfolio Risk Layer",
+  "limits_snapshot": {
+    "max_portfolio_leverage": 3.0,
+    "max_symbol_exposure": 35.0,
+    "max_cluster_exposure": 50.0,
+    "max_strategy_exposure": 40.0,
+    "max_single_trade_risk": 10.0,
+    "max_intraday_drawdown": 5.0,
+    "max_total_drawdown": 15.0
+  },
+  "cluster_count": 4,
+  "clusters": [
+    {
+      "cluster_id": "L1",
+      "symbols": [
+        "BTCUSDT",
+        "ETHUSDT"
+      ],
+      "cluster_type": "crypto_market_beta",
+      "correlation_score": 0.82,
+      "risk_weight": 1.0,
+      "updated_at": "2026-03-12T20:45:34.035724"
+    },
+    {
+      "cluster_id": "L2",
+      "symbols": [
+        "SOLUSDT",
+        "AVAXUSDT",
+        "LINKUSDT"
+      ],
+      "cluster_type": "high_beta_alts",
+      "correlation_score": 0.76,
+      "risk_weight": 1.15,
+      "updated_at": "2026-03-12T20:45:34.035725"
+    },
+    {
+      "cluster_id": "L3_TEST",
+      "symbols": [
+        "ADAUSDT",
+        "DOTUSDT",
+        "ATOMUSDT"
+      ],
+      "cluster_type": "mid_cap_alts",
+      "correlation_score": 0.68,
+      "risk_weight": 1.1,
+      "updated_at": "2026-03-12T20:49:52.998279"
+    },
+    {
+      "cluster_id": "TEST_CLUSTER_IT52",
+      "symbols": [
+        "BTCUSDT",
+        "ETHUSDT"
+      ],
+      "cluster_type": "sector",
+      "correlation_score": 0.7,
+      "risk_weight": 1.5,
+      "updated_at": "2026-03-12T21:03:14.763354"
+    }
+  ],
+  "dashboard": {
+    "total_exposure": 31080.0,
+    "cluster_exposure": {
+      "L1": 30820.0,
+      "L2": 60.0,
+      "UNCLUSTERED": 200.0
+    },
+    "strategy_exposure": {
+      "spot_pullback_v1": 30080.0,
+      "throttled_test_strategy": 200.0,
+      "manual_execution": 550.0,
+      "spot_pullback": 200.0,
+      "meta_disabled_v1": 50.0
+    },
+    "risk_alerts": [
+      {
+        "gate_decision": "REJECT",
+        "count": 3
+      }
+    ]
+  },
+  "validation_status": "PASS"
+}

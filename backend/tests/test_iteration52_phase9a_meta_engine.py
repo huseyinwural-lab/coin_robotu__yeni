@@ -17,8 +17,21 @@ import pytest
 import requests
 import time
 import uuid
+from pathlib import Path
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+
+def _resolve_base_url() -> str:
+    direct = os.environ.get("REACT_APP_BACKEND_URL", "").strip().rstrip("/")
+    if direct:
+        return direct
+    env_file = Path(__file__).resolve().parents[2] / "frontend" / ".env"
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        if raw_line.startswith("REACT_APP_BACKEND_URL="):
+            return raw_line.split("=", 1)[1].strip().rstrip("/")
+    raise RuntimeError("REACT_APP_BACKEND_URL missing")
+
+
+BASE_URL = _resolve_base_url()
 
 # Test credentials
 ADMIN_EMAIL = "admin@platform.dev"
@@ -28,7 +41,7 @@ ADMIN_PASSWORD = "Admin12345!"
 @pytest.fixture(scope="module")
 def admin_auth():
     """Get admin authentication token"""
-    resp = requests.post(f"{BASE_URL}/api/auth/login", json={
+    resp = requests.post(f"{BASE_URL}/api/auth/login/admin", json={
         "email": ADMIN_EMAIL,
         "password": ADMIN_PASSWORD
     })
@@ -54,7 +67,7 @@ def user_auth():
     user_id = user_data.get("user", {}).get("id") or user_data.get("id")
     
     # Get admin token to approve user
-    admin_resp = requests.post(f"{BASE_URL}/api/auth/login", json={
+    admin_resp = requests.post(f"{BASE_URL}/api/auth/login/admin", json={
         "email": ADMIN_EMAIL,
         "password": ADMIN_PASSWORD
     })
@@ -87,7 +100,7 @@ def user_auth():
     time.sleep(0.5)
     
     # Login as user
-    login_resp = requests.post(f"{BASE_URL}/api/auth/login", json={
+    login_resp = requests.post(f"{BASE_URL}/api/auth/login/user", json={
         "email": test_email,
         "password": test_password
     })
@@ -144,7 +157,7 @@ class TestAdminPortfolioRiskLimits:
         # Verify updated values
         assert data["max_portfolio_leverage"] == 2.5
         assert data["max_symbol_exposure"] == 30.0
-        print(f"Portfolio risk limits updated successfully")
+        print("Portfolio risk limits updated successfully")
         
         # Restore defaults
         default_limits = {

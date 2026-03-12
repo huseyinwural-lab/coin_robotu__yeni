@@ -1,6 +1,36 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-12
+### Iteration-52 — Phase-9A Strategy Meta Engine + Portfolio Risk Layer
+- Yeni servisler eklendi:
+  - `portfolio_risk_service.py` (risk score, risk flags, gate decision, position adjustment)
+  - `meta_strategy_engine_service.py` (allocation, throttling/disable, drift monitor)
+- Yeni config: `/app/config/portfolio_risk_limits.json` (admin güncellenebilir risk registry)
+- Yeni veri modeli/migration:
+  - `risk_clusters`
+  - `portfolio_exposure_snapshot`
+  - `strategy_allocations`
+  - `pending_signals`, `user_execution_intents`, `user_decision_traces` phase9 alanları
+- Execution preview pipeline phase9 entegrasyonu tamamlandı:
+  - meta strategy summary
+  - portfolio risk impact
+  - gate decision (ALLOW/ADJUST_POSITION/REQUIRE_APPROVAL/REJECT)
+- Admin UI eklendi:
+  - `/admin/strategy-allocation`
+  - `/admin/portfolio-risk`
+- User UI eklendi/güncellendi:
+  - `/user/execute` -> Portfolio Risk Impact + Meta Strategy Attribution
+  - `/user/signals` ve `/user/trades` -> strategy attribution alanları
+- Explainability phase9 entegrasyonu:
+  - decision trace alanları: `portfolio_risk_score`, `strategy_allocation_reason`, `cluster_risk_flag`, `meta_engine_decision`
+- Testler:
+  - iteration52 report: `/app/test_reports/iteration_52.json`
+  - yeni test setleri pass
+  - artefactlar üretildi:
+    - `/app/reports/portfolio_risk_validation.json`
+    - `/app/reports/meta_strategy_validation.json`
+
+## 2026-03-12
 ### Iteration-51 — Phase-8 Explainability Engine
 - Explainability backend tamamlandı:
   - Yeni model: `UserDecisionTrace` (`user_decision_traces`)

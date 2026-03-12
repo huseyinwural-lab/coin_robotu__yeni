@@ -2508,3 +2508,94 @@
 - **Phase-8 Explainability Engine: COMPLETE**
 - **Retention (90 gün): ACTIVE**
 - **Trace Coverage Endpoint: ACTIVE**
+
+## 38) 2026-03-12 — Iteration-52 (Phase-9A Strategy Meta Engine + Portfolio Risk Layer)
+
+### Hedef
+- Çoklu strateji ortamında sermaye tahsisini merkezi yönetmek.
+- Execution öncesi portföy risk gate ile leverage/exposure/drawdown kontrolü yapmak.
+- Risk/meta kararlarını user/admin UI ve explainability katmanında görünür kılmak.
+
+### Faz 1 — Portfolio Risk Engine
+- Yeni servis: `backend/services/portfolio_risk_service.py`
+  - Input: execution intent + current positions + portfolio state + strategy context + market state
+  - Output: `risk_score`, `risk_flags`, `approval_required`, `position_adjustment`, `decision` (ALLOW/ADJUST_POSITION/REQUIRE_APPROVAL/REJECT)
+- Yeni config: `/app/config/portfolio_risk_limits.json`
+  - `max_portfolio_leverage`, `max_symbol_exposure`, `max_cluster_exposure`, `max_strategy_exposure`, `max_single_trade_risk`, `max_intraday_drawdown`, `max_total_drawdown`
+- Yeni model/tablolar:
+  - `risk_clusters`
+  - `portfolio_exposure_snapshot`
+
+### Faz 2 — Strategy Meta Engine
+- Yeni servis: `backend/services/meta_strategy_engine_service.py`
+  - strategy weighting
+  - capital allocation
+  - strategy throttling / disable
+  - drift metrikleri: `expected_return`, `realized_return`, `signal_decay`, `execution_quality_score`
+- Yeni model/tablo:
+  - `strategy_allocations`
+
+### Faz 3 — Execution Pipeline Entegrasyonu
+- `preview_execution_intent` içine eklendi:
+  - meta strategy orchestration
+  - portfolio risk check
+  - risk gate kararı
+  - gerektiğinde pozisyon boyutu ayarlama (ADJUST_POSITION)
+- `UserExecutionIntent` genişletildi:
+  - `risk_score`, `gate_decision`, `meta_engine_decision`, `cluster_id`
+
+### Faz 4 — Admin Panel
+- Yeni backend router: `backend/routers/admin_phase9_meta.py`
+  - `GET/PUT /api/admin/portfolio-risk/limits`
+  - `GET/POST/PUT /api/admin/portfolio-risk/clusters`
+  - `GET /api/admin/portfolio-risk`
+  - `GET/PUT /api/admin/strategy-allocation`
+- Yeni admin sayfaları:
+  - `/admin/strategy-allocation`
+  - `/admin/portfolio-risk`
+
+### Faz 5 — User Execution ve Attribution
+- `/user/execute` preview kartına eklendi:
+  - **Portfolio Risk Impact**
+  - **Meta Strategy Attribution**
+- `/user/signals` ve `/user/trades` attribution alanları:
+  - `strategy_weight`
+  - `allocation_source`
+  - `meta_engine_decision`
+
+### Faz 6 — Explainability Entegrasyonu
+- `UserDecisionTrace` genişletildi:
+  - `portfolio_risk_score`
+  - `strategy_allocation_reason`
+  - `cluster_risk_flag`
+  - `meta_engine_decision`
+- Execution/signal/trade trace capture çağrıları yeni alanları besleyecek şekilde güncellendi.
+
+### Migration ve Şema
+- Yeni migration: `20260312_0028_phase9a_meta_risk_layer.py`
+  - pending_signals attribution alanları
+  - user_execution_intents risk/meta alanları
+  - user_decision_traces explainability meta-risk alanları
+  - yeni tablolar: risk_clusters, portfolio_exposure_snapshot, strategy_allocations
+
+### Test ve Artefact
+- Yeni test dosyaları:
+  - `test_portfolio_risk_engine.py`
+  - `test_meta_strategy_engine.py`
+  - `test_strategy_allocation.py`
+  - `test_cluster_exposure.py`
+  - `test_execution_risk_gate.py`
+- Ek kapsamlı suite:
+  - `test_iteration52_phase9a_meta_engine.py` (20 pass, 1 skip)
+- Test raporu:
+  - `/app/test_reports/iteration_52.json`
+- Validasyon artefactları:
+  - `/app/reports/portfolio_risk_validation.json`
+  - `/app/reports/meta_strategy_validation.json`
+
+### Durum
+- **Phase-9A core backend/admin/user entegrasyonu: COMPLETE**
+- **Risk gate: ACTIVE**
+- **Cluster exposure kontrolü: ACTIVE**
+- **Strategy allocation + meta engine: ACTIVE**
+- **MOCKED API: YOK**

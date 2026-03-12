@@ -1,0 +1,112 @@
+{
+  "generated_at": "2026-03-12T21:05:08.092163+00:00",
+  "iteration": "52",
+  "phase": "Phase-9A Meta Strategy Engine",
+  "allocation_count": 7,
+  "state_distribution": {
+    "ACTIVE": 4,
+    "THROTTLED": 0,
+    "DISABLED": 3
+  },
+  "top_allocations": [
+    {
+      "strategy_id": "disabled_test_strategy",
+      "capital_weight": 1.0,
+      "max_capital": 5000.0,
+      "current_capital": 0.0,
+      "confidence_score": 0.65,
+      "performance_score": 64.1026,
+      "state": "DISABLED",
+      "expected_return": 3.9,
+      "realized_return": 2.5,
+      "signal_decay": 0.0,
+      "execution_quality_score": 75.0,
+      "updated_at": "2026-03-12T21:05:08.063281"
+    },
+    {
+      "strategy_id": "throttled_test_strategy",
+      "capital_weight": 1.0,
+      "max_capital": 5000.0,
+      "current_capital": 0.0,
+      "confidence_score": 0.65,
+      "performance_score": 64.1026,
+      "state": "ACTIVE",
+      "expected_return": 3.9,
+      "realized_return": 2.5,
+      "signal_decay": 0.0,
+      "execution_quality_score": 75.0,
+      "updated_at": "2026-03-12T21:05:08.062448"
+    },
+    {
+      "strategy_id": "manual_execution",
+      "capital_weight": 0.8,
+      "max_capital": 5000.0,
+      "current_capital": 1000.0,
+      "confidence_score": 0.65,
+      "performance_score": 64.1026,
+      "state": "ACTIVE",
+      "expected_return": 3.9,
+      "realized_return": 2.5,
+      "signal_decay": 0.0,
+      "execution_quality_score": 75.0,
+      "updated_at": "2026-03-12T21:05:08.061656"
+    },
+    {
+      "strategy_id": "test_strategy_state",
+      "capital_weight": 1.0,
+      "max_capital": 10000.0,
+      "current_capital": 0.0,
+      "confidence_score": 0.0,
+      "performance_score": 500.0,
+      "state": "DISABLED",
+      "expected_return": 0.5,
+      "realized_return": 2.5,
+      "signal_decay": 0.0,
+      "execution_quality_score": 75.0,
+      "updated_at": "2026-03-12T21:05:08.060832"
+    },
+    {
+      "strategy_id": "meta_test_v1",
+      "capital_weight": 0.6,
+      "max_capital": 12000.0,
+      "current_capital": 1500.0,
+      "confidence_score": 0.0,
+      "performance_score": 500.0,
+      "state": "ACTIVE",
+      "expected_return": 0.5,
+      "realized_return": 2.5,
+      "signal_decay": 0.0,
+      "execution_quality_score": 75.0,
+      "updated_at": "2026-03-12T21:05:08.059992"
+    },
+    {
+      "strategy_id": "meta_disabled_v1",
+      "capital_weight": 1.0,
+      "max_capital": 1000.0,
+      "current_capital": 0.0,
+      "confidence_score": 0.65,
+      "performance_score": 64.1026,
+      "state": "DISABLED",
+      "expected_return": 3.9,
+      "realized_return": 2.5,
+      "signal_decay": 0.0,
+      "execution_quality_score": 75.0,
+      "updated_at": "2026-03-12T21:05:08.059053"
+    },
+    {
+      "strategy_id": "spot_pullback_v1",
+      "capital_weight": 1.0,
+      "max_capital": 10000.0,
+      "current_capital": 0.0,
+      "confidence_score": 0.55,
+      "performance_score": 75.7576,
+      "state": "ACTIVE",
+      "expected_return": 3.3,
+      "realized_return": 2.5,
+      "signal_decay": 0.0,
+      "execution_quality_score": 75.0,
+      "updated_at": "2026-03-12T21:05:08.057460"
+    }
+  ],
+  "validation_status": "PASS"
+}

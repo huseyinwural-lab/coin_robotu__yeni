@@ -44,16 +44,24 @@
   - Strategy explain + 7 günlük trace coverage endpointi canlı
   - 90 gün retention policy aktif
   - User Signals/Trades/Execute explainability panelleri tamamlandı
+- Iteration-52 kapanışı:
+  - Phase-9A Strategy Meta Engine + Portfolio Risk Layer tamamlandı
+  - Risk gate execution preview pipeline içine alındı
+  - Cluster exposure + strategy allocation dashboard’ları canlı
+  - User execute risk impact + signals/trades attribution görünür
 
 ## P1 (Sıradaki)
-1. Phase-9 Strategy Meta Engine:
-   - strategy orchestration
-   - portfolio allocation
-   - risk cluster engine
+1. Phase-9B Advanced Meta Orchestration:
+   - çapraz-strateji conflict resolver (aynı symbol/karşıt yön netting)
+   - dynamic capital rebalance (intraday)
+   - portfolio-level hedging öneri katmanı
 2. Execution panel advanced actions:
    - close/partial close/reverse intent contract’larını canlı aksiyonlara taşıma
+3. Risk governance:
+   - admin manual override audit trail
+   - rule simulation/sandbox mode
 
 ## P2 (Backlog)
-1. Strategy engine architecture genişletmesi (meta-strategy wrapper ve kurumsal karar katmanı)
-2. Legacy endpoint cleanup ve teknik borç azaltımı
-3. Advanced PDF reporting görsel kalite upgrade
+1. Legacy endpoint cleanup ve teknik borç azaltımı
+2. Advanced PDF reporting görsel kalite upgrade
+3. Strategy performance attribution raporları (haftalık/aylık)
