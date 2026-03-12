@@ -1944,3 +1944,38 @@
 ### Güncel sıra
 - Phase 6 / Faz-1 Görev-1 tamamlandı.
 - Sonraki blok: **Phase 6 / Faz-1 Görev-2 (User Dashboard/Portfolio/Trades API katmanı ve explainability veri akışı)**
+
+## 30) 2026-03-12 — Admin Kullanıcı Ayrımı + Açık Yeşil Koyu Buton Teması (Tamamlandı)
+
+### İstenen UX Düzeltmeleri
+- Admin panel menüsünde kullanıcı yönetimi iki ayrı satıra ayrıldı:
+  - `Admin Kullanıcıları` → `/admin/users/admins`
+  - `User Kullanıcıları` → `/admin/users/customers`
+- `Admin Users` sayfasında da aynı iki-satırlı scope menüsü eklendi.
+
+### Admin/User Scope Davranışı
+- Backend `GET /api/admin/users` endpointine `scope` parametresi eklendi:
+  - `scope=admin` → sadece `super_admin/admin/ops`
+  - `scope=user` → sadece `role=user` ve `approval_status=approved`
+- Böylece onayı tamamlanan user talepleri user listesine net şekilde düşer.
+
+### Admin Ekleme Akışı
+- Yeni endpoint: `POST /api/admin/users/admin-create`
+  - Admin ekranında `Admin Ekle` butonu ile çalışır.
+  - Oluşturulan admin hesapları anında `Admin Kullanıcıları` listesinde görünür.
+  - `ops` rolü bu aksiyonda readonly bırakıldı.
+
+### Renk/Tema Güncellemesi
+- Admin panelde koyu siyah aksiyon butonları açık yeşil tona çevrildi (global admin-theme override).
+- Özellikle `Yenile`, `Admin Ekle`, `Bulk Approve` gibi koyu butonlar yeni tona geçti.
+
+### Test
+- Backend:
+  - `test_phase6_admin_user_menu_scope.py` eklendi.
+  - Toplam regresyon: `36 passed` (`test_user_approval_flow`, `test_phase6_user_registry_owner_scope`, `test_phase6_comprehensive_owner_scope`, `test_phase6_admin_user_menu_scope`).
+- Frontend:
+  - Admin login + menü ayrımı + admin create form + buton renk doğrulaması otomasyonla geçti.
+
+### Güncel sıra
+- Phase 6 / Faz-1 kullanıcı ayrımı ve admin kullanıcı yönetimi UX düzeltmeleri tamamlandı.
+- Sonraki blok: **Phase 6 / Faz-1 Görev-2 (User Dashboard/Portfolio/Trades API katmanı ve explainability)**

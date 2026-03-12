@@ -1,6 +1,19 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-12
+### Admin Kullanıcı Ayrımı + Admin Ekle + Açık Yeşil Koyu Buton Teması
+- Admin sidebar’a iki ayrı menü satırı eklendi:
+  - `Admin Kullanıcıları` (`/admin/users/admins`)
+  - `User Kullanıcıları` (`/admin/users/customers`)
+- `AdminUsersPage` scope bazlı hale getirildi, user listesi onaylı user hesaplarıyla sınırlandı.
+- Yeni backend endpoint: `POST /api/admin/users/admin-create` (admin panelden admin/ops oluşturma).
+- `GET /api/admin/users` endpointine `scope=admin|user` desteği eklendi.
+- Admin panelde siyah aksiyon butonları açık yeşil tona geçirildi (özellikle Yenile / Admin Ekle / Bulk Approve).
+- Testler:
+  - Backend: `test_phase6_admin_user_menu_scope.py` + phase6 regressions => **36 PASS**
+  - Frontend otomasyon: menü ayrımı, admin create formu, buton rengi doğrulaması => **PASS**
+
+## 2026-03-12
 ### Phase 6 / Faz-1 Görev-1 — User Registry + Auth Integration + Data Isolation
 - `backend/core/users/user_registry.py` eklendi ve auth akışına entegre edildi.
 - Self-register kullanıcılar için varsayılan policy kesinleşti: `role=user`, `approval_status=pending`, `is_active=false`.

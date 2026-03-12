@@ -7,6 +7,10 @@
   - User registry katmanı
   - JWT auth entegrasyonu (role=user otomatik, pending approval)
   - Backend owner-scope enforcement + veri izolasyonu
+- Admin kullanıcı yönetimi UX düzeltmesi:
+  - Admin/User kullanıcı menüsü ayrımı
+  - Admin ekleme akışı (`admin-create`)
+  - Admin panelde koyu butonların açık yeşil temaya geçirilmesi
 
 ## P1 (Sıradaki)
 1. Phase 6 / Faz-1 Görev-2: User platform API katmanı (dashboard, portfolio, trades)
