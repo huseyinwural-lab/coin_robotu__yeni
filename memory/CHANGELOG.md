@@ -1,6 +1,30 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-12
+### FB-01 + FB-02 — Research Isolation + Legacy Finalization
+- Research namespace oluşturuldu: `/app/research/{formulas,experiments,notebooks,excluded}`.
+- Artefact üretim pipeline’ı eklendi: `python -m cli.generate_research_legacy_artifacts`.
+- Üretilen ana dosyalar:
+  - `/app/research/research_namespace_manifest.json`
+  - `/app/research/formula_decomposition_18M.json`
+  - `/app/research/excluded_formula_report.json`
+  - `/app/reports/excluded_formula_report.json`
+  - `/app/reports/legacy_formula_strategy_matrix.json`
+  - `/app/reports/legacy_formula_integration_report.json`
+  - `/app/strategies/active_formula_registry.json`
+- Production gate eklendi:
+  - Runtime allowlist: `core/execution/production_formula_gate.py`
+  - Static import scan: `services/formula_gate_service.py`
+  - CLI gate check: `python -m cli.production_formula_gate_check`
+  - CI fail-fast scriptleri: `run_formula_gate_check.sh`, `ci_formula_gate.sh`
+  - `ci_stage_gate.sh` ve `ci_prod_gate.sh` formula gate adımıyla güncellendi.
+- Strategy registry runtime’da active registry allowlist ile filtrelenir hale getirildi.
+- Testler:
+  - Local: `15 PASS` (`test_fb01_fb02_isolation_artifacts.py`, `test_fb01_production_gate_checks.py`, vb.)
+  - Testing agent: `/app/test_reports/iteration_48.json` => `12/12 PASS`
+  - Validation report: `/app/test_reports/fb01_fb02_validation_report.json`
+
+## 2026-03-12
 ### Phase L1 Core (Faz 1-3-5-6) — Legacy Formula Native Entegrasyon
 - `formül.rar` extraction + canonicalization tamamlandı; `legacy_formula_registry.json` üretildi (BC01-BC04 + scanner aileleri).
 - 4 native legacy strategy eklendi: `momentum_volume_breakout_v3`, `volatility_breakout_v2`, `adaptive_level_breakout_v2`, `oscillator_composite_reversion_v2`.

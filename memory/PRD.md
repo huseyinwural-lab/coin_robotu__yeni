@@ -2209,3 +2209,69 @@
 
 ### Faz Durumu
 - **Phase 6 = COMPLETE**
+
+## 34) 2026-03-12 — FB-01 + FB-02 Kapanışı (Research Isolation + Legacy Final Artefact)
+
+### Kapsam Kilidi (A/A/A/A)
+- Bu turda yalnızca **FB-01 + FB-02** uygulandı.
+- 18M decomposition, repo içi registry/legacy kaynaklarından deterministik türetildi.
+- Production gate seviyesi: **runtime guard + static import check + CI fail-fast**.
+- Excluded report çift lokasyon üretildi ve senkron doğrulandı.
+
+### FB-01 — Research Layer Isolation
+- Namespace oluşturuldu:
+  - `/app/research/formulas/`
+  - `/app/research/experiments/`
+  - `/app/research/notebooks/`
+  - `/app/research/excluded/`
+- Manifest üretildi:
+  - `/app/research/research_namespace_manifest.json`
+  - Alanlar: `allowed_readers`, `denied_modules`, `registry_source`, `generation_timestamp`, `isolation_policy_version`
+- 18M decomposition üretildi:
+  - `/app/research/formula_decomposition_18M.json`
+  - Segmentler: `ACTIVE`, `EXPERIMENTAL`, `LEGACY`, `EXCLUDED`
+- Excluded set üretildi (mirror):
+  - `/app/research/excluded_formula_report.json`
+  - `/app/reports/excluded_formula_report.json`
+  - Alanlar: `formula_id`, `exclusion_reason`, `risk_class`, `source_registry`, `timestamp`
+
+### FB-01.5 — Production Gate
+- Runtime gate eklendi:
+  - `backend/core/execution/production_formula_gate.py`
+  - production strategy catalog yalnızca `/app/strategies/active_formula_registry.json` allowlist’i ile filtrelenir.
+- Static import check eklendi:
+  - `backend/services/formula_gate_service.py`
+  - `backend/cli/production_formula_gate_check.py`
+- CI fail-fast entegrasyonu:
+  - `/app/scripts/run_formula_gate_check.sh`
+  - `/app/scripts/ci_formula_gate.sh`
+  - `/app/scripts/ci_stage_gate.sh` ve `/app/scripts/ci_prod_gate.sh` formula gate adımını içerir.
+
+### FB-02 — Legacy Integration Finalization
+- Strategy matrix üretildi:
+  - `/app/reports/legacy_formula_strategy_matrix.json`
+  - 1 formula → 1 strategy sınıfı, orphan=0
+- Integration report üretildi:
+  - `/app/reports/legacy_formula_integration_report.json`
+  - Alanlar: `legacy_formula_id`, `mapped_strategy`, `integration_status`, `performance_tag`, `source_origin`, `migration_decision`
+
+### Üretim Registry
+- `/app/strategies/active_formula_registry.json` oluşturuldu ve runtime gate tarafından zorunlu okunur.
+
+### Test ve Doğrulama
+- Local pytest:
+  - `test_fb01_fb02_isolation_artifacts.py`
+  - `test_fb01_production_gate_checks.py`
+  - `test_strategy_registry.py`
+  - `test_legacy_formula_registry.py`
+  - Sonuç: **15 PASS**
+- Testing agent:
+  - Rapor: `/app/test_reports/iteration_48.json`
+  - Sonuç: **12/12 PASS**
+- Tur artefact raporu:
+  - `/app/test_reports/fb01_fb02_validation_report.json`
+
+### Durum
+- **FB-01 COMPLETE**
+- **FB-02 COMPLETE**
+- Sonraki faz: **Phase-7 UI/UX Hardening (UX-01/02/03)**
