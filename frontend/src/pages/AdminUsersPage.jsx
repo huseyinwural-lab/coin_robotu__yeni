@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/context/AuthContext";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiClient } from "@/lib/api";
 
-const roleOptions = ["super_admin", "admin", "ops", "user"];
+const adminRoleOptions = ["super_admin", "admin", "ops"];
 
-export const AdminUsersPage = () => {
+export const AdminUsersPage = ({ scope = "user" }) => {
+  const { user: currentUser } = useAuth();
+  const navigate = useNavigate();
+  const isAdminScope = scope === "admin";
+  const canCreateSuperAdmin = currentUser?.role === "super_admin";
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState({
@@ -18,14 +24,24 @@ export const AdminUsersPage = () => {
     sort_by: "created_at",
     sort_dir: "desc",
   });
+  const [createForm, setCreateForm] = useState({
+    email: "",
+    password: "",
+    role: "admin",
+  });
+
+  useEffect(() => {
+    setFilters((prev) => ({ ...prev, role: "all" }));
+  }, [scope]);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await apiClient.get("/admin/users", {
         params: {
+          scope,
           search: filters.search || undefined,
-          role: filters.role === "all" ? undefined : filters.role,
+          role: isAdminScope && filters.role !== "all" ? filters.role : undefined,
           status: filters.status,
           sort_by: filters.sort_by,
           sort_dir: filters.sort_dir,
@@ -37,7 +53,7 @@ export const AdminUsersPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, isAdminScope, scope]);
 
   useEffect(() => {
     loadUsers();
@@ -49,6 +65,25 @@ export const AdminUsersPage = () => {
       return acc;
     }, {});
   }, [users]);
+
+  const handleCreateAdmin = async () => {
+    if (!createForm.email.trim() || !createForm.password.trim()) {
+      toast.error("Email ve şifre zorunlu");
+      return;
+    }
+    try {
+      await apiClient.post("/admin/users/admin-create", {
+        email: createForm.email.trim(),
+        password: createForm.password,
+        role: createForm.role,
+      });
+      toast.success("Admin kullanıcı oluşturuldu");
+      setCreateForm({ email: "", password: "", role: "admin" });
+      await loadUsers();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Admin kullanıcı oluşturulamadı");
+    }
+  };
 
   const updateRole = async (userId, role) => {
     try {
@@ -74,31 +109,54 @@ export const AdminUsersPage = () => {
   return (
     <section className="space-y-4" data-testid="admin-users-page">
       <header className="border border-black/40 bg-orange-300 p-4" data-testid="admin-users-header">
-        <h2 className="text-4xl font-black uppercase tracking-tight text-black" data-testid="admin-users-title">Admin User Management</h2>
+        <h2 className="text-4xl font-black uppercase tracking-tight text-black" data-testid="admin-users-title">
+          {isAdminScope ? "Admin Kullanıcıları" : "User Kullanıcıları"}
+        </h2>
         <p className="mt-2 text-sm text-black/80" data-testid="admin-users-description">
-          Kullanıcıları listele, rol ata, hesap durumunu active/disabled olarak yönet.
+          {isAdminScope
+            ? "Admin/super_admin/ops kullanıcılarını ayrı listede yönet."
+            : "Onaylanan müşteri kullanıcılarını ayrı listede görüntüle ve yönet."}
         </p>
       </header>
 
+      <div className="flex flex-wrap gap-2" data-testid="admin-users-scope-menu-row">
+        <Button
+          className={isAdminScope ? "border border-black bg-lime-300 text-black hover:bg-lime-400" : "border border-black bg-orange-200 text-black hover:bg-orange-300"}
+          onClick={() => navigate("/admin/users/admins")}
+          data-testid="admin-users-scope-admins-button"
+        >
+          Admin Kullanıcıları
+        </Button>
+        <Button
+          className={!isAdminScope ? "border border-black bg-lime-300 text-black hover:bg-lime-400" : "border border-black bg-orange-200 text-black hover:bg-orange-300"}
+          onClick={() => navigate("/admin/users/customers")}
+          data-testid="admin-users-scope-customers-button"
+        >
+          User Kullanıcıları
+        </Button>
+      </div>
+
       <div className="space-y-3 border border-black/30 bg-orange-100 p-4" data-testid="admin-users-toolbar">
-        <div className="grid gap-2 md:grid-cols-5" data-testid="admin-users-filters-grid">
+        <div className="grid gap-2 md:grid-cols-4" data-testid="admin-users-filters-grid">
           <Input
             value={filters.search}
             onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
             placeholder="Search email"
             data-testid="admin-users-search-input"
           />
-          <select
-            className="border border-black/40 bg-white px-3 py-2 text-sm"
-            value={filters.role}
-            onChange={(event) => setFilters((prev) => ({ ...prev, role: event.target.value }))}
-            data-testid="admin-users-role-filter-select"
-          >
-            <option value="all">all roles</option>
-            {roleOptions.map((role) => (
-              <option key={role} value={role}>{role}</option>
-            ))}
-          </select>
+          {isAdminScope && (
+            <select
+              className="border border-black/40 bg-white px-3 py-2 text-sm"
+              value={filters.role}
+              onChange={(event) => setFilters((prev) => ({ ...prev, role: event.target.value }))}
+              data-testid="admin-users-role-filter-select"
+            >
+              <option value="all">all admin roles</option>
+              {adminRoleOptions.map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+          )}
           <select
             className="border border-black/40 bg-white px-3 py-2 text-sm"
             value={filters.status}
@@ -133,11 +191,54 @@ export const AdminUsersPage = () => {
           <Button className="border border-black bg-black text-orange-400 hover:bg-zinc-800" onClick={loadUsers} data-testid="admin-users-refresh-button">
             Yenile
           </Button>
-          <p className="text-sm text-black" data-testid="admin-users-count-text">Toplam kullanıcı: {users.length}</p>
-          <p className="text-sm text-black" data-testid="admin-users-role-counts-text">
-            super_admin:{roleCounts.super_admin || 0} · admin:{roleCounts.admin || 0} · ops:{roleCounts.ops || 0} · user:{roleCounts.user || 0}
+          <p className="text-sm text-black" data-testid="admin-users-count-text">
+            Toplam {isAdminScope ? "admin" : "user"} kullanıcı: {users.length}
           </p>
+          {isAdminScope ? (
+            <p className="text-sm text-black" data-testid="admin-users-role-counts-text">
+              super_admin:{roleCounts.super_admin || 0} · admin:{roleCounts.admin || 0} · ops:{roleCounts.ops || 0}
+            </p>
+          ) : (
+            <p className="text-sm text-black" data-testid="admin-users-user-scope-note">
+              Not: Bu liste sadece onaylanan user hesaplarını gösterir.
+            </p>
+          )}
         </div>
+
+        {isAdminScope && (
+          <div className="grid gap-2 border border-black/30 bg-orange-50 p-3 md:grid-cols-4" data-testid="admin-users-create-admin-form">
+            <Input
+              value={createForm.email}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, email: event.target.value }))}
+              placeholder="Yeni admin email"
+              data-testid="admin-users-create-email-input"
+            />
+            <Input
+              type="password"
+              value={createForm.password}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, password: event.target.value }))}
+              placeholder="Geçici şifre"
+              data-testid="admin-users-create-password-input"
+            />
+            <select
+              className="border border-black/40 bg-white px-3 py-2 text-sm"
+              value={createForm.role}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, role: event.target.value }))}
+              data-testid="admin-users-create-role-select"
+            >
+              <option value="admin">admin</option>
+              <option value="ops">ops</option>
+              {canCreateSuperAdmin && <option value="super_admin">super_admin</option>}
+            </select>
+            <Button
+              className="border border-black bg-black text-orange-400 hover:bg-zinc-800"
+              onClick={handleCreateAdmin}
+              data-testid="admin-users-create-admin-button"
+            >
+              Admin Ekle
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="border border-black/30 bg-orange-100" data-testid="admin-users-table-wrapper">
@@ -148,7 +249,7 @@ export const AdminUsersPage = () => {
               <TableHead data-testid="admin-users-head-role">Role</TableHead>
               <TableHead data-testid="admin-users-head-status">Status</TableHead>
               <TableHead data-testid="admin-users-head-created">Created</TableHead>
-              <TableHead data-testid="admin-users-head-actions">Actions</TableHead>
+              <TableHead data-testid="admin-users-head-actions">{isAdminScope ? "Actions" : "User Actions"}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -156,16 +257,24 @@ export const AdminUsersPage = () => {
               <TableRow key={user.id} data-testid={`admin-users-row-${user.id}`}>
                 <TableCell data-testid={`admin-users-email-${user.id}`}>{user.email}</TableCell>
                 <TableCell data-testid={`admin-users-role-cell-${user.id}`}>
-                  <select
-                    className="border border-black/40 bg-white px-2 py-1 text-xs"
-                    value={user.role}
-                    onChange={(event) => updateRole(user.id, event.target.value)}
-                    data-testid={`admin-users-role-select-${user.id}`}
-                  >
-                    {roleOptions.map((role) => (
-                      <option key={role} value={role}>{role}</option>
-                    ))}
-                  </select>
+                  {isAdminScope ? (
+                    <select
+                      className="border border-black/40 bg-white px-2 py-1 text-xs"
+                      value={user.role}
+                      onChange={(event) => updateRole(user.id, event.target.value)}
+                      data-testid={`admin-users-role-select-${user.id}`}
+                    >
+                      {adminRoleOptions
+                        .filter((role) => canCreateSuperAdmin || role !== "super_admin" || user.role === "super_admin")
+                        .map((role) => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="inline-block rounded border border-black/40 bg-white px-2 py-1 text-xs" data-testid={`admin-users-role-label-${user.id}`}>
+                      {user.role}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell data-testid={`admin-users-status-${user.id}`}>
                   <span className={`inline-block rounded border px-2 py-1 text-xs ${user.status === "active" ? "border-emerald-700 bg-emerald-200 text-emerald-900" : "border-red-700 bg-red-200 text-red-900"}`} data-testid={`admin-users-status-badge-${user.id}`}>

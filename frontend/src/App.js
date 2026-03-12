@@ -84,7 +84,9 @@ function App() {
             }
           >
             <Route path="dashboard" element={<AdminDashboardPage />} />
-            <Route path="users" element={<AdminUsersPage />} />
+            <Route path="users" element={<Navigate to="/admin/users/customers" replace />} />
+            <Route path="users/admins" element={<AdminUsersPage scope="admin" />} />
+            <Route path="users/customers" element={<AdminUsersPage scope="user" />} />
             <Route path="user-approvals" element={<AdminUserApprovalsPage />} />
             <Route path="system-alerts" element={<AdminSystemAlertsPage />} />
             <Route path="strategy-observability" element={<AdminStrategyObservabilityPage />} />

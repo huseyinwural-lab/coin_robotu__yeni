@@ -37,6 +37,12 @@ class UserStatusUpdateRequest(BaseModel):
     status: str
 
 
+class AdminUserCreateRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+    role: str = "admin"
+
+
 class AlertChannelConfigUpdateRequest(BaseModel):
     resend_api_key: str | None = None
     alert_from: str | None = None

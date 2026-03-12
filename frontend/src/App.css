@@ -89,6 +89,21 @@
   background: #ffc67d !important;
 }
 
+.admin-ops-theme button.bg-black,
+.admin-ops-theme button[class*=" bg-black"],
+.admin-ops-theme button[class^="bg-black"] {
+  background: #b7f7a8 !important;
+  color: #0e2c14 !important;
+  border-color: #3a6f3a !important;
+}
+
+.admin-ops-theme button[class*="hover:bg-zinc-800"]:hover,
+.admin-ops-theme button[class*="hover:bg-zinc-900"]:hover,
+.admin-ops-theme button[class*="hover:bg-black"]:hover {
+  background: #9de98a !important;
+  color: #0b2611 !important;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
