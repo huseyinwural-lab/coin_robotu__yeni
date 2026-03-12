@@ -1,0 +1,129 @@
+{
+  "summary": "Phase 5.5 Controlled Testnet Hook testing complete. 46/46 pytest tests PASSED. All 10 core execution modules working correctly. Admin testnet endpoints return proper contract. Frontend /admin/futures/testnet-control renders all components correctly with testnet disabled by default and order path blocked.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p55_testnet_control_comprehensive.py",
+    "/app/test_reports/pytest/pytest_results_iter35_p55_testnet_control.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FuturesExecutionContract: Validates symbol (USDT pairs only), side (BUY/SELL), order_type (MARKET/LIMIT), normalizes symbol to uppercase",
+    "FuturesTestnetAdapter: Wraps BinanceFuturesTestnetAdapter for submit_market_order, cancel_order, order_status, fill_status",
+    "FuturesOrderPreflight: 8 checks - symbol_active, leverage_cap, quantity_valid, reduce_only_consistency, margin_available, testnet_mode_enabled, release_gate, live_endpoint_block",
+    "FuturesRetryPolicy: TIMEOUT/RATE_LIMIT/NETWORK_ERROR/EXCHANGE_5XX are retryable; INVALID_ORDER/INSUFFICIENT_MARGIN/REDUCE_ONLY_REJECTED fail_fast; DUPLICATE_CLIENT_ORDER triggers reconcile",
+    "FuturesCancelReplaceGuard: Blocks duplicate exposure by decision_trace_id+symbol+side; reconcile_after_cancel checks if order is actually cancelled before allowing replace",
+    "FuturesReduceOnlyGuard: Validates reduce_only orders against current position - blocks if no position or would increase exposure",
+    "FuturesSlippageTracker: Calculates expected vs realized slippage in bps, tracks delta",
+    "FuturesExecutionReconciler: Maps exchange status to internal state (accepted/partially_filled/filled/cancelled/rejected/unknown_needs_reconcile)",
+    "FuturesTestnetReleaseGate: Combines live_mode_enabled, release_gate_status, has_live_credentials into final gate status - BLOCKED if any condition fails",
+    "FuturesExecutionParityCheck: Compares paper vs testnet fill prices with tolerance_bps (default 20), returns PASS or WARN",
+    "live_endpoint_access: Always FALSE - live endpoints cannot be accessed",
+    "Testnet default OFF - order path blocked until explicitly enabled"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_p55_testnet_control_comprehensive.py"
+  ],
+  "success_rate": {
+    "backend": "100% (46/46 pytest tests passed)",
+    "frontend": "100% (All testnet control UI components render correctly)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 5.5 Controlled Testnet Hook fully verified. 10 core execution modules: (1) FuturesExecutionContract - request/response pydantic models, (2) FuturesTestnetAdapter - Binance testnet wrapper, (3) FuturesOrderPreflight - 8 safety checks, (4) FuturesRetryPolicy - reason-aware retry with exponential backoff, (5) FuturesCancelReplaceGuard - duplicate exposure blocker, (6) FuturesReduceOnlyGuard - reduce-only validation, (7) FuturesSlippageTracker - slippage calculation, (8) FuturesExecutionReconciler - state machine for order status, (9) FuturesTestnetReleaseGate - combines conditions into gate status, (10) FuturesExecutionParityCheck - paper vs testnet drift check. Admin endpoints: GET /api/admin/futures/testnet/status (full contract), GET /api/admin/futures/testnet/release-gate (gate status). Frontend: /admin/futures/testnet-control with summary cards, preflight table, retry policy table, slippage/reconciler/parity panels. Regression endpoints all working: /api/admin/futures/strategy/status, /api/admin/futures/decision-diagnostics, /api/admin/futures/leverage/status.",
+  "features_verified": {
+    "execution_modules": {
+      "futures_execution_contract": "PASS - Request/Response validation working",
+      "futures_testnet_adapter": "PASS - Adapter instantiation working",
+      "futures_order_preflight": "PASS - All 8 checks functioning correctly",
+      "futures_retry_policy": "PASS - Reason-aware retry classification and backoff",
+      "futures_cancel_replace_guard": "PASS - Duplicate exposure blocking",
+      "futures_reduce_only_guard": "PASS - Reduce-only validation",
+      "futures_slippage_tracker": "PASS - Slippage calculation",
+      "futures_execution_reconciler": "PASS - State machine working",
+      "futures_testnet_release_gate": "PASS - Gate evaluation logic",
+      "futures_execution_parity_check": "PASS - Drift tolerance check"
+    },
+    "api_endpoints": {
+      "testnet_status": {
+        "endpoint": "GET /api/admin/futures/testnet/status",
+        "status": "200 PASS",
+        "contract_fields": ["default_mode", "testnet_enabled", "live_endpoint_access", "release_gate", "preflight_template", "retry_policy", "slippage", "parity_check"]
+      },
+      "testnet_release_gate": {
+        "endpoint": "GET /api/admin/futures/testnet/release-gate",
+        "status": "200 PASS",
+        "contract_fields": ["status", "order_path_open", "reasons", "secret_isolation", "testnet_enabled"]
+      },
+      "regression_strategy_status": {
+        "endpoint": "GET /api/admin/futures/strategy/status",
+        "status": "200 PASS"
+      },
+      "regression_decision_diagnostics": {
+        "endpoint": "GET /api/admin/futures/decision-diagnostics",
+        "status": "200 PASS"
+      },
+      "regression_leverage_status": {
+        "endpoint": "GET /api/admin/futures/leverage/status",
+        "status": "200 PASS"
+      }
+    },
+    "frontend_testnet_control_components": {
+      "page_header": "PASS - 'Futures Testnet Control' title visible",
+      "summary_cards": "PASS - 4 cards: testnet_enabled, default_mode, release_gate, order_path_open",
+      "release_gate_reasons_panel": "PASS - Shows TESTNET_MODE_DISABLED_BY_DEFAULT",
+      "config_secret_isolation_panel": "PASS - Shows live_endpoint_access, isolation_pass, reason",
+      "preflight_checks_table": "PASS - 8 rows with check/pass/reason columns",
+      "retry_policy_table": "PASS - 5 rows with error/action/retry columns",
+      "slippage_panel": "PASS - expected/realized/delta values",
+      "reconciler_panel": "PASS - state value",
+      "parity_panel": "PASS - drift_bps/status values",
+      "refresh_button": "PASS - Button visible and working"
+    },
+    "testnet_default_closed_requirements": {
+      "testnet_enabled_false": "PASS - Testnet disabled by default",
+      "default_mode_paper": "PASS - Default mode is paper",
+      "order_path_open_false": "PASS - Order path blocked (gate closed)",
+      "release_gate_blocked": "PASS - Release gate is BLOCKED",
+      "live_endpoint_access_false": "PASS - Live endpoint access impossible"
+    }
+  },
+  "sample_api_responses": {
+    "testnet_status": {
+      "default_mode": "paper",
+      "testnet_enabled": false,
+      "live_endpoint_access": false,
+      "release_gate": {
+        "status": "BLOCKED",
+        "order_path_open": false,
+        "reasons": ["TESTNET_MODE_DISABLED_BY_DEFAULT"]
+      },
+      "preflight_template": {
+        "preflight_pass": false,
+        "reason_code": "TESTNET_MODE_DISABLED"
+      },
+      "retry_policy": [
+        {"error_code": "TIMEOUT", "decision": {"should_retry": true, "action": "retry"}}
+      ],
+      "slippage": {"expected_slippage": 0, "realized_slippage": 0},
+      "parity_check": {"status": "PASS", "drift_bps": 0}
+    },
+    "testnet_release_gate": {
+      "status": "BLOCKED",
+      "order_path_open": false,
+      "reasons": ["TESTNET_MODE_DISABLED_BY_DEFAULT"],
+      "testnet_enabled": false
+    }
+  }
+}

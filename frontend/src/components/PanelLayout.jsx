@@ -47,6 +47,7 @@ const adminOnlyItems = [
   { to: "/admin/futures/risk-monitor", label: "Futures Risk Monitor", icon: ShieldAlert, testId: "nav-admin-futures-risk-monitor-link" },
   { to: "/admin/futures/liquidation-protection", label: "Liquidation Protection", icon: ShieldCheck, testId: "nav-admin-futures-liquidation-protection-link" },
   { to: "/admin/futures/microstructure-guard", label: "Microstructure Guard", icon: Activity, testId: "nav-admin-futures-microstructure-guard-link" },
+  { to: "/admin/futures/testnet-control", label: "Testnet Control", icon: Radio, testId: "nav-admin-futures-testnet-control-link" },
   { to: "/admin/exchanges", label: "Exchanges", icon: Globe, testId: "nav-admin-exchanges-link" },
   { to: "/admin/proofs", label: "Proof Panel", icon: ShieldCheck, testId: "nav-admin-proofs-link" },
   { to: "/admin/reports/archive", label: "Reports Archive", icon: Archive, testId: "nav-reports-archive-link" },

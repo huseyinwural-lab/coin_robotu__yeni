@@ -10,6 +10,7 @@ import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { AdminExchangesPage } from "@/pages/AdminExchangesPage";
 import { AdminFuturesRiskMonitorPage } from "@/pages/AdminFuturesRiskMonitorPage";
 import { AdminFuturesMicrostructureGuardPage } from "@/pages/AdminFuturesMicrostructureGuardPage";
+import { AdminFuturesTestnetControlPage } from "@/pages/AdminFuturesTestnetControlPage";
 import { AdminProofsPage } from "@/pages/AdminProofsPage";
 import { AdminReportsArchivePage } from "@/pages/AdminReportsArchivePage";
 import { AdminRiskOrchestratorPage } from "@/pages/AdminRiskOrchestratorPage";
@@ -83,6 +84,7 @@ function App() {
             <Route path="futures/risk-monitor" element={<AdminFuturesRiskMonitorPage />} />
             <Route path="futures/liquidation-protection" element={<AdminFuturesRiskMonitorPage />} />
             <Route path="futures/microstructure-guard" element={<AdminFuturesMicrostructureGuardPage />} />
+            <Route path="futures/testnet-control" element={<AdminFuturesTestnetControlPage />} />
             <Route path="exchanges" element={<AdminExchangesPage />} />
             <Route path="proofs" element={<AdminProofsPage />} />
             <Route path="reports/archive" element={<AdminReportsArchivePage />} />
