@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 
 # Get backend URL from environment variable
-BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://explainer-engine-2.preview.emergentagent.com")
+BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://platform-hardening-4.preview.emergentagent.com")
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials
