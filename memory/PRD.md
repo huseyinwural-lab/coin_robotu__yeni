@@ -1773,3 +1773,71 @@
 ### Güncel sıra
 - Phase 5.7A tamamlandı.
 - Sonraki blok: **Phase 5.8 — Live Readiness Control System**
+
+## 27) 2026-03-12 — Phase 5.8 Live Readiness Control System (Tamamlandı)
+
+### Live Core
+- `core/live/position_sync_engine.py`
+  - Event: `POSITION_DRIFT_DETECTED`
+  - Engine vs exchange position drift kontrolü
+- `core/live/order_reconciliation_engine.py`
+  - Event: `ORDER_RECONCILIATION_ERROR`
+  - Missing/duplicate/execution mismatch tespiti
+- `core/live/balance_integrity_guard.py`
+  - Event: `BALANCE_INTEGRITY_ALERT`
+  - Wallet/available/margin integrity kontrolü
+- `core/live/exchange_latency_guard.py`
+  - Event: `EXCHANGE_LATENCY_ALERT`
+  - order_ack/api/ws/heartbeat latency guard
+- `core/live/readiness_score_engine.py`
+  - Eşit ağırlıklar: `0.25 / 0.25 / 0.25 / 0.25`
+  - State: `READY` / `WARNING` / `BLOCKED`
+  - Event: `LIVE_READINESS_ALERT`
+- `core/live/live_readiness_guard.py`
+  - Event: `LIVE_READINESS_BLOCK`
+  - Pipeline aksiyonları: block / downshift / allow
+
+### Observability
+- `core/observability/live_readiness_audit.py`
+  - Position/order/balance/latency/readiness/block eventlerini tek audit akışında toplar
+
+### Service + Pipeline
+- `services/futures_live_readiness_service.py`
+  - live-readiness snapshot, readiness-score endpoint payloadları
+  - `apply_live_readiness_guard_to_decisions` ile trade pipeline enforcement
+- `services/futures_strategy_service.py`
+  - Tail risk sonrası live readiness guard enforcement eklendi
+  - Snapshot’a readiness score/state/alerts alanları eklendi
+
+### API
+- Yeni endpointler:
+  - `GET /api/admin/futures/live-readiness`
+  - `GET /api/admin/futures/readiness-score`
+- Router: `routers/admin_futures_live_readiness.py`
+
+### UI
+- Yeni panel: `/admin/futures/live-readiness`
+  - readiness confidence score
+  - position sync monitor
+  - order reconciliation monitor
+  - balance integrity monitor
+  - exchange latency chart
+  - active readiness alerts
+
+### Test
+- Yeni test dosyaları:
+  - `test_position_sync_engine.py`
+  - `test_order_reconciliation_engine.py`
+  - `test_balance_integrity_guard.py`
+  - `test_exchange_latency_guard.py`
+  - `test_readiness_score_engine.py`
+  - `test_live_readiness_guard.py`
+  - `test_live_readiness_endpoint.py`
+- Lokal pytest: **16 passed**
+- Testing agent raporu: `/app/test_reports/iteration_42.json` => **PASS**
+  - Backend 100%
+  - Frontend 100%
+
+### Güncel sıra
+- Phase 5.8 tamamlandı.
+- Sonraki blok: **Phase 5.8A — Capital Scaling Validation**
