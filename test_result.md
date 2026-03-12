@@ -843,14 +843,85 @@ backend:
         agent: "testing"
         comment: "Legacy Formula Observability API integration FULLY FUNCTIONAL. Backend endpoint verified: 1) GET /api/admin/futures/strategy/status returns legacy_formula_observability array with 8 items. 2) Frontend successfully fetches and displays data in Legacy Formula (Tail Risk View) panel on /admin/futures/tail-risk page. 3) All items include required fields: strategy, family_code, source_type, shadow_status, signal_frequency, shadow_pnl, false_breakout_rate, confidence_drift. Backend integration working correctly."
 
+  - task: "Portfolio Risk Limits API - GET and PUT endpoints"
+    implemented: true
+    working: true
+    file: "backend/routers/admin_phase9_meta.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Iteration-52 Phase-9A Backend Test PASSED. GET /api/admin/portfolio-risk/limits endpoint working correctly - retrieved 7 risk limit parameters (max_portfolio_leverage: 3.0, max_symbol_exposure: 35.0, max_cluster_exposure: 50.0, max_strategy_exposure: 40.0, max_single_trade_risk: 10.0, max_intraday_drawdown: 5.0, max_total_drawdown: 15.0). PUT /api/admin/portfolio-risk/limits endpoint working correctly - successfully updated limits and restored original values. Admin authentication working properly."
+
+  - task: "Portfolio Risk Clusters API - GET and POST endpoints"
+    implemented: true
+    working: true
+    file: "backend/routers/admin_phase9_meta.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Iteration-52 Phase-9A Backend Test PASSED. GET /api/admin/portfolio-risk/clusters endpoint working correctly - retrieved 4 existing risk clusters. POST /api/admin/portfolio-risk/clusters endpoint working correctly - successfully created test cluster 'TEST_CLUSTER_IT52' with required fields (cluster_id, symbols: BTCUSDT/ETHUSDT, cluster_type: sector, correlation_score: 0.7, risk_weight: 1.5). All required schema validation working properly."
+
+  - task: "Portfolio Risk Dashboard API - GET endpoint"
+    implemented: true
+    working: true
+    file: "backend/routers/admin_phase9_meta.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Iteration-52 Phase-9A Backend Test PASSED. GET /api/admin/portfolio-risk dashboard endpoint working correctly - returned complete dashboard payload with total_exposure: 31070.0, cluster_exposure (3 clusters), strategy_exposure (5 strategies), risk_alerts (1 alert), drawdown_monitor configuration. All required dashboard fields present and properly structured for frontend consumption."
+
+  - task: "Strategy Allocation API - GET and PUT endpoints"
+    implemented: true
+    working: true
+    file: "backend/routers/admin_phase9_meta.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Iteration-52 Phase-9A Backend Test PASSED. GET /api/admin/strategy-allocation endpoint working correctly - retrieved 7 strategy allocations with complete configuration data. PUT /api/admin/strategy-allocation/{strategy_id} endpoint working correctly - successfully updated allocation for meta_disabled_v1 strategy and restored original values. Strategy allocation management fully functional."
+
+  - task: "User Execution Intent Preview API - Phase9A Fields"
+    implemented: true
+    working: true
+    file: "backend/routers/user_execution.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Iteration-52 Phase-9A Backend Test PASSED. POST /api/user/execution/intent/preview endpoint working correctly with ALL Phase9A fields present: meta_strategy_summary (15 fields), portfolio_risk_impact (13 fields), gate_decision: ALLOW, meta_engine_decision: ALLOW. User authentication working properly with test user account. Preview functionality fully operational for spot trading with strategy binding."
+
+  - task: "User Execution Intent Decision Trace API - Phase9A Fields"
+    implemented: true
+    working: true
+    file: "backend/routers/user_explainability.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Iteration-52 Phase-9A Backend Test PASSED. GET /api/user/execution/intents/{id}/decision-trace endpoint working correctly with ALL Phase9A fields present at trace level: portfolio_risk_score: 0.0017, strategy_allocation_reason: 'normal_allocation', meta_engine_decision: 'ALLOW'. Decision trace timeline properly populated with execution preview data. User authentication working properly. Decision traceability fully functional."
 metadata:
   last_updated: "2026-03-12"
-  test_sequence: 15
-  test_phase: "User Registration → Admin Approval → User Login Flow Retest"
+  test_sequence: 16
+  test_phase: "Iteration-52 Phase-9A Backend Regression + Feature Validation"
 
 test_plan:
   current_focus:
-    - "User approval workflow retest completed successfully - Per-row approve buttons validated"
+    - "Iteration-52 Phase-9A backend regression and feature validation completed successfully - All requirements validated"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -860,3 +931,6 @@ agent_communication:
     message: "LEGACY FORMULA SHADOW VISIBILITY TEST COMPLETED - ALL TESTS PASSED (11/11 - 100% SUCCESS RATE). Comprehensive validation of Legacy Formula Shadow integration across all four futures pages: STRATEGY ANALYTICS PAGE (/admin/futures/strategy-analytics): 1) ✓ Admin login successful (admin@platform.dev / Admin12345!). 2) ✓ Legacy Formula Shadow Matrix table visible with proper title 'Legacy Formula Shadow Matrix'. 3) ✓ ALL 8 REQUIRED TABLE COLUMNS VERIFIED: Component, Family, Source, Shadow, Signal Frequency, Shadow PnL, False Breakout Rate, Confidence Drift. 4) ✓ Found 8 legacy formula rows in table. 5) ✓ ALL 5 REQUIRED STRATEGIES FOUND: momentum_volume_breakout_v3 (BC03), volatility_breakout_v2 (BC01), adaptive_level_breakout_v2 (BC02), oscillator_composite_reversion_v2 (BC04), crypto_universe_prefilter_v1 (SCAN-CRYPTO-01). All rows display: family codes, source=legacy_formula, shadow=SHADOW_ONLY, signal_frequency values, shadow_pnl=0, false_breakout_rate=0, confidence_drift=0. STRATEGY GOVERNANCE PAGE (/admin/futures/strategy-governance): 6) ✓ Legacy Formula Shadow Visibility panel found with title 'Legacy Formula Shadow Visibility'. 7) ✓ Found 8 legacy formula items displaying all required fields (family, source, shadow, freq, false_breakout, conf_drift). CAPITAL GOVERNANCE PAGE (/admin/futures/capital-governance): 8) ✓ Legacy Formula (Capital Governance View) panel found with proper title. 9) ✓ Found 8 legacy formula items displaying all required fields (family, source, shadow, signal_frequency, shadow_pnl, false_breakout_rate, confidence_drift). TAIL RISK PAGE (/admin/futures/tail-risk): 10) ✓ Legacy Formula (Tail Risk View) panel found with proper title. 11) ✓ Found 8 legacy formula items displaying all required fields. DATA-TESTID VERIFICATION: ALL CRITICAL ELEMENTS ACCESSIBLE: Table wrapper (strategy-analytics-legacy-shadow-table-wrapper), Table (strategy-analytics-legacy-shadow-table), Column headers (strategy-analytics-legacy-head-*), Table rows (strategy-analytics-legacy-row-{index}), Table cells (strategy-analytics-legacy-*-{index}), Governance panels (strategy-governance-legacy-shadow-panel, capital-governance-legacy-shadow-panel, tail-risk-legacy-shadow-panel), Panel titles and items (*-legacy-shadow-title, *-legacy-shadow-item-{index}). ERROR MONITORING: ZERO console errors detected. ZERO network errors detected. ALL API endpoints returning data correctly. SCREENSHOTS: legacy_shadow_strategy_analytics.png (shows complete Legacy Formula Shadow Matrix table with 8 rows and all columns), legacy_shadow_strategy_governance.png (shows Legacy Formula Shadow Visibility panel with 8 items), legacy_shadow_capital_governance.png (shows Legacy Formula (Capital Governance View) panel with 8 items), legacy_shadow_tail_risk.png (shows Legacy Formula (Tail Risk View) panel with 8 items). CONCLUSION: Legacy Formula Shadow integration is production-ready. All required table columns present. All required strategy rows visible. Legacy visibility panels working across all governance pages. All data-testid attributes functional for automated testing."
   - agent: "testing"
     message: "USER REGISTRATION → ADMIN APPROVAL → USER LOGIN FLOW RETEST COMPLETED - ALL TESTS PASSED (6/6 - 100% SUCCESS RATE). Date: 2026-03-12. Comprehensive end-to-end validation of previously reported issue: STEP 1 - USER REGISTRATION: ✓ Navigated to /user/login and switched to register mode successfully. ✓ Registered new user: test_user_reg_1773349041@test.com with password TestPassword123!. ✓ Success toast displayed: 'Talebiniz alındı. Admin onayı sonrası giriş yapabilirsiniz.' ✓ User account created with approval_status='pending'. STEP 2 - ADMIN LOGIN: ✓ Successfully logged in as admin@platform.dev / Admin12345!. ✓ Redirected to /admin/dashboard correctly. STEP 3 - USER APPROVALS PAGE: ✓ Navigated to /admin/user-approvals successfully. ✓ Page loaded with 55 pending approval requests. ✓ Found registered user (test_user_reg_1773349041@test.com) in pending list with user_id: 74f115b7-0cc5-498a-bede-7b4b0b5f3052. STEP 4 - PER-ROW APPROVE BUTTON VALIDATION: ✓✓ NEW per-row 'Approve' button (data-testid='admin-approval-approve-button-{user_id}') rendered successfully. ✓✓ Button is visible: True, enabled: True, clickable: True. ✓✓ Per-row approve action buttons are now available and functional as requested. STEP 5 - USER APPROVAL ACTION: ✓ Clicked per-row Approve button for test user. ✓ Success toast displayed: 'Kullanıcı onaylandı'. ✓ User removed from pending approvals list after approval. ✓ Backend API POST /api/admin/user-approvals/bulk-approve working correctly. STEP 6 - USER LOGIN AFTER APPROVAL (CRITICAL VALIDATION): ✓✓✓ Logged out from admin panel. ✓✓✓ Navigated to /user/login. ✓✓✓ Logged in as approved user (test_user_reg_1773349041@test.com). ✓✓✓ LOGIN SUCCESSFUL - Redirected to /user/dashboard. ✓✓✓ NO 400 ERROR DETECTED. ✓✓✓ NO 403 ERROR DETECTED. ✓✓✓ NO network errors during login. ✓✓✓ Backend API POST /api/auth/login/user working correctly for approved users. ERROR MONITORING: ZERO console errors (except non-critical CDN rum requests). ZERO authentication errors. ZERO authorization errors. ALL data-testid attributes functional. CONCLUSION: Previously reported issue with user registration → admin approval → user login flow has been RESOLVED. Per-row approve action buttons are rendering and working correctly. Complete end-to-end user approval workflow is production-ready and fully functional. NO BLOCKERS FOUND."
+
+  - agent: "testing"
+    message: "ITERATION-52 PHASE-9A BACKEND REGRESSION + FEATURE VALIDATION COMPLETED - ALL TESTS PASSED (12/12 - 100% SUCCESS RATE). Comprehensive testing of all required backend APIs and frontend page accessibility completed successfully on https://explainer-engine-2.preview.emergentagent.com with admin credentials admin@platform.dev / Admin12345! and user credentials test_user_reg_1773349041@test.com / TestPassword123!. BACKEND API RESULTS: 1) ✅ /api/admin/portfolio-risk/limits GET and PUT - Portfolio risk limits retrieved (7 parameters) and updated successfully. 2) ✅ /api/admin/portfolio-risk/clusters GET and POST - Risk clusters retrieved (4 clusters) and test cluster created successfully. 3) ✅ /api/admin/portfolio-risk GET dashboard - Dashboard payload returned with total_exposure: 31070.0, 3 cluster exposures, 5 strategy exposures, 1 risk alert. 4) ✅ /api/admin/strategy-allocation GET and PUT - Strategy allocations retrieved (7 strategies) and allocation updated successfully. 5) ✅ /api/user/execution/intent/preview - Intent preview working with ALL Phase9A fields: meta_strategy_summary (15 fields), portfolio_risk_impact (13 fields), gate_decision: ALLOW, meta_engine_decision: ALLOW. 6) ✅ /api/user/execution/intents/{id}/decision-trace - Decision trace working with ALL Phase9A fields at trace level: portfolio_risk_score: 0.0017, strategy_allocation_reason: 'normal_allocation', meta_engine_decision: 'ALLOW'. FRONTEND PAGE ACCESSIBILITY: 1) ✅ /admin/strategy-allocation page - Status 200 (accessible). 2) ✅ /admin/portfolio-risk page - Status 200 (accessible). 3) ✅ /user/execute page - Status 200 (accessible). 4) ✅ /user/signals page - Status 200 (accessible). 5) ✅ /user/trades page - Status 200 (accessible). AUTHENTICATION: Admin authentication working correctly with provided credentials. User authentication working correctly with existing test user account. NO BLOCKERS FOUND: All required Phase9A backend endpoints are working correctly. All frontend pages are accessible. Portfolio risk management and strategy allocation features are fully functional. Meta strategy engine integration working correctly. Decision traceability includes all required Phase9A fields. PRODUCTION READY: All Iteration-52 Phase-9A regression and feature validation requirements have been met successfully."
