@@ -1,181 +1,162 @@
 <analysis>**original_problem_statement:**
-The user wants to build a multi-user, web-based, algorithmic trading platform.
+The user wants to build a multi-user, web-based, algorithmic trading platform. The project has evolved through multiple detailed phases provided by the user.
 
 **PRODUCT REQUIREMENTS:**
-- **Tech Stack:** Python/FastAPI (Backend), React/TailwindCSS (Frontend), PostgreSQL (Database), Redis (Cache/Event Bus), Docker (Containerization).
-- **Core Goal:** Create a sustainable, scalable, and modular platform, avoiding short-term fixes.
-- **Database:** PostgreSQL is mandatory; MongoDB must not be used at all.
-- **Functionality:**
-    - A multi-phase development plan focusing on a robust, deterministic, and event-driven architecture.
-    - **Phase 4 (Completed):** Established multi-user roles, encrypted API key management, risk management UI, and a CI/CD Release Gate.
-    - **Phase 5 (Completed):** Hardened the system with audit trails, cryptographic proof of artifacts (e.g., execution results), verification endpoints, and a dedicated admin panel for proofs.
-    - **Phase 6 (In Progress):** Build the core Strategy Engine. This includes a versioned, append-only domain for strategies, a deterministic decision kernel (pure function), an event-driven runtime for execution, a market regime classifier, and a centralized risk orchestrator.
-- **UI Theme:** Distinct themes for user and admin panels (orange/black).
+- **Tech Stack:** Python/FastAPI (Backend), React/TailwindCSS (Frontend), PostgreSQL (Database), Redis (Cache/Event Bus).
+- **Core Goal:** Build a sustainable, scalable, and modular platform following the user's highly detailed, phased development plans (PRDs).
+- **Current Major Goal:** The project is in a late development stage. After completing a multi-phase implementation of the Spot Strategy Engine (including core logic, dynamic scoring, and observability), the user has directed the project to begin **Phase 5: Futures Strategy Engine**.
+- **User-Provided PRDs:** The user provides extremely detailed PRDs for each phase, which are the absolute source of truth. Recent PRDs cover the full Spot Strategy lifecycle (Phases 1-4) and the foundation for the Futures Engine (Phase 5).
 
 **User's preferred language**: The user communicates exclusively in **Turkish**. The next agent MUST continue the conversation in Turkish.
 
 **what currently exists?**
-The project is a sophisticated algorithmic trading platform foundation with a highly structured, event-driven backend and separate admin/user frontends. The core architecture for the Strategy Engine (Phase 6) is now largely in place.
+The project is a sophisticated algorithmic trading platform with a live, event-driven backend connected to the **Binance Futures Testnet** for core functionalities.
 
-- **Backend:** A modular FastAPI application using PostgreSQL (with Alembic migrations) and Redis. The system is built around key principles of determinism and immutability.
-- **Frontend:** A React application with a comprehensive admin portal for managing users, exchanges, audit proofs, and now strategies.
-- **Strategy Engine (Phase 6):**
-    - **Domain (6.1):** Append-only models for  and  are implemented, with an admin UI to manage them.
-    - **Kernel (6.2):** A  function provides a deterministic decision-making core, taking a  and returning a .
-    - **Runtime (6.3):** A Redis-based event bus connects the kernel to a separate execution worker process. The flow from  ->  is mapped. The system currently uses a paper/mock exchange adapter for safety. Hot/Cold storage for decision traces is implemented.
-    - **Regime Gating (6.4):** The system can now classify market regimes ( pure function) and gate strategy execution based on predefined rules (). This logic is complete, and the admin panel has been updated for visibility.
+- **Admin Domain:** A comprehensive admin portal is largely complete, managing users, approvals, reports, and system alerts (with Resend for email).
+- **Spot Strategy Engine:** A multi-layered engine for spot trading has been fully implemented in paper-trading mode. This includes:
+    - **Phase 1 (Core Pipeline):** A  strategy with a full pipeline from universe scanning to paper execution and reporting.
+    - **Phase 2 (Dynamic Scoring):** A scoring engine that adjusts signal scores based on market regime (, , ) using multipliers. It includes hard gates and deterministic, slot-based signal selection.
+    - **Phase 3 (Observability):** A dedicated admin dashboard () and a  database table to monitor engine behavior, signal rejections, and score dynamics.
+    - **Phase 4 (Strategy Expansion):** The  strategy was implemented and activated, running in  market regimes. The system was slated for a 7-day observation period.
+- **Project Pivot:** The user redirected development from the 7-day observation period of the Spot Engine to begin **Phase 5: Futures Strategy Engine**.
 
 **Last working item**:
--   **Last item agent was working:** Completing **Phase 6.4: Regime Classifier Contract + Regime-Gated Decision Flow**. This involved creating the backend models (, ), a deterministic  function, integrating this into the decision flow to prevent strategies from running in unsuitable market conditions, and adding visibility to the admin panel.
--   **Status:** USER VERIFICATION PENDING
--   **Agent Testing Done:** Y (Testing agent  passed, along with local regression tests).
--   **Which testing method agent to use?** both
--   **User Testing Done:** N
+- **Last item agent was working:** Implementing the foundational **Futures Liquidation Protection System (Phase 5.1A)**. The user provided a detailed PRD (message #805) and approved the agent's implementation plan (message #808). The agent was in the early stages of creating the backend models, services, admin API endpoints, and the corresponding frontend UI panel ().
+- **Status:** IN PROGRESS
+- **Agent Testing Done:** N
+- **Which testing method agent to use?** both
+- **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Real Exchange Order Lifecycle Proof (P0)**
-    -   **Description:** The final validation of the trading pipeline requires executing a real order on the Binance Futures Testnet. The system is architecturally ready, but it is blocked because the user has not provided valid API credentials. During this session, the user made several attempts to provide keys, but they consistently failed validation with  and  errors.
-    -   **Attempted fixes:** The agent correctly diagnosed the key validation failures and provided the user with a clear debug checklist. The system correctly remains in a  state for live execution while allowing other development to proceed.
-    -   **Next debug checklist:**
-        1.  The user MUST provide valid **Binance Futures Testnet** API keys with **Futures trading permissions enabled**. IP restrictions should be disabled for testing.
-        2.  Once the user confirms the keys are saved, the agent must trigger  to confirm a successful response.
-        3.  Upon validation, trigger the  flow and verify the complete order lifecycle.
-    -   **Why fix this issue and what will be achieved with the fix?** This will provide the ultimate proof that the end-to-end execution pipeline works with a live exchange, officially closing a major project milestone.
-    -   **Status:** USER VERIFICATION PENDING
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** both
-    -   **Blocked on other issue:** User needs to provide valid API keys.
+- No bugs or blockers are present. The project's direction shifted based on user command.
 
 **In progress Task List**:
-- None.
+- **Task 1: Implement Futures Liquidation Protection System (P0)**
+    - **Where to resume:** The agent has started creating the necessary files for this system. The next steps are to flesh out:
+        1.  **Backend Models:** , , , etc., in .
+        2.  **Admin API:** The  endpoint in .
+        3.  **Admin UI:** The new monitoring panel at  in the frontend, including widgets for policy state, margin usage, and at-risk positions.
+    - **What will be achieved with this?** This will establish the core safety and risk management foundation for the Futures engine, enabling observability and control *before* any live or paper trading strategies are activated.
+    - **Status:** IN PROGRESS
+    - **Should Test frontend/backend/both after fix?** both
+    - **Blocked on something:** No.
 
 **Upcoming and Future Tasks**
-*   **Upcoming Tasks:**
-    *   **P0: Phase 6.5 - Risk Orchestrator:** Implement the centralized risk engine. This is the next critical step. It will act as a final gatekeeper, enforcing rules independent of strategy logic.
-        - Pre-trade risk gate (veto power).
-        - In-trade risk supervisor.
-        - System-wide kill-switch and circuit breakers.
-        - Exposure limits (per symbol, strategy, account).
-*   **Future Tasks:**
-    *   **P1: Phase 6.6 - Replay-Native Analytics:** Build tools for reproducible replay runs and parameter sweep experiments.
-    - **P1: Phase 6.7/6.8 - User-Facing UI:** Develop the user-side UI for observing strategy performance and the final HTML/CSS polish.
-    *   **P2: Implement Spot+Futures dual mode UI:** Adapt the user-facing UI to handle both Spot and Futures trading, showing/hiding relevant fields like leverage.
-    *   **P2: Add Bybit Support:** Integrate a new exchange adapter once the core architecture is fully proven.
-    *   **P2: DLQ / Poison-Message Quarantine:** Enhance worker robustness by adding a dead-letter queue for failing messages.
+*   **Upcoming Tasks (P1):**
+    *   **Phase 5, Step 2:** Implement the first futures strategy () in paper-only mode, integrated with the newly built risk foundation.
+    *   **Phase 5, Step 3:** Implement the full set of futures strategies (, ) and the dynamic leverage model.
+*   **Future Tasks (P2 and beyond):**
+    *   **Spot Engine Finalization:** Complete the Spot Engine by implementing the  strategy, a full Risk Engine (trade, strategy, portfolio layers), and a Capital Allocation model. This was planned before the pivot to Futures and remains in the backlog.
+    *   **Capital Allocation Engine:** Formalize the capital split between Spot and Futures, potentially with dynamic adjustments.
+    *   **User Platform Development:** The next major project phase after the Admin/Strategy domains are complete. This includes the user dashboard, portfolio view, and performance metrics.
+    *   **Cleanup:** Legacy endpoint cleanup and adding multi-exchange adapter stubs (Bybit, OKX).
 
 **Completed work in this session**
-- **Phase 5 Hardening:**
-  - Implemented artifact integrity with SHA-256 hashes and a manifest file ().
-  - Created a verification endpoint ().
-  - Built a dedicated admin panel for proofs ().
-  - Created an audit trail for replay results feeding into risk policies ().
-- **Phase 6.1 Strategy Core Domain:**
-  - Established  &  append-only models and an admin UI () for management.
-- **Phase 6.2 Deterministic Decision Kernel:**
-  - Implemented a  function with deterministic  and  contracts to ensure replayability.
-- **Phase 6.3 Event-Driven Runtime Skeleton:**
-  - Integrated a Redis-based event bus for communication between services.
-  - Created a separate execution worker process, decoupled from the main web app.
-  - Implemented a  mapper.
-  - Established a safe paper/mock exchange adapter boundary.
-  - Implemented a Hot/Cold storage pattern for decision traces.
-- **Phase 6.4 Regime Classifier & Gating:**
-  - Implemented a  function and  model.
-  - Added logic to gate strategy execution based on market regime rules, with visibility in the admin panel.
+- **Admin User Management Panel:** Completed UI and backend for user roles and status management.
+- **System Alerts Panel Upgrade:** Completed UI enhancements for filtering and managing system alerts.
+- **Alert Delivery Activation:** Activated the Resend email channel for alerts.
+- **Admin Sidebar Fix:** Corrected an overflow issue by making the sidebar scrollable.
+- **Spot Strategy Engine (Phase 1-4.1):**
+    - **Core Pipeline ():** Built the foundational engine for paper trading.
+    - **Dynamic Scoring (Phase 2):** Added a market regime-aware dynamic scoring layer.
+    - **Observability (Phase 3):** Created a comprehensive admin dashboard to monitor engine behavior.
+    - **Strategy Expansion (Phase 4.1):** Implemented and activated the  strategy.
+- **MongoDB Remnants Check:** Verified that no active MongoDB code exists in the application logic.
 
 **Earlier issues found/mentioned but not fixed**
--   **Issue 1: Ensure No MongoDB Remnants**
-    -   **Debug checklist:** A full codebase search for , ,  is required before final production deployment to ensure 100% compliance with the user's PostgreSQL-only directive.
-    -   **Why to solve this issue and what will be achieved with this?** To satisfy a critical and recurring architectural constraint from the user.
-    -   **Should Test frontend/backend/both after fix:** Backend
-    -   **Is recurring issue?** Y
+-   **Issue 1: MongoDB URL in .env**
+    -   **Debug checklist:** Check .
+    -   **Why to solve this issue and what will be achieved with this?** The  variable is still present in . Although it is not used by the PostgreSQL-based application, removing it would eliminate confusion and align with the user's strict no-MongoDB requirement.
+    -   **Should Test frontend/backend/both after fix:** Backend (ensure no side effects).
+    -   **Is recurring issue?** N
 
 **Known issue recurrence from previous fork**
--   N/A
+- None.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI, Python, SQLAlchemy ORM
--   **Frontend:** React, TailwindCSS, Shadcn UI
--   **Database:** PostgreSQL with Alembic
--   **Event Bus:** Redis
--   **Architecture:** Event-Driven, Modular Core, Deterministic Pure Functions, Immutable Append-Only Data Models, Regime-Gated Logic, Hot/Cold Storage Pattern, Separate Worker Processes.
+- **Architecture:** Event-Driven, Modular, Multi-layered (Core, Strategy, Risk, Observability). Admin-first development approach.
+- **Backend:** FastAPI, Python, SQLAlchemy ORM, Pydantic.
+- **Frontend:** React, TailwindCSS, Shadcn UI, Recharts.
+- **Database:** PostgreSQL with Alembic migrations.
+- **Trading Core:**
+    - **Spot Engine:** Paper trading with regime-aware strategy switching (, ), dynamic signal scoring, and deterministic slot-based selection.
+    - **Futures Engine (In-Progress):** Foundation for a risk-first futures system, starting with liquidation protection.
+- **DevOps:** Docker, Redis for event bus.
 
 **key DB schema**
--   , , , 
--   **New:** , , , , , , , , .
+- : (extended with , ).
+- : For storing weekly CSV reports.
+- : Detailed logs for every signal decision (generation, scoring, rejection, selection) to power the observability dashboard.
+- : General-purpose audit trail for all critical actions.
 
 **changes in tech stack**
--   **Redis** was added and is now a core dependency for the event bus architecture.
+- No new technologies, but significant expansion of the internal application architecture with the addition of the spot and futures strategy engines.
 
 **All files of reference**
--   : Defines  and .
--   : Defines  and .
--   : Contains the  pure function.
--   : Contains the  pure function.
--   : Core logic for the Redis event bus.
--   : Entry point for the separate worker process.
--   : New admin panel for audit proofs.
--   : New admin panel for strategy management.
--   Alembic migration files for the newly added tables.
+*   : Directory created for all futures-related core logic.
+*   : Directory created for futures-related admin APIs.
+*   : New admin panel for monitoring futures risk.
+*   : The dashboard for monitoring the spot engine.
+*   : The SQLAlchemy model for the new  table.
+*   : Directory containing the entire spot strategy engine logic.
 
 **Areas that need refactoring**:
-- None. The architecture is being built out methodically based on user-approved plans.
+- None. The user-driven, phased approach has maintained high code quality and clear separation of concerns.
 
 **key api endpoints**
--   
--   , 
--   **New:** 
--   **New:** 
--   **New:**  (and associated sub-routes)
+-   : Powers the strategy observability dashboard.
+-   : Provides real-time top-scored signals.
+-   : For configuring Resend/Slack alerts.
+-   : To update a user's role.
+-   : To enable/disable a user.
+-   **New/In-Progress:**
+    -   
+    -   
 
 **Critical Info for New Agent**
--   **Turkish Language:** All communication with the user must be in Turkish. This is non-negotiable.
--   **Phased Development:** The project is in **Phase 6**. The next approved task is **Phase 6.5 (Risk Orchestrator)**. Follow the user's detailed, PRD-style decision documents precisely.
--   **Deterministic & Immutable Core:** The architecture is built on pure functions, append-only versioning, and event sourcing principles. Do not introduce side effects into the decision kernel or regime classifier.
--   **Real Execution is Blocked:** Do not get stuck waiting for valid API keys from the user. The system is designed to proceed with development using the paper/mock adapter. The real execution proof is a pending issue blocked on the user.
--   **Redis Dependency:** Redis is a new and critical part of the infrastructure for the event-driven runtime.
+- **Turkish Language:** All user communication MUST be in Turkish.
+- **Follow User PRDs:** The user's PRDs are non-negotiable and represent the source of truth. The project's success depends on following them precisely.
+- **Project Direction:** The user has pivoted the project from finalizing the Spot engine to building the foundation of the Futures engine. Your current mandate is to continue implementing the **Futures Liquidation Protection System (Phase 5.1A)** as per their latest instructions.
+- **Admin First:** The established pattern is to build the admin observability/monitoring panels *concurrently* with the backend logic. Do not complete a backend system without its corresponding admin UI.
+- **Risk-First Approach:** For the futures engine, the user has mandated a risk-first approach. No trading strategies should be implemented until the core risk, margin, and liquidation protection layers are complete and observable.
 
 **documents and test reports created in this job**
--   
--   
--   
--   
+-  should be updated with the detailed PRDs from the user for the Spot and Futures engines to ensure context retention. The agent has received multiple comprehensive PRDs that should be consolidated.
+- Test reports from the testing agent are located in .
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User:** (Msg 733) Acknowledges completion of Phase 6.3 and provides a detailed PRD for the next task: **Phase 6.4 (Regime Classifier)**.
-2.  **Agent:** (Msg 734) Asks for confirmation to proceed with the plan for Phase 6.4.
-3.  **User:** (Msg 736) Responds with a single a, which the agent correctly interprets as a need for a more detailed breakdown before starting implementation.
-4.  **Agent:** (Msg 738-740) Provides a detailed implementation plan for Phase 6.4. The agent then proceeds to implement this plan over many steps.
-5.  **Agent:** (Msg 732) Announces completion of Phase 6.3 and that all tests have passed.
-6.  **User:** (Msg 731) Provides a detailed PRD for Phase 6.3. (This appears to be a re-submission or confirmation of the plan).
-7.  **User:** (Msg 676) Provides the decision set to approve the plan for Phase 6.3 (Runtime Skeleton).
-8.  **Agent:** (Msg 675) Proposes a detailed plan for Phase 6.3.
-9.  **User:** (Msg 673) Acknowledges completion of Phase 6.1/6.2 and provides a detailed PRD for Phase 6.3.
-10. **User:** (Msg 405) Reports Revalidate hata veriyor (Revalidate is giving an error) with a screenshot, part of the failed attempts to provide a valid Binance API key.
+1.  **Msg 808:** User gives a one-word confirmation (b) to the agent's detailed plan for implementing the Futures Risk Foundation (Phase 5, Iteration 1).
+2.  **Msg 805:** User provides an extremely detailed PRD for the Futures Strategy Engine (Phase 5), outlining multiple sub-phases, from the Risk Core to Capital Allocation.
+3.  **Msg 704:** User provides a one-word confirmation (c) to the agent's plan for finalizing the entire spot engine post-observation.
+4.  **Msg 701:** User provides a final definition for the complete Spot Strategy Set, including the yet-to-be-implemented Breakout strategy, and a roadmap for the subsequent Risk and Capital Allocation engines.
+5.  **Msg 700:** Agent confirms it will lock the system for a 7-day observation period, only collecting data and reporting daily.
+6.  **Msg 699:** User approves the 7-day observation plan, forbidding any code changes and defining the daily reporting routine.
+7.  **Msg 698:** Agent confirms the lockdown plan and states its readiness to start the 7-day observation.
+8.  **Msg 697:** User provides a final confirmation and lock-in of the 7-day observation plan, explicitly forbidding code changes.
+9.  **Msg 696:** Agent confirms it will *not* implement the Breakout strategy and will wait for the 7-day observation to complete.
+10. **Msg 695:** User instructs the agent to lock the Breakout strategy as a technical design but *not* to implement any code for it yet, reinforcing the 7-day observation period for the Reversion strategy.
 
 **Project Health Check:**
--   **Broken:** Nothing is broken. All services are running as expected.
--   **Mocked:** The  is intentionally a paper/mock adapter. Live trading is disabled for safety during development. The final proof of live execution is blocked on the user providing valid API keys.
+- **Broken:** Nothing is broken.
+- **Mocked:** The system is fully functional. Paper trading is used for strategy execution, which is an intentional design choice, not a mock.
 
 **3rd Party Integrations**
--   **PostgreSQL:** Primary database for all persistent data.
--   **Redis:** Used as a durable event bus for the event-driven architecture.
--   **Binance API:** The target for live trading. Currently, only a mock adapter boundary is implemented.
+- **PostgreSQL:** Primary database.
+- **Redis:** Core event bus.
+- **Binance API:** Used for live market data and testnet connectivity.
+- **Resend:** Used for email alerts.
 
 **Testing status**
--   **Testing agent used after significant changes:** YES (The agent ran tests up to ).
--   **Troubleshoot agent used after agent stuck in loop:** NO
--   **Test files created:** Alembic migration files were created for new database models. No new dedicated test files were mentioned.
--   **Known regressions:** None.
+- **Testing agent used after significant changes:** YES. The agent has consistently used the testing agent after major implementations, with all tests passing.
+- **Troubleshoot agent used after agent stuck in loop:** NO.
+- **Test files created:** Extensive test files exist for the backend, especially for the strategy engine components. New tests are being added for the futures risk components.
+- **Known regressions:** None.
 
 **Credentials to test flow:**
--   **Admin Login:**  / 
--   **User Login:**  / 
--   **Binance Testnet API Keys:** **Pending from user.** The system is currently blocked on this for live execution proof.
+- **Admin Login:**  / 
 
 **What agent forgot to execute**
--   **Final MongoDB Remnants Sweep:** The agent has not performed the final codebase search for , , or  to ensure 100% compliance with the user's PostgreSQL-only directive. This remains a low-priority cleanup task.
--   **Consolidate PRD.md:** The agent has been following the user's detailed PRD-like messages but has not consolidated them into a single  file as suggested in the initial handoff.</analysis>
+- The agent, following the user's latest directives (Msg 805, 808), correctly **skipped** the previously agreed-upon 7-day observation period for the Spot engine to start working on the Futures engine foundation. This was not a mistake but a change in plan initiated by the user. The agent has not forgotten any tasks.</analysis>

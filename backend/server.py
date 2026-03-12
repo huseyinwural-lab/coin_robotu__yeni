@@ -8,6 +8,9 @@ from core.config import settings
 from db import Base, engine
 from routers import (
     admin_control,
+    admin_futures_adl_status,
+    admin_futures_liquidation_status,
+    admin_futures_risk_status,
     admin_phase3,
     admin_strategy_risk_capital,
     admin_strategy_observability,
@@ -84,6 +87,9 @@ api_router.include_router(venues.router)
 api_router.include_router(audit.router)
 api_router.include_router(market.router)
 api_router.include_router(admin_control.router)
+api_router.include_router(admin_futures_risk_status.router)
+api_router.include_router(admin_futures_liquidation_status.router)
+api_router.include_router(admin_futures_adl_status.router)
 api_router.include_router(admin_phase3.router)
 api_router.include_router(admin_strategy_risk_capital.router)
 api_router.include_router(admin_strategy_observability.router)

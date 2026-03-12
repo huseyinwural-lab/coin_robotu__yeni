@@ -44,6 +44,8 @@ const adminOnlyItems = [
   { to: "/admin/user-approvals", label: "Kullanıcı Onayları", icon: ListChecks, testId: "nav-admin-user-approvals-link" },
   { to: "/admin/system-alerts", label: "System Alerts", icon: AlertTriangle, testId: "nav-admin-system-alerts-link" },
   { to: "/admin/strategy-observability", label: "Strategy Observability", icon: Activity, testId: "nav-admin-strategy-observability-link" },
+  { to: "/admin/futures/risk-monitor", label: "Futures Risk Monitor", icon: ShieldAlert, testId: "nav-admin-futures-risk-monitor-link" },
+  { to: "/admin/futures/liquidation-protection", label: "Liquidation Protection", icon: ShieldCheck, testId: "nav-admin-futures-liquidation-protection-link" },
   { to: "/admin/exchanges", label: "Exchanges", icon: Globe, testId: "nav-admin-exchanges-link" },
   { to: "/admin/proofs", label: "Proof Panel", icon: ShieldCheck, testId: "nav-admin-proofs-link" },
   { to: "/admin/reports/archive", label: "Reports Archive", icon: Archive, testId: "nav-reports-archive-link" },

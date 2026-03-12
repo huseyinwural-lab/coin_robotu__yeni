@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminLoginPage } from "@/pages/AdminLoginPage";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { AdminExchangesPage } from "@/pages/AdminExchangesPage";
+import { AdminFuturesRiskMonitorPage } from "@/pages/AdminFuturesRiskMonitorPage";
 import { AdminProofsPage } from "@/pages/AdminProofsPage";
 import { AdminReportsArchivePage } from "@/pages/AdminReportsArchivePage";
 import { AdminRiskOrchestratorPage } from "@/pages/AdminRiskOrchestratorPage";
@@ -78,6 +79,8 @@ function App() {
             <Route path="user-approvals" element={<AdminUserApprovalsPage />} />
             <Route path="system-alerts" element={<AdminSystemAlertsPage />} />
             <Route path="strategy-observability" element={<AdminStrategyObservabilityPage />} />
+            <Route path="futures/risk-monitor" element={<AdminFuturesRiskMonitorPage />} />
+            <Route path="futures/liquidation-protection" element={<AdminFuturesRiskMonitorPage />} />
             <Route path="exchanges" element={<AdminExchangesPage />} />
             <Route path="proofs" element={<AdminProofsPage />} />
             <Route path="reports/archive" element={<AdminReportsArchivePage />} />
