@@ -24,10 +24,23 @@ from services.execution_intent_service import (
     preview_execution_intent,
     submit_execution_intent,
 )
+from services.rate_limiter_service import consume_exchange_rate_limit
 from services.position_management_service import list_user_positions
 from services.strategy_intelligence_service import evaluate_hedge_suggestion
 
 router = APIRouter(prefix="/user/execution", tags=["user_execution"])
+
+
+def _guard_exchange_rate_limit():
+    allowed, retry_after_seconds, _ = consume_exchange_rate_limit("binance", tokens=1.0)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "exchange_rate_limit_reached",
+                "retry_after_seconds": retry_after_seconds,
+            },
+        )
 
 
 @router.get("/presets", response_model=list[ExecutionPresetResponse])
@@ -42,6 +55,7 @@ def preview_intent(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    _guard_exchange_rate_limit()
     intent, validation = preview_execution_intent(db, current_user.id, payload.model_dump())
     create_audit_log(
         db,
@@ -92,6 +106,7 @@ def preview_position_action(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    _guard_exchange_rate_limit()
     mapped_payload = {
         "source_type": "position_action",
         "source_ref_id": payload.position_id,
@@ -160,6 +175,7 @@ def submit_position_action(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    _guard_exchange_rate_limit()
     try:
         intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
     except ValueError as exc:
@@ -189,6 +205,7 @@ def submit_intent(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    _guard_exchange_rate_limit()
     try:
         intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
     except ValueError as exc:

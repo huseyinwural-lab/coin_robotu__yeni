@@ -1708,6 +1708,18 @@ class ExecutionIntentPreviewResponse(BaseModel):
     venue_context: dict = Field(default_factory=dict)
 
 
+class TradingPreviewRateLimitResponse(BaseModel):
+    allowed: bool
+    retry_after_seconds: float = 0
+    remaining_tokens: float
+
+
+class TradingPreviewResponse(BaseModel):
+    preview: ExecutionIntentPreviewResponse
+    metrics: dict
+    rate_limit: TradingPreviewRateLimitResponse
+
+
 class ExecutionIntentSubmitRequest(BaseModel):
     intent_token: str
     preview_hash: str | None = None
@@ -1718,6 +1730,22 @@ class ExecutionIntentSubmitResponse(BaseModel):
     intent_status: str
     reason_codes: list[str]
     queue_state: str
+
+
+class AdminEmergencyStopRequest(BaseModel):
+    reason: str = Field(default="manual_emergency_stop", min_length=3, max_length=220)
+
+
+class AdminEmergencyStopResponse(BaseModel):
+    status: str
+    reason: str
+    stop_all_bots_applied: bool
+    closed_positions_count: int
+    rejected_intents_count: int
+    disable_futures_applied: bool
+    emergency_mode_active: bool
+    kill_switch_reasons: list[str]
+    triggered_at: datetime
 
 
 class ExecutionIntentCancelRequest(BaseModel):

@@ -33,6 +33,7 @@ export const Phase4LiveControlPage = () => {
   const [permissionStatus, setPermissionStatus] = useState(null);
   const [permissionResult, setPermissionResult] = useState(null);
   const [permissionForm, setPermissionForm] = useState({ api_key: "", api_secret: "" });
+  const [emergencyStopResult, setEmergencyStopResult] = useState(null);
 
   const loadAll = useCallback(async () => {
     try {
@@ -105,6 +106,19 @@ export const Phase4LiveControlPage = () => {
       loadAll();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Kill switch aksiyonu başarısız");
+    }
+  };
+
+  const runEmergencyStop = async () => {
+    try {
+      const { data } = await apiClient.post("/v1/admin/emergency_stop", {
+        reason: "phase4_live_panel_panic_button",
+      });
+      setEmergencyStopResult(data);
+      toast.success("Emergency Stop tetiklendi");
+      loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Emergency Stop başarısız");
     }
   };
 
@@ -215,10 +229,19 @@ export const Phase4LiveControlPage = () => {
       <div className="border border-red-500/40 bg-red-950/10 p-4" data-testid="phase4-kill-switch-panel">
         <p className="text-xs uppercase tracking-widest text-red-300" data-testid="phase4-kill-switch-title">Emergency Kill Switch</p>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="phase4-kill-switch-buttons">
+          <Button className="bg-red-900 text-white hover:bg-red-950" onClick={runEmergencyStop} data-testid="phase4-kill-emergency-stop-button">PANIC EMERGENCY STOP</Button>
           <Button className="bg-red-700 text-white hover:bg-red-800" onClick={() => runKillAction("stop-all-bots")} data-testid="phase4-kill-stop-bots-button">STOP ALL BOTS</Button>
           <Button className="bg-red-700 text-white hover:bg-red-800" onClick={() => runKillAction("close-all-positions")} data-testid="phase4-kill-close-positions-button">CLOSE ALL POSITIONS</Button>
           <Button className="bg-red-700 text-white hover:bg-red-800" onClick={() => runKillAction("disable-futures")} data-testid="phase4-kill-disable-futures-button">DISABLE FUTURES</Button>
         </div>
+        {emergencyStopResult && (
+          <div className="mt-3 rounded border border-red-600/40 bg-black/20 p-3 text-xs" data-testid="phase4-kill-emergency-result-panel">
+            <p data-testid="phase4-kill-emergency-result-status">status: {emergencyStopResult.status}</p>
+            <p data-testid="phase4-kill-emergency-result-reason">reason: {emergencyStopResult.reason}</p>
+            <p data-testid="phase4-kill-emergency-result-closed-positions">closed_positions_count: {emergencyStopResult.closed_positions_count}</p>
+            <p data-testid="phase4-kill-emergency-result-rejected-intents">rejected_intents_count: {emergencyStopResult.rejected_intents_count}</p>
+          </div>
+        )}
       </div>
 
       <div className="border border-slate-800 bg-slate-900" data-testid="phase4-readiness-table-wrapper">

@@ -5,8 +5,10 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from core.config import settings
+from core.structured_logging import configure_structured_logging
 from db import Base, engine
 from routers import (
+    admin_emergency,
     admin_control,
     admin_futures_adl_status,
     admin_futures_correlation,
@@ -48,6 +50,7 @@ from routers import (
     admin_execution,
     user_approvals,
     user_execution,
+    user_trading,
     user_explainability,
     user_platform,
     user_reports,
@@ -66,10 +69,7 @@ from services.realtime.socket_gateway import create_socket_app
 from services.state_rebuild_service import run_state_rebuild
 from services.weekly_report_service import run_weekly_report_loop
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+configure_structured_logging(logging.INFO)
 logger = logging.getLogger(__name__)
 weekly_report_task: asyncio.Task | None = None
 
@@ -100,6 +100,7 @@ api_router.include_router(user_platform.router)
 api_router.include_router(user_scanner_signals.router)
 api_router.include_router(user_indicator_screener.router)
 api_router.include_router(user_execution.router)
+api_router.include_router(user_trading.router)
 api_router.include_router(user_explainability.router)
 api_router.include_router(user_reports.router)
 api_router.include_router(strategy_templates.router)
@@ -133,6 +134,7 @@ api_router.include_router(admin_phase3.router)
 api_router.include_router(admin_strategy_risk_capital.router)
 api_router.include_router(admin_strategy_observability.router)
 api_router.include_router(admin_execution.router)
+api_router.include_router(admin_emergency.router)
 api_router.include_router(admin_phase9_meta.router)
 api_router.include_router(admin_positions_monitor.router)
 api_router.include_router(admin_strategy_intelligence.router)

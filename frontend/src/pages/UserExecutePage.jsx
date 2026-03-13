@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -46,6 +46,13 @@ export const UserExecutePage = () => {
   const [previewTrace, setPreviewTrace] = useState(null);
   const [previewTraceLoading, setPreviewTraceLoading] = useState(false);
   const [flowContext, setFlowContext] = useState(null);
+  const [liveMetrics, setLiveMetrics] = useState(null);
+  const [autoPreviewEnabled, setAutoPreviewEnabled] = useState(true);
+  const [autoPreviewStatus, setAutoPreviewStatus] = useState({
+    state: "idle",
+    message: "Henüz canlı önizleme çalışmadı",
+    updatedAt: null,
+  });
 
   const selectedConnection = useMemo(
     () => connections.find((item) => item.id === selectedConnectionId) || null,
@@ -180,41 +187,107 @@ export const UserExecutePage = () => {
     [preview],
   );
 
-  const runPreview = async () => {
+  const buildPreviewPayload = useCallback(
+    () => ({
+      ...form,
+      exchange_connection_id: selectedConnection?.id || form.exchange_connection_id || null,
+      account_label: selectedConnection?.account_label || form.account_label || "default",
+      exchange: selectedConnection?.exchange || form.exchange || "binance",
+      environment: selectedConnection?.environment || form.environment || "testnet",
+    }),
+    [form, selectedConnection],
+  );
+
+  const loadDecisionTrace = useCallback(async (intentId) => {
+    if (!intentId) {
+      setPreviewTrace(null);
+      return;
+    }
+    setPreviewTraceLoading(true);
+    try {
+      const traceRes = await apiClient.get(`/user/execution/intents/${intentId}/decision-trace`);
+      setPreviewTrace(traceRes.data?.latest_trace || null);
+    } catch (_error) {
+      setPreviewTrace(null);
+    } finally {
+      setPreviewTraceLoading(false);
+    }
+  }, []);
+
+  const runPreview = useCallback(async ({ silent = false } = {}) => {
     if (venueAccess && !venueAccess.allowed) {
-      toast.error(`Venue blocked: ${(venueAccess.reason_codes || []).join(",") || venueAccess.venue_state || "unknown"}`);
+      if (!silent) {
+        toast.error(`Venue blocked: ${(venueAccess.reason_codes || []).join(",") || venueAccess.venue_state || "unknown"}`);
+      }
+      setAutoPreviewStatus({
+        state: "blocked",
+        message: "Venue erişimi engelli",
+        updatedAt: new Date().toISOString(),
+      });
       return;
     }
 
-    setPreviewTrace(null);
+    if (silent) {
+      setAutoPreviewStatus({
+        state: "running",
+        message: "Canlı önizleme hesaplanıyor...",
+        updatedAt: new Date().toISOString(),
+      });
+    } else {
+      setPreviewTrace(null);
+    }
+
     try {
-      const payload = {
-        ...form,
-        exchange_connection_id: selectedConnection?.id || form.exchange_connection_id || null,
-        account_label: selectedConnection?.account_label || form.account_label || "default",
-        exchange: selectedConnection?.exchange || form.exchange || "binance",
-        environment: selectedConnection?.environment || form.environment || "testnet",
-      };
-      const { data } = await apiClient.post("/user/execution/intent/preview", payload);
-      setPreview(data);
-      setPreviewTraceLoading(true);
-      try {
-        const traceRes = await apiClient.get(`/user/execution/intents/${data.intent_id}/decision-trace`);
-        setPreviewTrace(traceRes.data?.latest_trace || null);
-      } catch (_error) {
-        setPreviewTrace(null);
-      } finally {
-        setPreviewTraceLoading(false);
+      const payload = buildPreviewPayload();
+      const { data } = await apiClient.post("/v1/user/trading/preview", payload);
+      const previewPayload = data?.preview || null;
+      setPreview(previewPayload);
+      setLiveMetrics(data?.metrics || null);
+      setAutoPreviewStatus({
+        state: "ready",
+        message: "Canlı önizleme güncel",
+        updatedAt: new Date().toISOString(),
+      });
+
+      if (previewPayload?.intent_id) {
+        await loadDecisionTrace(previewPayload.intent_id);
       }
-      if (data.validation_status === "valid") {
-        toast.success("Preview başarılı");
-      } else {
-        toast.error("Preview policy tarafından reddedildi");
+
+      if (!silent) {
+        if (previewPayload?.validation_status === "valid") {
+          toast.success("Preview başarılı");
+        } else {
+          toast.error("Preview policy tarafından reddedildi");
+        }
       }
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Preview başarısız");
+      const detail = error?.response?.data?.detail;
+      const message = typeof detail === "string" ? detail : detail?.code || "Preview başarısız";
+      if (!silent) {
+        toast.error(message);
+      }
+      setAutoPreviewStatus({
+        state: "error",
+        message,
+        updatedAt: new Date().toISOString(),
+      });
     }
-  };
+  }, [buildPreviewPayload, loadDecisionTrace, venueAccess]);
+
+  useEffect(() => {
+    if (!autoPreviewEnabled || isLoading || !selectedConnection) {
+      return;
+    }
+    if (!form.symbol || form.symbol.trim().length < 5) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      runPreview({ silent: true });
+    }, 900);
+
+    return () => clearTimeout(timer);
+  }, [autoPreviewEnabled, form, isLoading, runPreview, selectedConnection]);
 
   const submitQueue = async () => {
     if (!preview) {
@@ -222,7 +295,7 @@ export const UserExecutePage = () => {
       return;
     }
     try {
-      const { data } = await apiClient.post("/user/execution/intent/submit", {
+      const { data } = await apiClient.post("/v1/user/trading/execute", {
         intent_token: preview.intent_token,
         preview_hash: preview.preview_hash,
       });
@@ -336,9 +409,25 @@ export const UserExecutePage = () => {
       <div className="col-span-12 lg:col-span-5 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-execute-preview-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-preview-title">Preview Summary</p>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="user-execute-actions">
-          <Button onClick={runPreview} data-testid="user-execute-preview-button">Preview</Button>
+          <Button onClick={() => runPreview({ silent: false })} data-testid="user-execute-preview-button">Preview</Button>
           <Button onClick={submitQueue} disabled={!submitEnabled} data-testid="user-execute-submit-button">Submit to Queue</Button>
           <Button variant="outline" onClick={cancelIntent} disabled={!preview} data-testid="user-execute-cancel-button">Cancel Intent</Button>
+          <Button
+            variant="outline"
+            onClick={() => setAutoPreviewEnabled((previous) => !previous)}
+            data-testid="user-execute-auto-preview-toggle-button"
+          >
+            Auto Preview: {autoPreviewEnabled ? "On" : "Off"}
+          </Button>
+        </div>
+        <div className="mt-3 rounded border border-slate-800 bg-slate-950 px-3 py-2" data-testid="user-execute-auto-preview-status-panel">
+          <p className="text-xs text-slate-500" data-testid="user-execute-auto-preview-status-label">Canlı Önizleme Durumu</p>
+          <p className="text-sm text-slate-200" data-testid="user-execute-auto-preview-status-value">
+            {autoPreviewStatus.state} · {autoPreviewStatus.message}
+          </p>
+          <p className="text-xs text-slate-400" data-testid="user-execute-auto-preview-status-updated-at">
+            updated_at: {autoPreviewStatus.updatedAt || "-"}
+          </p>
         </div>
         {!preview && (
           <div className="mt-4 rounded border border-amber-500/40 bg-amber-500/10 p-3" data-testid="user-execute-empty-preview-guidance">
@@ -396,6 +485,21 @@ export const UserExecutePage = () => {
                 <p data-testid="user-execute-cluster-exposure">cluster_exposure_pct: {preview.portfolio_risk_impact?.cluster_exposure_pct ?? 0}</p>
                 <p data-testid="user-execute-strategy-exposure">strategy_exposure_pct: {preview.portfolio_risk_impact?.strategy_exposure_pct ?? 0}</p>
                 <p data-testid="user-execute-single-trade-risk">single_trade_risk_pct: {preview.portfolio_risk_impact?.single_trade_risk_pct ?? 0}</p>
+              </div>
+            </div>
+            <div className="border border-slate-800 p-3" data-testid="user-execute-live-metrics-panel">
+              <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-live-metrics-title">Real-Time Execution Preview</p>
+              <div className="mt-2 grid gap-1 text-xs" data-testid="user-execute-live-metrics-content">
+                <p data-testid="user-execute-live-metrics-entry-price">entry_price: {liveMetrics?.entry_price ?? "-"}</p>
+                <p data-testid="user-execute-live-metrics-estimated-notional">estimated_notional: {liveMetrics?.estimated_notional ?? "-"}</p>
+                <p data-testid="user-execute-live-metrics-estimated-quantity">estimated_quantity: {liveMetrics?.estimated_quantity ?? "-"}</p>
+                <p data-testid="user-execute-live-metrics-estimated-risk-usdt">estimated_risk_usdt: {liveMetrics?.estimated_risk_usdt ?? "-"}</p>
+                <p data-testid="user-execute-live-metrics-stop-distance">stop_distance_pct: {liveMetrics?.stop_distance_pct ?? "-"}</p>
+                <p data-testid="user-execute-live-metrics-take-profit-distance">take_profit_distance_pct: {liveMetrics?.take_profit_distance_pct ?? "-"}</p>
+                <p data-testid="user-execute-live-metrics-rr-ratio">risk_reward_ratio: {liveMetrics?.risk_reward_ratio ?? "-"}</p>
+                <p data-testid="user-execute-live-metrics-liquidity-state">liquidity_guard_ok: {String(liveMetrics?.liquidity_guard?.ok ?? false)}</p>
+                <p data-testid="user-execute-live-metrics-liquidity-spread">spread_bps: {liveMetrics?.liquidity_guard?.spread_bps ?? "-"}</p>
+                <p data-testid="user-execute-live-metrics-liquidity-volume">quote_volume: {liveMetrics?.liquidity_guard?.quote_volume ?? "-"}</p>
               </div>
             </div>
             <div className="border border-slate-800 p-3" data-testid="user-execute-meta-strategy-panel">
