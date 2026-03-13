@@ -183,8 +183,8 @@ export const AdminPortfolioRiskPage = () => {
                 <th className="px-3 py-2">Cluster</th>
                 <th className="px-3 py-2">Type</th>
                 <th className="px-3 py-2">Symbols</th>
-                <th className="px-3 py-2">Correlation</th>
-                <th className="px-3 py-2">Risk Weight</th>
+                <th className="px-3 py-2 text-right">Correlation</th>
+                <th className="px-3 py-2 text-right">Risk Weight</th>
               </tr>
             </thead>
             <tbody data-testid="admin-portfolio-risk-cluster-table-body">
@@ -193,8 +193,8 @@ export const AdminPortfolioRiskPage = () => {
                   <td className="px-3 py-2" data-testid={`admin-portfolio-risk-cluster-id-${item.cluster_id}`}>{item.cluster_id}</td>
                   <td className="px-3 py-2" data-testid={`admin-portfolio-risk-cluster-type-${item.cluster_id}`}>{item.cluster_type}</td>
                   <td className="px-3 py-2" data-testid={`admin-portfolio-risk-cluster-symbols-${item.cluster_id}`}>{(item.symbols || []).join(", ")}</td>
-                  <td className="px-3 py-2" data-testid={`admin-portfolio-risk-cluster-correlation-${item.cluster_id}`}>{item.correlation_score}</td>
-                  <td className="px-3 py-2" data-testid={`admin-portfolio-risk-cluster-risk-weight-${item.cluster_id}`}>{item.risk_weight}</td>
+                  <td className="px-3 py-2 text-right tabular-nums" data-testid={`admin-portfolio-risk-cluster-correlation-${item.cluster_id}`}>{item.correlation_score}</td>
+                  <td className="px-3 py-2 text-right tabular-nums" data-testid={`admin-portfolio-risk-cluster-risk-weight-${item.cluster_id}`}>{item.risk_weight}</td>
                 </tr>
               ))}
               {clusters.length === 0 && (

@@ -96,7 +96,7 @@ export const AdminPositionsMonitorPage = () => {
 
       <div className="col-span-12 overflow-x-auto border border-slate-800 bg-slate-900" data-testid="admin-positions-monitor-table-wrapper">
         <table className="min-w-full text-sm" data-testid="admin-positions-monitor-table">
-          <thead className="bg-slate-800 text-left" data-testid="admin-positions-monitor-table-head">
+          <thead className="sticky top-0 z-20 bg-slate-800 text-left" data-testid="admin-positions-monitor-table-head">
             <tr>
               <th className="px-3 py-2">Position</th>
               <th className="px-3 py-2">Symbol</th>

@@ -132,7 +132,7 @@ export const AdminExecutionQueuePage = () => {
 
       <div className="overflow-x-auto border border-slate-800 bg-slate-900" data-testid="admin-execution-queue-table-wrapper">
         <table className="min-w-full text-sm" data-testid="admin-execution-queue-table" aria-label="Execution queue tablosu">
-          <thead className="bg-slate-800 text-left" data-testid="admin-execution-queue-table-head">
+          <thead className="sticky top-0 z-20 bg-slate-800 text-left" data-testid="admin-execution-queue-table-head">
             <tr>
               <th className="px-3 py-2">Intent</th>
               <th className="px-3 py-2">User</th>
