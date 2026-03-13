@@ -2948,3 +2948,62 @@
 - **IQ-06: COMPLETE**
 - **IQ-10 (yoğun tablo + vurgu + compact/wide): COMPLETE**
 - **MOCKED API: YOK**
+
+## 44) 2026-03-13 — Iteration-59 (U-IS-01/02/03: Indicator Screener Filter Layer Completion)
+
+### Kapsam
+- User isteğine göre Indicator Screener ekranı query-only modelden çıkarılıp profesyonel filter layer ile tamamlandı.
+- P0 odakları kapatıldı: volume/liquidity, symbol universe control, market participation, filter-aware backend contract.
+
+### Backend Güncellemeleri
+- `indicator_query_engine_service.py` filter-aware olarak genişletildi:
+  - `filter_payload` kontratı
+  - universe mode desteği: `all_tradable`, `top_by_volume`, `whitelist_only`, `watchlist_only`, `saved_universe`, `futures_only_eligible_universe`
+  - market participation: `spot_only`, `futures_only`, `both`
+  - pair sınıf filtreleri: `usdt_only`, `btc_only`, leveraged/stable-stable exclude
+  - result quality filtreleri: `min_signal_score`, `min_confidence`, `min_rr_estimate`, `only_executable`, `only_fresh_data`, freshness tolerance
+  - state contract: `success`, `no_match`, `empty_universe`, `invalid_filter_combination`, `invalid_query`, `backend_unavailable`, `rate_limit_throttled`
+  - response alanları: `applied_filters`, `active_filter_chips`, `result_state`, `filter_error`, `warnings`
+- `market_data_provider.py` genişletildi:
+  - symbol metadata: `volume_24h`, `spread_pct_24h`, `quote_asset`, `margin_eligible`, `leveraged_token`, `stablecoin_pair`
+  - Binance global 451 durumunda spot için fallback endpoint akışı
+- `storage_service.py` genişletildi:
+  - saved query için `filter_snapshot` + `schema_version`
+  - watchlist için `context_snapshot`
+- `models.py`:
+  - `UserIndicatorSavedQuery`: `filter_snapshot`, `schema_version`
+  - `UserIndicatorWatchlist`: `context_snapshot`
+- Migration:
+  - `20260313_0032_indicator_screener_filter_context.py`
+
+### Frontend Güncellemeleri
+- `UserIndicatorScreenerPage.jsx` baştan filtre-katman odaklı refactor edildi:
+  - Core filter bar (exchange, market type, universe mode, symbol search, timeframe, sort, limit)
+  - Volume/liquidity filtreleri
+  - Universe control + saved universe seçimi
+  - Market participation + pair sınıfı filtreleri
+  - Result quality filtreleri
+  - Active filter chips + clear single + clear all
+  - Filter collapse/expand
+  - Saved query ile filter snapshot restore
+  - Result state ayrımı bannerları
+  - Dense table + compact/wide + mobile card
+  - Bridge context korunumu (Open in Execute market context; watchlist context snapshot)
+
+### Test & Validation Artefactları
+- `/app/test_reports/iteration_59.json` (testing agent)
+- `/app/test_reports/indicator_screener_filter_layer.json`
+- `/app/reports/indicator_screener_filter_validation.json`
+
+### Test Sonuçları
+- Testing agent: backend **50/50 PASS**, frontend **15/15 PASS**
+- Lokal pytest:
+  - `test_indicator_screener_u_is_filter_layer.py` → **50 passed**
+  - `test_indicator_screener_filter_layer.py` → **5 passed**
+  - phase + comprehensive set → **40 passed**
+
+### Durum
+- **U-IS-01: COMPLETE**
+- **U-IS-02: COMPLETE**
+- **U-IS-03: COMPLETE**
+- **MOCKED API: YOK**

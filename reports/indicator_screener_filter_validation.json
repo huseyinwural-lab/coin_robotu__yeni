@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-03-13T00:36:26.020809+00:00",
+  "validation_items": [
+    {
+      "item": "Core filter bar",
+      "status": "PASS"
+    },
+    {
+      "item": "Volume/liquidity filters",
+      "status": "PASS"
+    },
+    {
+      "item": "Symbol universe modes",
+      "status": "PASS"
+    },
+    {
+      "item": "Market participation filters",
+      "status": "PASS"
+    },
+    {
+      "item": "Result quality filters",
+      "status": "PASS"
+    },
+    {
+      "item": "State separation (loading/no_match/empty_universe/broken variants)",
+      "status": "PASS"
+    },
+    {
+      "item": "Filter validation rules",
+      "status": "PASS"
+    },
+    {
+      "item": "Filter-aware backend scan contract",
+      "status": "PASS"
+    },
+    {
+      "item": "Query+Filter+Bridge consistency",
+      "status": "PASS"
+    }
+  ],
+  "notes": [
+    "Binance global endpoint 451 durumunda spot için Binance US fallback kullanılıyor.",
+    "min_24h_volume default 100000 olarak güvenli seviyeye ayarlandı.",
+    "Create Signal Rule aksiyonu FEATURE FLAG (disabled)."
+  ],
+  "mocked_api": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-03-13T00:36:26.020798+00:00",
+  "scope": "Indicator Screener User Filter Layer Completion (U-IS-01/02/03)",
+  "status": "PASS",
+  "backend": {
+    "pytest_files": [
+      "/app/backend/tests/test_indicator_screener_u_is_filter_layer.py",
+      "/app/backend/tests/test_indicator_screener_filter_layer.py",
+      "/app/backend/tests/test_indicator_screener_phase1.py",
+      "/app/backend/tests/test_indicator_screener_phase2.py",
+      "/app/backend/tests/test_indicator_screener_phase3.py",
+      "/app/backend/tests/test_indicator_screener_iq_comprehensive.py"
+    ],
+    "results": {
+      "u_is_filter_layer": "50 passed",
+      "filter_layer": "5 passed",
+      "phase1_phase2_phase3_comprehensive": "40 passed"
+    }
+  },
+  "frontend": {
+    "smoke_screenshot": "indicator-screener-filter-layer-smoke.png",
+    "key_ui_checks": [
+      "active filter chips",
+      "clear single / clear all",
+      "collapse / expand",
+      "dense table + compact/wide mode",
+      "state banner separation"
+    ]
+  },
+  "contract_checks": {
+    "applied_filters_returned": true,
+    "filter_snapshot_saved_query": true,
+    "watchlist_context_snapshot": true,
+    "empty_query_filter_only_supported": true,
+    "mocked_api": false
+  }
+}
