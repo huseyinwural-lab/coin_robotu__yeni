@@ -3576,3 +3576,39 @@
 - **RISK_POLICY_MISSING kalıcı çözüm: COMPLETE**
 - **Starter Safe default policy otomasyonu: COMPLETE**
 - **MOCKED API: YOK**
+
+## 60) 2026-03-13 — Iteration-78 (Fix All Blockers + Onboarding Wizard + Risk Health)
+
+### Kullanıcı Talebi
+- Tüm önerilen kalan iyileştirmelerin tek pakette uygulanması:
+  1. Signals için `Fix All Blockers`
+  2. Auto-fix sonrası otomatik re-evaluate + status badge animasyonu
+  3. Onboarding sırasında default risk policy özelleştirme wizard'ı
+  4. Risk Policy Health Score kartı
+
+### Uygulanan Özellikler
+- **Backend**
+  - Yeni endpoint: `POST /api/user/signals/fix-all-blockers`
+  - Yeni response modeli: `UserSignalsBulkFixResponse`
+  - Yeni servis akışı: `bulk_fix_blocked_signals` (blocked sinyallerde toplu auto-fix)
+- **Frontend / Signals**
+  - `Fix All Blockers` butonu eklendi
+  - Toplu fix sonrası sinyaller otomatik yenileniyor
+  - Düzeltilen satırlarda status badge pulse animasyonu (`ring + animate-pulse`)
+- **Frontend / Dashboard**
+  - `Risk Policy Health Score` kartı eklendi (score + level + açıklama)
+  - `Onboarding Risk Wizard` eklendi: başlangıç policy alanları dashboard üzerinden düzenlenebilir
+  - Wizard kaydetme: `PUT /api/risk-policies/{id}` ile mevcut default policy güncelleniyor
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_77.json`
+  - Backend: **13 PASS / 1 SKIP / 0 FAIL**
+  - Frontend: **PASS**
+  - Fix-all endpoint + UI + onboarding wizard + health score doğrulandı.
+
+### Durum
+- **Fix All Blockers: COMPLETE**
+- **Signals auto re-evaluate + badge animation: COMPLETE**
+- **Risk onboarding wizard: COMPLETE**
+- **Risk Policy Health Score: COMPLETE**
+- **MOCKED API: YOK**
