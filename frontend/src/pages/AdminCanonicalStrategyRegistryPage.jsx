@@ -9,14 +9,18 @@ const regimeOptions = ["any", "trend", "breakout", "pullback", "reversal"];
 
 export const AdminCanonicalStrategyRegistryPage = () => {
   const [rows, setRows] = useState([]);
+  const [familyGates, setFamilyGates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
+  const [savingGate, setSavingGate] = useState(false);
 
   const loadRegistry = async () => {
     setLoading(true);
     try {
       const { data } = await apiClient.get("/admin/canonical-strategies/registry", { params: { include_legacy: true } });
       setRows(Array.isArray(data) ? data : []);
+      const gatesRes = await apiClient.get("/admin/strategy-family-gates");
+      setFamilyGates(Array.isArray(gatesRes.data) ? gatesRes.data : []);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Canonical registry yüklenemedi");
     } finally {
@@ -55,6 +59,36 @@ export const AdminCanonicalStrategyRegistryPage = () => {
       toast.error(error?.response?.data?.detail || "Kayıt güncellenemedi");
     } finally {
       setSavingId("");
+    }
+  };
+
+  const updateGateLocal = (family, patch) => {
+    setFamilyGates((prev) => prev.map((item) => (item.family === family ? { ...item, ...patch } : item)));
+  };
+
+  const saveFamilyGates = async () => {
+    setSavingGate(true);
+    try {
+      const payload = {
+        items: familyGates.map((item) => ({
+          family: item.family,
+          is_enabled: Boolean(item.is_enabled),
+          long_threshold: Number(item.long_threshold || 0),
+          short_threshold: Number(item.short_threshold || 0),
+          min_strategy_count: Number(item.min_strategy_count || 1),
+          max_conflict_score: Number(item.max_conflict_score || 0),
+          regime_match_required: Boolean(item.regime_match_required),
+          risk_clear_required: Boolean(item.risk_clear_required),
+          reversal_extra_confirmation: Boolean(item.reversal_extra_confirmation),
+        })),
+      };
+      const { data } = await apiClient.put("/admin/strategy-family-gates", payload);
+      setFamilyGates(Array.isArray(data) ? data : []);
+      toast.success("Strategy family gates kaydedildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Gate ayarları kaydedilemedi");
+    } finally {
+      setSavingGate(false);
     }
   };
 
@@ -211,6 +245,49 @@ export const AdminCanonicalStrategyRegistryPage = () => {
                 </p>
               ))}
               {legacyRows.length === 0 && <p className="text-xs" data-testid="admin-canonical-registry-legacy-empty">Legacy candidate bulunamadı.</p>}
+            </div>
+          </div>
+
+          <div className="border border-emerald-700 bg-emerald-950/20 p-4" data-testid="admin-family-gates-panel">
+            <div className="flex items-center justify-between gap-2" data-testid="admin-family-gates-header">
+              <h3 className="text-sm font-bold uppercase" data-testid="admin-family-gates-title">Strategy Family Strict Gates</h3>
+              <Button type="button" onClick={saveFamilyGates} disabled={savingGate} data-testid="admin-family-gates-save-button">
+                {savingGate ? "Kaydediliyor" : "Gate Ayarlarını Kaydet"}
+              </Button>
+            </div>
+            <div className="mt-3 overflow-x-auto" data-testid="admin-family-gates-table-wrapper">
+              <table className="min-w-[1200px] text-xs" data-testid="admin-family-gates-table">
+                <thead>
+                  <tr>
+                    <th className="px-2 py-1 text-left">family</th>
+                    <th className="px-2 py-1 text-left">enabled</th>
+                    <th className="px-2 py-1 text-left">long_threshold</th>
+                    <th className="px-2 py-1 text-left">short_threshold</th>
+                    <th className="px-2 py-1 text-left">min_strategy_count</th>
+                    <th className="px-2 py-1 text-left">max_conflict_score</th>
+                    <th className="px-2 py-1 text-left">regime_match_required</th>
+                    <th className="px-2 py-1 text-left">risk_clear_required</th>
+                    <th className="px-2 py-1 text-left">reversal_extra_confirmation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {familyGates.map((gate) => (
+                    <tr key={gate.family} className="border-t border-emerald-900" data-testid={`admin-family-gates-row-${gate.family}`}>
+                      <td className="px-2 py-1 font-semibold" data-testid={`admin-family-gates-family-${gate.family}`}>{gate.family}</td>
+                      <td className="px-2 py-1">
+                        <input type="checkbox" checked={Boolean(gate.is_enabled)} onChange={(e) => updateGateLocal(gate.family, { is_enabled: e.target.checked })} data-testid={`admin-family-gates-enabled-${gate.family}`} />
+                      </td>
+                      <td className="px-2 py-1"><input type="number" step="0.5" value={gate.long_threshold} onChange={(e) => updateGateLocal(gate.family, { long_threshold: e.target.value })} className="w-20 bg-transparent" data-testid={`admin-family-gates-long-threshold-${gate.family}`} /></td>
+                      <td className="px-2 py-1"><input type="number" step="0.5" value={gate.short_threshold} onChange={(e) => updateGateLocal(gate.family, { short_threshold: e.target.value })} className="w-20 bg-transparent" data-testid={`admin-family-gates-short-threshold-${gate.family}`} /></td>
+                      <td className="px-2 py-1"><input type="number" value={gate.min_strategy_count} onChange={(e) => updateGateLocal(gate.family, { min_strategy_count: e.target.value })} className="w-16 bg-transparent" data-testid={`admin-family-gates-min-count-${gate.family}`} /></td>
+                      <td className="px-2 py-1"><input type="number" step="0.5" value={gate.max_conflict_score} onChange={(e) => updateGateLocal(gate.family, { max_conflict_score: e.target.value })} className="w-16 bg-transparent" data-testid={`admin-family-gates-max-conflict-${gate.family}`} /></td>
+                      <td className="px-2 py-1"><input type="checkbox" checked={Boolean(gate.regime_match_required)} onChange={(e) => updateGateLocal(gate.family, { regime_match_required: e.target.checked })} data-testid={`admin-family-gates-regime-required-${gate.family}`} /></td>
+                      <td className="px-2 py-1"><input type="checkbox" checked={Boolean(gate.risk_clear_required)} onChange={(e) => updateGateLocal(gate.family, { risk_clear_required: e.target.checked })} data-testid={`admin-family-gates-risk-required-${gate.family}`} /></td>
+                      <td className="px-2 py-1"><input type="checkbox" checked={Boolean(gate.reversal_extra_confirmation)} onChange={(e) => updateGateLocal(gate.family, { reversal_extra_confirmation: e.target.checked })} data-testid={`admin-family-gates-reversal-extra-${gate.family}`} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </>

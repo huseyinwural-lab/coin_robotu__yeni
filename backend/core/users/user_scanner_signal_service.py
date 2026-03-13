@@ -922,6 +922,8 @@ def run_user_scanner(
 
     payload = scan_canonical_universe_for_signals(db, redis_client, max_symbols=max(max_results, 30))
     ranked = payload.get("top_ranked", [])
+    engine_version = str(payload.get("engine_version") or "canonical-engine.v3")
+    schema_version = str(payload.get("schema_version") or "decision-card.v1")
     scoped_symbols = _user_symbols_scope(db, user_id)
     normalized_selected_symbols = [str(item).strip().upper() for item in (selected_symbols or []) if str(item).strip()]
 
@@ -971,6 +973,7 @@ def run_user_scanner(
 
     for item in selected:
         signal_value = str(item.get("signal", "none") or "none").lower()
+        final_decision = str(item.get("final_decision") or ("LONG" if signal_value == "long" else "SHORT" if signal_value == "short" else "NO_TRADE")).upper()
         reason_codes = item.get("reason_codes") or []
         confidence = float(item.get("signal_strength") or 0)
         score = float(item.get("signal_score") or 0)
@@ -987,9 +990,72 @@ def run_user_scanner(
             confidence=confidence,
             signal_score=score,
             reason_codes=reason_codes,
-            payload=item,
+            payload={
+                **item,
+                "final_decision": final_decision,
+                "schema_version": schema_version,
+                "engine_version": engine_version,
+            },
         )
         db.add(scanner_row)
+        db.flush()
+
+        record_decision_trace(
+            db,
+            user_id=user_id,
+            trace_scope="signal",
+            trace_type="symbol_decision_evaluated",
+            entity_id=scanner_row.id,
+            strategy_code=strategy_code,
+            decision_status=final_decision,
+            reason_codes=reason_codes or ["decision_evaluated"],
+            feature_snapshot={
+                "layer": "signal",
+                "previous_state": "ANALYZED",
+                "new_state": final_decision,
+                "long_score": float(item.get("long_score") or 0),
+                "short_score": float(item.get("short_score") or 0),
+            },
+            context_payload={
+                "symbol": symbol,
+                "run_id": run_id,
+                "schema_version": schema_version,
+                "engine_version": engine_version,
+            },
+        )
+
+        gating_reason = next(
+            (
+                code
+                for code in (reason_codes or [])
+                if code
+                in {
+                    "regime_mismatch",
+                    "breakout_condition_missing",
+                    "pullback_trend_unclear",
+                    "reversal_extra_confirmation_required",
+                    "long_threshold_not_met",
+                    "short_threshold_not_met",
+                    "conflict_score_exceeded",
+                    "family_disabled",
+                    "family_gate_missing",
+                }
+            ),
+            None,
+        )
+        if gating_reason is not None:
+            record_decision_trace(
+                db,
+                user_id=user_id,
+                trace_scope="signal",
+                trace_type="family_gate_evaluated",
+                entity_id=scanner_row.id,
+                strategy_code=strategy_code,
+                decision_status="BLOCKED" if final_decision == "BLOCKED" else final_decision,
+                reason_codes=[gating_reason],
+                feature_snapshot={"layer": "gating", "previous_state": "SCORED", "new_state": final_decision},
+                context_payload={"symbol": symbol, "run_id": run_id},
+            )
 
         if signal_value == "none":
             continue
@@ -997,14 +1063,71 @@ def run_user_scanner(
         existing_direction = symbol_direction_seen.get(symbol)
         if existing_direction and existing_direction != signal_value:
             warning_set.add("symbol_direction_conflict_blocked")
+            scanner_row.payload = {
+                **(scanner_row.payload or {}),
+                "final_decision": "BLOCKED",
+                "blocked_reason_current": "SYMBOL_DIRECTION_CONFLICT",
+                "risk_state": {"state": "blocked", "reason": "symbol_direction_conflict"},
+            }
+            scanner_row.reason_codes = list(dict.fromkeys([*(scanner_row.reason_codes or []), "symbol_direction_conflict"]))
+            record_decision_trace(
+                db,
+                user_id=user_id,
+                trace_scope="signal",
+                trace_type="risk_block",
+                entity_id=scanner_row.id,
+                strategy_code=strategy_code,
+                decision_status="BLOCKED",
+                reason_codes=["symbol_direction_conflict"],
+                feature_snapshot={"layer": "risk", "previous_state": final_decision, "new_state": "BLOCKED"},
+                context_payload={"symbol": symbol, "run_id": run_id},
+            )
             continue
 
         if symbol in cooldown_symbols:
             warning_set.add("symbol_cooldown_active")
+            scanner_row.payload = {
+                **(scanner_row.payload or {}),
+                "final_decision": "BLOCKED",
+                "blocked_reason_current": "SYMBOL_COOLDOWN",
+                "cooldown_state": {"state": "blocked", "reason": "symbol_cooldown", "seconds": cooldown_seconds},
+            }
+            scanner_row.reason_codes = list(dict.fromkeys([*(scanner_row.reason_codes or []), "symbol_cooldown"]))
+            record_decision_trace(
+                db,
+                user_id=user_id,
+                trace_scope="signal",
+                trace_type="risk_block",
+                entity_id=scanner_row.id,
+                strategy_code=strategy_code,
+                decision_status="BLOCKED",
+                reason_codes=["symbol_cooldown"],
+                feature_snapshot={"layer": "risk", "previous_state": final_decision, "new_state": "BLOCKED"},
+                context_payload={"symbol": symbol, "run_id": run_id},
+            )
             continue
 
         if open_positions_count + queued_count >= max_positions:
             warning_set.add("max_positions_reached")
+            scanner_row.payload = {
+                **(scanner_row.payload or {}),
+                "final_decision": "BLOCKED",
+                "blocked_reason_current": "MAX_POSITIONS_REACHED",
+                "risk_state": {"state": "blocked", "reason": "max_positions_reached", "max_positions": max_positions},
+            }
+            scanner_row.reason_codes = list(dict.fromkeys([*(scanner_row.reason_codes or []), "max_positions_reached"]))
+            record_decision_trace(
+                db,
+                user_id=user_id,
+                trace_scope="signal",
+                trace_type="risk_block",
+                entity_id=scanner_row.id,
+                strategy_code=strategy_code,
+                decision_status="BLOCKED",
+                reason_codes=["max_positions_reached"],
+                feature_snapshot={"layer": "risk", "previous_state": final_decision, "new_state": "BLOCKED"},
+                context_payload={"symbol": symbol, "run_id": run_id},
+            )
             continue
 
         symbol_direction_seen[symbol] = signal_value

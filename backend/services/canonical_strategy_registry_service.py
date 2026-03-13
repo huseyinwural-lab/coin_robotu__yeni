@@ -155,7 +155,7 @@ CANONICAL_STRATEGIES: dict[str, dict] = {
         signal_score={"base": 2},
     ),
     "macd_impulse": _contract(
-        family="momentum",
+        family="trend",
         regime="trend",
         enabled=True,
         priority=18,

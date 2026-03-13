@@ -2196,6 +2196,111 @@ class CanonicalStrategyRegistryUpdateRequest(BaseModel):
     forced_disable_reason: str | None = None
 
 
+class StrategyFamilyGateResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    schema_version: str = "sprint3.v1"
+    engine_version: str = "canonical-engine.v3"
+    generated_at: datetime | None = None
+    family: str
+    is_enabled: bool
+    long_threshold: float
+    short_threshold: float
+    min_strategy_count: int
+    max_conflict_score: float
+    regime_match_required: bool
+    risk_clear_required: bool
+    reversal_extra_confirmation: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class StrategyFamilyGateUpdateItem(BaseModel):
+    family: str
+    is_enabled: bool | None = None
+    long_threshold: float | None = Field(default=None, ge=0)
+    short_threshold: float | None = Field(default=None, ge=0)
+    min_strategy_count: int | None = Field(default=None, ge=1)
+    max_conflict_score: float | None = Field(default=None, ge=0)
+    regime_match_required: bool | None = None
+    risk_clear_required: bool | None = None
+    reversal_extra_confirmation: bool | None = None
+
+
+class StrategyFamilyGateBulkUpdateRequest(BaseModel):
+    items: list[StrategyFamilyGateUpdateItem] = Field(default_factory=list)
+
+
+class DecisionCardStrategyContribution(BaseModel):
+    strategy_id: str
+    family: str
+    direction: str
+    raw_signal: str
+    normalized_score: float
+    weight: float
+    contribution_score: float
+    status: str
+
+
+class DecisionCardResponse(BaseModel):
+    schema_version: str
+    engine_version: str
+    generated_at: datetime
+    symbol: str
+    market_regime: str
+    decision: str
+    confidence: float
+    long_score: float
+    short_score: float
+    dominant_family: str | None = None
+    supporting_families: list[str] = Field(default_factory=list)
+    top_contributors: list[DecisionCardStrategyContribution] = Field(default_factory=list)
+    entry_zone: dict = Field(default_factory=dict)
+    stop_loss: float | None = None
+    take_profit_1: float | None = None
+    take_profit_2: float | None = None
+    invalidation: dict = Field(default_factory=dict)
+    blocked_reason: str | None = None
+    cooldown_remaining: int = 0
+    risk_block: str | None = None
+    updated_at: datetime
+
+
+class DecisionCardEnvelopeResponse(BaseModel):
+    schema_version: str
+    engine_version: str
+    generated_at: datetime
+    items: list[DecisionCardResponse] = Field(default_factory=list)
+
+
+class SymbolExplainabilityResponse(BaseModel):
+    schema_version: str
+    engine_version: str
+    generated_at: datetime
+    symbol: str
+    final_decision: str
+    long_score: float
+    short_score: float
+    winning_side: str
+    decision_confidence: float
+    source_strategies: list[DecisionCardStrategyContribution] = Field(default_factory=list)
+    family_scores: dict = Field(default_factory=dict)
+    blocked_reason_current: str | None = None
+    blocked_reason_timeline: list[dict] = Field(default_factory=list)
+    risk_state: dict = Field(default_factory=dict)
+    cooldown_state: dict = Field(default_factory=dict)
+    regime_state: dict = Field(default_factory=dict)
+    explanation_templates: list[str] = Field(default_factory=list)
+
+
+class BlockedReasonTimelineEnvelopeResponse(BaseModel):
+    schema_version: str
+    engine_version: str
+    generated_at: datetime
+    symbol: str
+    items: list[dict] = Field(default_factory=list)
+
+
 
 class AdminExecutionQueueDecisionRequest(BaseModel):
     note: str = ""

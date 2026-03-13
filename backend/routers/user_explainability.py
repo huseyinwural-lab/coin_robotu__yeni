@@ -7,9 +7,20 @@ from db import get_db
 from deps import require_user
 from models import ExecutionMetric, PaperPosition, PendingSignal, SignalEvent, User, UserExecutionIntent
 from schemas import (
+    BlockedReasonTimelineEnvelopeResponse,
+    DecisionCardEnvelopeResponse,
+    DecisionCardResponse,
     DecisionTraceTimelineResponse,
+    SymbolExplainabilityResponse,
     StrategyExplainResponse,
     TraceCoverageResponse,
+)
+from services.decision_card_service import (
+    blocked_timeline_envelope,
+    decision_card_envelope,
+    get_user_decision_card,
+    get_user_symbol_explainability,
+    list_user_decision_cards,
 )
 from services.explainability_service import (
     TRACE_RETENTION_DAYS,
@@ -278,3 +289,51 @@ def explainability_coverage(
 ):
     payload = compute_trace_coverage(db, user_id=current_user.id, window_days=days)
     return TraceCoverageResponse(**payload)
+
+
+@router.get("/decision-cards", response_model=DecisionCardEnvelopeResponse)
+def user_decision_cards(
+    limit: int = Query(default=40, ge=1, le=200),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    items = list_user_decision_cards(db, current_user.id, limit=limit)
+    return DecisionCardEnvelopeResponse(**decision_card_envelope(items))
+
+
+@router.get("/decision-cards/{symbol}", response_model=DecisionCardResponse)
+def user_decision_card(
+    symbol: str,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    item = get_user_decision_card(db, current_user.id, symbol)
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="decision_card_not_found")
+    return DecisionCardResponse(**item)
+
+
+@router.get("/explainability/{symbol}", response_model=SymbolExplainabilityResponse)
+def user_symbol_explainability(
+    symbol: str,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    payload = get_user_symbol_explainability(db, current_user.id, symbol)
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="symbol_explainability_not_found")
+    return SymbolExplainabilityResponse(**payload)
+
+
+@router.get("/blocked-reason-timeline/{symbol}", response_model=BlockedReasonTimelineEnvelopeResponse)
+def user_blocked_reason_timeline(
+    symbol: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    payload = get_user_symbol_explainability(db, current_user.id, symbol)
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="symbol_not_found")
+    timeline = (payload.get("blocked_reason_timeline") or [])[:limit]
+    return BlockedReasonTimelineEnvelopeResponse(**blocked_timeline_envelope(symbol, timeline))

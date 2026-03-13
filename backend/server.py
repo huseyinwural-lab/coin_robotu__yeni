@@ -31,6 +31,7 @@ from routers import (
     admin_phase9_meta,
     admin_positions_monitor,
     admin_canonical_strategies,
+    admin_strategy_family_gates,
     admin_strategy_intelligence,
     admin_closure,
     admin_users,
@@ -145,6 +146,7 @@ api_router.include_router(admin_action_center.router)
 api_router.include_router(admin_phase9_meta.router)
 api_router.include_router(admin_positions_monitor.router)
 api_router.include_router(admin_canonical_strategies.router)
+api_router.include_router(admin_strategy_family_gates.router)
 api_router.include_router(admin_strategy_intelligence.router)
 api_router.include_router(admin_closure.router)
 api_router.include_router(pipeline.router)

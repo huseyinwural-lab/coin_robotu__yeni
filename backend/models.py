@@ -1083,6 +1083,22 @@ class CanonicalStrategyRegistry(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class StrategyFamilyGate(Base):
+    __tablename__ = "strategy_family_gates"
+
+    family: Mapped[str] = mapped_column(String(30), primary_key=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    long_threshold: Mapped[float] = mapped_column(Float, default=5.0)
+    short_threshold: Mapped[float] = mapped_column(Float, default=5.0)
+    min_strategy_count: Mapped[int] = mapped_column(Integer, default=1)
+    max_conflict_score: Mapped[float] = mapped_column(Float, default=2.0)
+    regime_match_required: Mapped[bool] = mapped_column(Boolean, default=True)
+    risk_clear_required: Mapped[bool] = mapped_column(Boolean, default=True)
+    reversal_extra_confirmation: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class RegimeSnapshot(Base):
     __tablename__ = "regime_snapshots"
 

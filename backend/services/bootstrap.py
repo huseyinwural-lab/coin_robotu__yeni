@@ -16,6 +16,7 @@ from models import (
 )
 from services.audit_service import create_audit_log
 from services.canonical_strategy_registry_service import seed_canonical_strategy_registry
+from services.strategy_family_gate_service import seed_strategy_family_gates
 from services.venue_service import seed_binance_venue_registry
 
 
@@ -291,6 +292,7 @@ def seed_default_admin():
         _seed_live_activation_config(db)
         _seed_risk_orchestrator_policy(db)
         seed_canonical_strategy_registry(db)
+        seed_strategy_family_gates(db)
         seed_binance_venue_registry(db)
     finally:
         db.close()
