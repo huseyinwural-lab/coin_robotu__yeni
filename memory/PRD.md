@@ -4292,3 +4292,65 @@
 - **Scanner run stability (500 regression): COMPLETE**
 - **MOCKED API: VAR**
   - Email verification delivery provider bu ortamda mocked.
+
+## 78) 2026-03-13 — Iteration-96 (Sprint-3+4 Tek İşlem: Göz + Hafıza)
+
+### Kullanıcı Talebi
+- Sprint-3 ve Sprint-4 kapsamının tek işlemde kapatılması
+- Sıra: Explainability (Göz) → Learning (Hafıza)
+
+### Uygulananlar
+1. **Sprint-3 finalize (Explainability + strict gating + decision card)**
+   - User explainability payload ve panel
+   - Strategy-family strict gate config + admin-tunable endpointler
+   - Symbol-level decision card ve deterministic karar etiketleri
+
+2. **Sprint-4 Learning Event Model**
+   - Yeni persistence:
+     - `learning_decision_events`
+     - `strategy_outcome_memory`
+     - `family_outcome_memory`
+     - `learning_recommendations`
+   - `refresh_learning_memory` ile karar/sonuç hafızası üretimi
+
+3. **Learning Guardrails (auto-mutate yok)**
+   - Learning sadece öneri üretir
+   - Production rule set değişikliği admin onaylı apply ile yapılır
+   - Endpoint: `POST /api/admin/learning/recommendations/{id}/apply`
+
+4. **Admin Learning Panel**
+   - Route: `/admin/learning-panel`
+   - Backend:
+     - `POST /api/admin/learning/refresh`
+     - `GET /api/admin/learning/overview`
+   - UI:
+     - strategy quality tablosu
+     - family memory tablosu
+     - recommendation listesi + apply aksiyonu
+
+5. **User Safe Surface**
+   - Endpoint: `GET /api/user/learning/safe-surface`
+   - Decision card alanları:
+     - `confidence_adjustment`
+     - `learning_badges`
+     - `learning_quality_score`
+
+6. **Dokümantasyon**
+   - `/app/memory/SPRINT4_LEARNING_IMPLEMENTATION.md`
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_93.json`
+  - Backend: **15/15 PASS**
+  - Frontend: **100% PASS**
+  - Kapsam doğrulama:
+    - family gate API + UI
+    - decision cards + explainability API + UI
+    - learning refresh/overview/apply API + admin UI
+    - scanner run stabilitesi
+
+### Durum
+- **Sprint-3 (Göz): COMPLETE**
+- **Sprint-4 (Hafıza): COMPLETE**
+- **Human-in-the-loop learning guardrail: COMPLETE**
+- **MOCKED API: VAR**
+  - Email verification delivery provider bu ortamda mocked.

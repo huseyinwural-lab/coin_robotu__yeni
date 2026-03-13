@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { SymbolSelectorPanel } from "@/components/SymbolSelectorPanel";
 import { apiClient } from "@/lib/api";
 import { saveExecutionContext } from "@/lib/userFlowContext";
+import { DecisionCard } from "@/pages/user/components/DecisionCard";
+import { ExplainabilityDrawer } from "@/pages/user/components/ExplainabilityDrawer";
 
 const scannerQuickPresets = [
   {
@@ -58,6 +60,7 @@ export const UserScannerPage = () => {
   const [autoRunAlerts, setAutoRunAlerts] = useState([]);
   const [decisionCards, setDecisionCards] = useState([]);
   const [selectedDecisionSymbol, setSelectedDecisionSymbol] = useState("");
+  const [isExplainabilityDrawerOpen, setIsExplainabilityDrawerOpen] = useState(false);
   const [symbolExplainability, setSymbolExplainability] = useState(null);
   const [isExplainabilityLoading, setIsExplainabilityLoading] = useState(false);
   const [isSavingAutomation, setIsSavingAutomation] = useState(false);
@@ -314,7 +317,7 @@ export const UserScannerPage = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       load({ silent: true, notifyAutoRuns: true });
-    }, 15000);
+    }, 10000);
     return () => clearInterval(timer);
   }, []);
 
@@ -434,6 +437,7 @@ export const UserScannerPage = () => {
   const onSelectDecisionCard = async (symbol) => {
     setSelectedDecisionSymbol(symbol);
     await loadSymbolExplainability(symbol);
+    setIsExplainabilityDrawerOpen(true);
   };
 
   return (
@@ -556,37 +560,15 @@ export const UserScannerPage = () => {
       <section className="col-span-12 rounded border border-blue-800/50 bg-blue-950/20 p-4" data-testid="user-decision-card-section">
         <div className="flex items-center justify-between" data-testid="user-decision-card-header">
           <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="user-decision-card-title">Symbol-level Decision Cards</p>
-          <Button variant="outline" onClick={() => load({ silent: true })} data-testid="user-decision-card-refresh-button">Kartları Yenile</Button>
+          <div className="flex items-center gap-2" data-testid="user-decision-card-toolbar-actions">
+            <p className="text-xs text-blue-100" data-testid="user-decision-card-auto-refresh-label">Auto Refresh: 10s</p>
+            <Button variant="outline" onClick={() => load({ silent: true })} data-testid="user-decision-card-refresh-button">Kartları Yenile</Button>
+          </div>
         </div>
 
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="user-decision-card-grid">
           {decisionCards.length === 0 && <p className="text-xs text-blue-100" data-testid="user-decision-card-empty">Henüz decision card üretilmedi.</p>}
-          {decisionCards.map((card) => (
-            <article key={card.symbol} className="rounded border border-blue-700/70 bg-black/20 p-3" data-testid={`user-decision-card-${card.symbol}`}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold" data-testid={`user-decision-card-symbol-${card.symbol}`}>{card.symbol}</p>
-                <span className="text-xs" data-testid={`user-decision-card-decision-${card.symbol}`}>{card.decision}</span>
-              </div>
-              <p className="mt-1 text-xs text-slate-300" data-testid={`user-decision-card-regime-${card.symbol}`}>Regime: {card.market_regime}</p>
-              <p className="text-xs text-slate-300" data-testid={`user-decision-card-score-${card.symbol}`}>L/S: {card.long_score} / {card.short_score}</p>
-              <p className="text-xs text-slate-300" data-testid={`user-decision-card-dominant-family-${card.symbol}`}>Dominant Family: {card.dominant_family || "-"}</p>
-              <p className="text-xs text-slate-300" data-testid={`user-decision-card-risk-block-${card.symbol}`}>Risk Block: {card.risk_block || card.blocked_reason || "clear"}</p>
-              <p className="text-xs text-slate-300" data-testid={`user-decision-card-confidence-adjustment-${card.symbol}`}>Confidence Adj: {card.confidence_adjustment || 0}</p>
-              <p className="text-xs text-slate-300" data-testid={`user-decision-card-entry-zone-${card.symbol}`}>
-                Entry Zone: {card.entry_zone?.min ?? "-"} / {card.entry_zone?.max ?? "-"}
-              </p>
-              <div className="mt-1 flex flex-wrap gap-1" data-testid={`user-decision-card-learning-badges-${card.symbol}`}>
-                {(card.learning_badges || []).map((badge, idx) => (
-                  <span key={`${card.symbol}-badge-${idx}`} className="rounded border border-blue-700 px-1 py-0.5 text-[10px]" data-testid={`user-decision-card-learning-badge-${card.symbol}-${idx}`}>{badge}</span>
-                ))}
-              </div>
-              <div className="mt-2 flex gap-2" data-testid={`user-decision-card-actions-${card.symbol}`}>
-                <Button type="button" size="sm" variant="outline" onClick={() => onSelectDecisionCard(card.symbol)} data-testid={`user-decision-card-open-explainability-button-${card.symbol}`}>
-                  Explainability
-                </Button>
-              </div>
-            </article>
-          ))}
+          {decisionCards.map((card) => <DecisionCard key={card.symbol} card={card} onOpenExplainability={onSelectDecisionCard} />)}
         </div>
       </section>
 
@@ -594,56 +576,27 @@ export const UserScannerPage = () => {
         <p className="text-xs uppercase tracking-widest text-fuchsia-300" data-testid="user-explainability-title">User Explainability Panel</p>
         {!selectedDecisionSymbol && <p className="mt-2 text-xs" data-testid="user-explainability-empty">Önce bir symbol decision card seçin.</p>}
         {selectedDecisionSymbol && (
-          <>
-            <p className="mt-2 text-sm" data-testid="user-explainability-selected-symbol">Symbol: {selectedDecisionSymbol}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-3" data-testid="user-explainability-content">
+            <p className="text-sm" data-testid="user-explainability-selected-symbol">Symbol: {selectedDecisionSymbol}</p>
+            <Button type="button" size="sm" variant="outline" onClick={() => setIsExplainabilityDrawerOpen(true)} data-testid="user-explainability-open-drawer-button">
+              Explainability Drawer Aç
+            </Button>
             {isExplainabilityLoading && <p className="text-xs" data-testid="user-explainability-loading">Yükleniyor...</p>}
             {!isExplainabilityLoading && symbolExplainability && (
-              <div className="mt-2 space-y-2" data-testid="user-explainability-content">
-                <p className="text-xs" data-testid="user-explainability-final-decision">Final Decision: {symbolExplainability.final_decision}</p>
-                <p className="text-xs" data-testid="user-explainability-score">Long/Short Score: {symbolExplainability.long_score} / {symbolExplainability.short_score}</p>
-                <p className="text-xs" data-testid="user-explainability-winning-side">Winning Side: {symbolExplainability.winning_side}</p>
-                <p className="text-xs" data-testid="user-explainability-confidence">Decision Confidence: {symbolExplainability.decision_confidence}</p>
-                <div data-testid="user-explainability-template-list">
-                  {(symbolExplainability.explanation_templates || []).map((item, idx) => (
-                    <p key={`${selectedDecisionSymbol}-tpl-${idx}`} className="text-xs text-fuchsia-100" data-testid={`user-explainability-template-${idx}`}>{item}</p>
-                  ))}
-                </div>
-                <div data-testid="user-explainability-family-gates">
-                  <p className="text-xs font-semibold">Family Gate Durumları</p>
-                  <div className="grid gap-1 md:grid-cols-2">
-                    {Object.entries(symbolExplainability.family_scores || {}).map(([family, gate]) => (
-                      <p key={`${selectedDecisionSymbol}-gate-${family}`} className="text-xs" data-testid={`user-explainability-family-gate-${family}`}>
-                        {family}: {gate.gate_status} ({gate.gate_reason})
-                      </p>
-                    ))}
-                  </div>
-                </div>
-                <div data-testid="user-explainability-source-strategies">
-                  <p className="text-xs font-semibold">Source Strategy Katkıları</p>
-                  <div className="max-h-40 overflow-y-auto space-y-1">
-                    {(symbolExplainability.source_strategies || []).map((item) => (
-                      <p key={`${selectedDecisionSymbol}-${item.strategy_id}`} className="text-xs" data-testid={`user-explainability-strategy-${item.strategy_id}`}>
-                        {item.strategy_id} · {item.family} · raw={item.raw_signal} · contrib={item.contribution_score} · status={item.status}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-                <div data-testid="user-explainability-blocked-timeline">
-                  <p className="text-xs font-semibold">Blocked Reason Timeline</p>
-                  <div className="max-h-40 overflow-y-auto space-y-1">
-                    {(symbolExplainability.blocked_reason_timeline || []).map((event, idx) => (
-                      <p key={`${selectedDecisionSymbol}-timeline-${idx}`} className="text-xs" data-testid={`user-explainability-timeline-item-${idx}`}>
-                        {formatDateLabel(event.event_time)} · {event.layer} · {event.reason_code} · {event.previous_state}→{event.new_state}
-                      </p>
-                    ))}
-                    {(symbolExplainability.blocked_reason_timeline || []).length === 0 && <p className="text-xs" data-testid="user-explainability-timeline-empty">Timeline kaydı yok.</p>}
-                  </div>
-                </div>
-              </div>
+              <p className="text-xs text-fuchsia-100" data-testid="user-explainability-final-decision">Final Decision: {symbolExplainability.final_decision}</p>
             )}
-          </>
+          </div>
         )}
       </section>
+
+      <ExplainabilityDrawer
+        isOpen={isExplainabilityDrawerOpen}
+        onOpenChange={setIsExplainabilityDrawerOpen}
+        selectedSymbol={selectedDecisionSymbol}
+        isLoading={isExplainabilityLoading}
+        explainability={symbolExplainability}
+        formatDateLabel={formatDateLabel}
+      />
 
       <div className="col-span-12 flex flex-wrap items-center gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-controls">
         <label className="text-xs uppercase tracking-widest text-slate-500" htmlFor="user-scanner-mode-select" data-testid="user-scanner-mode-label">Signal Mode</label>

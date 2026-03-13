@@ -1,158 +1,174 @@
 <analysis>**original_problem_statement:**
-The user's primary goal has evolved through a series of rapid development and bug-fixing cycles. After resolving a critical, long-standing issue with Binance API key validation that prevented trading, the user confirmed the core bot functionality (buy/sell) is working.
+The user, a technically proficient product owner, is directing a massive architectural refactor of a trading bot application. The project has moved from fixing initial setup and Dockerization issues to a multi-sprint implementation of a new professional-grade trading strategy engine.
 
-The most recent request (message #1000 and #1021) is to finalize the user authentication and onboarding experience by:
-1.  Creating a new user registration form.
-2.  Changing the MULTI-USER text on the login page to XİLO-USER.
-3.  Resizing the login form to normal dimensions.
-4.  Adding  and  fields to the new registration form.
+The core goal is to replace a collection of disorganized explorer scripts with a robust, centralized, and explainable system.
 
-**User's preferred language**: The user communicates exclusively in **Turkish**. The next agent MUST respond in Turkish.
+The project is being developed in sprints defined by the user:
+-   **Sprint 1 (Completed):** Build the foundational  and . Deprecate old strategies and activate 4 new core strategies.
+-   **Sprint 2 (Completed):** Implement detailed, symmetric (long/short) contracts for all 12 canonical strategies defined by the user.
+-   **Sprint 3 (In Progress):** Build the Explainability layer. This includes an admin panel for Strict Gating (controlling strategy families) and a user-facing Decision Card to explain *why* a trade decision (LONG, SHORT, BLOCKED) was made for each symbol.
+-   **Sprint 4 (Upcoming):** Build the Memory/Learning layer to track strategy performance over time and provide data-driven recommendations to the admin.
+
+The most recent user directive was to complete Sprint 3.
+
+**User's preferred language**: **Turkish**. The user provides highly detailed, technical product requirement documents (PRDs) in Turkish. The next agent MUST communicate exclusively in Turkish.
 
 **what currently exists?**
-The application is a feature-rich algorithmic trading platform. The core trading loop is now functional after extensive debugging of the Binance API key validation logic. A new user registration page has been created at , and the login page UI has been updated as per the user's request. The backend has been updated to support  and  fields for new users, but the frontend implementation is incomplete.
+The application is a full-stack trading bot platform. The backend has undergone a significant architectural overhaul, replacing the old strategy logic with a new . This engine processes signals from a  containing 12 canonical strategies (4 of which are active).
+
+For Sprint 3, the following components have been built:
+-   **Backend:** New Pydantic models (, ), database models (), services, and API endpoints (, ) to support the explainability feature.
+-   **Frontend (Admin):** An admin page () has been created to allow admins to enable/disable and configure thresholds for strategy families (Trend, Breakout, etc.).
+-   **Frontend (User):** The UI component for the Symbol-Level Decision Card () is currently being built to display the decision data from the backend.
 
 **Last working item**:
--   **Last item agent was working:** Implementing  and  fields in the new user registration flow. The agent has already updated the backend (, ) and was in the process of adding the corresponding input fields to the frontend  component.
+-   **Last item agent was working:** Implementing the frontend for the Symbol-Level Decision Card. The agent was building the React component () to visualize the complex decision payload, including final decision (LONG/SHORT/BLOCKED), confidence scores, contributing strategies, and block reasons.
 -   **Status:** IN PROGRESS
 -   **Agent Testing Done:** N
--   **Which testing method agent to use?** both.
-    -   Backend testing agent to verify the  endpoint correctly handles the new  and  fields.
-    -   Frontend testing agent to perform a full user registration from the UI and confirm the new user is created in the database with all fields populated.
+-   **Which testing method agent to use?** both
+    -   **Backend testing agent:** To verify the new, complex endpoints like  and  return correct data structures and handle updates properly.
+    -   **Frontend testing agent:** To test the full user and admin flows for Sprint 3. This includes:
+        1.  Verifying the  component correctly renders all possible states (LONG, SHORT, BLOCKED, NO_TRADE).
+        2.  Verifying the  admin page can successfully update the gating rules and that these changes are reflected in the user-facing .
 -   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Complete the registration form implementation (P0)**
--   **Issue 2: Admin left menu is not scrollable (P2)**
+-   **Issue 1: Complete Sprint 3 Implementation (P0)**
 
 **Issues Detail:**
--   **Issue 1: Complete the registration form implementation**
-    -   **Attempted fixes:** The backend  model and  endpoint have been successfully updated to accept  and .
+-   **Issue 1: Complete Sprint 3 Implementation**
+    -   **Attempted fixes:** The agent has successfully built most of the backend infrastructure and the admin-facing UI for strategy gating. The work is now focused on the user-facing UI.
     -   **Next debug checklist:**
-        1.  Edit .
-        2.  Add two new  components for First Name and Last Name.
-        3.  Update the component's state to manage these new fields.
-        4.  Modify the  function to include  and  in the payload sent to the  endpoint.
-        5.  Test the full registration flow.
-    -   **Why fix this issue and what will be achieved with the fix?** To complete the user's latest feature request for a more comprehensive registration process.
+        1.  Finalize the JSX and logic in  to correctly display all data from the  endpoint.
+        2.  Implement the  component, which should be triggered from the  to show more granular details like strategy contribution scores and the blocked-reason timeline.
+        3.  Integrate the  list into the main user dashboard/scanner page so the user can see the latest decision for each symbol.
+        4.  Ensure real-time updates or a polling mechanism is in place to refresh the decision cards.
+    -   **Why fix this issue and what will be achieved with the fix?** Completing this will finish the Explainability sprint (Sprint 3), a critical step that makes the bot's complex decision-making process transparent to both the user and the admin.
     -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
     -   **Should Test frontend/backend/both after fix?** both
     -   **Blocked on other issue:** No
 
--   **Issue 2: Admin left menu is not scrollable**
-    -   **Attempted fixes:** None in this session. This is a long-standing, low-priority UI bug.
-    -   **Next debug checklist:**
-        1.  Locate the CSS file governing the admin layout/sidebar.
-        2.  Apply  and a  (e.g.,  or a calculated value) to the sidebar container element.
-    -   **Why fix this issue and what will be achieved with the fix?** This will fix a minor UI bug that makes some admin menu items inaccessible on smaller screen heights.
-    -   **Status:** NOT STARTED
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** frontend
-    -   **Blocked on other issue:** No
-
 **In progress Task List**:
--   **Task 1: Complete  and  implementation (P0)**
-    -   **Where to resume:** . Add the necessary JSX for the input fields and update the submission logic.
-    -   **What will be achieved with this?** The user registration page will be fully functional with the requested fields.
+-   **Task 1: Finalize User-Facing Explainability UI (P0)**
+    -   **Where to resume:** .
+    -   **What will be achieved with this?** The user will have a clear, card-based view for each symbol, showing the bot's final decision and the primary reasons behind it.
     -   **Status:** IN PROGRESS
     -   **Should Test frontend/backend/both after fix?** both
     -   **Blocked on something:** No
 
 **Upcoming and Future Tasks**
--   **Upcoming Tasks:**
-    -   **Task 1 (P1):** Add a phone number field to the registration form (user expressed interest in message #1021).
+-   **Upcoming Tasks (Sprint 4 - Hafıza / Memory):**
+    -   **Task 1 (P0):** Implement the Learning Event Model to log the detailed context and outcome of every trade decision for later analysis.
+    -   **Task 2 (P0):** Create a Strategy Outcome Memory service to process the event logs and calculate performance metrics (e.g., hit rate, average return, false-allow rate) for each strategy and strategy family.
+    -   **Task 3 (P1):** Build the Admin Learning Panel to display these performance metrics, show quality degradation alerts, and present admin-approved recommendations (e.g., disable strategy X, lower weight for strategy Y).
+    -   **Task 4 (P1):** Implement Learning Guardrails to ensure the learning system only generates *recommendations* and never automatically modifies production rules without explicit admin approval.
+    -   **Task 5 (P2):** Add simple, safe learning-driven insights to the user UI, such as a decision confidence score or a recently degraded quality warning.
 -   **Future Tasks:**
-    -   **Task 2 (P2):** Implement an email verification flow after user registration.
-    -   **Task 3 (P2):** Create an onboarding wizard for new users after their first login.
-    -   **Task 4 (P2):** Add a Risk Policy Health Score card to the user dashboard to provide users with feedback on their risk settings.
-    -   **Task 5 (P2):** Add a live system status card to the public landing page.
+    -   Add a Walk-forward quality metric to automatically suggest strategy weights based on rolling performance.
+    -   Implement user-based multiple automation profiles (e.g., scalp-3m, swing-15m).
 
 **Completed work in this session**
--   **Critical Bug Fix: API Key Validation:** Resolved a complex bug preventing Binance API key validation (), which blocked all trading. This involved extensive debugging of backend logic (), improving frontend error messages (), and addressing credential/environment mismatches.
--   **Critical Bug Fix: Bot Trading Flow:** Fixed multiple issues preventing the bot from executing trades, including a disabled futures flag, incorrect bot modes, and UI bugs in the symbol selector.
--   **Feature: User Registration System:** Created a new registration page () and the corresponding backend endpoint and database model changes.
--   **Feature: Enhanced Symbol Selection:** Replaced a basic text input with a multi-modal component for selecting symbols (Select All, Top 50 Active, Custom List).
--   **Feature: Signal Blocker Auto-Fix:** Implemented a Fix All Blockers button on the Signals page to resolve common trading impediments automatically.
--   **Feature: Automated Default Risk Policy:** Ensured new users are automatically assigned a Starter Safe risk policy to improve the out-of-the-box experience.
--   **UI/UX Overhaul:**
-    -   Implemented a Live Control Status card to make the bot's state clear.
-    -   Updated the login page text to XİLO-USER and resized the form.
-    -   Reordered the entire user menu sidebar based on the user's specified workflow.
-    -   Conducted and implemented fixes from two full-system audits of all 58 admin and user menus.
+-   **Major Architectural Refactor (Strategy Engine - Sprints 1 & 2):**
+    -   Deprecated dozens of old, disorganized explorer strategies.
+    -   Implemented a canonical  with 12 new, professionally defined strategies.
+    -   Built a  to score and aggregate signals from the registry into a final deterministic decision.
+    -   Created extensive documentation for the new engine architecture ().
+-   **Feature Implementation (Sprint 3 - In Progress):**
+    -   Built the complete backend and admin UI for Strategy Family Gating.
+    -   Built the backend data models and API endpoints for the Decision Card and Explainability features.
+-   **Critical Environment Fixes:**
+    -   Resolved numerous Docker, dependency (, , ), and environment variable () issues to ensure the project runs reliably from a clean  command.
+    -   Created a  with clear, step-by-step setup instructions.
+    -   Implemented a default admin user bootstrap service that runs only on initial DB setup.
+-   **Other Features:**
+    -   Implemented an automatic 3-minute scanner trigger with a UI toggle.
+    -   Completed the user registration form by adding  and  fields.
 
 **Earlier issues found/mentioned but not fixed**
--   **Issue 1: Admin Left Menu is not Scrollable.** This minor UI issue was first noted in the initial handoff and has been consistently de-prioritized in favor of critical bug fixes and features.
+-   **Issue 1: Admin left menu is not scrollable.** This is a long-standing, very low-priority UI bug that has been correctly deferred in favor of major architectural work.
+-   **Issue 2: Save user's symbol selection on the scanner page.** In user message #62, the user requested that the scanner's symbol selection be saved. The agent implemented the auto-scan feature from the same message but missed this part of the request.
 
 **Known issue recurrence from previous fork**
--   None. The API key validation was a new, persistent issue in this session.
+-   None. The user did re-paste a large request for Docker fixes, but the agent correctly identified it as a duplicate, audited the existing (correct) solution, and made a minor clarification in the .
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **API Key Validation:** A complex, multi-step validation process () for Binance keys that checks for timestamp sync, trade permissions (spot/futures), and rate limits, providing detailed reason codes for failures.
--   **Signal State Machine & Auto-Fix:** A system that tracks trading signals through states (, , ) and provides automated one-click solutions for common blockers like .
--   **User Authentication Flow:** Standard JWT-based authentication with a newly added registration endpoint.
+-   **Master Signal Engine:** A central service that receives raw signals from multiple strategies, normalizes them into scores, applies weights, resolves conflicts, and produces a single, deterministic trade intent (LONG, SHORT, or NO_TRADE).
+-   **Strategy Registry:** A canonical, database-driven list of the 12 approved trading strategies. This prevents the use of arbitrary or deprecated logic.
+-   **Strategy Family Gating:** An admin-controlled layer that can enable/disable or set score thresholds for entire families of strategies (e.g., Trend, Reversal), allowing for dynamic adaptation to market conditions without code changes.
+-   **Explainability Data Contract:** A rich, structured data payload sent from the backend to the frontend that details every step of a decision, including contribution scores from each strategy and the specific reason for any blocks.
 
 **key DB schema**
--   : {email, hashed_password, **firstName**, **lastName**, is_active, is_superuser, is_approved}
+-   : {strategy_id, name, family, description, is_enabled, weight}
+-   : {family_name, is_enabled, long_threshold, short_threshold, min_strategy_count}
+-   : {email, hashed_password, firstName, lastName, ...}
 
 **changes in tech stack**
 -   None.
 
 **All files of reference**
--   **Current Task:**
-    -    (File to be modified)
-    -    (Recently modified)
-    -    (Recently modified)
--   **Key Related Files from Recent Fixes:**
+-   **Currently In-Progress:**
+    -   
+-   **Key Files for Sprint 3:**
+    -    (needs to be updated to incorporate gating)
+    -    (contains  model)
     -   
     -   
+    -   
+-   **Documentation:**
     -   
     -   
 
 **Areas that need refactoring**:
--   None identified.
+-   None. The current work is a deliberate and structured refactor itself.
 
 **key api endpoints**
--   : (New) Creates a new user.
--   : (Heavily debugged/modified) Validates a user's exchange API key.
--   : (New) Attempts to resolve all blockers for a user's signals.
+-   : Get a list of decision cards for all symbols.
+-   : Get the detailed explainability payload for a symbol.
+-   : Get the current gating rules.
+-   : Update the gating rules.
 
 **Critical Info for New Agent**
--   **You MUST communicate in Turkish.**
--   The user is very hands-on and changes priorities frequently based on what they are currently testing. Be prepared for rapid context shifts from feature development to urgent bug fixing.
--   The platform just recovered from a critical and frustrating bug related to Binance API key validation. Any issues in  or with trading execution should be treated with high priority.
--   The immediate task is to finish the  and  implementation on the  frontend. The backend work for this is already complete.
+-   **MUST communicate in Turkish.**
+-   The project is in the middle of a large, user-directed architectural refactor. Adhere strictly to the user's PRDs for Sprint 3 and the upcoming Sprint 4.
+-   The immediate task is to complete the frontend implementation for the Explainability feature, specifically the  component.
+-   The backend and frontend are now tightly coupled via complex data contracts. Refer to the Pydantic models in  as the source of truth for the frontend data structure.
+-   Do not get distracted by minor UI issues. The user's priority is the functional completion of the strategy engine sprints.
 
 **documents and test reports created in this job**
-- Numerous test reports were generated during the extensive debugging and feature validation cycles (e.g., , , ).
+-   
+-   
+-    (Continuously updated by the agent)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **#1024:** User replied a, interpreted as an affirmative to the agent's proposal to add more fields to the registration form. (In Progress)
-2.  **#1022:** Agent confirmed the three login/registration page tasks were complete and proposed adding more fields. (Complete)
-3.  **#1021:** User asked for clarification on what was being proposed. (Complete)
-4.  **#1000:** User requested three final changes: change MULTI-USER to XİLO-USER, resize the login form, and add a registration form. (Complete)
-5.  **#999:** Agent confirmed that all critical/blocking issues were resolved. (Complete)
-6.  **#998:** User confirmed the system is working (buy/sell) and asked if anything else was left. (Complete)
-7.  **#954:** User provided new, correct API keys for the agent to test with. (Complete)
-8.  **#953:** Agent confirmed the issue was with the provided credentials and requested new, clean keys. (Complete)
-9.  **#948:** User provided login credentials for a test account for the agent to use for debugging. (Complete)
-10. **#939:** User provided a screenshot of API keys and asked the agent to fix the issue. (Complete)
+1.  **#737 (Agent):** (Thinking) Planning to create . (In Progress)
+2.  **#668 - #736 (Agent):** Agent implementing Sprint 3. (In Progress)
+3.  **#667 (User):** a - Confirmed the agent's plan to proceed. (Complete)
+4.  **#664 (User):** Provided a detailed PRD for Sprint 3 (Göz) and Sprint 4 (Hafıza) and asked to close out the previous discussion. (In Progress)
+5.  **#544 (User):** tamam başla (okay start) - Instructed the agent to start the next task. (Complete)
+6.  **#543 (Agent):** Confirmed the closure of a set of future tasks, moving them to the backlog. (Complete)
+7.  **#542 (User):** bunu toplu kapatalım (let's close this out collectively) - Confirmed the agent's summary of future tasks to be moved to the backlog. (Complete)
+8.  **#540 (User):** Asked for a collective report of all Next Action Items, Future/Backlog and Potansiyel improvement to close the topic. (Complete)
+9.  **#530 (User):** Confirmed the agent's plan to audit and apply minimal patches to the Docker setup issues. (Complete)
+10. **#527 (User):** Re-pasted the entire Docker setup problem description from an earlier message. (Complete)
 
 **Project Health Check:**
 -   **Broken:** None.
--   **Mocked/Incomplete:** The  and  fields on the frontend registration page are not yet implemented.
+-   **Mocked/Incomplete:**
+    -   The user-facing Explainability UI (, ) is not yet complete.
+    -   The entire Learning layer (Sprint 4) is unimplemented.
 
 **3rd Party Integrations**
 -   **PostgreSQL:** Primary database.
--   **Redis:** Caching and event bus.
+-   **Redis:** Caching.
 -   **Binance API:** For live market data and order execution (Futures Testnet).
 -   **Resend:** For email alerts.
 
 **Testing status**
--   **Testing agent used after significant changes:** NO, not in the most recent bug fixes. The fixes were highly iterative and relied on manual validation and user feedback.
+-   **Testing agent used after significant changes:** NO, not yet for the Sprint 3 work as it is still in progress.
 -   **Troubleshoot agent used after agent stuck in loop:** NO.
 -   **Test files created:** []
 -   **Known regressions:** None.
@@ -160,7 +176,6 @@ The application is a feature-rich algorithmic trading platform. The core trading
 **Credentials to test flow:**
 -   **Admin Login:**  / 
 -   **User Login:**  / 
--   **Test User from Session:**  / 
 
 **What agent forgot to execute**
--   The low-priority UI bug where the **admin left menu is not scrollable** remains unfixed from the original handoff summary. It has been correctly deprioritized multiple times.</analysis>
+-   In user message #62, the user requested two features: 1) an automatic 3-minute scan, and 2) the ability to **save the scanner's symbol selection**. The agent successfully implemented the auto-scan but appears to have completely overlooked the request to save the user's symbol selection. This remains an unaddressed feature request.</analysis>
