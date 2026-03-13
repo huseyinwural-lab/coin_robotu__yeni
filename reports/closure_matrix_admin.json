@@ -1,16 +1,17 @@
 {
-  "generated_at": "2026-03-13T01:30:00Z",
+  "generated_at": "2026-03-13T02:00:00Z",
   "domain": "admin",
+  "status": "pass",
   "matrix": [
-    {"area": "Operational Visibility", "status": "validated_previous_iterations"},
-    {"area": "Exposure/Risk Consistency", "status": "validated_previous_iterations"},
-    {"area": "Strategy Governance", "status": "validated_previous_iterations"},
-    {"area": "Recovery/Fault Handling", "status": "validated_previous_iterations"},
-    {"area": "Exchange Readiness Consolidation", "status": "validated_previous_iterations"},
-    {"area": "Cross-Dashboard Consistency", "status": "validated_previous_iterations"}
+    {"area": "Operational Visibility", "status": "pass"},
+    {"area": "Position/Exposure/Risk Consistency", "status": "pass"},
+    {"area": "Strategy Governance Finalization", "status": "pass"},
+    {"area": "Recovery & Fault Handling", "status": "pass"},
+    {"area": "Exchange/Live Readiness Consolidation", "status": "pass"},
+    {"area": "Cross-Dashboard Consistency Panel", "status": "pass"}
   ],
   "references": [
-    "/app/test_reports/iteration_56.json",
-    "/app/test_reports/iteration_57.json"
+    "/app/test_reports/iteration_62.json",
+    "/app/test_reports/iteration_65.json"
   ]
 }

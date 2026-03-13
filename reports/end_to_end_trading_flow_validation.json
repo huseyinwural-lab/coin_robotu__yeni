@@ -1,15 +1,18 @@
 {
-  "generated_at": "2026-03-13T01:30:00Z",
-  "flow": "scanner/screener -> execute preview -> queue visibility",
-  "status": "pass_with_current_scope",
+  "generated_at": "2026-03-13T02:00:00Z",
+  "flow": "primary_trading_and_recovery_e2e",
+  "status": "pass",
   "validated_paths": [
-    "indicator-screener -> open in execute bridge context",
-    "execute -> intent preview with venue gating",
-    "execution queue and positions visibility contracts (existing platform coverage)"
+    "scanner -> results",
+    "signals -> execute preview -> queue visibility",
+    "positions/paper positions action intent lifecycle",
+    "failed-event retry/resolve",
+    "state rebuild log flow",
+    "indicator-screener filter -> execute bridge context"
   ],
-  "latest_test_source": "/app/test_reports/iteration_61.json",
+  "latest_test_source": "/app/test_reports/iteration_65.json",
   "remarks": [
-    "Venue blocked scenarios now reject at preview with explicit reason",
-    "Connection context and source context persist into preview"
+    "Venue blocked scenarios reject at preview with explicit reason codes",
+    "Connection and source context persists until preview stage"
   ]
 }

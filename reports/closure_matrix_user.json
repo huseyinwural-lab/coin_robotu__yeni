@@ -1,19 +1,21 @@
 {
-  "generated_at": "2026-03-13T01:30:00Z",
+  "generated_at": "2026-03-13T02:00:00Z",
   "domain": "user",
+  "status": "pass",
   "matrix": [
-    {"area": "Primary Trading Flow", "status": "validated_with_current_scope"},
-    {"area": "Execute Professionalization", "status": "pass_new_updates_u08"},
-    {"area": "Signals Completion", "status": "validated_previous_iterations"},
-    {"area": "Positions/Paper Positions", "status": "validated_previous_iterations"},
-    {"area": "Portfolio/Reports Integrity", "status": "validated_previous_iterations"},
-    {"area": "Exchange Connection Model", "status": "pass_new_updates_u07"},
-    {"area": "Bridge Context Hardening", "status": "pass_new_updates_u09"},
-    {"area": "Indicator Screener Filter Layer", "status": "validated_previous_and_current_iterations"},
-    {"area": "Freshness Visibility", "status": "pass_new_updates_u12"}
+    {"area": "Primary Trading Flow Completion (U-01)", "status": "pass"},
+    {"area": "Execute Screen Professionalization (U-02)", "status": "pass"},
+    {"area": "Signals Screen Completion (U-03)", "status": "pass"},
+    {"area": "Positions & Paper Positions (U-04)", "status": "pass"},
+    {"area": "Portfolio/Dashboard/Reports Integrity (U-05)", "status": "pass"},
+    {"area": "User Form Quality Closure (U-06)", "status": "pass"},
+    {"area": "Exchange Connection Model (U-07)", "status": "pass"},
+    {"area": "Execute Venue/Account Awareness (U-08)", "status": "pass"},
+    {"area": "Bridge Context Hardening (U-09)", "status": "pass"},
+    {"area": "Indicator Screener Filter Layer + E2E + Freshness (U-10/U-11/U-12)", "status": "pass"}
   ],
   "references": [
-    "/app/test_reports/iteration_60.json",
-    "/app/test_reports/iteration_61.json"
+    "/app/test_reports/iteration_63.json",
+    "/app/test_reports/iteration_65.json"
   ]
 }

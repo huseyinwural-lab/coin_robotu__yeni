@@ -1,25 +1,37 @@
 {
-  "generated_at": "2026-03-13T01:30:00Z",
+  "generated_at": "2026-03-13T02:00:00Z",
   "category": "UI Consistency",
+  "status": "pass",
   "checks": [
     {
       "item": "Header theme refactor",
       "status": "pass",
-      "evidence": "PanelLayout sticky header updated to light-green system"
+      "evidence": "Admin/User top header layer uses light-green system"
+    },
+    {
+      "item": "Button color system cleanup",
+      "status": "pass",
+      "evidence": "primary=emerald, secondary=slate, warning=amber, danger=rose"
+    },
+    {
+      "item": "Dense table consistency",
+      "status": "pass",
+      "evidence": "AdminExecutionQueue/AdminPositionsMonitor sticky header fixed, AdminPortfolioRisk numeric alignment fixed"
+    },
+    {
+      "item": "Empty/Broken/No-Match visual contract",
+      "status": "pass",
+      "evidence": "Distinct state banners and table empty rows across critical screens"
     },
     {
       "item": "Dev/Test surface cleanup",
       "status": "pass",
-      "evidence": "Exchange Mock removed from user nav and route redirected"
-    },
-    {
-      "item": "Indicator Screener dense table and freshness visibility",
-      "status": "pass",
-      "evidence": "freshness panel + last_candle/evaluated_at/data_source/cache flags surfaced"
+      "evidence": "Exchange Mock removed from user nav, route redirected"
     }
   ],
   "source_reports": [
     "/app/test_reports/iteration_60.json",
-    "/app/test_reports/iteration_61.json"
+    "/app/test_reports/iteration_61.json",
+    "/app/test_reports/iteration_64.json"
   ]
 }
