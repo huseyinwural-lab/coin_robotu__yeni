@@ -4,11 +4,26 @@ Tests for Admin Positions Monitor, Portfolio Risk, Execution Queue pages
 Tests operational state handling (loading/empty/error) and filter/summary visibility
 """
 
+import os
+from pathlib import Path
+
 import pytest
 import requests
-import os
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+
+def _resolve_base_url() -> str:
+    env_base = os.environ.get("REACT_APP_BACKEND_URL", "").strip().rstrip("/")
+    if env_base:
+        return env_base
+    frontend_env = Path("/app/frontend/.env")
+    if frontend_env.exists():
+        for line in frontend_env.read_text(encoding="utf-8").splitlines():
+            if line.startswith("REACT_APP_BACKEND_URL="):
+                return line.split("=", 1)[1].strip().rstrip("/")
+    raise RuntimeError("REACT_APP_BACKEND_URL not found")
+
+
+BASE_URL = _resolve_base_url()
 
 
 class TestAdminAuthentication:
@@ -16,10 +31,10 @@ class TestAdminAuthentication:
 
     def test_admin_login(self):
         """Test admin login with valid credentials"""
-        response = requests.post(f"{BASE_URL}/api/auth/login", json={
+        response = requests.post(f"{BASE_URL}/api/auth/login/admin", json={
             "email": "admin@platform.dev",
             "password": "Admin12345!"
-        })
+        }, timeout=20)
         assert response.status_code == 200, f"Admin login failed: {response.text}"
         data = response.json()
         assert "access_token" in data, "access_token missing in response"
@@ -29,10 +44,10 @@ class TestAdminAuthentication:
 @pytest.fixture
 def admin_headers():
     """Get admin auth headers"""
-    response = requests.post(f"{BASE_URL}/api/auth/login", json={
+    response = requests.post(f"{BASE_URL}/api/auth/login/admin", json={
         "email": "admin@platform.dev",
         "password": "Admin12345!"
-    })
+    }, timeout=20)
     if response.status_code == 200:
         token = response.json().get("access_token")
         return {"Authorization": f"Bearer {token}"}
