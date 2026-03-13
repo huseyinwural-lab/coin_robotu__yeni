@@ -1,0 +1,143 @@
+{
+  "summary": "Iteration 88 - Scanner Automation Config (3 dakika otomasyon) - All tests PASS",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "features_tested": {
+    "get_scanner_automation_endpoint": {
+      "status": "PASS",
+      "description": "GET /api/user/scanner/automation returns config with all required fields",
+      "verified_fields": [
+        "auto_enabled",
+        "interval_seconds (=180)",
+        "symbol_source",
+        "symbol_selection_mode",
+        "selected_symbols",
+        "last_run_at",
+        "next_run_at",
+        "last_run_status",
+        "last_run_id",
+        "last_run_error"
+      ],
+      "tests": [
+        "test_get_automation_config_returns_200 (PASS)",
+        "test_get_automation_config_interval_is_180 (PASS)",
+        "test_get_automation_config_has_required_fields (PASS)"
+      ]
+    },
+    "put_scanner_automation_endpoint": {
+      "status": "PASS",
+      "description": "PUT /api/user/scanner/automation persists selection (source/mode/selected_symbols)",
+      "tests": [
+        "test_put_automation_config_persists_selection (PASS)",
+        "test_put_automation_config_toggle_off (PASS)",
+        "test_put_automation_config_toggle_on (PASS)",
+        "test_put_automation_config_persists_across_get (PASS)"
+      ]
+    },
+    "scanner_automation_status_fields": {
+      "status": "PASS",
+      "description": "last_run_at, last_run_status, next_run_at fields work correctly",
+      "tests": [
+        "test_last_run_status_field_exists (PASS)",
+        "test_next_run_at_calculated_when_enabled (PASS)"
+      ]
+    },
+    "scanner_symbol_modes": {
+      "status": "PASS",
+      "description": "Different symbol selection modes work correctly",
+      "tests": [
+        "test_top_active_50_mode (PASS)",
+        "test_top_active_100_mode (PASS)",
+        "test_custom_list_mode_with_symbols (PASS)",
+        "test_bot_scope_mode (PASS)"
+      ]
+    },
+    "frontend_automation_card": {
+      "status": "PASS",
+      "description": "Frontend User Scanner page shows automation card with all required elements",
+      "verified_elements": [
+        "Automation card visible (data-testid: user-scanner-automation-card)",
+        "Title: 'Scanner Otomasyon (3 Dakika)'",
+        "Status displays AKTİF/PASİF",
+        "Periyot: 3 dakika",
+        "Son Çalışma: timestamp (e.g., 13.03.2026 15:06:20)",
+        "Sonraki Çalışma: timestamp (e.g., 13.03.2026 15:09:20)"
+      ]
+    },
+    "frontend_save_selection_button": {
+      "status": "PASS",
+      "description": "'Seçimi Kaydet (Otomasyona)' button saves selection",
+      "verified": [
+        "Button visible and clickable",
+        "Toast notification shows '3 dakikalık otomatik scanner aktif'",
+        "Selection persisted to backend"
+      ]
+    },
+    "frontend_toggle_button": {
+      "status": "PASS",
+      "description": "Toggle button enables/disables automation",
+      "verified": [
+        "Button text changes: 'Otomatik Tetiklemeyi Kapat' / 'Otomatik Tetiklemeyi Aç'",
+        "Status updates to AKTİF/PASİF",
+        "Toast notification 'Otomatik scanner kapatıldı'"
+      ]
+    },
+    "frontend_hydration_on_reload": {
+      "status": "PASS",
+      "description": "Saved source/mode/selected_symbols hydrate on page reload",
+      "verified": [
+        "symbol_mode persists after reload (tested custom_list)",
+        "auto_enabled status persists after reload",
+        "Symbol selector shows previously saved mode"
+      ]
+    },
+    "runtime_scanner_automation_loop": {
+      "status": "VERIFIED_BY_CODE_REVIEW",
+      "description": "Backend runtime._scanner_automation_loop() runs every 15s, triggers scanner for enabled configs",
+      "implementation_details": [
+        "Loop checks UserScannerAutomationConfig with auto_enabled=True",
+        "Calculates elapsed time since last_run_at",
+        "Only runs if elapsed >= interval_seconds (180)",
+        "Updates last_run_at, last_run_status, last_run_id on success",
+        "Updates last_run_error on failure"
+      ]
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter88_scanner_automation.py",
+    "/app/test_reports/pytest/pytest_results_iter88_scanner_automation.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iter88_scanner_automation.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 tests passed)",
+    "frontend": "100% (8/8 features verified)"
+  },
+  "test_credentials": {
+    "user": "TEST_phase4iter2_pipeline@example.com / TestPassword123!"
+  },
+  "seed_data_creation": "None - used existing test user",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Scanner automation config fully working. GET/PUT /api/user/scanner/automation endpoints return/persist auto_enabled, interval_seconds=180, symbol_source, symbol_selection_mode, selected_symbols, last_run_at, last_run_status, next_run_at. Frontend automation card shows all status info, toggle and save buttons work. Hydration on page reload verified. Runtime loop (_scanner_automation_loop in runtime.py) automatically runs scanner every 3 minutes for users with auto_enabled=True.",
+  "mocked_apis": {
+    "email_verification": "Email delivery provider is MOCKED; verification code is returned directly by API"
+  },
+  "screenshots": {
+    "01_scanner_automation_card": "/app/test_reports/artifacts_iter88/01_scanner_automation_card.jpeg",
+    "02_after_save_selection": "/app/test_reports/artifacts_iter88/02_after_save_selection.jpeg",
+    "03_after_toggle": "/app/test_reports/artifacts_iter88/03_after_toggle.jpeg",
+    "04_after_reload_hydration": "/app/test_reports/artifacts_iter88/04_after_reload_hydration.jpeg",
+    "05_final_scanner_page": "/app/test_reports/artifacts_iter88/05_final_scanner_page.jpeg"
+  }
+}

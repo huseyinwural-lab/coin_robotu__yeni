@@ -1355,6 +1355,35 @@ class UserScannerRunResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class UserScannerAutomationConfigUpdateRequest(BaseModel):
+    auto_enabled: bool = True
+    interval_seconds: int = Field(default=180, ge=180, le=180)
+    max_results: int = Field(default=25, ge=5, le=100)
+    symbol_source: str = "crypto"
+    symbol_selection_mode: str = "top_active_50"
+    selected_symbols: list[str] = Field(default_factory=list)
+
+
+class UserScannerAutomationConfigResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    auto_enabled: bool
+    interval_seconds: int
+    max_results: int
+    symbol_source: str
+    symbol_selection_mode: str
+    selected_symbols: list[str] = Field(default_factory=list)
+    last_run_id: str | None = None
+    last_run_status: str
+    last_run_error: str | None = None
+    last_run_at: datetime | None = None
+    next_run_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class UserScannerResultResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

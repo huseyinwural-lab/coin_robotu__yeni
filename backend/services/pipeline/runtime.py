@@ -13,7 +13,10 @@ from models import (
     StateRebuildLog,
     StrategyTemplate,
     User,
+    UserRole,
+    UserScannerAutomationConfig,
 )
+from core.users.user_scanner_signal_service import run_user_scanner
 from services.audit_service import create_audit_log
 from services.execution_policy_service import get_policy_for_strategy
 from services.failed_event_service import create_failed_event, mark_failed_event_resolved, mark_failed_event_retry
@@ -63,6 +66,7 @@ class PipelineRuntime:
         self._kill_switch_task: asyncio.Task | None = None
         self._spot_universe_task: asyncio.Task | None = None
         self._daily_report_task: asyncio.Task | None = None
+        self._scanner_automation_task: asyncio.Task | None = None
         self._last_release_gate_status: str | None = None
         self._last_kill_switch_active: bool = False
         self._running = False
@@ -80,6 +84,10 @@ class PipelineRuntime:
         self._kill_switch_task = asyncio.create_task(self._kill_switch_guard_loop(), name="kill-switch-guard")
         self._spot_universe_task = asyncio.create_task(self._spot_universe_refresh_loop(), name="spot-universe-refresh")
         self._daily_report_task = asyncio.create_task(self._daily_strategy_report_loop(), name="spot-daily-report")
+        self._scanner_automation_task = asyncio.create_task(
+            self._scanner_automation_loop(),
+            name="user-scanner-automation",
+        )
         logger.info("Phase-3 runtime started")
 
     async def stop(self):
@@ -94,6 +102,7 @@ class PipelineRuntime:
             self._kill_switch_task,
             self._spot_universe_task,
             self._daily_report_task,
+            self._scanner_automation_task,
         ]:
             if task:
                 task.cancel()
@@ -101,6 +110,71 @@ class PipelineRuntime:
                     await task
                 except asyncio.CancelledError:
                     pass
+
+    async def _scanner_automation_loop(self):
+        while self._running:
+            await asyncio.sleep(15)
+            db = SessionLocal()
+            try:
+                rows = (
+                    db.query(UserScannerAutomationConfig)
+                    .filter(UserScannerAutomationConfig.auto_enabled.is_(True))
+                    .all()
+                )
+                if not rows:
+                    continue
+
+                now = datetime.now(timezone.utc)
+                for row in rows:
+                    interval_seconds = int(row.interval_seconds or 180)
+                    if interval_seconds <= 0:
+                        interval_seconds = 180
+
+                    if row.last_run_at:
+                        last_run_at = row.last_run_at
+                        if last_run_at.tzinfo is None:
+                            last_run_at = last_run_at.replace(tzinfo=timezone.utc)
+                        elapsed = (now - last_run_at).total_seconds()
+                        if elapsed < interval_seconds:
+                            continue
+
+                    user = (
+                        db.query(User)
+                        .filter(
+                            User.id == row.user_id,
+                            User.role == UserRole.USER,
+                            User.is_active.is_(True),
+                            User.approval_status == "approved",
+                        )
+                        .first()
+                    )
+                    if user is None:
+                        continue
+
+                    try:
+                        result = run_user_scanner(
+                            db,
+                            user.id,
+                            requested_mode=None,
+                            max_results=int(row.max_results or 25),
+                            symbol_source=str(row.symbol_source or "crypto"),
+                            selected_symbols=list(row.selected_symbols or []),
+                            symbol_selection_mode=str(row.symbol_selection_mode or "top_active_50"),
+                        )
+                        row.last_run_at = now
+                        row.last_run_status = "success"
+                        row.last_run_error = None
+                        row.last_run_id = str(result.get("run_id") or "")
+                    except Exception as exc:
+                        row.last_run_at = now
+                        row.last_run_status = "error"
+                        row.last_run_error = str(exc)[:240]
+
+                db.commit()
+            except Exception as exc:
+                logger.exception("Scanner automation loop error: %s", exc)
+            finally:
+                db.close()
 
     async def _release_gate_guard_loop(self):
         while self._running:

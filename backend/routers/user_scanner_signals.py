@@ -5,18 +5,23 @@ from core.users.user_scanner_signal_service import (
     approve_pending_signal,
     bulk_fix_blocked_signals,
     diagnose_pending_signal,
+    get_or_create_scanner_automation_config,
     get_or_create_signal_mode,
     list_user_scanner_results,
     list_user_signals,
     reject_pending_signal,
     run_user_scanner,
+    scanner_automation_config_response_payload,
     update_signal_mode,
+    update_scanner_automation_config,
 )
 from db import get_db
 from deps import require_user
 from models import PendingSignal, User, UserScannerResult
 from schemas import (
     UserScannerOverviewResponse,
+    UserScannerAutomationConfigResponse,
+    UserScannerAutomationConfigUpdateRequest,
     UserScannerResultResponse,
     UserScannerRunRequest,
     UserScannerRunResponse,
@@ -56,6 +61,49 @@ def put_signal_mode(
         details={"mode": row.mode},
     )
     return UserSignalModeResponse(mode=row.mode, updated_at=row.updated_at)
+
+
+@router.get("/scanner/automation", response_model=UserScannerAutomationConfigResponse)
+def get_scanner_automation_config(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    row = get_or_create_scanner_automation_config(db, current_user.id)
+    payload = scanner_automation_config_response_payload(row)
+    return UserScannerAutomationConfigResponse(**payload)
+
+
+@router.put("/scanner/automation", response_model=UserScannerAutomationConfigResponse)
+def put_scanner_automation_config(
+    payload: UserScannerAutomationConfigUpdateRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    row = update_scanner_automation_config(
+        db,
+        current_user.id,
+        auto_enabled=payload.auto_enabled,
+        interval_seconds=payload.interval_seconds,
+        max_results=payload.max_results,
+        symbol_source=payload.symbol_source,
+        symbol_selection_mode=payload.symbol_selection_mode,
+        selected_symbols=payload.selected_symbols,
+    )
+    create_audit_log(
+        db,
+        action="user_scanner_automation_config_updated",
+        entity_type="user_scanner_automation_config",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "auto_enabled": bool(row.auto_enabled),
+            "interval_seconds": int(row.interval_seconds or 180),
+            "max_results": int(row.max_results or 25),
+            "symbol_source": row.symbol_source,
+            "symbol_selection_mode": row.symbol_selection_mode,
+            "selected_symbol_count": len(row.selected_symbols or []),
+        },
+    )
+    response_payload = scanner_automation_config_response_payload(row)
+    return UserScannerAutomationConfigResponse(**response_payload)
 
 
 @router.post("/scanner/run", response_model=UserScannerRunResponse)

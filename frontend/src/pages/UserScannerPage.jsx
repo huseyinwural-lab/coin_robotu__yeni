@@ -32,6 +32,8 @@ const scannerQuickPresets = [
   },
 ];
 
+const AUTO_SCAN_INTERVAL_SECONDS = 180;
+
 export const UserScannerPage = () => {
   const navigate = useNavigate();
   const [mode, setMode] = useState("ASSISTED");
@@ -43,6 +45,8 @@ export const UserScannerPage = () => {
   const [symbolSource, setSymbolSource] = useState("crypto");
   const [symbolMode, setSymbolMode] = useState("top_active_50");
   const [selectedSymbols, setSelectedSymbols] = useState([]);
+  const [automationConfig, setAutomationConfig] = useState(null);
+  const [isSavingAutomation, setIsSavingAutomation] = useState(false);
 
   const activeModeLabel = String(overview?.mode || mode || "ASSISTED").toUpperCase();
   const executionPathLabel =
@@ -52,26 +56,73 @@ export const UserScannerPage = () => {
         ? "SEMI_AUTO_ACTIVE"
         : "MANUAL_REVIEW_FLOW";
 
-  const load = async () => {
+  const formatDateLabel = (value) => {
+    if (!value) {
+      return "-";
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return "-";
+    }
+    return parsed.toLocaleString("tr-TR");
+  };
+
+  const saveAutomationConfig = async ({ autoEnabled, withToast = true } = {}) => {
+    const nextEnabled = typeof autoEnabled === "boolean" ? autoEnabled : Boolean(automationConfig?.auto_enabled ?? true);
+    setIsSavingAutomation(true);
+    try {
+      const { data } = await apiClient.put("/user/scanner/automation", {
+        auto_enabled: nextEnabled,
+        interval_seconds: AUTO_SCAN_INTERVAL_SECONDS,
+        max_results: 25,
+        symbol_source: symbolSource,
+        symbol_selection_mode: symbolMode,
+        selected_symbols: selectedSymbols,
+      });
+      setAutomationConfig(data || null);
+      if (withToast) {
+        toast.success(nextEnabled ? "3 dakikalık otomatik scanner aktif" : "Otomatik scanner kapatıldı");
+      }
+      return data;
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Otomasyon ayarı kaydedilemedi");
+      throw error;
+    } finally {
+      setIsSavingAutomation(false);
+    }
+  };
+
+  const load = async ({ hydrateSelection = false } = {}) => {
     setIsLoading(true);
-    const [modeRes, overviewRes, resultsRes] = await Promise.all([
+    const [modeRes, overviewRes, resultsRes, automationRes] = await Promise.all([
       apiClient.get("/user/signal-mode"),
       apiClient.get("/user/scanner"),
       apiClient.get("/user/scanner/results", { params: { limit: 80 } }),
+      apiClient.get("/user/scanner/automation"),
     ]);
     setMode(modeRes.data.mode || "ASSISTED");
     setOverview(overviewRes.data);
     setScannerResults(resultsRes.data || []);
+    const automation = automationRes?.data || null;
+    setAutomationConfig(automation);
+    if (hydrateSelection && automation) {
+      setSymbolSource(automation.symbol_source || "crypto");
+      setSymbolMode(automation.symbol_selection_mode || "top_active_50");
+      setSelectedSymbols(Array.isArray(automation.selected_symbols) ? automation.selected_symbols : []);
+    }
     setIsLoading(false);
   };
 
   useEffect(() => {
-    load();
+    load({ hydrateSelection: true });
   }, []);
 
   const runScanner = async () => {
     setIsRunning(true);
     try {
+      if (automationConfig?.auto_enabled) {
+        await saveAutomationConfig({ autoEnabled: true, withToast: false });
+      }
       await apiClient.put("/user/signal-mode", { mode });
       const { data } = await apiClient.post("/user/scanner/run", {
         mode,
@@ -109,6 +160,9 @@ export const UserScannerPage = () => {
         toast.warning((data.warnings || []).join(","));
       }
       toast.success(`Preset çalıştı: ${preset.label}`);
+      if (automationConfig?.auto_enabled) {
+        await saveAutomationConfig({ autoEnabled: true, withToast: false });
+      }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Preset çalıştırılamadı");
     } finally {
@@ -191,6 +245,38 @@ export const UserScannerPage = () => {
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-source">Source: {symbolSource.toUpperCase()}</p>
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-symbol-mode">Symbol Mode: {symbolMode}</p>
         </div>
+      </section>
+
+      <section className="col-span-12 rounded border border-emerald-800/50 bg-emerald-950/20 p-4" data-testid="user-scanner-automation-card">
+        <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="user-scanner-automation-title">Scanner Otomasyon (3 Dakika)</p>
+        <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="user-scanner-automation-grid">
+          <p className="text-sm" data-testid="user-scanner-automation-status">Durum: {automationConfig?.auto_enabled ? "AKTİF" : "PASİF"}</p>
+          <p className="text-sm" data-testid="user-scanner-automation-interval">Periyot: 3 dakika</p>
+          <p className="text-sm" data-testid="user-scanner-automation-last-run">Son Çalışma: {formatDateLabel(automationConfig?.last_run_at)}</p>
+          <p className="text-sm" data-testid="user-scanner-automation-next-run">Sonraki Çalışma: {formatDateLabel(automationConfig?.next_run_at)}</p>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2" data-testid="user-scanner-automation-actions">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => saveAutomationConfig({ autoEnabled: !(automationConfig?.auto_enabled ?? true) })}
+            disabled={isSavingAutomation}
+            data-testid="user-scanner-automation-toggle-button"
+          >
+            {isSavingAutomation ? "Kaydediliyor..." : automationConfig?.auto_enabled ? "Otomatik Tetiklemeyi Kapat" : "Otomatik Tetiklemeyi Aç"}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => saveAutomationConfig({ autoEnabled: true })}
+            disabled={isSavingAutomation}
+            data-testid="user-scanner-automation-save-selection-button"
+          >
+            {isSavingAutomation ? "Kaydediliyor..." : "Seçimi Kaydet (Otomasyona)"}
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-emerald-200" data-testid="user-scanner-automation-hint">
+          Kaynak + seçim modu + seçili semboller bir kez kaydedilir; otomatik scanner her 3 dakikada bu kayıtlı seçimle çalışır.
+        </p>
       </section>
 
       <div className="col-span-12 flex flex-wrap items-center gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-controls">

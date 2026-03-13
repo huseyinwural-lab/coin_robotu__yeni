@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from models import (
     RiskPolicy,
     SignalEvent,
     UserExchangeConnection,
+    UserScannerAutomationConfig,
     UserScannerResult,
     UserSignalMode,
 )
@@ -28,6 +29,8 @@ from services.venue_service import check_user_venue_access, seed_binance_venue_r
 
 ALLOWED_SIGNAL_MODES = {"ASSISTED", "AUTO", "MANUAL"}
 DEFAULT_SIGNAL_MODE = "MANUAL"
+ALLOWED_SCANNER_SOURCES = {"crypto", "stock"}
+ALLOWED_SCANNER_SELECTION_MODES = {"bot_scope", "all_exchange", "top_active_50", "top_active_100", "custom_list"}
 
 SIGNAL_PENDING_REASON_HINTS = {
     "MANUAL_APPROVAL_REQUIRED": (
@@ -66,6 +69,114 @@ def _normalize_mode(mode: str | None) -> str:
     if candidate not in ALLOWED_SIGNAL_MODES:
         return DEFAULT_SIGNAL_MODE
     return candidate
+
+
+def _normalize_symbol_source(source: str | None) -> str:
+    candidate = str(source or "crypto").strip().lower()
+    return candidate if candidate in ALLOWED_SCANNER_SOURCES else "crypto"
+
+
+def _normalize_symbol_selection_mode(selection_mode: str | None) -> str:
+    candidate = str(selection_mode or "top_active_50").strip().lower()
+    return candidate if candidate in ALLOWED_SCANNER_SELECTION_MODES else "top_active_50"
+
+
+def _normalize_selected_symbols(symbols: list[str] | None) -> list[str]:
+    normalized = [str(item or "").strip().upper() for item in (symbols or []) if str(item or "").strip()]
+    return list(dict.fromkeys(normalized))
+
+
+def _clamp_scanner_max_results(max_results: int | None) -> int:
+    try:
+        value = int(max_results or 25)
+    except (TypeError, ValueError):
+        value = 25
+    return max(5, min(100, value))
+
+
+def _clamp_interval_seconds(interval_seconds: int | None) -> int:
+    try:
+        value = int(interval_seconds or 180)
+    except (TypeError, ValueError):
+        value = 180
+    return 180 if value != 180 else value
+
+
+def _next_scanner_run_at(config: UserScannerAutomationConfig) -> datetime | None:
+    if not config.auto_enabled:
+        return None
+    if config.last_run_at is None:
+        return datetime.now(timezone.utc)
+    base = config.last_run_at
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    return base + timedelta(seconds=int(config.interval_seconds or 180))
+
+
+def get_or_create_scanner_automation_config(db: Session, user_id: str) -> UserScannerAutomationConfig:
+    row = db.query(UserScannerAutomationConfig).filter(UserScannerAutomationConfig.user_id == user_id).first()
+    if row:
+        return row
+
+    row = UserScannerAutomationConfig(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        auto_enabled=True,
+        interval_seconds=180,
+        max_results=25,
+        symbol_source="crypto",
+        symbol_selection_mode="top_active_50",
+        selected_symbols=[],
+        last_run_status="idle",
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def update_scanner_automation_config(
+    db: Session,
+    user_id: str,
+    *,
+    auto_enabled: bool,
+    interval_seconds: int,
+    max_results: int,
+    symbol_source: str,
+    symbol_selection_mode: str,
+    selected_symbols: list[str],
+) -> UserScannerAutomationConfig:
+    row = get_or_create_scanner_automation_config(db, user_id)
+    row.auto_enabled = bool(auto_enabled)
+    row.interval_seconds = _clamp_interval_seconds(interval_seconds)
+    row.max_results = _clamp_scanner_max_results(max_results)
+    row.symbol_source = _normalize_symbol_source(symbol_source)
+    row.symbol_selection_mode = _normalize_symbol_selection_mode(symbol_selection_mode)
+    row.selected_symbols = _normalize_selected_symbols(selected_symbols)
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def scanner_automation_config_response_payload(config: UserScannerAutomationConfig) -> dict:
+    return {
+        "id": config.id,
+        "user_id": config.user_id,
+        "auto_enabled": bool(config.auto_enabled),
+        "interval_seconds": int(config.interval_seconds or 180),
+        "max_results": _clamp_scanner_max_results(config.max_results),
+        "symbol_source": _normalize_symbol_source(config.symbol_source),
+        "symbol_selection_mode": _normalize_symbol_selection_mode(config.symbol_selection_mode),
+        "selected_symbols": _normalize_selected_symbols(config.selected_symbols),
+        "last_run_id": config.last_run_id,
+        "last_run_status": config.last_run_status or "idle",
+        "last_run_error": config.last_run_error,
+        "last_run_at": config.last_run_at,
+        "next_run_at": _next_scanner_run_at(config),
+        "created_at": config.created_at,
+        "updated_at": config.updated_at,
+    }
 
 
 def _user_symbols_scope(db: Session, user_id: str) -> set[str]:
