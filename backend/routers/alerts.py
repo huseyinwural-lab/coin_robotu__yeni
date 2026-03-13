@@ -1,7 +1,10 @@
 from datetime import datetime, timezone
+import csv
+import io
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -41,6 +44,68 @@ def get_system_alerts(
         date_from=parsed_from,
         date_to=parsed_to,
         limit=limit,
+    )
+
+
+@router.get("/export.csv")
+def export_system_alerts_csv(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    status_filter: str | None = Query(default="all"),
+    severity: str | None = None,
+    alert_type: str | None = None,
+    entity_key: str | None = None,
+    limit: int = 2000,
+):
+    _ = current_admin
+    status_value = status_filter if status_filter != "all" else None
+    rows = list_system_alerts(
+        db,
+        status=status_value,
+        severity=severity,
+        alert_type=alert_type,
+        entity_key=entity_key,
+        limit=min(limit, 5000),
+    )
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        [
+            "id",
+            "alert_type",
+            "severity",
+            "status",
+            "entity_key",
+            "occurrences",
+            "message",
+            "root_cause_code",
+            "created_at",
+            "updated_at",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row.id,
+                row.alert_type,
+                row.severity,
+                row.status,
+                row.entity_key,
+                row.occurrences,
+                row.message,
+                row.root_cause_code,
+                row.created_at.isoformat() if row.created_at else "",
+                row.updated_at.isoformat() if row.updated_at else "",
+            ]
+        )
+
+    buffer.seek(0)
+    filename = f"system_alerts_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 

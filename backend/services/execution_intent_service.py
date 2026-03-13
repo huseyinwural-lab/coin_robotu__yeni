@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db import redis_client
@@ -1033,6 +1034,64 @@ def list_execution_queue(db: Session, *, status_filter: str = "QUEUED", limit: i
     if status_filter != "all":
         query = query.filter(UserExecutionIntent.status == status_filter)
     return query.order_by(UserExecutionIntent.created_at.desc()).limit(limit).all()
+
+
+def retry_execution_intent(db: Session, intent_id: str, admin_user_id: str, admin_note: str = "") -> UserExecutionIntent:
+    intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.id == intent_id).first()
+    if intent is None:
+        raise ValueError("intent_not_found")
+    if intent.status != "REJECTED":
+        raise ValueError("intent_not_retryable")
+
+    intent.status = "QUEUED"
+    intent.submitted_at = datetime.now(timezone.utc)
+    intent.approved_at = None
+    intent.released_at = None
+    intent.cancelled_at = None
+    intent.admin_user_id = admin_user_id
+    intent.admin_note = admin_note or "retried_from_admin_queue"
+    intent.reject_reason_codes = []
+    db.commit()
+    db.refresh(intent)
+    return intent
+
+
+def rejection_reason_summary(db: Session, limit: int = 500) -> list[dict]:
+    rows = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.status == "REJECTED")
+        .order_by(UserExecutionIntent.updated_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    buckets: dict[str, int] = {}
+    for row in rows:
+        reasons = row.reject_reason_codes or ["unspecified"]
+        for reason in reasons:
+            key = str(reason or "unspecified")
+            buckets[key] = buckets.get(key, 0) + 1
+
+    return [
+        {"reason_code": reason_code, "count": count}
+        for reason_code, count in sorted(buckets.items(), key=lambda item: item[1], reverse=True)
+    ]
+
+
+def queue_status_summary(db: Session) -> dict:
+    rows = (
+        db.query(UserExecutionIntent.status, func.count(UserExecutionIntent.id))
+        .group_by(UserExecutionIntent.status)
+        .all()
+    )
+    by_status = {str(status): int(count) for status, count in rows}
+    return {
+        "total": int(sum(by_status.values())),
+        "queued": int(by_status.get("QUEUED", 0)),
+        "rejected": int(by_status.get("REJECTED", 0)),
+        "released": int(by_status.get("RELEASED", 0)),
+        "by_status": by_status,
+    }
 
 
 def list_user_execution_intents(db: Session, user_id: str, limit: int = 50) -> list[UserExecutionIntent]:

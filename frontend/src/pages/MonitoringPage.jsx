@@ -110,6 +110,9 @@ export const MonitoringPage = () => {
   const progressPct = overrideExpiryMs && releaseGate?.override_active
     ? Math.max(0, Math.min(100, (remainingMs / (30 * 60 * 1000)) * 100))
     : 0;
+  const reconnectCount = Number(metrics?.websocket_reconnects_5m || 0);
+  const wsStatus = String(metrics?.websocket_status || "unknown").toLowerCase();
+  const wsHealthState = wsStatus.includes("reconnect") || reconnectCount > 3 ? "degraded" : "healthy";
 
   const submitOverride = async () => {
     if (!overrideForm.reason_note || overrideForm.reason_note.trim().length < 12) {
@@ -246,6 +249,14 @@ export const MonitoringPage = () => {
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-failed-pending">Failed Events Pending: {metrics?.failed_events_pending ?? "-"}</p>
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-failed-dead">Failed Events Dead: {metrics?.failed_events_dead ?? "-"}</p>
         <p className="mt-1 font-mono text-xs text-slate-400" data-testid="monitoring-kill-switch-reasons">Kill Switch Reasons: {(metrics?.kill_switch_reasons || []).join(",") || "-"}</p>
+      </div>
+
+      <div className="border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-websocket-health-panel">
+        <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="monitoring-websocket-health-title">WebSocket Health</p>
+        <p className="mt-2 text-sm" data-testid="monitoring-websocket-health-state">state={wsHealthState} · raw_status={metrics?.websocket_status || "-"}</p>
+        <p className="mt-1 text-xs text-slate-400" data-testid="monitoring-websocket-health-reconnect-count">reconnects_5m={reconnectCount}</p>
+        <p className="mt-1 text-xs text-slate-400" data-testid="monitoring-websocket-health-latency">latency_ms={metrics?.latency_ms ?? "-"}</p>
+        <Button className="mt-3 bg-blue-700 text-white hover:bg-blue-800" onClick={fetchMonitoring} data-testid="monitoring-websocket-health-refresh-button">WS Sağlığını Yenile</Button>
       </div>
 
       <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-permission-drift-panel">

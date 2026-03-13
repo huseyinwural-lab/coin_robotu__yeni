@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -319,10 +320,11 @@ export const AdminCrossDashboardConsistencyPage = () => {
 
         <div className="mt-3 overflow-x-auto" data-testid="admin-cross-dashboard-consistency-matrix-table-wrapper">
           <table className="min-w-full text-sm" data-testid="admin-cross-dashboard-consistency-matrix-table">
-            <thead className="bg-slate-800 text-left" data-testid="admin-cross-dashboard-consistency-matrix-table-head">
+            <thead className="sticky top-0 z-20 bg-slate-800 text-left" data-testid="admin-cross-dashboard-consistency-matrix-table-head">
               <tr>
                 <th className="px-3 py-2">Panel</th>
                 <th className="px-3 py-2">Route</th>
+                <th className="px-3 py-2">Drilldown</th>
                 <th className="px-3 py-2">Runtime</th>
                 <th className="px-3 py-2">loading</th>
                 <th className="px-3 py-2">empty</th>
@@ -337,6 +339,11 @@ export const AdminCrossDashboardConsistencyPage = () => {
                 <tr key={item.panel_key} className="border-t border-slate-800" data-testid={`admin-cross-dashboard-consistency-matrix-row-${item.panel_key}`}>
                   <td className="px-3 py-2" data-testid={`admin-cross-dashboard-consistency-matrix-title-${item.panel_key}`}>{item.title}</td>
                   <td className="px-3 py-2" data-testid={`admin-cross-dashboard-consistency-matrix-route-${item.panel_key}`}>{item.route}</td>
+                  <td className="px-3 py-2" data-testid={`admin-cross-dashboard-consistency-matrix-drilldown-${item.panel_key}`}>
+                    <Link className="text-blue-300 underline" to={item.route} data-testid={`admin-cross-dashboard-consistency-matrix-drilldown-link-${item.panel_key}`}>
+                      paneli aç
+                    </Link>
+                  </td>
                   <td className="px-3 py-2" data-testid={`admin-cross-dashboard-consistency-matrix-runtime-${item.panel_key}`}>{item.runtime_state}</td>
                   <td className="px-3 py-2" data-testid={`admin-cross-dashboard-consistency-matrix-loading-${item.panel_key}`}>{String(item.state_coverage?.loading)}</td>
                   <td className="px-3 py-2" data-testid={`admin-cross-dashboard-consistency-matrix-empty-${item.panel_key}`}>{String(item.state_coverage?.empty)}</td>
@@ -348,7 +355,7 @@ export const AdminCrossDashboardConsistencyPage = () => {
               ))}
               {filteredPanels.length === 0 && (
                 <tr className="border-t border-slate-800" data-testid="admin-cross-dashboard-consistency-matrix-empty-row">
-                  <td colSpan={9} className="px-3 py-4 text-center text-sm text-slate-400" data-testid="admin-cross-dashboard-consistency-matrix-empty-text">Filtreye uygun panel bulunamadı.</td>
+                  <td colSpan={10} className="px-3 py-4 text-center text-sm text-slate-400" data-testid="admin-cross-dashboard-consistency-matrix-empty-text">Filtreye uygun panel bulunamadı.</td>
                 </tr>
               )}
             </tbody>
@@ -372,7 +379,7 @@ export const AdminCrossDashboardConsistencyPage = () => {
 
         <div className="mt-3 overflow-x-auto" data-testid="admin-cross-dashboard-consistency-contract-table-wrapper">
           <table className="min-w-full text-sm" data-testid="admin-cross-dashboard-consistency-contract-table">
-            <thead className="bg-slate-800 text-left" data-testid="admin-cross-dashboard-consistency-contract-table-head">
+            <thead className="sticky top-0 z-20 bg-slate-800 text-left" data-testid="admin-cross-dashboard-consistency-contract-table-head">
               <tr>
                 <th className="px-3 py-2">Panel</th>
                 <th className="px-3 py-2">Endpoint</th>
@@ -447,7 +454,7 @@ export const AdminCrossDashboardConsistencyPage = () => {
 
         <div className="mt-3 overflow-x-auto" data-testid="admin-cross-dashboard-consistency-metric-table-wrapper">
           <table className="min-w-full text-sm" data-testid="admin-cross-dashboard-consistency-metric-table">
-            <thead className="bg-slate-800 text-left" data-testid="admin-cross-dashboard-consistency-metric-table-head">
+            <thead className="sticky top-0 z-20 bg-slate-800 text-left" data-testid="admin-cross-dashboard-consistency-metric-table-head">
               <tr>
                 <th className="px-3 py-2">Metric</th>
                 <th className="px-3 py-2">Canonical</th>

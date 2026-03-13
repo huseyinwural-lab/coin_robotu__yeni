@@ -49,3 +49,12 @@ def strategy_observability_report(
     db: Session = Depends(get_db),
 ):
     return get_strategy_observability_report(db, window=window)
+
+
+@router.get("/observability-report")
+def strategy_observability_report_alias(
+    window: str = Query(default="24h"),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return get_strategy_observability_report(db, window=window)

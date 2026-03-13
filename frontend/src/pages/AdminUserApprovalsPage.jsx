@@ -15,6 +15,7 @@ export const AdminUserApprovalsPage = () => {
   const [sortDir, setSortDir] = useState("asc");
   const [selectedIds, setSelectedIds] = useState([]);
   const [rejectReason, setRejectReason] = useState("");
+  const [emailSuggestions, setEmailSuggestions] = useState([]);
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
@@ -40,6 +41,20 @@ export const AdminUserApprovalsPage = () => {
     loadRequests();
   }, [loadRequests]);
 
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await apiClient.get("/admin/user-approvals/email-suggestions", {
+          params: { query: search || "", limit: 8 },
+        });
+        setEmailSuggestions(data?.suggestions || []);
+      } catch (_error) {
+        setEmailSuggestions([]);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const allSelected = useMemo(
     () => requests.length > 0 && selectedIds.length === requests.length,
     [requests, selectedIds],
@@ -62,6 +77,8 @@ export const AdminUserApprovalsPage = () => {
       toast.error("En az bir kullanıcı seçin");
       return;
     }
+    const confirmed = window.confirm(`${selectedIds.length} kullanıcı onaylansın mı?`);
+    if (!confirmed) return;
     try {
       await apiClient.post("/admin/user-approvals/bulk-approve", { ids: selectedIds });
       toast.success("Seçili kullanıcılar onaylandı");
@@ -81,6 +98,8 @@ export const AdminUserApprovalsPage = () => {
       toast.error("Reject reason zorunlu");
       return;
     }
+    const confirmed = window.confirm(`${selectedIds.length} kullanıcı reddedilsin mi?`);
+    if (!confirmed) return;
     try {
       await apiClient.post("/admin/user-approvals/bulk-reject", { ids: selectedIds, reason: rejectReason });
       toast.success("Seçili kullanıcılar reddedildi");
@@ -93,6 +112,8 @@ export const AdminUserApprovalsPage = () => {
   };
 
   const handleSingleApprove = async (userId) => {
+    const confirmed = window.confirm("Bu kullanıcıyı onaylamak istiyor musun?");
+    if (!confirmed) return;
     try {
       await apiClient.post("/admin/user-approvals/bulk-approve", { ids: [userId] });
       toast.success("Kullanıcı onaylandı");
@@ -104,12 +125,29 @@ export const AdminUserApprovalsPage = () => {
 
   const handleSingleReject = async (userId) => {
     const reason = rejectReason.trim() || "manual_reject";
+    const confirmed = window.confirm("Bu kullanıcıyı reddetmek istiyor musun?");
+    if (!confirmed) return;
     try {
       await apiClient.post("/admin/user-approvals/bulk-reject", { ids: [userId], reason });
       toast.success("Kullanıcı reddedildi");
       loadRequests();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Reddetme işlemi başarısız");
+    }
+  };
+
+  const handleRejectStale = async () => {
+    const confirmed = window.confirm("30 günden eski pending talepler reddedilsin mi?");
+    if (!confirmed) return;
+    try {
+      const { data } = await apiClient.post("/admin/user-approvals/reject-stale", {
+        stale_days: 30,
+        reason: "stale_pending_auto_reject",
+      });
+      toast.success(`${data?.count || 0} stale talep reddedildi`);
+      await loadRequests();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Stale reject başarısız");
     }
   };
 
@@ -130,8 +168,16 @@ export const AdminUserApprovalsPage = () => {
             placeholder="Search email"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
+            list="admin-user-approvals-email-suggestions"
             data-testid="admin-user-approvals-search-input"
           />
+          <datalist id="admin-user-approvals-email-suggestions" data-testid="admin-user-approvals-email-suggestions-list">
+            {emailSuggestions.map((item, index) => (
+              <option key={item} value={item} data-testid={`admin-user-approvals-email-suggestion-${index}`}>
+                {item}
+              </option>
+            ))}
+          </datalist>
           <select
             className="border border-black/40 bg-white px-3 py-2 text-sm"
             value={sortBy}
@@ -172,6 +218,13 @@ export const AdminUserApprovalsPage = () => {
             data-testid="admin-user-approvals-bulk-reject-button"
           >
             Bulk Reject
+          </Button>
+          <Button
+            className="border border-black bg-amber-500 text-black hover:bg-amber-600"
+            onClick={handleRejectStale}
+            data-testid="admin-user-approvals-reject-stale-button"
+          >
+            Reject Stale (&gt;30g)
           </Button>
           <Input
             placeholder="Reject reason (zorunlu)"

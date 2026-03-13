@@ -8,6 +8,7 @@ from core.config import settings
 from core.structured_logging import configure_structured_logging
 from db import Base, engine
 from routers import (
+    admin_action_center,
     admin_emergency,
     admin_control,
     admin_futures_adl_status,
@@ -46,6 +47,7 @@ from routers import (
     spot_strategy,
     ops_alerts,
     report_archive,
+    reports_alias,
     risk_policies,
     admin_execution,
     user_approvals,
@@ -108,6 +110,7 @@ api_router.include_router(strategy_domain.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(alerts.router)
 api_router.include_router(report_archive.router)
+api_router.include_router(reports_alias.router)
 api_router.include_router(ops_alerts.router)
 api_router.include_router(user_approvals.router)
 api_router.include_router(admin_users.router)
@@ -135,6 +138,7 @@ api_router.include_router(admin_strategy_risk_capital.router)
 api_router.include_router(admin_strategy_observability.router)
 api_router.include_router(admin_execution.router)
 api_router.include_router(admin_emergency.router)
+api_router.include_router(admin_action_center.router)
 api_router.include_router(admin_phase9_meta.router)
 api_router.include_router(admin_positions_monitor.router)
 api_router.include_router(admin_strategy_intelligence.router)

@@ -7,6 +7,8 @@ import { apiClient } from "@/lib/api";
 
 export const AdminExecutionQueuePage = () => {
   const [queueRows, setQueueRows] = useState([]);
+  const [rejectionSummary, setRejectionSummary] = useState([]);
+  const [queueSnapshot, setQueueSnapshot] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
   const [loadError, setLoadError] = useState("");
@@ -16,8 +18,13 @@ export const AdminExecutionQueuePage = () => {
     setIsLoading(true);
     setLoadError("");
     try {
-      const { data } = await apiClient.get("/admin/execution-queue", { params: { status_filter: statusFilter, limit: 200 } });
+      const [{ data }, { data: summaryData }] = await Promise.all([
+        apiClient.get("/admin/execution-queue", { params: { status_filter: statusFilter, limit: 200 } }),
+        apiClient.get("/admin/execution-queue/rejection-summary", { params: { limit: 500 } }),
+      ]);
       setQueueRows(data || []);
+      setRejectionSummary(summaryData?.rejection_reason_distribution || []);
+      setQueueSnapshot(summaryData?.queue || null);
     } catch (error) {
       const message = error?.response?.data?.detail || "Execution queue verisi yüklenemedi";
       setLoadError(message);
@@ -56,6 +63,19 @@ export const AdminExecutionQueuePage = () => {
       await load();
     } catch (error) {
       toast.error(error?.response?.data?.detail || `Intent ${action} başarısız`);
+    } finally {
+      setDecisionIntentId("");
+    }
+  };
+
+  const retryRejected = async (intentId) => {
+    setDecisionIntentId(intentId);
+    try {
+      await apiClient.post(`/admin/execution-queue/${intentId}/retry`, { note: "retry_from_admin_ui" });
+      toast.success("Intent yeniden kuyruğa alındı");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Retry başarısız");
     } finally {
       setDecisionIntentId("");
     }
@@ -130,6 +150,21 @@ export const AdminExecutionQueuePage = () => {
         </article>
       </div>
 
+      <section className="border border-slate-800 bg-slate-900 p-4" data-testid="admin-execution-queue-rejection-summary-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-execution-queue-rejection-summary-header-row">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-execution-queue-rejection-summary-title">Rejected Intent Root-Cause Summary</p>
+          <p className="text-xs text-slate-400" data-testid="admin-execution-queue-rejection-summary-queue-snapshot">queued={queueSnapshot?.queued ?? 0} · rejected={queueSnapshot?.rejected ?? 0} · total={queueSnapshot?.total ?? 0}</p>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="admin-execution-queue-rejection-summary-grid">
+          {rejectionSummary.slice(0, 12).map((item, index) => (
+            <div key={`${item.reason_code}-${index}`} className="border border-slate-700 p-2 text-xs" data-testid={`admin-execution-queue-rejection-reason-${index}`}>
+              {item.reason_code}: {item.count}
+            </div>
+          ))}
+          {rejectionSummary.length === 0 && <p className="text-xs text-slate-400" data-testid="admin-execution-queue-rejection-summary-empty">Rejected reason dağılımı yok.</p>}
+        </div>
+      </section>
+
       <div className="overflow-x-auto border border-slate-800 bg-slate-900" data-testid="admin-execution-queue-table-wrapper">
         <table className="min-w-full text-sm" data-testid="admin-execution-queue-table" aria-label="Execution queue tablosu">
           <thead className="sticky top-0 z-20 bg-slate-800 text-left" data-testid="admin-execution-queue-table-head">
@@ -167,6 +202,12 @@ export const AdminExecutionQueuePage = () => {
                     <div className="flex gap-2" data-testid={`admin-execution-queue-actions-${row.id}`}>
                       <Button className="bg-emerald-500 text-black hover:bg-emerald-400" onClick={() => decide(row.id, "approve")} disabled={decisionIntentId === row.id} data-testid={`admin-execution-queue-approve-button-${row.id}`}>Approve</Button>
                       <Button variant="outline" onClick={() => decide(row.id, "reject")} disabled={decisionIntentId === row.id} data-testid={`admin-execution-queue-reject-button-${row.id}`}>Reject</Button>
+                    </div>
+                  ) : row.status === "REJECTED" ? (
+                    <div className="flex gap-2" data-testid={`admin-execution-queue-retry-actions-${row.id}`}>
+                      <Button variant="outline" onClick={() => retryRejected(row.id)} disabled={decisionIntentId === row.id} data-testid={`admin-execution-queue-retry-button-${row.id}`}>
+                        Retry
+                      </Button>
                     </div>
                   ) : (
                     <span className="text-xs text-slate-400" data-testid={`admin-execution-queue-final-status-${row.id}`}>{row.status}</span>

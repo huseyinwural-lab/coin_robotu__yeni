@@ -138,6 +138,34 @@ export const AdminSystemAlertsPage = () => {
 
   const deliveryStatusLabel = (row, channel) => row?.delivery_status?.[channel]?.status || "-";
 
+  const exportCsv = async () => {
+    try {
+      const { data } = await apiClient.get("/admin/system-alerts/export.csv", {
+        params: {
+          status_filter: filters.status,
+          severity: filters.severity === "all" ? undefined : filters.severity,
+          alert_type: filters.alert_type || undefined,
+          entity_key: filters.entity_key || undefined,
+          limit: Number(filters.limit) || 50,
+        },
+        responseType: "blob",
+      });
+
+      const blob = new Blob([data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `system_alerts_${new Date().toISOString().slice(0, 19)}.csv`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      toast.success("CSV export indirildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "CSV export başarısız");
+    }
+  };
+
+  const maxTimelineCount = Math.max(...timeline.map((point) => Number(point.count || 0)), 1);
+
   return (
     <section className="space-y-4" data-testid="admin-system-alerts-page">
       <header className="border border-black/40 bg-orange-300 p-4" data-testid="admin-system-alerts-header">
@@ -191,6 +219,9 @@ export const AdminSystemAlertsPage = () => {
           <Button className="border border-black bg-white text-black hover:bg-neutral-100" onClick={loadData} data-testid="admin-system-alerts-refresh-button">
             Yenile
           </Button>
+          <Button className="border border-black bg-emerald-700 text-white hover:bg-emerald-800" onClick={exportCsv} data-testid="admin-system-alerts-export-csv-button">
+            CSV Export
+          </Button>
         </div>
       </div>
 
@@ -229,7 +260,14 @@ export const AdminSystemAlertsPage = () => {
         <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="admin-system-alerts-timeline-grid">
           {timeline.map((point) => (
             <div key={point.date} className="border border-black/20 bg-white px-2 py-2 text-xs" data-testid={`admin-system-alerts-timeline-point-${point.date}`}>
-              {point.date} · {point.count}
+              <p data-testid={`admin-system-alerts-timeline-point-label-${point.date}`}>{point.date} · {point.count}</p>
+              <div className="mt-1 h-2 w-full bg-black/10" data-testid={`admin-system-alerts-timeline-point-bar-wrapper-${point.date}`}>
+                <div
+                  className="h-full bg-orange-600"
+                  style={{ width: `${Math.max(6, (Number(point.count || 0) / maxTimelineCount) * 100)}%` }}
+                  data-testid={`admin-system-alerts-timeline-point-bar-${point.date}`}
+                />
+              </div>
             </div>
           ))}
           {timeline.length === 0 && <p className="text-xs text-black/70" data-testid="admin-system-alerts-timeline-empty-text">Timeline verisi yok.</p>}
@@ -238,7 +276,7 @@ export const AdminSystemAlertsPage = () => {
 
       <div className="border border-black/30 bg-orange-100" data-testid="admin-system-alerts-table-wrapper">
         <Table data-testid="admin-system-alerts-table">
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-20 bg-orange-100">
             <TableRow>
               <TableHead data-testid="admin-system-alerts-head-select">
                 <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} data-testid="admin-system-alerts-select-all-checkbox" />
