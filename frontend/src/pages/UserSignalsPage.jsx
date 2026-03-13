@@ -102,6 +102,9 @@ export const UserSignalsPage = () => {
     if ((blockedByCode.BOT_NOT_RUNNING || 0) > 0) {
       return "Bazı sinyaller BOT_NOT_RUNNING nedeniyle bloklu; satırdaki Auto Diagnose + Auto Fix ile toparlayın.";
     }
+    if ((blockedByCode.RISK_POLICY_MISSING || 0) > 0) {
+      return "RISK_POLICY_MISSING blokajı var; satırdaki Risk Policy Auto-Fix ile başlangıç policy'sini otomatik oluşturun.";
+    }
     if ((blockedByCode.ORDER_PRECHECK_FAILED || 0) > 0) {
       return "ORDER_PRECHECK_FAILED görüldü; Execute preview parametrelerini gözden geçirin.";
     }
@@ -369,6 +372,11 @@ export const UserSignalsPage = () => {
                   <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid={`user-signals-mobile-preview-intent-${signal.id}`}>Preview Intent</Button>
                   <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid={`user-signals-mobile-follow-signal-${signal.id}`}>Follow Signal</Button>
                   <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, false)} data-testid={`user-signals-mobile-diagnose-${signal.id}`}>Diagnose</Button>
+                  {signal.blocked_reason_code === "RISK_POLICY_MISSING" && (
+                    <Button className="bg-amber-500 text-black hover:bg-amber-600" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-mobile-risk-policy-autofix-${signal.id}`}>
+                      Risk Policy Auto-Fix
+                    </Button>
+                  )}
                   <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-mobile-diagnose-fix-${signal.id}`}>Auto Fix</Button>
                 </>
               )}
@@ -439,6 +447,11 @@ export const UserSignalsPage = () => {
                         <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid={`user-signals-preview-intent-button-${signal.id}`}>Preview Intent</Button>
                         <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid={`user-signals-follow-signal-button-${signal.id}`}>Follow Signal</Button>
                         <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, false)} data-testid={`user-signals-diagnose-button-${signal.id}`}>Diagnose</Button>
+                        {signal.blocked_reason_code === "RISK_POLICY_MISSING" && (
+                          <Button className="bg-amber-500 text-black hover:bg-amber-600" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-risk-policy-autofix-button-${signal.id}`}>
+                            Risk Policy Auto-Fix
+                          </Button>
+                        )}
                         <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-diagnose-fix-button-${signal.id}`}>Auto Fix</Button>
                       </>
                     ) : (

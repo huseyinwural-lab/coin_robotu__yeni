@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from core.security import create_access_token, hash_password, verify_password
 from models import User, UserRole
 from schemas import LoginRequest, RegisterRequest
+from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
 
 
 @dataclass
@@ -86,6 +87,7 @@ def approve_user_account(db: Session, user_id: str) -> User:
     user.is_active = True
     user.approved_at = datetime.now(timezone.utc)
     user.disabled_at = None
+    ensure_user_safe_default_risk_policy(db, user.id, commit=False)
     db.commit()
     db.refresh(user)
     return user

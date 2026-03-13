@@ -23,6 +23,7 @@ from services.explainability_service import record_decision_trace
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.pipeline.cache_store import get_json
 from services.pipeline.spot_strategy_service import scan_spot_universe_for_signals
+from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
 ALLOWED_SIGNAL_MODES = {"ASSISTED", "AUTO", "MANUAL"}
@@ -31,7 +32,7 @@ DEFAULT_SIGNAL_MODE = "MANUAL"
 SIGNAL_PENDING_REASON_HINTS = {
     "MANUAL_APPROVAL_REQUIRED": ("Sinyal manuel onay bekliyor.", "Sinyal satırından Approve ile devam edin."),
     "BOT_NOT_RUNNING": ("Bot runtime çalışmıyor.", "Bot profilini başlatın (is_running=true)."),
-    "RISK_POLICY_MISSING": ("Risk policy tanımlı değil.", "Risk Policy ekranından aktif policy oluşturun."),
+    "RISK_POLICY_MISSING": ("Risk policy tanımlı değil.", "Signals satırından Auto-Fix veya Risk Policy ekranından policy oluşturun."),
     "RISK_LIMIT_BLOCKED": ("Risk limiti engeli oluştu.", "Risk limitlerini veya mevcut pozisyon riskini kontrol edin."),
     "EXCHANGE_NOT_READY": ("Exchange readiness uygun değil.", "Exchange key/venue assignment/readiness durumunu düzeltin."),
     "MARKET_DATA_STALE": ("Piyasa verisi güncel değil.", "Market data akışını ve son candle zamanını doğrulayın."),
@@ -971,6 +972,11 @@ def diagnose_pending_signal(
                 bot.symbols = [*existing, symbol][:40]
                 bot.updated_at = datetime.now(timezone.utc)
                 actions_applied.append("symbol_added_to_bot_scope")
+
+    if auto_fix and row.blocked_reason_code == "RISK_POLICY_MISSING":
+        _, created = ensure_user_safe_default_risk_policy(db, row.user_id, commit=False)
+        if created:
+            actions_applied.append("safe_default_risk_policy_created")
 
     if actions_applied:
         db.flush()
