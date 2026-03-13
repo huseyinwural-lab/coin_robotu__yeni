@@ -1046,6 +1046,39 @@ class StrategyRegimeBinding(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class CanonicalStrategyRegistry(Base):
+    __tablename__ = "canonical_strategy_registry"
+
+    strategy_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    strategy_family: Mapped[str] = mapped_column(String(60), index=True)
+    direction: Mapped[str] = mapped_column(String(10), default="both")
+    market_regime: Mapped[str] = mapped_column(String(40), default="any")
+    entry_logic_version: Mapped[str] = mapped_column(String(40), default="v1")
+    exit_logic_version: Mapped[str] = mapped_column(String(40), default="v1")
+    risk_profile: Mapped[str] = mapped_column(String(40), default="balanced")
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    priority: Mapped[int] = mapped_column(Integer, default=100)
+    cooldown_policy: Mapped[str] = mapped_column(String(80), default="symbol:180s")
+    weight: Mapped[float] = mapped_column(Float, default=1.0)
+    entry_long: Mapped[dict] = mapped_column(JSON, default=dict)
+    entry_short: Mapped[dict] = mapped_column(JSON, default=dict)
+    exit_long: Mapped[dict] = mapped_column(JSON, default=dict)
+    exit_short: Mapped[dict] = mapped_column(JSON, default=dict)
+    invalid_state_rules: Mapped[list[str]] = mapped_column(JSON, default=list)
+    cooldown_rules: Mapped[dict] = mapped_column(JSON, default=dict)
+    risk_rules: Mapped[dict] = mapped_column(JSON, default=dict)
+    is_legacy_candidate: Mapped[bool] = mapped_column(Boolean, default=False)
+    in_production_path: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_50_signal_quality: Mapped[float] = mapped_column(Float, default=0.0)
+    false_allow_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    false_reject_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    cooldown_state: Mapped[str] = mapped_column(String(20), default="ready")
+    risk_block_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    forced_disable_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class RegimeSnapshot(Base):
     __tablename__ = "regime_snapshots"
 

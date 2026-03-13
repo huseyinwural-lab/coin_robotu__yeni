@@ -24,7 +24,7 @@ from services.execution_intent_service import (
 from services.explainability_service import record_decision_trace
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.pipeline.cache_store import get_json
-from services.pipeline.spot_strategy_service import scan_spot_universe_for_signals
+from services.pipeline.canonical_signal_engine import scan_canonical_universe_for_signals
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
@@ -884,23 +884,23 @@ def run_user_scanner(
 ) -> dict:
     mode_row = get_or_create_signal_mode(db, user_id)
     mode = _normalize_mode(requested_mode or mode_row.mode)
-    warnings: list[str] = []
+    warning_set: set[str] = set()
 
     if mode != "AUTO" and _has_active_bot(db, user_id):
         mode = "AUTO"
-        warnings.append("signal_mode_auto_enforced_for_active_bot")
+        warning_set.add("signal_mode_auto_enforced_for_active_bot")
 
     if mode_row.mode != mode:
         mode_row.mode = mode
         mode_row.updated_at = datetime.now(timezone.utc)
 
-    payload = scan_spot_universe_for_signals(redis_client, max_symbols=max(max_results, 30))
+    payload = scan_canonical_universe_for_signals(db, redis_client, max_symbols=max(max_results, 30))
     ranked = payload.get("top_ranked", [])
     scoped_symbols = _user_symbols_scope(db, user_id)
     normalized_selected_symbols = [str(item).strip().upper() for item in (selected_symbols or []) if str(item).strip()]
 
     if str(symbol_source or "crypto").lower() != "crypto":
-        warnings.append("scanner_currently_supports_crypto_only")
+        warning_set.add("scanner_currently_supports_crypto_only")
         ranked = []
 
     if normalized_selected_symbols:
@@ -917,6 +917,7 @@ def run_user_scanner(
     bot = _default_bot_for_user(db, user_id, selected_symbols)
     actionable_count = 0
     queued_count = 0
+    symbol_direction_seen: dict[str, str] = {}
 
     for item in selected:
         signal_value = str(item.get("signal", "none") or "none").lower()
@@ -924,7 +925,7 @@ def run_user_scanner(
         confidence = float(item.get("signal_strength") or 0)
         score = float(item.get("signal_score") or 0)
         symbol = str(item.get("symbol", "BTCUSDT")).upper()
-        strategy_code = str(item.get("strategy_code") or "spot_pullback_v1")
+        strategy_code = str(item.get("strategy_code") or "canonical_unknown")
         requested_notional = max(10.0, round(score, 4))
 
         meta_summary = run_meta_strategy_engine(
@@ -956,6 +957,12 @@ def run_user_scanner(
 
         if signal_value == "none":
             continue
+
+        existing_direction = symbol_direction_seen.get(symbol)
+        if existing_direction and existing_direction != signal_value:
+            warning_set.add("symbol_direction_conflict_blocked")
+            continue
+        symbol_direction_seen[symbol] = signal_value
 
         actionable_count += 1
         signal_event = SignalEvent(
@@ -1047,93 +1054,7 @@ def run_user_scanner(
         )
 
     if actionable_count == 0 and selected:
-        fallback = selected[0]
-        fallback_symbol = str(fallback.get("symbol", "BTCUSDT")).upper()
-        fallback_strategy = str(fallback.get("strategy_code") or "spot_pullback_v1")
-        fallback_signal = SignalEvent(
-            id=str(uuid.uuid4()),
-            bot_profile_id=bot.id,
-            user_id=user_id,
-            symbol=fallback_symbol,
-            market_type=bot.market_type,
-            timeframe=bot.timeframe,
-            strategy_id=fallback_strategy,
-            signal="long",
-            direction="long",
-            confidence=0.55,
-            reason_codes=["fallback_signal_low_activity"],
-        )
-        db.add(fallback_signal)
-        db.flush()
-
-        actionable_count += 1
-        fallback_pending = PendingSignal(
-            id=str(uuid.uuid4()),
-            signal_id=fallback_signal.id,
-            user_id=user_id,
-            symbol=fallback_symbol,
-            strategy_code=fallback_strategy,
-            confidence=0.55,
-            mode=mode,
-            status="pending",
-            strategy_weight=1.0,
-            allocation_source="fallback",
-            meta_engine_decision="ALLOW",
-            previous_state="DETECTED",
-            current_state="DETECTED",
-            bot_profile_id=bot.id,
-            runtime_owner=bot.name,
-            created_at=datetime.now(timezone.utc),
-            decision_note="fallback_signal_created",
-        )
-        db.add(fallback_pending)
-        db.flush()
-        _refresh_pending_signal_snapshot(db, fallback_pending)
-
-        if fallback_pending.status == "pending":
-            queued_count += 1
-
-        if mode == "AUTO" and fallback_pending.execution_eligible:
-            try:
-                connection = _resolve_default_exchange_connection(db, user_id)
-                _dispatch_signal_to_execution(
-                    db,
-                    row=fallback_pending,
-                    signal=fallback_signal,
-                    exchange_connection=connection,
-                    actor_user_id=user_id,
-                )
-            except Exception as exc:
-                _apply_order_precheck_failed(fallback_pending, error_detail=str(exc))
-
-        record_decision_trace(
-            db,
-            user_id=user_id,
-            trace_scope="signal",
-            trace_type="scanner_fallback_signal",
-            entity_id=fallback_pending.id,
-            strategy_code=fallback_strategy,
-            decision_status=fallback_pending.current_state,
-            reason_codes=[fallback_pending.blocked_reason_code] if fallback_pending.blocked_reason_code else ["fallback_signal_low_activity"],
-            strategy_allocation_reason="fallback_signal_created",
-            meta_engine_decision="ALLOW",
-            feature_snapshot={
-                "confidence": 0.55,
-                "mode": mode,
-                "signal": "long",
-                "strategy_weight": 1.0,
-                "execution_eligible": fallback_pending.execution_eligible,
-            },
-            context_payload={
-                "run_id": run_id,
-                "symbol": fallback_symbol,
-                "signal_event_id": fallback_signal.id,
-                "pending_status": fallback_pending.status,
-                "current_state": fallback_pending.current_state,
-                "allocation_source": "fallback",
-                "requires_manual_approval": fallback_pending.requires_manual_approval,
-            },
-        )
+        warning_set.add("no_actionable_signal_generated")
 
     db.commit()
     pending_total = (
@@ -1150,7 +1071,7 @@ def run_user_scanner(
         "pending_total": pending_total,
         "generated_at": datetime.now(timezone.utc),
         "selected_symbols": selected_symbols,
-        "warnings": warnings,
+        "warnings": sorted(warning_set),
     }
 
 

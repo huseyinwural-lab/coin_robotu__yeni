@@ -64,6 +64,7 @@ import { AdminPortfolioRiskPage } from "@/pages/AdminPortfolioRiskPage";
 import { AdminPositionsMonitorPage } from "@/pages/AdminPositionsMonitorPage";
 import { AdminStrategyIntelligencePage } from "@/pages/AdminStrategyIntelligencePage";
 import { AdminCrossDashboardConsistencyPage } from "@/pages/AdminCrossDashboardConsistencyPage";
+import { AdminCanonicalStrategyRegistryPage } from "@/pages/AdminCanonicalStrategyRegistryPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -138,6 +139,7 @@ function App() {
             <Route path="portfolio-risk" element={<AdminPortfolioRiskPage />} />
             <Route path="positions-monitor" element={<AdminPositionsMonitorPage />} />
             <Route path="strategy-intelligence" element={<AdminStrategyIntelligencePage />} />
+            <Route path="canonical-strategy-registry" element={<AdminCanonicalStrategyRegistryPage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />
             <Route path="correlation-matrix" element={<CorrelationMatrixPage />} />
             <Route path="execution-states" element={<ExecutionStatesPage />} />

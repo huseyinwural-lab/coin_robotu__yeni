@@ -1,0 +1,154 @@
+{
+  "summary": "Iteration 90 - Canonical Strategy Registry Sprint-1 - All features verified",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "features_tested": {
+    "canonical_strategy_registry_table": {
+      "status": "PASS",
+      "description": "Migration created canonical_strategy_registry table with 12 canonical + 9 legacy strategies",
+      "tests": [
+        "test_get_registry_with_legacy - 21 strategies total (PASS)",
+        "test_get_registry_without_legacy - 12 canonical strategies (PASS)",
+        "test_get_registry_canonical_strategies_enabled - 4 core enabled (PASS)",
+        "test_get_registry_legacy_candidates_disabled - 9 legacy disabled (PASS)"
+      ],
+      "verified_canonical_strategies": [
+        "ichimoku_trend_continuation (enabled, priority=10)",
+        "supertrend_flip (enabled, priority=15)",
+        "bollinger_squeeze_breakout (enabled, priority=12)",
+        "macd_impulse (enabled, priority=18)",
+        "golden_cross_regime (disabled)",
+        "structure_breakout (disabled)",
+        "moving_momentum (disabled)",
+        "vortex_directional_cross (disabled)",
+        "fibonacci_pullback_continuation (disabled)",
+        "fisher_reversal (disabled)",
+        "divergence_reversal_suite (disabled)",
+        "stochastic_exhaustion_reentry (disabled)"
+      ]
+    },
+    "get_canonical_registry_api": {
+      "status": "PASS",
+      "description": "GET /api/admin/canonical-strategies/registry works with include_legacy param",
+      "tests": [
+        "include_legacy=true returns 21 items (PASS)",
+        "include_legacy=false returns 12 items (PASS)"
+      ]
+    },
+    "put_canonical_registry_api": {
+      "status": "PASS",
+      "description": "PUT /api/admin/canonical-strategies/registry/{strategy_id} updates direction/is_enabled/priority/cooldown/weight",
+      "tests": [
+        "test_put_registry_update_direction (PASS)",
+        "test_put_registry_update_is_enabled (PASS)",
+        "test_put_registry_update_priority_weight_cooldown (PASS)",
+        "test_put_registry_nonexistent_strategy_404 (PASS)"
+      ]
+    },
+    "post_refresh_metrics_api": {
+      "status": "PASS",
+      "description": "POST /api/admin/canonical-strategies/registry/refresh-metrics updates quality/risk metrics",
+      "tests": [
+        "test_post_refresh_metrics (PASS)"
+      ],
+      "metrics_fields_verified": ["last_50_signal_quality", "false_allow_rate", "false_reject_rate", "cooldown_state"]
+    },
+    "user_scanner_canonical_engine": {
+      "status": "PASS",
+      "description": "User scanner uses canonical signal engine (not legacy spot scanner)",
+      "tests": [
+        "test_scanner_run_uses_canonical_strategies (PASS)",
+        "test_scanner_results_use_canonical_strategy_codes (PASS)"
+      ],
+      "verified": "Scanner results use canonical strategies like ichimoku_trend_continuation, macd_impulse"
+    },
+    "scanner_fallback_long_removed": {
+      "status": "PASS",
+      "description": "run_user_scanner no longer produces fallback long signals",
+      "tests": ["test_scanner_no_fallback_long_behavior (PASS)"],
+      "behavior": "no_actionable_signal_generated warning when no signals match thresholds"
+    },
+    "scanner_symbol_direction_conflict": {
+      "status": "PASS",
+      "description": "Scanner run blocks same symbol with conflicting directions",
+      "tests": ["test_scanner_symbol_direction_conflict_warning (PASS)"],
+      "warning": "symbol_direction_conflict_blocked"
+    },
+    "frontend_canonical_registry_page": {
+      "status": "PASS",
+      "description": "Admin Canonical Strategy Registry page renders and actions work",
+      "verified_elements": [
+        "Page title: CANONICAL STRATEGY REGISTRY",
+        "Description: Production path sadece canonical registry üzerinden çalışır. Legacy stratejiler arşivde tutulur.",
+        "Yenile button (refresh registry)",
+        "Metrik Yenile button (refresh metrics)",
+        "Table with columns: strategy_id, family, enabled, direction, regime, weight, priority, cooldown, quality(50), false_allow, false_reject, risk_block, forced_disable_reason, actions",
+        "Kaydet button per row (save changes)",
+        "LEGACY CANDIDATES (ARCHIVE ONLY) section"
+      ],
+      "toast_notifications": [
+        "Kaydedildi: {strategy_id} (on save)",
+        "Metrikler yenilendi (on metrics refresh)"
+      ]
+    },
+    "sidebar_canonical_registry_link": {
+      "status": "PASS",
+      "description": "Admin sidebar shows Canonical Strategy Registry link",
+      "location": "Between Strategy Allocation and Portfolio Risk in sidebar"
+    },
+    "legacy_module_wrappers": {
+      "status": "PASS",
+      "description": "Legacy modules moved to legacy folder with wrapper imports",
+      "tests": [
+        "test_spot_strategy_service_wrapper_exists (PASS)",
+        "test_strategy_engine_wrapper_exists (PASS)",
+        "test_legacy_spot_strategy_service_exists (PASS)",
+        "test_legacy_strategy_engine_exists (PASS)"
+      ],
+      "files": [
+        "/app/backend/services/pipeline/spot_strategy_service.py (wrapper)",
+        "/app/backend/services/pipeline/strategy_engine.py (wrapper)",
+        "/app/backend/services/pipeline/legacy/spot_strategy_service.py (original)",
+        "/app/backend/services/pipeline/legacy/strategy_engine.py (original)"
+      ]
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter90_canonical_strategy_registry.py",
+    "/app/test_reports/pytest/pytest_results_iter90_canonical_registry.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iter90_canonical_strategy_registry.py"
+  ],
+  "success_rate": {
+    "backend": "100% (20/20 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!",
+    "user": "TEST_phase4iter2_pipeline@example.com / TestPassword123!"
+  },
+  "seed_data_creation": "Bootstrap seeds 12 canonical + 9 legacy strategies into canonical_strategy_registry table",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sprint-1 canonical strategy registry complete. 12 canonical strategies in production path with 4 core enabled (ichimoku, supertrend, bollinger, macd). 9 legacy candidates archived with forced_disable_reason. Admin page at /admin/canonical-strategy-registry with full CRUD. User scanner now uses canonical_signal_engine with THRESHOLD=5, REJECT_THRESHOLD=2. Symbol direction conflict blocking and no_actionable_signal_generated warnings work. Legacy modules in /services/pipeline/legacy/ with wrapper imports in parent folder.",
+  "mocked_apis": {
+    "email_verification": "Email delivery provider is MOCKED; verification code is returned directly by API"
+  },
+  "screenshots": {
+    "02_canonical_registry_page": "/app/test_reports/artifacts_iter90/02_canonical_registry_page.jpeg",
+    "04_admin_sidebar_links": "/app/test_reports/artifacts_iter90/04_admin_sidebar_links.jpeg",
+    "05_canonical_registry_final": "/app/test_reports/artifacts_iter90/05_canonical_registry_final.jpeg",
+    "06_after_save_action": "/app/test_reports/artifacts_iter90/06_after_save_action.jpeg",
+    "07_after_metrics_refresh": "/app/test_reports/artifacts_iter90/07_after_metrics_refresh.jpeg"
+  }
+}

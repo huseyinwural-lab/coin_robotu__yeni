@@ -85,6 +85,7 @@ const adminOnlyItems = [
   { to: "/admin/execution-policies", label: "Execution Policies", icon: Settings2, testId: "nav-execution-policies-link" },
   { to: "/admin/execution-queue", label: "Execution Queue", icon: Wrench, testId: "nav-execution-queue-link" },
   { to: "/admin/strategy-allocation", label: "Strategy Allocation", icon: BarChartBig, testId: "nav-strategy-allocation-link" },
+  { to: "/admin/canonical-strategy-registry", label: "Canonical Strategy Registry", icon: ClipboardList, testId: "nav-canonical-strategy-registry-link" },
   { to: "/admin/portfolio-risk", label: "Portfolio Risk", icon: ShieldAlert, testId: "nav-portfolio-risk-link" },
   { to: "/admin/strategy-intelligence", label: "Strategy Intelligence", icon: Radar, testId: "nav-strategy-intelligence-link" },
   { to: "/admin/positions-monitor", label: "Positions Monitor", icon: Activity, testId: "nav-positions-monitor-link" },

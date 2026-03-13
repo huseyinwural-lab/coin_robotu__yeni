@@ -15,6 +15,7 @@ from models import (
     UserRole,
 )
 from services.audit_service import create_audit_log
+from services.canonical_strategy_registry_service import seed_canonical_strategy_registry
 from services.venue_service import seed_binance_venue_registry
 
 
@@ -289,6 +290,7 @@ def seed_default_admin():
         _seed_backtest_cards(db)
         _seed_live_activation_config(db)
         _seed_risk_orchestrator_policy(db)
+        seed_canonical_strategy_registry(db)
         seed_binance_venue_registry(db)
     finally:
         db.close()

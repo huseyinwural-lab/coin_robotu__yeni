@@ -2148,6 +2148,51 @@ class StrategyAllocationUpdateRequest(BaseModel):
     state: str | None = None
 
 
+class CanonicalStrategyRegistryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    strategy_id: str
+    strategy_family: str
+    direction: str
+    market_regime: str
+    entry_logic_version: str
+    exit_logic_version: str
+    risk_profile: str
+    is_enabled: bool
+    priority: int
+    cooldown_policy: str
+    weight: float
+    entry_long: dict = Field(default_factory=dict)
+    entry_short: dict = Field(default_factory=dict)
+    exit_long: dict = Field(default_factory=dict)
+    exit_short: dict = Field(default_factory=dict)
+    invalid_state_rules: list[str] = Field(default_factory=list)
+    cooldown_rules: dict = Field(default_factory=dict)
+    risk_rules: dict = Field(default_factory=dict)
+    is_legacy_candidate: bool = False
+    in_production_path: bool = True
+    last_50_signal_quality: float = 0
+    false_allow_rate: float = 0
+    false_reject_rate: float = 0
+    cooldown_state: str = "ready"
+    risk_block_reason: str | None = None
+    forced_disable_reason: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CanonicalStrategyRegistryUpdateRequest(BaseModel):
+    direction: str | None = None
+    market_regime: str | None = None
+    is_enabled: bool | None = None
+    priority: int | None = None
+    cooldown_policy: str | None = None
+    weight: float | None = Field(default=None, ge=0)
+    risk_profile: str | None = None
+    forced_disable_reason: str | None = None
+
+
+
 class AdminExecutionQueueDecisionRequest(BaseModel):
     note: str = ""
 
