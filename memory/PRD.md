@@ -3284,3 +3284,58 @@
 ### Durum
 - **BUG-EXEC-12: COMPLETE**
 - **MOCKED API: YOK**
+
+## 54) 2026-03-13 — User Menü Full-Pass Closure (Tek Sefer)
+
+### Talep
+- Kullanıcı isteği: User tarafındaki tüm menüde önceki `Next Action Items + Future/Backlog + Potansiyel geliştirme` maddelerinin tek iterasyonda kapatılması.
+
+### Uygulanan Kapsam (User Menü)
+- **Scanner**
+  - Quick preset onboarding kartları (Manual Discovery / Semi-Auto Balanced / Full Auto Momentum)
+  - Tek tık mode set + scanner run
+- **Signals**
+  - Funnel metrik paneli (Detected/Ready-Approved/Intent/Submitted/Filled/Blocked)
+  - Smart recommendation banner
+  - Diagnose + Auto Fix aksiyonları (`/api/user/signal/{id}/diagnose`)
+  - Blocked alert toggle
+- **Execute**
+  - Cross-page flow context fallback (query yoksa local context)
+  - Context banner + clear context
+  - Empty preview guidance panel
+- **Indicator Screener**
+  - Starter pack quick run kartları
+  - Open in Execute tarafında context persist
+- **Reports**
+  - Week override + format guard (YYYY-MM-DD)
+  - Strategy filter + compare previous week
+  - PnL delta görünümü
+- **Backtest Insights**
+  - Market/strategy filter
+  - Sort seçenekleri
+  - Benchmark delta
+- **Strategy Template**
+  - User bridge guidance panel + CTA (Scanner/Execute)
+- **Positions**
+  - Empty-state panel + hızlı yönlendirme CTA
+  - Stop/TP label iyileştirmesi
+  - Satır bazlı action explainability metni
+
+### Backend Ekleri
+- Signal diagnose endpoint:
+  - `POST /api/user/signal/{id}/diagnose?auto_fix=true|false`
+  - deterministic blocker snapshot + self-heal aksiyonları
+- Signal/approval zinciri trace alanları kalıcı modelde aktif
+
+### Test Sonuçları
+- `testing_agent` raporu:
+  - `/app/test_reports/iteration_70.json`
+  - Backend: **30/30 PASS** (1 senaryo N/A skip)
+  - Frontend: **100% PASS**
+- Ek self-test:
+  - weekly report week formatları (`YYYY-MM-DD` + `YYYY-Www`) = PASS
+  - signal diagnose endpoint = PASS
+
+### Durum
+- **User Menü Full-Pass: COMPLETE**
+- **MOCKED API: YOK**
