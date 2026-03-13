@@ -3851,3 +3851,33 @@
 - **Revalidate stabilizasyonu: COMPLETE**
 - **Risk policy/scanner göstergeleri: COMPLETE**
 - **MOCKED API: YOK**
+
+## 68) 2026-03-13 — Iteration-86 (Giriş ekranı son 3 talep)
+
+### Kullanıcı Talebi
+1. Landing başlığında `MULTI-USER` yerine `XILO-USER`
+2. Giriş ekranı ölçülerinin normalleştirilmesi
+3. Hesap açma için form eklenmesi
+
+### Uygulananlar
+- `LandingPage.jsx`
+  - Ana başlık: **XILO-USER Trading Engine**
+  - Landing üzerinde doğrudan **Hesap Aç** formu eklendi (email + şifre + şifre tekrar)
+  - Şifre uyuşmazlık kontrolü + toast hata/success akışı
+  - Kayıt sonrası `/user/login` yönlendirmesi
+- `UserLoginPage.jsx`
+  - Kart genişliği/typography/input yükseklikleri normalize edildi (daha kompakt ve okunabilir)
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_85.json`
+  - **All 5 features PASS**
+  - Heading değişimi PASS
+  - Account opening form PASS
+  - Entry screen sizing PASS (desktop/tablet/mobile)
+  - Register success + error handling PASS
+
+### Durum
+- **XILO-USER başlık güncellemesi: COMPLETE**
+- **Giriş ekranı normal ölçüler: COMPLETE**
+- **Landing hesap açma formu: COMPLETE**
+- **MOCKED API: YOK**
