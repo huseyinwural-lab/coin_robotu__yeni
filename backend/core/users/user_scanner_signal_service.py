@@ -1011,3 +1011,41 @@ def diagnose_pending_signal(
     db.refresh(row)
     row.execution_mode_label = _execution_mode_label(row.mode)
     return row, actions_applied
+
+
+def bulk_fix_blocked_signals(db: Session, user_id: str, limit: int = 200) -> dict:
+    rows = (
+        db.query(PendingSignal)
+        .filter(PendingSignal.user_id == user_id, PendingSignal.status == "blocked")
+        .order_by(PendingSignal.created_at.desc())
+        .limit(max(min(limit, 500), 1))
+        .all()
+    )
+
+    actions_summary: dict[str, int] = {}
+    updated_signal_ids: list[str] = []
+    fixed_count = 0
+
+    for row in rows:
+        updated, actions_applied = diagnose_pending_signal(db, user_id, row.id, auto_fix=True)
+        if actions_applied:
+            updated_signal_ids.append(updated.id)
+        for action in actions_applied:
+            actions_summary[action] = actions_summary.get(action, 0) + 1
+        if actions_applied or str(updated.status).lower() != "blocked":
+            fixed_count += 1
+
+    remaining_blocked = (
+        db.query(PendingSignal)
+        .filter(PendingSignal.user_id == user_id, PendingSignal.status == "blocked")
+        .count()
+    )
+
+    return {
+        "scanned_count": len(rows),
+        "blocked_before": len(rows),
+        "fixed_count": fixed_count,
+        "remaining_blocked": remaining_blocked,
+        "updated_signal_ids": updated_signal_ids,
+        "actions_summary": actions_summary,
+    }

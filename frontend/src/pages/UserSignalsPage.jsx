@@ -22,6 +22,8 @@ export const UserSignalsPage = () => {
   const [explainLoadingId, setExplainLoadingId] = useState("");
   const [blockedAlertEnabled, setBlockedAlertEnabled] = useState(() => localStorage.getItem("signals-blocked-alerts") !== "off");
   const [diagnoseBusyId, setDiagnoseBusyId] = useState("");
+  const [isBulkFixRunning, setIsBulkFixRunning] = useState(false);
+  const [animatedSignalIds, setAnimatedSignalIds] = useState([]);
   const alertedSignalIdsRef = useRef(new Set());
 
   const load = async () => {
@@ -122,15 +124,16 @@ export const UserSignalsPage = () => {
     return "Semi-Auto";
   };
 
-  const statusBadgeClass = (status) => {
+  const statusBadgeClass = (status, isAnimated = false) => {
     const normalized = String(status || "").toLowerCase();
+    const pulseClass = isAnimated ? " ring-2 ring-cyan-300 animate-pulse" : "";
     if (["filled", "submitted", "queued", "ready", "approved"].includes(normalized)) {
-      return "bg-emerald-200 text-emerald-900";
+      return `bg-emerald-200 text-emerald-900${pulseClass}`;
     }
     if (["blocked", "rejected", "expired"].includes(normalized)) {
-      return "bg-rose-200 text-rose-900";
+      return `bg-rose-200 text-rose-900${pulseClass}`;
     }
-    return "bg-amber-200 text-amber-900";
+    return `bg-amber-200 text-amber-900${pulseClass}`;
   };
 
   const normalizedStatusText = (signal) => {
@@ -189,11 +192,37 @@ export const UserSignalsPage = () => {
       const { data } = await apiClient.post(`/user/signal/${signalId}/diagnose`, null, { params: { auto_fix: autoFix } });
       await load();
       const actions = (data?.actions_applied || []).join(", ");
+      if (autoFix) {
+        setAnimatedSignalIds((previous) => Array.from(new Set([...previous, signalId])));
+        setTimeout(() => {
+          setAnimatedSignalIds((previous) => previous.filter((item) => item !== signalId));
+        }, 3200);
+      }
       toast.success(`Diagnose: ${data.current_state}${actions ? ` / actions: ${actions}` : ""}`);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Signal diagnose başarısız");
     } finally {
       setDiagnoseBusyId("");
+    }
+  };
+
+  const runFixAllBlockers = async () => {
+    setIsBulkFixRunning(true);
+    try {
+      const { data } = await apiClient.post("/user/signals/fix-all-blockers", null, { params: { limit: 250 } });
+      await load();
+      const updatedIds = data?.updated_signal_ids || [];
+      if (updatedIds.length > 0) {
+        setAnimatedSignalIds((previous) => Array.from(new Set([...previous, ...updatedIds])));
+        setTimeout(() => {
+          setAnimatedSignalIds((previous) => previous.filter((id) => !updatedIds.includes(id)));
+        }, 3600);
+      }
+      toast.success(`Fix All tamamlandı: fixed=${data?.fixed_count || 0}, remaining=${data?.remaining_blocked || 0}`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Fix All Blockers başarısız");
+    } finally {
+      setIsBulkFixRunning(false);
     }
   };
 
@@ -280,6 +309,9 @@ export const UserSignalsPage = () => {
             blocked sinyal uyarıları aktif
           </label>
           <Button variant="outline" onClick={load} data-testid="user-signals-refresh-button">Yenile</Button>
+          <Button className="bg-cyan-500 text-black hover:bg-cyan-400" disabled={isBulkFixRunning} onClick={runFixAllBlockers} data-testid="user-signals-fix-all-blockers-button">
+            {isBulkFixRunning ? "Fixing..." : "Fix All Blockers"}
+          </Button>
         </div>
       </header>
 
@@ -349,7 +381,11 @@ export const UserSignalsPage = () => {
         {signals.map((signal) => (
           <article key={signal.id} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid={`user-signals-mobile-card-${signal.id}`}>
             <p className="text-sm font-semibold" data-testid={`user-signals-mobile-symbol-${signal.id}`}>{signal.symbol}</p>
-            <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-status-${signal.id}`}>{signal.status}</p>
+            <p className="text-xs" data-testid={`user-signals-mobile-status-${signal.id}`}>
+              <span className={`rounded px-2 py-1 font-semibold ${statusBadgeClass(signal.status, animatedSignalIds.includes(signal.id))}`} data-testid={`user-signals-mobile-status-badge-${signal.id}`}>
+                {normalizedStatusText(signal)}
+              </span>
+            </p>
             <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-execution-mode-${signal.id}`}>mode: {signal.execution_mode_label || modeLabelFromRaw(signal.mode)}</p>
             <p className="text-xs text-rose-300" data-testid={`user-signals-mobile-blocked-reason-${signal.id}`}>blocked: {signal.blocked_reason_code || "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-solution-hint-${signal.id}`}>hint: {signal.blocked_solution_hint || "-"}</p>
@@ -418,7 +454,7 @@ export const UserSignalsPage = () => {
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-allocation-${signal.id}`}>{signal.allocation_source ?? "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-meta-${signal.id}`}>{signal.meta_engine_decision ?? "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-status-${signal.id}`}>
-                  <span className={`rounded px-2 py-1 text-xs font-semibold ${statusBadgeClass(signal.status)}`} data-testid={`user-signals-table-status-badge-${signal.id}`}>{normalizedStatusText(signal)}</span>
+                  <span className={`rounded px-2 py-1 text-xs font-semibold ${statusBadgeClass(signal.status, animatedSignalIds.includes(signal.id))}`} data-testid={`user-signals-table-status-badge-${signal.id}`}>{normalizedStatusText(signal)}</span>
                 </td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-execution-mode-${signal.id}`}>{signal.execution_mode_label || modeLabelFromRaw(signal.mode)}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-blocked-reason-${signal.id}`}>

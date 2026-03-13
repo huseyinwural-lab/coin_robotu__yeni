@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from core.users.user_scanner_signal_service import (
     approve_pending_signal,
+    bulk_fix_blocked_signals,
     diagnose_pending_signal,
     get_or_create_signal_mode,
     list_user_scanner_results,
@@ -24,6 +25,7 @@ from schemas import (
     UserSignalDiagnoseResponse,
     UserSignalModeResponse,
     UserSignalModeUpdateRequest,
+    UserSignalsBulkFixResponse,
     UserSignalResponse,
 )
 from services.audit_service import create_audit_log
@@ -244,3 +246,27 @@ def diagnose_signal(
         last_eligibility_check_at=row.last_eligibility_check_at,
         actions_applied=actions_applied,
     )
+
+
+@router.post("/signals/fix-all-blockers", response_model=UserSignalsBulkFixResponse)
+def fix_all_blocked_signals(
+    limit: int = Query(default=200, ge=1, le=500),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    payload = bulk_fix_blocked_signals(db, current_user.id, limit=limit)
+    create_audit_log(
+        db,
+        action="user_signals_fix_all_blockers",
+        entity_type="pending_signal",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "scanned_count": payload.get("scanned_count", 0),
+            "fixed_count": payload.get("fixed_count", 0),
+            "remaining_blocked": payload.get("remaining_blocked", 0),
+            "actions_summary": payload.get("actions_summary") or {},
+        },
+    )
+    return UserSignalsBulkFixResponse(**payload)

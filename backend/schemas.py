@@ -1406,6 +1406,15 @@ class UserSignalDiagnoseResponse(BaseModel):
     actions_applied: list[str] = Field(default_factory=list)
 
 
+class UserSignalsBulkFixResponse(BaseModel):
+    scanned_count: int
+    blocked_before: int
+    fixed_count: int
+    remaining_blocked: int
+    updated_signal_ids: list[str] = Field(default_factory=list)
+    actions_summary: dict = Field(default_factory=dict)
+
+
 class DecisionReasonDetailResponse(BaseModel):
     code: str
     title: str
