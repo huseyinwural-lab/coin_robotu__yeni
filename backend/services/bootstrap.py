@@ -22,6 +22,9 @@ def _seed_admin(db: Session):
     if not settings.default_admin_email or not settings.default_admin_password:
         return
 
+    if db.query(User).count() > 0:
+        return
+
     existing_admin = db.query(User).filter(User.email == settings.default_admin_email).first()
     if existing_admin:
         existing_admin.is_active = True
