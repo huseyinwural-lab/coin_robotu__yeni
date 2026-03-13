@@ -3339,3 +3339,51 @@
 ### Durum
 - **User Menü Full-Pass: COMPLETE**
 - **MOCKED API: YOK**
+
+## 55) 2026-03-13 — Iteration-71 (V1 Trading Preview + Emergency Stop + Structured Safety Layer)
+
+### Kapsam
+- Kullanıcı onaylı sprint planına göre kritik üretim güvenliği adımları uygulandı:
+  - **V1 Trading Preview/Execute API alias katmanı**
+  - **Admin PANIC Emergency Stop endpointi**
+  - **Token Bucket Rate Limiter (1200 req/min)**
+  - **Structured JSON logging standardizasyonu**
+  - **Execute ekranında gerçek zamanlı preview metrik görünürlüğü**
+
+### Backend
+- Yeni endpointler:
+  - `POST /api/v1/user/trading/preview`
+  - `POST /api/v1/user/trading/execute`
+  - `POST /api/v1/admin/emergency_stop`
+- Yeni servisler:
+  - `services/rate_limiter_service.py` (token bucket, global exchange limiti)
+  - `services/trading_preview_service.py` (RR, notional, qty, liquidity guard metrikleri)
+- Legacy akış regresyonsuz korundu:
+  - `/api/user/execution/intent/preview`
+  - `/api/user/execution/intent/submit`
+- Structured logging:
+  - `core/structured_logging.py` eklendi
+  - `server.py` root logger JSON formatter ile standardize edildi
+
+### Frontend
+- `UserExecutePage.jsx`:
+  - Auto Preview toggle eklendi
+  - Canlı preview durum paneli eklendi
+  - Real-time execution metrics paneli eklendi (entry, notional, qty, RR, liquidity)
+  - Submit çağrısı V1 execute endpointine bağlandı
+- `Phase4LiveControlPage.jsx`:
+  - **PANIC EMERGENCY STOP** butonu eklendi
+  - Emergency sonucu için özet panel eklendi
+
+### Test Sonuçları
+- Testing agent raporu: `/app/test_reports/iteration_71.json`
+  - Backend: **13/13 PASS**
+  - Frontend: **PASS**
+  - V1 endpointler + emergency stop + UI test-id doğrulamaları PASS
+
+### Durum
+- **V1 Trading Preview/Execute: COMPLETE**
+- **Admin Emergency Stop: COMPLETE**
+- **Rate Limiter (Token Bucket): COMPLETE**
+- **Structured JSON Logging: COMPLETE**
+- **MOCKED API: YOK**
