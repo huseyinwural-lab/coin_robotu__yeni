@@ -3920,3 +3920,42 @@
 - **Canlı durum kartı: COMPLETE**
 - **MOCKED API: VAR**
   - Email delivery provider entegrasyonu olmadığı için doğrulama kodu bu ortamda API cevabında gösteriliyor.
+
+## 70) 2026-03-13 — Iteration-88 (Kayıt Formu: First/Last/Phone + Login Redirect + Admin Sidebar Scroll)
+
+### Kullanıcı Seçimleri
+- Kapsam: **P0 + P1 + P2**
+- Kayıt alan etiketi dili: **İngilizce**
+- Kayıt sonrası yönlendirme: **Login sayfası**
+
+### Uygulananlar
+1. **Register payload genişletildi (backend)**
+   - `RegisterRequest` alanları: `first_name`, `last_name`, `phone`
+   - `register_user_account` içinde `first_name + last_name` birleşiminden `full_name` resolve edilip onboarding profile’a yazılıyor.
+
+2. **Landing kayıt formu güncellendi (frontend)**
+   - Form alanları: `First Name`, `Last Name`, `Phone Number`, `E-posta`, `Şifre`, `Şifre Tekrar`
+   - Submit payload: `first_name`, `last_name`, `full_name`, `phone`, `email`, `password`
+   - Başarılı kayıt sonrası yönlendirme: `/user/login`
+
+3. **Admin sol menü scroll düzeltmesi**
+   - Sidebar container `overflow-y-auto` ile güncellendi.
+   - Alt menü öğelerine kaydırarak erişim sağlandı.
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_87.json`
+  - Backend: **6/6 PASS**
+  - Frontend: **5/5 PASS**
+  - Doğrulananlar:
+    - `/api/auth/register` first/last/phone kabulü
+    - onboarding `full_name` resolve
+    - landing form İngilizce alanlar
+    - register sonrası `/user/login` redirect
+    - admin sidebar scroll + alt menü erişimi
+
+### Durum
+- **Registration first_name + last_name + phone: COMPLETE**
+- **Register success redirect to login: COMPLETE**
+- **Admin left menu scrollability: COMPLETE**
+- **MOCKED API: VAR**
+  - Email verification delivery provider bu ortamda entegre değil; doğrulama kodu request response içinde dönebiliyor.
