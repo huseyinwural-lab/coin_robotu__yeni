@@ -3612,3 +3612,42 @@
 - **Risk onboarding wizard: COMPLETE**
 - **Risk Policy Health Score: COMPLETE**
 - **MOCKED API: YOK**
+
+## 61) 2026-03-13 — Iteration-79 (Bot trading check + Futures all-select fix)
+
+### Kullanıcı Sorunu
+- "Bot alım satmıyor"
+- "Futures'ta tümünü seçince liste yansımıyor"
+
+### Root Cause ve Fix
+1) **Futures all-select boş dönüyordu**
+   - Neden: `fapi.binance.com` endpointi bulunduğumuz bölgede `451` döndürüyordu.
+   - Fix:
+     - `market_data_provider.py` futures URL fallback eklendi:
+       - `https://fapi.binance.com`
+       - `https://testnet.binancefuture.com`
+     - `symbol_selector_service.py` içinde boş satır dönmesi halinde `force_refresh=True` retry eklendi.
+   - Sonuç: Futures universe tekrar dolu dönüyor (`571` sembol).
+
+2) **Futures seçimi UI'ya yansımıyordu**
+   - Neden: `futuresSymbols` state, üstteki CSV input ile senkron değildi.
+   - Fix:
+     - `MarketUniversePage.jsx` içinde `useEffect` ile spot/futures selector state -> CSV input senkronu eklendi.
+     - futures selector için `selected_count` görünürlüğü eklendi.
+
+3) **Bot trading kontrolü (global blokaj)**
+   - Tespit: `disable_futures` geçmiş emergency akışından `true` kalmıştı.
+   - Fix:
+     - `admin_action_center.py` `clear_kill_switch` akışında artık `disable_futures=false` resetleniyor.
+     - canlı durumda admin control üzerinden `disable_futures=false` uygulanıp doğrulandı.
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_78.json`
+  - Backend: **8/8 PASS**
+  - Frontend: **PASS**
+  - Futures all-select ve UI yansıma doğrulandı.
+
+### Durum
+- **Futures all-select bug: RESOLVED**
+- **disable_futures reset bug: RESOLVED**
+- **MOCKED API: YOK**
