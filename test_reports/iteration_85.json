@@ -1,0 +1,113 @@
+{
+  "summary": "Iteration 85 - Entry Flow UI Fixes Verification - All 5 features PASS",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "features_tested": {
+    "heading_text_change": {
+      "status": "PASS",
+      "description": "Landing page heading changed from MULTI-USER to XILO-USER Trading Engine",
+      "file": "/app/frontend/src/pages/LandingPage.jsx:65-67",
+      "selector_verified": "data-testid='landing-main-heading'",
+      "result": "Heading text is 'XILO-USER Trading Engine'"
+    },
+    "account_opening_form": {
+      "status": "PASS",
+      "description": "Landing page has visible account opening form with email/password/confirm fields and submit button",
+      "file": "/app/frontend/src/pages/LandingPage.jsx:78-114",
+      "selectors_verified": [
+        "landing-register-form",
+        "landing-register-email-input",
+        "landing-register-password-input",
+        "landing-register-confirm-password-input",
+        "landing-register-submit-button"
+      ],
+      "result": "All form elements visible and functional"
+    },
+    "entry_screen_sizing": {
+      "status": "PASS",
+      "description": "Entry/login screen dimensions normalized - no oversized typography or layout overflow",
+      "file": "/app/frontend/src/pages/UserLoginPage.jsx",
+      "measurements": {
+        "desktop_login_card": "672px width (fits in 1920px viewport)",
+        "tablet_layout": "768px viewport - all elements visible, no overflow",
+        "mobile_login_card": "358px width (fits in 390px viewport)",
+        "mobile_landing_container": "390px width (exactly fits viewport)"
+      },
+      "result": "Login page uses max-w-2xl (672px) card, clean responsive layout"
+    },
+    "register_flow_success": {
+      "status": "PASS",
+      "description": "Register flow from landing form submits and triggers success handling",
+      "test_flow": "Fill form → Submit → Navigate to /user/login with success toast",
+      "toast_message": "Kayıt talebiniz alındı. Admin onayı sonrası giriş yapabilirsiniz.",
+      "result": "Registration API called, success toast shown, redirected to login"
+    },
+    "register_flow_error_handling": {
+      "status": "PASS",
+      "description": "Register flow shows error for password mismatch",
+      "test_flow": "Fill form with mismatched passwords → Submit → Stay on page with error toast",
+      "error_toast": "Şifreler uyuşmuyor",
+      "result": "Frontend validation prevents submission, error toast displayed"
+    }
+  },
+  "ui_verification": {
+    "landing_page": {
+      "heading": "XILO-USER TRADING ENGINE (text-4xl/5xl, uppercase, font-black)",
+      "layout": "Two-column grid on desktop, single column on mobile",
+      "register_form": "Visible with title 'Hesap Aç', 3 inputs, submit button",
+      "navigation_buttons": "Kullanıcı Girişi and Admin Girişi buttons visible"
+    },
+    "user_login_page": {
+      "title": "Giriş yap (text-3xl, font-black)",
+      "card_size": "max-w-2xl (672px), normalized - not oversized",
+      "form_elements": "Email input, password input, remember checkbox, submit button",
+      "responsive": "Scales correctly on tablet (768px) and mobile (390px)"
+    }
+  },
+  "data_testid_verification": {
+    "landing_page": [
+      "landing-page ✓",
+      "landing-container ✓",
+      "landing-main-heading ✓",
+      "landing-register-form ✓",
+      "landing-register-email-input ✓",
+      "landing-register-password-input ✓",
+      "landing-register-confirm-password-input ✓",
+      "landing-register-submit-button ✓",
+      "landing-user-login-button ✓",
+      "landing-admin-login-button ✓"
+    ],
+    "user_login_page": [
+      "user-login-page ✓",
+      "user-login-card ✓",
+      "user-login-title ✓",
+      "user-login-email-input ✓",
+      "user-login-password-input ✓",
+      "user-login-submit-button ✓",
+      "user-login-toggle-password-button ✓",
+      "user-login-remember-checkbox ✓",
+      "user-login-register-toggle-button ✓"
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {
+    "frontend": "100% (5/5 features verified)"
+  },
+  "test_credentials": {
+    "test_registration": "test_iter85_52176@test.com / TestPass123! (created during test)"
+  },
+  "seed_data_creation": "Test user registered via landing page form",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 3 user-requested fixes verified: (1) Heading changed to XILO-USER Trading Engine, (2) Entry/login screen sizing normalized with max-w-2xl card (672px) and responsive layouts, (3) Account opening form exists on landing page with email/password/confirm fields, submit button, and proper error handling. All data-testid selectors confirmed working."
+}

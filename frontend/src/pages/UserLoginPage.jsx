@@ -37,31 +37,31 @@ export const UserLoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#edf0f5] px-4 py-10" data-testid="user-login-page">
-      <div className="mx-auto w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10" data-testid="user-login-card">
+    <div className="min-h-screen bg-[#edf0f5] px-4 py-8" data-testid="user-login-page">
+      <div className="mx-auto w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8" data-testid="user-login-card">
         <header className="text-center" data-testid="user-login-header">
-          <h1 className="text-4xl font-black text-slate-900" data-testid="user-login-title">Giriş yap</h1>
+          <h1 className="text-3xl font-black text-slate-900" data-testid="user-login-title">Giriş yap</h1>
           <p className="mt-2 text-base text-slate-600" data-testid="user-login-subtitle">Hesabınıza giriş yapın.</p>
         </header>
 
-        <form onSubmit={onSubmit} className="mx-auto mt-8 max-w-3xl space-y-5" data-testid="user-login-form">
+        <form onSubmit={onSubmit} className="mx-auto mt-7 max-w-xl space-y-4" data-testid="user-login-form">
           <div className="space-y-2" data-testid="user-login-type-block">
-            <p className="text-lg font-semibold text-slate-800" data-testid="user-login-type-label">Giriş türü</p>
-            <label className="inline-flex items-center gap-2 text-3xl font-medium text-slate-800" data-testid="user-login-type-individual-label">
+            <p className="text-base font-semibold text-slate-800" data-testid="user-login-type-label">Giriş türü</p>
+            <label className="inline-flex items-center gap-2 text-base font-medium text-slate-800" data-testid="user-login-type-individual-label">
               <input type="radio" name="login-type" checked readOnly className="h-5 w-5 accent-blue-600" data-testid="user-login-type-individual-radio" />
               Bireysel
             </label>
           </div>
 
           <div className="space-y-2" data-testid="user-login-email-block">
-            <p className="text-3xl font-medium text-slate-800" data-testid="user-login-email-label">E-posta</p>
+            <p className="text-base font-medium text-slate-800" data-testid="user-login-email-label">E-posta</p>
             <div className="relative" data-testid="user-login-email-input-wrapper">
               <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
               <Input
                 type="email"
                 value={form.email}
                 onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-                className="h-14 border-slate-200 bg-slate-100 pl-11 text-xl text-slate-900"
+                className="h-11 border-slate-200 bg-slate-100 pl-11 text-base text-slate-900"
                 data-testid="user-login-email-input"
                 required
               />
@@ -69,14 +69,14 @@ export const UserLoginPage = () => {
           </div>
 
           <div className="space-y-2" data-testid="user-login-password-block">
-            <p className="text-3xl font-medium text-slate-800" data-testid="user-login-password-label">Şifre</p>
+            <p className="text-base font-medium text-slate-800" data-testid="user-login-password-label">Şifre</p>
             <div className="relative" data-testid="user-login-password-input-wrapper">
               <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
               <Input
                 type={showPassword ? "text" : "password"}
                 value={form.password}
                 onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-                className="h-14 border-slate-200 bg-slate-100 pl-11 pr-11 text-xl text-slate-900"
+                className="h-11 border-slate-200 bg-slate-100 pl-11 pr-11 text-base text-slate-900"
                 data-testid="user-login-password-input"
                 minLength={8}
                 required
@@ -108,7 +108,7 @@ export const UserLoginPage = () => {
             </button>
           </div>
 
-          <Button className="h-14 w-full bg-orange-500 text-3xl font-semibold text-black hover:bg-orange-600" data-testid="user-login-submit-button" disabled={submitting}>
+          <Button className="h-11 w-full bg-orange-500 text-lg font-semibold text-black hover:bg-orange-600" data-testid="user-login-submit-button" disabled={submitting}>
             {submitting ? "İşleniyor..." : mode === "register" ? "Talep Oluştur" : "E-posta ile giriş yap"}
           </Button>
 
