@@ -3679,3 +3679,34 @@
 ### Durum
 - **Spot/Futures bot smoke test: COMPLETE**
 - **MOCKED API: YOK**
+
+## 63) 2026-03-13 — Iteration-81 (Blocker Cleanup: Active Bot AUTO + Precheck Code Clarity)
+
+### Kullanıcı Kararı
+- 1B: Sadece **aktif botu olan kullanıcıda** otomatik `AUTO` mode
+- 2A: `ORDER_PRECHECK_FAILED` bypass yok; blocked kalsın ama açık hata kodu göster
+
+### Uygulanan Değişiklikler
+- `user_scanner_signal_service.py`
+  - `_has_active_bot` eklendi
+  - Aktif bot varsa scanner mode otomatik `AUTO` enforce ediliyor
+  - Scanner response'a `signal_mode_auto_enforced_for_active_bot` warning'i eklendi
+  - `MANUAL_APPROVAL_REQUIRED` için auto-fix sırasında aktif bot kullanıcıda mode `AUTO`'ya çevrilip auto dispatch deneniyor
+  - `_apply_order_precheck_failed` eklendi:
+    - `blocked_reason_message` içine reject code'lar yazılıyor
+    - `blocked_solution_hint` kodları açıkça içeriyor
+    - precheck fail durumunda signal blocked kalıyor (fallback yok)
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_79.json`
+  - Backend: **10/10 PASS**
+  - Doğrulananlar:
+    - Active-bot kullanıcıda mode AUTO enforce
+    - `MANUAL_APPROVAL_REQUIRED` azalması
+    - `ORDER_PRECHECK_FAILED` mesajında code/detail görünümü
+    - `fix-all-blockers` precheck fail'leri yanlışlıkla bypass etmiyor
+
+### Durum
+- **Active-bot AUTO enforcement: COMPLETE**
+- **Precheck code clarity (no bypass): COMPLETE**
+- **MOCKED API: YOK**
