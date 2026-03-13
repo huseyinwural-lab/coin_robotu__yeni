@@ -30,7 +30,10 @@ ALLOWED_SIGNAL_MODES = {"ASSISTED", "AUTO", "MANUAL"}
 DEFAULT_SIGNAL_MODE = "MANUAL"
 
 SIGNAL_PENDING_REASON_HINTS = {
-    "MANUAL_APPROVAL_REQUIRED": ("Sinyal manuel onay bekliyor.", "Sinyal satırından Approve ile devam edin."),
+    "MANUAL_APPROVAL_REQUIRED": (
+        "Sinyal manuel onay bekliyor.",
+        "Signals satırından Approve veya Fix All Blockers ile AUTO moda geçirip devam edin.",
+    ),
     "BOT_NOT_RUNNING": ("Bot runtime çalışmıyor.", "Bot profilini başlatın (is_running=true)."),
     "RISK_POLICY_MISSING": ("Risk policy tanımlı değil.", "Signals satırından Auto-Fix veya Risk Policy ekranından policy oluşturun."),
     "RISK_LIMIT_BLOCKED": ("Risk limiti engeli oluştu.", "Risk limitlerini veya mevcut pozisyon riskini kontrol edin."),
@@ -71,6 +74,16 @@ def _user_symbols_scope(db: Session, user_id: str) -> set[str]:
     for row in rows:
         symbols.update((row.symbols or []))
     return {symbol.upper() for symbol in symbols if symbol}
+
+
+def _has_active_bot(db: Session, user_id: str) -> bool:
+    row = (
+        db.query(BotProfile)
+        .filter(BotProfile.user_id == user_id, BotProfile.is_running.is_(True), BotProfile.is_enabled.is_(True))
+        .order_by(BotProfile.updated_at.desc())
+        .first()
+    )
+    return row is not None
 
 
 def _default_bot_for_user(db: Session, user_id: str, symbols: list[str]) -> BotProfile:
@@ -188,6 +201,39 @@ def _signal_reason_details(reason_code: str) -> tuple[str, str]:
     )
 
 
+def _apply_order_precheck_failed(
+    row: PendingSignal,
+    *,
+    reason_codes: list[str] | None = None,
+    error_detail: str = "",
+) -> None:
+    row.execution_eligible = False
+    row.status = "blocked"
+    row.blocked_reason_code = "ORDER_PRECHECK_FAILED"
+
+    base_message, base_hint = _signal_reason_details("ORDER_PRECHECK_FAILED")
+    normalized_codes = [str(code).strip() for code in (reason_codes or []) if str(code).strip()]
+
+    if normalized_codes:
+        compact_codes = normalized_codes[:5]
+        row.blocked_reason_message = f"{base_message} / codes: {', '.join(compact_codes)}"
+        row.blocked_solution_hint = (
+            f"Precheck kodları: {', '.join(compact_codes)}. Exchange connection, permission snapshot ve risk limitlerini doğrulayın."
+        )
+        row.decision_note = f"order_precheck_failed:{'|'.join(compact_codes)}"[:240]
+    elif error_detail:
+        compact_detail = str(error_detail).replace("\n", " ").strip()[:180]
+        row.blocked_reason_message = f"{base_message} / detail: {compact_detail}"
+        row.blocked_solution_hint = "Exchange connection ve execution preview parametrelerini kontrol edin."
+        row.decision_note = f"order_precheck_failed:{compact_detail}"[:240]
+    else:
+        row.blocked_reason_message = base_message
+        row.blocked_solution_hint = base_hint
+        row.decision_note = "order_precheck_failed"
+
+    _set_state(row, "BLOCKED")
+
+
 def _primary_reason_code(reason_codes: list[str]) -> str:
     for code in SIGNAL_REASON_PRIORITY:
         if code in reason_codes:
@@ -292,6 +338,9 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
         row.execution_eligible = False
         row.last_eligibility_check_at = datetime.now(timezone.utc)
         return row
+
+    if row.mode != "AUTO" and _has_active_bot(db, row.user_id):
+        row.mode = "AUTO"
 
     signal = db.query(SignalEvent).filter(SignalEvent.id == row.signal_id, SignalEvent.user_id == row.user_id).first()
     if signal is None:
@@ -400,12 +449,8 @@ def _dispatch_signal_to_execution(
     _set_state(row, "ORDER_INTENT_CREATED")
 
     if validation.get("validation_status") != "valid":
-        row.execution_eligible = False
-        row.status = "blocked"
-        row.blocked_reason_code = "ORDER_PRECHECK_FAILED"
-        row.blocked_reason_message, row.blocked_solution_hint = _signal_reason_details("ORDER_PRECHECK_FAILED")
-        row.decision_note = "order_precheck_failed"
-        _set_state(row, "BLOCKED")
+        reason_codes = [str(item) for item in (validation.get("reject_reason_codes") or []) if str(item).strip()]
+        _apply_order_precheck_failed(row, reason_codes=reason_codes)
         return row
 
     submitted_intent = submit_execution_intent(db, row.user_id, intent.intent_token, preview_hash=intent.preview_hash)
@@ -434,7 +479,8 @@ def get_or_create_signal_mode(db: Session, user_id: str) -> UserSignalMode:
     if row:
         return row
 
-    row = UserSignalMode(id=str(uuid.uuid4()), user_id=user_id, mode=DEFAULT_SIGNAL_MODE)
+    default_mode = "AUTO" if _has_active_bot(db, user_id) else DEFAULT_SIGNAL_MODE
+    row = UserSignalMode(id=str(uuid.uuid4()), user_id=user_id, mode=default_mode)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -512,6 +558,11 @@ def run_user_scanner(
     mode_row = get_or_create_signal_mode(db, user_id)
     mode = _normalize_mode(requested_mode or mode_row.mode)
     warnings: list[str] = []
+
+    if mode != "AUTO" and _has_active_bot(db, user_id):
+        mode = "AUTO"
+        warnings.append("signal_mode_auto_enforced_for_active_bot")
+
     if mode_row.mode != mode:
         mode_row.mode = mode
         mode_row.updated_at = datetime.now(timezone.utc)
@@ -634,14 +685,8 @@ def run_user_scanner(
                     exchange_connection=connection,
                     actor_user_id=user_id,
                 )
-            except Exception:
-                pending_row.status = "blocked"
-                pending_row.blocked_reason_code = "ORDER_PRECHECK_FAILED"
-                (
-                    pending_row.blocked_reason_message,
-                    pending_row.blocked_solution_hint,
-                ) = _signal_reason_details("ORDER_PRECHECK_FAILED")
-                _set_state(pending_row, "BLOCKED")
+            except Exception as exc:
+                _apply_order_precheck_failed(pending_row, error_detail=str(exc))
 
         record_decision_trace(
             db,
@@ -731,14 +776,8 @@ def run_user_scanner(
                     exchange_connection=connection,
                     actor_user_id=user_id,
                 )
-            except Exception:
-                fallback_pending.status = "blocked"
-                fallback_pending.blocked_reason_code = "ORDER_PRECHECK_FAILED"
-                (
-                    fallback_pending.blocked_reason_message,
-                    fallback_pending.blocked_solution_hint,
-                ) = _signal_reason_details("ORDER_PRECHECK_FAILED")
-                _set_state(fallback_pending, "BLOCKED")
+            except Exception as exc:
+                _apply_order_precheck_failed(fallback_pending, error_detail=str(exc))
 
         record_decision_trace(
             db,
@@ -978,10 +1017,32 @@ def diagnose_pending_signal(
         if created:
             actions_applied.append("safe_default_risk_policy_created")
 
+    if auto_fix and row.blocked_reason_code == "MANUAL_APPROVAL_REQUIRED" and _has_active_bot(db, row.user_id):
+        if row.mode != "AUTO":
+            row.mode = "AUTO"
+            actions_applied.append("signal_mode_switched_to_auto")
+
     if actions_applied:
         db.flush()
 
     _refresh_pending_signal_snapshot(db, row)
+
+    if auto_fix and row.mode == "AUTO" and row.execution_eligible and row.status in {"pending", "ready", "blocked"}:
+        signal = db.query(SignalEvent).filter(SignalEvent.id == row.signal_id, SignalEvent.user_id == row.user_id).first()
+        if signal is not None:
+            try:
+                exchange_connection = _resolve_default_exchange_connection(db, user_id)
+                _dispatch_signal_to_execution(
+                    db,
+                    row=row,
+                    signal=signal,
+                    exchange_connection=exchange_connection,
+                    actor_user_id=user_id,
+                )
+                actions_applied.append("auto_dispatch_triggered")
+            except Exception as exc:
+                _apply_order_precheck_failed(row, error_detail=str(exc))
+                actions_applied.append("auto_dispatch_precheck_failed")
     record_decision_trace(
         db,
         user_id=user_id,
