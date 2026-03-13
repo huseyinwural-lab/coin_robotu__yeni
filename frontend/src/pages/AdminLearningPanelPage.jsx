@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 
 export const AdminLearningPanelPage = () => {
-  const [overview, setOverview] = useState({ strategy_memory: [], family_memory: [], recommendations: [] });
+  const [overview, setOverview] = useState({ strategy_memory: [], family_memory: [], recommendations: [], events: [], guardrails: {} });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -13,7 +13,7 @@ export const AdminLearningPanelPage = () => {
     setLoading(true);
     try {
       const { data } = await apiClient.get("/admin/learning/overview");
-      setOverview(data || { strategy_memory: [], family_memory: [], recommendations: [] });
+      setOverview(data || { strategy_memory: [], family_memory: [], recommendations: [], events: [], guardrails: {} });
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Learning overview yüklenemedi");
     } finally {
@@ -82,6 +82,8 @@ export const AdminLearningPanelPage = () => {
                   <th className="px-2 py-1 text-left">false_reject</th>
                   <th className="px-2 py-1 text-left">rolling</th>
                   <th className="px-2 py-1 text-left">decay_quality</th>
+                  <th className="px-2 py-1 text-left">quality_degradation</th>
+                  <th className="px-2 py-1 text-left">recommendation</th>
                 </tr>
               </thead>
               <tbody>
@@ -95,8 +97,10 @@ export const AdminLearningPanelPage = () => {
                     <td className="px-2 py-1">{row.avg_return}</td>
                     <td className="px-2 py-1">{row.false_allow_rate}</td>
                     <td className="px-2 py-1">{row.false_reject_rate}</td>
-                    <td className="px-2 py-1">{row.recent_rolling_score}</td>
-                    <td className="px-2 py-1">{row.decay_adjusted_quality_score}</td>
+                    <td className="px-2 py-1">{row.rolling_quality_score ?? row.recent_rolling_score}</td>
+                    <td className="px-2 py-1">{row.decay_adjusted_score ?? row.decay_adjusted_quality_score}</td>
+                    <td className="px-2 py-1">{row.quality_degradation_flag ? "yes" : "no"}</td>
+                    <td className="px-2 py-1">{row?.recommendation?.recommendation_type || "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -134,6 +138,11 @@ export const AdminLearningPanelPage = () => {
 
           <div className="border border-slate-700 p-3" data-testid="admin-learning-recommendation-panel">
             <p className="text-sm font-semibold" data-testid="admin-learning-recommendation-title">Learning Recommendations</p>
+            <div className="mt-2 rounded border border-lime-900/60 bg-lime-950/20 p-2" data-testid="admin-learning-guardrail-panel">
+              <p className="text-xs" data-testid="admin-learning-guardrail-auto-change">Auto Change Forbidden: {overview?.guardrails?.auto_change_forbidden ? "true" : "false"}</p>
+              <p className="text-xs" data-testid="admin-learning-guardrail-admin-approval">Admin Approval Required: {overview?.guardrails?.admin_approval_required ? "true" : "false"}</p>
+              <p className="text-xs" data-testid="admin-learning-guardrail-audit">Audit Log Enabled: {overview?.guardrails?.audit_log_enabled ? "true" : "false"}</p>
+            </div>
             <div className="mt-2 space-y-2" data-testid="admin-learning-recommendation-list">
               {(overview.recommendations || []).map((item) => (
                 <div key={item.id} className="flex flex-wrap items-center gap-2 rounded border border-slate-700 p-2" data-testid={`admin-learning-recommendation-item-${item.id}`}>
@@ -148,6 +157,40 @@ export const AdminLearningPanelPage = () => {
               ))}
               {(overview.recommendations || []).length === 0 && <p className="text-xs" data-testid="admin-learning-recommendation-empty">Öneri yok.</p>}
             </div>
+          </div>
+
+          <div className="overflow-x-auto border border-slate-700" data-testid="admin-learning-events-wrapper">
+            <table className="min-w-[1400px] text-xs" data-testid="admin-learning-events-table">
+              <thead>
+                <tr>
+                  <th className="px-2 py-1 text-left">event_id</th>
+                  <th className="px-2 py-1 text-left">symbol</th>
+                  <th className="px-2 py-1 text-left">decision</th>
+                  <th className="px-2 py-1 text-left">outcome</th>
+                  <th className="px-2 py-1 text-left">pnl_norm</th>
+                  <th className="px-2 py-1 text-left">mfe</th>
+                  <th className="px-2 py-1 text-left">mae</th>
+                  <th className="px-2 py-1 text-left">hold_duration</th>
+                  <th className="px-2 py-1 text-left">created_at</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(overview.events || []).slice(0, 120).map((item, idx) => (
+                  <tr key={item.event_id} className="border-t border-slate-800" data-testid={`admin-learning-events-row-${idx}`}>
+                    <td className="px-2 py-1" data-testid={`admin-learning-events-id-${idx}`}>{item.event_id}</td>
+                    <td className="px-2 py-1">{item.symbol}</td>
+                    <td className="px-2 py-1">{item.decision}</td>
+                    <td className="px-2 py-1">{item.outcome_label}</td>
+                    <td className="px-2 py-1">{item.pnl_normalized}</td>
+                    <td className="px-2 py-1">{item.max_favorable_excursion}</td>
+                    <td className="px-2 py-1">{item.max_adverse_excursion}</td>
+                    <td className="px-2 py-1">{item.hold_duration}</td>
+                    <td className="px-2 py-1">{String(item.created_at || "")}</td>
+                  </tr>
+                ))}
+                {(overview.events || []).length === 0 && <tr><td className="px-2 py-2 text-xs" colSpan={9} data-testid="admin-learning-events-empty">Event yok.</td></tr>}
+              </tbody>
+            </table>
           </div>
         </>
       )}

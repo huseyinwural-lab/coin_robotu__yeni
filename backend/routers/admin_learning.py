@@ -7,7 +7,7 @@ from db import get_db
 from deps import require_admin
 from models import CanonicalStrategyRegistry, LearningRecommendation, User
 from services.audit_service import create_audit_log
-from services.learning_memory_service import get_learning_overview, refresh_learning_memory
+from services.learning_memory_service import get_learning_overview, list_learning_events, refresh_learning_memory
 
 
 router = APIRouter(prefix="/admin/learning", tags=["admin_learning"])
@@ -67,7 +67,12 @@ def admin_apply_learning_recommendation(
         rec_val = recommendation.recommendation_value or {}
         if rec_type == "disable_recommendation":
             strategy.is_enabled = bool(rec_val.get("suggested_is_enabled", False))
-        elif rec_type in {"auto_throttle_recommendation", "weight_boost_recommendation"}:
+        elif rec_type in {
+            "auto_throttle_recommendation",
+            "weight_boost_recommendation",
+            "decrease_weight_recommendation",
+            "increase_weight_recommendation",
+        }:
             multiplier = float(rec_val.get("suggested_weight_multiplier", 1.0))
             strategy.weight = max(0.0, round(float(strategy.weight or 1.0) * multiplier, 4))
 
@@ -94,4 +99,24 @@ def admin_apply_learning_recommendation(
         "generated_at": datetime.now(timezone.utc),
         "recommendation_id": recommendation.id,
         "applied": True,
+        "guardrail": {
+            "auto_change_forbidden": True,
+            "admin_approval_required": True,
+            "applied_by_admin": current_admin.id,
+        },
+    }
+
+
+@router.get("/events")
+def admin_learning_events(
+    limit: int = Query(default=200, ge=1, le=1000),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return {
+        "schema_version": "learning.v1",
+        "engine_version": "learning-engine.v1",
+        "generated_at": datetime.now(timezone.utc),
+        "items": list_learning_events(db, limit=limit),
     }

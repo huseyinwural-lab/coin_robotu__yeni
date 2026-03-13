@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -7,6 +8,8 @@ import { ResponsiveMiniLineChart } from "@/components/ResponsiveMiniLineChart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
+import { DecisionCard } from "@/pages/user/components/DecisionCard";
+import { ExplainabilityDrawer } from "@/pages/user/components/ExplainabilityDrawer";
 
 const computeRiskPolicyHealth = (policy) => {
   if (!policy) {
@@ -39,6 +42,7 @@ const computeRiskPolicyHealth = (policy) => {
 };
 
 export const UserDashboardPage = () => {
+  const navigate = useNavigate();
   const [dashboard, setDashboard] = useState(null);
   const [portfolio, setPortfolio] = useState(null);
   const [performance, setPerformance] = useState(null);
@@ -51,13 +55,46 @@ export const UserDashboardPage = () => {
   const [isSavingWizard, setIsSavingWizard] = useState(false);
   const [wizardDismissed, setWizardDismissed] = useState(false);
   const [isControlBusy, setIsControlBusy] = useState(false);
+  const [decisionCards, setDecisionCards] = useState([]);
+  const [selectedDecisionSymbol, setSelectedDecisionSymbol] = useState("");
+  const [isExplainabilityDrawerOpen, setIsExplainabilityDrawerOpen] = useState(false);
+  const [symbolExplainability, setSymbolExplainability] = useState(null);
+  const [isExplainabilityLoading, setIsExplainabilityLoading] = useState(false);
+
+  const formatDateLabel = (value) => {
+    if (!value) {
+      return "-";
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return "-";
+    }
+    return parsed.toLocaleString("tr-TR");
+  };
+
+  const loadSymbolExplainability = async (symbol) => {
+    if (!symbol) {
+      setSymbolExplainability(null);
+      return;
+    }
+    setIsExplainabilityLoading(true);
+    try {
+      const { data } = await apiClient.get(`/user/explainability/${encodeURIComponent(symbol)}`);
+      setSymbolExplainability(data || null);
+    } catch (error) {
+      setSymbolExplainability(null);
+      toast.error(error?.response?.data?.detail || "Explainability yüklenemedi");
+    } finally {
+      setIsExplainabilityLoading(false);
+    }
+  };
 
   const load = async ({ silent = false } = {}) => {
     if (!silent) {
       setIsLoading(true);
     }
     try {
-      const [dashboardRes, portfolioRes, performanceRes, riskPoliciesRes, modeRes, botsRes, signalsRes] = await Promise.all([
+      const [dashboardRes, portfolioRes, performanceRes, riskPoliciesRes, modeRes, botsRes, signalsRes, cardsRes] = await Promise.all([
         apiClient.get("/user/dashboard"),
         apiClient.get("/user/portfolio"),
         apiClient.get("/user/performance"),
@@ -65,6 +102,7 @@ export const UserDashboardPage = () => {
         apiClient.get("/user/signal-mode"),
         apiClient.get("/bot-profiles"),
         apiClient.get("/user/signals", { params: { limit: 50 } }),
+        apiClient.get("/user/decision-cards", { params: { limit: 12 } }),
       ]);
       setDashboard(dashboardRes.data);
       setPortfolio(portfolioRes.data);
@@ -73,6 +111,16 @@ export const UserDashboardPage = () => {
       setSignalMode(modeRes.data || null);
       setBotProfiles(botsRes.data || []);
       setRecentSignals(signalsRes.data || []);
+      const cards = cardsRes?.data?.items || [];
+      setDecisionCards(cards);
+      if (cards.length > 0) {
+        const symbolToUse = selectedDecisionSymbol || cards[0].symbol;
+        setSelectedDecisionSymbol(symbolToUse);
+        await loadSymbolExplainability(symbolToUse);
+      } else {
+        setSelectedDecisionSymbol("");
+        setSymbolExplainability(null);
+      }
     } finally {
       if (!silent) {
         setIsLoading(false);
@@ -87,9 +135,19 @@ export const UserDashboardPage = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       load({ silent: true });
-    }, 15000);
+    }, 10000);
     return () => clearInterval(timer);
   }, []);
+
+  const onSelectDecisionCard = async (symbol) => {
+    setSelectedDecisionSymbol(symbol);
+    await loadSymbolExplainability(symbol);
+    setIsExplainabilityDrawerOpen(true);
+  };
+
+  const openSymbolDetail = (symbol) => {
+    navigate(`/user/symbol/${encodeURIComponent(symbol)}`);
+  };
 
   const activeBotCount = useMemo(
     () => (botProfiles || []).filter((item) => item.is_running && item.is_enabled).length,
@@ -238,7 +296,7 @@ export const UserDashboardPage = () => {
       <section className="col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-dashboard-live-control-status-card">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-dashboard-live-control-status-header">
           <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-dashboard-live-control-status-title">Live Control Status</p>
-          <p className="text-xs text-cyan-100" data-testid="user-dashboard-live-control-status-refresh">Auto Refresh: 15s</p>
+          <p className="text-xs text-cyan-100" data-testid="user-dashboard-live-control-status-refresh">Auto Refresh: 10s</p>
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="user-dashboard-live-control-status-grid">
           <p className="text-sm" data-testid="user-dashboard-live-control-mode">Signal Mode: {liveControlState.rawMode}</p>
@@ -252,6 +310,24 @@ export const UserDashboardPage = () => {
           <Button variant="outline" disabled={isControlBusy} onClick={setSignalModeAuto} data-testid="user-dashboard-live-control-set-auto-button">AUTO'ya Al</Button>
           <Button className="bg-cyan-500 text-black hover:bg-cyan-400" disabled={isControlBusy} onClick={runFixAllBlockers} data-testid="user-dashboard-live-control-fix-all-blockers-button">Fix All Blockers</Button>
           <Button variant="outline" disabled={isControlBusy} onClick={() => load({ silent: true })} data-testid="user-dashboard-live-control-refresh-button">Yenile</Button>
+        </div>
+      </section>
+
+      <section className="col-span-12 rounded border border-blue-800/50 bg-blue-950/20 p-4" data-testid="user-dashboard-decision-card-section">
+        <div className="flex items-center justify-between gap-2" data-testid="user-dashboard-decision-card-header">
+          <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="user-dashboard-decision-card-title">Dashboard Decision Cards</p>
+          <p className="text-xs text-blue-100" data-testid="user-dashboard-decision-card-auto-refresh">Auto Refresh: 10s</p>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="user-dashboard-decision-card-grid">
+          {decisionCards.length === 0 && <p className="text-xs text-blue-100" data-testid="user-dashboard-decision-card-empty">Henüz decision card yok.</p>}
+          {decisionCards.map((card) => (
+            <DecisionCard
+              key={card.symbol}
+              card={card}
+              onOpenExplainability={onSelectDecisionCard}
+              onOpenSymbolDetail={openSymbolDetail}
+            />
+          ))}
         </div>
       </section>
 
@@ -326,6 +402,15 @@ export const UserDashboardPage = () => {
           </div>
         </section>
       )}
+
+      <ExplainabilityDrawer
+        isOpen={isExplainabilityDrawerOpen}
+        onOpenChange={setIsExplainabilityDrawerOpen}
+        selectedSymbol={selectedDecisionSymbol}
+        isLoading={isExplainabilityLoading}
+        explainability={symbolExplainability}
+        formatDateLabel={formatDateLabel}
+      />
     </section>
   );
 };

@@ -1430,6 +1430,25 @@ class UserScannerAutomationProfileResponse(BaseModel):
     updated_at: datetime
 
 
+class UserScannerSymbolSelectionUpdateRequest(BaseModel):
+    scanner_id: str = Field(default="default", min_length=1, max_length=60)
+    symbol_source: str = "crypto"
+    symbol_selection_mode: str = "top_active_50"
+    selected_symbols: list[str] = Field(default_factory=list)
+
+
+class UserScannerSymbolSelectionResponse(BaseModel):
+    id: str
+    user_id: str
+    scanner_id: str
+    symbol_source: str
+    symbol_selection_mode: str
+    selected_symbols: list[str] = Field(default_factory=list)
+    saved_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
 class UserScannerResultResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -2255,6 +2274,7 @@ class DecisionCardResponse(BaseModel):
     dominant_family: str | None = None
     supporting_families: list[str] = Field(default_factory=list)
     top_contributors: list[DecisionCardStrategyContribution] = Field(default_factory=list)
+    top_strategies: list[DecisionCardStrategyContribution] = Field(default_factory=list)
     entry_zone: dict = Field(default_factory=dict)
     stop_loss: float | None = None
     take_profit_1: float | None = None
@@ -2263,6 +2283,7 @@ class DecisionCardResponse(BaseModel):
     blocked_reason: str | None = None
     cooldown_remaining: int = 0
     risk_block: str | None = None
+    risk_state: dict = Field(default_factory=dict)
     confidence_adjustment: float = 0
     learning_badges: list[str] = Field(default_factory=list)
     learning_quality_score: float | None = None

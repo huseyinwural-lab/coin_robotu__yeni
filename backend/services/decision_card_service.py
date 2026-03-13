@@ -86,7 +86,7 @@ def _row_to_decision_card(db: Session, row: UserScannerResult, quality_lookup: d
     if quality_score > 65 and quality.get("sample_count", 0) >= 5:
         learning_badges.append("decision supported by high-quality recent signals")
         confidence_adjustment += 0.1
-    if any(item.get("recommendation_type") == "auto_throttle_recommendation" for item in recommendations):
+    if any(item.get("recommendation_type") in {"auto_throttle_recommendation", "decrease_weight_recommendation"} for item in recommendations):
         learning_badges.append("strategy currently throttled")
         confidence_adjustment -= 0.1
     timeline = _trace_timeline(db, row.user_id, row.symbol, limit=20)
@@ -106,6 +106,7 @@ def _row_to_decision_card(db: Session, row: UserScannerResult, quality_lookup: d
         "dominant_family": payload.get("dominant_family"),
         "supporting_families": payload.get("supporting_families") or [],
         "top_contributors": top_contributors,
+        "top_strategies": top_contributors,
         "entry_zone": payload.get("entry_zone") or {},
         "stop_loss": payload.get("stop"),
         "take_profit_1": payload.get("take_profit_1"),
@@ -114,6 +115,7 @@ def _row_to_decision_card(db: Session, row: UserScannerResult, quality_lookup: d
         "blocked_reason": blocked_reason,
         "cooldown_remaining": int((payload.get("cooldown_state") or {}).get("seconds") or 0),
         "risk_block": (payload.get("risk_state") or {}).get("reason"),
+        "risk_state": payload.get("risk_state") or {"state": "unknown"},
         "confidence_adjustment": round(confidence_adjustment, 4),
         "learning_badges": learning_badges,
         "learning_quality_score": round(quality_score, 4) if quality else None,

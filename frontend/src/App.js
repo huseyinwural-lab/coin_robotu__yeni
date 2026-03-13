@@ -55,6 +55,7 @@ import { UserTradesPage } from "@/pages/UserTradesPage";
 import { UserScannerPage } from "@/pages/UserScannerPage";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
+import { UserSymbolDecisionDetailPage } from "@/pages/UserSymbolDecisionDetailPage";
 import { UserReportsPage } from "@/pages/UserReportsPage";
 import { UserExecutePage } from "@/pages/UserExecutePage";
 import { UserPositionsPage } from "@/pages/UserPositionsPage";
@@ -168,6 +169,7 @@ function App() {
             <Route path="scanner" element={<UserScannerPage />} />
             <Route path="indicator-screener" element={<UserIndicatorScreenerPage />} />
             <Route path="signals" element={<UserSignalsPage />} />
+            <Route path="symbol/:symbol" element={<UserSymbolDecisionDetailPage />} />
             <Route path="reports" element={<UserReportsPage />} />
             <Route path="execute" element={<UserExecutePage />} />
             <Route path="bot-profiles" element={<BotProfilesPage />} />

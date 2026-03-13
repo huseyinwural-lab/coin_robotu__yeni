@@ -1284,6 +1284,23 @@ class SymbolSelectionWatchlist(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class UserScannerSymbolSelection(Base):
+    __tablename__ = "user_scanner_symbol_selections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "scanner_id", name="uq_user_scanner_symbol_selection"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    scanner_id: Mapped[str] = mapped_column(String(60), default="default", index=True)
+    selected_symbols: Mapped[list[str]] = mapped_column(JSON, default=list)
+    symbol_source: Mapped[str] = mapped_column(String(20), default="crypto")
+    symbol_selection_mode: Mapped[str] = mapped_column(String(40), default="top_active_50")
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 @event.listens_for(ExecutionMetric, "before_update", propagate=True)
 def _block_execution_metric_update(_, __, ___):
     raise ValueError("execution_metric_immutable")

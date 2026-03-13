@@ -61,6 +61,10 @@ def _classify_outcome(position: PaperPosition | None, pending: PendingSignal | N
     return "OPEN", 0.0, 0.0, 0.0, False, False
 
 
+def _quality_degradation_flag(decay_quality: float) -> bool:
+    return float(decay_quality) < 25.0
+
+
 def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
     _ensure_learning_tables(db)
     window_start = datetime.now(timezone.utc) - timedelta(days=window_days)
@@ -236,7 +240,7 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
                         id=str(uuid.uuid4()),
                         strategy_id=strategy_id,
                         family=None,
-                        recommendation_type="auto_throttle_recommendation",
+                        recommendation_type="decrease_weight_recommendation",
                         recommendation_value={"suggested_weight_multiplier": 0.7},
                         note="false allow trend yüksek, throttle önerisi",
                         severity="medium",
@@ -248,7 +252,7 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
                         id=str(uuid.uuid4()),
                         strategy_id=strategy_id,
                         family=None,
-                        recommendation_type="weight_boost_recommendation",
+                        recommendation_type="increase_weight_recommendation",
                         recommendation_value={"suggested_weight_multiplier": 1.1},
                         note="son dönem kalite yüksek, sınırlı weight artırımı önerisi",
                         severity="low",
@@ -306,10 +310,28 @@ def get_learning_overview(db: Session) -> dict:
         .all()
     )
 
+    recommendation_lookup: dict[str, list[dict]] = defaultdict(list)
+    for row in recommendation_rows:
+        key = str(row.strategy_id or "")
+        if key:
+            recommendation_lookup[key].append(
+                {
+                    "recommendation_type": row.recommendation_type,
+                    "severity": row.severity,
+                    "note": row.note,
+                    "created_at": row.created_at,
+                }
+            )
+
     return {
         "schema_version": LEARNING_SCHEMA_VERSION,
         "engine_version": LEARNING_ENGINE_VERSION,
         "generated_at": datetime.now(timezone.utc),
+        "guardrails": {
+            "auto_change_forbidden": True,
+            "admin_approval_required": True,
+            "audit_log_enabled": True,
+        },
         "strategy_memory": [
             {
                 "strategy_id": row.strategy_id,
@@ -322,8 +344,16 @@ def get_learning_overview(db: Session) -> dict:
                 "avg_mae": row.avg_mae,
                 "false_allow_rate": row.false_allow_rate,
                 "false_reject_rate": row.false_reject_rate,
+                "rolling_quality_score": row.recent_rolling_score,
+                "decay_adjusted_score": row.decay_adjusted_quality_score,
                 "recent_rolling_score": row.recent_rolling_score,
                 "decay_adjusted_quality_score": row.decay_adjusted_quality_score,
+                "quality_degradation_flag": _quality_degradation_flag(row.decay_adjusted_quality_score),
+                "recent_performance": {
+                    "hit_rate": row.hit_rate,
+                    "avg_return": row.avg_return,
+                },
+                "recommendation": (recommendation_lookup.get(str(row.strategy_id)) or [None])[0],
                 "updated_at": row.updated_at,
             }
             for row in strategy_rows
@@ -354,10 +384,49 @@ def get_learning_overview(db: Session) -> dict:
                 "is_applied": row.is_applied,
                 "created_at": row.created_at,
                 "applied_at": row.applied_at,
+                "admin_approval_required": True,
             }
             for row in recommendation_rows
         ],
+        "events": list_learning_events(db, limit=200),
     }
+
+
+def list_learning_events(db: Session, *, limit: int = 200) -> list[dict]:
+    _ensure_learning_tables(db)
+    rows = (
+        db.query(LearningDecisionEvent)
+        .order_by(LearningDecisionEvent.created_at.desc())
+        .limit(max(1, min(limit, 1000)))
+        .all()
+    )
+    events: list[dict] = []
+    for row in rows:
+        events.append(
+            {
+                "event_id": row.id,
+                "symbol": row.symbol,
+                "decision": row.decision,
+                "strategies": list(row.source_strategies or []),
+                "families": row.family_scores or {},
+                "regime_snapshot": row.regime_snapshot or {},
+                "risk_snapshot": row.risk_snapshot or {},
+                "entry_price": row.entry_price,
+                "exit_price": row.exit_price,
+                "max_favorable_excursion": row.max_favorable_excursion,
+                "max_adverse_excursion": row.max_adverse_excursion,
+                "hold_duration": row.hold_duration_minutes,
+                "hold_duration_minutes": row.hold_duration_minutes,
+                "outcome_label": row.outcome_label,
+                "pnl_normalized": row.pnl_normalized,
+                "stop_hit": row.stop_hit,
+                "tp_hit": row.tp_hit,
+                "invalidated": row.invalidated,
+                "created_at": row.created_at,
+                "closed_at": row.closed_at,
+            }
+        )
+    return events
 
 
 def strategy_quality_lookup(db: Session) -> dict[str, dict]:

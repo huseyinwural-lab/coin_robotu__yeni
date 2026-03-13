@@ -64,7 +64,10 @@ export const UserScannerPage = () => {
   const [symbolExplainability, setSymbolExplainability] = useState(null);
   const [isExplainabilityLoading, setIsExplainabilityLoading] = useState(false);
   const [isSavingAutomation, setIsSavingAutomation] = useState(false);
+  const [selectionSavedAt, setSelectionSavedAt] = useState(null);
+  const [selectionHydrated, setSelectionHydrated] = useState(false);
   const profileRunTrackerRef = useRef({});
+  const symbolPersistTimerRef = useRef(null);
 
   const activeModeLabel = String(overview?.mode || mode || "ASSISTED").toUpperCase();
   const executionPathLabel =
@@ -261,13 +264,14 @@ export const UserScannerPage = () => {
       setIsLoading(true);
     }
     try {
-      const [modeRes, overviewRes, resultsRes, automationRes, profilesRes, cardsRes] = await Promise.all([
+      const [modeRes, overviewRes, resultsRes, automationRes, profilesRes, cardsRes, persistedSelectionRes] = await Promise.all([
         apiClient.get("/user/signal-mode"),
         apiClient.get("/user/scanner"),
         apiClient.get("/user/scanner/results", { params: { limit: 80 } }),
         apiClient.get("/user/scanner/automation"),
         apiClient.get("/user/scanner/automation-profiles"),
         apiClient.get("/user/decision-cards", { params: { limit: 60 } }),
+        apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" } }),
       ]);
       setMode(modeRes.data.mode || "ASSISTED");
       setOverview(overviewRes.data);
@@ -277,6 +281,7 @@ export const UserScannerPage = () => {
       setAutomationConfig(automation);
       setAutomationProfiles(profiles);
       const cards = cardsRes?.data?.items || [];
+      const persistedSelection = persistedSelectionRes?.data || null;
       setDecisionCards(cards);
       if (cards.length > 0) {
         const selectedSymbol = selectedDecisionSymbol || cards[0].symbol;
@@ -302,6 +307,13 @@ export const UserScannerPage = () => {
           setSymbolMode(automation.symbol_selection_mode || "top_active_50");
           setSelectedSymbols(Array.isArray(automation.selected_symbols) ? automation.selected_symbols : []);
         }
+        if (persistedSelection) {
+          setSymbolSource(persistedSelection.symbol_source || "crypto");
+          setSymbolMode(persistedSelection.symbol_selection_mode || "top_active_50");
+          setSelectedSymbols(Array.isArray(persistedSelection.selected_symbols) ? persistedSelection.selected_symbols : []);
+          setSelectionSavedAt(persistedSelection.saved_at || null);
+        }
+        setSelectionHydrated(true);
       }
     } finally {
       if (!silent) {
@@ -320,6 +332,33 @@ export const UserScannerPage = () => {
     }, 10000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!selectionHydrated) {
+      return;
+    }
+    if (symbolPersistTimerRef.current) {
+      clearTimeout(symbolPersistTimerRef.current);
+    }
+    symbolPersistTimerRef.current = setTimeout(async () => {
+      try {
+        const { data } = await apiClient.put("/user/scanner/symbol-selection", {
+          scanner_id: "default",
+          symbol_source: symbolSource,
+          symbol_selection_mode: symbolMode,
+          selected_symbols: selectedSymbols,
+        });
+        setSelectionSavedAt(data?.saved_at || null);
+      } catch {
+        // otomatik persist sessiz hataya toleranslı
+      }
+    }, 700);
+    return () => {
+      if (symbolPersistTimerRef.current) {
+        clearTimeout(symbolPersistTimerRef.current);
+      }
+    };
+  }, [selectionHydrated, symbolMode, symbolSource, selectedSymbols]);
 
   const runScanner = async () => {
     setIsRunning(true);
@@ -440,6 +479,10 @@ export const UserScannerPage = () => {
     setIsExplainabilityDrawerOpen(true);
   };
 
+  const openSymbolDetail = (symbol) => {
+    navigate(`/user/symbol/${encodeURIComponent(symbol)}`);
+  };
+
   return (
     <section className="grid grid-cols-12 gap-4" data-testid="user-scanner-page">
       <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-header">
@@ -488,6 +531,9 @@ export const UserScannerPage = () => {
         </div>
         <p className="mt-2 text-xs text-emerald-200" data-testid="user-scanner-automation-hint">
           Kaynak + seçim modu + seçili semboller profilde saklanır; otomatik scanner kayıtlı profil periyoduyla çalışır.
+        </p>
+        <p className="mt-1 text-xs text-emerald-100" data-testid="user-scanner-selection-persisted-at">
+          Sembol Kaydı: {formatDateLabel(selectionSavedAt)}
         </p>
       </section>
 
@@ -568,7 +614,14 @@ export const UserScannerPage = () => {
 
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="user-decision-card-grid">
           {decisionCards.length === 0 && <p className="text-xs text-blue-100" data-testid="user-decision-card-empty">Henüz decision card üretilmedi.</p>}
-          {decisionCards.map((card) => <DecisionCard key={card.symbol} card={card} onOpenExplainability={onSelectDecisionCard} />)}
+          {decisionCards.map((card) => (
+            <DecisionCard
+              key={card.symbol}
+              card={card}
+              onOpenExplainability={onSelectDecisionCard}
+              onOpenSymbolDetail={openSymbolDetail}
+            />
+          ))}
         </div>
       </section>
 

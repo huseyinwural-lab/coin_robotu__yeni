@@ -8,7 +8,7 @@ const decisionBadgeClass = {
   NO_TRADE: "border-slate-500/60 bg-slate-500/20 text-slate-200",
 };
 
-export const DecisionCard = ({ card, onOpenExplainability }) => {
+export const DecisionCard = ({ card, onOpenExplainability, onOpenSymbolDetail }) => {
   const decision = String(card?.decision || "NO_TRADE").toUpperCase();
   const badgeClass = decisionBadgeClass[decision] || decisionBadgeClass.NO_TRADE;
   const topContributors = Array.isArray(card?.top_contributors) ? card.top_contributors.slice(0, 2) : [];
@@ -21,10 +21,24 @@ export const DecisionCard = ({ card, onOpenExplainability }) => {
       </div>
 
       <p className="mt-1 text-xs text-slate-300" data-testid={`user-decision-card-regime-${card.symbol}`}>Regime: {card.market_regime}</p>
+      <p className="text-xs text-slate-300" data-testid={`user-decision-card-confidence-${card.symbol}`}>Confidence: {card.confidence}</p>
       <p className="text-xs text-slate-300" data-testid={`user-decision-card-score-${card.symbol}`}>L/S: {card.long_score} / {card.short_score}</p>
       <p className="text-xs text-slate-300" data-testid={`user-decision-card-dominant-family-${card.symbol}`}>Dominant Family: {card.dominant_family || "-"}</p>
+      <p className="text-xs text-slate-300" data-testid={`user-decision-card-entry-zone-${card.symbol}`}>
+        Entry Zone: {card.entry_zone?.min ?? "-"} / {card.entry_zone?.max ?? "-"}
+      </p>
+      <p className="text-xs text-slate-300" data-testid={`user-decision-card-stop-${card.symbol}`}>Stop: {card.stop_loss ?? "-"}</p>
+      <p className="text-xs text-slate-300" data-testid={`user-decision-card-tp1-${card.symbol}`}>TP1: {card.take_profit_1 ?? "-"}</p>
+      <p className="text-xs text-slate-300" data-testid={`user-decision-card-tp2-${card.symbol}`}>TP2: {card.take_profit_2 ?? "-"}</p>
+      <p className="text-xs text-slate-300" data-testid={`user-decision-card-invalidation-${card.symbol}`}>
+        Invalidation: {card.invalidation?.type || card.invalidation?.reason || "-"}
+      </p>
       <p className="text-xs text-slate-300" data-testid={`user-decision-card-risk-block-${card.symbol}`}>Risk Block: {card.risk_block || card.blocked_reason || "clear"}</p>
+      <p className="text-xs text-slate-300" data-testid={`user-decision-card-blocked-reason-${card.symbol}`}>Blocked Reason: {card.blocked_reason || "-"}</p>
+      <p className="text-xs text-slate-300" data-testid={`user-decision-card-cooldown-${card.symbol}`}>Cooldown (sec): {card.cooldown_remaining ?? 0}</p>
+      <p className="text-xs text-slate-300" data-testid={`user-decision-card-risk-state-${card.symbol}`}>Risk State: {card.risk_block ? "blocked" : "clear"}</p>
       <p className="text-xs text-slate-300" data-testid={`user-decision-card-confidence-adjustment-${card.symbol}`}>Confidence Adj: {card.confidence_adjustment || 0}</p>
+      <p className="text-xs text-slate-300" data-testid={`user-decision-card-updated-at-${card.symbol}`}>Updated At: {card.updated_at || card.generated_at || "-"}</p>
 
       <div className="mt-1 flex flex-wrap gap-1" data-testid={`user-decision-card-learning-badges-${card.symbol}`}>
         {(card.learning_badges || []).map((badge, idx) => (
@@ -56,6 +70,17 @@ export const DecisionCard = ({ card, onOpenExplainability }) => {
         >
           Explainability
         </Button>
+        {typeof onOpenSymbolDetail === "function" && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onOpenSymbolDetail(card.symbol)}
+            data-testid={`user-decision-card-open-symbol-detail-button-${card.symbol}`}
+          >
+            Symbol Detail
+          </Button>
+        )}
       </div>
     </article>
   );
