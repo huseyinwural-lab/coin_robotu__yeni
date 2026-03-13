@@ -1,0 +1,128 @@
+{
+  "summary": "Iteration 83 - All 6 Features Verified PASS - Exchange validate hint, Risk Policy status, Scanner mode indicator",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "features_tested": {
+    "risk_policies_active_inactive_indicator": {
+      "status": "PASS",
+      "description": "Risk Policies page shows clear policy status ACTIVE/INACTIVE with row-level badges",
+      "panel_testid": "risk-policies-active-indicator-panel",
+      "status_testid": "risk-policies-active-indicator-status",
+      "badge_testid": "risk-table-status-badge-{id}",
+      "verified_content": {
+        "status_text": "Policy Status: ACTIVE",
+        "active_policy_text": "Active Policy: Starter Safe (Auto)",
+        "note": "Varsayılan execution policy en güncel policy olarak uygulanır",
+        "badge_styling": "Green bg with ACTIVE text for active policy"
+      }
+    },
+    "scanner_active_mode_indicator": {
+      "status": "PASS",
+      "description": "Scanner page shows clear active mode indicator card with mode/path/source/symbol mode",
+      "card_testid": "user-scanner-active-mode-indicator-card",
+      "verified_fields": {
+        "mode_field": "Active Mode: MANUAL",
+        "path_field": "Execution Path: MANUAL_REVIEW_FLOW",
+        "source_field": "Source: CRYPTO",
+        "symbol_mode_field": "Symbol Mode: top_active_50"
+      },
+      "card_styling": "Cyan/teal border with 4-column layout"
+    },
+    "exchange_validate_bypass_assignment_required": {
+      "status": "PASS",
+      "description": "Exchange validate no longer fails with assignment_required/settings_mismatch when matching UserExchangeConnection exists",
+      "bypass_logic_location": "/app/backend/services/live_mode_service.py lines 663-696",
+      "test_result": "assignment_required bypassed when user has matching connection profile",
+      "actual_failure_code": "exchange_error_451 (real credential issue shown instead of assignment mismatch)"
+    },
+    "exchange_validate_hint_text": {
+      "status": "PASS",
+      "description": "Exchange validate response includes hint text for common failures",
+      "hint_mappings_verified": [
+        "invalid_key -> API key/secret geçersiz...",
+        "missing_trade_permission -> API key üzerinde trade yetkisi kapalı...",
+        "ip_restriction -> API key IP whitelist kısıtına takılıyor...",
+        "exchange_error_451 -> Bölgesel erişim kısıtı (451)...",
+        "assignment_required -> Venue assignment eksik...",
+        "settings_mismatch -> Seçilen venue ile aktif exchange ayarı uyuşmuyor..."
+      ],
+      "hint_function_location": "/app/backend/services/live_mode_service.py _validation_hint()"
+    },
+    "frontend_exchange_settings_hint_display": {
+      "status": "PASS",
+      "description": "Frontend Exchange Settings displays validate hint line",
+      "hint_testid": "user-exchange-validate-hint-line",
+      "banner_format": "{context}: {reason} | hint: {hint_text}",
+      "toast_display": "hint shown as toast.error"
+    },
+    "regression_risk_policies_list": {
+      "status": "PASS",
+      "endpoint": "GET /api/risk-policies",
+      "response": "200 OK with list of policies"
+    },
+    "regression_scanner_run": {
+      "status": "PASS",
+      "endpoints_tested": [
+        "GET /api/user/scanner",
+        "GET /api/user/scanner/results",
+        "GET /api/user/signal-mode"
+      ],
+      "ui_test": "Scanner run button clickable, success toast displayed"
+    }
+  },
+  "backend_tests": {
+    "total": 11,
+    "passed": 11,
+    "skipped": 0,
+    "failed": 0,
+    "test_file": "/app/backend/tests/test_iteration83_validate_hint_regression.py",
+    "test_classes": [
+      "TestBackendHealth (1 test)",
+      "TestRiskPoliciesRegression (1 test)",
+      "TestScannerRegression (3 tests)",
+      "TestExchangeValidateHint (1 test)",
+      "TestExchangeValidateHintMessages (1 test)",
+      "TestExchangeValidateBypassLogic (1 test)",
+      "TestVenueOptionsEndpoint (2 tests)",
+      "TestExchangeReadinessChecklist (1 test)"
+    ]
+  },
+  "frontend_tests": {
+    "risk_policy_page": "PASS - Panel with ACTIVE/INACTIVE status and row badges visible",
+    "scanner_page": "PASS - Mode indicator card with all 4 fields visible",
+    "scanner_run": "PASS - Run button works, success toast shown"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration83_validate_hint_regression.py",
+    "/app/test_reports/pytest/pytest_results_iter83.xml",
+    "/app/test_reports/artifacts_iter83/01_after_login.jpeg",
+    "/app/test_reports/artifacts_iter83/02_risk_policies_page.jpeg",
+    "/app/test_reports/artifacts_iter83/03_scanner_page.jpeg",
+    "/app/test_reports/artifacts_iter83/04_scanner_after_run.jpeg"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration83_validate_hint_regression.py"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": {
+    "user": "test_iter83_user_1773408317@test.com / TestPass123!",
+    "admin": "admin@platform.dev / Admin12345!"
+  },
+  "seed_data_creation": "Created new approved user and exchange connection profile for testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 6 features verified: (1) Risk Policy page has active/inactive indicator panel + row-level ACTIVE/INACTIVE badges, (2) Scanner page has active mode indicator card with mode/path/source/symbol mode, (3) Exchange validate bypasses assignment_required when UserExchangeConnection exists, (4) Exchange validate returns hint text for common failures, (5) Frontend displays hint in banner and dedicated line, (6) Risk policies list and scanner run regression tests pass.",
+  "rca_of_the_issue": "N/A - Feature verification testing. All requested features are working correctly."
+}

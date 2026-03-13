@@ -401,6 +401,7 @@ export const UserExchangeSettingsPage = () => {
         },
       });
       setValidateResult(data);
+      setTestOrderBanner("");
       toast.success("Exchange doğrulaması tamamlandı");
       await loadAll();
     } catch (error) {
@@ -409,7 +410,11 @@ export const UserExchangeSettingsPage = () => {
       if (typeof detail === "object") {
         const context = [detail.exchange, detail.market_type, detail.environment].filter(Boolean).join("/");
         const reason = Array.isArray(detail.reason_codes) ? detail.reason_codes.join(",") : detail.failure_code || detail.status || "validation_failed";
-        setTestOrderBanner(context ? `${context}: ${reason}` : reason);
+        const hint = detail?.hint ? ` | hint: ${detail.hint}` : "";
+        setTestOrderBanner(context ? `${context}: ${reason}${hint}` : `${reason}${hint}`);
+        if (detail?.hint) {
+          toast.error(detail.hint);
+        }
       }
       toast.error("Exchange doğrulaması başarısız");
     } finally {
@@ -1061,6 +1066,9 @@ export const UserExchangeSettingsPage = () => {
           </p>
           <p className="text-xs font-mono text-slate-300" data-testid="user-exchange-validate-reason-codes-line">
             reason_codes: {(validateResult?.reason_codes || []).join(",") || "-"}
+          </p>
+          <p className="text-xs font-mono text-slate-300" data-testid="user-exchange-validate-hint-line">
+            hint: {validateResult?.hint || "-"}
           </p>
         </div>
       </div>

@@ -622,6 +622,24 @@ def validate_exchange_credentials_for_user(
         requested_environment,
     )
 
+    def _validation_hint(reason_codes: list[str]) -> str | None:
+        normalized = {str(code).strip().lower() for code in (reason_codes or []) if str(code).strip()}
+        if "invalid_key" in normalized:
+            if requested_environment == "testnet":
+                return "API key/secret geçersiz veya mainnet key testnet ortamında kullanılıyor olabilir. Testnet key kullanın ya da environment'i live seçin."
+            return "API key/secret geçersiz veya yetkiler yetersiz. Key/secret ve permission seçeneklerini kontrol edin."
+        if "missing_trade_permission" in normalized:
+            return "API key üzerinde trade yetkisi kapalı. Binance API izinlerinde trade/futures izinlerini açın."
+        if "ip_restriction" in normalized:
+            return "API key IP whitelist kısıtına takılıyor. Sunucu IP'sini whitelist'e ekleyin veya IP kısıtını kaldırın."
+        if "exchange_error_451" in normalized:
+            return "Bölgesel erişim kısıtı (451) oluştu. Farklı venue/environment veya uygun endpoint fallback ile doğrulayın."
+        if "assignment_required" in normalized:
+            return "Venue assignment eksik. Exchange connection profilini varsayılan yapıp tekrar deneyin."
+        if "settings_mismatch" in normalized:
+            return "Seçilen venue ile aktif exchange ayarı uyuşmuyor. Exchange Settings ekranında aynı venue'yu seçin."
+        return None
+
     def _validation_failure(reason_codes: list[str], code: int, *, capability: bool = capability_match) -> tuple[dict, int]:
         settings_row.last_validation_success = False
         settings_row.last_reason_codes = reason_codes
@@ -638,6 +656,7 @@ def validate_exchange_credentials_for_user(
             "can_withdraw": False,
             "reason_codes": reason_codes,
             "capability_match": capability,
+            "hint": _validation_hint(reason_codes),
         }, code
 
     requested_connection = (
