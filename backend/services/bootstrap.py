@@ -24,11 +24,10 @@ def _seed_admin(db: Session):
     if not settings.default_admin_email or not settings.default_admin_password:
         return
 
-    if db.query(User).count() > 0:
-        return
-
     existing_admin = db.query(User).filter(User.email == settings.default_admin_email).first()
     if existing_admin:
+        existing_admin.role = UserRole.SUPER_ADMIN
+        existing_admin.password_hash = hash_password(settings.default_admin_password)
         existing_admin.is_active = True
         existing_admin.approval_status = "approved"
         existing_admin.approval_requested_at = existing_admin.approval_requested_at or datetime.now(timezone.utc)
@@ -39,7 +38,7 @@ def _seed_admin(db: Session):
     admin = User(
         email=settings.default_admin_email,
         password_hash=hash_password(settings.default_admin_password),
-        role=UserRole.ADMIN,
+        role=UserRole.SUPER_ADMIN,
         is_active=True,
         approval_status="approved",
         approval_requested_at=datetime.now(timezone.utc),
