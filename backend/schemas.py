@@ -1383,6 +1383,24 @@ class UserSignalDecisionResponse(BaseModel):
     created_order_intent_id: str | None = None
 
 
+class UserSignalDiagnoseResponse(BaseModel):
+    id: str
+    status: str
+    current_state: str
+    blocked_reason_code: str
+    blocked_reason_message: str
+    blocked_solution_hint: str
+    requires_manual_approval: bool
+    execution_eligible: bool
+    bot_profile_id: str | None = None
+    risk_policy_id: str | None = None
+    exchange_connection_id: str | None = None
+    created_order_intent_id: str | None = None
+    runtime_owner: str
+    last_eligibility_check_at: datetime | None = None
+    actions_applied: list[str] = Field(default_factory=list)
+
+
 class DecisionReasonDetailResponse(BaseModel):
     code: str
     title: str

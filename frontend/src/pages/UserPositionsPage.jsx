@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -7,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 
 export const UserPositionsPage = () => {
+  const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busyAction, setBusyAction] = useState("");
@@ -75,6 +77,17 @@ export const UserPositionsPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="user-positions-description">Open pozisyon yönetimi: close, partial close, reverse, stop/tp güncelleme.</p>
       </header>
 
+      {rows.length === 0 && (
+        <section className="col-span-12 border border-amber-500/40 bg-amber-500/10 p-4" data-testid="user-positions-empty-state-panel">
+          <p className="text-sm text-amber-100" data-testid="user-positions-empty-state-text">Açık pozisyon yok. Bu normal bir durum olabilir (henüz filled trade oluşmamış olabilir).</p>
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="user-positions-empty-state-actions">
+            <Button variant="outline" onClick={() => navigate("/user/scanner")} data-testid="user-positions-empty-go-scanner-button">Scanner’a Git</Button>
+            <Button variant="outline" onClick={() => navigate("/user/signals")} data-testid="user-positions-empty-go-signals-button">Signals’a Git</Button>
+            <Button variant="outline" onClick={() => navigate("/user/execute")} data-testid="user-positions-empty-go-execute-button">Execute’a Git</Button>
+          </div>
+        </section>
+      )}
+
       <div className="col-span-12 overflow-x-auto border border-slate-800 bg-slate-900" data-testid="user-positions-table-wrapper">
         <table className="min-w-full text-sm" data-testid="user-positions-table">
           <thead className="bg-slate-800 text-left" data-testid="user-positions-table-head">
@@ -109,6 +122,9 @@ export const UserPositionsPage = () => {
                 <td className="px-3 py-2" data-testid={`user-positions-hedge-suggestion-${row.position_id}`}>{row.hedge_suggestion?.hedge_symbol ? `${row.hedge_suggestion.hedge_symbol} ${row.hedge_suggestion.hedge_direction} ${row.hedge_suggestion.hedge_size}` : "none"}</td>
                 <td className="px-3 py-2">
                   <div className="grid gap-2" data-testid={`user-positions-actions-${row.position_id}`}>
+                    <p className="text-xs text-slate-400" data-testid={`user-positions-action-explainability-${row.position_id}`}>
+                      Why: recommended_action={row.recommended_action || "monitor"} / risk_reduction_score={row.risk_reduction_score ?? 0}
+                    </p>
                     <div className="flex flex-wrap gap-2" data-testid={`user-positions-primary-actions-${row.position_id}`}>
                       <Button
                         className="bg-rose-500 text-white hover:bg-rose-400"
@@ -163,14 +179,18 @@ export const UserPositionsPage = () => {
                     </div>
 
                     <div className="flex flex-wrap gap-2" data-testid={`user-positions-risk-actions-${row.position_id}`}>
-                      <Input
-                        className="w-28"
-                        type="number"
-                        value={stopPrice[row.position_id] ?? ""}
-                        placeholder="stop"
-                        onChange={(event) => setStopPrice((prev) => ({ ...prev, [row.position_id]: event.target.value }))}
-                        data-testid={`user-positions-stop-input-${row.position_id}`}
-                      />
+                      <div className="flex flex-col gap-1" data-testid={`user-positions-stop-group-${row.position_id}`}>
+                        <label className="text-[11px] text-slate-400" htmlFor={`user-positions-stop-input-${row.position_id}`} data-testid={`user-positions-stop-label-${row.position_id}`}>Stop Price</label>
+                        <Input
+                          id={`user-positions-stop-input-${row.position_id}`}
+                          className="w-28"
+                          type="number"
+                          value={stopPrice[row.position_id] ?? ""}
+                          placeholder="stop"
+                          onChange={(event) => setStopPrice((prev) => ({ ...prev, [row.position_id]: event.target.value }))}
+                          data-testid={`user-positions-stop-input-${row.position_id}`}
+                        />
+                      </div>
                       <Button
                         variant="outline"
                         disabled={busyAction === `MOVE_STOP-${row.position_id}`}
@@ -186,14 +206,18 @@ export const UserPositionsPage = () => {
                         Edit Stop
                       </Button>
 
-                      <Input
-                        className="w-28"
-                        type="number"
-                        value={takeProfitPrice[row.position_id] ?? ""}
-                        placeholder="take profit"
-                        onChange={(event) => setTakeProfitPrice((prev) => ({ ...prev, [row.position_id]: event.target.value }))}
-                        data-testid={`user-positions-tp-input-${row.position_id}`}
-                      />
+                      <div className="flex flex-col gap-1" data-testid={`user-positions-tp-group-${row.position_id}`}>
+                        <label className="text-[11px] text-slate-400" htmlFor={`user-positions-tp-input-${row.position_id}`} data-testid={`user-positions-tp-label-${row.position_id}`}>Take Profit Price</label>
+                        <Input
+                          id={`user-positions-tp-input-${row.position_id}`}
+                          className="w-28"
+                          type="number"
+                          value={takeProfitPrice[row.position_id] ?? ""}
+                          placeholder="take profit"
+                          onChange={(event) => setTakeProfitPrice((prev) => ({ ...prev, [row.position_id]: event.target.value }))}
+                          data-testid={`user-positions-tp-input-${row.position_id}`}
+                        />
+                      </div>
                       <Button
                         variant="outline"
                         disabled={busyAction === `MOVE_TAKE_PROFIT-${row.position_id}`}

@@ -5,6 +5,31 @@ import { toast } from "sonner";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
+import { saveExecutionContext } from "@/lib/userFlowContext";
+
+const scannerQuickPresets = [
+  {
+    id: "manual-discovery",
+    label: "Manual Discovery",
+    mode: "MANUAL",
+    maxResults: 20,
+    note: "Sinyalleri manuel inceleyip onaylamak için.",
+  },
+  {
+    id: "assisted-balanced",
+    label: "Semi-Auto Balanced",
+    mode: "ASSISTED",
+    maxResults: 25,
+    note: "Risk ve queue kontrollü yarı otomatik akış.",
+  },
+  {
+    id: "auto-momentum",
+    label: "Full Auto Momentum",
+    mode: "AUTO",
+    maxResults: 30,
+    note: "Uygun sinyallerde intent hattını otomatik başlatır.",
+  },
+];
 
 export const UserScannerPage = () => {
   const navigate = useNavigate();
@@ -46,13 +71,37 @@ export const UserScannerPage = () => {
     }
   };
 
+  const runPreset = async (preset) => {
+    setIsRunning(true);
+    try {
+      await apiClient.put("/user/signal-mode", { mode: preset.mode });
+      setMode(preset.mode);
+      await apiClient.post("/user/scanner/run", { mode: preset.mode, max_results: preset.maxResults });
+      await load();
+      toast.success(`Preset çalıştı: ${preset.label}`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Preset çalıştırılamadı");
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
   if (isLoading) {
     return <LoadingSkeleton rows={6} testId="user-scanner-loading-skeleton" />;
   }
 
   const openExecuteFromScanner = (item) => {
     const side = item.signal === "short" ? "sell" : "buy";
-    navigate(`/user/execute?source=scanner&symbol=${encodeURIComponent(item.symbol)}&side=${encodeURIComponent(side)}&market_type=spot&preset=spot_basic`);
+    const marketType = item.market_type || "spot";
+    saveExecutionContext({
+      source: "scanner",
+      symbol: item.symbol,
+      market_type: marketType,
+      side,
+      strategy_code: item.strategy_code,
+      confidence: item.confidence,
+    });
+    navigate(`/user/execute?source=scanner&symbol=${encodeURIComponent(item.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(marketType)}&preset=spot_basic`);
   };
 
   const buildIntentPayload = (item) => ({
@@ -126,6 +175,18 @@ export const UserScannerPage = () => {
           {compactMode ? "Compact: ON" : "Compact: OFF"}
         </Button>
       </div>
+
+      <section className="col-span-12 grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-scanner-quick-preset-section">
+        {scannerQuickPresets.map((preset) => (
+          <article key={preset.id} className="rounded border border-slate-700 bg-slate-950 p-3" data-testid={`user-scanner-quick-preset-card-${preset.id}`}>
+            <p className="text-sm font-semibold text-slate-100" data-testid={`user-scanner-quick-preset-title-${preset.id}`}>{preset.label}</p>
+            <p className="mt-1 text-xs text-slate-400" data-testid={`user-scanner-quick-preset-note-${preset.id}`}>{preset.note}</p>
+            <Button className="mt-3" variant="outline" onClick={() => runPreset(preset)} disabled={isRunning} data-testid={`user-scanner-quick-preset-run-button-${preset.id}`}>
+              {isRunning ? "Çalışıyor..." : "Preset Çalıştır"}
+            </Button>
+          </article>
+        ))}
+      </section>
 
       <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-scanner-run-summary-grid">
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-mode-card"><p className="text-xs text-slate-500">Aktif Mode</p><p className="text-lg font-semibold text-orange-400" data-testid="user-scanner-summary-mode-value">{overview?.mode ?? mode}</p></div>

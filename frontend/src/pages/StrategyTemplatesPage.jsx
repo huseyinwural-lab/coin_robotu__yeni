@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ const initialForm = {
 
 export const StrategyTemplatesPage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(initialForm);
@@ -64,6 +66,19 @@ export const StrategyTemplatesPage = () => {
           Trend Following, Mean Reversion, Breakout, Volatility Expansion modları için temel şablon alanı.
         </p>
       </header>
+
+      {user?.role !== "admin" && (
+        <section className="border border-emerald-500/40 bg-emerald-500/10 p-4" data-testid="strategy-templates-user-bridge-panel">
+          <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="strategy-templates-user-bridge-title">User Bridge Guidance</p>
+          <p className="mt-2 text-sm text-emerald-100" data-testid="strategy-templates-user-bridge-description">
+            Bu ekran read-only. Şablonu aksiyona çevirmek için Scanner veya Execute ekranına geçin.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="strategy-templates-user-bridge-actions">
+            <Button variant="outline" onClick={() => navigate("/user/scanner")} data-testid="strategy-templates-go-scanner-button">Scanner’a Git</Button>
+            <Button variant="outline" onClick={() => navigate("/user/execute?source=strategy-template") } data-testid="strategy-templates-go-execute-button">Execute’a Git</Button>
+          </div>
+        </section>
+      )}
 
       {user?.role === "admin" && (
         <form onSubmit={submitTemplate} className="grid gap-3 border border-blue-900 bg-slate-900 p-4 md:grid-cols-2" data-testid="strategy-template-form">

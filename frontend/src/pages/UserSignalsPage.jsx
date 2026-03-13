@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
+import { saveExecutionContext } from "@/lib/userFlowContext";
 
 export const UserSignalsPage = () => {
   const navigate = useNavigate();
@@ -19,6 +20,9 @@ export const UserSignalsPage = () => {
   const [signalTrace, setSignalTrace] = useState(null);
   const [strategyExplain, setStrategyExplain] = useState(null);
   const [explainLoadingId, setExplainLoadingId] = useState("");
+  const [blockedAlertEnabled, setBlockedAlertEnabled] = useState(() => localStorage.getItem("signals-blocked-alerts") !== "off");
+  const [diagnoseBusyId, setDiagnoseBusyId] = useState("");
+  const alertedSignalIdsRef = useRef(new Set());
 
   const load = async () => {
     setIsLoading(true);
@@ -39,7 +43,70 @@ export const UserSignalsPage = () => {
     load();
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem("signals-blocked-alerts", blockedAlertEnabled ? "on" : "off");
+  }, [blockedAlertEnabled]);
+
+  useEffect(() => {
+    if (!blockedAlertEnabled) {
+      return;
+    }
+    const blockedRows = signals.filter((item) => item.status === "blocked" && item.blocked_reason_code);
+    for (const row of blockedRows) {
+      if (!alertedSignalIdsRef.current.has(row.id)) {
+        alertedSignalIdsRef.current.add(row.id);
+        toast.warning(`Signal blocked: ${row.symbol} / ${row.blocked_reason_code}`);
+      }
+    }
+  }, [signals, blockedAlertEnabled]);
+
   const pendingSignals = useMemo(() => signals.filter((item) => item.status === "pending"), [signals]);
+  const funnelMetrics = useMemo(() => {
+    const counters = {
+      detected: signals.length,
+      approved_or_ready: 0,
+      intent_created: 0,
+      submitted: 0,
+      filled: 0,
+      blocked: 0,
+    };
+    signals.forEach((row) => {
+      if (["ready", "approved", "queued", "submitted", "filled"].includes(String(row.status))) {
+        counters.approved_or_ready += 1;
+      }
+      if (row.created_order_intent_id) {
+        counters.intent_created += 1;
+      }
+      if (["queued", "submitted", "filled"].includes(String(row.status))) {
+        counters.submitted += 1;
+      }
+      if (String(row.status) === "filled") {
+        counters.filled += 1;
+      }
+      if (String(row.status) === "blocked") {
+        counters.blocked += 1;
+      }
+    });
+    return counters;
+  }, [signals]);
+
+  const recommendationText = useMemo(() => {
+    const blockedByCode = signals.reduce((acc, row) => {
+      const code = row.blocked_reason_code || "NONE";
+      acc[code] = (acc[code] || 0) + 1;
+      return acc;
+    }, {});
+    if ((blockedByCode.MANUAL_APPROVAL_REQUIRED || 0) > 5) {
+      return "MANUAL mode yoğun onay bekliyor; hızlı aksiyon için Semi-Auto düşünebilirsiniz.";
+    }
+    if ((blockedByCode.BOT_NOT_RUNNING || 0) > 0) {
+      return "Bazı sinyaller BOT_NOT_RUNNING nedeniyle bloklu; satırdaki Auto Diagnose + Auto Fix ile toparlayın.";
+    }
+    if ((blockedByCode.ORDER_PRECHECK_FAILED || 0) > 0) {
+      return "ORDER_PRECHECK_FAILED görüldü; Execute preview parametrelerini gözden geçirin.";
+    }
+    return "Signal->Execution hattı sağlıklı. Filled oranını artırmak için confidence >= 0.7 filtreleyin.";
+  }, [signals]);
 
   const modeLabelFromRaw = (rawMode) => {
     const normalized = String(rawMode || "ASSISTED").toUpperCase();
@@ -94,13 +161,37 @@ export const UserSignalsPage = () => {
   const openExecuteFromSignal = (signal) => {
     const side = signal.signal === "short" ? "sell" : "buy";
     const marketType = signal.market_type || "spot";
+    saveExecutionContext({
+      source: "signal",
+      symbol: signal.symbol,
+      market_type: marketType,
+      side,
+      signal_id: signal.signal_id,
+      strategy_code: signal.strategy_code,
+      blocked_reason_code: signal.blocked_reason_code,
+    });
     navigate(
       `/user/execute?source=signal&symbol=${encodeURIComponent(signal.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(marketType)}&preset=spot_basic`,
     );
   };
 
   const applyPresetFromSignal = (signal) => {
-    navigate(`/user/execute?source=signal&symbol=${encodeURIComponent(signal.symbol)}&side=buy&market_type=spot&preset=spot_basic`);
+    const side = signal.signal === "short" ? "sell" : "buy";
+    navigate(`/user/execute?source=signal&symbol=${encodeURIComponent(signal.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(signal.market_type || "spot")}&preset=spot_basic`);
+  };
+
+  const runDiagnose = async (signalId, autoFix = false) => {
+    setDiagnoseBusyId(signalId);
+    try {
+      const { data } = await apiClient.post(`/user/signal/${signalId}/diagnose`, null, { params: { auto_fix: autoFix } });
+      await load();
+      const actions = (data?.actions_applied || []).join(", ");
+      toast.success(`Diagnose: ${data.current_state}${actions ? ` / actions: ${actions}` : ""}`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Signal diagnose başarısız");
+    } finally {
+      setDiagnoseBusyId("");
+    }
   };
 
   const buildIntentPayload = (signal) => ({
@@ -180,6 +271,13 @@ export const UserSignalsPage = () => {
         <p className="mt-3 inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900" data-testid="user-signals-active-execution-mode-badge">
           Execution Mode: {modeLabelFromRaw(signalMode?.mode)}
         </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3" data-testid="user-signals-alert-settings-row">
+          <label className="inline-flex items-center gap-2 text-xs text-slate-300" data-testid="user-signals-blocked-alert-toggle-wrapper">
+            <input type="checkbox" checked={blockedAlertEnabled} onChange={(event) => setBlockedAlertEnabled(event.target.checked)} data-testid="user-signals-blocked-alert-toggle" />
+            blocked sinyal uyarıları aktif
+          </label>
+          <Button variant="outline" onClick={load} data-testid="user-signals-refresh-button">Yenile</Button>
+        </div>
       </header>
 
       <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-signals-metrics-grid">
@@ -187,6 +285,20 @@ export const UserSignalsPage = () => {
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-open-positions-card"><p className="text-xs text-slate-500">Open Positions</p><p className="text-xl font-semibold" data-testid="user-signals-open-positions-value">{portfolio?.open_positions_count ?? "-"}</p></div>
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-open-notional-card"><p className="text-xs text-slate-500">Open Notional</p><p className="text-xl font-semibold" data-testid="user-signals-open-notional-value">{portfolio?.open_notional ?? "-"}</p></div>
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-trades-count-card"><p className="text-xs text-slate-500">Trades</p><p className="text-xl font-semibold" data-testid="user-signals-trades-count-value">{trades.length}</p></div>
+      </div>
+
+      <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-signals-funnel-grid">
+        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-detected-card"><p className="text-[11px] text-slate-500">Detected</p><p className="text-lg font-semibold">{funnelMetrics.detected}</p></div>
+        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-approved-card"><p className="text-[11px] text-slate-500">Ready/Approved</p><p className="text-lg font-semibold">{funnelMetrics.approved_or_ready}</p></div>
+        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-intent-card"><p className="text-[11px] text-slate-500">Intent</p><p className="text-lg font-semibold">{funnelMetrics.intent_created}</p></div>
+        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-submitted-card"><p className="text-[11px] text-slate-500">Submitted</p><p className="text-lg font-semibold">{funnelMetrics.submitted}</p></div>
+        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-filled-card"><p className="text-[11px] text-slate-500">Filled</p><p className="text-lg font-semibold text-emerald-400">{funnelMetrics.filled}</p></div>
+        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-blocked-card"><p className="text-[11px] text-slate-500">Blocked</p><p className="text-lg font-semibold text-rose-400">{funnelMetrics.blocked}</p></div>
+      </div>
+
+      <div className="col-span-12 border border-amber-500/40 bg-amber-500/10 p-3" data-testid="user-signals-smart-recommendation-banner">
+        <p className="text-xs uppercase tracking-wider text-amber-300" data-testid="user-signals-smart-recommendation-title">Akıllı Öneri</p>
+        <p className="mt-1 text-sm text-amber-100" data-testid="user-signals-smart-recommendation-text">{recommendationText}</p>
       </div>
 
       <aside className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-signals-explain-panel">
@@ -244,14 +356,20 @@ export const UserSignalsPage = () => {
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-meta-decision-${signal.id}`}>meta: {signal.meta_engine_decision ?? "-"}</p>
             <div className="mt-2 flex flex-wrap gap-2" data-testid={`user-signals-mobile-actions-${signal.id}`}>
               <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-mobile-why-button-${signal.id}`}>Why this signal?</Button>
-              {(signal.status === "pending" || signal.status === "ready") && (
+              {(signal.status === "pending" || signal.status === "ready" || signal.status === "blocked") && (
                 <>
-                  <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-mobile-approve-${signal.id}`}>Approve</Button>
-                  <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-mobile-reject-${signal.id}`}>Reject</Button>
+                  {(signal.status === "pending" || signal.status === "ready") && (
+                    <>
+                      <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-mobile-approve-${signal.id}`}>Approve</Button>
+                      <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-mobile-reject-${signal.id}`}>Reject</Button>
+                    </>
+                  )}
                   <Button variant="outline" onClick={() => openExecuteFromSignal(signal)} data-testid={`user-signals-mobile-open-execute-${signal.id}`}>Execute</Button>
                   <Button variant="outline" onClick={() => applyPresetFromSignal(signal)} data-testid={`user-signals-mobile-apply-preset-${signal.id}`}>Apply Preset</Button>
                   <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid={`user-signals-mobile-preview-intent-${signal.id}`}>Preview Intent</Button>
                   <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid={`user-signals-mobile-follow-signal-${signal.id}`}>Follow Signal</Button>
+                  <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, false)} data-testid={`user-signals-mobile-diagnose-${signal.id}`}>Diagnose</Button>
+                  <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-mobile-diagnose-fix-${signal.id}`}>Auto Fix</Button>
                 </>
               )}
               {!(signal.status === "pending" || signal.status === "ready") && (
@@ -308,14 +426,20 @@ export const UserSignalsPage = () => {
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>
                   <div className="flex flex-wrap gap-2" data-testid={`user-signals-actions-${signal.id}`}>
                     <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-why-button-${signal.id}`}>Why this signal?</Button>
-                    {(signal.status === "pending" || signal.status === "ready") ? (
+                    {(signal.status === "pending" || signal.status === "ready" || signal.status === "blocked") ? (
                       <>
-                        <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-approve-button-${signal.id}`}>Approve</Button>
-                        <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-reject-button-${signal.id}`}>Reject</Button>
+                        {(signal.status === "pending" || signal.status === "ready") && (
+                          <>
+                            <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-approve-button-${signal.id}`}>Approve</Button>
+                            <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-reject-button-${signal.id}`}>Reject</Button>
+                          </>
+                        )}
                         <Button variant="outline" onClick={() => openExecuteFromSignal(signal)} data-testid={`user-signals-open-execute-button-${signal.id}`}>Open in Execute</Button>
                         <Button variant="outline" onClick={() => applyPresetFromSignal(signal)} data-testid={`user-signals-apply-preset-button-${signal.id}`}>Apply Preset</Button>
                         <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid={`user-signals-preview-intent-button-${signal.id}`}>Preview Intent</Button>
                         <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid={`user-signals-follow-signal-button-${signal.id}`}>Follow Signal</Button>
+                        <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, false)} data-testid={`user-signals-diagnose-button-${signal.id}`}>Diagnose</Button>
+                        <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-diagnose-fix-button-${signal.id}`}>Auto Fix</Button>
                       </>
                     ) : (
                       <span className="text-xs text-slate-400" data-testid={`user-signals-final-status-text-${signal.id}`}>{signal.status}</span>

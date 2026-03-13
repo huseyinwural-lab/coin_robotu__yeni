@@ -916,3 +916,72 @@ def reject_pending_signal(db: Session, user_id: str, pending_signal_id: str, not
     db.refresh(row)
     row.execution_mode_label = _execution_mode_label(row.mode)
     return row
+
+
+def diagnose_pending_signal(
+    db: Session,
+    user_id: str,
+    pending_signal_id: str,
+    auto_fix: bool = False,
+) -> tuple[PendingSignal, list[str]]:
+    row = (
+        db.query(PendingSignal)
+        .filter(PendingSignal.id == pending_signal_id, PendingSignal.user_id == user_id)
+        .first()
+    )
+    if row is None:
+        raise ValueError("pending_signal_not_found")
+
+    actions_applied: list[str] = []
+    _refresh_pending_signal_snapshot(db, row)
+
+    if auto_fix and row.blocked_reason_code == "BOT_NOT_RUNNING" and row.bot_profile_id:
+        bot = db.query(BotProfile).filter(BotProfile.id == row.bot_profile_id).first()
+        if bot is not None and not bool(bot.is_running):
+            bot.is_running = True
+            bot.updated_at = datetime.now(timezone.utc)
+            actions_applied.append("bot_runtime_started")
+
+    if auto_fix and row.blocked_reason_code == "SYMBOL_NOT_ALLOWED" and row.bot_profile_id:
+        bot = db.query(BotProfile).filter(BotProfile.id == row.bot_profile_id).first()
+        if bot is not None:
+            existing = [item.upper() for item in (bot.symbols or []) if item]
+            symbol = str(row.symbol or "").upper()
+            if symbol and symbol not in existing:
+                bot.symbols = [*existing, symbol][:40]
+                bot.updated_at = datetime.now(timezone.utc)
+                actions_applied.append("symbol_added_to_bot_scope")
+
+    if actions_applied:
+        db.flush()
+
+    _refresh_pending_signal_snapshot(db, row)
+    record_decision_trace(
+        db,
+        user_id=user_id,
+        trace_scope="signal",
+        trace_type="signal_runtime_diagnose",
+        entity_id=row.id,
+        strategy_code=row.strategy_code,
+        decision_status=row.current_state,
+        reason_codes=[row.blocked_reason_code] if row.blocked_reason_code else ["diagnose_ok"],
+        strategy_allocation_reason=row.blocked_solution_hint or "signal_runtime_diagnose",
+        meta_engine_decision=row.meta_engine_decision,
+        feature_snapshot={
+            "execution_eligible": bool(row.execution_eligible),
+            "requires_manual_approval": bool(row.requires_manual_approval),
+            "actions_applied": actions_applied,
+        },
+        context_payload={
+            "pending_signal_id": row.id,
+            "signal_id": row.signal_id,
+            "blocked_reason_code": row.blocked_reason_code,
+            "current_state": row.current_state,
+            "auto_fix": bool(auto_fix),
+        },
+    )
+
+    db.commit()
+    db.refresh(row)
+    row.execution_mode_label = _execution_mode_label(row.mode)
+    return row, actions_applied

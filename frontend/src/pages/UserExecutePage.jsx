@@ -6,6 +6,7 @@ import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
+import { clearExecutionContext, readExecutionContext } from "@/lib/userFlowContext";
 
 const defaultForm = {
   source_type: "manual",
@@ -44,6 +45,7 @@ export const UserExecutePage = () => {
   const [preview, setPreview] = useState(null);
   const [previewTrace, setPreviewTrace] = useState(null);
   const [previewTraceLoading, setPreviewTraceLoading] = useState(false);
+  const [flowContext, setFlowContext] = useState(null);
 
   const selectedConnection = useMemo(
     () => connections.find((item) => item.id === selectedConnectionId) || null,
@@ -99,13 +101,18 @@ export const UserExecutePage = () => {
       }
 
       setSelectedPreset(preset);
+      const hasExplicitQuery = Boolean(searchParams.get("source") || searchParams.get("symbol") || searchParams.get("market_type"));
+      const storedContext = readExecutionContext();
+      const effectiveContext = !hasExplicitQuery ? storedContext : null;
+      setFlowContext(effectiveContext);
+
       setForm((prev) => ({
         ...prev,
-        source_type: source,
+        source_type: effectiveContext?.source || source,
         source_ref_id: searchParams.get("source_ref_id") || "",
-        symbol,
-        side,
-        market_type: marketType,
+        symbol: effectiveContext?.symbol || symbol,
+        side: effectiveContext?.side || side,
+        market_type: effectiveContext?.market_type || marketType,
         exchange,
         environment,
         account_label: defaultConnection?.account_label || "default",
@@ -247,6 +254,16 @@ export const UserExecutePage = () => {
       <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-execute-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-execute-title">Trade Execution Control</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-execute-description">Preview token zorunlu, submit assisted queue’ya gider.</p>
+        {flowContext && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded border border-emerald-400/40 bg-emerald-400/10 p-2" data-testid="user-execute-flow-context-banner">
+            <p className="text-xs text-emerald-200" data-testid="user-execute-flow-context-text">
+              Taşınan bağlam: {flowContext.source} / {flowContext.symbol} / {flowContext.market_type}
+            </p>
+            <Button size="sm" variant="outline" onClick={() => { clearExecutionContext(); setFlowContext(null); }} data-testid="user-execute-clear-flow-context-button">
+              Bağlamı Temizle
+            </Button>
+          </div>
+        )}
       </header>
 
       <div className="col-span-12 lg:col-span-7 grid grid-cols-12 gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-execute-form-grid">
@@ -323,7 +340,14 @@ export const UserExecutePage = () => {
           <Button onClick={submitQueue} disabled={!submitEnabled} data-testid="user-execute-submit-button">Submit to Queue</Button>
           <Button variant="outline" onClick={cancelIntent} disabled={!preview} data-testid="user-execute-cancel-button">Cancel Intent</Button>
         </div>
-        {!preview && <p className="mt-4 text-sm text-slate-400" data-testid="user-execute-no-preview">Henüz preview çalıştırılmadı.</p>}
+        {!preview && (
+          <div className="mt-4 rounded border border-amber-500/40 bg-amber-500/10 p-3" data-testid="user-execute-empty-preview-guidance">
+            <p className="text-sm text-slate-300" data-testid="user-execute-no-preview">Henüz preview çalıştırılmadı.</p>
+            <p className="mt-1 text-xs text-amber-100" data-testid="user-execute-empty-preview-guidance-text">
+              Akış: Connection seç → formu doldur → Preview Intent → validation valid ise Submit to Queue.
+            </p>
+          </div>
+        )}
         {preview && (
           <div className="mt-4 space-y-2 text-sm" data-testid="user-execute-preview-content">
             <p data-testid="user-execute-intent-token">intent_token: {preview.intent_token}</p>

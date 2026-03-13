@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiClient } from "@/lib/api";
+import { saveExecutionContext } from "@/lib/userFlowContext";
 
 const createSignalRuleFeatureEnabled = false;
 const FILTER_SCHEMA_VERSION = 2;
@@ -476,11 +477,38 @@ export const UserIndicatorScreenerPage = () => {
         confidence: row.confidence,
       },
     };
+    const side = Number(row.signal_score || 0) < 0 ? "sell" : "buy";
+    saveExecutionContext({
+      source: "indicator-screener",
+      symbol: row.symbol,
+      market_type: row.market_type,
+      side,
+      query_expression: filters.query_expression,
+      filter_payload: buildFilterPayload(),
+      signal_score: row.signal_score,
+      confidence: row.confidence,
+    });
     const encodedBridge = encodeURIComponent(JSON.stringify(bridgePayload));
     toast.success(`${row.symbol} (${row.market_type}) Execute ekranına aktarılıyor`);
     navigate(
-      `/user/execute?symbol=${encodeURIComponent(row.symbol)}&market_type=${encodeURIComponent(row.market_type)}&side=buy&source=indicator-screener&exchange=${encodeURIComponent(row.exchange || filters.exchange)}&environment=testnet&bridge_context=${encodedBridge}`,
+      `/user/execute?symbol=${encodeURIComponent(row.symbol)}&market_type=${encodeURIComponent(row.market_type)}&side=${encodeURIComponent(side)}&source=indicator-screener&exchange=${encodeURIComponent(row.exchange || filters.exchange)}&environment=testnet&bridge_context=${encodedBridge}`,
     );
+  };
+
+  const applyStarterPreset = async (presetKey) => {
+    const selected = presets.find((item) => item.preset_key === presetKey);
+    if (selected) {
+      applyPreset(selected);
+      await runQuery();
+      return;
+    }
+    const fallbackMap = {
+      oversold_rsi: "rsi14 < 30",
+      breakout_volume: "close > ema20 AND volume > 1000000",
+      trend_pullback: "close > ema50 AND rsi14 < 45",
+    };
+    updateFilter("query_expression", fallbackMap[presetKey] || defaultFilters.query_expression);
+    await runQuery();
   };
 
   const createSignalRule = () => {
@@ -888,6 +916,24 @@ export const UserIndicatorScreenerPage = () => {
                   <Button key={preset.preset_key} className={buttonClass.secondary} onClick={() => applyPreset(preset)} data-testid={`user-indicator-screener-preset-button-${preset.preset_key}`}>{preset.title}</Button>
                 ))}
                 {presets.length === 0 && <p className="text-sm text-slate-500" data-testid="user-indicator-screener-presets-empty">Preset bulunmuyor.</p>}
+              </div>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-3" data-testid="user-indicator-screener-starter-pack-grid">
+                <article className="rounded border border-emerald-200 bg-emerald-50 p-2" data-testid="user-indicator-screener-starter-card-oversold">
+                  <p className="text-xs font-semibold text-emerald-900">Starter: Oversold RSI</p>
+                  <p className="text-[11px] text-emerald-800">rsi14 &lt; 30 + hızlı tarama</p>
+                  <Button size="sm" className="mt-2 w-full" onClick={() => applyStarterPreset("oversold_rsi")} data-testid="user-indicator-screener-starter-run-button-oversold">Run</Button>
+                </article>
+                <article className="rounded border border-emerald-200 bg-emerald-50 p-2" data-testid="user-indicator-screener-starter-card-breakout">
+                  <p className="text-xs font-semibold text-emerald-900">Starter: Breakout Volume</p>
+                  <p className="text-[11px] text-emerald-800">momentum + volume doğrulaması</p>
+                  <Button size="sm" className="mt-2 w-full" onClick={() => applyStarterPreset("breakout_volume")} data-testid="user-indicator-screener-starter-run-button-breakout">Run</Button>
+                </article>
+                <article className="rounded border border-emerald-200 bg-emerald-50 p-2" data-testid="user-indicator-screener-starter-card-pullback">
+                  <p className="text-xs font-semibold text-emerald-900">Starter: Trend Pullback</p>
+                  <p className="text-[11px] text-emerald-800">ema50 üstü geri çekilme</p>
+                  <Button size="sm" className="mt-2 w-full" onClick={() => applyStarterPreset("trend_pullback")} data-testid="user-indicator-screener-starter-run-button-pullback">Run</Button>
+                </article>
               </div>
             </article>
           </div>

@@ -23,10 +23,26 @@ def _sha256(path: Path) -> str:
 def _week_range(week: str | None = None) -> tuple[datetime, datetime, str]:
     now = datetime.now(timezone.utc)
     if week:
-        year_str, week_str = week.split("-W")
-        year = int(year_str)
-        week_num = int(week_str)
-        week_start = datetime.fromisocalendar(year, week_num, 1).replace(tzinfo=timezone.utc)
+        # Support both ISO week format (YYYY-Www) and ISO date format (YYYY-MM-DD)
+        if "-W" in week:
+            # ISO week format: 2026-W01
+            year_str, week_str = week.split("-W")
+            year = int(year_str)
+            week_num = int(week_str)
+            week_start = datetime.fromisocalendar(year, week_num, 1).replace(tzinfo=timezone.utc)
+        else:
+            # ISO date format: 2026-01-01 - find the week containing this date
+            try:
+                parsed_date = datetime.fromisoformat(week).replace(tzinfo=timezone.utc)
+                # Get the Monday of that week
+                week_start = (parsed_date - timedelta(days=parsed_date.weekday())).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+            except ValueError:
+                # Fallback to current week if parsing fails
+                week_start = (now - timedelta(days=now.weekday())).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
     else:
         week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
     week_end = week_start + timedelta(days=7)

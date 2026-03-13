@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from core.users.user_scanner_signal_service import (
     approve_pending_signal,
+    diagnose_pending_signal,
     get_or_create_signal_mode,
     list_user_scanner_results,
     list_user_signals,
@@ -20,6 +21,7 @@ from schemas import (
     UserScannerRunResponse,
     UserSignalDecisionRequest,
     UserSignalDecisionResponse,
+    UserSignalDiagnoseResponse,
     UserSignalModeResponse,
     UserSignalModeUpdateRequest,
     UserSignalResponse,
@@ -194,4 +196,48 @@ def reject_signal(
         current_state=row.current_state,
         blocked_reason_code=row.blocked_reason_code,
         created_order_intent_id=row.created_order_intent_id,
+    )
+
+
+@router.post("/signal/{signal_id}/diagnose", response_model=UserSignalDiagnoseResponse)
+def diagnose_signal(
+    signal_id: str,
+    auto_fix: bool = Query(default=False),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        row, actions_applied = diagnose_pending_signal(db, current_user.id, signal_id, auto_fix=auto_fix)
+    except ValueError as exc:
+        message = str(exc)
+        if message == "pending_signal_not_found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
+
+    create_audit_log(
+        db,
+        action="user_pending_signal_diagnosed",
+        entity_type="pending_signal",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"auto_fix": bool(auto_fix), "actions_applied": actions_applied},
+    )
+
+    return UserSignalDiagnoseResponse(
+        id=row.id,
+        status=row.status,
+        current_state=row.current_state or "DETECTED",
+        blocked_reason_code=row.blocked_reason_code or "",
+        blocked_reason_message=row.blocked_reason_message or "",
+        blocked_solution_hint=row.blocked_solution_hint or "",
+        requires_manual_approval=bool(row.requires_manual_approval),
+        execution_eligible=bool(row.execution_eligible),
+        bot_profile_id=row.bot_profile_id,
+        risk_policy_id=row.risk_policy_id,
+        exchange_connection_id=row.exchange_connection_id,
+        created_order_intent_id=row.created_order_intent_id,
+        runtime_owner=row.runtime_owner or "",
+        last_eligibility_check_at=row.last_eligibility_check_at,
+        actions_applied=actions_applied,
     )
