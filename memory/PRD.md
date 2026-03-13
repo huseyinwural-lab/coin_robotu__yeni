@@ -3959,3 +3959,48 @@
 - **Admin left menu scrollability: COMPLETE**
 - **MOCKED API: VAR**
   - Email verification delivery provider bu ortamda entegre değil; doğrulama kodu request response içinde dönebiliyor.
+
+## 71) 2026-03-13 — Iteration-89 (Scanner 3 Dakika Otomasyon + Kayıtlı Seçim)
+
+### Kullanıcı Talebi
+- Scanner'ın **her 3 dakikada otomatik tetiklenmesi**
+- Symbol seçim alanındaki ayarların **bir kere kaydedilip** sonraki güncellemelerde kayıtlı seçimle çalışması
+
+### Uygulananlar
+1. **Scanner otomasyon konfigürasyonu (backend)**
+   - Yeni model+tablo: `user_scanner_automation_configs`
+   - Alanlar: `auto_enabled`, `interval_seconds(180)`, `max_results`, `symbol_source`, `symbol_selection_mode`, `selected_symbols`, `last_run_*`
+   - Endpointler:
+     - `GET /api/user/scanner/automation`
+     - `PUT /api/user/scanner/automation`
+
+2. **Runtime otomatik scanner döngüsü**
+   - `pipeline runtime` içine `_scanner_automation_loop` eklendi
+   - Döngü 15 sn aralıkla due kontrolü yapar; konfigürasyonda `interval_seconds=180` dolunca scanner çalıştırır
+   - Başarı/hata bilgisi `last_run_status`, `last_run_at`, `last_run_id`, `last_run_error` alanlarına yazılır
+
+3. **Frontend scanner otomasyon kartı**
+   - `UserScannerPage` üzerinde yeni kart:
+     - Durum (AKTİF/PASİF)
+     - Periyot (3 dakika)
+     - Son çalışma / Sonraki çalışma
+   - Aksiyonlar:
+     - `Otomatik Tetiklemeyi Aç/Kapat`
+     - `Seçimi Kaydet (Otomasyona)`
+   - Sayfa açılışında kayıtlı `source/mode/selected_symbols` hydrate edilerek otomatik yüklenir
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_88.json`
+  - Backend: **14/14 PASS**
+  - Frontend: **8/8 PASS**
+  - Doğrulananlar:
+    - scanner automation GET/PUT
+    - interval `180` doğrulaması
+    - seçim persist + reload hydration
+    - frontend otomasyon kartı + toggle/save aksiyonları
+
+### Durum
+- **Scanner 3 dakikalık otomasyon: COMPLETE**
+- **Kayıtlı seçimle otomasyon güncellemesi: COMPLETE**
+- **MOCKED API: VAR**
+  - Email verification delivery provider bu ortamda mocked.
