@@ -267,7 +267,7 @@ def scanner_run(
             symbol_selection_mode=payload.symbol_selection_mode,
         )
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"scanner_run_failed:{exc}") from exc
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="scanner_run_failed") from exc
     create_audit_log(
         db,
         action="user_scanner_run",

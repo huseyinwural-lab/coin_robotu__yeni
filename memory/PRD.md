@@ -4153,3 +4153,54 @@
 - **Admin yönetim ekranı (B kapsamı): COMPLETE**
 - **MOCKED API: VAR**
   - Email verification delivery provider bu ortamda mocked.
+
+## 75) 2026-03-13 — Iteration-93 (Sprint-2: 12 Strategy Contract + Global Risk Enforcement)
+
+### Kullanıcı Onayı
+- 12 strateji contract: **birebir uygula**
+- Aktivasyon: **12 tanımlı, 4 aktif**
+- Global risk: **hemen enforce et**
+- Dokümantasyon: pseudo-code + veri akışı + strategy class mimarisi `/app/memory` altına yaz
+
+### Uygulananlar
+1. **12 strateji contract alanları tamamlandı**
+   - Registry contract alanları explicit: `entry_long`, `entry_short`, `exit_long`, `exit_short`, `stop_loss`, `take_profit`, `invalidation`, `signal_score`
+   - Tüm 12 strategy_id için deterministic contract içeriği seed edildi
+
+2. **Master Signal Engine genişletildi (12 evaluator)**
+   - Ichimoku, Golden Cross, SuperTrend, Vortex, Bollinger, Moving Momentum, Fibonacci Pullback, MACD Impulse, Fisher, Divergence, Structure Breakout, Stochastic
+   - Symbol bazlı aggregate skor: `long_score` / `short_score`
+   - Deterministic conflict çözümü: `threshold=5`, `reject_threshold=2`
+
+3. **Global risk enforcement aktif**
+   - `max_positions=5`
+   - `risk_per_trade=1.5%`
+   - `cooldown_symbol=6h (21600s)`
+   - Scanner run akışına cooldown ve position-limit block kontrolü eklendi
+
+4. **Runtime kararlılık düzeltmesi**
+   - Scanner 500 hatası kök nedeni giderildi (`PaperPosition.is_open` yerine `status='open'`)
+   - Scanner path’te gerekli tablo kontrolü/oluşturma güvence mekanizması eklendi
+
+5. **Teknik dokümantasyon eklendi**
+   - `/app/memory/CANONICAL_SIGNAL_ENGINE_SPRINT2.md`
+   - İçerik: pseudo-code, data flow, strategy class mimarisi
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_91.json`
+  - Backend: **26/26 PASS**
+  - Frontend: **100% PASS**
+  - Doğrulananlar:
+    - 12 strategy contract alanları
+    - 4 aktif strateji politikası
+    - scanner run 500 fix
+    - global risk enforcement
+    - admin canonical registry UI doğrulamaları
+    - sprint2 dokümantasyon dosyası
+
+### Durum
+- **Sprint-2 contract standardization: COMPLETE**
+- **Global risk enforcement (max_positions/risk_per_trade/cooldown): COMPLETE**
+- **Master engine 12-strategy coverage (active 4): COMPLETE**
+- **MOCKED API: VAR**
+  - Email verification delivery provider bu ortamda mocked.
