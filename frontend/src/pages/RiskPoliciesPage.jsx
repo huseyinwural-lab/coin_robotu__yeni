@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ export const RiskPoliciesPage = () => {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [formErrors, setFormErrors] = useState({});
+
+  const activePolicy = useMemo(() => (items && items.length > 0 ? items[0] : null), [items]);
 
   const fetchItems = async () => {
     const { data } = await apiClient.get("/risk-policies");
@@ -104,6 +106,17 @@ export const RiskPoliciesPage = () => {
       <header className="border border-slate-800 bg-slate-900 p-4" data-testid="risk-policies-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="risk-policies-title">Risk Policy Yönetimi</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="risk-policies-description">Position sizing, ATR, RR ve günlük risk limitleri tek formda yönetilir.</p>
+        <div className="mt-3 grid gap-2 rounded border border-cyan-800/40 bg-cyan-950/20 p-3 md:grid-cols-3" data-testid="risk-policies-active-indicator-panel">
+          <p className="text-xs" data-testid="risk-policies-active-indicator-status">
+            Policy Status: {activePolicy ? "ACTIVE" : "INACTIVE"}
+          </p>
+          <p className="text-xs" data-testid="risk-policies-active-indicator-name">
+            Active Policy: {activePolicy?.name || "-"}
+          </p>
+          <p className="text-xs" data-testid="risk-policies-active-indicator-note">
+            Not: Varsayılan execution policy en güncel policy olarak uygulanır.
+          </p>
+        </div>
       </header>
 
       <form onSubmit={handleSubmit} className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="risk-policy-form">
@@ -236,6 +249,7 @@ export const RiskPoliciesPage = () => {
               <TableHead data-testid="risk-table-head-position">Position %</TableHead>
               <TableHead data-testid="risk-table-head-atr">ATR</TableHead>
               <TableHead data-testid="risk-table-head-rr">RR</TableHead>
+              <TableHead data-testid="risk-table-head-status">Status</TableHead>
               <TableHead data-testid="risk-table-head-action">Aksiyon</TableHead>
             </TableRow>
           </TableHeader>
@@ -246,6 +260,11 @@ export const RiskPoliciesPage = () => {
                 <TableCell className="font-mono" data-testid={`risk-table-position-${item.id}`}>{item.position_size_pct}</TableCell>
                 <TableCell className="font-mono" data-testid={`risk-table-atr-${item.id}`}>{item.atr_stop_multiplier}</TableCell>
                 <TableCell className="font-mono" data-testid={`risk-table-rr-${item.id}`}>{item.risk_reward_ratio}</TableCell>
+                <TableCell data-testid={`risk-table-status-${item.id}`}>
+                  <span className={`rounded px-2 py-1 text-xs font-semibold ${activePolicy?.id === item.id ? "bg-emerald-200 text-emerald-900" : "bg-slate-300 text-slate-800"}`} data-testid={`risk-table-status-badge-${item.id}`}>
+                    {activePolicy?.id === item.id ? "ACTIVE" : "INACTIVE"}
+                  </span>
+                </TableCell>
                 <TableCell>
                   <Button size="sm" variant="outline" className="border-slate-600 bg-transparent" onClick={() => editPolicy(item)} data-testid={`risk-table-edit-${item.id}`}>
                     Düzenle

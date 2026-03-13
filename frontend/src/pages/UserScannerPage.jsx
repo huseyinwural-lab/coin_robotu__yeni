@@ -44,6 +44,14 @@ export const UserScannerPage = () => {
   const [symbolMode, setSymbolMode] = useState("top_active_50");
   const [selectedSymbols, setSelectedSymbols] = useState([]);
 
+  const activeModeLabel = String(overview?.mode || mode || "ASSISTED").toUpperCase();
+  const executionPathLabel =
+    activeModeLabel === "AUTO"
+      ? "BOT_AUTO_ACTIVE"
+      : activeModeLabel === "ASSISTED"
+        ? "SEMI_AUTO_ACTIVE"
+        : "MANUAL_REVIEW_FLOW";
+
   const load = async () => {
     setIsLoading(true);
     const [modeRes, overviewRes, resultsRes] = await Promise.all([
@@ -174,6 +182,16 @@ export const UserScannerPage = () => {
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-scanner-title">Scanner</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-description">Responsive scanner + compact table + mobile card yapısı.</p>
       </header>
+
+      <section className="col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-active-mode-indicator-card">
+        <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-scanner-active-mode-indicator-title">Scanner Active Mode Indicator</p>
+        <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="user-scanner-active-mode-indicator-grid">
+          <p className="text-sm" data-testid="user-scanner-active-mode-indicator-mode">Active Mode: {activeModeLabel}</p>
+          <p className="text-sm" data-testid="user-scanner-active-mode-indicator-path">Execution Path: {executionPathLabel}</p>
+          <p className="text-sm" data-testid="user-scanner-active-mode-indicator-source">Source: {symbolSource.toUpperCase()}</p>
+          <p className="text-sm" data-testid="user-scanner-active-mode-indicator-symbol-mode">Symbol Mode: {symbolMode}</p>
+        </div>
+      </section>
 
       <div className="col-span-12 flex flex-wrap items-center gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-controls">
         <label className="text-xs uppercase tracking-widest text-slate-500" htmlFor="user-scanner-mode-select" data-testid="user-scanner-mode-label">Signal Mode</label>

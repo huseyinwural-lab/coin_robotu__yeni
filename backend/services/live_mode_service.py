@@ -38,6 +38,7 @@ from models import (
     RiskPolicy,
     TestnetExecutionLog,
     User,
+    UserExchangeConnection,
     UserExchangeSetting,
     UserRiskSetting,
 )
@@ -639,11 +640,58 @@ def validate_exchange_credentials_for_user(
             "capability_match": capability,
         }, code
 
-    if not allowed:
+    requested_connection = (
+        db.query(UserExchangeConnection)
+        .filter(
+            UserExchangeConnection.user_id == user_id,
+            UserExchangeConnection.exchange == requested_exchange,
+            UserExchangeConnection.market_type == requested_market_type,
+            UserExchangeConnection.environment == requested_environment,
+        )
+        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+        .first()
+    )
+
+    if requested_connection is None:
+        requested_connection = (
+            db.query(UserExchangeConnection)
+            .filter(
+                UserExchangeConnection.user_id == user_id,
+                UserExchangeConnection.exchange == requested_exchange,
+                UserExchangeConnection.environment == requested_environment,
+            )
+            .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+            .first()
+        )
+
+    bypass_assignment_check = (
+        not allowed
+        and requested_connection is not None
+        and "assignment_required" in (venue_reason_codes or [])
+    )
+
+    if not allowed and not bypass_assignment_check:
         return _validation_failure(venue_reason_codes or [venue_state], 403)
 
+    if bypass_assignment_check:
+        capability_match = True
+
+    if requested_connection is not None:
+        connection_api_key = decrypt_exchange_secret(requested_connection.api_key_encrypted)
+        connection_api_secret = decrypt_exchange_secret(requested_connection.api_secret_encrypted)
+        if connection_api_key and connection_api_secret:
+            settings_row.exchange = requested_exchange
+            settings_row.mode = requested_environment
+            settings_row.api_key_encrypted = requested_connection.api_key_encrypted
+            settings_row.api_secret_encrypted = requested_connection.api_secret_encrypted
+            settings_row.updated_at = datetime.now(timezone.utc)
+            db.commit()
+
     if requested_exchange != settings_row.exchange.lower() or requested_environment != settings_row.mode.lower():
-        return _validation_failure(["settings_mismatch"], 400)
+        mismatch_reason_codes = ["settings_mismatch"]
+        if requested_connection is None:
+            mismatch_reason_codes.append("matching_connection_not_found")
+        return _validation_failure(mismatch_reason_codes, 400)
 
     if requested_exchange != "binance":
         return _validation_failure(["adapter_not_configured"], 400)
