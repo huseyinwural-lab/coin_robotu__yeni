@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-03-13T07:24:00Z",
+  "feature": "signal -> order intent pipeline",
+  "status": "PASS",
+  "pipeline": [
+    "signal approved",
+    "execution candidate evaluation",
+    "order intent created",
+    "intent submitted",
+    "order released",
+    "filled/rejected/blocked"
+  ],
+  "verified_outcomes": {
+    "manual_approve_to_filled": "PASS",
+    "auto_mode_intent_creation": "PASS",
+    "blocked_with_reason": "PASS (ORDER_PRECHECK_FAILED)"
+  },
+  "source": "/app/test_reports/iteration_68.json"
+}

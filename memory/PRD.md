@@ -3226,3 +3226,61 @@
 ### Durum
 - **UI-07: COMPLETE**
 - **MOCKED API: YOK**
+
+## 53) 2026-03-13 — BUG-EXEC-12 (Signal var ama işlem açılmıyor)
+
+### Kullanıcı Seçimleri (Kilitledi)
+- Varsayılan execution mode: **MANUAL**
+- Ortam: **Binance testnet**
+- Mevcut user connection kullanılacak
+- `blocked_reason_code` backend modeline kalıcı eklenecek
+- `/user/signals` tablosuna execution görünürlük kolonları eklenecek
+
+### Teknik Uygulama
+- `pending_signals` modeli genişletildi (kalıcı):
+  - `previous_state`, `current_state`
+  - `blocked_reason_code`, `blocked_reason_message`, `blocked_solution_hint`
+  - `requires_manual_approval`, `execution_eligible`
+  - `bot_profile_id`, `risk_policy_id`, `exchange_connection_id`
+  - `created_order_intent_id`, `runtime_owner`
+  - `last_eligibility_check_at`, `last_transition_at`
+- Migration eklendi:
+  - `/app/backend/migrations/versions/20260313_0034_pending_signal_execution_trace.py`
+- Signal service güncellendi:
+  - blocker reason code üretimi + çözüm önerisi
+  - state machine geçişleri ve snapshot refresh
+  - manual approval sonrası signal->intent->submit->release zinciri
+  - AUTO modda eligible signal için intent zinciri
+- Execution intent servisi:
+  - signal bridge (testnet) için soft override ve pipeline sürekliliği
+  - release sonrası `intent.position_id` setleniyor
+
+### UI Değişiklikleri (/user/signals)
+- Header’da aktif mode badge: `Execution Mode: Manual / Semi-Auto / Full Auto`
+- Yeni kolonlar:
+  - Execution Mode
+  - Blokaj Nedeni (+ çözüm önerisi)
+  - Son Uygunluk Kontrolü
+  - Intent
+  - Runtime Sahibi
+- Durum badge standardı normalize edildi:
+  - Pending, Blocked, Ready, Queued, Submitted, Filled, Rejected, Expired
+- Muğlak "askıda" yerine deterministic reason kodları görünür.
+
+### Test Sonuçları
+- Ana test raporu:
+  - `/app/test_reports/iteration_68.json` → Backend **30/30 PASS**, Frontend **100% PASS**
+- Regresyon raporu:
+  - `/app/test_reports/signal_execution_blocker_regression.json` (PASS)
+
+### Üretilen Artefactlar
+- `/app/reports/signal_state_machine_trace_validation.json`
+- `/app/reports/pending_signal_reason_codes_validation.json`
+- `/app/reports/signal_bot_runtime_binding_validation.json`
+- `/app/reports/signal_approval_gate_mode_validation.json`
+- `/app/reports/signal_to_order_intent_pipeline_validation.json`
+- `/app/reports/user_signals_execution_visibility_validation.json`
+
+### Durum
+- **BUG-EXEC-12: COMPLETE**
+- **MOCKED API: YOK**

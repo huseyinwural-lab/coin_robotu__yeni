@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-03-13T07:24:00Z",
+  "feature": "Signal ↔ Bot Runtime Binding",
+  "status": "PASS",
+  "checks": [
+    "runtime owner resolution",
+    "bot running state check",
+    "strategy compatibility check",
+    "symbol ownership check",
+    "market_type compatibility check",
+    "exchange/account context binding"
+  ],
+  "api_fields": [
+    "runtime_owner",
+    "bot_profile_id",
+    "exchange_connection_id",
+    "execution_eligible",
+    "blocked_reason_code"
+  ],
+  "note": "No runtime owner / runtime mismatch scenarios now produce explicit blocker codes instead of silent pending.",
+  "source": "/app/test_reports/iteration_68.json"
+}

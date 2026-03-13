@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-03-13T07:24:00Z",
+  "feature": "Pending/Askıda Reason Codes",
+  "status": "PASS",
+  "implemented_codes": [
+    "MANUAL_APPROVAL_REQUIRED",
+    "BOT_NOT_RUNNING",
+    "RISK_POLICY_MISSING",
+    "RISK_LIMIT_BLOCKED",
+    "EXCHANGE_NOT_READY",
+    "MARKET_DATA_STALE",
+    "POSITION_LIMIT_REACHED",
+    "SYMBOL_NOT_ALLOWED",
+    "ORDER_PRECHECK_FAILED",
+    "EXECUTION_DISABLED",
+    "SIGNAL_EXPIRED"
+  ],
+  "ui_visibility": {
+    "blocked_reason_code": "visible",
+    "solution_hint": "visible",
+    "last_eligibility_check_at": "visible"
+  },
+  "source": "/app/test_reports/iteration_68.json"
+}

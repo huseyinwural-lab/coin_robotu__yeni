@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-03-13T07:24:00Z",
+  "feature": "User Signals Execution Visibility",
+  "status": "PASS",
+  "table_columns": [
+    "Execution Mode",
+    "Blokaj Nedeni",
+    "Son Uygunluk Kontrolü",
+    "Intent",
+    "Runtime Sahibi"
+  ],
+  "badge_states": [
+    "Pending",
+    "Blocked",
+    "Ready",
+    "Queued",
+    "Submitted",
+    "Filled",
+    "Rejected",
+    "Expired"
+  ],
+  "result": "Ambiguous pending/askıda metni kaldırıldı; her satırda neden ve çözüm görünür.",
+  "source": "/app/test_reports/iteration_68.json"
+}

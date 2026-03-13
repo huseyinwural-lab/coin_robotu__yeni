@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-03-13T07:24:00Z",
+  "feature": "Approval Gate Mode Visibility",
+  "status": "PASS",
+  "modes": {
+    "MANUAL": "Manual",
+    "ASSISTED": "Semi-Auto",
+    "AUTO": "Full Auto"
+  },
+  "ui_contract": {
+    "header_badge": "Execution Mode: Manual/Semi-Auto/Full Auto",
+    "row_column": "Execution Mode",
+    "manual_pending_reason": "MANUAL_APPROVAL_REQUIRED"
+  },
+  "default_mode": "MANUAL",
+  "source": "/app/test_reports/iteration_68.json"
+}

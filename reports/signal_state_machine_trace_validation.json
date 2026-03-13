@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-03-13T07:24:00Z",
+  "feature": "BUG-EXEC-12 / Signal State Machine Trace",
+  "status": "PASS",
+  "states": [
+    "DETECTED",
+    "PENDING_APPROVAL",
+    "EXECUTION_READY",
+    "ORDER_INTENT_CREATED",
+    "ORDER_SUBMITTED",
+    "FILLED",
+    "REJECTED",
+    "BLOCKED",
+    "EXPIRED"
+  ],
+  "required_fields": [
+    "signal_id",
+    "current_state",
+    "previous_state",
+    "blocked_reason_code",
+    "requires_manual_approval",
+    "execution_eligible",
+    "bot_profile_id",
+    "risk_policy_id",
+    "exchange_connection_id",
+    "created_order_intent_id"
+  ],
+  "verification": "All fields present in /api/user/signals response and surfaced in UI table",
+  "source": "/app/test_reports/iteration_68.json"
+}
