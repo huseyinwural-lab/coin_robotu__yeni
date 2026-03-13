@@ -26,7 +26,7 @@ def reconcile_position_state(engine_positions: list[dict], exchange_positions: l
 
     state = "SYNCED"
     if not exchange_positions:
-        state = "UNVERIFIED"
+        state = "SYNCED" if not engine_positions else "UNVERIFIED"
     elif drifts:
         state = "DRIFT"
 

@@ -30,7 +30,7 @@ def reconcile_order_state(engine_orders: list[dict], exchange_orders: list[dict]
 
     state = "RECONCILED"
     if not exchange_orders:
-        state = "UNVERIFIED"
+        state = "RECONCILED" if not engine_orders else "UNVERIFIED"
     elif issues:
         state = "ERROR"
 
