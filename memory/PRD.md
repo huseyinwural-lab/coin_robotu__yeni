@@ -37,6 +37,31 @@
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
 ## 5) What Has Been Implemented
+### 2026-03-13 (Learning Recommendation Impact Simulator eklendi)
+- Yeni backend simulator API’leri eklendi (read-only):
+  - `POST /api/admin/learning/simulate-impact` (global form simülasyonu)
+  - `POST /api/admin/learning/recommendations/{id}/simulate` (recommendation satırından hızlı simülasyon)
+- Çıktı metrikleri kullanıcı isteğine göre standartlaştırıldı:
+  - `projected_risk_score`
+  - `projected_gate_decision`
+  - `expected_hit_rate_delta`
+  - `expected_avg_return_delta`
+  - `allocation_drift_delta`
+  - `hedge_effect_score`
+- Simülasyon güvenliği (guardrail):
+  - `read_only=true`
+  - simulate çağrıları production kural/weight/apply state değiştirmez
+  - apply akışı ayrı admin aksiyonu olarak korunur
+- UI tarafı çift erişim modeli tamamlandı:
+  - Admin Learning Panel içinde global form + recommendation satırında `Simulate Impact`
+  - Ayrı detay sayfası: `/admin/learning-impact-simulator`
+  - Sidebar menü linki eklendi: `Learning Impact Simulator`
+- Test/Doğrulama:
+  - Self-test (API): başarılı
+  - Testing agent: `/app/test_reports/iteration_96.json`
+    - Backend: `13/14 PASS` (1 test seed koşulu nedeniyle skipped, bug değil)
+    - Frontend: `%100 PASS`
+
 ### 2026-03-13 (Master Closure Pack — Sprint-3 + Sprint-4 + Persistence + Hardening Surface)
 - **Faz-1 Explainability UI kapanışı tamamlandı**:
   - DecisionCard alanları genişletildi: decision, confidence, long/short, dominant family, top contributors/strategies, entry zone, stop/tp1/tp2, invalidation, blocked reason, cooldown, risk state, updated_at.
