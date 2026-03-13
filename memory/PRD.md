@@ -37,6 +37,20 @@
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
 ## 5) What Has Been Implemented
+### 2026-03-13 (Sprint-3 Explainability Closure — Fork Dev Continuation)
+- User Scanner üzerinde explainability UI modülerleştirildi:
+  - `frontend/src/pages/user/components/DecisionCard.jsx`
+  - `frontend/src/pages/user/components/ExplainabilityDrawer.jsx`
+- `UserScannerPage` entegrasyonu güncellendi:
+  - Decision card listesi yeni `DecisionCard` bileşeni ile render ediliyor
+  - Explainability butonu ile `ExplainabilityDrawer` açılıyor
+  - Explainability paneli drawer tetikleyici/senaryo özeti olarak sadeleştirildi
+- Decision card yenileme periyodu kullanıcı tercihiyle **10 saniye polling** olarak güncellendi.
+- Test/Doğrulama:
+  - Smoke screenshot alındı (landing yüklenmesi doğrulandı)
+  - Backend self-test: user decision-cards, user explainability, admin strategy-family-gates endpointleri 200
+  - Testing agent raporu: `/app/test_reports/iteration_94.json` (**backend 17/17, frontend Sprint-3 explainability akışları %100**)
+
 ### 2026-03-10
 - JWT auth (register/login/me) + role kontrolü
 - Bot profile CRUD (create/update/list)
