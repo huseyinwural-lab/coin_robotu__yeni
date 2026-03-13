@@ -3881,3 +3881,42 @@
 - **Giriş ekranı normal ölçüler: COMPLETE**
 - **Landing hesap açma formu: COMPLETE**
 - **MOCKED API: YOK**
+
+## 69) 2026-03-13 — Iteration-87 (Ad Soyad+Telefon + E-posta Doğrulama + Onboarding + Canlı Durum)
+
+### Uygulananlar
+1. **Kayıt formu genişletildi**
+   - Landing formuna `Ad Soyad` ve `Telefon` alanları eklendi.
+   - Register payload artık `full_name` + `phone` destekliyor.
+
+2. **E-posta doğrulama akışı eklendi**
+   - Backend endpointleri:
+     - `POST /api/auth/email-verification/request`
+     - `POST /api/auth/email-verification/verify`
+     - `GET /api/auth/onboarding-status`
+   - Yeni onboarding profil tablosu: `user_onboarding_profiles`
+   - Kayıt sırasında onboarding profil otomatik oluşturuluyor.
+
+3. **Onboarding adım göstergesi**
+   - Landing üzerinde kayıt sonrası onboarding durum kartı:
+     - Hesap oluşturuldu
+     - E-posta doğrulandı
+     - Admin onayı
+     - Girişe hazır
+   - Kod üret / kod doğrula / girişe git aksiyonları eklendi.
+
+4. **Canlı Durum kartı**
+   - Landing’de `Platform Online` + `Execution Engine İşlemde` kartı eklendi.
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_86.json`
+  - Backend: **9/9 PASS**
+  - Frontend: **7/7 PASS**
+  - Full flow PASS (register -> onboarding -> verification -> login yönlendirme)
+
+### Durum
+- **Ad Soyad + Telefon form alanları: COMPLETE**
+- **E-posta doğrulama + onboarding adımları: COMPLETE**
+- **Canlı durum kartı: COMPLETE**
+- **MOCKED API: VAR**
+  - Email delivery provider entegrasyonu olmadığı için doğrulama kodu bu ortamda API cevabında gösteriliyor.

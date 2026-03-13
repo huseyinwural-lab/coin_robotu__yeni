@@ -192,7 +192,7 @@ export const PanelLayout = () => {
 
       <div className="grid h-[calc(100vh-57px)] grid-cols-1 md:grid-cols-[var(--sidebar-width)_1fr]" style={{ "--sidebar-width": sidebarCollapsed ? "92px" : "260px" }}>
         <aside
-          className={`fixed inset-y-[57px] left-0 z-50 flex w-64 -translate-x-full flex-col overflow-hidden border-r p-4 transition-transform md:static md:inset-auto md:z-auto md:h-full md:min-h-0 md:w-auto md:translate-x-0 ${sidebarClass} ${sidebarOpen ? "translate-x-0" : ""}`}
+          className={`fixed inset-y-[57px] left-0 z-50 flex w-64 -translate-x-full flex-col overflow-y-auto overflow-x-hidden border-r p-4 transition-transform md:static md:inset-auto md:z-auto md:h-full md:min-h-0 md:w-auto md:translate-x-0 ${sidebarClass} ${sidebarOpen ? "translate-x-0" : ""}`}
           data-testid="sidebar-panel"
           aria-label="Ana gezinme menüsü"
         >
@@ -207,7 +207,7 @@ export const PanelLayout = () => {
             )}
           </div>
 
-          <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 pb-2" data-testid="sidebar-navigation" aria-label="Sidebar linkleri">
+          <nav className="min-h-0 flex-1 space-y-2 pr-1 pb-2" data-testid="sidebar-navigation" aria-label="Sidebar linkleri">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (

@@ -14,7 +14,8 @@ export const LandingPage = () => {
   const navigate = useNavigate();
   const { register } = useAuth();
   const [form, setForm] = useState({
-    fullName: "",
+    firstName: "",
+    lastName: "",
     phone: "",
     email: "",
     password: "",
@@ -109,13 +110,14 @@ export const LandingPage = () => {
       await register({
         email: normalizedEmail,
         password: form.password,
-        full_name: form.fullName.trim(),
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
+        full_name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
         phone: form.phone.trim(),
       });
       toast.success("Kayıt talebiniz alındı. Admin onayı sonrası giriş yapabilirsiniz.");
-      setForm({ fullName: "", phone: "", email: "", password: "", confirmPassword: "" });
-      await requestVerificationCode(normalizedEmail);
-      await refreshOnboardingStatus(normalizedEmail);
+      setForm({ firstName: "", lastName: "", phone: "", email: "", password: "", confirmPassword: "" });
+      navigate("/user/login");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Hesap açma başarısız");
     } finally {
@@ -167,18 +169,27 @@ export const LandingPage = () => {
               <div className="grid gap-2" data-testid="landing-register-fields">
                 <Input
                   type="text"
-                  value={form.fullName}
-                  onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))}
-                  placeholder="Ad Soyad"
+                  value={form.firstName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                  placeholder="First Name"
                   className="h-10 border-black bg-orange-50 text-sm"
-                  data-testid="landing-register-full-name-input"
+                  data-testid="landing-register-first-name-input"
+                  required
+                />
+                <Input
+                  type="text"
+                  value={form.lastName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                  placeholder="Last Name"
+                  className="h-10 border-black bg-orange-50 text-sm"
+                  data-testid="landing-register-last-name-input"
                   required
                 />
                 <Input
                   type="tel"
                   value={form.phone}
                   onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
-                  placeholder="Telefon"
+                  placeholder="Phone Number"
                   className="h-10 border-black bg-orange-50 text-sm"
                   data-testid="landing-register-phone-input"
                   required

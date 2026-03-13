@@ -22,6 +22,8 @@ class UserResponse(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
+    first_name: str | None = Field(default=None, max_length=60)
+    last_name: str | None = Field(default=None, max_length=60)
     full_name: str | None = Field(default=None, max_length=120)
     phone: str | None = Field(default=None, max_length=40)
 

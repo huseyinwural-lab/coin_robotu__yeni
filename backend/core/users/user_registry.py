@@ -47,9 +47,14 @@ def register_user_account(db: Session, payload: RegisterRequest) -> User:
     )
     db.add(user)
     db.flush()
+    first_name = (payload.first_name or "").strip()
+    last_name = (payload.last_name or "").strip()
+    full_name_from_parts = " ".join(part for part in [first_name, last_name] if part).strip()
+    resolved_full_name = full_name_from_parts or (payload.full_name or "").strip() or None
+
     onboarding = UserOnboardingProfile(
         user_id=user.id,
-        full_name=(payload.full_name or "").strip() or None,
+        full_name=resolved_full_name,
         phone=(payload.phone or "").strip() or None,
         email_verified=False,
     )
