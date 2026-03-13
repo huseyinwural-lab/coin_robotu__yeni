@@ -3547,3 +3547,32 @@
 - **Final closure operasyon planı: APPLIED**
 - **Kritik blokajlar (pending approvals/open alerts/rejected timeout pattern): temizlendi**
 - **MOCKED API: YOK**
+
+## 59) 2026-03-13 — Iteration-77 (Signals RISK_POLICY_MISSING Kalıcı Çözüm)
+
+### Sorun
+- User tarafında scanner çalışsa da bazı sinyaller `RISK_POLICY_MISSING` nedeniyle bloklanıyordu.
+
+### Uygulanan Kalıcı Çözüm
+- **Onaylanan kullanıcıya otomatik güvenli başlangıç risk policy**
+  - Yeni servis: `services/risk_policy_defaults_service.py`
+  - `ensure_user_safe_default_risk_policy` eklendi (idempotent)
+  - Tekli onay (`/api/auth/admin/user-approval-requests/{id}/approve`) ve bulk onay (`/api/admin/user-approvals/bulk-approve`) akışlarına bağlandı.
+- **Signals'ta tek tık auto-fix**
+  - `diagnose_pending_signal` içinde `RISK_POLICY_MISSING` için auto-fix eklendi.
+  - Auto-fix sonucu: `safe_default_risk_policy_created` aksiyonu döner.
+- **UI iyileştirme**
+  - `UserSignalsPage.jsx` üzerinde `RISK_POLICY_MISSING` için özel buton eklendi:
+    - Desktop: `user-signals-risk-policy-autofix-button-{signal_id}`
+    - Mobile: `user-signals-mobile-risk-policy-autofix-{signal_id}`
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_76.json`
+  - Backend: **9/9 PASS**
+  - Frontend: **PASS**
+  - On-approval default policy + diagnose auto-fix + conditional UI doğrulandı.
+
+### Durum
+- **RISK_POLICY_MISSING kalıcı çözüm: COMPLETE**
+- **Starter Safe default policy otomasyonu: COMPLETE**
+- **MOCKED API: YOK**
