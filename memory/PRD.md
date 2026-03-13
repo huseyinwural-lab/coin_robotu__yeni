@@ -37,6 +37,29 @@
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
 ## 5) What Has Been Implemented
+### 2026-03-13 (Master Closure Pack — Sprint-3 + Sprint-4 + Persistence + Hardening Surface)
+- **Faz-1 Explainability UI kapanışı tamamlandı**:
+  - DecisionCard alanları genişletildi: decision, confidence, long/short, dominant family, top contributors/strategies, entry zone, stop/tp1/tp2, invalidation, blocked reason, cooldown, risk state, updated_at.
+  - ExplainabilityDrawer detayları genişletildi: source strategy (direction/raw/normalized/weight/contribution/status), family gate score/threshold/status/reason, blocked timeline reason_detail.
+  - Decision card akışı 3 yüzeyde tamamlandı: **Scanner**, **Dashboard**, **Symbol Detail (`/user/symbol/:symbol`)**.
+  - Polling standardı 10 saniye olarak tüm ilgili karar ekranlarında hizalandı.
+- **Faz-2 Symbol Persistence tamamlandı**:
+  - Yeni model: `UserScannerSymbolSelection` (`user_id`, `scanner_id`, `selected_symbols`, `symbol_source`, `symbol_selection_mode`, `saved_at`).
+  - Yeni endpointler: `GET/PUT /api/user/scanner/symbol-selection`.
+  - UserScannerPage’te debounce auto-persist + sayfa yenilemede seçim restore akışı aktif.
+- **Faz-3/4 Learning katmanı kontrat hizalaması tamamlandı**:
+  - `learning_memory_service` genişletildi: guardrails payload, `events` listesi, strategy memory alias alanları (`rolling_quality_score`, `decay_adjusted_score`, `quality_degradation_flag`, `recent_performance`, recommendation özet).
+  - Recommendation tipleri genişletildi: `increase_weight_recommendation`, `decrease_weight_recommendation` (legacy tiplerle uyum korunarak).
+  - Yeni endpoint: `GET /api/admin/learning/events`.
+  - `POST /api/admin/learning/recommendations/{id}/apply` yeni tiplerle uyumlu hale getirildi.
+- **Admin Learning Panel UI genişletildi**:
+  - Strategy memory tablosuna quality degradation + recommendation kolonları eklendi.
+  - Guardrails paneli (auto change forbidden / admin approval required / audit enabled) eklendi.
+  - Learning events tablosu eklendi.
+- **Doğrulama**:
+  - Self-test: symbol persistence + decision/explainability + learning overview/events endpointleri başarılı.
+  - Testing agent: `/app/test_reports/iteration_95.json` → backend **16/16**, frontend **%100**.
+
 ### 2026-03-13 (Sprint-3 Explainability Closure — Fork Dev Continuation)
 - User Scanner üzerinde explainability UI modülerleştirildi:
   - `frontend/src/pages/user/components/DecisionCard.jsx`
