@@ -50,6 +50,15 @@ export const UserExecutePage = () => {
     [connections, selectedConnectionId],
   );
 
+  const connectionOptions = useMemo(
+    () =>
+      connections.map((connection) => ({
+        id: connection.id,
+        label: `${connection.account_label} | ${connection.exchange}/${connection.market_type}/${connection.environment}`,
+      })),
+    [connections],
+  );
+
   const isFutures = form.market_type === "futures";
 
   useEffect(() => {
@@ -250,9 +259,9 @@ export const UserExecutePage = () => {
             onChange={(event) => setSelectedConnectionId(event.target.value)}
             data-testid="execute-connection-select"
           >
-            {connections.map((connection) => (
-              <option key={connection.id} value={connection.id}>
-                {connection.account_label} · {connection.exchange}/{connection.market_type}/{connection.environment}
+            {connectionOptions.map((optionItem) => (
+              <option key={optionItem.id} value={optionItem.id}>
+                {optionItem.label}
               </option>
             ))}
             {connections.length === 0 && <option value="">no-connection</option>}
