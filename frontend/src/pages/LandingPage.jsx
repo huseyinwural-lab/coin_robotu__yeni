@@ -13,8 +13,88 @@ const heroImage = "https://images.unsplash.com/photo-1762278805112-a0f50365845e?
 export const LandingPage = () => {
   const navigate = useNavigate();
   const { register } = useAuth();
-  const [form, setForm] = useState({ email: "", password: "", confirmPassword: "" });
+  const [form, setForm] = useState({
+    fullName: "",
+    phone: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [onboarding, setOnboarding] = useState({
+    email: "",
+    verificationCode: "",
+    generatedCode: "",
+    status: null,
+    isRequesting: false,
+    isVerifying: false,
+  });
+
+  const refreshOnboardingStatus = async (email) => {
+    const normalizedEmail = String(email || "").trim();
+    if (!normalizedEmail) {
+      return;
+    }
+    const response = await fetch(`/api/auth/onboarding-status?email=${encodeURIComponent(normalizedEmail)}`);
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload?.detail || "Onboarding durumu alınamadı");
+    }
+    setOnboarding((previous) => ({ ...previous, email: normalizedEmail, status: payload || null }));
+  };
+
+  const requestVerificationCode = async (email) => {
+    const normalizedEmail = String(email || "").trim();
+    if (!normalizedEmail) {
+      return;
+    }
+    setOnboarding((previous) => ({ ...previous, isRequesting: true, email: normalizedEmail }));
+    try {
+      const response = await fetch("/api/auth/email-verification/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.detail || "Doğrulama kodu oluşturulamadı");
+      }
+      setOnboarding((previous) => ({ ...previous, generatedCode: payload?.verification_code || "" }));
+      toast.success("Doğrulama kodu üretildi");
+      await refreshOnboardingStatus(normalizedEmail);
+    } catch (error) {
+      toast.error(error?.message || "Doğrulama kodu üretilemedi");
+    } finally {
+      setOnboarding((previous) => ({ ...previous, isRequesting: false }));
+    }
+  };
+
+  const verifyEmailCode = async () => {
+    const normalizedEmail = String(onboarding.email || "").trim();
+    if (!normalizedEmail || !onboarding.verificationCode.trim()) {
+      toast.error("E-posta ve doğrulama kodu zorunlu");
+      return;
+    }
+    setOnboarding((previous) => ({ ...previous, isVerifying: true }));
+    try {
+      const response = await fetch("/api/auth/email-verification/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail, code: onboarding.verificationCode.trim() }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.detail || "E-posta doğrulaması başarısız");
+      }
+      toast.success("E-posta doğrulaması tamamlandı");
+      setOnboarding((previous) => ({ ...previous, verificationCode: "", generatedCode: "" }));
+      await refreshOnboardingStatus(normalizedEmail);
+    } catch (error) {
+      toast.error(error?.message || "E-posta doğrulaması başarısız");
+    } finally {
+      setOnboarding((previous) => ({ ...previous, isVerifying: false }));
+    }
+  };
 
   const onRegisterSubmit = async (event) => {
     event.preventDefault();
@@ -25,10 +105,17 @@ export const LandingPage = () => {
 
     setIsSubmitting(true);
     try {
-      await register({ email: form.email.trim(), password: form.password });
+      const normalizedEmail = form.email.trim();
+      await register({
+        email: normalizedEmail,
+        password: form.password,
+        full_name: form.fullName.trim(),
+        phone: form.phone.trim(),
+      });
       toast.success("Kayıt talebiniz alındı. Admin onayı sonrası giriş yapabilirsiniz.");
-      setForm({ email: "", password: "", confirmPassword: "" });
-      navigate("/user/login");
+      setForm({ fullName: "", phone: "", email: "", password: "", confirmPassword: "" });
+      await requestVerificationCode(normalizedEmail);
+      await refreshOnboardingStatus(normalizedEmail);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Hesap açma başarısız");
     } finally {
@@ -79,6 +166,24 @@ export const LandingPage = () => {
               <p className="text-xs font-bold uppercase tracking-widest" data-testid="landing-register-title">Hesap Aç</p>
               <div className="grid gap-2" data-testid="landing-register-fields">
                 <Input
+                  type="text"
+                  value={form.fullName}
+                  onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))}
+                  placeholder="Ad Soyad"
+                  className="h-10 border-black bg-orange-50 text-sm"
+                  data-testid="landing-register-full-name-input"
+                  required
+                />
+                <Input
+                  type="tel"
+                  value={form.phone}
+                  onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
+                  placeholder="Telefon"
+                  className="h-10 border-black bg-orange-50 text-sm"
+                  data-testid="landing-register-phone-input"
+                  required
+                />
+                <Input
                   type="email"
                   value={form.email}
                   onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
@@ -112,6 +217,39 @@ export const LandingPage = () => {
                 {isSubmitting ? "Gönderiliyor..." : "Hesap Aç"}
               </Button>
             </form>
+
+            {onboarding.email && (
+              <div className="mt-4 max-w-lg space-y-3 rounded border border-black/60 bg-black/10 p-4" data-testid="landing-onboarding-status-card">
+                <p className="text-xs font-bold uppercase tracking-widest" data-testid="landing-onboarding-status-title">Onboarding Adımları</p>
+                <p className="text-xs" data-testid="landing-onboarding-status-email">E-posta: {onboarding.email}</p>
+                <div className="space-y-1" data-testid="landing-onboarding-status-steps">
+                  {(onboarding.status?.steps || []).map((step) => (
+                    <p key={step.key} className="text-xs" data-testid={`landing-onboarding-step-${step.key}`}>
+                      {step.done ? "✅" : "⏳"} {step.label}
+                    </p>
+                  ))}
+                </div>
+                {onboarding.generatedCode && (
+                  <p className="text-xs font-mono" data-testid="landing-onboarding-generated-code">Doğrulama Kodu: {onboarding.generatedCode}</p>
+                )}
+                <div className="flex flex-wrap gap-2" data-testid="landing-onboarding-actions">
+                  <Button type="button" variant="outline" onClick={() => requestVerificationCode(onboarding.email)} disabled={onboarding.isRequesting} data-testid="landing-onboarding-request-code-button">
+                    {onboarding.isRequesting ? "Gönderiliyor..." : "Kod Yeniden Üret"}
+                  </Button>
+                  <Input
+                    value={onboarding.verificationCode}
+                    onChange={(event) => setOnboarding((prev) => ({ ...prev, verificationCode: event.target.value }))}
+                    placeholder="Doğrulama kodu"
+                    className="h-9 max-w-[180px] border-black bg-orange-50 text-sm"
+                    data-testid="landing-onboarding-code-input"
+                  />
+                  <Button type="button" onClick={verifyEmailCode} disabled={onboarding.isVerifying} data-testid="landing-onboarding-verify-button">
+                    {onboarding.isVerifying ? "Doğrulanıyor..." : "E-postayı Doğrula"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => navigate("/user/login")} data-testid="landing-onboarding-go-login-button">Girişe Git</Button>
+                </div>
+              </div>
+            )}
           </motion.div>
 
           <motion.div
@@ -130,6 +268,15 @@ export const LandingPage = () => {
               />
             </div>
           </motion.div>
+        </section>
+
+        <section className="rounded border border-black/70 bg-black/10 p-4" data-testid="landing-live-status-card">
+          <p className="text-xs font-bold uppercase tracking-widest" data-testid="landing-live-status-title">Canlı Durum</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="landing-live-status-grid">
+            <p className="text-xs" data-testid="landing-live-status-platform">Platform: 🟢 Online</p>
+            <p className="text-xs" data-testid="landing-live-status-engine">Execution Engine: 🟢 İşlemde</p>
+            <p className="text-xs" data-testid="landing-live-status-note">Not: İlk kurulumda testnet ile başlamanız önerilir.</p>
+          </div>
         </section>
 
         <section className="grid gap-3 pb-2 md:grid-cols-3" data-testid="landing-feature-grid">

@@ -1,11 +1,12 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import secrets
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.security import create_access_token, hash_password, verify_password
-from models import User, UserRole
+from models import User, UserOnboardingProfile, UserRole
 from schemas import LoginRequest, RegisterRequest
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
 
@@ -45,9 +46,102 @@ def register_user_account(db: Session, payload: RegisterRequest) -> User:
         approved_at=None,
     )
     db.add(user)
+    db.flush()
+    onboarding = UserOnboardingProfile(
+        user_id=user.id,
+        full_name=(payload.full_name or "").strip() or None,
+        phone=(payload.phone or "").strip() or None,
+        email_verified=False,
+    )
+    db.add(onboarding)
     db.commit()
     db.refresh(user)
     return user
+
+
+def _onboarding_profile_for_user(db: Session, user: User) -> UserOnboardingProfile:
+    row = db.query(UserOnboardingProfile).filter(UserOnboardingProfile.user_id == user.id).first()
+    if row:
+        return row
+    row = UserOnboardingProfile(user_id=user.id, email_verified=False)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def request_email_verification_code(db: Session, email: str) -> UserOnboardingProfile:
+    normalized_email = _normalize_email(email)
+    user = db.query(User).filter(User.email == normalized_email, User.role == UserRole.USER).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kullanıcı bulunamadı")
+
+    profile = _onboarding_profile_for_user(db, user)
+    now = datetime.now(timezone.utc)
+    code = f"{secrets.randbelow(900000) + 100000}"
+    profile.verification_code = code
+    profile.verification_requested_at = now
+    profile.verification_expires_at = now.replace(microsecond=0) + timedelta(minutes=15)
+    profile.updated_at = now
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
+def verify_email_code(db: Session, email: str, code: str) -> UserOnboardingProfile:
+    normalized_email = _normalize_email(email)
+    user = db.query(User).filter(User.email == normalized_email, User.role == UserRole.USER).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kullanıcı bulunamadı")
+
+    profile = _onboarding_profile_for_user(db, user)
+    now = datetime.now(timezone.utc)
+    normalized_code = str(code or "").strip()
+
+    if not profile.verification_code or normalized_code != profile.verification_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Doğrulama kodu geçersiz")
+
+    expires_at = profile.verification_expires_at
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at and now > expires_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Doğrulama kodunun süresi doldu")
+
+    profile.email_verified = True
+    profile.verification_code = None
+    profile.verification_expires_at = None
+    profile.updated_at = now
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
+def onboarding_status_by_email(db: Session, email: str) -> dict:
+    normalized_email = _normalize_email(email)
+    user = db.query(User).filter(User.email == normalized_email, User.role == UserRole.USER).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kullanıcı bulunamadı")
+
+    profile = _onboarding_profile_for_user(db, user)
+    verified = bool(profile.email_verified)
+    approval = str(user.approval_status)
+    active = bool(user.is_active)
+    steps = [
+        {"key": "account_created", "label": "Hesap oluşturuldu", "done": True},
+        {"key": "email_verified", "label": "E-posta doğrulandı", "done": verified},
+        {"key": "admin_approved", "label": "Admin onayı", "done": approval == "approved"},
+        {"key": "login_ready", "label": "Girişe hazır", "done": verified and approval == "approved" and active},
+    ]
+    return {
+        "email": user.email,
+        "email_verified": verified,
+        "approval_status": approval,
+        "is_active": active,
+        "full_name": profile.full_name,
+        "phone": profile.phone,
+        "steps": steps,
+    }
 
 
 def user_login_with_policy(

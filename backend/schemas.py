@@ -22,6 +22,36 @@ class UserResponse(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
+    full_name: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=40)
+
+
+class EmailVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+class EmailVerificationVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=12)
+
+
+class EmailVerificationResponse(BaseModel):
+    status: str
+    email: str
+    email_verified: bool
+    expires_at: datetime | None = None
+    verification_code: str | None = None
+    message: str | None = None
+
+
+class AuthOnboardingStatusResponse(BaseModel):
+    email: str
+    email_verified: bool
+    approval_status: str
+    is_active: bool
+    full_name: str | None = None
+    phone: str | None = None
+    steps: list[dict] = Field(default_factory=list)
 
 
 class LoginRequest(BaseModel):

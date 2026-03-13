@@ -4,14 +4,26 @@ from sqlalchemy.orm import Session
 from core.users.user_registry import (
     approve_user_account,
     list_user_accounts_for_approval,
+    onboarding_status_by_email,
     register_user_account,
     reject_user_account,
+    request_email_verification_code,
+    verify_email_code,
     user_login_with_policy,
 )
 from db import get_db
 from deps import get_current_user, require_admin
 from models import User, UserRole
-from schemas import AuthResponse, LoginRequest, RegisterRequest, UserResponse
+from schemas import (
+    AuthOnboardingStatusResponse,
+    AuthResponse,
+    EmailVerificationRequest,
+    EmailVerificationResponse,
+    EmailVerificationVerifyRequest,
+    LoginRequest,
+    RegisterRequest,
+    UserResponse,
+)
 from services.audit_service import create_audit_log
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -32,6 +44,36 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         details={"email": user.email, "approval_status": user.approval_status},
     )
     return user
+
+
+@router.post("/email-verification/request", response_model=EmailVerificationResponse)
+def request_email_verification(payload: EmailVerificationRequest, db: Session = Depends(get_db)):
+    profile = request_email_verification_code(db, payload.email)
+    return EmailVerificationResponse(
+        status="code_sent",
+        email=payload.email,
+        email_verified=bool(profile.email_verified),
+        expires_at=profile.verification_expires_at,
+        verification_code=profile.verification_code,
+        message="Doğrulama kodu oluşturuldu",
+    )
+
+
+@router.post("/email-verification/verify", response_model=EmailVerificationResponse)
+def verify_email_verification(payload: EmailVerificationVerifyRequest, db: Session = Depends(get_db)):
+    profile = verify_email_code(db, payload.email, payload.code)
+    return EmailVerificationResponse(
+        status="verified",
+        email=payload.email,
+        email_verified=bool(profile.email_verified),
+        message="E-posta doğrulandı",
+    )
+
+
+@router.get("/onboarding-status", response_model=AuthOnboardingStatusResponse)
+def get_auth_onboarding_status(email: str, db: Session = Depends(get_db)):
+    payload = onboarding_status_by_email(db, email)
+    return AuthOnboardingStatusResponse(**payload)
 
 
 def _login_with_policy(
