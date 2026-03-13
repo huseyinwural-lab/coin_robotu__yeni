@@ -355,7 +355,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         elif risk_decision == "REQUIRE_APPROVAL":
             precheck_flags.append("portfolio_risk_manual_approval_required")
 
-    if intent_type == "OPEN_POSITION" and not venue_allowed:
+    if intent_type == "OPEN_POSITION" and requested_environment == "live" and not venue_allowed:
         validation["validation_status"] = "rejected"
         precheck_reasons.append("venue_access_blocked")
         if venue_state:
@@ -409,6 +409,14 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     final_reject_codes = sorted(set(precheck_reasons))
     final_risk_flags = sorted(set(precheck_flags + (risk_impact.get("risk_flags") or [])))
     gate_decision = str(risk_impact.get("decision") or "ALLOW")
+
+    if bool(payload.get("signal_bridge_context")) and requested_environment == "testnet":
+        soft_override_codes = {"strategy_conflict_loser", "symbol_not_allowed", "assignment_required", "venue_access_blocked"}
+        hard_codes = [code for code in final_reject_codes if code not in soft_override_codes]
+        if not hard_codes:
+            validation["validation_status"] = "valid"
+            final_reject_codes = []
+            final_risk_flags = sorted(set([*final_risk_flags, "testnet_signal_bridge_soft_override"]))
 
     normalized["meta_strategy_summary"] = meta_summary
     normalized["portfolio_risk_impact"] = {
@@ -850,8 +858,10 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
     if intent.intent_type == "OPEN_POSITION":
         position = _open_position_from_intent(db, intent, normalized)
         action_event_type = "execution_order_released"
+        intent.position_id = position.id
     else:
         position, action_event_type, _ = _apply_position_action_intent(db, intent)
+        intent.position_id = position.id
         db.add(
             PositionLedgerEvent(
                 id=str(uuid.uuid4()),

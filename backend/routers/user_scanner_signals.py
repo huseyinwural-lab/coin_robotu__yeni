@@ -155,6 +155,9 @@ def approve_signal(
         order_position_id=row.order_position_id,
         decided_at=row.decided_at,
         decision_note=row.decision_note,
+        current_state=row.current_state,
+        blocked_reason_code=row.blocked_reason_code,
+        created_order_intent_id=row.created_order_intent_id,
     )
 
 
@@ -188,4 +191,7 @@ def reject_signal(
         order_position_id=row.order_position_id,
         decided_at=row.decided_at,
         decision_note=row.decision_note,
+        current_state=row.current_state,
+        blocked_reason_code=row.blocked_reason_code,
+        created_order_intent_id=row.created_order_intent_id,
     )

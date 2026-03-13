@@ -1352,6 +1352,20 @@ class UserSignalResponse(BaseModel):
     strategy_weight: float | None = None
     allocation_source: str | None = None
     meta_engine_decision: str | None = None
+    previous_state: str | None = None
+    current_state: str | None = None
+    blocked_reason_code: str | None = None
+    blocked_reason_message: str | None = None
+    blocked_solution_hint: str | None = None
+    requires_manual_approval: bool | None = None
+    execution_eligible: bool | None = None
+    bot_profile_id: str | None = None
+    risk_policy_id: str | None = None
+    exchange_connection_id: str | None = None
+    created_order_intent_id: str | None = None
+    runtime_owner: str | None = None
+    last_eligibility_check_at: datetime | None = None
+    execution_mode_label: str | None = None
 
 
 class UserSignalDecisionRequest(BaseModel):
@@ -1364,6 +1378,9 @@ class UserSignalDecisionResponse(BaseModel):
     order_position_id: str | None
     decided_at: datetime | None
     decision_note: str
+    current_state: str | None = None
+    blocked_reason_code: str | None = None
+    created_order_intent_id: str | None = None
 
 
 class DecisionReasonDetailResponse(BaseModel):

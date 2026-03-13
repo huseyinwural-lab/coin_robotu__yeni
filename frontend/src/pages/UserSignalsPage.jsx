@@ -9,6 +9,7 @@ import { apiClient } from "@/lib/api";
 export const UserSignalsPage = () => {
   const navigate = useNavigate();
   const [signals, setSignals] = useState([]);
+  const [signalMode, setSignalMode] = useState(null);
   const [portfolio, setPortfolio] = useState(null);
   const [trades, setTrades] = useState([]);
   const [busyId, setBusyId] = useState("");
@@ -21,14 +22,16 @@ export const UserSignalsPage = () => {
 
   const load = async () => {
     setIsLoading(true);
-    const [signalsRes, portfolioRes, tradesRes] = await Promise.all([
+    const [signalsRes, portfolioRes, tradesRes, modeRes] = await Promise.all([
       apiClient.get("/user/signals", { params: { limit: 120 } }),
       apiClient.get("/user/portfolio"),
       apiClient.get("/user/trades", { params: { limit: 120 } }),
+      apiClient.get("/user/signal-mode"),
     ]);
     setSignals(signalsRes.data || []);
     setPortfolio(portfolioRes.data);
     setTrades(tradesRes.data || []);
+    setSignalMode(modeRes.data || null);
     setIsLoading(false);
   };
 
@@ -37,6 +40,39 @@ export const UserSignalsPage = () => {
   }, []);
 
   const pendingSignals = useMemo(() => signals.filter((item) => item.status === "pending"), [signals]);
+
+  const modeLabelFromRaw = (rawMode) => {
+    const normalized = String(rawMode || "ASSISTED").toUpperCase();
+    if (normalized === "MANUAL") {
+      return "Manual";
+    }
+    if (normalized === "AUTO") {
+      return "Full Auto";
+    }
+    return "Semi-Auto";
+  };
+
+  const statusBadgeClass = (status) => {
+    const normalized = String(status || "").toLowerCase();
+    if (["filled", "submitted", "queued", "ready", "approved"].includes(normalized)) {
+      return "bg-emerald-200 text-emerald-900";
+    }
+    if (["blocked", "rejected", "expired"].includes(normalized)) {
+      return "bg-rose-200 text-rose-900";
+    }
+    return "bg-amber-200 text-amber-900";
+  };
+
+  const normalizedStatusText = (signal) => {
+    const value = String(signal.status || "pending").toLowerCase();
+    if (value === "approved") {
+      return "Ready";
+    }
+    if (value === "info") {
+      return "Pending";
+    }
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  };
 
   const decideSignal = async (signalId, action) => {
     setBusyId(signalId);
@@ -56,8 +92,11 @@ export const UserSignalsPage = () => {
   }
 
   const openExecuteFromSignal = (signal) => {
-    const side = signal.status === "pending" ? "buy" : "buy";
-    navigate(`/user/execute?source=signal&symbol=${encodeURIComponent(signal.symbol)}&side=${encodeURIComponent(side)}&market_type=spot&preset=spot_basic`);
+    const side = signal.signal === "short" ? "sell" : "buy";
+    const marketType = signal.market_type || "spot";
+    navigate(
+      `/user/execute?source=signal&symbol=${encodeURIComponent(signal.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(marketType)}&preset=spot_basic`,
+    );
   };
 
   const applyPresetFromSignal = (signal) => {
@@ -67,9 +106,9 @@ export const UserSignalsPage = () => {
   const buildIntentPayload = (signal) => ({
     source_type: "signal",
     source_ref_id: signal.signal_id,
-    market_type: "spot",
+    market_type: signal.market_type || "spot",
     symbol: signal.symbol,
-    side: "buy",
+    side: signal.signal === "short" ? "sell" : "buy",
     order_type: "market",
     position_size_mode: "fixed_notional",
     position_size_value: 30,
@@ -80,6 +119,7 @@ export const UserSignalsPage = () => {
     execution_mode: "signal_follow",
     strategy_binding: signal.strategy_code,
     signal_confidence: signal.confidence,
+    exchange_connection_id: signal.exchange_connection_id || null,
   });
 
   const previewIntentFromSignal = async (signal) => {
@@ -137,6 +177,9 @@ export const UserSignalsPage = () => {
             {compactMode ? "Compact: ON" : "Compact: OFF"}
           </Button>
         </div>
+        <p className="mt-3 inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900" data-testid="user-signals-active-execution-mode-badge">
+          Execution Mode: {modeLabelFromRaw(signalMode?.mode)}
+        </p>
       </header>
 
       <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-signals-metrics-grid">
@@ -192,13 +235,16 @@ export const UserSignalsPage = () => {
           <article key={signal.id} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid={`user-signals-mobile-card-${signal.id}`}>
             <p className="text-sm font-semibold" data-testid={`user-signals-mobile-symbol-${signal.id}`}>{signal.symbol}</p>
             <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-status-${signal.id}`}>{signal.status}</p>
+            <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-execution-mode-${signal.id}`}>mode: {signal.execution_mode_label || modeLabelFromRaw(signal.mode)}</p>
+            <p className="text-xs text-rose-300" data-testid={`user-signals-mobile-blocked-reason-${signal.id}`}>blocked: {signal.blocked_reason_code || "-"}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-solution-hint-${signal.id}`}>hint: {signal.blocked_solution_hint || "-"}</p>
             <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-strategy-${signal.id}`}>{signal.strategy_code}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-strategy-weight-${signal.id}`}>weight: {signal.strategy_weight ?? "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-allocation-source-${signal.id}`}>source: {signal.allocation_source ?? "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-meta-decision-${signal.id}`}>meta: {signal.meta_engine_decision ?? "-"}</p>
             <div className="mt-2 flex flex-wrap gap-2" data-testid={`user-signals-mobile-actions-${signal.id}`}>
               <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-mobile-why-button-${signal.id}`}>Why this signal?</Button>
-              {signal.status === "pending" && (
+              {(signal.status === "pending" || signal.status === "ready") && (
                 <>
                   <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-mobile-approve-${signal.id}`}>Approve</Button>
                   <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-mobile-reject-${signal.id}`}>Reject</Button>
@@ -208,7 +254,7 @@ export const UserSignalsPage = () => {
                   <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid={`user-signals-mobile-follow-signal-${signal.id}`}>Follow Signal</Button>
                 </>
               )}
-              {signal.status !== "pending" && (
+              {!(signal.status === "pending" || signal.status === "ready") && (
                 <span className="text-xs text-slate-400" data-testid={`user-signals-mobile-final-status-${signal.id}`}>{signal.status}</span>
               )}
             </div>
@@ -227,6 +273,11 @@ export const UserSignalsPage = () => {
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Allocation</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Meta</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Status</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Execution Mode</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Blokaj Nedeni</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Son Uygunluk Kontrolü</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Intent</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Runtime Sahibi</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Time</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Actions</th>
             </tr>
@@ -240,12 +291,24 @@ export const UserSignalsPage = () => {
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-weight-${signal.id}`}>{signal.strategy_weight ?? "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-allocation-${signal.id}`}>{signal.allocation_source ?? "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-meta-${signal.id}`}>{signal.meta_engine_decision ?? "-"}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-status-${signal.id}`}>{signal.status}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-status-${signal.id}`}>
+                  <span className={`rounded px-2 py-1 text-xs font-semibold ${statusBadgeClass(signal.status)}`} data-testid={`user-signals-table-status-badge-${signal.id}`}>{normalizedStatusText(signal)}</span>
+                </td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-execution-mode-${signal.id}`}>{signal.execution_mode_label || modeLabelFromRaw(signal.mode)}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-blocked-reason-${signal.id}`}>
+                  <div>
+                    <p className="text-xs font-semibold">{signal.blocked_reason_code || "-"}</p>
+                    <p className="text-[11px] text-slate-400" data-testid={`user-signals-table-blocked-solution-${signal.id}`}>{signal.blocked_solution_hint || "-"}</p>
+                  </div>
+                </td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-last-eligibility-check-${signal.id}`}>{signal.last_eligibility_check_at ? new Date(signal.last_eligibility_check_at).toLocaleString() : "-"}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-intent-${signal.id}`}>{signal.created_order_intent_id || "-"}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-runtime-owner-${signal.id}`}>{signal.runtime_owner || "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-time-${signal.id}`}>{new Date(signal.created_at).toLocaleString()}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>
                   <div className="flex flex-wrap gap-2" data-testid={`user-signals-actions-${signal.id}`}>
                     <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-why-button-${signal.id}`}>Why this signal?</Button>
-                    {signal.status === "pending" ? (
+                    {(signal.status === "pending" || signal.status === "ready") ? (
                       <>
                         <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-approve-button-${signal.id}`}>Approve</Button>
                         <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-reject-button-${signal.id}`}>Reject</Button>
