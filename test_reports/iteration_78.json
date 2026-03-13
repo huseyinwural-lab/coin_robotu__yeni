@@ -1,0 +1,102 @@
+{
+  "summary": "Iteration 78 - Bug fix verification for (1) Bots not trading / futures 451 restriction and (2) Futures all-select not reflected. All 8 backend tests passed. Backend fix VERIFIED: futures universe API returns 571 rows after fallback to testnet endpoint. Frontend UI displays saved admin control state correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "features_tested": {
+    "admin_action_center_disable_futures_reset": {
+      "status": "PASS",
+      "description": "After calling /api/admin/action-center/close-next-actions with clear_kill_switch=true, disable_futures is correctly reset to false in action center summary"
+    },
+    "futures_universe_api_571_rows": {
+      "status": "PASS",
+      "description": "GET /api/symbol-selector/universe?source=crypto&exchange=binance&market_type=futures&mode=all_exchange returns 571 rows (fix for 451 restriction via fallback to testnet.binancefuture.com)"
+    },
+    "futures_universe_force_refresh_on_empty": {
+      "status": "PASS",
+      "description": "_crypto_universe_rows now retries with force_refresh=True if initial result has no rows"
+    },
+    "spot_universe_regression": {
+      "status": "PASS", 
+      "description": "Spot universe API returns 259 rows with mode=all_exchange, confirming no regression"
+    },
+    "spot_top_active_50_regression": {
+      "status": "PASS",
+      "description": "Spot top_active_50 mode correctly returns 50 selected symbols"
+    },
+    "market_universe_page_ui": {
+      "status": "PASS",
+      "description": "Market Universe page loads correctly with futures/spot selectors, CSV inputs populated with saved values from admin control"
+    }
+  },
+  "api_verification": {
+    "futures_universe_response": {
+      "rows_count": 571,
+      "selected_count": 571,
+      "market_type": "futures",
+      "sample_symbols": ["BTCUSDT", "BTCUSDC", "ETHUSDT", "DOGEUSDT", "ETHUSDC"]
+    },
+    "spot_universe_response": {
+      "rows_count": 259,
+      "selected_count": 259,
+      "market_type": "spot",
+      "sample_symbols": ["BTCUSDT", "USDTUSD", "BTCUSD", "ETHUSDT", "ETHUSD"]
+    },
+    "action_center_summary": {
+      "disable_futures": false,
+      "emergency_mode": false,
+      "kill_switch_active": false,
+      "kill_switch_reasons": ["cleared_by_action_center"]
+    }
+  },
+  "test_results": {
+    "backend_tests": {
+      "total": 8,
+      "passed": 8,
+      "skipped": 0,
+      "failed": 0,
+      "test_file": "/app/backend/tests/test_iteration78_futures_fix.py"
+    },
+    "frontend_tests": {
+      "login_working": true,
+      "market_universe_page_loads": true,
+      "futures_selector_visible": true,
+      "spot_selector_visible": true,
+      "disable_futures_unchecked": true
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration78_futures_fix.py",
+    "/app/test_reports/pytest/pytest_results_iter78_futures.xml",
+    "/app/test_reports/artifacts_iter78/03_market_universe_page.jpeg",
+    "/app/test_reports/artifacts_iter78/11_market_universe.jpeg"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "market_data_provider.py correctly implements fallback URL list for futures: ['https://fapi.binance.com', 'https://testnet.binancefuture.com']",
+    "symbol_selector_service.py _crypto_universe_rows retries with force_refresh=True when rows list is empty",
+    "admin_action_center.py clear_kill_switch path correctly sets control.disable_futures = False",
+    "MarketUniversePage.jsx properly syncs futuresSymbols state to futures_universe CSV input via useEffect"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration78_futures_fix.py"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 passed)",
+    "frontend": "100% (UI verified)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!"
+  },
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bug fix for futures 451 restriction verified. Backend now falls back to testnet.binancefuture.com endpoint when main Binance futures API returns 451. Futures universe returns 571 rows. Spot universe returns 259 rows (regression check passed). Admin Action Center clear_kill_switch correctly resets disable_futures to false.",
+  "rca_of_the_issue": "Root Cause: Binance fapi.binance.com endpoint returns HTTP 451 (Unavailable for Legal Reasons) for certain regions. Fix: Added fallback URL list in market_data_provider.py to try testnet.binancefuture.com when main endpoint fails. Additionally, symbol_selector_service.py now retries with force_refresh=True if initial API call returns empty rows."
+}

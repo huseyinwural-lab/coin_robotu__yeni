@@ -98,6 +98,8 @@ def provider_config_summary(db: Session) -> dict:
 def _crypto_universe_rows(exchange: str, market_type: str, quote_asset_filter: str = "ALL") -> list[dict]:
     provider = BinanceMarketDataProvider()
     payload = provider.get_tradable_symbols(exchange=exchange, market_type=market_type)
+    if not payload.get("rows"):
+        payload = provider.get_tradable_symbols(exchange=exchange, market_type=market_type, force_refresh=True)
     rows: list[dict] = []
     for row in payload.get("rows", []):
         if not bool(row.get("is_tradable", False)):

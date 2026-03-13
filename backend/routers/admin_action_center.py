@@ -136,6 +136,7 @@ def close_next_actions(payload: dict | None = None, current_admin: User = Depend
         control = db.query(AdminControl).filter(AdminControl.id == "global").first()
         if control:
             control.emergency_mode = False
+            control.disable_futures = False
 
     db.commit()
     create_audit_log(

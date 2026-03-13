@@ -59,7 +59,10 @@ class BinanceMarketDataProvider:
             "https://api2.binance.com",
             "https://api.binance.us",
         ]
-        self._futures_base_urls = ["https://fapi.binance.com"]
+        self._futures_base_urls = [
+            "https://fapi.binance.com",
+            "https://testnet.binancefuture.com",
+        ]
 
     def _resolve_endpoint_candidates(self, market_type: str, endpoint_type: str) -> list[str]:
         market = (market_type or "spot").strip().lower()

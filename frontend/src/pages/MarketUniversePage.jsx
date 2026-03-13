@@ -71,6 +71,14 @@ export const MarketUniversePage = () => {
     hydrate();
   }, []);
 
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, spot_universe: (spotSymbols || []).join(",") }));
+  }, [spotSymbols]);
+
+  useEffect(() => {
+    setForm((prev) => ({ ...prev, futures_universe: (futuresSymbols || []).join(",") }));
+  }, [futuresSymbols]);
+
   const submit = async (event) => {
     event.preventDefault();
     try {
@@ -159,6 +167,7 @@ export const MarketUniversePage = () => {
       <section className="grid gap-4 border border-slate-800 bg-slate-900 p-4" data-testid="market-universe-symbol-selector-section">
         <div data-testid="market-universe-spot-selector-wrapper">
           <p className="mb-2 text-xs uppercase tracking-widest text-slate-500" data-testid="market-universe-spot-selector-title">Spot Universe Selector</p>
+          <p className="mb-2 text-xs text-slate-400" data-testid="market-universe-spot-selector-count">selected_count: {spotSymbols.length}</p>
           <SymbolSelectorPanel
             testIdPrefix="market-universe-spot-selector"
             exchange="binance"
@@ -175,6 +184,7 @@ export const MarketUniversePage = () => {
 
         <div data-testid="market-universe-futures-selector-wrapper">
           <p className="mb-2 text-xs uppercase tracking-widest text-slate-500" data-testid="market-universe-futures-selector-title">Futures Universe Selector</p>
+          <p className="mb-2 text-xs text-slate-400" data-testid="market-universe-futures-selector-count">selected_count: {futuresSymbols.length}</p>
           <SymbolSelectorPanel
             testIdPrefix="market-universe-futures-selector"
             exchange="binance"
