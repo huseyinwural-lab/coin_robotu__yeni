@@ -3741,3 +3741,39 @@
 - **Aksiyonlar (AUTO/FixAll/Refresh): COMPLETE**
 - **15s auto refresh: COMPLETE**
 - **MOCKED API: YOK**
+
+## 65) 2026-03-13 — Iteration-83 (User Menü Sırası Güncellendi)
+
+### Kullanıcı Talebi
+- User menüsünün istenen sıraya göre düzenlenmesi.
+
+### Uygulanan Sıra
+1. User Dashboard
+2. Exchange Settings
+3. Risk Policy
+4. Bot Profilleri
+5. Scanner
+6. Signals
+7. Trades
+8. Positions
+9. Strategy Template
+10. Indicator Screener
+11. Portfolio
+12. Reports
+13. Execute
+14. Paper Positions
+
+> Not: Mevcut ek menü `Backtest Insights` korunarak 15. sırada bırakıldı.
+
+### Teknik Değişiklik
+- `frontend/src/components/PanelLayout.jsx` içinde `userNavItems` dizisi yeniden sıralandı.
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_81.json`
+  - Frontend: **ALL PASS**
+  - 14 maddelik istenen sıra birebir doğrulandı
+  - Backtest Insights erişilebilirliği ve link clickability doğrulandı
+
+### Durum
+- **User menu reorder: COMPLETE**
+- **MOCKED API: YOK**
