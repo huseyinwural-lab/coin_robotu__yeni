@@ -17,6 +17,11 @@ Not: Browser `http://backend:8001` hostname’ini çözmez; bu değer sadece Doc
 `backend/.env` içindeki `CORS_ORIGINS` değerine de aynı host/IP origin'ini ekleyin:
 
 - Örnek: `http://localhost:3000,http://127.0.0.1:3000,http://<HOST_IP>:3000`
+- Not: `<HOST_IP>` placeholder'ını gerçek sunucu/LAN IP adresinizle değiştirin.
+
+Package manager:
+
+- Frontend için deterministik kurulum: **Yarn** (`yarn.lock` + Dockerfile `--frozen-lockfile`).
 
 ## 2) Compose doğrulama
 
@@ -51,3 +56,4 @@ Bootstrap davranışı deterministic'tir:
 - Sadece `users` tablosu boşken varsayılan admin oluşturulur.
 - Tablo boş değilse tekrar oluşturulmaz.
 - Duplicate oluşmaz.
+- Yeni admin ekleyip varsayılan admin'i sildiğinizde (tablo boş olmadığı sürece) otomatik yeniden oluşmaz.

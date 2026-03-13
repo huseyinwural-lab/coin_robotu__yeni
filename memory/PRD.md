@@ -4204,3 +4204,23 @@
 - **Master engine 12-strategy coverage (active 4): COMPLETE**
 - **MOCKED API: VAR**
   - Email verification delivery provider bu ortamda mocked.
+
+## 76) 2026-03-13 — Iteration-94 (Docker Runtime Audit — Minimal Patch)
+
+### Kullanıcı Talebi
+- Sadece minimal patch (NO REFACTOR)
+- Docker runtime/env akışının deterministik doğrulanması
+- README quickstart notlarının netleştirilmesi
+
+### Uygulananlar
+1. Repo audit yapıldı: compose/env/package-manager/admin bootstrap maddeleri kontrol edildi
+2. `docker-compose.yml` runtime env dosyaları (`backend/.env`, `frontend/.env`) ile uyumlu doğrulandı
+3. `README.md` minimal netleştirme:
+   - `<HOST_IP>` placeholder’ının gerçek IP ile değiştirilmesi notu
+   - Frontend package manager’ın Yarn deterministik akış notu
+   - Default admin silindikten sonra DB boş değilse yeniden oluşmama davranışı notu
+
+### Durum
+- **Docker runtime/env akışı: VERIFIED**
+- **Yarn deterministic setup: VERIFIED**
+- **Default admin bootstrap davranışı: VERIFIED**
