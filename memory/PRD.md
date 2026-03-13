@@ -3007,3 +3007,38 @@
 - **U-IS-02: COMPLETE**
 - **U-IS-03: COMPLETE**
 - **MOCKED API: YOK**
+
+## 45) 2026-03-13 — Iteration-60 (U-IS-04: Visual Consistency and UI Closure)
+
+### Uygulanan Blok
+- Faz U-IS-04 kapsamı (F-12 → F-18) Indicator Screener ekranına eklendi ve tamamlandı.
+
+### Frontend — Görsel Kapanış
+- `UserIndicatorScreenerPage.jsx` görsel ve etkileşim standardı yükseltildi:
+  - **F-12**: Açık yeşil header + top toolbar standardı (query + primary actions hizası)
+  - **F-13**: Filter panel grupları netleştirildi (market, liquidity/universe, participation/quality, sorting) + helper textler
+  - **F-14**: Dense table standardı (sticky header, numeric right align, sortable icon standardı, row hover/selected, compact/wide okunabilirlik)
+  - **F-15**: Button/color compliance (primary green, secondary neutral, warning amber, danger red, disabled muted)
+  - **F-16**: State visual contract (loading/no_match/empty_universe/invalid_filter/backend_unavailable/rate_limit/permission_blocked)
+  - **F-17**: Active filter chips + query/applied summary görünürlüğü + context retention
+- Open in Execute geçişinde market context görünürlüğü güçlendirildi (toast + query param context).
+
+### Backend / Contract Korunumu
+- Filter-aware backend kontratı regressionsuz çalışmaya devam ediyor:
+  - `applied_filters`, `active_filter_chips`, `result_state`, `filter_error`, `warnings` alanları korunuyor.
+- Herhangi bir mock entegrasyon kullanılmadı.
+
+### Validation Artefact
+- `/app/reports/indicator_screener_ui_consistency_validation.json`
+
+### Test Sonuçları
+- Testing agent raporu: `/app/test_reports/iteration_60.json`
+  - backend: **100%**
+  - frontend: **100%**
+  - F-12..F-18 doğrulaması PASS
+- Lokal pytest regressions:
+  - indicator screener test seti toplam: **90 passed**
+
+### Durum
+- **U-IS-04 (F-12..F-18): COMPLETE**
+- **MOCKED API: YOK**

@@ -495,100 +495,80 @@ export const UserIndicatorScreenerPage = () => {
     return [];
   }, [meta]);
 
-  const statusMessage = useMemo(() => {
-    const state = meta?.result_state;
-    if (!state) {
-      return "";
-    }
-    return resultStateMessages[state] || "";
-  }, [meta]);
-
   const effectiveState = isRunning ? "loading" : (meta?.result_state || "success");
+  const appliedFilterSummary = meta?.applied_filters || buildFilterPayload();
+  const querySummaryText = (filters.query_expression || "").trim() || "(query yok - filter-only mode)";
 
-  const appliedFilterSummary = useMemo(() => {
-    const fromMeta = meta?.applied_filters;
-    if (fromMeta) {
-      return fromMeta;
-    }
-    return buildFilterPayload();
-  }, [meta, filters]);
+  const stateCardMap = {
+    loading: {
+      title: "Tarama Çalışıyor",
+      description: resultStateMessages.loading,
+      tone: "border-sky-300 bg-sky-50 text-sky-900",
+      ctaLabel: "",
+      ctaAction: () => {},
+    },
+    no_match: {
+      title: "Eşleşme Yok",
+      description: "Query veya filtreleri koruyarak farklı timeframe/likidite ayarı deneyebilirsiniz.",
+      tone: "border-emerald-300 bg-emerald-50 text-emerald-900",
+      ctaLabel: "Filtreleri Gözden Geçir",
+      ctaAction: () => setShowFiltersExpanded(true),
+    },
+    empty_universe: {
+      title: "Universe Boş",
+      description: "Seçtiğiniz universe + market + likidite kombinasyonunda değerlendirilecek sembol bulunamadı.",
+      tone: "border-amber-300 bg-amber-50 text-amber-900",
+      ctaLabel: "Universe'i Sıfırla",
+      ctaAction: () => {
+        setFilters((prev) => ({ ...prev, symbol_universe_mode: "all_tradable", symbol_whitelist: "", saved_query_id: "" }));
+        setShowFiltersExpanded(true);
+      },
+    },
+    invalid_filter_combination: {
+      title: "Geçersiz Filtre Kombinasyonu",
+      description: meta?.filter_error || "Filtreler arası çakışma tespit edildi.",
+      tone: "border-amber-400 bg-amber-50 text-amber-900",
+      ctaLabel: "Clear All Filters",
+      ctaAction: clearAllFilters,
+    },
+    invalid_query: {
+      title: "Query Geçersiz",
+      description: runError || resultStateMessages.invalid_query,
+      tone: "border-rose-300 bg-rose-50 text-rose-900",
+      ctaLabel: "Query Temizle",
+      ctaAction: () => setFilters((prev) => ({ ...prev, query_expression: "" })),
+    },
+    backend_unavailable: {
+      title: "Backend Ulaşılamıyor",
+      description: runError || resultStateMessages.backend_unavailable,
+      tone: "border-rose-300 bg-rose-50 text-rose-900",
+      ctaLabel: "Retry Scan",
+      ctaAction: runQuery,
+    },
+    rate_limit_throttled: {
+      title: "Rate-Limit Throttled",
+      description: runError || resultStateMessages.rate_limit_throttled,
+      tone: "border-orange-300 bg-orange-50 text-orange-900",
+      ctaLabel: "Biraz Sonra Tekrar Dene",
+      ctaAction: runQuery,
+    },
+    permission_blocked: {
+      title: "Permission Blocked",
+      description: runError || resultStateMessages.permission_blocked,
+      tone: "border-rose-300 bg-rose-50 text-rose-900",
+      ctaLabel: "Girişe Dön",
+      ctaAction: () => navigate("/user/login"),
+    },
+    success: {
+      title: "",
+      description: "",
+      tone: "",
+      ctaLabel: "",
+      ctaAction: () => {},
+    },
+  };
 
-  const querySummaryText = useMemo(() => {
-    const query = (filters.query_expression || "").trim();
-    return query || "(query yok - filter-only mode)";
-  }, [filters.query_expression]);
-
-  const stateCard = useMemo(() => {
-    const map = {
-      loading: {
-        title: "Tarama Çalışıyor",
-        description: resultStateMessages.loading,
-        tone: "border-sky-300 bg-sky-50 text-sky-900",
-        ctaLabel: "",
-        ctaAction: () => {},
-      },
-      no_match: {
-        title: "Eşleşme Yok",
-        description: "Query veya filtreleri koruyarak farklı timeframe/likidite ayarı deneyebilirsiniz.",
-        tone: "border-emerald-300 bg-emerald-50 text-emerald-900",
-        ctaLabel: "Filtreleri Gözden Geçir",
-        ctaAction: () => setShowFiltersExpanded(true),
-      },
-      empty_universe: {
-        title: "Universe Boş",
-        description: "Seçtiğiniz universe + market + likidite kombinasyonunda değerlendirilecek sembol bulunamadı.",
-        tone: "border-amber-300 bg-amber-50 text-amber-900",
-        ctaLabel: "Universe'i Sıfırla",
-        ctaAction: () => {
-          setFilters((prev) => ({ ...prev, symbol_universe_mode: "all_tradable", symbol_whitelist: "", saved_query_id: "" }));
-          setShowFiltersExpanded(true);
-        },
-      },
-      invalid_filter_combination: {
-        title: "Geçersiz Filtre Kombinasyonu",
-        description: meta?.filter_error || "Filtreler arası çakışma tespit edildi.",
-        tone: "border-amber-400 bg-amber-50 text-amber-900",
-        ctaLabel: "Clear All Filters",
-        ctaAction: clearAllFilters,
-      },
-      invalid_query: {
-        title: "Query Geçersiz",
-        description: runError || resultStateMessages.invalid_query,
-        tone: "border-rose-300 bg-rose-50 text-rose-900",
-        ctaLabel: "Query Temizle",
-        ctaAction: () => setFilters((prev) => ({ ...prev, query_expression: "" })),
-      },
-      backend_unavailable: {
-        title: "Backend Ulaşılamıyor",
-        description: runError || resultStateMessages.backend_unavailable,
-        tone: "border-rose-300 bg-rose-50 text-rose-900",
-        ctaLabel: "Retry Scan",
-        ctaAction: runQuery,
-      },
-      rate_limit_throttled: {
-        title: "Rate-Limit Throttled",
-        description: runError || resultStateMessages.rate_limit_throttled,
-        tone: "border-orange-300 bg-orange-50 text-orange-900",
-        ctaLabel: "Biraz Sonra Tekrar Dene",
-        ctaAction: runQuery,
-      },
-      permission_blocked: {
-        title: "Permission Blocked",
-        description: runError || resultStateMessages.permission_blocked,
-        tone: "border-rose-300 bg-rose-50 text-rose-900",
-        ctaLabel: "Girişe Dön",
-        ctaAction: () => navigate("/user/login"),
-      },
-      success: {
-        title: "",
-        description: "",
-        tone: "",
-        ctaLabel: "",
-        ctaAction: () => {},
-      },
-    };
-    return map[effectiveState] || map.success;
-  }, [effectiveState, meta, runError, navigate, clearAllFilters, runQuery]);
+  const stateCard = stateCardMap[effectiveState] || stateCardMap.success;
 
   if (isBootLoading) {
     return <LoadingSkeleton rows={10} testId="user-indicator-screener-loading-skeleton" />;
