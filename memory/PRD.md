@@ -4004,3 +4004,60 @@
 - **Kayıtlı seçimle otomasyon güncellemesi: COMPLETE**
 - **MOCKED API: VAR**
   - Email verification delivery provider bu ortamda mocked.
+
+## 72) 2026-03-13 — Iteration-90 (Çoklu Otomasyon Profili + Otomatik Yeni Sinyal Uyarıları + Signals Blok Hatası)
+
+### Kullanıcı Talebi
+- Çoklu scanner otomasyon profili (örn. `scalp-3m`, `swing-15m`)
+- Otomatik run sonrası sadece yeni sinyal varsa toast + alert
+- Ekran görüntüsündeki Signals tablo aksiyon alanı blok/layout hatasının düzeltilmesi
+
+### Uygulananlar
+1. **Backend: çoklu profil altyapısı**
+   - Yeni tablo/model: `user_scanner_automation_profiles`
+   - `user_scanner_automation_configs` tablosuna `last_actionable_count` alanı eklendi
+   - Yeni endpointler:
+     - `GET /api/user/scanner/automation-profiles`
+     - `POST /api/user/scanner/automation-profiles`
+     - `PUT /api/user/scanner/automation-profiles/{profile_id}`
+     - `POST /api/user/scanner/automation-profiles/{profile_id}/activate`
+     - `DELETE /api/user/scanner/automation-profiles/{profile_id}`
+   - Legacy endpointler (`/api/user/scanner/automation`) korunarak geriye dönük uyumluluk sağlandı.
+
+2. **Runtime: profile-bazlı otomasyon döngüsü**
+   - `_scanner_automation_loop` profil kayıtlarını işler; due profile’larda scanner run yapar.
+   - `last_run_id`, `last_run_status`, `last_run_at`, `last_run_error`, `last_actionable_count` günceller.
+   - Profili olan user’larda legacy config run’ı skip edilerek duplicate çalışma engellendi.
+
+3. **Frontend: UserScannerPage çoklu profil yönetimi**
+   - Profil oluşturma (adı + periyot), aktif etme, silme, aktif profili güncelleme
+   - Otomasyon kartı aktif profile göre durum/periyot/sonraki run gösterimi
+   - Otomatik run uyarı kartı eklendi
+
+4. **Yeni sinyal geldiğinde bildirim (toast + alerts)**
+   - Frontend profile `last_run_id` değişimini poll ederek izler
+   - Sadece `last_actionable_count > 0` durumunda toast üretir
+   - Son 10 otomatik run uyarısı kartta listelenir
+
+5. **Signals blok/layout hatası düzeltmesi**
+   - Desktop table min width artırıldı (`min-w-[2200px]`)
+   - Aksiyon sütunu `min-w-[420px]`, `flex-nowrap`, `whitespace-nowrap`
+   - Butonlar tek satırda kalır; yatay scroll ile erişim korunur
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_89.json`
+  - Backend: **14/14 PASS**
+  - Frontend: **100% PASS**
+  - Doğrulananlar:
+    - automation profile CRUD + activate
+    - runtime alan güncellemeleri
+    - legacy endpoint uyumluluğu
+    - scanner profile UI + alerts card
+    - signals table action layout fix
+
+### Durum
+- **Çoklu otomasyon profili: COMPLETE**
+- **Yeni sinyal toast + alert: COMPLETE**
+- **Signals blok/layout hatası: COMPLETE**
+- **MOCKED API: VAR**
+  - Email verification delivery provider bu ortamda mocked.
