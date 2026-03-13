@@ -3444,3 +3444,63 @@
 - **Admin Closure Package: COMPLETE**
 - **Iteration-72’den gelen 404 alias notları: RESOLVED**
 - **MOCKED API: YOK**
+
+## 57) 2026-03-13 — Iteration-75 (Admin+User Advanced Symbol Selector Rollout)
+
+### Kullanıcı Kararı
+- Kapsam onayı: **1B 2B 3B 4B 5B**
+  - Bot Profile + Scanner + Indicator Screener + Execute
+  - Modlar: `ALL_EXCHANGE`, `TOP_ACTIVE_50`, `TOP_ACTIVE_100`, `CUSTOM_LIST`
+  - Quote asset geniş kapsam
+  - Watchlist kaydet/yükle
+  - Kripto + Senet (NASDAQ+NYSE)
+
+### Backend
+- Yeni model/tablo:
+  - `external_provider_credentials` (Alpha key)
+  - `symbol_selection_watchlists` (user/admin watchlist)
+- Yeni API paketi:
+  - `GET /api/symbol-selector/universe`
+  - `GET/POST/PUT/DELETE /api/symbol-selector/watchlists`
+  - `GET /api/symbol-selector/provider-config`
+  - `PUT /api/symbol-selector/provider-config/alpha-vantage` (admin)
+- `Alpha Vantage` entegrasyonu (playbook bazlı):
+  - LISTING_STATUS (NASDAQ+NYSE active stocks)
+  - TOP_GAINERS_LOSERS (most actively traded)
+- Scanner geliştirmesi:
+  - `UserScannerRunRequest` artık `symbol_source`, `symbol_selection_mode`, `selected_symbols` alıyor
+  - `run_user_scanner` custom sembol seti ve source-aware warning döndürüyor
+- Indicator Screener:
+  - `symbol_source` destek alanı eklendi
+  - yeni mod aliasları desteklendi (`all_exchange`, `top_active_50/100`, `custom_list`)
+
+### Frontend
+- Yeni ortak bileşen: `SymbolSelectorPanel.jsx`
+  - Kaynak (crypto/stock), mod, arama, checkbox seçim, watchlist save/apply
+- Entegrasyon yapılan sayfalar:
+  - `BotProfilesPage`
+  - `UserScannerPage`
+  - `UserIndicatorScreenerPage`
+  - `UserExecutePage` (single-select)
+  - `MarketUniversePage` (admin: spot/futures selector + Alpha key panel)
+  - `AdminStrategyIntelligencePage` (single-select)
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_74.json`
+  - Core symbol selector backend testleri PASS
+  - Admin UI entegrasyonları PASS
+  - Agent raporundaki user-role kaynaklı eksikler main agent tarafından self-test ile kapatıldı
+- Ek self-testler:
+  - user auth + scanner run (crypto/stock source)
+  - indicator run (stock source validation)
+  - watchlist CRUD
+  - admin market universe ve user scanner smoke screenshot
+
+### Not
+- **Indicator Screener ve Execute hesaplama motoru şu an crypto ağırlıklı çalışır.** Stock source seçimi için selector/watchlist ve universe tarafı aktif; hesaplama/trade motoru stock için policy gereği ayrı fazda genişletilecek.
+
+### Durum
+- **Advanced Symbol Selector (Admin+User): COMPLETE**
+- **Watchlist + Top50/Top100 + All Exchange + Custom List: COMPLETE**
+- **Alpha key manuel giriş paneli: COMPLETE**
+- **MOCKED API: YOK**
