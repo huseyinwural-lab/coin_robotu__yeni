@@ -4061,3 +4061,28 @@
 - **Signals blok/layout hatası: COMPLETE**
 - **MOCKED API: VAR**
   - Email verification delivery provider bu ortamda mocked.
+
+## 73) 2026-03-13 — Iteration-91 (Docker Deterministic Startup Hardening)
+
+### Kullanıcı Talebi
+- `docker compose config -> up -d --build -> ps` akışının temiz Docker host üzerinde workaround’suz çalışması
+- `.env.example` sadece örnek; runtime `.env` kullanımı
+- Frontend backend URL browser uyumlu olması
+- CORS_ORIGINS örneğinin host/IP senaryosunu kapsaması
+- Deterministik package-manager ve Dockerfile netliği
+- Default admin bootstrap davranışının net ve duplicate-safe olması
+- README/Quickstart eklenmesi
+
+### Uygulananlar
+1. `docker-compose.yml` runtime env dosyaları `.env` olacak şekilde güncellendi
+2. `backend/.env.example` ve `frontend/.env.example` kalıcılaştırıldı ve browser-host/CORS notlarıyla uyumlu hale getirildi
+3. Build kıran kullanılmayan `emergentintegrations==0.1.0` requirements’tan kaldırıldı
+4. Frontend Yarn deterministik kurulum netleştirildi (`yarn.lock` + Dockerfile `yarn install --frozen-lockfile --non-interactive`)
+5. `date-fns` uyumu `react-day-picker` ile hizalandı (`^3.6.0`), `ajv` + `ajv-keywords` açık bağımlılık olarak eklendi
+6. Admin bootstrap, yalnızca boş users tablosunda seed edecek şekilde güvenceye alındı (duplicate/recreate engeli)
+7. `README.md` içine Docker Quickstart eklendi (`cp .env.example -> .env`, compose komutları, URL ve admin bilgileri)
+
+### Durum
+- **Docker compose deterministic startup hardening: COMPLETE**
+- **Runtime env strategy (.env) + examples: COMPLETE**
+- **Admin bootstrap deterministic behavior: COMPLETE**
