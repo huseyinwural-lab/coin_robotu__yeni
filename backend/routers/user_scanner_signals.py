@@ -67,6 +67,9 @@ def scanner_run(
         current_user.id,
         requested_mode=payload.mode,
         max_results=payload.max_results,
+        symbol_source=payload.symbol_source,
+        selected_symbols=payload.selected_symbols,
+        symbol_selection_mode=payload.symbol_selection_mode,
     )
     create_audit_log(
         db,

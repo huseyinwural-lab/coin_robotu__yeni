@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
+import { SymbolSelectorPanel } from "@/components/SymbolSelectorPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
@@ -24,6 +25,16 @@ export const AdminStrategyIntelligencePage = () => {
     override_reason: "",
   });
   const [simulationResult, setSimulationResult] = useState(null);
+  const [simulationSymbolSource, setSimulationSymbolSource] = useState("crypto");
+  const [simulationSymbolMode, setSimulationSymbolMode] = useState("top_active_50");
+  const [simulationSelectedSymbols, setSimulationSelectedSymbols] = useState(["BTCUSDT"]);
+
+  useEffect(() => {
+    if ((simulationSelectedSymbols || []).length === 0) {
+      return;
+    }
+    setSimulationForm((prev) => ({ ...prev, symbol: simulationSelectedSymbols[0] }));
+  }, [simulationSelectedSymbols]);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -200,6 +211,20 @@ export const AdminStrategyIntelligencePage = () => {
             <input type="checkbox" checked={simulationForm.apply_override} onChange={(event) => setSimulationForm((prev) => ({ ...prev, apply_override: event.target.checked }))} data-testid="admin-strategy-intelligence-apply-override-toggle" />
             apply_override
           </label>
+        </div>
+        <div className="mt-3" data-testid="admin-strategy-intelligence-symbol-selector-wrapper">
+          <SymbolSelectorPanel
+            testIdPrefix="admin-strategy-intelligence-symbol-selector"
+            exchange="binance"
+            marketType="spot"
+            source={simulationSymbolSource}
+            onSourceChange={setSimulationSymbolSource}
+            mode={simulationSymbolMode}
+            onModeChange={setSimulationSymbolMode}
+            selectedSymbols={simulationSelectedSymbols}
+            onSelectedSymbolsChange={setSimulationSelectedSymbols}
+            multi={false}
+          />
         </div>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="admin-strategy-intelligence-simulation-actions">
           <Button onClick={submitSimulation} data-testid="admin-strategy-intelligence-run-simulation-button">Run Simulation</Button>

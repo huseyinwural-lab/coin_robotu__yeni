@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
+import { SymbolSelectorPanel } from "@/components/SymbolSelectorPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,7 +20,8 @@ const defaultFilters = {
   query_expression: "rsi14 < 30",
   limit: 50,
 
-  symbol_universe_mode: "all_tradable",
+  symbol_universe_mode: "all_exchange",
+  symbol_source: "crypto",
   symbol_whitelist: "",
   symbol_search: "",
   saved_query_id: "",
@@ -52,6 +54,7 @@ const defaultFilters = {
 const filterKeyLabels = {
   market_participation: "Market",
   symbol_universe_mode: "Universe",
+  symbol_source: "Source",
   symbol_search: "Search",
   min_24h_volume: "Min Vol",
   max_24h_volume: "Max Vol",
@@ -158,6 +161,7 @@ export const UserIndicatorScreenerPage = () => {
   const [densityMode, setDensityMode] = useState("compact");
   const [showFiltersExpanded, setShowFiltersExpanded] = useState(true);
   const [selectedRowKey, setSelectedRowKey] = useState("");
+  const [selectorSymbols, setSelectorSymbols] = useState([]);
 
   const watchlistSymbolSet = useMemo(() => new Set((watchlistRows || []).map((item) => `${item.symbol}:${item.market_type}`)), [watchlistRows]);
 
@@ -205,7 +209,23 @@ export const UserIndicatorScreenerPage = () => {
     setFilters((prev) => ({ ...prev, [key]: defaultFilters[key] }));
   };
 
+  useEffect(() => {
+    const parsed = (filters.symbol_whitelist || "")
+      .split(",")
+      .map((item) => item.trim().toUpperCase())
+      .filter(Boolean);
+    setSelectorSymbols(parsed);
+  }, [filters.symbol_whitelist]);
+
+  const syncSelectorSymbols = (nextSymbols) => {
+    const normalized = (nextSymbols || []).map((item) => String(item || "").trim().toUpperCase()).filter(Boolean);
+    const deduped = Array.from(new Set(normalized));
+    setSelectorSymbols(deduped);
+    updateFilter("symbol_whitelist", deduped.join(","));
+  };
+
   const buildFilterPayload = () => ({
+    symbol_source: filters.symbol_source,
     symbol_universe_mode: filters.symbol_universe_mode,
     symbol_whitelist: (filters.symbol_whitelist || "")
       .split(",")
@@ -213,7 +233,12 @@ export const UserIndicatorScreenerPage = () => {
       .filter(Boolean),
     symbol_search: (filters.symbol_search || "").trim().toUpperCase(),
     saved_query_id: filters.saved_query_id || null,
-    universe_top_n: Number(filters.universe_top_n || 200),
+    universe_top_n:
+      filters.symbol_universe_mode === "top_active_50"
+        ? 50
+        : filters.symbol_universe_mode === "top_active_100"
+          ? 100
+          : Number(filters.universe_top_n || 200),
 
     sort_by: filters.sort_by,
     sort_direction: filters.sort_direction,
@@ -246,12 +271,16 @@ export const UserIndicatorScreenerPage = () => {
       return "min 24h volume, max 24h volume değerinden büyük olamaz.";
     }
 
-    if (filters.symbol_universe_mode === "top_by_volume" && (filters.symbol_whitelist || "").trim()) {
+    if (["top_by_volume", "top_active_50", "top_active_100"].includes(filters.symbol_universe_mode) && (filters.symbol_whitelist || "").trim()) {
       return "top by volume seçiliyken whitelist aynı anda kullanılamaz.";
     }
 
-    if (filters.symbol_universe_mode === "whitelist_only" && !(filters.symbol_whitelist || "").trim()) {
+    if (["whitelist_only", "custom_list"].includes(filters.symbol_universe_mode) && !(filters.symbol_whitelist || "").trim()) {
       return "whitelist only modunda en az bir sembol girilmeli.";
+    }
+
+    if (filters.symbol_source === "stock") {
+      return "Indicator Screener hesaplama motoru şu an sadece crypto source destekliyor.";
     }
 
     if (filters.only_fresh_data && Number(filters.last_candle_freshness_minutes || 0) <= 0) {
@@ -285,7 +314,7 @@ export const UserIndicatorScreenerPage = () => {
         timeframe: filters.timeframe,
         query_expression: filters.query_expression,
         limit: Number(filters.limit),
-        symbol_universe: filters.symbol_universe_mode === "whitelist_only" ? (filters.symbol_whitelist || "") : "all",
+        symbol_universe: ["whitelist_only", "custom_list"].includes(filters.symbol_universe_mode) ? (filters.symbol_whitelist || "") : "all",
         filter_payload: buildFilterPayload(),
       };
       const { data } = await apiClient.post("/user/indicator-screener/run", payload);
@@ -383,7 +412,7 @@ export const UserIndicatorScreenerPage = () => {
       query_expression: item.query_expression,
       limit: item.result_limit,
 
-      symbol_universe_mode: snapshot.symbol_universe_mode || ((item.symbol_universe || []).length ? "whitelist_only" : "all_tradable"),
+      symbol_universe_mode: snapshot.symbol_universe_mode || ((item.symbol_universe || []).length ? "custom_list" : "all_exchange"),
       symbol_whitelist: (snapshot.symbol_whitelist || item.symbol_universe || []).join(","),
       symbol_search: snapshot.symbol_search || "",
       saved_query_id: item.id,
@@ -588,7 +617,7 @@ export const UserIndicatorScreenerPage = () => {
       tone: "border-amber-300 bg-amber-50 text-amber-900",
       ctaLabel: "Universe'i Sıfırla",
       ctaAction: () => {
-        setFilters((prev) => ({ ...prev, symbol_universe_mode: "all_tradable", symbol_whitelist: "", saved_query_id: "" }));
+        setFilters((prev) => ({ ...prev, symbol_universe_mode: "all_exchange", symbol_whitelist: "", saved_query_id: "" }));
         setShowFiltersExpanded(true);
       },
     },
@@ -783,23 +812,50 @@ export const UserIndicatorScreenerPage = () => {
                 <label className="space-y-1" data-testid="user-indicator-screener-universe-mode-field">
                   <span className="text-xs text-slate-600">Symbol Universe Mode</span>
                   <select value={filters.symbol_universe_mode} onChange={(event) => updateFilter("symbol_universe_mode", event.target.value)} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm" data-testid="user-indicator-screener-universe-mode-select">
-                    <option value="all_tradable" data-testid="user-indicator-screener-universe-mode-option-all-tradable">all tradable</option>
-                    <option value="top_by_volume" data-testid="user-indicator-screener-universe-mode-option-top-by-volume">top by volume</option>
-                    <option value="whitelist_only" data-testid="user-indicator-screener-universe-mode-option-whitelist-only">whitelist only</option>
+                    <option value="all_exchange" data-testid="user-indicator-screener-universe-mode-option-all-exchange">all exchange</option>
+                    <option value="top_active_50" data-testid="user-indicator-screener-universe-mode-option-top-active-50">top active 50</option>
+                    <option value="top_active_100" data-testid="user-indicator-screener-universe-mode-option-top-active-100">top active 100</option>
+                    <option value="custom_list" data-testid="user-indicator-screener-universe-mode-option-custom-list">custom list</option>
+                    <option value="all_tradable" data-testid="user-indicator-screener-universe-mode-option-all-tradable">all tradable (legacy)</option>
+                    <option value="top_by_volume" data-testid="user-indicator-screener-universe-mode-option-top-by-volume">top by volume (legacy)</option>
+                    <option value="whitelist_only" data-testid="user-indicator-screener-universe-mode-option-whitelist-only">whitelist only (legacy)</option>
                     <option value="watchlist_only" data-testid="user-indicator-screener-universe-mode-option-watchlist-only">watchlist only</option>
                     <option value="saved_universe" data-testid="user-indicator-screener-universe-mode-option-saved-universe">saved universe</option>
                     <option value="futures_only_eligible_universe" data-testid="user-indicator-screener-universe-mode-option-futures-eligible">futures-only eligible universe</option>
+                  </select>
+                </label>
+                <label className="space-y-1" data-testid="user-indicator-screener-symbol-source-field">
+                  <span className="text-xs text-slate-600">Symbol Source</span>
+                  <select value={filters.symbol_source} onChange={(event) => updateFilter("symbol_source", event.target.value)} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm" data-testid="user-indicator-screener-symbol-source-select">
+                    <option value="crypto" data-testid="user-indicator-screener-symbol-source-option-crypto">crypto</option>
+                    <option value="stock" data-testid="user-indicator-screener-symbol-source-option-stock">stock</option>
                   </select>
                 </label>
                 <label className="space-y-1" data-testid="user-indicator-screener-universe-top-n-field">
                   <span className="text-xs text-slate-600">Universe Top N</span>
                   <Input type="number" min={1} max={500} value={filters.universe_top_n} onChange={(event) => updateFilter("universe_top_n", Number(event.target.value || 1))} className="h-9 border-slate-300 bg-white" data-testid="user-indicator-screener-universe-top-n-input" />
                 </label>
-                {filters.symbol_universe_mode === "whitelist_only" && (
-                  <label className="space-y-1 sm:col-span-2" data-testid="user-indicator-screener-whitelist-field">
-                    <span className="text-xs text-slate-600">Whitelist (virgül ile)</span>
+                {["whitelist_only", "custom_list"].includes(filters.symbol_universe_mode) && (
+                  <div className="space-y-1 sm:col-span-3" data-testid="user-indicator-screener-whitelist-field">
+                    <span className="text-xs text-slate-600">Custom Symbol Selector</span>
+                    <SymbolSelectorPanel
+                      testIdPrefix="user-indicator-screener-symbol-selector"
+                      exchange={filters.exchange}
+                      marketType={filters.market_type}
+                      source={filters.symbol_source}
+                      onSourceChange={(value) => updateFilter("symbol_source", value)}
+                      mode={filters.symbol_universe_mode === "custom_list" ? "custom_list" : "all_exchange"}
+                      onModeChange={(value) => {
+                        if (value === "custom_list") {
+                          updateFilter("symbol_universe_mode", "custom_list");
+                        }
+                      }}
+                      selectedSymbols={selectorSymbols}
+                      onSelectedSymbolsChange={syncSelectorSymbols}
+                      multi
+                    />
                     <Input value={filters.symbol_whitelist} onChange={(event) => updateFilter("symbol_whitelist", event.target.value)} placeholder="BTCUSDT,ETHUSDT,SOLUSDT" className="h-9 border-slate-300 bg-white" data-testid="user-indicator-screener-whitelist-input" />
-                  </label>
+                  </div>
                 )}
                 {filters.symbol_universe_mode === "saved_universe" && (
                   <label className="space-y-1 sm:col-span-2" data-testid="user-indicator-screener-saved-universe-field">

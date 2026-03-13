@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
+import { SymbolSelectorPanel } from "@/components/SymbolSelectorPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
@@ -53,6 +54,9 @@ export const UserExecutePage = () => {
     message: "Henüz canlı önizleme çalışmadı",
     updatedAt: null,
   });
+  const [symbolSelectorSource, setSymbolSelectorSource] = useState("crypto");
+  const [symbolSelectorMode, setSymbolSelectorMode] = useState("top_active_50");
+  const [symbolSelectorSelection, setSymbolSelectorSelection] = useState([defaultForm.symbol]);
 
   const selectedConnection = useMemo(
     () => connections.find((item) => item.id === selectedConnectionId) || null,
@@ -126,9 +130,20 @@ export const UserExecutePage = () => {
         exchange_connection_id: preselectedConnectionId,
       }));
       setIsLoading(false);
+
+      const initialSymbol = (effectiveContext?.symbol || symbol || "BTCUSDT").toUpperCase();
+      setSymbolSelectorSelection([initialSymbol]);
     };
     load();
   }, [searchParams]);
+
+  useEffect(() => {
+    const first = (symbolSelectorSelection || [])[0];
+    if (!first) {
+      return;
+    }
+    setForm((prev) => ({ ...prev, symbol: first.toUpperCase() }));
+  }, [symbolSelectorSelection]);
 
   useEffect(() => {
     if (!selectedConnection) {
@@ -183,8 +198,8 @@ export const UserExecutePage = () => {
   }, [selectedPreset, presets]);
 
   const submitEnabled = useMemo(
-    () => Boolean(preview?.validation_status === "valid" && preview?.intent_status === "PREVIEWED"),
-    [preview],
+    () => Boolean(symbolSelectorSource === "crypto" && preview?.validation_status === "valid" && preview?.intent_status === "PREVIEWED"),
+    [preview, symbolSelectorSource],
   );
 
   const buildPreviewPayload = useCallback(
@@ -215,6 +230,18 @@ export const UserExecutePage = () => {
   }, []);
 
   const runPreview = useCallback(async ({ silent = false } = {}) => {
+    if (symbolSelectorSource !== "crypto") {
+      setAutoPreviewStatus({
+        state: "blocked",
+        message: "Execute preview şu an sadece crypto source destekliyor",
+        updatedAt: new Date().toISOString(),
+      });
+      if (!silent) {
+        toast.error("Execute preview şu an sadece crypto source destekliyor");
+      }
+      return;
+    }
+
     if (venueAccess && !venueAccess.allowed) {
       if (!silent) {
         toast.error(`Venue blocked: ${(venueAccess.reason_codes || []).join(",") || venueAccess.venue_state || "unknown"}`);
@@ -272,7 +299,7 @@ export const UserExecutePage = () => {
         updatedAt: new Date().toISOString(),
       });
     }
-  }, [buildPreviewPayload, loadDecisionTrace, venueAccess]);
+  }, [buildPreviewPayload, loadDecisionTrace, symbolSelectorSource, venueAccess]);
 
   useEffect(() => {
     if (!autoPreviewEnabled || isLoading || !selectedConnection) {
@@ -385,6 +412,21 @@ export const UserExecutePage = () => {
         <div className="col-span-6 md:col-span-3"><label className="text-xs text-slate-500">Side</label><select className="mt-1 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={form.side} onChange={(e) => setForm((p) => ({ ...p, side: e.target.value }))} data-testid="execute-side-select"><option value="buy">buy</option><option value="sell">sell</option><option value="long">long</option><option value="short">short</option></select></div>
         <div className="col-span-12 md:col-span-3"><label className="text-xs text-slate-500">Order Type</label><select className="mt-1 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={form.order_type} onChange={(e) => setForm((p) => ({ ...p, order_type: e.target.value }))} data-testid="execute-order-type-select"><option value="market">market</option><option value="limit">limit</option><option value="stop_limit">stop_limit</option></select></div>
         <div className="col-span-12 md:col-span-3"><label className="text-xs text-slate-500">Symbol</label><Input value={form.symbol} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value.toUpperCase() }))} data-testid="execute-symbol-input" /></div>
+
+        <div className="col-span-12" data-testid="user-execute-symbol-selector-wrapper">
+          <SymbolSelectorPanel
+            testIdPrefix="user-execute-symbol-selector"
+            exchange={form.exchange}
+            marketType={form.market_type}
+            source={symbolSelectorSource}
+            onSourceChange={setSymbolSelectorSource}
+            mode={symbolSelectorMode}
+            onModeChange={setSymbolSelectorMode}
+            selectedSymbols={symbolSelectorSelection}
+            onSelectedSymbolsChange={setSymbolSelectorSelection}
+            multi={false}
+          />
+        </div>
 
         {isFutures && (
           <>

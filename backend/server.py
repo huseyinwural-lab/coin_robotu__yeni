@@ -49,6 +49,7 @@ from routers import (
     report_archive,
     reports_alias,
     risk_policies,
+    symbol_selector,
     admin_execution,
     user_approvals,
     user_execution,
@@ -111,6 +112,7 @@ api_router.include_router(audit_logs.router)
 api_router.include_router(alerts.router)
 api_router.include_router(report_archive.router)
 api_router.include_router(reports_alias.router)
+api_router.include_router(symbol_selector.router)
 api_router.include_router(ops_alerts.router)
 api_router.include_router(user_approvals.router)
 api_router.include_router(admin_users.router)

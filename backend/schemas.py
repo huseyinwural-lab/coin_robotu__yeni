@@ -1306,6 +1306,9 @@ class UserSignalModeUpdateRequest(BaseModel):
 class UserScannerRunRequest(BaseModel):
     mode: str | None = None
     max_results: int = Field(default=20, ge=5, le=100)
+    symbol_source: str = "crypto"
+    symbol_selection_mode: str = "bot_scope"
+    selected_symbols: list[str] = Field(default_factory=list)
 
 
 class UserScannerRunResponse(BaseModel):
@@ -1316,6 +1319,8 @@ class UserScannerRunResponse(BaseModel):
     queued_count: int
     pending_total: int
     generated_at: datetime
+    selected_symbols: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class UserScannerResultResponse(BaseModel):
@@ -1489,6 +1494,66 @@ class UserScannerOverviewResponse(BaseModel):
     pending_signals: int
     latest_run_id: str | None
     latest_generated_at: datetime | None
+
+
+class SymbolUniverseRowResponse(BaseModel):
+    symbol: str
+    source: str
+    exchange: str
+    market_type: str
+    quote_asset: str | None = None
+    volume_24h: float | None = None
+    is_tradable: bool = True
+    company_name: str | None = None
+    sector: str | None = None
+
+
+class SymbolUniverseResponse(BaseModel):
+    source: str
+    mode: str
+    exchange: str
+    market_type: str
+    rows: list[SymbolUniverseRowResponse] = Field(default_factory=list)
+    selected_symbols: list[str] = Field(default_factory=list)
+    skipped_symbols: list[dict] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    has_provider_key: bool = True
+
+
+class SymbolWatchlistCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    source: str = "crypto"
+    exchange: str = "binance"
+    market_type: str = "spot"
+    symbols: list[str] = Field(default_factory=list)
+
+
+class SymbolWatchlistUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    symbols: list[str] = Field(default_factory=list)
+
+
+class SymbolWatchlistResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    name: str
+    source: str
+    exchange: str
+    market_type: str
+    symbols: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class SymbolProviderConfigResponse(BaseModel):
+    has_alpha_vantage_key: bool
+    key_hint: str | None = None
+
+
+class SymbolProviderConfigUpdateRequest(BaseModel):
+    api_key: str = Field(min_length=6, max_length=200)
 
 
 class IndicatorScreenerRunRequest(BaseModel):

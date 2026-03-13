@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
+import { SymbolSelectorPanel } from "@/components/SymbolSelectorPanel";
 import { apiClient } from "@/lib/api";
 import { saveExecutionContext } from "@/lib/userFlowContext";
 
@@ -39,6 +40,9 @@ export const UserScannerPage = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
+  const [symbolSource, setSymbolSource] = useState("crypto");
+  const [symbolMode, setSymbolMode] = useState("top_active_50");
+  const [selectedSymbols, setSelectedSymbols] = useState([]);
 
   const load = async () => {
     setIsLoading(true);
@@ -61,8 +65,17 @@ export const UserScannerPage = () => {
     setIsRunning(true);
     try {
       await apiClient.put("/user/signal-mode", { mode });
-      await apiClient.post("/user/scanner/run", { mode, max_results: 25 });
+      const { data } = await apiClient.post("/user/scanner/run", {
+        mode,
+        max_results: 25,
+        symbol_source: symbolSource,
+        symbol_selection_mode: symbolMode,
+        selected_symbols: selectedSymbols,
+      });
       await load();
+      if ((data?.warnings || []).length > 0) {
+        toast.warning((data.warnings || []).join(","));
+      }
       toast.success("Scanner çalıştırıldı");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Scanner çalıştırılamadı");
@@ -76,8 +89,17 @@ export const UserScannerPage = () => {
     try {
       await apiClient.put("/user/signal-mode", { mode: preset.mode });
       setMode(preset.mode);
-      await apiClient.post("/user/scanner/run", { mode: preset.mode, max_results: preset.maxResults });
+      const { data } = await apiClient.post("/user/scanner/run", {
+        mode: preset.mode,
+        max_results: preset.maxResults,
+        symbol_source: symbolSource,
+        symbol_selection_mode: symbolMode,
+        selected_symbols: selectedSymbols,
+      });
       await load();
+      if ((data?.warnings || []).length > 0) {
+        toast.warning((data.warnings || []).join(","));
+      }
       toast.success(`Preset çalıştı: ${preset.label}`);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Preset çalıştırılamadı");
@@ -176,6 +198,21 @@ export const UserScannerPage = () => {
         </Button>
       </div>
 
+      <div className="col-span-12" data-testid="user-scanner-symbol-selector-wrapper">
+        <SymbolSelectorPanel
+          testIdPrefix="user-scanner-symbol-selector"
+          exchange="binance"
+          marketType="spot"
+          source={symbolSource}
+          onSourceChange={setSymbolSource}
+          mode={symbolMode}
+          onModeChange={setSymbolMode}
+          selectedSymbols={selectedSymbols}
+          onSelectedSymbolsChange={setSelectedSymbols}
+          multi
+        />
+      </div>
+
       <section className="col-span-12 grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-scanner-quick-preset-section">
         {scannerQuickPresets.map((preset) => (
           <article key={preset.id} className="rounded border border-slate-700 bg-slate-950 p-3" data-testid={`user-scanner-quick-preset-card-${preset.id}`}>
@@ -193,6 +230,7 @@ export const UserScannerPage = () => {
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-result-count-card"><p className="text-xs text-slate-500">Toplam Sonuç</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-result-count-value">{overview?.total_results ?? scannerResults.length}</p></div>
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-actionable-count-card"><p className="text-xs text-slate-500">Son Run ID</p><p className="text-sm font-semibold" data-testid="user-scanner-summary-actionable-count-value">{overview?.latest_run_id ?? "-"}</p></div>
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-pending-count-card"><p className="text-xs text-slate-500">Pending Queue</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-pending-count-value">{overview?.pending_signals ?? "-"}</p></div>
+        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-selected-symbol-count-card"><p className="text-xs text-slate-500">Seçili Sembol</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-selected-symbol-count-value">{selectedSymbols.length}</p></div>
       </div>
 
       <div className="col-span-12 grid gap-3 md:hidden" data-testid="user-scanner-mobile-cards">

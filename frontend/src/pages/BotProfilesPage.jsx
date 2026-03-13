@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SymbolSelectorPanel } from "@/components/SymbolSelectorPanel";
 import { apiClient } from "@/lib/api";
 
 const initialForm = {
@@ -23,6 +24,9 @@ export const BotProfilesPage = () => {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [formErrors, setFormErrors] = useState({});
+  const [symbolSource, setSymbolSource] = useState("crypto");
+  const [symbolMode, setSymbolMode] = useState("top_active_50");
+  const [selectedSymbols, setSelectedSymbols] = useState(["BTCUSDT", "ETHUSDT"]);
 
   const fetchItems = async () => {
     const { data } = await apiClient.get("/bot-profiles");
@@ -36,10 +40,12 @@ export const BotProfilesPage = () => {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const parsedSymbols = form.symbols
-      .split(",")
-      .map((value) => value.trim().toUpperCase())
-      .filter(Boolean);
+    const parsedSymbols = (selectedSymbols || []).length
+      ? selectedSymbols
+      : form.symbols
+          .split(",")
+          .map((value) => value.trim().toUpperCase())
+          .filter(Boolean);
     const nextErrors = {};
 
     if (!form.name.trim()) {
@@ -80,6 +86,8 @@ export const BotProfilesPage = () => {
       }
       setEditingId(null);
       setForm(initialForm);
+      setSelectedSymbols(["BTCUSDT", "ETHUSDT"]);
+      setSymbolMode("top_active_50");
       setFormErrors({});
       fetchItems();
     } catch (error) {
@@ -94,6 +102,9 @@ export const BotProfilesPage = () => {
       symbols: item.symbols.join(","),
       max_concurrent_trades: item.leverage,
     });
+    setSymbolSource("crypto");
+    setSymbolMode("custom_list");
+    setSelectedSymbols(item.symbols || []);
     setFormErrors({});
   };
 
@@ -168,16 +179,20 @@ export const BotProfilesPage = () => {
 
         <div className="form-group" data-testid="bot-form-group-symbols">
           <label className="form-label" htmlFor="bot-form-symbols-input" data-testid="bot-form-symbols-label">Symbols</label>
-          <Input
-            id="bot-form-symbols-input"
-            value={form.symbols}
-            onChange={(event) => setForm((prev) => ({ ...prev, symbols: event.target.value }))}
-            data-testid="bot-form-symbols-input"
-            aria-label="Symbols"
-            aria-describedby="bot-form-symbols-helper bot-form-symbols-error"
-            required
+          <SymbolSelectorPanel
+            testIdPrefix="bot-form-symbol-selector"
+            exchange={form.exchange}
+            marketType={form.market_type}
+            source={symbolSource}
+            onSourceChange={setSymbolSource}
+            mode={symbolMode}
+            onModeChange={setSymbolMode}
+            selectedSymbols={selectedSymbols}
+            onSelectedSymbolsChange={setSelectedSymbols}
+            multi
           />
-          <p className="form-helper-text" id="bot-form-symbols-helper" data-testid="bot-form-symbols-helper">Virgülle ayırarak sembol girin. Örn: BTCUSDT,ETHUSDT</p>
+          <Input id="bot-form-symbols-input" value={selectedSymbols.join(",")} readOnly data-testid="bot-form-symbols-input" aria-label="Symbols" aria-describedby="bot-form-symbols-helper bot-form-symbols-error" required />
+          <p className="form-helper-text" id="bot-form-symbols-helper" data-testid="bot-form-symbols-helper">Select modları: tüm borsa / top 50-100 / custom list + watchlist.</p>
           {formErrors.symbols && <p className="form-error-text" id="bot-form-symbols-error" data-testid="bot-form-symbols-error">{formErrors.symbols}</p>}
         </div>
 
@@ -230,6 +245,8 @@ export const BotProfilesPage = () => {
               onClick={() => {
                 setEditingId(null);
                 setForm(initialForm);
+                setSelectedSymbols(["BTCUSDT", "ETHUSDT"]);
+                setSymbolMode("top_active_50");
                 setFormErrors({});
               }}
               data-testid="bot-form-cancel-edit-button"

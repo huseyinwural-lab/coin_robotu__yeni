@@ -1071,6 +1071,29 @@ class DecisionTraceCold(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ExternalProviderCredential(Base):
+    __tablename__ = "external_provider_credentials"
+
+    provider: Mapped[str] = mapped_column(String(80), primary_key=True)
+    api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class SymbolSelectionWatchlist(Base):
+    __tablename__ = "symbol_selection_watchlists"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120), index=True)
+    source: Mapped[str] = mapped_column(String(20), default="crypto", index=True)
+    exchange: Mapped[str] = mapped_column(String(50), default="binance")
+    market_type: Mapped[str] = mapped_column(String(20), default="spot")
+    symbols: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 @event.listens_for(ExecutionMetric, "before_update", propagate=True)
 def _block_execution_metric_update(_, __, ___):
     raise ValueError("execution_metric_immutable")

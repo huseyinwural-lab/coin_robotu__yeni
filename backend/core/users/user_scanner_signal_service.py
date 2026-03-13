@@ -498,9 +498,19 @@ def list_user_signals(db: Session, user_id: str, limit: int = 100) -> list[Pendi
     return rows
 
 
-def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = None, max_results: int = 20) -> dict:
+def run_user_scanner(
+    db: Session,
+    user_id: str,
+    *,
+    requested_mode: str | None = None,
+    max_results: int = 20,
+    symbol_source: str = "crypto",
+    selected_symbols: list[str] | None = None,
+    symbol_selection_mode: str = "bot_scope",
+) -> dict:
     mode_row = get_or_create_signal_mode(db, user_id)
     mode = _normalize_mode(requested_mode or mode_row.mode)
+    warnings: list[str] = []
     if mode_row.mode != mode:
         mode_row.mode = mode
         mode_row.updated_at = datetime.now(timezone.utc)
@@ -508,8 +518,16 @@ def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = 
     payload = scan_spot_universe_for_signals(redis_client, max_symbols=max(max_results, 30))
     ranked = payload.get("top_ranked", [])
     scoped_symbols = _user_symbols_scope(db, user_id)
+    normalized_selected_symbols = [str(item).strip().upper() for item in (selected_symbols or []) if str(item).strip()]
 
-    if scoped_symbols:
+    if str(symbol_source or "crypto").lower() != "crypto":
+        warnings.append("scanner_currently_supports_crypto_only")
+        ranked = []
+
+    if normalized_selected_symbols:
+        selected_scope = set(normalized_selected_symbols)
+        ranked = [item for item in ranked if str(item.get("symbol", "")).upper() in selected_scope]
+    elif str(symbol_selection_mode or "bot_scope").lower() == "bot_scope" and scoped_symbols:
         ranked = [item for item in ranked if str(item.get("symbol", "")).upper() in scoped_symbols]
     selected = ranked[:max_results]
     selected_symbols = [str(item.get("symbol", "BTCUSDT")).upper() for item in selected]
@@ -764,6 +782,8 @@ def run_user_scanner(db: Session, user_id: str, *, requested_mode: str | None = 
         "queued_count": queued_count,
         "pending_total": pending_total,
         "generated_at": datetime.now(timezone.utc),
+        "selected_symbols": selected_symbols,
+        "warnings": warnings,
     }
 
 

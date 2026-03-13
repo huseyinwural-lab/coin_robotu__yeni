@@ -18,6 +18,7 @@ MAX_RESULT_LIMIT = 300
 MAX_WORKERS = 12
 
 DEFAULT_FILTERS = {
+    "symbol_source": "crypto",
     "symbol_universe_mode": "all_tradable",
     "symbol_search": "",
     "symbol_whitelist": [],
@@ -69,10 +70,14 @@ def _normalize_universe_mode(raw_mode: str | None) -> str:
     candidate = (raw_mode or "").strip().lower()
     mapping = {
         "all": "all_tradable",
+        "all_exchange": "all_tradable",
         "all_tradable": "all_tradable",
         "top": "top_by_volume",
+        "top_active_50": "top_by_volume",
+        "top_active_100": "top_by_volume",
         "top_by_volume": "top_by_volume",
         "whitelist": "whitelist_only",
+        "custom_list": "whitelist_only",
         "whitelist_only": "whitelist_only",
         "watchlist": "watchlist_only",
         "watchlist_only": "watchlist_only",
@@ -99,6 +104,7 @@ def _build_filter_payload(symbol_universe, raw_filter_payload: dict, market_type
         payload.update(raw_filter_payload)
 
     payload["symbol_universe_mode"] = _normalize_universe_mode(payload.get("symbol_universe_mode"))
+    payload["symbol_source"] = str(payload.get("symbol_source") or "crypto").strip().lower()
     payload["market_participation"] = _normalize_market_participation(market_type, payload.get("market_participation"))
     payload["sort_direction"] = str(payload.get("sort_direction") or "asc").lower()
     payload["sort_by"] = str(payload.get("sort_by") or "symbol").lower()
@@ -130,6 +136,9 @@ def _build_filter_payload(symbol_universe, raw_filter_payload: dict, market_type
 
 
 def _validate_filter_payload(payload: dict) -> str | None:
+    if payload.get("symbol_source") != "crypto":
+        return "stock_symbol_source_not_supported_in_indicator_engine"
+
     if payload.get("sort_by") not in SORTABLE_FIELDS:
         return f"Geçersiz sort_by: {payload.get('sort_by')}"
     if payload.get("sort_direction") not in {"asc", "desc"}:
@@ -164,6 +173,8 @@ def _build_active_filter_chips(payload: dict) -> list[dict]:
         chips.append({"key": "market_participation", "label": "Market", "value": payload.get("market_participation")})
     if payload.get("symbol_universe_mode") != "all_tradable":
         chips.append({"key": "symbol_universe_mode", "label": "Universe", "value": payload.get("symbol_universe_mode")})
+    if payload.get("symbol_source") != "crypto":
+        chips.append({"key": "symbol_source", "label": "Source", "value": payload.get("symbol_source")})
     if payload.get("symbol_search"):
         chips.append({"key": "symbol_search", "label": "Search", "value": payload.get("symbol_search")})
     if payload.get("min_24h_volume"):

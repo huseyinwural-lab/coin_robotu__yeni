@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SymbolSelectorPanel } from "@/components/SymbolSelectorPanel";
 import { apiClient } from "@/lib/api";
 
 const initialForm = {
@@ -23,6 +24,26 @@ const csvToList = (value) => value.split(",").map((item) => item.trim().toUpperC
 export const MarketUniversePage = () => {
   const [form, setForm] = useState(initialForm);
   const [preview, setPreview] = useState(null);
+  const [spotSymbols, setSpotSymbols] = useState(["BTCUSDT", "ETHUSDT"]);
+  const [futuresSymbols, setFuturesSymbols] = useState(["BTCUSDT", "ETHUSDT"]);
+  const [stockSymbols, setStockSymbols] = useState([]);
+  const [spotSource, setSpotSource] = useState("crypto");
+  const [futuresSource, setFuturesSource] = useState("crypto");
+  const [stockSource, setStockSource] = useState("stock");
+  const [spotMode, setSpotMode] = useState("all_exchange");
+  const [futuresMode, setFuturesMode] = useState("all_exchange");
+  const [stockMode, setStockMode] = useState("custom_list");
+  const [alphaKeyInput, setAlphaKeyInput] = useState("");
+  const [providerConfig, setProviderConfig] = useState(null);
+
+  const hydrateProviderConfig = async () => {
+    try {
+      const { data } = await apiClient.get("/symbol-selector/provider-config");
+      setProviderConfig(data || null);
+    } catch {
+      setProviderConfig(null);
+    }
+  };
 
   const hydrate = async () => {
     try {
@@ -37,7 +58,10 @@ export const MarketUniversePage = () => {
         whitelist: control.whitelist.join(","),
         blacklist: control.blacklist.join(","),
       });
+      setSpotSymbols(control.spot_universe || []);
+      setFuturesSymbols(control.futures_universe || []);
       setPreview(nextPreview);
+      await hydrateProviderConfig();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Universe ayarları yüklenemedi");
     }
@@ -55,8 +79,8 @@ export const MarketUniversePage = () => {
         max_open_positions_cap: Number(form.max_open_positions_cap),
         minimum_volume_usd: Number(form.minimum_volume_usd),
         max_spread_bps: Number(form.max_spread_bps),
-        spot_universe: csvToList(form.spot_universe),
-        futures_universe: csvToList(form.futures_universe),
+        spot_universe: (spotSymbols || []).length ? spotSymbols : csvToList(form.spot_universe),
+        futures_universe: (futuresSymbols || []).length ? futuresSymbols : csvToList(form.futures_universe),
         whitelist: csvToList(form.whitelist),
         blacklist: csvToList(form.blacklist),
         emergency_mode: form.emergency_mode,
@@ -66,6 +90,21 @@ export const MarketUniversePage = () => {
       hydrate();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Güncelleme başarısız");
+    }
+  };
+
+  const saveAlphaKey = async () => {
+    if (!alphaKeyInput.trim()) {
+      toast.error("Alpha Vantage API key zorunlu");
+      return;
+    }
+    try {
+      const { data } = await apiClient.put("/symbol-selector/provider-config/alpha-vantage", { api_key: alphaKeyInput.trim() });
+      setProviderConfig(data || null);
+      setAlphaKeyInput("");
+      toast.success("Alpha Vantage key kaydedildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Alpha Vantage key kaydedilemedi");
     }
   };
 
@@ -107,6 +146,65 @@ export const MarketUniversePage = () => {
 
         <Button className="bg-blue-600 text-white hover:bg-blue-700 md:col-span-2" data-testid="universe-save-button">Kuralları Kaydet</Button>
       </form>
+
+      <section className="grid gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="market-universe-alpha-key-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="market-universe-alpha-key-title">Stock Provider (Alpha Vantage)</p>
+        <p className="text-xs text-slate-400" data-testid="market-universe-alpha-key-status">has_key: {String(providerConfig?.has_alpha_vantage_key || false)} {providerConfig?.key_hint ? `(${providerConfig.key_hint})` : ""}</p>
+        <div className="flex flex-wrap gap-2" data-testid="market-universe-alpha-key-row">
+          <Input value={alphaKeyInput} onChange={(event) => setAlphaKeyInput(event.target.value)} placeholder="Alpha Vantage API Key" data-testid="market-universe-alpha-key-input" />
+          <Button onClick={saveAlphaKey} data-testid="market-universe-alpha-key-save-button">Key Kaydet</Button>
+        </div>
+      </section>
+
+      <section className="grid gap-4 border border-slate-800 bg-slate-900 p-4" data-testid="market-universe-symbol-selector-section">
+        <div data-testid="market-universe-spot-selector-wrapper">
+          <p className="mb-2 text-xs uppercase tracking-widest text-slate-500" data-testid="market-universe-spot-selector-title">Spot Universe Selector</p>
+          <SymbolSelectorPanel
+            testIdPrefix="market-universe-spot-selector"
+            exchange="binance"
+            marketType="spot"
+            source={spotSource}
+            onSourceChange={setSpotSource}
+            mode={spotMode}
+            onModeChange={setSpotMode}
+            selectedSymbols={spotSymbols}
+            onSelectedSymbolsChange={setSpotSymbols}
+            multi
+          />
+        </div>
+
+        <div data-testid="market-universe-futures-selector-wrapper">
+          <p className="mb-2 text-xs uppercase tracking-widest text-slate-500" data-testid="market-universe-futures-selector-title">Futures Universe Selector</p>
+          <SymbolSelectorPanel
+            testIdPrefix="market-universe-futures-selector"
+            exchange="binance"
+            marketType="futures"
+            source={futuresSource}
+            onSourceChange={setFuturesSource}
+            mode={futuresMode}
+            onModeChange={setFuturesMode}
+            selectedSymbols={futuresSymbols}
+            onSelectedSymbolsChange={setFuturesSymbols}
+            multi
+          />
+        </div>
+
+        <div data-testid="market-universe-stock-selector-wrapper">
+          <p className="mb-2 text-xs uppercase tracking-widest text-slate-500" data-testid="market-universe-stock-selector-title">Stock Tracking Selector (NASDAQ+NYSE)</p>
+          <SymbolSelectorPanel
+            testIdPrefix="market-universe-stock-selector"
+            exchange="US"
+            marketType="equity"
+            source={stockSource}
+            onSourceChange={setStockSource}
+            mode={stockMode}
+            onModeChange={setStockMode}
+            selectedSymbols={stockSymbols}
+            onSelectedSymbolsChange={setStockSymbols}
+            multi
+          />
+        </div>
+      </section>
 
       <div className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="market-universe-preview-panel">
         <div>
