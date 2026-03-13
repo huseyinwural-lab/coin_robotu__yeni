@@ -3710,3 +3710,34 @@
 - **Active-bot AUTO enforcement: COMPLETE**
 - **Precheck code clarity (no bypass): COMPLETE**
 - **MOCKED API: YOK**
+
+## 64) 2026-03-13 — Iteration-82 (Live Control Status: Bot mu Manual mi net görünürlük)
+
+### Kullanıcı Talebi
+- “Botun çalışıp çalışmadığı belli değil; bot mu manuel mi aktif net görülsün.”
+- Seçimler: Dashboard + Signals, aksiyon butonları aktif, 15 sn auto refresh.
+
+### Uygulananlar
+- **User Signals** sayfasına `Live Control Status` kartı eklendi:
+  - Signal Mode
+  - Bot Runtime (RUNNING/STOPPED + adet)
+  - Execution Path (BOT_AUTO_ACTIVE / SEMI_AUTO_ACTIVE / MANUAL_FLOW)
+  - Last Signal State
+  - Current Blocker
+  - ORDER_PRECHECK note
+  - Aksiyonlar: `AUTO'ya Al`, `Fix All Blockers`, `Yenile`
+  - `Auto Refresh: 15s` göstergesi + interval refresh
+- **User Dashboard** sayfasına aynı kapsamdaki `Live Control Status` kartı eklendi.
+- Signals sayfasında hook-order kaynaklı compile problemi giderildi.
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_80.json`
+  - Backend: **13/13 PASS**
+  - Frontend: **PASS**
+  - Signals + Dashboard kartları ve butonlar doğrulandı.
+
+### Durum
+- **Live Control Status (Dashboard + Signals): COMPLETE**
+- **Aksiyonlar (AUTO/FixAll/Refresh): COMPLETE**
+- **15s auto refresh: COMPLETE**
+- **MOCKED API: YOK**
