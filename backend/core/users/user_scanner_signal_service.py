@@ -12,6 +12,7 @@ from models import (
     SignalEvent,
     UserExchangeConnection,
     UserScannerAutomationConfig,
+    UserScannerAutomationProfile,
     UserScannerResult,
     UserSignalMode,
 )
@@ -102,6 +103,14 @@ def _clamp_interval_seconds(interval_seconds: int | None) -> int:
     return 180 if value != 180 else value
 
 
+def _clamp_profile_interval_seconds(interval_seconds: int | None) -> int:
+    try:
+        value = int(interval_seconds or 180)
+    except (TypeError, ValueError):
+        value = 180
+    return max(180, min(3600, value))
+
+
 def _next_scanner_run_at(config: UserScannerAutomationConfig) -> datetime | None:
     if not config.auto_enabled:
         return None
@@ -111,6 +120,17 @@ def _next_scanner_run_at(config: UserScannerAutomationConfig) -> datetime | None
     if base.tzinfo is None:
         base = base.replace(tzinfo=timezone.utc)
     return base + timedelta(seconds=int(config.interval_seconds or 180))
+
+
+def _next_profile_run_at(profile: UserScannerAutomationProfile) -> datetime | None:
+    if not profile.auto_enabled:
+        return None
+    if profile.last_run_at is None:
+        return datetime.now(timezone.utc)
+    base = profile.last_run_at
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    return base + timedelta(seconds=int(profile.interval_seconds or 180))
 
 
 def get_or_create_scanner_automation_config(db: Session, user_id: str) -> UserScannerAutomationConfig:
@@ -128,6 +148,7 @@ def get_or_create_scanner_automation_config(db: Session, user_id: str) -> UserSc
         symbol_selection_mode="top_active_50",
         selected_symbols=[],
         last_run_status="idle",
+        last_actionable_count=0,
     )
     db.add(row)
     db.commit()
@@ -171,12 +192,200 @@ def scanner_automation_config_response_payload(config: UserScannerAutomationConf
         "selected_symbols": _normalize_selected_symbols(config.selected_symbols),
         "last_run_id": config.last_run_id,
         "last_run_status": config.last_run_status or "idle",
+        "last_actionable_count": int(config.last_actionable_count or 0),
         "last_run_error": config.last_run_error,
         "last_run_at": config.last_run_at,
         "next_run_at": _next_scanner_run_at(config),
         "created_at": config.created_at,
         "updated_at": config.updated_at,
     }
+
+
+def scanner_automation_profile_response_payload(profile: UserScannerAutomationProfile) -> dict:
+    return {
+        "id": profile.id,
+        "user_id": profile.user_id,
+        "name": profile.name,
+        "auto_enabled": bool(profile.auto_enabled),
+        "is_active": bool(profile.is_active),
+        "interval_seconds": _clamp_profile_interval_seconds(profile.interval_seconds),
+        "max_results": _clamp_scanner_max_results(profile.max_results),
+        "symbol_source": _normalize_symbol_source(profile.symbol_source),
+        "symbol_selection_mode": _normalize_symbol_selection_mode(profile.symbol_selection_mode),
+        "selected_symbols": _normalize_selected_symbols(profile.selected_symbols),
+        "last_run_id": profile.last_run_id,
+        "last_run_status": profile.last_run_status or "idle",
+        "last_actionable_count": int(profile.last_actionable_count or 0),
+        "last_run_error": profile.last_run_error,
+        "last_run_at": profile.last_run_at,
+        "next_run_at": _next_profile_run_at(profile),
+        "created_at": profile.created_at,
+        "updated_at": profile.updated_at,
+    }
+
+
+def list_scanner_automation_profiles(db: Session, user_id: str) -> list[UserScannerAutomationProfile]:
+    rows = (
+        db.query(UserScannerAutomationProfile)
+        .filter(UserScannerAutomationProfile.user_id == user_id)
+        .order_by(UserScannerAutomationProfile.is_active.desc(), UserScannerAutomationProfile.updated_at.desc())
+        .all()
+    )
+    return rows
+
+
+def create_scanner_automation_profile(
+    db: Session,
+    user_id: str,
+    *,
+    name: str,
+    auto_enabled: bool,
+    is_active: bool,
+    interval_seconds: int,
+    max_results: int,
+    symbol_source: str,
+    symbol_selection_mode: str,
+    selected_symbols: list[str],
+) -> UserScannerAutomationProfile:
+    normalized_name = str(name or "").strip()
+    if not normalized_name:
+        raise ValueError("profile_name_required")
+
+    existing = (
+        db.query(UserScannerAutomationProfile)
+        .filter(UserScannerAutomationProfile.user_id == user_id, UserScannerAutomationProfile.name == normalized_name)
+        .first()
+    )
+    if existing is not None:
+        raise ValueError("profile_name_already_exists")
+
+    if is_active:
+        db.query(UserScannerAutomationProfile).filter(UserScannerAutomationProfile.user_id == user_id).update(
+            {UserScannerAutomationProfile.is_active: False}
+        )
+
+    row = UserScannerAutomationProfile(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        name=normalized_name,
+        auto_enabled=bool(auto_enabled),
+        is_active=bool(is_active),
+        interval_seconds=_clamp_profile_interval_seconds(interval_seconds),
+        max_results=_clamp_scanner_max_results(max_results),
+        symbol_source=_normalize_symbol_source(symbol_source),
+        symbol_selection_mode=_normalize_symbol_selection_mode(symbol_selection_mode),
+        selected_symbols=_normalize_selected_symbols(selected_symbols),
+        last_run_status="idle",
+        last_actionable_count=0,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def update_scanner_automation_profile(
+    db: Session,
+    user_id: str,
+    profile_id: str,
+    *,
+    name: str,
+    auto_enabled: bool,
+    is_active: bool,
+    interval_seconds: int,
+    max_results: int,
+    symbol_source: str,
+    symbol_selection_mode: str,
+    selected_symbols: list[str],
+) -> UserScannerAutomationProfile:
+    row = (
+        db.query(UserScannerAutomationProfile)
+        .filter(UserScannerAutomationProfile.id == profile_id, UserScannerAutomationProfile.user_id == user_id)
+        .first()
+    )
+    if row is None:
+        raise ValueError("scanner_automation_profile_not_found")
+
+    normalized_name = str(name or "").strip()
+    if not normalized_name:
+        raise ValueError("profile_name_required")
+
+    name_conflict = (
+        db.query(UserScannerAutomationProfile)
+        .filter(
+            UserScannerAutomationProfile.user_id == user_id,
+            UserScannerAutomationProfile.name == normalized_name,
+            UserScannerAutomationProfile.id != profile_id,
+        )
+        .first()
+    )
+    if name_conflict is not None:
+        raise ValueError("profile_name_already_exists")
+
+    if is_active:
+        db.query(UserScannerAutomationProfile).filter(
+            UserScannerAutomationProfile.user_id == user_id,
+            UserScannerAutomationProfile.id != profile_id,
+        ).update({UserScannerAutomationProfile.is_active: False})
+
+    row.name = normalized_name
+    row.auto_enabled = bool(auto_enabled)
+    row.is_active = bool(is_active)
+    row.interval_seconds = _clamp_profile_interval_seconds(interval_seconds)
+    row.max_results = _clamp_scanner_max_results(max_results)
+    row.symbol_source = _normalize_symbol_source(symbol_source)
+    row.symbol_selection_mode = _normalize_symbol_selection_mode(symbol_selection_mode)
+    row.selected_symbols = _normalize_selected_symbols(selected_symbols)
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def activate_scanner_automation_profile(db: Session, user_id: str, profile_id: str) -> UserScannerAutomationProfile:
+    row = (
+        db.query(UserScannerAutomationProfile)
+        .filter(UserScannerAutomationProfile.id == profile_id, UserScannerAutomationProfile.user_id == user_id)
+        .first()
+    )
+    if row is None:
+        raise ValueError("scanner_automation_profile_not_found")
+
+    db.query(UserScannerAutomationProfile).filter(UserScannerAutomationProfile.user_id == user_id).update(
+        {UserScannerAutomationProfile.is_active: False}
+    )
+    row.is_active = True
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def delete_scanner_automation_profile(db: Session, user_id: str, profile_id: str) -> bool:
+    row = (
+        db.query(UserScannerAutomationProfile)
+        .filter(UserScannerAutomationProfile.id == profile_id, UserScannerAutomationProfile.user_id == user_id)
+        .first()
+    )
+    if row is None:
+        return False
+
+    was_active = bool(row.is_active)
+    db.delete(row)
+    db.commit()
+
+    if was_active:
+        fallback = (
+            db.query(UserScannerAutomationProfile)
+            .filter(UserScannerAutomationProfile.user_id == user_id)
+            .order_by(UserScannerAutomationProfile.updated_at.desc())
+            .first()
+        )
+        if fallback is not None:
+            fallback.is_active = True
+            fallback.updated_at = datetime.now(timezone.utc)
+            db.commit()
+    return True
 
 
 def _user_symbols_scope(db: Session, user_id: str) -> set[str]:

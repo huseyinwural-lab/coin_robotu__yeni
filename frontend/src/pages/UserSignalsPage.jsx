@@ -491,7 +491,7 @@ export const UserSignalsPage = () => {
       </div>
 
       <div className="col-span-12 hidden overflow-x-auto border border-slate-800 bg-slate-900 md:block" data-testid="user-signals-table-wrapper">
-        <table className="min-w-full text-sm" data-testid="user-signals-table" aria-label="Signals tablosu">
+        <table className="min-w-[2200px] text-sm" data-testid="user-signals-table" aria-label="Signals tablosu">
           <thead className="bg-slate-800 text-left" data-testid="user-signals-table-head">
             <tr>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Symbol</th>
@@ -524,17 +524,17 @@ export const UserSignalsPage = () => {
                 </td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-execution-mode-${signal.id}`}>{signal.execution_mode_label || modeLabelFromRaw(signal.mode)}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-blocked-reason-${signal.id}`}>
-                  <div>
+                  <div className="max-w-[260px]">
                     <p className="text-xs font-semibold">{signal.blocked_reason_code || "-"}</p>
-                    <p className="text-[11px] text-slate-400" data-testid={`user-signals-table-blocked-solution-${signal.id}`}>{signal.blocked_solution_hint || "-"}</p>
+                    <p className="text-[11px] text-slate-400 break-words" data-testid={`user-signals-table-blocked-solution-${signal.id}`}>{signal.blocked_solution_hint || "-"}</p>
                   </div>
                 </td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-last-eligibility-check-${signal.id}`}>{signal.last_eligibility_check_at ? new Date(signal.last_eligibility_check_at).toLocaleString() : "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-intent-${signal.id}`}>{signal.created_order_intent_id || "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-runtime-owner-${signal.id}`}>{signal.runtime_owner || "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-time-${signal.id}`}>{new Date(signal.created_at).toLocaleString()}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>
-                  <div className="flex flex-wrap gap-2" data-testid={`user-signals-actions-${signal.id}`}>
+                <td className={compactMode ? "px-2 py-1 align-top min-w-[420px]" : "px-3 py-2 align-top min-w-[420px]"}>
+                  <div className="flex min-w-max flex-nowrap gap-2 whitespace-nowrap" data-testid={`user-signals-actions-${signal.id}`}>
                     <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-why-button-${signal.id}`}>Why this signal?</Button>
                     {(signal.status === "pending" || signal.status === "ready" || signal.status === "blocked") ? (
                       <>

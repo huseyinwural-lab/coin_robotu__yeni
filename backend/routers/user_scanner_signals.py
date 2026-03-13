@@ -2,17 +2,23 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from core.users.user_scanner_signal_service import (
+    activate_scanner_automation_profile,
     approve_pending_signal,
     bulk_fix_blocked_signals,
+    create_scanner_automation_profile,
+    delete_scanner_automation_profile,
     diagnose_pending_signal,
     get_or_create_scanner_automation_config,
     get_or_create_signal_mode,
+    list_scanner_automation_profiles,
     list_user_scanner_results,
     list_user_signals,
     reject_pending_signal,
     run_user_scanner,
     scanner_automation_config_response_payload,
+    scanner_automation_profile_response_payload,
     update_signal_mode,
+    update_scanner_automation_profile,
     update_scanner_automation_config,
 )
 from db import get_db
@@ -22,6 +28,9 @@ from schemas import (
     UserScannerOverviewResponse,
     UserScannerAutomationConfigResponse,
     UserScannerAutomationConfigUpdateRequest,
+    UserScannerAutomationProfileCreateRequest,
+    UserScannerAutomationProfileResponse,
+    UserScannerAutomationProfileUpdateRequest,
     UserScannerResultResponse,
     UserScannerRunRequest,
     UserScannerRunResponse,
@@ -104,6 +113,141 @@ def put_scanner_automation_config(
     )
     response_payload = scanner_automation_config_response_payload(row)
     return UserScannerAutomationConfigResponse(**response_payload)
+
+
+@router.get("/scanner/automation-profiles", response_model=list[UserScannerAutomationProfileResponse])
+def get_scanner_automation_profiles(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    rows = list_scanner_automation_profiles(db, current_user.id)
+    return [UserScannerAutomationProfileResponse(**scanner_automation_profile_response_payload(row)) for row in rows]
+
+
+@router.post("/scanner/automation-profiles", response_model=UserScannerAutomationProfileResponse)
+def post_scanner_automation_profile(
+    payload: UserScannerAutomationProfileCreateRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = create_scanner_automation_profile(
+            db,
+            current_user.id,
+            name=payload.name,
+            auto_enabled=payload.auto_enabled,
+            is_active=payload.is_active,
+            interval_seconds=payload.interval_seconds,
+            max_results=payload.max_results,
+            symbol_source=payload.symbol_source,
+            symbol_selection_mode=payload.symbol_selection_mode,
+            selected_symbols=payload.selected_symbols,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="user_scanner_automation_profile_created",
+        entity_type="user_scanner_automation_profile",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "name": row.name,
+            "auto_enabled": bool(row.auto_enabled),
+            "interval_seconds": int(row.interval_seconds or 180),
+            "selected_symbol_count": len(row.selected_symbols or []),
+        },
+    )
+    return UserScannerAutomationProfileResponse(**scanner_automation_profile_response_payload(row))
+
+
+@router.put("/scanner/automation-profiles/{profile_id}", response_model=UserScannerAutomationProfileResponse)
+def put_scanner_automation_profile(
+    profile_id: str,
+    payload: UserScannerAutomationProfileUpdateRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = update_scanner_automation_profile(
+            db,
+            current_user.id,
+            profile_id,
+            name=payload.name,
+            auto_enabled=payload.auto_enabled,
+            is_active=payload.is_active,
+            interval_seconds=payload.interval_seconds,
+            max_results=payload.max_results,
+            symbol_source=payload.symbol_source,
+            symbol_selection_mode=payload.symbol_selection_mode,
+            selected_symbols=payload.selected_symbols,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message == "scanner_automation_profile_not_found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
+
+    create_audit_log(
+        db,
+        action="user_scanner_automation_profile_updated",
+        entity_type="user_scanner_automation_profile",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "name": row.name,
+            "auto_enabled": bool(row.auto_enabled),
+            "is_active": bool(row.is_active),
+            "interval_seconds": int(row.interval_seconds or 180),
+            "selected_symbol_count": len(row.selected_symbols or []),
+        },
+    )
+    return UserScannerAutomationProfileResponse(**scanner_automation_profile_response_payload(row))
+
+
+@router.post("/scanner/automation-profiles/{profile_id}/activate", response_model=UserScannerAutomationProfileResponse)
+def post_activate_scanner_automation_profile(
+    profile_id: str,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = activate_scanner_automation_profile(db, current_user.id, profile_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="user_scanner_automation_profile_activated",
+        entity_type="user_scanner_automation_profile",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"name": row.name},
+    )
+    return UserScannerAutomationProfileResponse(**scanner_automation_profile_response_payload(row))
+
+
+@router.delete("/scanner/automation-profiles/{profile_id}")
+def delete_scanner_automation_profile_route(
+    profile_id: str,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    deleted = delete_scanner_automation_profile(db, current_user.id, profile_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="scanner_automation_profile_not_found")
+
+    create_audit_log(
+        db,
+        action="user_scanner_automation_profile_deleted",
+        entity_type="user_scanner_automation_profile",
+        entity_id=profile_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={},
+    )
+    return {"status": "ok", "deleted": True, "profile_id": profile_id}
 
 
 @router.post("/scanner/run", response_model=UserScannerRunResponse)

@@ -15,6 +15,7 @@ from models import (
     User,
     UserRole,
     UserScannerAutomationConfig,
+    UserScannerAutomationProfile,
 )
 from core.users.user_scanner_signal_service import run_user_scanner
 from services.audit_service import create_audit_log
@@ -116,26 +117,27 @@ class PipelineRuntime:
             await asyncio.sleep(15)
             db = SessionLocal()
             try:
-                rows = (
+                now = datetime.now(timezone.utc)
+                profile_rows = (
+                    db.query(UserScannerAutomationProfile)
+                    .filter(UserScannerAutomationProfile.auto_enabled.is_(True))
+                    .all()
+                )
+                profiled_user_ids = {row.user_id for row in profile_rows}
+
+                legacy_rows = (
                     db.query(UserScannerAutomationConfig)
                     .filter(UserScannerAutomationConfig.auto_enabled.is_(True))
                     .all()
                 )
-                if not rows:
-                    continue
 
-                now = datetime.now(timezone.utc)
-                for row in rows:
-                    interval_seconds = int(row.interval_seconds or 180)
-                    if interval_seconds <= 0:
-                        interval_seconds = 180
-
+                for row in profile_rows:
+                    interval_seconds = max(180, int(row.interval_seconds or 180))
                     if row.last_run_at:
                         last_run_at = row.last_run_at
                         if last_run_at.tzinfo is None:
                             last_run_at = last_run_at.replace(tzinfo=timezone.utc)
-                        elapsed = (now - last_run_at).total_seconds()
-                        if elapsed < interval_seconds:
+                        if (now - last_run_at).total_seconds() < interval_seconds:
                             continue
 
                     user = (
@@ -165,6 +167,51 @@ class PipelineRuntime:
                         row.last_run_status = "success"
                         row.last_run_error = None
                         row.last_run_id = str(result.get("run_id") or "")
+                        row.last_actionable_count = int(result.get("actionable_count") or 0)
+                    except Exception as exc:
+                        row.last_run_at = now
+                        row.last_run_status = "error"
+                        row.last_run_error = str(exc)[:240]
+
+                for row in legacy_rows:
+                    if row.user_id in profiled_user_ids:
+                        continue
+                    interval_seconds = max(180, int(row.interval_seconds or 180))
+                    if row.last_run_at:
+                        last_run_at = row.last_run_at
+                        if last_run_at.tzinfo is None:
+                            last_run_at = last_run_at.replace(tzinfo=timezone.utc)
+                        if (now - last_run_at).total_seconds() < interval_seconds:
+                            continue
+
+                    user = (
+                        db.query(User)
+                        .filter(
+                            User.id == row.user_id,
+                            User.role == UserRole.USER,
+                            User.is_active.is_(True),
+                            User.approval_status == "approved",
+                        )
+                        .first()
+                    )
+                    if user is None:
+                        continue
+
+                    try:
+                        result = run_user_scanner(
+                            db,
+                            user.id,
+                            requested_mode=None,
+                            max_results=int(row.max_results or 25),
+                            symbol_source=str(row.symbol_source or "crypto"),
+                            selected_symbols=list(row.selected_symbols or []),
+                            symbol_selection_mode=str(row.symbol_selection_mode or "top_active_50"),
+                        )
+                        row.last_run_at = now
+                        row.last_run_status = "success"
+                        row.last_run_error = None
+                        row.last_run_id = str(result.get("run_id") or "")
+                        row.last_actionable_count = int(result.get("actionable_count") or 0)
                     except Exception as exc:
                         row.last_run_at = now
                         row.last_run_status = "error"
