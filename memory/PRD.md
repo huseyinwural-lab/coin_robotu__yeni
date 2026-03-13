@@ -2870,3 +2870,81 @@
 ### Durum
 - **Platform Kapanış Paketi Faz-1B: COMPLETE**
 - **MOCKED API: YOK**
+
+## 43) 2026-03-12 — Iteration-58 (Indicator Query Engine: IQ-01 → IQ-06 + IQ-10)
+
+### Kullanıcı Kilit Seçimleri
+- İlk teslim kapsamı: **A (IQ-01 → IQ-06 + IQ-10)**
+- Binance market type: **A (Spot zorunlu, Futures opsiyonel)**
+- Symbol universe default: **A (all tradable varsayılan + whitelist opsiyonel)**
+- Bridge aksiyonları: **A (Open in Execute + Watchlist + Saved Query; Create Signal Rule feature flag)**
+- Teslim yöntemi: **A (Faz bazlı ara teslim + test raporu)**
+
+### Backend — Yeni Özellikler
+- Yeni router: `backend/routers/user_indicator_screener.py`
+  - `POST /api/user/indicator-screener/run`
+  - `GET /api/user/indicator-screener/presets`
+  - `GET/POST/DELETE /api/user/indicator-screener/saved-queries`
+  - `GET/POST/DELETE /api/user/indicator-screener/watchlist`
+- Yeni servisler:
+  - `services/indicator_screener/query_parser.py`
+    - whitelist tabanlı güvenli grammar
+    - desteklenen operatörler: `< <= > >= = != AND OR ( )`
+    - SQL/eval benzeri güvensiz tokenlar reddedilir
+  - `services/indicator_screener/market_data_provider.py`
+    - Binance spot/futures adapter kontratı
+    - Spotta global Binance 451 durumunda Binance US fallback
+    - normalize output: symbol/exchange/market_type/timeframe/candles
+    - kısa süreli cache + freshness alanları
+  - `services/indicator_screener/indicator_calculation_service.py`
+    - RSI14, RSI7, EMA20, EMA50, SMA20, SMA50, Fibo(161.8/127.2/100/78.6)
+  - `services/indicator_screener/indicator_query_engine_service.py`
+    - deterministik tarama (sorted universe + sorted output)
+    - all tradable default + whitelist opsiyonu
+    - rsi14/rsi7 tekil ve birleşik kural yürütümü
+  - `services/indicator_screener/storage_service.py`
+    - Saved Query + Watchlist CRUD
+- Veri modeli / migration:
+  - modeller: `UserIndicatorSavedQuery`, `UserIndicatorWatchlist`
+  - migration: `20260312_0031_indicator_screener.py`
+
+### Frontend — Yeni User Ekranı
+- Yeni sayfa: `frontend/src/pages/UserIndicatorScreenerPage.jsx`
+  - route: `/user/indicator-screener`
+  - filtre paneli: exchange, market type, timeframe, query, limit, symbol universe
+  - quick presets
+  - run / clear / save query / export csv
+  - yoğun veri tablosu (sortable)
+  - compact/wide mode
+  - mobile card + desktop dense table
+  - empty vs broken state ayrımı
+  - rsi highlight ve matched-field görsel vurgusu
+  - bridge aksiyonları: Open in Execute, Add to Watchlist, Create Signal Rule (disabled feature flag)
+- Navigasyon:
+  - `PanelLayout` user menüsüne `Indicator Screener` linki eklendi
+  - `App.js` route kaydı eklendi
+
+### Faz Bazlı Test Raporları
+- `/app/test_reports/indicator_screener_phase_1.json`
+- `/app/test_reports/indicator_screener_phase_2.json`
+- `/app/test_reports/indicator_screener_phase_3.json`
+
+### Test Sonuçları
+- Pytest:
+  - `test_indicator_screener_phase1.py` → **5 passed**
+  - `test_indicator_screener_phase2.py` → **4 passed**
+  - `test_indicator_screener_phase3.py` → **4 passed**
+  - `test_indicator_screener_iq_comprehensive.py` (testing agent ekledi) → **22 passed**
+- Testing agent: `/app/test_reports/iteration_58.json`
+  - Backend 22/22 PASS
+  - Frontend kritik akışlar PASS
+
+### Durum
+- **IQ-01: COMPLETE**
+- **IQ-02: COMPLETE**
+- **IQ-03 (Binance adapter + deterministik tarama): COMPLETE**
+- **IQ-04: COMPLETE**
+- **IQ-05: COMPLETE**
+- **IQ-06: COMPLETE**
+- **IQ-10 (yoğun tablo + vurgu + compact/wide): COMPLETE**
+- **MOCKED API: YOK**
