@@ -82,6 +82,7 @@ def preview_intent(
         allocation_adjustment_notice=validation.get("allocation_adjustment_notice"),
         hedge_suggestion=validation.get("hedge_suggestion") or {},
         risk_reduction_score=validation.get("risk_reduction_score"),
+        venue_context=validation.get("venue_context") or {},
     )
 
 
@@ -149,6 +150,7 @@ def preview_position_action(
         allocation_adjustment_notice=validation.get("allocation_adjustment_notice"),
         hedge_suggestion=validation.get("hedge_suggestion") or {},
         risk_reduction_score=validation.get("risk_reduction_score"),
+        venue_context=validation.get("venue_context") or {},
     )
 
 

@@ -24,7 +24,6 @@ import {
   Settings2,
   ShieldAlert,
   ShieldCheck,
-  TestTube2,
   TrendingUp,
   UserCog,
   Wrench,
@@ -53,7 +52,6 @@ const userNavItems = [
   { to: "/user/exchange-settings", label: "Exchange Settings", icon: KeyRound, testId: "nav-user-exchange-settings-link" },
   { to: "/user/positions", label: "Positions", icon: Activity, testId: "nav-user-positions-link" },
   { to: "/user/paper-positions", label: "Paper Positions", icon: Activity, testId: "nav-paper-positions-link" },
-  { to: "/user/exchange-mock", label: "Exchange Mock", icon: TestTube2, testId: "nav-exchange-mock-link" },
 ];
 
 const adminOnlyItems = [
@@ -165,7 +163,7 @@ export const PanelLayout = () => {
 
   return (
     <div className={`${roleThemeClass} h-screen overflow-hidden bg-slate-950 text-slate-100`} data-testid="panel-layout-wrapper">
-      <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur" data-testid="panel-sticky-header" aria-label="Panel üst navigasyon">
+      <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-emerald-300 bg-emerald-100/95 px-4 py-3 text-slate-900 backdrop-blur" data-testid="panel-sticky-header" aria-label="Panel üst navigasyon">
         <div className="flex items-center gap-2" data-testid="panel-sticky-header-left">
           <Button
             type="button"

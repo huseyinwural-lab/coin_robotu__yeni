@@ -15,6 +15,7 @@ from services.strategy_intelligence_service import (
     evaluate_conflict_warning,
     evaluate_hedge_suggestion,
 )
+from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
 ALLOWED_SUBMIT_SOURCE_STATES = {"PREVIEWED"}
 POSITION_ACTION_TYPES = {
@@ -231,6 +232,37 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     symbol = str(normalized.get("symbol") or "BTCUSDT")
     signal_confidence = float(payload.get("signal_confidence") or normalized.get("signal_confidence") or 0.65)
 
+    requested_exchange = str(payload.get("exchange") or normalized.get("exchange") or "binance").strip().lower()
+    requested_market_type = str(normalized.get("market_type") or payload.get("market_type") or "spot").strip().lower()
+    requested_environment = str(payload.get("environment") or normalized.get("environment") or "testnet").strip().lower()
+    exchange_connection_id = str(payload.get("exchange_connection_id") or "").strip() or None
+    account_label = str(payload.get("account_label") or normalized.get("account_label") or "default").strip()
+
+    seed_binance_venue_registry(db)
+    venue_allowed, venue_state, capability_match, venue_reason_codes = check_user_venue_access(
+        db,
+        user_id,
+        requested_exchange,
+        requested_market_type,
+        requested_environment,
+    )
+    venue_context = {
+        "exchange": requested_exchange,
+        "market_type": requested_market_type,
+        "environment": requested_environment,
+        "account_label": account_label,
+        "exchange_connection_id": exchange_connection_id,
+        "allowed": venue_allowed,
+        "venue_state": venue_state,
+        "capability_match": capability_match,
+        "reason_codes": venue_reason_codes,
+    }
+    normalized["exchange"] = requested_exchange
+    normalized["environment"] = requested_environment
+    normalized["account_label"] = account_label
+    normalized["exchange_connection_id"] = exchange_connection_id
+    normalized["venue_context"] = venue_context
+
     meta_summary = run_meta_strategy_engine(
         db,
         user_id=user_id,
@@ -322,6 +354,13 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
             risk_adjustment_reason = "position_size_adjusted_by_portfolio_risk"
         elif risk_decision == "REQUIRE_APPROVAL":
             precheck_flags.append("portfolio_risk_manual_approval_required")
+
+    if intent_type == "OPEN_POSITION" and not venue_allowed:
+        validation["validation_status"] = "rejected"
+        precheck_reasons.append("venue_access_blocked")
+        if venue_state:
+            precheck_flags.append(f"venue_state:{venue_state}")
+        precheck_reasons.extend(venue_reason_codes or [])
 
     conflict_result = evaluate_conflict_warning(
         db,
@@ -496,6 +535,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     validation["allocation_adjustment_notice"] = rebalance_result.get("allocation_adjustment_notice")
     validation["hedge_suggestion"] = hedge_suggestion
     validation["risk_reduction_score"] = float(hedge_suggestion.get("risk_reduction_score") or 0)
+    validation["venue_context"] = venue_context
 
     db.commit()
     db.refresh(intent)

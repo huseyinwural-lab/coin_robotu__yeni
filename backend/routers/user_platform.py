@@ -6,6 +6,13 @@ from core.users.user_exchange_connector import (
     get_or_create_user_exchange_setting,
     upsert_user_exchange_connection,
 )
+from core.users.user_exchange_connections import (
+    create_user_exchange_connection,
+    delete_user_exchange_connection,
+    list_user_exchange_connections,
+    set_default_user_exchange_connection,
+    update_user_exchange_connection,
+)
 from core.users.user_portfolio_engine import (
     build_user_performance_snapshot,
     build_user_portfolio_snapshot,
@@ -22,6 +29,9 @@ from deps import require_user
 from models import BotProfile, PendingSignal, RiskPolicy, User
 from schemas import (
     UserDashboardResponse,
+    UserExchangeConnectionPatchRequest,
+    UserExchangeConnectionResponse,
+    UserExchangeConnectionUpsertRequest,
     UserExchangeConnectRequest,
     UserExchangeConnectResponse,
     UserPerformanceSnapshotResponse,
@@ -82,6 +92,143 @@ def update_user_exchange(
     db: Session = Depends(get_db),
 ):
     return connect_user_exchange(payload=payload, current_user=current_user, db=db)
+
+
+@router.get("/exchange-connections", response_model=list[UserExchangeConnectionResponse])
+def get_user_exchange_connections(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    rows = list_user_exchange_connections(db, current_user.id)
+    return [UserExchangeConnectionResponse(**row) for row in rows]
+
+
+@router.post("/exchange-connections", response_model=UserExchangeConnectionResponse, status_code=status.HTTP_201_CREATED)
+def create_exchange_connection(
+    payload: UserExchangeConnectionUpsertRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = create_user_exchange_connection(
+            db,
+            user_id=current_user.id,
+            account_label=payload.account_label,
+            exchange=payload.exchange,
+            market_type=payload.market_type,
+            environment=payload.environment,
+            is_default=payload.is_default,
+            api_key=payload.api_key,
+            api_secret=payload.api_secret,
+            permission_snapshot=payload.permission_snapshot,
+            readiness_snapshot=payload.readiness_snapshot,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="user_exchange_connection_created",
+        entity_type="user_exchange_connection",
+        entity_id=row["id"],
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "account_label": row["account_label"],
+            "exchange": row["exchange"],
+            "market_type": row["market_type"],
+            "environment": row["environment"],
+            "is_default": row["is_default"],
+        },
+    )
+    return UserExchangeConnectionResponse(**row)
+
+
+@router.put("/exchange-connections/{connection_id}", response_model=UserExchangeConnectionResponse)
+def update_exchange_connection(
+    connection_id: str,
+    payload: UserExchangeConnectionPatchRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = update_user_exchange_connection(
+            db,
+            user_id=current_user.id,
+            connection_id=connection_id,
+            account_label=payload.account_label,
+            exchange=payload.exchange,
+            market_type=payload.market_type,
+            environment=payload.environment,
+            is_default=payload.is_default,
+            api_key=payload.api_key,
+            api_secret=payload.api_secret,
+            permission_snapshot=payload.permission_snapshot,
+            readiness_snapshot=payload.readiness_snapshot,
+        )
+    except ValueError as exc:
+        status_code = status.HTTP_404_NOT_FOUND if str(exc) == "connection_not_found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="user_exchange_connection_updated",
+        entity_type="user_exchange_connection",
+        entity_id=row["id"],
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "account_label": row["account_label"],
+            "exchange": row["exchange"],
+            "market_type": row["market_type"],
+            "environment": row["environment"],
+            "is_default": row["is_default"],
+        },
+    )
+    return UserExchangeConnectionResponse(**row)
+
+
+@router.post("/exchange-connections/{connection_id}/set-default", response_model=UserExchangeConnectionResponse)
+def set_exchange_connection_default(
+    connection_id: str,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = set_default_user_exchange_connection(db, user_id=current_user.id, connection_id=connection_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="user_exchange_connection_set_default",
+        entity_type="user_exchange_connection",
+        entity_id=row["id"],
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"account_label": row["account_label"]},
+    )
+    return UserExchangeConnectionResponse(**row)
+
+
+@router.delete("/exchange-connections/{connection_id}")
+def remove_exchange_connection(
+    connection_id: str,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = delete_user_exchange_connection(db, user_id=current_user.id, connection_id=connection_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="user_exchange_connection_deleted",
+        entity_type="user_exchange_connection",
+        entity_id=connection_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details=payload,
+    )
+    return payload
 
 
 @router.post("/portfolio/map", response_model=UserPortfolioMapResponse)

@@ -465,8 +465,22 @@ export const UserIndicatorScreenerPage = () => {
   };
 
   const openInExecute = (row) => {
+    const bridgePayload = {
+      query_expression: filters.query_expression,
+      filter_payload: buildFilterPayload(),
+      source_row: {
+        symbol: row.symbol,
+        market_type: row.market_type,
+        timeframe: row.timeframe,
+        signal_score: row.signal_score,
+        confidence: row.confidence,
+      },
+    };
+    const encodedBridge = encodeURIComponent(JSON.stringify(bridgePayload));
     toast.success(`${row.symbol} (${row.market_type}) Execute ekranına aktarılıyor`);
-    navigate(`/user/execute?symbol=${row.symbol}&marketType=${row.market_type}&side=BUY&quantity=0.001&timeInForce=GTC&source=indicator-screener`);
+    navigate(
+      `/user/execute?symbol=${encodeURIComponent(row.symbol)}&market_type=${encodeURIComponent(row.market_type)}&side=buy&source=indicator-screener&exchange=${encodeURIComponent(row.exchange || filters.exchange)}&environment=testnet&bridge_context=${encodedBridge}`,
+    );
   };
 
   const createSignalRule = () => {
@@ -494,6 +508,32 @@ export const UserIndicatorScreenerPage = () => {
     }
     return [];
   }, [meta]);
+
+  const freshnessSummary = useMemo(() => {
+    if (!rows.length) {
+      return {
+        lastCandleTime: "-",
+        evaluatedAt: meta?.calculation_timestamp || "-",
+        snapshotAt: meta?.calculation_timestamp || "-",
+        dataSource: "-",
+        cacheHits: 0,
+        freshFetches: 0,
+      };
+    }
+
+    const rowWithNewestCandle = [...rows].sort((a, b) => String(b.last_candle_time || "").localeCompare(String(a.last_candle_time || "")))[0];
+    const rowWithNewestEval = [...rows].sort((a, b) => String(b.evaluated_at || "").localeCompare(String(a.evaluated_at || "")))[0];
+    const uniqueSources = [...new Set(rows.map((row) => row.data_source).filter(Boolean))];
+
+    return {
+      lastCandleTime: rowWithNewestCandle?.last_candle_time || "-",
+      evaluatedAt: rowWithNewestEval?.evaluated_at || meta?.calculation_timestamp || "-",
+      snapshotAt: meta?.calculation_timestamp || "-",
+      dataSource: uniqueSources.length ? uniqueSources.join(" | ") : "-",
+      cacheHits: rows.filter((row) => Boolean(row.cache_hit)).length,
+      freshFetches: rows.filter((row) => Boolean(row.fresh_fetch)).length,
+    };
+  }, [rows, meta]);
 
   const effectiveState = isRunning ? "loading" : (meta?.result_state || "success");
   const appliedFilterSummary = meta?.applied_filters || buildFilterPayload();
@@ -875,6 +915,33 @@ export const UserIndicatorScreenerPage = () => {
         <article className="rounded-md border border-slate-300 bg-white p-3" data-testid="user-indicator-screener-summary-result-state-card"><p className="text-xs text-slate-500">Result State</p><p className="text-xl font-semibold text-slate-900" data-testid="user-indicator-screener-summary-result-state-value">{effectiveState || "-"}</p></article>
       </div>
 
+      <section className="grid gap-3 rounded-lg border border-slate-300 bg-white p-3 md:grid-cols-2 lg:grid-cols-3" data-testid="user-indicator-screener-freshness-visibility-panel">
+        <article className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="user-indicator-screener-freshness-last-candle-card">
+          <p className="text-xs text-slate-500">last_candle_time</p>
+          <p className="text-sm font-semibold text-slate-900" data-testid="user-indicator-screener-freshness-last-candle-value">{freshnessSummary.lastCandleTime !== "-" ? new Date(freshnessSummary.lastCandleTime).toLocaleString() : "-"}</p>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="user-indicator-screener-freshness-evaluated-at-card">
+          <p className="text-xs text-slate-500">evaluated_at</p>
+          <p className="text-sm font-semibold text-slate-900" data-testid="user-indicator-screener-freshness-evaluated-at-value">{freshnessSummary.evaluatedAt !== "-" ? new Date(freshnessSummary.evaluatedAt).toLocaleString() : "-"}</p>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="user-indicator-screener-freshness-snapshot-at-card">
+          <p className="text-xs text-slate-500">snapshot_at</p>
+          <p className="text-sm font-semibold text-slate-900" data-testid="user-indicator-screener-freshness-snapshot-at-value">{freshnessSummary.snapshotAt !== "-" ? new Date(freshnessSummary.snapshotAt).toLocaleString() : "-"}</p>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="user-indicator-screener-freshness-data-source-card">
+          <p className="text-xs text-slate-500">data_source</p>
+          <p className="text-sm font-semibold text-slate-900" data-testid="user-indicator-screener-freshness-data-source-value">{freshnessSummary.dataSource}</p>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="user-indicator-screener-freshness-cache-hit-card">
+          <p className="text-xs text-slate-500">cache_hit</p>
+          <p className="text-sm font-semibold text-slate-900" data-testid="user-indicator-screener-freshness-cache-hit-value">{freshnessSummary.cacheHits}</p>
+        </article>
+        <article className="rounded-md border border-slate-200 bg-slate-50 p-3" data-testid="user-indicator-screener-freshness-fresh-fetch-card">
+          <p className="text-xs text-slate-500">fresh_fetch</p>
+          <p className="text-sm font-semibold text-slate-900" data-testid="user-indicator-screener-freshness-fresh-fetch-value">{freshnessSummary.freshFetches}</p>
+        </article>
+      </section>
+
       {effectiveState !== "success" && (
         <div className={`rounded-md border p-3 ${stateCard.tone}`} data-testid="user-indicator-screener-state-contract-panel">
           <p className="text-sm font-semibold" data-testid="user-indicator-screener-state-contract-title">{stateCard.title}</p>
@@ -948,6 +1015,11 @@ export const UserIndicatorScreenerPage = () => {
                   ["stale_data", "Fresh", false],
                   ["matched_rules", "Matched Rules", false],
                   ["updated_at", "Updated At", true],
+                  ["last_candle_time", "Last Candle", false],
+                  ["evaluated_at", "Evaluated At", false],
+                  ["data_source", "Data Source", false],
+                  ["cache_hit", "Cache", false],
+                  ["fresh_fetch", "Fresh Fetch", false],
                 ].map(([field, label, sortable]) => (
                   <th key={field} className={`px-2 font-semibold text-slate-700 ${["close", "rsi14", "rsi7", "volume_24h", "signal_score", "confidence", "rr_estimate"].includes(field) ? "text-right" : ""}`} data-testid={`user-indicator-screener-head-${field}`}>
                     {sortable ? (
@@ -991,6 +1063,11 @@ export const UserIndicatorScreenerPage = () => {
                     <td className={`px-2 text-center ${row.stale_data ? "text-rose-600" : "text-emerald-700"}`} data-testid={`user-indicator-screener-cell-freshness-${row.symbol}-${row.market_type}`}>{row.stale_data ? "stale" : "fresh"}</td>
                     <td className="px-2 text-xs text-slate-700" data-testid={`user-indicator-screener-cell-matched-rules-${row.symbol}-${row.market_type}`}>{(row.matched_rules || []).join(" | ") || "-"}</td>
                     <td className="px-2 text-xs text-slate-600" data-testid={`user-indicator-screener-cell-updated-at-${row.symbol}-${row.market_type}`}>{row.updated_at ? new Date(row.updated_at).toLocaleString() : "-"}</td>
+                    <td className="px-2 text-xs text-slate-600" data-testid={`user-indicator-screener-cell-last-candle-time-${row.symbol}-${row.market_type}`}>{row.last_candle_time ? new Date(row.last_candle_time).toLocaleString() : "-"}</td>
+                    <td className="px-2 text-xs text-slate-600" data-testid={`user-indicator-screener-cell-evaluated-at-${row.symbol}-${row.market_type}`}>{row.evaluated_at ? new Date(row.evaluated_at).toLocaleString() : "-"}</td>
+                    <td className="px-2 text-xs text-slate-700" data-testid={`user-indicator-screener-cell-data-source-${row.symbol}-${row.market_type}`}>{row.data_source || "-"}</td>
+                    <td className="px-2 text-center text-xs text-slate-700" data-testid={`user-indicator-screener-cell-cache-hit-${row.symbol}-${row.market_type}`}>{String(Boolean(row.cache_hit))}</td>
+                    <td className="px-2 text-center text-xs text-slate-700" data-testid={`user-indicator-screener-cell-fresh-fetch-${row.symbol}-${row.market_type}`}>{String(Boolean(row.fresh_fetch))}</td>
                     <td className="sticky right-0 z-10 px-2 bg-white" data-testid={`user-indicator-screener-cell-actions-${row.symbol}-${row.market_type}`}>
                       <div className="flex flex-nowrap gap-1" data-testid={`user-indicator-screener-row-actions-${row.symbol}-${row.market_type}`}>
                         <Button size="sm" className={buttonClass.primary} onClick={() => openInExecute(row)} data-testid={`user-indicator-screener-open-execute-button-${row.symbol}-${row.market_type}`}>Open in Execute</Button>
@@ -1003,7 +1080,7 @@ export const UserIndicatorScreenerPage = () => {
               })}
               {rows.length === 0 && (
                 <tr className="border-t border-slate-200" data-testid="user-indicator-screener-table-empty-row">
-                  <td colSpan={23} className="px-2 py-4 text-center text-sm text-slate-500" data-testid="user-indicator-screener-table-empty-text">Sonuç bulunmuyor.</td>
+                  <td colSpan={28} className="px-2 py-4 text-center text-sm text-slate-500" data-testid="user-indicator-screener-table-empty-text">Sonuç bulunmuyor.</td>
                 </tr>
               )}
             </tbody>

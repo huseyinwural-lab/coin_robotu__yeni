@@ -10,6 +10,10 @@ import { apiClient } from "@/lib/api";
 const defaultForm = {
   source_type: "manual",
   source_ref_id: "",
+  exchange_connection_id: "",
+  account_label: "",
+  exchange: "binance",
+  environment: "testnet",
   market_type: "spot",
   symbol: "BTCUSDT",
   side: "buy",
@@ -32,30 +36,109 @@ export const UserExecutePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [form, setForm] = useState(defaultForm);
   const [presets, setPresets] = useState([]);
+  const [connections, setConnections] = useState([]);
+  const [selectedConnectionId, setSelectedConnectionId] = useState("");
+  const [venueAccess, setVenueAccess] = useState(null);
+  const [bridgeContext, setBridgeContext] = useState(null);
   const [selectedPreset, setSelectedPreset] = useState("");
   const [preview, setPreview] = useState(null);
   const [previewTrace, setPreviewTrace] = useState(null);
   const [previewTraceLoading, setPreviewTraceLoading] = useState(false);
+
+  const selectedConnection = useMemo(
+    () => connections.find((item) => item.id === selectedConnectionId) || null,
+    [connections, selectedConnectionId],
+  );
 
   const isFutures = form.market_type === "futures";
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
-      const { data } = await apiClient.get("/user/execution/presets");
-      setPresets(data || []);
+      const [presetRes, connectionRes] = await Promise.all([
+        apiClient.get("/user/execution/presets"),
+        apiClient.get("/user/exchange-connections"),
+      ]);
+      const loadedPresets = presetRes.data || [];
+      const loadedConnections = connectionRes.data || [];
+      setPresets(loadedPresets);
+      setConnections(loadedConnections);
+
+      const defaultConnection =
+        loadedConnections.find((item) => item.is_default) || loadedConnections[0] || null;
+      const preselectedConnectionId =
+        searchParams.get("exchange_connection_id") || defaultConnection?.id || "";
+      setSelectedConnectionId(preselectedConnectionId);
 
       const source = searchParams.get("source") || "manual";
       const symbol = searchParams.get("symbol") || "BTCUSDT";
       const side = searchParams.get("side") || "buy";
       const marketType = searchParams.get("market_type") || "spot";
+      const exchange = searchParams.get("exchange") || defaultConnection?.exchange || "binance";
+      const environment = searchParams.get("environment") || defaultConnection?.environment || "testnet";
       const preset = searchParams.get("preset") || "";
+      const bridgeContextEncoded = searchParams.get("bridge_context");
+      if (bridgeContextEncoded) {
+        try {
+          const decoded = JSON.parse(decodeURIComponent(bridgeContextEncoded));
+          setBridgeContext(decoded);
+        } catch {
+          setBridgeContext(null);
+        }
+      } else {
+        setBridgeContext(null);
+      }
+
       setSelectedPreset(preset);
-      setForm((prev) => ({ ...prev, source_type: source, symbol, side, market_type: marketType }));
+      setForm((prev) => ({
+        ...prev,
+        source_type: source,
+        source_ref_id: searchParams.get("source_ref_id") || "",
+        symbol,
+        side,
+        market_type: marketType,
+        exchange,
+        environment,
+        account_label: defaultConnection?.account_label || "default",
+        exchange_connection_id: preselectedConnectionId,
+      }));
       setIsLoading(false);
     };
     load();
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!selectedConnection) {
+      setVenueAccess(null);
+      return;
+    }
+
+    const updateVenueContext = async () => {
+      try {
+        const { data } = await apiClient.get("/venues/access-check", {
+          params: {
+            exchange: selectedConnection.exchange,
+            market_type: selectedConnection.market_type,
+            environment: selectedConnection.environment,
+          },
+        });
+        setVenueAccess(data);
+      } catch {
+        setVenueAccess(null);
+      }
+    };
+
+    setForm((prev) => ({
+      ...prev,
+      exchange_connection_id: selectedConnection.id,
+      account_label: selectedConnection.account_label,
+      exchange: selectedConnection.exchange,
+      environment: selectedConnection.environment,
+      market_type: selectedConnection.market_type || prev.market_type,
+    }));
+
+    updateVenueContext();
+  }, [selectedConnection]);
 
   useEffect(() => {
     if (!selectedPreset) {
@@ -82,9 +165,21 @@ export const UserExecutePage = () => {
   );
 
   const runPreview = async () => {
+    if (venueAccess && !venueAccess.allowed) {
+      toast.error(`Venue blocked: ${(venueAccess.reason_codes || []).join(",") || venueAccess.venue_state || "unknown"}`);
+      return;
+    }
+
     setPreviewTrace(null);
     try {
-      const { data } = await apiClient.post("/user/execution/intent/preview", form);
+      const payload = {
+        ...form,
+        exchange_connection_id: selectedConnection?.id || form.exchange_connection_id || null,
+        account_label: selectedConnection?.account_label || form.account_label || "default",
+        exchange: selectedConnection?.exchange || form.exchange || "binance",
+        environment: selectedConnection?.environment || form.environment || "testnet",
+      };
+      const { data } = await apiClient.post("/user/execution/intent/preview", payload);
       setPreview(data);
       setPreviewTraceLoading(true);
       try {
@@ -147,6 +242,33 @@ export const UserExecutePage = () => {
 
       <div className="col-span-12 lg:col-span-7 grid grid-cols-12 gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-execute-form-grid">
         <div className="col-span-12 md:col-span-6">
+          <label className="text-xs text-slate-500" htmlFor="execute-connection-select">Exchange Connection</label>
+          <select
+            id="execute-connection-select"
+            className="mt-1 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            value={selectedConnectionId}
+            onChange={(event) => setSelectedConnectionId(event.target.value)}
+            data-testid="execute-connection-select"
+          >
+            {connections.map((connection) => (
+              <option key={connection.id} value={connection.id}>
+                {connection.account_label} · {connection.exchange}/{connection.market_type}/{connection.environment}
+              </option>
+            ))}
+            {connections.length === 0 && <option value="">no-connection</option>}
+          </select>
+        </div>
+        <div className="col-span-12 md:col-span-6 border border-slate-800 bg-slate-950 px-3 py-2" data-testid="execute-venue-state-card">
+          <p className="text-xs text-slate-500" data-testid="execute-venue-state-label">Venue State</p>
+          <p className="text-sm text-slate-100" data-testid="execute-venue-state-value">
+            {venueAccess?.venue_state || "unknown"} / allowed={String(venueAccess?.allowed ?? false)}
+          </p>
+          <p className="text-xs text-slate-400" data-testid="execute-venue-state-reasons">
+            {(venueAccess?.reason_codes || []).join(",") || "-"}
+          </p>
+        </div>
+
+        <div className="col-span-12 md:col-span-6">
           <label className="text-xs text-slate-500">Source</label>
           <Input value={form.source_type} onChange={(e) => setForm((p) => ({ ...p, source_type: e.target.value }))} data-testid="execute-source-type-input" />
         </div>
@@ -201,6 +323,29 @@ export const UserExecutePage = () => {
             <p data-testid="user-execute-approval-required">approval_required: {String(preview.approval_required)}</p>
             <p data-testid="user-execute-gate-decision">gate_decision: {preview.gate_decision}</p>
             <p data-testid="user-execute-meta-engine-decision">meta_engine_decision: {preview.meta_engine_decision}</p>
+            <div className="border border-slate-800 p-3" data-testid="user-execute-venue-context-panel">
+              <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-venue-context-title">Venue Context</p>
+              <div className="mt-2 grid gap-1 text-xs" data-testid="user-execute-venue-context-content">
+                <p data-testid="user-execute-venue-context-account-label">account_label: {preview.venue_context?.account_label || form.account_label || "default"}</p>
+                <p data-testid="user-execute-venue-context-exchange">exchange: {preview.venue_context?.exchange || form.exchange}</p>
+                <p data-testid="user-execute-venue-context-market-type">market_type: {preview.venue_context?.market_type || form.market_type}</p>
+                <p data-testid="user-execute-venue-context-environment">environment: {preview.venue_context?.environment || form.environment}</p>
+                <p data-testid="user-execute-venue-context-state">venue_state: {preview.venue_context?.venue_state || venueAccess?.venue_state || "unknown"}</p>
+                <p data-testid="user-execute-venue-context-allowed">allowed: {String(preview.venue_context?.allowed ?? venueAccess?.allowed ?? false)}</p>
+              </div>
+            </div>
+
+            {bridgeContext && (
+              <div className="border border-slate-800 p-3" data-testid="user-execute-bridge-context-panel">
+                <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-bridge-context-title">Bridge Context</p>
+                <p className="text-xs text-slate-300" data-testid="user-execute-bridge-context-source">source: {form.source_type}</p>
+                <p className="text-xs text-slate-300" data-testid="user-execute-bridge-context-query">query: {bridgeContext.query_expression || "-"}</p>
+                <p className="text-xs text-slate-300" data-testid="user-execute-bridge-context-filter-snapshot">
+                  filter_snapshot: {JSON.stringify(bridgeContext.filter_payload || {})}
+                </p>
+              </div>
+            )}
+
             <div data-testid="user-execute-reason-codes">
               <p className="text-xs uppercase tracking-widest text-slate-500">reason_codes</p>
               {(preview.reject_reason_codes || []).length === 0 ? <p className="text-slate-400">none</p> : preview.reject_reason_codes.map((code) => <p key={code}>{code}</p>)}

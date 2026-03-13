@@ -19,7 +19,7 @@ from db import SessionLocal
 from models import RiskPolicyAuditEvent
 
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://platform-hardening-4.preview.emergentagent.com")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://filter-engine.preview.emergentagent.com")
 
 
 @pytest.fixture(scope="module")

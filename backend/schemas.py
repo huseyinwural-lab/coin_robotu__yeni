@@ -1177,6 +1177,48 @@ class UserExchangeConnectResponse(BaseModel):
     updated_at: datetime | None
 
 
+class UserExchangeConnectionUpsertRequest(BaseModel):
+    account_label: str
+    exchange: str = "binance"
+    market_type: str = "spot"
+    environment: str = "testnet"
+    is_default: bool = False
+    api_key: str | None = None
+    api_secret: str | None = None
+    permission_snapshot: list[str] = Field(default_factory=list)
+    readiness_snapshot: dict = Field(default_factory=dict)
+
+
+class UserExchangeConnectionPatchRequest(BaseModel):
+    account_label: str | None = None
+    exchange: str | None = None
+    market_type: str | None = None
+    environment: str | None = None
+    is_default: bool | None = None
+    api_key: str | None = None
+    api_secret: str | None = None
+    permission_snapshot: list[str] | None = None
+    readiness_snapshot: dict | None = None
+
+
+class UserExchangeConnectionResponse(BaseModel):
+    id: str
+    user_id: str
+    account_label: str
+    exchange: str
+    market_type: str
+    environment: str
+    is_default: bool
+    readiness_snapshot: dict
+    permission_snapshot: list[str]
+    has_api_key: bool
+    has_api_secret: bool
+    masked_api_key: str
+    credential_fingerprint: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class UserPortfolioMapRequest(BaseModel):
     market_type: str = "spot"
     leverage: int = Field(default=1, ge=1, le=20)
@@ -1596,6 +1638,10 @@ class ExecutionIntentPreviewRequest(BaseModel):
     price: float | None = None
     stop_price: float | None = None
     take_profit_price: float | None = None
+    exchange_connection_id: str | None = None
+    exchange: str | None = None
+    environment: str | None = None
+    account_label: str | None = None
 
 
 class ExecutionIntentPreviewResponse(BaseModel):
@@ -1624,6 +1670,7 @@ class ExecutionIntentPreviewResponse(BaseModel):
     allocation_adjustment_notice: str | None = None
     hedge_suggestion: dict = Field(default_factory=dict)
     risk_reduction_score: float | None = None
+    venue_context: dict = Field(default_factory=dict)
 
 
 class ExecutionIntentSubmitRequest(BaseModel):

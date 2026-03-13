@@ -13,6 +13,16 @@ const initialForm = {
   api_secret: "",
 };
 
+const initialConnectionForm = {
+  account_label: "",
+  exchange: "binance",
+  market_type: "spot",
+  environment: "testnet",
+  api_key: "",
+  api_secret: "",
+  is_default: false,
+};
+
 const fallbackVenue = {
   exchange: "binance",
   market_type: "futures",
@@ -47,6 +57,10 @@ export const UserExchangeSettingsPage = () => {
   const [venueOptions, setVenueOptions] = useState([]);
   const [selectedVenue, setSelectedVenue] = useState(fallbackVenue);
   const [venueAccess, setVenueAccess] = useState(null);
+  const [connectionProfiles, setConnectionProfiles] = useState([]);
+  const [connectionForm, setConnectionForm] = useState(initialConnectionForm);
+  const [editingConnectionId, setEditingConnectionId] = useState("");
+  const [isConnectionSaving, setIsConnectionSaving] = useState(false);
 
   const exchangeOptions = useMemo(() => {
     const list = [...new Set(venueOptions.map((item) => item.exchange))];
@@ -77,7 +91,7 @@ export const UserExchangeSettingsPage = () => {
 
   const loadAll = useCallback(async () => {
     try {
-      const [settingsRes, permissionRes, tickerRes, readinessRes, riskRes, overviewRes, venueOptionsRes] = await Promise.all([
+      const [settingsRes, permissionRes, tickerRes, readinessRes, riskRes, overviewRes, venueOptionsRes, connectionsRes] = await Promise.all([
         apiClient.get("/phase4/exchange-settings"),
         apiClient.get("/phase4/permission-status"),
         apiClient.get("/market/ticker?symbol=BTCUSDT"),
@@ -91,6 +105,7 @@ export const UserExchangeSettingsPage = () => {
         apiClient.get("/user-risk/settings"),
         apiClient.get("/user-risk/overview"),
         apiClient.get("/venues/options"),
+        apiClient.get("/user/exchange-connections"),
       ]);
       setSettings(settingsRes.data);
       setPermission(permissionRes.data);
@@ -100,6 +115,7 @@ export const UserExchangeSettingsPage = () => {
       setPortfolioOverview(overviewRes.data);
       const allowedVenueOptions = (venueOptionsRes.data || []).filter((item) => item.exchange !== "-");
       setVenueOptions(allowedVenueOptions);
+      setConnectionProfiles(connectionsRes.data || []);
       setSelectedVenue((prev) => {
         const previousStillAvailable = allowedVenueOptions.find(
           (item) => item.exchange === prev.exchange && item.market_type === prev.market_type && item.environment === prev.environment,
@@ -203,6 +219,87 @@ export const UserExchangeSettingsPage = () => {
 
   const onEnvironmentChange = (nextEnvironment) => {
     setSelectedVenue((prev) => ({ ...prev, environment: nextEnvironment }));
+  };
+
+  const resetConnectionEditor = () => {
+    setEditingConnectionId("");
+    setConnectionForm((prev) => ({
+      ...initialConnectionForm,
+      exchange: selectedVenue.exchange || "binance",
+      market_type: selectedVenue.market_type || "spot",
+      environment: selectedVenue.environment || "testnet",
+    }));
+  };
+
+  const startEditConnection = (connection) => {
+    setEditingConnectionId(connection.id);
+    setConnectionForm({
+      account_label: connection.account_label,
+      exchange: connection.exchange,
+      market_type: connection.market_type,
+      environment: connection.environment,
+      api_key: "",
+      api_secret: "",
+      is_default: connection.is_default,
+    });
+  };
+
+  const saveConnectionProfile = async () => {
+    if (!connectionForm.account_label.trim()) {
+      toast.error("account_label zorunlu");
+      return;
+    }
+
+    setIsConnectionSaving(true);
+    try {
+      const payload = {
+        account_label: connectionForm.account_label.trim(),
+        exchange: connectionForm.exchange,
+        market_type: connectionForm.market_type,
+        environment: connectionForm.environment,
+        is_default: Boolean(connectionForm.is_default),
+        api_key: connectionForm.api_key || undefined,
+        api_secret: connectionForm.api_secret || undefined,
+      };
+
+      if (editingConnectionId) {
+        await apiClient.put(`/user/exchange-connections/${editingConnectionId}`, payload);
+        toast.success("Connection profili güncellendi");
+      } else {
+        await apiClient.post("/user/exchange-connections", payload);
+        toast.success("Connection profili oluşturuldu");
+      }
+
+      resetConnectionEditor();
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Connection profili kaydedilemedi");
+    } finally {
+      setIsConnectionSaving(false);
+    }
+  };
+
+  const setProfileAsDefault = async (connectionId) => {
+    try {
+      await apiClient.post(`/user/exchange-connections/${connectionId}/set-default`);
+      toast.success("Varsayılan connection güncellendi");
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Varsayılan connection güncellenemedi");
+    }
+  };
+
+  const deleteConnectionProfile = async (connectionId) => {
+    try {
+      await apiClient.delete(`/user/exchange-connections/${connectionId}`);
+      toast.success("Connection profili silindi");
+      if (editingConnectionId === connectionId) {
+        resetConnectionEditor();
+      }
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Connection profili silinemedi");
+    }
   };
 
   const saveSettings = async (event) => {
@@ -371,6 +468,103 @@ export const UserExchangeSettingsPage = () => {
             <MetricCard label="Compounding" value={String(portfolioOverview?.compounding_enabled ?? false)} tone="orange" testId="user-overview-compounding" />
             <MetricCard label="Sonraki Baz" value={portfolioOverview?.next_base_capital ?? "-"} tone="blue" testId="user-overview-next-base" />
           </div>
+
+          <section className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-connection-profiles-panel">
+            <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-connection-profiles-header">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-connection-profiles-title">Connection Profiles</p>
+                <p className="text-xs text-slate-400" data-testid="user-connection-profiles-description">account_label + exchange + market_type + environment + default yönetimi.</p>
+              </div>
+              <Button variant="outline" onClick={resetConnectionEditor} data-testid="user-connection-profiles-reset-button">Yeni Profil</Button>
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-3" data-testid="user-connection-profiles-form-grid">
+              <Input
+                value={connectionForm.account_label}
+                onChange={(event) => setConnectionForm((prev) => ({ ...prev, account_label: event.target.value }))}
+                placeholder="account_label"
+                data-testid="user-connection-profile-account-label-input"
+              />
+              <select
+                className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                value={connectionForm.exchange}
+                onChange={(event) => setConnectionForm((prev) => ({ ...prev, exchange: event.target.value }))}
+                data-testid="user-connection-profile-exchange-select"
+              >
+                {exchangeOptions.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+              <select
+                className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                value={connectionForm.market_type}
+                onChange={(event) => setConnectionForm((prev) => ({ ...prev, market_type: event.target.value }))}
+                data-testid="user-connection-profile-market-type-select"
+              >
+                <option value="spot">spot</option>
+                <option value="futures">futures</option>
+              </select>
+              <select
+                className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                value={connectionForm.environment}
+                onChange={(event) => setConnectionForm((prev) => ({ ...prev, environment: event.target.value }))}
+                data-testid="user-connection-profile-environment-select"
+              >
+                <option value="testnet">testnet</option>
+                <option value="live">live</option>
+              </select>
+              <Input
+                value={connectionForm.api_key}
+                onChange={(event) => setConnectionForm((prev) => ({ ...prev, api_key: event.target.value }))}
+                placeholder="API Key (opsiyonel güncelleme)"
+                data-testid="user-connection-profile-api-key-input"
+              />
+              <Input
+                value={connectionForm.api_secret}
+                onChange={(event) => setConnectionForm((prev) => ({ ...prev, api_secret: event.target.value }))}
+                placeholder="API Secret (opsiyonel güncelleme)"
+                data-testid="user-connection-profile-api-secret-input"
+              />
+              <label className="md:col-span-3 flex items-center gap-2 text-sm text-slate-300" data-testid="user-connection-profile-default-toggle-wrapper">
+                <input
+                  type="checkbox"
+                  checked={Boolean(connectionForm.is_default)}
+                  onChange={(event) => setConnectionForm((prev) => ({ ...prev, is_default: event.target.checked }))}
+                  data-testid="user-connection-profile-default-toggle"
+                />
+                default connection
+              </label>
+              <Button
+                className="md:col-span-3 bg-orange-500 text-black hover:bg-orange-600"
+                onClick={saveConnectionProfile}
+                disabled={isConnectionSaving}
+                data-testid="user-connection-profile-save-button"
+              >
+                {isConnectionSaving ? "Kaydediliyor..." : editingConnectionId ? "Connection Güncelle" : "Connection Ekle"}
+              </Button>
+            </div>
+
+            <div className="space-y-2" data-testid="user-connection-profiles-list">
+              {connectionProfiles.map((connection) => (
+                <article key={connection.id} className="flex flex-wrap items-center justify-between gap-2 border border-slate-700 bg-slate-950 p-3" data-testid={`user-connection-profile-row-${connection.id}`}>
+                  <div data-testid={`user-connection-profile-info-${connection.id}`}>
+                    <p className="text-sm font-semibold text-slate-100" data-testid={`user-connection-profile-label-${connection.id}`}>{connection.account_label}{connection.is_default ? " (default)" : ""}</p>
+                    <p className="text-xs text-slate-400" data-testid={`user-connection-profile-meta-${connection.id}`}>{connection.exchange} / {connection.market_type} / {connection.environment}</p>
+                    <p className="text-xs text-slate-500" data-testid={`user-connection-profile-permissions-${connection.id}`}>permissions: {(connection.permission_snapshot || []).join(",") || "-"}</p>
+                    <p className="text-xs text-slate-500" data-testid={`user-connection-profile-readiness-${connection.id}`}>readiness: {connection.readiness_snapshot?.venue_state || "-"}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2" data-testid={`user-connection-profile-actions-${connection.id}`}>
+                    <Button size="sm" variant="outline" onClick={() => startEditConnection(connection)} data-testid={`user-connection-profile-edit-button-${connection.id}`}>Düzenle</Button>
+                    <Button size="sm" variant="outline" onClick={() => setProfileAsDefault(connection.id)} data-testid={`user-connection-profile-set-default-button-${connection.id}`}>Default Yap</Button>
+                    <Button size="sm" className="bg-rose-600 text-white hover:bg-rose-500" onClick={() => deleteConnectionProfile(connection.id)} data-testid={`user-connection-profile-delete-button-${connection.id}`}>Sil</Button>
+                  </div>
+                </article>
+              ))}
+              {connectionProfiles.length === 0 && (
+                <p className="text-sm text-slate-400" data-testid="user-connection-profiles-empty">Henüz connection profili yok.</p>
+              )}
+            </div>
+          </section>
         </div>
       )}
 

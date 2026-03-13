@@ -37,7 +37,6 @@ import { CorrelationMatrixPage } from "@/pages/CorrelationMatrixPage";
 import { ExecutionPoliciesPage } from "@/pages/ExecutionPoliciesPage";
 import { ExecutionStatesPage } from "@/pages/ExecutionStatesPage";
 import { ExposureGroupsPage } from "@/pages/ExposureGroupsPage";
-import { ExchangeMockPage } from "@/pages/ExchangeMockPage";
 import { FailedEventsPage } from "@/pages/FailedEventsPage";
 import { HardeningChecklistPage } from "@/pages/HardeningChecklistPage";
 import { LandingPage } from "@/pages/LandingPage";
@@ -174,7 +173,7 @@ function App() {
             <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />
             <Route path="positions" element={<UserPositionsPage />} />
             <Route path="paper-positions" element={<PaperPositionsPage />} />
-            <Route path="exchange-mock" element={<ExchangeMockPage />} />
+            <Route path="exchange-mock" element={<Navigate to="/user/dashboard" replace />} />
           </Route>
 
           <Route path="/app/*" element={<Navigate to="/" replace />} />
