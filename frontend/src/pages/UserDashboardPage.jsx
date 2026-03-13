@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 import { DecisionCard } from "@/pages/user/components/DecisionCard";
 import { ExplainabilityDrawer } from "@/pages/user/components/ExplainabilityDrawer";
+import { UserLearningImpactWidget } from "@/pages/user/components/UserLearningImpactWidget";
 
 const computeRiskPolicyHealth = (policy) => {
   if (!policy) {
@@ -60,6 +61,8 @@ export const UserDashboardPage = () => {
   const [isExplainabilityDrawerOpen, setIsExplainabilityDrawerOpen] = useState(false);
   const [symbolExplainability, setSymbolExplainability] = useState(null);
   const [isExplainabilityLoading, setIsExplainabilityLoading] = useState(false);
+  const [impactStrategyId, setImpactStrategyId] = useState("");
+  const [impactFamily, setImpactFamily] = useState("");
 
   const formatDateLabel = (value) => {
     if (!value) {
@@ -116,6 +119,12 @@ export const UserDashboardPage = () => {
       if (cards.length > 0) {
         const symbolToUse = selectedDecisionSymbol || cards[0].symbol;
         setSelectedDecisionSymbol(symbolToUse);
+        if (!impactStrategyId) {
+          setImpactStrategyId(cards[0]?.top_contributors?.[0]?.strategy_id || "");
+        }
+        if (!impactFamily) {
+          setImpactFamily(cards[0]?.dominant_family || "");
+        }
         await loadSymbolExplainability(symbolToUse);
       } else {
         setSelectedDecisionSymbol("");
@@ -147,6 +156,11 @@ export const UserDashboardPage = () => {
 
   const openSymbolDetail = (symbol) => {
     navigate(`/user/symbol/${encodeURIComponent(symbol)}`);
+  };
+
+  const openImpactSimulatorFromCard = (card) => {
+    setImpactStrategyId(card?.top_contributors?.[0]?.strategy_id || "");
+    setImpactFamily(card?.dominant_family || "");
   };
 
   const activeBotCount = useMemo(
@@ -326,8 +340,22 @@ export const UserDashboardPage = () => {
               card={card}
               onOpenExplainability={onSelectDecisionCard}
               onOpenSymbolDetail={openSymbolDetail}
+              onOpenImpactSimulator={openImpactSimulatorFromCard}
             />
           ))}
+        </div>
+      </section>
+
+      <section className="col-span-12 lg:col-span-4 rounded border border-indigo-800/50 bg-indigo-950/20 p-4" data-testid="user-dashboard-learning-impact-corner">
+        <p className="text-xs uppercase tracking-widest text-indigo-300" data-testid="user-dashboard-learning-impact-corner-title">Strategic Corner · Impact Simulator</p>
+        <div className="mt-2" data-testid="user-dashboard-learning-impact-corner-body">
+          <UserLearningImpactWidget
+            symbol={selectedDecisionSymbol || ""}
+            defaultStrategyId={impactStrategyId}
+            defaultFamily={impactFamily}
+            compact
+            testIdPrefix="user-dashboard-learning-impact"
+          />
         </div>
       </section>
 

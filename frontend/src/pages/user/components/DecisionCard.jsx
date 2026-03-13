@@ -8,7 +8,7 @@ const decisionBadgeClass = {
   NO_TRADE: "border-slate-500/60 bg-slate-500/20 text-slate-200",
 };
 
-export const DecisionCard = ({ card, onOpenExplainability, onOpenSymbolDetail }) => {
+export const DecisionCard = ({ card, onOpenExplainability, onOpenSymbolDetail, onOpenImpactSimulator }) => {
   const decision = String(card?.decision || "NO_TRADE").toUpperCase();
   const badgeClass = decisionBadgeClass[decision] || decisionBadgeClass.NO_TRADE;
   const topContributors = Array.isArray(card?.top_contributors) ? card.top_contributors.slice(0, 2) : [];
@@ -79,6 +79,17 @@ export const DecisionCard = ({ card, onOpenExplainability, onOpenSymbolDetail })
             data-testid={`user-decision-card-open-symbol-detail-button-${card.symbol}`}
           >
             Symbol Detail
+          </Button>
+        )}
+        {typeof onOpenImpactSimulator === "function" && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onOpenImpactSimulator(card)}
+            data-testid={`user-decision-card-open-impact-simulator-button-${card.symbol}`}
+          >
+            Impact Simulate
           </Button>
         )}
       </div>

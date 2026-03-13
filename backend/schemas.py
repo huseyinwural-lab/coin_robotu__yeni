@@ -2130,6 +2130,36 @@ class LearningImpactSimulationResponse(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
 
 
+class UserLearningImpactSimulationRequest(BaseModel):
+    symbol: str | None = None
+    strategy_id: str | None = None
+    family: str | None = None
+    recommendation_type: str = "decrease_weight_recommendation"
+    suggested_weight_multiplier: float | None = Field(default=None, ge=0.1, le=3.0)
+
+
+class UserLearningSuggestionCreateRequest(BaseModel):
+    symbol: str | None = None
+    strategy_id: str | None = None
+    family: str | None = None
+    recommendation_type: str
+    simulation_payload: dict = Field(default_factory=dict)
+    note: str = ""
+
+
+class UserLearningSuggestionResponse(BaseModel):
+    id: str
+    user_id: str
+    symbol: str | None = None
+    strategy_id: str | None = None
+    family: str | None = None
+    recommendation_type: str
+    simulation_payload: dict = Field(default_factory=dict)
+    note: str = ""
+    status: str
+    created_at: datetime
+
+
 class PortfolioRiskLimitsResponse(BaseModel):
     max_portfolio_leverage: float
     max_symbol_exposure: float

@@ -62,6 +62,7 @@ from routers import (
     user_reports,
     user_scanner_signals,
     user_scanner_symbol_selection,
+    user_learning_simulator,
     user_indicator_screener,
     user_risk,
     strategy_templates,
@@ -106,6 +107,7 @@ api_router.include_router(user_risk.router)
 api_router.include_router(user_platform.router)
 api_router.include_router(user_scanner_signals.router)
 api_router.include_router(user_scanner_symbol_selection.router)
+api_router.include_router(user_learning_simulator.router)
 api_router.include_router(user_indicator_screener.router)
 api_router.include_router(user_execution.router)
 api_router.include_router(user_trading.router)

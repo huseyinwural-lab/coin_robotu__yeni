@@ -7,6 +7,7 @@ from db import get_db
 from deps import require_admin
 from models import CanonicalStrategyRegistry, LearningRecommendation, User
 from schemas import LearningImpactSimulationRequest, LearningImpactSimulationResponse
+from schemas import UserLearningSuggestionResponse
 from services.audit_service import create_audit_log
 from services.learning_memory_service import (
     get_learning_overview,
@@ -15,6 +16,7 @@ from services.learning_memory_service import (
     simulate_learning_recommendation_impact,
     simulate_recommendation_row_impact,
 )
+from services.user_learning_simulator_service import list_admin_learning_suggestions
 
 
 router = APIRouter(prefix="/admin/learning", tags=["admin_learning"])
@@ -156,3 +158,28 @@ def admin_simulate_learning_impact(
         recommendation_type=payload.recommendation_type,
         suggested_weight_multiplier=payload.suggested_weight_multiplier,
     )
+
+
+@router.get("/user-suggestions", response_model=list[UserLearningSuggestionResponse])
+def admin_list_user_learning_suggestions(
+    limit: int = Query(default=120, ge=1, le=500),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows = list_admin_learning_suggestions(db, limit=limit)
+    return [
+        UserLearningSuggestionResponse(
+            id=row.id,
+            user_id=row.user_id,
+            symbol=row.symbol,
+            strategy_id=row.strategy_id,
+            family=row.family,
+            recommendation_type=row.recommendation_type,
+            simulation_payload=row.simulation_payload or {},
+            note=row.note,
+            status=row.status,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]

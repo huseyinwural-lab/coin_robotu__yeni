@@ -1301,6 +1301,23 @@ class UserScannerSymbolSelection(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class UserLearningSimulationSuggestion(Base):
+    __tablename__ = "user_learning_simulation_suggestions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    symbol: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    strategy_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    family: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    recommendation_type: Mapped[str] = mapped_column(String(40), default="decrease_weight_recommendation", index=True)
+    simulation_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    note: Mapped[str] = mapped_column(String(280), default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+
+
 @event.listens_for(ExecutionMetric, "before_update", propagate=True)
 def _block_execution_metric_update(_, __, ___):
     raise ValueError("execution_metric_immutable")
