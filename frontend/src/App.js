@@ -166,8 +166,10 @@ function App() {
             <Route path="signals" element={<UserSignalsPage />} />
             <Route path="reports" element={<UserReportsPage />} />
             <Route path="execute" element={<UserExecutePage />} />
-            <Route path="bots" element={<BotProfilesPage />} />
-            <Route path="risk-policies" element={<RiskPoliciesPage />} />
+            <Route path="bot-profiles" element={<BotProfilesPage />} />
+            <Route path="bots" element={<Navigate to="/user/bot-profiles" replace />} />
+            <Route path="risk-policy" element={<RiskPoliciesPage />} />
+            <Route path="risk-policies" element={<Navigate to="/user/risk-policy" replace />} />
             <Route path="strategies" element={<StrategyTemplatesPage />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
             <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />

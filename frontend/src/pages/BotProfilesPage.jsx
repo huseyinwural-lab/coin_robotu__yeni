@@ -12,9 +12,9 @@ const initialForm = {
   market_type: "spot",
   symbols: "BTCUSDT,ETHUSDT",
   strategy_type: "trend_following",
+  max_concurrent_trades: 3,
   timeframe: "15m",
   trend_timeframe: "1h",
-  leverage: 3,
   is_enabled: true,
 };
 
@@ -22,6 +22,7 @@ export const BotProfilesPage = () => {
   const [items, setItems] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(initialForm);
+  const [formErrors, setFormErrors] = useState({});
 
   const fetchItems = async () => {
     const { data } = await apiClient.get("/bot-profiles");
@@ -34,10 +35,39 @@ export const BotProfilesPage = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    const parsedSymbols = form.symbols
+      .split(",")
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean);
+    const nextErrors = {};
+
+    if (!form.name.trim()) {
+      nextErrors.name = "Bot Name zorunludur.";
+    }
+    if (parsedSymbols.length === 0) {
+      nextErrors.symbols = "En az bir sembol girin.";
+    }
+    if (!Number(form.max_concurrent_trades) || Number(form.max_concurrent_trades) < 1) {
+      nextErrors.max_concurrent_trades = "Max Concurrent Trades en az 1 olmalı.";
+    }
+
+    setFormErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error("Form alanlarını kontrol edin");
+      return;
+    }
+
     const payload = {
-      ...form,
-      symbols: form.symbols.split(",").map((value) => value.trim()).filter(Boolean),
-      leverage: Number(form.leverage),
+      name: form.name.trim(),
+      exchange: form.exchange,
+      market_type: form.market_type,
+      symbols: parsedSymbols,
+      strategy_type: form.strategy_type,
+      timeframe: form.timeframe,
+      trend_timeframe: form.trend_timeframe,
+      leverage: Number(form.max_concurrent_trades),
+      is_enabled: Boolean(form.is_enabled),
     };
 
     try {
@@ -50,6 +80,7 @@ export const BotProfilesPage = () => {
       }
       setEditingId(null);
       setForm(initialForm);
+      setFormErrors({});
       fetchItems();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Bot profili işlemi başarısız");
@@ -58,7 +89,12 @@ export const BotProfilesPage = () => {
 
   const onEdit = (item) => {
     setEditingId(item.id);
-    setForm({ ...item, symbols: item.symbols.join(",") });
+    setForm({
+      ...item,
+      symbols: item.symbols.join(","),
+      max_concurrent_trades: item.leverage,
+    });
+    setFormErrors({});
   };
 
   const toggleRunning = async (item) => {
@@ -80,12 +116,107 @@ export const BotProfilesPage = () => {
       </header>
 
       <form onSubmit={handleSubmit} className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="bot-profile-form">
-        <Input placeholder="Bot adı" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} data-testid="bot-form-name-input" required />
-        <Input placeholder="Exchange" value={form.exchange} onChange={(event) => setForm((prev) => ({ ...prev, exchange: event.target.value }))} data-testid="bot-form-exchange-input" required />
-        <Input placeholder="Market type" value={form.market_type} onChange={(event) => setForm((prev) => ({ ...prev, market_type: event.target.value }))} data-testid="bot-form-market-type-input" required />
-        <Input placeholder="Symbols (CSV)" value={form.symbols} onChange={(event) => setForm((prev) => ({ ...prev, symbols: event.target.value }))} data-testid="bot-form-symbols-input" required />
-        <Input placeholder="Strategy type" value={form.strategy_type} onChange={(event) => setForm((prev) => ({ ...prev, strategy_type: event.target.value }))} data-testid="bot-form-strategy-type-input" required />
-        <Input placeholder="Leverage" type="number" min={1} max={25} value={form.leverage} onChange={(event) => setForm((prev) => ({ ...prev, leverage: event.target.value }))} data-testid="bot-form-leverage-input" required />
+        <div className="form-group" data-testid="bot-form-group-name">
+          <label className="form-label" htmlFor="bot-form-name-input" data-testid="bot-form-name-label">Bot Name</label>
+          <Input
+            id="bot-form-name-input"
+            value={form.name}
+            onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+            data-testid="bot-form-name-input"
+            aria-label="Bot Name"
+            aria-describedby="bot-form-name-helper bot-form-name-error"
+            required
+          />
+          <p className="form-helper-text" id="bot-form-name-helper" data-testid="bot-form-name-helper">Botu ayırt etmek için benzersiz bir ad girin.</p>
+          {formErrors.name && <p className="form-error-text" id="bot-form-name-error" data-testid="bot-form-name-error">{formErrors.name}</p>}
+        </div>
+
+        <div className="form-group" data-testid="bot-form-group-exchange">
+          <label className="form-label" htmlFor="bot-form-exchange-select" data-testid="bot-form-exchange-label">Exchange</label>
+          <select
+            id="bot-form-exchange-select"
+            value={form.exchange}
+            onChange={(event) => setForm((prev) => ({ ...prev, exchange: event.target.value }))}
+            className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            data-testid="bot-form-exchange-select"
+            aria-label="Exchange"
+            aria-describedby="bot-form-exchange-helper"
+            required
+          >
+            <option value="binance">binance</option>
+          </select>
+          <p className="form-helper-text" id="bot-form-exchange-helper" data-testid="bot-form-exchange-helper">Botun işlem yapacağı borsayı seçin.</p>
+        </div>
+
+        <div className="form-group" data-testid="bot-form-group-market-type">
+          <label className="form-label" htmlFor="bot-form-market-type-select" data-testid="bot-form-market-type-label">Market Type</label>
+          <select
+            id="bot-form-market-type-select"
+            value={form.market_type}
+            onChange={(event) => setForm((prev) => ({ ...prev, market_type: event.target.value }))}
+            className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            data-testid="bot-form-market-type-select"
+            aria-label="Market Type"
+            aria-describedby="bot-form-market-type-helper"
+            required
+          >
+            <option value="spot">spot</option>
+            <option value="futures">futures</option>
+          </select>
+          <p className="form-helper-text" id="bot-form-market-type-helper" data-testid="bot-form-market-type-helper">Spot veya futures işlem tipini belirleyin.</p>
+        </div>
+
+        <div className="form-group" data-testid="bot-form-group-symbols">
+          <label className="form-label" htmlFor="bot-form-symbols-input" data-testid="bot-form-symbols-label">Symbols</label>
+          <Input
+            id="bot-form-symbols-input"
+            value={form.symbols}
+            onChange={(event) => setForm((prev) => ({ ...prev, symbols: event.target.value }))}
+            data-testid="bot-form-symbols-input"
+            aria-label="Symbols"
+            aria-describedby="bot-form-symbols-helper bot-form-symbols-error"
+            required
+          />
+          <p className="form-helper-text" id="bot-form-symbols-helper" data-testid="bot-form-symbols-helper">Virgülle ayırarak sembol girin. Örn: BTCUSDT,ETHUSDT</p>
+          {formErrors.symbols && <p className="form-error-text" id="bot-form-symbols-error" data-testid="bot-form-symbols-error">{formErrors.symbols}</p>}
+        </div>
+
+        <div className="form-group" data-testid="bot-form-group-strategy">
+          <label className="form-label" htmlFor="bot-form-strategy-select" data-testid="bot-form-strategy-label">Strategy</label>
+          <select
+            id="bot-form-strategy-select"
+            value={form.strategy_type}
+            onChange={(event) => setForm((prev) => ({ ...prev, strategy_type: event.target.value }))}
+            className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            data-testid="bot-form-strategy-select"
+            aria-label="Strategy"
+            aria-describedby="bot-form-strategy-helper"
+            required
+          >
+            <option value="trend_following">trend_following</option>
+            <option value="mean_reversion">mean_reversion</option>
+            <option value="volatility_breakout">volatility_breakout</option>
+          </select>
+          <p className="form-helper-text" id="bot-form-strategy-helper" data-testid="bot-form-strategy-helper">Botun sinyal üretim metodunu seçin.</p>
+        </div>
+
+        <div className="form-group" data-testid="bot-form-group-max-concurrent-trades">
+          <label className="form-label" htmlFor="bot-form-max-concurrent-trades-input" data-testid="bot-form-max-concurrent-trades-label">Max Concurrent Trades</label>
+          <Input
+            id="bot-form-max-concurrent-trades-input"
+            type="number"
+            min={1}
+            max={25}
+            value={form.max_concurrent_trades}
+            onChange={(event) => setForm((prev) => ({ ...prev, max_concurrent_trades: event.target.value }))}
+            data-testid="bot-form-max-concurrent-trades-input"
+            aria-label="Max Concurrent Trades"
+            aria-describedby="bot-form-max-concurrent-trades-helper bot-form-max-concurrent-trades-error"
+            required
+          />
+          <p className="form-helper-text" id="bot-form-max-concurrent-trades-helper" data-testid="bot-form-max-concurrent-trades-helper">Aynı anda açılabilecek maksimum işlem sayısını belirleyin.</p>
+          {formErrors.max_concurrent_trades && <p className="form-error-text" id="bot-form-max-concurrent-trades-error" data-testid="bot-form-max-concurrent-trades-error">{formErrors.max_concurrent_trades}</p>}
+        </div>
 
         <div className="flex gap-2 md:col-span-2">
           <Button className="bg-orange-500 text-black hover:bg-orange-600" type="submit" data-testid="bot-form-submit-button">
@@ -99,6 +230,7 @@ export const BotProfilesPage = () => {
               onClick={() => {
                 setEditingId(null);
                 setForm(initialForm);
+                setFormErrors({});
               }}
               data-testid="bot-form-cancel-edit-button"
             >

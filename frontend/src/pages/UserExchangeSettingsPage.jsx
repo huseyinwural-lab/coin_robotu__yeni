@@ -33,6 +33,9 @@ const initialFuturesContext = {
   leverage: 3,
   margin_mode: "cross",
   position_side: "BOTH",
+  risk_per_trade_pct: 20,
+  max_daily_trades: 10,
+  atr_stop_multiplier: 3,
 };
 
 export const UserExchangeSettingsPage = () => {
@@ -61,6 +64,8 @@ export const UserExchangeSettingsPage = () => {
   const [connectionForm, setConnectionForm] = useState(initialConnectionForm);
   const [editingConnectionId, setEditingConnectionId] = useState("");
   const [isConnectionSaving, setIsConnectionSaving] = useState(false);
+  const [connectionErrors, setConnectionErrors] = useState({});
+  const [riskFormErrors, setRiskFormErrors] = useState({});
 
   const exchangeOptions = useMemo(() => {
     const list = [...new Set(venueOptions.map((item) => item.exchange))];
@@ -177,6 +182,9 @@ export const UserExchangeSettingsPage = () => {
             leverage: futuresContext.leverage,
             margin_mode: futuresContext.margin_mode,
             position_side: futuresContext.position_side,
+            risk_per_trade_pct: futuresContext.risk_per_trade_pct,
+            max_daily_trades: futuresContext.max_daily_trades,
+            atr_stop_multiplier: futuresContext.atr_stop_multiplier,
           },
         });
         setRiskPreview(data);
@@ -185,7 +193,15 @@ export const UserExchangeSettingsPage = () => {
       }
     };
     fetchPreview();
-  }, [futuresContext.leverage, futuresContext.margin_mode, futuresContext.position_side, selectedVenue.market_type]);
+  }, [
+    futuresContext.atr_stop_multiplier,
+    futuresContext.leverage,
+    futuresContext.margin_mode,
+    futuresContext.max_daily_trades,
+    futuresContext.position_side,
+    futuresContext.risk_per_trade_pct,
+    selectedVenue.market_type,
+  ]);
 
   const onExchangeChange = (nextExchange) => {
     const markets = [
@@ -223,6 +239,7 @@ export const UserExchangeSettingsPage = () => {
 
   const resetConnectionEditor = () => {
     setEditingConnectionId("");
+    setConnectionErrors({});
     setConnectionForm((prev) => ({
       ...initialConnectionForm,
       exchange: selectedVenue.exchange || "binance",
@@ -233,6 +250,7 @@ export const UserExchangeSettingsPage = () => {
 
   const startEditConnection = (connection) => {
     setEditingConnectionId(connection.id);
+    setConnectionErrors({});
     setConnectionForm({
       account_label: connection.account_label,
       exchange: connection.exchange,
@@ -245,8 +263,20 @@ export const UserExchangeSettingsPage = () => {
   };
 
   const saveConnectionProfile = async () => {
+    const nextErrors = {};
     if (!connectionForm.account_label.trim()) {
-      toast.error("account_label zorunlu");
+      nextErrors.account_label = "Account label zorunlu";
+    }
+    if (connectionForm.api_key && !connectionForm.api_secret) {
+      nextErrors.api_secret = "API Key girildiğinde API Secret da girilmeli";
+    }
+    if (connectionForm.api_secret && !connectionForm.api_key) {
+      nextErrors.api_key = "API Secret girildiğinde API Key de girilmeli";
+    }
+
+    setConnectionErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error("Connection form alanlarını kontrol edin");
       return;
     }
 
@@ -271,6 +301,7 @@ export const UserExchangeSettingsPage = () => {
       }
 
       resetConnectionEditor();
+      setConnectionErrors({});
       await loadAll();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Connection profili kaydedilemedi");
@@ -326,6 +357,23 @@ export const UserExchangeSettingsPage = () => {
     if (!riskSettings) {
       return;
     }
+
+    const nextErrors = {};
+    if (!Number(riskSettings.allocation_pct) || Number(riskSettings.allocation_pct) <= 0) {
+      nextErrors.allocation_pct = "Allocation % 0'dan büyük olmalı";
+    }
+    if (!Number(riskSettings.trade_risk_pct) || Number(riskSettings.trade_risk_pct) <= 0) {
+      nextErrors.trade_risk_pct = "Risk % Per Trade 0'dan büyük olmalı";
+    }
+    if (!Number(riskSettings.daily_loss_limit_pct) || Number(riskSettings.daily_loss_limit_pct) <= 0) {
+      nextErrors.daily_loss_limit_pct = "Max Daily Loss % 0'dan büyük olmalı";
+    }
+    setRiskFormErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      toast.error("Risk form alanlarını kontrol edin");
+      return;
+    }
+
     try {
       const { data } = await apiClient.put("/user-risk/settings", {
         allocation_pct: Number(riskSettings.allocation_pct),
@@ -334,6 +382,7 @@ export const UserExchangeSettingsPage = () => {
         compounding_enabled: Boolean(riskSettings.compounding_enabled),
       });
       setRiskSettings(data);
+      setRiskFormErrors({});
       toast.success("Risk ayarları kaydedildi");
       await loadAll();
     } catch (error) {
@@ -479,52 +528,94 @@ export const UserExchangeSettingsPage = () => {
             </div>
 
             <div className="grid gap-2 md:grid-cols-3" data-testid="user-connection-profiles-form-grid">
-              <Input
-                value={connectionForm.account_label}
-                onChange={(event) => setConnectionForm((prev) => ({ ...prev, account_label: event.target.value }))}
-                placeholder="account_label"
-                data-testid="user-connection-profile-account-label-input"
-              />
-              <select
-                className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                value={connectionForm.exchange}
-                onChange={(event) => setConnectionForm((prev) => ({ ...prev, exchange: event.target.value }))}
-                data-testid="user-connection-profile-exchange-select"
-              >
-                {exchangeOptions.map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-              <select
-                className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                value={connectionForm.market_type}
-                onChange={(event) => setConnectionForm((prev) => ({ ...prev, market_type: event.target.value }))}
-                data-testid="user-connection-profile-market-type-select"
-              >
-                <option value="spot">spot</option>
-                <option value="futures">futures</option>
-              </select>
-              <select
-                className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                value={connectionForm.environment}
-                onChange={(event) => setConnectionForm((prev) => ({ ...prev, environment: event.target.value }))}
-                data-testid="user-connection-profile-environment-select"
-              >
-                <option value="testnet">testnet</option>
-                <option value="live">live</option>
-              </select>
-              <Input
-                value={connectionForm.api_key}
-                onChange={(event) => setConnectionForm((prev) => ({ ...prev, api_key: event.target.value }))}
-                placeholder="API Key (opsiyonel güncelleme)"
-                data-testid="user-connection-profile-api-key-input"
-              />
-              <Input
-                value={connectionForm.api_secret}
-                onChange={(event) => setConnectionForm((prev) => ({ ...prev, api_secret: event.target.value }))}
-                placeholder="API Secret (opsiyonel güncelleme)"
-                data-testid="user-connection-profile-api-secret-input"
-              />
+              <div className="form-group" data-testid="user-connection-profile-account-label-group">
+                <label className="form-label" htmlFor="user-connection-profile-account-label-input" data-testid="user-connection-profile-account-label-label">Account Label</label>
+                <Input
+                  id="user-connection-profile-account-label-input"
+                  value={connectionForm.account_label}
+                  onChange={(event) => setConnectionForm((prev) => ({ ...prev, account_label: event.target.value }))}
+                  data-testid="user-connection-profile-account-label-input"
+                  aria-label="Account Label"
+                  aria-describedby="user-connection-profile-account-label-helper user-connection-profile-account-label-error"
+                />
+                <p className="form-helper-text" id="user-connection-profile-account-label-helper" data-testid="user-connection-profile-account-label-helper">Bağlantıyı ayırt eden kısa ad. Örn: main-futures-testnet</p>
+                {connectionErrors.account_label && <p className="form-error-text" id="user-connection-profile-account-label-error" data-testid="user-connection-profile-account-label-error">{connectionErrors.account_label}</p>}
+              </div>
+              <div className="form-group" data-testid="user-connection-profile-exchange-group">
+                <label className="form-label" htmlFor="user-connection-profile-exchange-select" data-testid="user-connection-profile-exchange-label">Exchange</label>
+                <select
+                  id="user-connection-profile-exchange-select"
+                  className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  value={connectionForm.exchange}
+                  onChange={(event) => setConnectionForm((prev) => ({ ...prev, exchange: event.target.value }))}
+                  data-testid="user-connection-profile-exchange-select"
+                  aria-label="Exchange"
+                  aria-describedby="user-connection-profile-exchange-helper"
+                >
+                  {exchangeOptions.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+                <p className="form-helper-text" id="user-connection-profile-exchange-helper" data-testid="user-connection-profile-exchange-helper">Bağlantının kullanılacağı borsa.</p>
+              </div>
+              <div className="form-group" data-testid="user-connection-profile-market-type-group">
+                <label className="form-label" htmlFor="user-connection-profile-market-type-select" data-testid="user-connection-profile-market-type-label">Market Type</label>
+                <select
+                  id="user-connection-profile-market-type-select"
+                  className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  value={connectionForm.market_type}
+                  onChange={(event) => setConnectionForm((prev) => ({ ...prev, market_type: event.target.value }))}
+                  data-testid="user-connection-profile-market-type-select"
+                  aria-label="Market Type"
+                  aria-describedby="user-connection-profile-market-type-helper"
+                >
+                  <option value="spot">spot</option>
+                  <option value="futures">futures</option>
+                </select>
+                <p className="form-helper-text" id="user-connection-profile-market-type-helper" data-testid="user-connection-profile-market-type-helper">Spot veya futures kanalını seçin.</p>
+              </div>
+              <div className="form-group" data-testid="user-connection-profile-environment-group">
+                <label className="form-label" htmlFor="user-connection-profile-environment-select" data-testid="user-connection-profile-environment-label">Environment</label>
+                <select
+                  id="user-connection-profile-environment-select"
+                  className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  value={connectionForm.environment}
+                  onChange={(event) => setConnectionForm((prev) => ({ ...prev, environment: event.target.value }))}
+                  data-testid="user-connection-profile-environment-select"
+                  aria-label="Environment"
+                  aria-describedby="user-connection-profile-environment-helper"
+                >
+                  <option value="testnet">testnet</option>
+                  <option value="live">live</option>
+                </select>
+                <p className="form-helper-text" id="user-connection-profile-environment-helper" data-testid="user-connection-profile-environment-helper">Canlı veya test ortamı.</p>
+              </div>
+              <div className="form-group" data-testid="user-connection-profile-api-key-group">
+                <label className="form-label" htmlFor="user-connection-profile-api-key-input" data-testid="user-connection-profile-api-key-label">API Key</label>
+                <Input
+                  id="user-connection-profile-api-key-input"
+                  value={connectionForm.api_key}
+                  onChange={(event) => setConnectionForm((prev) => ({ ...prev, api_key: event.target.value }))}
+                  data-testid="user-connection-profile-api-key-input"
+                  aria-label="API Key"
+                  aria-describedby="user-connection-profile-api-key-helper user-connection-profile-api-key-error"
+                />
+                <p className="form-helper-text" id="user-connection-profile-api-key-helper" data-testid="user-connection-profile-api-key-helper">Opsiyonel güncelleme: mevcut key'i değiştirmek için doldurun.</p>
+                {connectionErrors.api_key && <p className="form-error-text" id="user-connection-profile-api-key-error" data-testid="user-connection-profile-api-key-error">{connectionErrors.api_key}</p>}
+              </div>
+              <div className="form-group" data-testid="user-connection-profile-api-secret-group">
+                <label className="form-label" htmlFor="user-connection-profile-api-secret-input" data-testid="user-connection-profile-api-secret-label">API Secret</label>
+                <Input
+                  id="user-connection-profile-api-secret-input"
+                  value={connectionForm.api_secret}
+                  onChange={(event) => setConnectionForm((prev) => ({ ...prev, api_secret: event.target.value }))}
+                  data-testid="user-connection-profile-api-secret-input"
+                  aria-label="API Secret"
+                  aria-describedby="user-connection-profile-api-secret-helper user-connection-profile-api-secret-error"
+                />
+                <p className="form-helper-text" id="user-connection-profile-api-secret-helper" data-testid="user-connection-profile-api-secret-helper">Opsiyonel güncelleme: key ile birlikte girin.</p>
+                {connectionErrors.api_secret && <p className="form-error-text" id="user-connection-profile-api-secret-error" data-testid="user-connection-profile-api-secret-error">{connectionErrors.api_secret}</p>}
+              </div>
               <label className="md:col-span-3 flex items-center gap-2 text-sm text-slate-300" data-testid="user-connection-profile-default-toggle-wrapper">
                 <input
                   type="checkbox"
@@ -571,21 +662,33 @@ export const UserExchangeSettingsPage = () => {
       {activeTab === "risk" && (
         <div className="space-y-4" data-testid="user-risk-settings-tab-content">
           <div className="grid gap-2 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-risk-venue-selection-grid">
-            <select value={selectedVenue.exchange} onChange={(event) => onExchangeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-risk-venue-exchange-select">
-              {exchangeOptions.map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-            <select value={selectedVenue.market_type} onChange={(event) => onMarketTypeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-risk-venue-market-type-select">
-              {marketTypeOptions.map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-            <select value={selectedVenue.environment} onChange={(event) => onEnvironmentChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-risk-venue-environment-select">
-              {environmentOptions.map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
+            <div className="form-group" data-testid="user-risk-venue-exchange-group">
+              <label className="form-label" htmlFor="user-risk-venue-exchange-select" data-testid="user-risk-venue-exchange-label">Exchange</label>
+              <select id="user-risk-venue-exchange-select" value={selectedVenue.exchange} onChange={(event) => onExchangeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-risk-venue-exchange-select" aria-label="Exchange" aria-describedby="user-risk-venue-exchange-helper">
+                {exchangeOptions.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+              <p className="form-helper-text" id="user-risk-venue-exchange-helper" data-testid="user-risk-venue-exchange-helper">Risk hesaplamasının yapılacağı borsa.</p>
+            </div>
+            <div className="form-group" data-testid="user-risk-venue-market-type-group">
+              <label className="form-label" htmlFor="user-risk-venue-market-type-select" data-testid="user-risk-venue-market-type-label">Market Type</label>
+              <select id="user-risk-venue-market-type-select" value={selectedVenue.market_type} onChange={(event) => onMarketTypeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-risk-venue-market-type-select" aria-label="Market Type" aria-describedby="user-risk-venue-market-type-helper">
+                {marketTypeOptions.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+              <p className="form-helper-text" id="user-risk-venue-market-type-helper" data-testid="user-risk-venue-market-type-helper">Spot veya futures risk modunu seçin.</p>
+            </div>
+            <div className="form-group" data-testid="user-risk-venue-environment-group">
+              <label className="form-label" htmlFor="user-risk-venue-environment-select" data-testid="user-risk-venue-environment-label">Environment</label>
+              <select id="user-risk-venue-environment-select" value={selectedVenue.environment} onChange={(event) => onEnvironmentChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-risk-venue-environment-select" aria-label="Environment" aria-describedby="user-risk-venue-environment-helper">
+                {environmentOptions.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+              <p className="form-helper-text" id="user-risk-venue-environment-helper" data-testid="user-risk-venue-environment-helper">Testnet veya live ortamı.</p>
+            </div>
             <p className="md:col-span-3 text-xs text-slate-400" data-testid="user-risk-selected-venue-summary">Seçili venue: {selectedVenue.exchange} / {selectedVenue.market_type} / {selectedVenue.environment}</p>
             {venueOptions.length === 0 && (
               <p className="md:col-span-3 text-xs text-yellow-300" data-testid="user-risk-no-assignment-warning">Henüz venue assignment yok. Admin panelden kullanıcıya venue atanmalı.</p>
@@ -599,35 +702,100 @@ export const UserExchangeSettingsPage = () => {
 
             {selectedVenue.market_type === "futures" && (
               <>
-                <Input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={futuresContext.leverage}
-                  onChange={(event) => setFuturesContext((prev) => ({ ...prev, leverage: Number(event.target.value) || 1 }))}
-                  data-testid="user-futures-leverage-input"
-                  placeholder="Leverage"
-                />
-                <select
-                  value={futuresContext.margin_mode}
-                  onChange={(event) => setFuturesContext((prev) => ({ ...prev, margin_mode: event.target.value }))}
-                  className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                  data-testid="user-futures-margin-mode-select"
-                >
-                  <option value="cross">cross</option>
-                  <option value="isolated">isolated</option>
-                </select>
-                <select
-                  value={futuresContext.position_side}
-                  onChange={(event) => setFuturesContext((prev) => ({ ...prev, position_side: event.target.value }))}
-                  className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                  data-testid="user-futures-position-side-select"
-                >
-                  <option value="BOTH">BOTH</option>
-                  <option value="LONG">LONG</option>
-                  <option value="SHORT">SHORT</option>
-                </select>
-                <p className="text-sm text-yellow-300" data-testid="user-futures-liquidation-risk-text">
+                <div className="form-group" data-testid="user-futures-leverage-group">
+                  <label className="form-label" htmlFor="user-futures-leverage-input" data-testid="user-futures-leverage-label">Leverage</label>
+                  <Input
+                    id="user-futures-leverage-input"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={futuresContext.leverage}
+                    onChange={(event) => setFuturesContext((prev) => ({ ...prev, leverage: Number(event.target.value) || 1 }))}
+                    data-testid="user-futures-leverage-input"
+                    aria-label="Leverage"
+                    aria-describedby="user-futures-leverage-helper"
+                  />
+                  <p className="form-helper-text" id="user-futures-leverage-helper" data-testid="user-futures-leverage-helper">Futures işlem çarpanı.</p>
+                </div>
+                <div className="form-group" data-testid="user-futures-margin-mode-group">
+                  <label className="form-label" htmlFor="user-futures-margin-mode-select" data-testid="user-futures-margin-mode-label">Margin Mode</label>
+                  <select
+                    id="user-futures-margin-mode-select"
+                    value={futuresContext.margin_mode}
+                    onChange={(event) => setFuturesContext((prev) => ({ ...prev, margin_mode: event.target.value }))}
+                    className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    data-testid="user-futures-margin-mode-select"
+                    aria-label="Margin Mode"
+                    aria-describedby="user-futures-margin-mode-helper"
+                  >
+                    <option value="cross">cross</option>
+                    <option value="isolated">isolated</option>
+                  </select>
+                  <p className="form-helper-text" id="user-futures-margin-mode-helper" data-testid="user-futures-margin-mode-helper">Cross veya isolated marjin tipi.</p>
+                </div>
+                <div className="form-group" data-testid="user-futures-position-side-group">
+                  <label className="form-label" htmlFor="user-futures-position-side-select" data-testid="user-futures-position-side-label">Position Mode</label>
+                  <select
+                    id="user-futures-position-side-select"
+                    value={futuresContext.position_side}
+                    onChange={(event) => setFuturesContext((prev) => ({ ...prev, position_side: event.target.value }))}
+                    className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                    data-testid="user-futures-position-side-select"
+                    aria-label="Position Mode"
+                    aria-describedby="user-futures-position-side-helper"
+                  >
+                    <option value="BOTH">BOTH</option>
+                    <option value="LONG">LONG</option>
+                    <option value="SHORT">SHORT</option>
+                  </select>
+                  <p className="form-helper-text" id="user-futures-position-side-helper" data-testid="user-futures-position-side-helper">Hedge modu için yön seçimi.</p>
+                </div>
+                <div className="form-group" data-testid="user-futures-risk-per-trade-group">
+                  <label className="form-label" htmlFor="user-futures-risk-per-trade-input" data-testid="user-futures-risk-per-trade-label">Risk % Per Trade</label>
+                  <Input
+                    id="user-futures-risk-per-trade-input"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={futuresContext.risk_per_trade_pct}
+                    onChange={(event) => setFuturesContext((prev) => ({ ...prev, risk_per_trade_pct: Number(event.target.value) || 1 }))}
+                    data-testid="user-futures-risk-per-trade-input"
+                    aria-label="Risk % Per Trade"
+                    aria-describedby="user-futures-risk-per-trade-helper"
+                  />
+                  <p className="form-helper-text" id="user-futures-risk-per-trade-helper" data-testid="user-futures-risk-per-trade-helper">Her işlem için risk yüzdesi.</p>
+                </div>
+                <div className="form-group" data-testid="user-futures-max-daily-trades-group">
+                  <label className="form-label" htmlFor="user-futures-max-daily-trades-input" data-testid="user-futures-max-daily-trades-label">Max Daily Trades</label>
+                  <Input
+                    id="user-futures-max-daily-trades-input"
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={futuresContext.max_daily_trades}
+                    onChange={(event) => setFuturesContext((prev) => ({ ...prev, max_daily_trades: Number(event.target.value) || 1 }))}
+                    data-testid="user-futures-max-daily-trades-input"
+                    aria-label="Max Daily Trades"
+                    aria-describedby="user-futures-max-daily-trades-helper"
+                  />
+                  <p className="form-helper-text" id="user-futures-max-daily-trades-helper" data-testid="user-futures-max-daily-trades-helper">Günlük işlem üst limiti.</p>
+                </div>
+                <div className="form-group" data-testid="user-futures-atr-stop-multiplier-group">
+                  <label className="form-label" htmlFor="user-futures-atr-stop-multiplier-input" data-testid="user-futures-atr-stop-multiplier-label">ATR Stop Multiplier</label>
+                  <Input
+                    id="user-futures-atr-stop-multiplier-input"
+                    type="number"
+                    min={0.5}
+                    step="0.1"
+                    value={futuresContext.atr_stop_multiplier}
+                    onChange={(event) => setFuturesContext((prev) => ({ ...prev, atr_stop_multiplier: Number(event.target.value) || 1 }))}
+                    data-testid="user-futures-atr-stop-multiplier-input"
+                    aria-label="ATR Stop Multiplier"
+                    aria-describedby="user-futures-atr-stop-multiplier-helper"
+                  />
+                  <p className="form-helper-text" id="user-futures-atr-stop-multiplier-helper" data-testid="user-futures-atr-stop-multiplier-helper">ATR tabanlı stop mesafesi katsayısı.</p>
+                </div>
+                <p className="text-sm text-yellow-300 md:col-span-4" data-testid="user-futures-liquidation-risk-text">
                   liquidation risk: leverage arttıkça likidasyon buffer düşer.
                 </p>
               </>
@@ -641,9 +809,24 @@ export const UserExchangeSettingsPage = () => {
           </div>
 
           <div className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="user-risk-settings-form-grid">
-            <Input type="number" min={1} max={50} value={riskSettings?.allocation_pct ?? 20} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), allocation_pct: event.target.value }))} data-testid="user-risk-allocation-input" placeholder="İşleme Ayrılan Ana Para (%)" />
-            <Input type="number" min={1} max={25} value={riskSettings?.trade_risk_pct ?? 10} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), trade_risk_pct: event.target.value }))} data-testid="user-risk-trade-risk-input" placeholder="İşlemdeki Paranın Risk Oranı (%)" />
-            <Input type="number" min={1} max={10} value={riskSettings?.daily_loss_limit_pct ?? 3} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), daily_loss_limit_pct: event.target.value }))} data-testid="user-risk-daily-loss-input" placeholder="Günlük Zarar Limiti (%)" />
+            <div className="form-group" data-testid="user-risk-allocation-group">
+              <label className="form-label" htmlFor="user-risk-allocation-input" data-testid="user-risk-allocation-label">Position Size (%)</label>
+              <Input id="user-risk-allocation-input" type="number" min={1} max={50} value={riskSettings?.allocation_pct ?? 20} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), allocation_pct: event.target.value }))} data-testid="user-risk-allocation-input" aria-label="Position Size (%)" aria-describedby="user-risk-allocation-helper user-risk-allocation-error" />
+              <p className="form-helper-text" id="user-risk-allocation-helper" data-testid="user-risk-allocation-helper">Toplam sermayeden işleme ayrılacak oran.</p>
+              {riskFormErrors.allocation_pct && <p className="form-error-text" id="user-risk-allocation-error" data-testid="user-risk-allocation-error">{riskFormErrors.allocation_pct}</p>}
+            </div>
+            <div className="form-group" data-testid="user-risk-trade-risk-group">
+              <label className="form-label" htmlFor="user-risk-trade-risk-input" data-testid="user-risk-trade-risk-label">Risk % Per Trade</label>
+              <Input id="user-risk-trade-risk-input" type="number" min={1} max={25} value={riskSettings?.trade_risk_pct ?? 10} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), trade_risk_pct: event.target.value }))} data-testid="user-risk-trade-risk-input" aria-label="Risk % Per Trade" aria-describedby="user-risk-trade-risk-helper user-risk-trade-risk-error" />
+              <p className="form-helper-text" id="user-risk-trade-risk-helper" data-testid="user-risk-trade-risk-helper">Her işlemde göze alınacak risk yüzdesi.</p>
+              {riskFormErrors.trade_risk_pct && <p className="form-error-text" id="user-risk-trade-risk-error" data-testid="user-risk-trade-risk-error">{riskFormErrors.trade_risk_pct}</p>}
+            </div>
+            <div className="form-group" data-testid="user-risk-daily-loss-group">
+              <label className="form-label" htmlFor="user-risk-daily-loss-input" data-testid="user-risk-daily-loss-label">Max Daily Loss (%)</label>
+              <Input id="user-risk-daily-loss-input" type="number" min={1} max={10} value={riskSettings?.daily_loss_limit_pct ?? 3} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), daily_loss_limit_pct: event.target.value }))} data-testid="user-risk-daily-loss-input" aria-label="Max Daily Loss (%)" aria-describedby="user-risk-daily-loss-helper user-risk-daily-loss-error" />
+              <p className="form-helper-text" id="user-risk-daily-loss-helper" data-testid="user-risk-daily-loss-helper">Günlük maksimum kayıp limiti.</p>
+              {riskFormErrors.daily_loss_limit_pct && <p className="form-error-text" id="user-risk-daily-loss-error" data-testid="user-risk-daily-loss-error">{riskFormErrors.daily_loss_limit_pct}</p>}
+            </div>
             <label className="flex items-center gap-2 text-sm" data-testid="user-risk-compounding-toggle-row">
               <input type="checkbox" checked={Boolean(riskSettings?.compounding_enabled)} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), compounding_enabled: event.target.checked }))} data-testid="user-risk-compounding-toggle" />
               Kâr/Zararı Ana Paraya Ekle
@@ -671,6 +854,9 @@ export const UserExchangeSettingsPage = () => {
                   <p data-testid="user-risk-preview-futures-leverage">Leverage: x{riskPreview?.leverage ?? "-"}</p>
                   <p data-testid="user-risk-preview-futures-margin-mode">Margin mode: {riskPreview?.margin_mode ?? "-"}</p>
                   <p data-testid="user-risk-preview-futures-position-side">Position side: {riskPreview?.position_side ?? "-"}</p>
+                  <p data-testid="user-risk-preview-futures-risk-per-trade">Risk % Per Trade: %{futuresContext.risk_per_trade_pct}</p>
+                  <p data-testid="user-risk-preview-futures-max-daily-trades">Max Daily Trades: {futuresContext.max_daily_trades}</p>
+                  <p data-testid="user-risk-preview-futures-atr-stop-multiplier">ATR Stop Multiplier: {futuresContext.atr_stop_multiplier}</p>
                   <p data-testid="user-risk-preview-futures-margin-usage">Margin usage: %{riskPreview?.margin_usage_pct ?? "-"}</p>
                   <p data-testid="user-risk-preview-futures-liquidation-buffer">Estimated liquidation buffer: %{riskPreview?.estimated_liquidation_buffer_pct ?? "-"}</p>
                 </>
@@ -689,21 +875,30 @@ export const UserExchangeSettingsPage = () => {
         <div className="space-y-4" data-testid="user-test-validation-tab-content">
 
       <div className="grid gap-2 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-test-venue-selection-grid">
-        <select value={selectedVenue.exchange} onChange={(event) => onExchangeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-venue-exchange-select">
-          {exchangeOptions.map((item) => (
-            <option key={item} value={item}>{item}</option>
-          ))}
-        </select>
-        <select value={selectedVenue.market_type} onChange={(event) => onMarketTypeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-venue-market-type-select">
-          {marketTypeOptions.map((item) => (
-            <option key={item} value={item}>{item}</option>
-          ))}
-        </select>
-        <select value={selectedVenue.environment} onChange={(event) => onEnvironmentChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-venue-environment-select">
-          {environmentOptions.map((item) => (
-            <option key={item} value={item}>{item}</option>
-          ))}
-        </select>
+        <div className="form-group" data-testid="user-test-venue-exchange-group">
+          <label className="form-label" htmlFor="user-test-venue-exchange-select" data-testid="user-test-venue-exchange-label">Exchange</label>
+          <select id="user-test-venue-exchange-select" value={selectedVenue.exchange} onChange={(event) => onExchangeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-venue-exchange-select" aria-label="Exchange">
+            {exchangeOptions.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group" data-testid="user-test-venue-market-type-group">
+          <label className="form-label" htmlFor="user-test-venue-market-type-select" data-testid="user-test-venue-market-type-label">Market Type</label>
+          <select id="user-test-venue-market-type-select" value={selectedVenue.market_type} onChange={(event) => onMarketTypeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-venue-market-type-select" aria-label="Market Type">
+            {marketTypeOptions.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group" data-testid="user-test-venue-environment-group">
+          <label className="form-label" htmlFor="user-test-venue-environment-select" data-testid="user-test-venue-environment-label">Environment</label>
+          <select id="user-test-venue-environment-select" value={selectedVenue.environment} onChange={(event) => onEnvironmentChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-venue-environment-select" aria-label="Environment">
+            {environmentOptions.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </div>
         <p className="md:col-span-3 text-xs text-slate-400" data-testid="user-test-selected-venue-summary">Seçili venue: {selectedVenue.exchange} / {selectedVenue.market_type} / {selectedVenue.environment}</p>
         {venueOptions.length === 0 && (
           <p className="md:col-span-3 text-xs text-yellow-300" data-testid="user-test-no-assignment-warning">Henüz venue assignment yok. Admin panelden kullanıcıya venue atanmalı.</p>
@@ -712,16 +907,25 @@ export const UserExchangeSettingsPage = () => {
 
       {selectedVenue.market_type === "futures" && (
         <div className="grid gap-2 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-test-futures-context-grid">
-          <Input type="number" min={1} max={20} value={futuresContext.leverage} onChange={(event) => setFuturesContext((prev) => ({ ...prev, leverage: Number(event.target.value) || 1 }))} data-testid="user-test-futures-leverage-input" placeholder="Leverage" />
-          <select value={futuresContext.margin_mode} onChange={(event) => setFuturesContext((prev) => ({ ...prev, margin_mode: event.target.value }))} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-futures-margin-mode-select">
-            <option value="cross">cross</option>
-            <option value="isolated">isolated</option>
-          </select>
-          <select value={futuresContext.position_side} onChange={(event) => setFuturesContext((prev) => ({ ...prev, position_side: event.target.value }))} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-futures-position-side-select">
-            <option value="BOTH">BOTH</option>
-            <option value="LONG">LONG</option>
-            <option value="SHORT">SHORT</option>
-          </select>
+          <div className="form-group" data-testid="user-test-futures-leverage-group">
+            <label className="form-label" htmlFor="user-test-futures-leverage-input" data-testid="user-test-futures-leverage-label">Leverage</label>
+            <Input id="user-test-futures-leverage-input" type="number" min={1} max={20} value={futuresContext.leverage} onChange={(event) => setFuturesContext((prev) => ({ ...prev, leverage: Number(event.target.value) || 1 }))} data-testid="user-test-futures-leverage-input" aria-label="Leverage" />
+          </div>
+          <div className="form-group" data-testid="user-test-futures-margin-mode-group">
+            <label className="form-label" htmlFor="user-test-futures-margin-mode-select" data-testid="user-test-futures-margin-mode-label">Margin Mode</label>
+            <select id="user-test-futures-margin-mode-select" value={futuresContext.margin_mode} onChange={(event) => setFuturesContext((prev) => ({ ...prev, margin_mode: event.target.value }))} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-futures-margin-mode-select" aria-label="Margin Mode">
+              <option value="cross">cross</option>
+              <option value="isolated">isolated</option>
+            </select>
+          </div>
+          <div className="form-group" data-testid="user-test-futures-position-side-group">
+            <label className="form-label" htmlFor="user-test-futures-position-side-select" data-testid="user-test-futures-position-side-label">Position Mode</label>
+            <select id="user-test-futures-position-side-select" value={futuresContext.position_side} onChange={(event) => setFuturesContext((prev) => ({ ...prev, position_side: event.target.value }))} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-test-futures-position-side-select" aria-label="Position Mode">
+              <option value="BOTH">BOTH</option>
+              <option value="LONG">LONG</option>
+              <option value="SHORT">SHORT</option>
+            </select>
+          </div>
         </div>
       )}
 
@@ -792,18 +996,34 @@ export const UserExchangeSettingsPage = () => {
       </div>
 
       <form className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" onSubmit={saveSettings} data-testid="user-exchange-settings-form">
-        <select value={selectedVenue.exchange} onChange={(event) => onExchangeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-exchange-settings-exchange-select">
-          {exchangeOptions.map((item) => (
-            <option key={item} value={item}>{item}</option>
-          ))}
-        </select>
-        <select value={selectedVenue.environment} onChange={(event) => onEnvironmentChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-exchange-settings-environment-select">
-          {environmentOptions.map((item) => (
-            <option key={item} value={item}>{item}</option>
-          ))}
-        </select>
-        <Input value={form.api_key} onChange={(event) => setForm((prev) => ({ ...prev, api_key: event.target.value }))} placeholder="API Key" data-testid="user-exchange-settings-api-key-input" required />
-        <Input value={form.api_secret} onChange={(event) => setForm((prev) => ({ ...prev, api_secret: event.target.value }))} placeholder="API Secret" data-testid="user-exchange-settings-api-secret-input" required />
+        <div className="form-group" data-testid="user-exchange-settings-exchange-group">
+          <label className="form-label" htmlFor="user-exchange-settings-exchange-select" data-testid="user-exchange-settings-exchange-label">Exchange</label>
+          <select id="user-exchange-settings-exchange-select" value={selectedVenue.exchange} onChange={(event) => onExchangeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-exchange-settings-exchange-select" aria-label="Exchange">
+            {exchangeOptions.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+          <p className="form-helper-text" data-testid="user-exchange-settings-exchange-helper">Ana bağlantı için kullanılacak borsa.</p>
+        </div>
+        <div className="form-group" data-testid="user-exchange-settings-environment-group">
+          <label className="form-label" htmlFor="user-exchange-settings-environment-select" data-testid="user-exchange-settings-environment-label">Environment</label>
+          <select id="user-exchange-settings-environment-select" value={selectedVenue.environment} onChange={(event) => onEnvironmentChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-exchange-settings-environment-select" aria-label="Environment">
+            {environmentOptions.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+          <p className="form-helper-text" data-testid="user-exchange-settings-environment-helper">Canlı veya testnet hedef ortamı.</p>
+        </div>
+        <div className="form-group" data-testid="user-exchange-settings-api-key-group">
+          <label className="form-label" htmlFor="user-exchange-settings-api-key-input" data-testid="user-exchange-settings-api-key-label">API Key</label>
+          <Input id="user-exchange-settings-api-key-input" value={form.api_key} onChange={(event) => setForm((prev) => ({ ...prev, api_key: event.target.value }))} data-testid="user-exchange-settings-api-key-input" aria-label="API Key" aria-describedby="user-exchange-settings-api-key-helper" required />
+          <p className="form-helper-text" id="user-exchange-settings-api-key-helper" data-testid="user-exchange-settings-api-key-helper">Borsa panelinden alınan API key.</p>
+        </div>
+        <div className="form-group" data-testid="user-exchange-settings-api-secret-group">
+          <label className="form-label" htmlFor="user-exchange-settings-api-secret-input" data-testid="user-exchange-settings-api-secret-label">API Secret</label>
+          <Input id="user-exchange-settings-api-secret-input" value={form.api_secret} onChange={(event) => setForm((prev) => ({ ...prev, api_secret: event.target.value }))} data-testid="user-exchange-settings-api-secret-input" aria-label="API Secret" aria-describedby="user-exchange-settings-api-secret-helper" required />
+          <p className="form-helper-text" id="user-exchange-settings-api-secret-helper" data-testid="user-exchange-settings-api-secret-helper">API key ile eşleşen secret değeri.</p>
+        </div>
         <Button className="md:col-span-2 bg-orange-500 text-black hover:bg-orange-600" data-testid="user-exchange-settings-save-button" disabled={isSaving}>
           {isSaving ? "Kaydediliyor..." : "API Bilgilerini Kaydet"}
         </Button>
