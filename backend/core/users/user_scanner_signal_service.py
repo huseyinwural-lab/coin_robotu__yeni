@@ -400,10 +400,12 @@ def _build_signal_intent_payload(
     exchange_connection: UserExchangeConnection | None,
 ) -> dict:
     side = "buy" if signal.direction == "long" else "sell"
+    market_type = (signal.market_type or "spot").lower()
+    strategy_binding = str(signal.strategy_id or "trend_following")
     payload = {
         "source_type": "manual",
         "source_ref_id": row.signal_id,
-        "market_type": signal.market_type or "spot",
+        "market_type": market_type,
         "symbol": row.symbol,
         "side": side,
         "order_type": "market",
@@ -413,11 +415,16 @@ def _build_signal_intent_payload(
         "take_profit_value": 2,
         "stop_loss_mode": "percent",
         "stop_loss_value": 1,
-        "execution_mode": "manual",
-        "strategy_binding": "manual_execution",
+        "execution_mode": "bot_assisted",
+        "strategy_binding": strategy_binding,
         "signal_confidence": float(row.confidence or 0.5),
         "signal_bridge_context": True,
     }
+
+    if market_type == "futures":
+        payload["margin_mode"] = "isolated"
+        payload["leverage"] = 3
+
     if exchange_connection is not None:
         payload.update(
             {
