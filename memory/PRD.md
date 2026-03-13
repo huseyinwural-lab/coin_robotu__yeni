@@ -3042,3 +3042,66 @@
 ### Durum
 - **U-IS-04 (F-12..F-18): COMPLETE**
 - **MOCKED API: YOK**
+
+## 46) 2026-03-13 — Iteration-61 (U-07/U-08/U-09/U-12 + UI-05)
+
+### Uygulanan Blok
+- Kullanıcının birleşik kapanış listesine göre bu iterasyonda aşağıdaki kritik user/indicator kapanışları tamamlandı:
+  - **U-07:** Çoklu exchange connection modeli
+  - **U-08:** Execute venue/account awareness
+  - **U-09:** Screener → Execute bridge context hardening
+  - **U-12:** Screener data freshness visibility
+  - **UI-05:** User üretim navigasyonundan Exchange Mock temizliği
+
+### Backend — Yeni Contract ve Endpointler
+- Yeni model eklendi: `UserExchangeConnection` (`models.py`)
+- Yeni migration eklendi: `20260313_0033_user_exchange_connections.py`
+- Yeni servis eklendi: `core/users/user_exchange_connections.py`
+  - list/create/update/delete/set-default
+  - legacy `phase4/exchange-settings` ile default profil senkronizasyonu
+- Yeni endpointler (`/api/user/exchange-connections`):
+  - `GET /api/user/exchange-connections`
+  - `POST /api/user/exchange-connections`
+  - `PUT /api/user/exchange-connections/{id}`
+  - `POST /api/user/exchange-connections/{id}/set-default`
+  - `DELETE /api/user/exchange-connections/{id}`
+- Execute preview kontratı genişletildi:
+  - request: `exchange_connection_id`, `exchange`, `environment`, `account_label`
+  - response: `venue_context`
+  - venue blocked durumda `validation_status=rejected` + `venue_access_blocked`
+
+### Frontend — Uygulanan Kapanışlar
+- `UserExecutePage.jsx`
+  - Exchange Connection selector
+  - Venue state/readiness card
+  - Preview panelde `venue_context`
+  - bridge_context görünürlüğü (query + filter snapshot)
+- `UserExchangeSettingsPage.jsx`
+  - Connection Profiles paneli (create/update/delete/default)
+- `UserIndicatorScreenerPage.jsx`
+  - Open in Execute köprü URL’si düzeltildi (`market_type`, `bridge_context`, source/filter snapshot)
+  - Freshness panel eklendi: `last_candle_time`, `evaluated_at`, `snapshot_at`, `data_source`, `cache_hit`, `fresh_fetch`
+  - Dense tabloda freshness kolonları eklendi
+- `PanelLayout.jsx` + `App.js`
+  - User nav’dan Exchange Mock kaldırıldı
+  - `/user/exchange-mock` route dashboard’a yönlendirildi
+  - Sticky header açık yeşil sisteme geçirildi
+
+### Test & Validation Artefactları
+- Testing agent raporu: `/app/test_reports/iteration_61.json`
+- Lokal pytest: `/app/backend/tests/test_exchange_connections_u07.py` → **10 passed**
+- Ek raporlar:
+  - `/app/test_reports/final_admin_user_closure.json`
+  - `/app/reports/platform_ui_consistency_validation.json`
+  - `/app/reports/end_to_end_trading_flow_validation.json`
+  - `/app/reports/closure_matrix_admin.json`
+  - `/app/reports/closure_matrix_user.json`
+  - `/app/reports/exchange_connection_model_validation.json`
+
+### Durum
+- **U-07: COMPLETE**
+- **U-08: COMPLETE (venue_context + preview gate)**
+- **U-09: COMPLETE (screener bridge context)**
+- **U-12: COMPLETE (freshness visibility on screener)**
+- **UI-05: COMPLETE**
+- **MOCKED API: YOK**

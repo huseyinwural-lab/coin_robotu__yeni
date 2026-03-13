@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-03-13T01:30:00Z",
+  "category": "UI Consistency",
+  "checks": [
+    {
+      "item": "Header theme refactor",
+      "status": "pass",
+      "evidence": "PanelLayout sticky header updated to light-green system"
+    },
+    {
+      "item": "Dev/Test surface cleanup",
+      "status": "pass",
+      "evidence": "Exchange Mock removed from user nav and route redirected"
+    },
+    {
+      "item": "Indicator Screener dense table and freshness visibility",
+      "status": "pass",
+      "evidence": "freshness panel + last_candle/evaluated_at/data_source/cache flags surfaced"
+    }
+  ],
+  "source_reports": [
+    "/app/test_reports/iteration_60.json",
+    "/app/test_reports/iteration_61.json"
+  ]
+}

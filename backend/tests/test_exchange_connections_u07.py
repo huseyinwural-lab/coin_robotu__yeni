@@ -6,7 +6,27 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+
+def _resolve_base_url() -> str:
+    candidate = (os.environ.get("REACT_APP_BACKEND_URL") or "").strip().rstrip("/")
+    if candidate:
+        return candidate
+
+    env_paths = ["/app/frontend/.env", "/app/.env"]
+    for path in env_paths:
+        if not os.path.exists(path):
+            continue
+        with open(path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("REACT_APP_BACKEND_URL="):
+                    parsed = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if parsed:
+                        return parsed.rstrip("/")
+
+    return "http://127.0.0.1:8001"
+
+
+BASE_URL = _resolve_base_url()
 
 # Test credentials
 USER_EMAIL = "e2_conn_last@example.com"
@@ -112,7 +132,6 @@ class TestUserExchangeConnectionsCRUD:
         assert data["market_type"] == "spot"
         assert data["environment"] == "testnet"
         print(f"test_create_exchange_connection: PASS - created {data['id']}")
-        return data["id"]
 
     def test_create_duplicate_label_fails(self):
         """Test creating connection with duplicate label fails"""
@@ -166,7 +185,7 @@ class TestUserExchangeConnectionsCRUD:
         assert update_response.status_code == 200, f"Expected 200, got {update_response.status_code}: {update_response.text}"
         updated_data = update_response.json()
         assert updated_data["market_type"] == "futures"
-        print(f"test_update_exchange_connection: PASS - updated to futures")
+        print("test_update_exchange_connection: PASS - updated to futures")
 
     def test_set_default_connection(self):
         """Test POST /api/user/exchange-connections/{id}/set-default"""
@@ -371,7 +390,7 @@ class TestExecutionPreviewVenueContext:
         assert "allowed" in venue_context, "venue_context should have allowed"
         assert "venue_state" in venue_context, "venue_context should have venue_state"
 
-        print(f"test_execution_preview_returns_venue_context: PASS")
+        print("test_execution_preview_returns_venue_context: PASS")
         print(f"  venue_context: exchange={venue_context.get('exchange')}, market_type={venue_context.get('market_type')}, environment={venue_context.get('environment')}")
         print(f"  allowed={venue_context.get('allowed')}, venue_state={venue_context.get('venue_state')}")
 
@@ -409,7 +428,7 @@ class TestExecutionPreviewVenueContext:
             assert "venue_access_blocked" in reject_reason_codes or any("venue" in code.lower() for code in reject_reason_codes)
             print(f"test_venue_blocked_returns_rejection: PASS - validation_status={validation_status}")
         else:
-            print(f"test_venue_blocked_returns_rejection: SKIP - venue was allowed")
+            print("test_venue_blocked_returns_rejection: SKIP - venue was allowed")
 
 
 class TestIndicatorScreenerFreshness:
@@ -467,7 +486,7 @@ class TestIndicatorScreenerFreshness:
             if field in first_row:
                 found_fields.append(field)
 
-        print(f"test_screener_freshness_fields_in_rows: PASS")
+        print("test_screener_freshness_fields_in_rows: PASS")
         print(f"  Found freshness fields: {found_fields}")
         print(f"  last_candle_time={first_row.get('last_candle_time')}")
         print(f"  evaluated_at={first_row.get('evaluated_at')}")
