@@ -29,6 +29,8 @@ def create_saved_query(
     timeframe: str,
     query_expression: str,
     symbol_universe,
+    filter_snapshot: dict,
+    schema_version: int,
     result_limit: int,
 ) -> UserIndicatorSavedQuery:
     normalized_name = name.strip() if name else ""
@@ -50,6 +52,8 @@ def create_saved_query(
         existing.timeframe = timeframe
         existing.query_expression = query_expression
         existing.symbol_universe = symbol_universe if isinstance(symbol_universe, list) else []
+        existing.filter_snapshot = filter_snapshot if isinstance(filter_snapshot, dict) else {}
+        existing.schema_version = int(schema_version or 1)
         existing.result_limit = result_limit
         existing.updated_at = _utc_now()
         db.commit()
@@ -65,6 +69,8 @@ def create_saved_query(
         timeframe=timeframe,
         query_expression=query_expression,
         symbol_universe=symbol_universe if isinstance(symbol_universe, list) else [],
+        filter_snapshot=filter_snapshot if isinstance(filter_snapshot, dict) else {},
+        schema_version=int(schema_version or 1),
         result_limit=result_limit,
         created_at=_utc_now(),
         updated_at=_utc_now(),
@@ -105,6 +111,7 @@ def add_watchlist_symbol(
     market_type: str,
     symbol: str,
     note: str,
+    context_snapshot: dict,
 ) -> UserIndicatorWatchlist:
     normalized_symbol = symbol.strip().upper()
     if not normalized_symbol:
@@ -122,6 +129,7 @@ def add_watchlist_symbol(
     )
     if existing:
         existing.note = note or existing.note
+        existing.context_snapshot = context_snapshot if isinstance(context_snapshot, dict) else existing.context_snapshot
         db.commit()
         db.refresh(existing)
         return existing
@@ -133,6 +141,7 @@ def add_watchlist_symbol(
         market_type=market_type,
         symbol=normalized_symbol,
         note=note or "",
+        context_snapshot=context_snapshot if isinstance(context_snapshot, dict) else {},
         created_at=_utc_now(),
     )
     db.add(row)

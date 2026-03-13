@@ -218,7 +218,7 @@ class TestIQ02InvalidQueryParse:
         assert "parantez" in data["query_error"].lower() or ")" in data["query_error"]
 
     def test_iq02_empty_query_expression(self):
-        """Empty query expression should return explanatory error"""
+        """Empty query expression should run filter-only mode"""
         payload = {
             "exchange": "binance",
             "market_type": "spot",
@@ -235,8 +235,8 @@ class TestIQ02InvalidQueryParse:
         )
         assert response.status_code == 200, response.text
         data = response.json()
-        assert data["query_valid"] is False
-        assert data["query_error"] is not None
+        assert data["query_valid"] is True
+        assert data["query_error"] is None
 
 
 class TestIQ03Determinism:

@@ -34,12 +34,15 @@ def run_indicator_screener(
     db: Session = Depends(get_db),
 ):
     result = run_indicator_query_engine(
+        db=db,
+        user_id=current_user.id,
         exchange=payload.exchange,
         market_type=payload.market_type,
         timeframe=payload.timeframe,
         query_expression=payload.query_expression,
         symbol_universe=payload.symbol_universe,
         limit=payload.limit,
+        filter_payload=payload.filter_payload,
     )
 
     create_audit_log(
@@ -53,10 +56,13 @@ def run_indicator_screener(
         details={
             "query_expression": payload.query_expression,
             "query_valid": result.get("query_valid", False),
+            "result_state": result.get("result_state", "unknown"),
+            "filter_error": result.get("filter_error"),
             "match_count": result.get("match_count", 0),
             "evaluated_count": result.get("evaluated_count", 0),
             "market_type": payload.market_type,
             "timeframe": payload.timeframe,
+            "applied_filters": result.get("applied_filters", {}),
         },
     )
     return IndicatorScreenerRunResponse(**result)
@@ -88,6 +94,8 @@ def screener_saved_query_create(
         timeframe=payload.timeframe,
         query_expression=payload.query_expression,
         symbol_universe=payload.symbol_universe,
+        filter_snapshot=payload.filter_snapshot,
+        schema_version=payload.schema_version,
         result_limit=payload.result_limit,
     )
     create_audit_log(
@@ -102,6 +110,7 @@ def screener_saved_query_create(
             "exchange": row.exchange,
             "market_type": row.market_type,
             "timeframe": row.timeframe,
+            "schema_version": row.schema_version,
         },
     )
     return row
@@ -143,6 +152,7 @@ def screener_watchlist_add(
             market_type=payload.market_type,
             symbol=payload.symbol,
             note=payload.note,
+            context_snapshot=payload.context_snapshot,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -154,7 +164,12 @@ def screener_watchlist_add(
         entity_id=row.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
-        details={"symbol": row.symbol, "exchange": row.exchange, "market_type": row.market_type},
+        details={
+            "symbol": row.symbol,
+            "exchange": row.exchange,
+            "market_type": row.market_type,
+            "context_snapshot": row.context_snapshot,
+        },
     )
     return row
 

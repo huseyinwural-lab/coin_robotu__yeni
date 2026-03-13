@@ -206,6 +206,8 @@ class UserIndicatorSavedQuery(Base):
     timeframe: Mapped[str] = mapped_column(String(10), default="15m")
     query_expression: Mapped[str] = mapped_column(Text, default="")
     symbol_universe: Mapped[list[str]] = mapped_column(JSON, default=list)
+    filter_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    schema_version: Mapped[int] = mapped_column(Integer, default=1)
     result_limit: Mapped[int] = mapped_column(Integer, default=50)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -223,6 +225,7 @@ class UserIndicatorWatchlist(Base):
     market_type: Mapped[str] = mapped_column(String(20), default="spot")
     symbol: Mapped[str] = mapped_column(String(30), index=True)
     note: Mapped[str] = mapped_column(Text, default="")
+    context_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

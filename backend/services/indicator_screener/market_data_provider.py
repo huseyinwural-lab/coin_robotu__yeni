@@ -7,6 +7,18 @@ from db import redis_client
 
 
 ALLOWED_TIMEFRAMES = {"5m", "15m", "1h", "4h", "1d"}
+STABLE_ASSETS = {
+    "USDT",
+    "USDC",
+    "BUSD",
+    "FDUSD",
+    "TUSD",
+    "DAI",
+    "USDP",
+    "EUR",
+    "TRY",
+}
+LEVERAGED_SUFFIXES = {"UP", "DOWN", "BULL", "BEAR", "3L", "3S", "5L", "5S"}
 
 
 class MarketDataProviderError(RuntimeError):
@@ -55,10 +67,20 @@ class BinanceMarketDataProvider:
             raise MarketDataProviderError("market_type sadece 'spot' veya 'futures' olabilir")
 
         if market == "spot":
-            path = "/api/v3/exchangeInfo" if endpoint_type == "symbols" else "/api/v3/klines"
+            if endpoint_type == "symbols":
+                path = "/api/v3/exchangeInfo"
+            elif endpoint_type == "ticker24h":
+                path = "/api/v3/ticker/24hr"
+            else:
+                path = "/api/v3/klines"
             return [f"{base}{path}" for base in self._spot_base_urls]
 
-        path = "/fapi/v1/exchangeInfo" if endpoint_type == "symbols" else "/fapi/v1/klines"
+        if endpoint_type == "symbols":
+            path = "/fapi/v1/exchangeInfo"
+        elif endpoint_type == "ticker24h":
+            path = "/fapi/v1/ticker/24hr"
+        else:
+            path = "/fapi/v1/klines"
         return [f"{base}{path}" for base in self._futures_base_urls]
 
     def _request_with_fallback(
@@ -97,31 +119,77 @@ class BinanceMarketDataProvider:
         endpoint_candidates = self._resolve_endpoint_candidates(normalized_market_type, "symbols")
         payload, used_url = self._request_with_fallback(endpoint_candidates, timeout_seconds=15)
 
+        ticker_candidates = self._resolve_endpoint_candidates(normalized_market_type, "ticker24h")
+        ticker_payload: list[dict] = []
+        ticker_provider_url = None
+        try:
+            ticker_response, ticker_provider_url = self._request_with_fallback(ticker_candidates, timeout_seconds=12)
+            if isinstance(ticker_response, list):
+                ticker_payload = ticker_response
+        except MarketDataProviderError:
+            ticker_payload = []
+
+        ticker_map: dict[str, dict] = {}
+        for row in ticker_payload:
+            symbol = str(row.get("symbol", "")).upper()
+            if symbol:
+                ticker_map[symbol] = row
+
+        rows: list[dict] = []
         symbols: list[str] = []
         for row in payload.get("symbols", []):
             symbol = str(row.get("symbol", "")).upper()
-            if not symbol.endswith("USDT"):
+            if not symbol:
                 continue
-            if row.get("status") != "TRADING":
-                continue
-            if str(row.get("quoteAsset", "")).upper() != "USDT":
-                continue
-            if normalized_market_type == "spot" and not bool(row.get("isSpotTradingAllowed", True)):
-                continue
-            if normalized_market_type == "futures" and row.get("contractType") not in {"PERPETUAL", "CURRENT_MONTH", "NEXT_MONTH"}:
-                continue
+            quote_asset = str(row.get("quoteAsset", "")).upper()
+            base_asset = str(row.get("baseAsset", "")).upper()
+
+            if normalized_market_type == "spot":
+                is_tradable = row.get("status") == "TRADING" and bool(row.get("isSpotTradingAllowed", True))
+            else:
+                is_tradable = row.get("status") == "TRADING" and row.get("contractType") in {"PERPETUAL", "CURRENT_MONTH", "NEXT_MONTH"}
+
+            ticker = ticker_map.get(symbol, {})
+            quote_volume_24h = float(ticker.get("quoteVolume")) if ticker.get("quoteVolume") not in [None, ""] else None
+            bid_price = float(ticker.get("bidPrice")) if ticker.get("bidPrice") not in [None, ""] else 0.0
+            ask_price = float(ticker.get("askPrice")) if ticker.get("askPrice") not in [None, ""] else 0.0
+            last_price = float(ticker.get("lastPrice")) if ticker.get("lastPrice") not in [None, ""] else 0.0
+            spread_pct_24h = abs(ask_price - bid_price) / last_price * 100 if last_price > 0 and bid_price > 0 and ask_price > 0 else None
+
+            leveraged_token = any(base_asset.endswith(suffix) for suffix in LEVERAGED_SUFFIXES)
+            stablecoin_pair = base_asset in STABLE_ASSETS and quote_asset in STABLE_ASSETS
+
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "quote_asset": quote_asset,
+                    "base_asset": base_asset,
+                    "status": str(row.get("status") or "UNKNOWN"),
+                    "is_tradable": bool(is_tradable),
+                    "margin_eligible": bool(row.get("isMarginTradingAllowed", False)),
+                    "futures_eligible": normalized_market_type == "futures",
+                    "volume_24h": quote_volume_24h,
+                    "spread_pct_24h": spread_pct_24h,
+                    "last_price": last_price,
+                    "leveraged_token": leveraged_token,
+                    "stablecoin_pair": stablecoin_pair,
+                }
+            )
             symbols.append(symbol)
 
+        rows.sort(key=lambda item: item["symbol"])
         symbols = sorted(set(symbols))
         result = {
             "exchange": normalized_exchange,
             "market_type": normalized_market_type,
             "symbols": symbols,
+            "rows": rows,
             "symbol_count": len(symbols),
             "generated_at": _utc_now_iso(),
             "cache_hit": False,
             "source": f"{normalized_exchange}_{normalized_market_type}_exchange_info",
             "provider_url": used_url,
+            "ticker_provider_url": ticker_provider_url,
         }
         _set_cache_json(cache_key, result, ttl_seconds=300)
         return result

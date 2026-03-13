@@ -1418,9 +1418,10 @@ class IndicatorScreenerRunRequest(BaseModel):
     exchange: str = "binance"
     market_type: str = "spot"
     timeframe: str = "15m"
-    query_expression: str
+    query_expression: str = ""
     symbol_universe: list[str] | str | None = "all"
     limit: int = Field(default=50, ge=1, le=300)
+    filter_payload: dict = Field(default_factory=dict)
 
 
 class IndicatorScreenerRowResponse(BaseModel):
@@ -1452,6 +1453,20 @@ class IndicatorScreenerRowResponse(BaseModel):
     cache_hit: bool
     fresh_fetch: bool
     last_candle_time: str | None
+    volume_24h: float | None = None
+    spread_pct_24h: float | None = None
+    quote_asset: str | None = None
+    is_tradable: bool = True
+    margin_eligible: bool = False
+    futures_eligible: bool = False
+    leveraged_token: bool = False
+    stablecoin_pair: bool = False
+    signal_score: float | None = None
+    confidence: float | None = None
+    rr_estimate: float | None = None
+    executable: bool = True
+    executable_reasons: list[str] = Field(default_factory=list)
+    stale_data: bool = False
 
 
 class IndicatorScreenerRunResponse(BaseModel):
@@ -1470,6 +1485,11 @@ class IndicatorScreenerRunResponse(BaseModel):
     exchange: str | None = None
     market_type: str | None = None
     timeframe: str | None = None
+    applied_filters: dict = Field(default_factory=dict)
+    active_filter_chips: list[dict] = Field(default_factory=list)
+    result_state: str = "success"
+    filter_error: str | None = None
+    warnings: list[str] = Field(default_factory=list)
 
 
 class IndicatorScreenerPresetResponse(BaseModel):
@@ -1485,6 +1505,8 @@ class UserIndicatorSavedQueryCreateRequest(BaseModel):
     timeframe: str = "15m"
     query_expression: str
     symbol_universe: list[str] = Field(default_factory=list)
+    filter_snapshot: dict = Field(default_factory=dict)
+    schema_version: int = 1
     result_limit: int = Field(default=50, ge=1, le=300)
 
 
@@ -1499,6 +1521,8 @@ class UserIndicatorSavedQueryResponse(BaseModel):
     timeframe: str
     query_expression: str
     symbol_universe: list[str]
+    filter_snapshot: dict
+    schema_version: int
     result_limit: int
     created_at: datetime
     updated_at: datetime
@@ -1509,6 +1533,7 @@ class UserIndicatorWatchlistCreateRequest(BaseModel):
     market_type: str = "spot"
     symbol: str
     note: str = ""
+    context_snapshot: dict = Field(default_factory=dict)
 
 
 class UserIndicatorWatchlistResponse(BaseModel):
@@ -1520,6 +1545,7 @@ class UserIndicatorWatchlistResponse(BaseModel):
     market_type: str
     symbol: str
     note: str
+    context_snapshot: dict
     created_at: datetime
 
 

@@ -77,7 +77,9 @@ def test_phase2_futures_market_type_optional_works():
         "limit": 10,
     }
     data = _run_query(payload)
-    if data["query_valid"]:
+    if data.get("result_state") in ["backend_unavailable", "rate_limit_throttled", "empty_universe"]:
+        assert data.get("warnings") is not None
+    elif data["query_valid"]:
         assert data["evaluated_count"] >= 1
     else:
         assert data["query_error"]
