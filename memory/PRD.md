@@ -3387,3 +3387,60 @@
 - **Rate Limiter (Token Bucket): COMPLETE**
 - **Structured JSON Logging: COMPLETE**
 - **MOCKED API: YOK**
+
+## 56) 2026-03-13 — Iteration-73 (Admin Closure Package - All Menus Hardening Sprint)
+
+### Kullanıcı Talebi
+- Admin paneldeki geniş audit listesindeki **Next Action + Future/Backlog + Potansiyel geliştirme** maddelerini tek sprintte operasyonel olarak kapatacak kapsamlı paket.
+
+### Backend Uygulamaları
+- **Action Center** eklendi:
+  - `GET /api/admin/action-center/summary`
+  - `POST /api/admin/action-center/close-next-actions`
+  - Açık alert ack, stale approval reject, pending_timeout reject intent requeue otomasyonu.
+- **Execution Queue iyileştirmeleri**:
+  - `GET /api/admin/execution-queue/rejection-summary`
+  - `POST /api/admin/execution-queue/{intent_id}/retry`
+  - Servis katmanında `retry_execution_intent`, `rejection_reason_summary`, `queue_status_summary`.
+- **System Alerts CSV export**:
+  - `GET /api/admin/system-alerts/export.csv`
+- **User Approvals genişletmesi**:
+  - `GET /api/admin/user-approvals/email-suggestions`
+  - `POST /api/admin/user-approvals/reject-stale`
+- **Route alias fixleri (Iteration-72 düşük öncelik notları kapatıldı)**:
+  - `/api/admin/strategy/observability-report` alias
+  - `/api/reports/archive` alias
+
+### Frontend Uygulamaları
+- **AdminDashboardPage**:
+  - Severity filter, auto-refresh toggle, Action Center summary/result kartları,
+  - “Auto-Close Next Actions” butonu,
+  - Kritik aksiyonların gerçek API tetiklenmesi (skeleton toast yerine).
+- **AdminSystemAlertsPage**:
+  - CSV export butonu,
+  - timeline mini bar görselleştirme,
+  - tablo header sticky davranışı.
+- **AdminUserApprovalsPage**:
+  - Email suggestion datalist,
+  - bulk/single approve-reject confirm akışı,
+  - `Reject Stale (>30g)` aksiyonu.
+- **AdminExecutionQueuePage**:
+  - rejected root-cause summary panel,
+  - queue snapshot,
+  - REJECTED kayıtlar için Retry butonu.
+- **AdminCrossDashboardConsistencyPage**:
+  - Panel drilldown linkleri,
+  - tablo sticky header iyileştirmeleri.
+- **MonitoringPage**:
+  - WebSocket health paneli + manuel yenile butonu.
+
+### Test Sonucu
+- Testing agent raporu: `/app/test_reports/iteration_73.json`
+  - Backend: **21/21 PASS**
+  - Frontend: **PASS**
+  - Yeni endpointler + UI entegrasyonları + route alias regresyonları: **PASS**
+
+### Durum
+- **Admin Closure Package: COMPLETE**
+- **Iteration-72’den gelen 404 alias notları: RESOLVED**
+- **MOCKED API: YOK**
