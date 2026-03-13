@@ -337,3 +337,29 @@ def user_blocked_reason_timeline(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="symbol_not_found")
     timeline = (payload.get("blocked_reason_timeline") or [])[:limit]
     return BlockedReasonTimelineEnvelopeResponse(**blocked_timeline_envelope(symbol, timeline))
+
+
+@router.get("/learning/safe-surface")
+def user_learning_safe_surface(
+    limit: int = Query(default=30, ge=1, le=100),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    cards = list_user_decision_cards(db, current_user.id, limit=limit)
+    items = [
+        {
+            "symbol": item["symbol"],
+            "decision": item["decision"],
+            "confidence_adjustment": item.get("confidence_adjustment", 0),
+            "learning_badges": item.get("learning_badges", []),
+            "learning_quality_score": item.get("learning_quality_score"),
+            "updated_at": item.get("updated_at"),
+        }
+        for item in cards
+    ]
+    return {
+        "schema_version": "learning.v1",
+        "engine_version": "learning-engine.v1",
+        "generated_at": datetime.now(timezone.utc),
+        "items": items,
+    }

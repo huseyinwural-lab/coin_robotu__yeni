@@ -467,6 +467,44 @@ def scan_canonical_universe_for_signals(db: Session, cache, *, max_symbols: int 
         regime = _regime_label(candles, indicators)
         entry = _safe_float(indicators.get("close"), 0.0)
         atr = max(_safe_float(indicators.get("atr14"), 0.0), 0.0000001)
+        if entry <= 0:
+            ranked_rows.append(
+                {
+                    "symbol": symbol,
+                    "signal": "none",
+                    "final_decision": "NO_TRADE",
+                    "signal_score": 0.0,
+                    "signal_strength": 0.0,
+                    "long_score": 0.0,
+                    "short_score": 0.0,
+                    "winning_side": "none",
+                    "decision_confidence": 0.0,
+                    "source_strategies": [],
+                    "family_scores": {},
+                    "blocked_reason_current": "STALE_INDICATOR_SNAPSHOT",
+                    "blocked_reason_timeline": [],
+                    "risk_state": {"state": "unresolved", "reason": "risk_state_unresolved"},
+                    "cooldown_state": {"state": "clear"},
+                    "regime_state": {"state": "unresolved", "reason": "stale_indicator_snapshot"},
+                    "reason_codes": ["stale_indicator_snapshot"],
+                    "strategy_code": "master_signal_engine",
+                    "market_regime": "unresolved",
+                    "dominant_family": None,
+                    "supporting_families": [],
+                    "top_contributors": [],
+                    "entry": 0.0,
+                    "entry_zone": {},
+                    "stop": 0.0,
+                    "take_profit_1": 0.0,
+                    "take_profit_2": 0.0,
+                    "take_profit": 0.0,
+                    "invalidation": {"reason": "stale_indicator_snapshot"},
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "schema_version": SCHEMA_VERSION,
+                    "engine_version": ENGINE_VERSION,
+                }
+            )
+            continue
         breakout_condition = _safe_float(indicators.get("atr_pct"), 0.0) >= 0.01
         pullback_trend_clear = abs(_safe_float(indicators.get("ema50"), 0) - _safe_float(indicators.get("ema200"), 0)) / max(
             _safe_float(indicators.get("ema200"), 1), 1e-9

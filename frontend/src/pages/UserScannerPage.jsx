@@ -571,9 +571,15 @@ export const UserScannerPage = () => {
               <p className="text-xs text-slate-300" data-testid={`user-decision-card-score-${card.symbol}`}>L/S: {card.long_score} / {card.short_score}</p>
               <p className="text-xs text-slate-300" data-testid={`user-decision-card-dominant-family-${card.symbol}`}>Dominant Family: {card.dominant_family || "-"}</p>
               <p className="text-xs text-slate-300" data-testid={`user-decision-card-risk-block-${card.symbol}`}>Risk Block: {card.risk_block || card.blocked_reason || "clear"}</p>
+              <p className="text-xs text-slate-300" data-testid={`user-decision-card-confidence-adjustment-${card.symbol}`}>Confidence Adj: {card.confidence_adjustment || 0}</p>
               <p className="text-xs text-slate-300" data-testid={`user-decision-card-entry-zone-${card.symbol}`}>
                 Entry Zone: {card.entry_zone?.min ?? "-"} / {card.entry_zone?.max ?? "-"}
               </p>
+              <div className="mt-1 flex flex-wrap gap-1" data-testid={`user-decision-card-learning-badges-${card.symbol}`}>
+                {(card.learning_badges || []).map((badge, idx) => (
+                  <span key={`${card.symbol}-badge-${idx}`} className="rounded border border-blue-700 px-1 py-0.5 text-[10px]" data-testid={`user-decision-card-learning-badge-${card.symbol}-${idx}`}>{badge}</span>
+                ))}
+              </div>
               <div className="mt-2 flex gap-2" data-testid={`user-decision-card-actions-${card.symbol}`}>
                 <Button type="button" size="sm" variant="outline" onClick={() => onSelectDecisionCard(card.symbol)} data-testid={`user-decision-card-open-explainability-button-${card.symbol}`}>
                   Explainability

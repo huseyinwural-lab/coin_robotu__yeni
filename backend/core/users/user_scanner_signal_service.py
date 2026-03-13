@@ -1063,11 +1063,16 @@ def run_user_scanner(
         existing_direction = symbol_direction_seen.get(symbol)
         if existing_direction and existing_direction != signal_value:
             warning_set.add("symbol_direction_conflict_blocked")
+            blocked_sources = [
+                {**src, "status": "blocked" if src.get("status") == "accepted" else src.get("status")}
+                for src in (scanner_row.payload or {}).get("source_strategies", [])
+            ]
             scanner_row.payload = {
                 **(scanner_row.payload or {}),
                 "final_decision": "BLOCKED",
                 "blocked_reason_current": "SYMBOL_DIRECTION_CONFLICT",
                 "risk_state": {"state": "blocked", "reason": "symbol_direction_conflict"},
+                "source_strategies": blocked_sources,
             }
             scanner_row.reason_codes = list(dict.fromkeys([*(scanner_row.reason_codes or []), "symbol_direction_conflict"]))
             record_decision_trace(
@@ -1086,11 +1091,16 @@ def run_user_scanner(
 
         if symbol in cooldown_symbols:
             warning_set.add("symbol_cooldown_active")
+            blocked_sources = [
+                {**src, "status": "blocked" if src.get("status") == "accepted" else src.get("status")}
+                for src in (scanner_row.payload or {}).get("source_strategies", [])
+            ]
             scanner_row.payload = {
                 **(scanner_row.payload or {}),
                 "final_decision": "BLOCKED",
                 "blocked_reason_current": "SYMBOL_COOLDOWN",
                 "cooldown_state": {"state": "blocked", "reason": "symbol_cooldown", "seconds": cooldown_seconds},
+                "source_strategies": blocked_sources,
             }
             scanner_row.reason_codes = list(dict.fromkeys([*(scanner_row.reason_codes or []), "symbol_cooldown"]))
             record_decision_trace(
@@ -1109,11 +1119,16 @@ def run_user_scanner(
 
         if open_positions_count + queued_count >= max_positions:
             warning_set.add("max_positions_reached")
+            blocked_sources = [
+                {**src, "status": "blocked" if src.get("status") == "accepted" else src.get("status")}
+                for src in (scanner_row.payload or {}).get("source_strategies", [])
+            ]
             scanner_row.payload = {
                 **(scanner_row.payload or {}),
                 "final_decision": "BLOCKED",
                 "blocked_reason_current": "MAX_POSITIONS_REACHED",
                 "risk_state": {"state": "blocked", "reason": "max_positions_reached", "max_positions": max_positions},
+                "source_strategies": blocked_sources,
             }
             scanner_row.reason_codes = list(dict.fromkeys([*(scanner_row.reason_codes or []), "max_positions_reached"]))
             record_decision_trace(

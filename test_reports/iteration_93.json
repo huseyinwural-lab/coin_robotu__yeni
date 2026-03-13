@@ -1,0 +1,67 @@
+{
+  "summary": "Sprint-3+4 Combined Testing (Iteration 93) - Family Gates, Learning Memory, Decision Cards, Explainability. All backend APIs working correctly (15/15 tests pass). Frontend pages tested: UserScannerPage (decision cards with learning badges, explainability panel), AdminCanonicalStrategyRegistryPage (family gates panel with 4 families), AdminLearningPanelPage (strategy/family memory tables, recommendations with apply). Fixed critical bug in learning_memory_service.py where UNIQUE constraint on pending_signal_id was failing during refresh.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter93_sprint3_sprint4_learning_gates.py",
+    "/app/test_reports/pytest/pytest_results_iter93_sprint3_sprint4.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/services/learning_memory_service.py",
+    "/app/backend/routers/admin_learning.py",
+    "/app/backend/tests/test_iter93_sprint3_sprint4_learning_gates.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!",
+    "user": "TEST_phase4iter2_pipeline@example.com / TestPassword123!"
+  },
+  "seed_data_creation": "None required - used existing test users",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sprint-3+4 implementation verified. All backend endpoints working: GET/PUT /api/admin/strategy-family-gates, GET /api/admin/blocked-reason-timeline/{symbol}, GET /api/user/decision-cards, GET /api/user/decision-cards/{symbol}, GET /api/user/explainability/{symbol}, GET /api/user/learning/safe-surface, POST /api/admin/learning/refresh, GET /api/admin/learning/overview, POST /api/admin/learning/recommendations/{id}/apply. Frontend routes: /user/scanner for UserScannerPage, /admin/canonical-strategy-registry for family gates, /admin/learning-panel for learning memory. Fix applied to learning_memory_service.py to handle unique constraint on pending_signal_id when same pending signal is referenced by multiple scanner results.",
+  "rca_of_the_issue": "Fixed bug in refresh_learning_memory() - UNIQUE constraint failed on pending_signal_id when multiple scanner results referenced the same pending signal. Solution: Track used pending_signal_ids and only assign if not already used.",
+  "features_tested": {
+    "strategy_family_gates": {
+      "GET /api/admin/strategy-family-gates": "PASS - Returns 4 families (trend, breakout, pullback, reversal) with correct schema",
+      "PUT /api/admin/strategy-family-gates": "PASS - Updates persist correctly",
+      "frontend_family_gates_panel": "PASS - Panel renders with 4 rows, enable toggles, threshold inputs, save button"
+    },
+    "blocked_reason_timeline": {
+      "GET /api/admin/blocked-reason-timeline/{symbol}": "PASS - Returns timeline with schema_version/engine_version/generation"
+    },
+    "decision_cards": {
+      "GET /api/user/decision-cards": "PASS - Returns list with confidence_adjustment and learning_badges",
+      "GET /api/user/decision-cards/{symbol}": "PASS - Returns individual card with all required fields",
+      "frontend_decision_cards": "PASS - Cards render with learning badges, confidence adjustments visible"
+    },
+    "explainability": {
+      "GET /api/user/explainability/{symbol}": "PASS - Returns source strategies, family scores, blocked timeline, templates",
+      "frontend_explainability_panel": "PASS - Panel shows symbol, decision, scores, family gate statuses, timeline"
+    },
+    "learning_safe_surface": {
+      "GET /api/user/learning/safe-surface": "PASS - Returns confidence adjustments and learning badges"
+    },
+    "admin_learning": {
+      "GET /api/admin/learning/overview": "PASS - Returns strategy_memory, family_memory, recommendations",
+      "POST /api/admin/learning/refresh": "PASS - Refreshes learning memory (778 events processed)",
+      "POST /api/admin/learning/recommendations/{id}/apply": "PASS - Returns 404 for non-existent or strategy not in registry",
+      "frontend_learning_panel": "PASS - Shows strategy/family memory tables, recommendations with Apply buttons"
+    },
+    "scanner_run": {
+      "POST /api/user/scanner/run": "PASS - Returns 200 (not 500)"
+    }
+  }
+}

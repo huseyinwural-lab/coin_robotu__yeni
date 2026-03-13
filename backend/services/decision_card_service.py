@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from models import UserDecisionTrace, UserScannerResult
+from services.learning_memory_service import strategy_quality_lookup, strategy_recommendation_lookup
 
 
 SCHEMA_VERSION = "decision-card.v1"
@@ -66,12 +67,28 @@ def _trace_timeline(db: Session, user_id: str, symbol: str, limit: int = 20) -> 
     return items
 
 
-def _row_to_decision_card(db: Session, row: UserScannerResult) -> dict:
+def _row_to_decision_card(db: Session, row: UserScannerResult, quality_lookup: dict[str, dict], recommendation_lookup: dict[str, list[dict]]) -> dict:
     payload = row.payload or {}
     decision = _normalize_decision(payload.get("final_decision") or ("LONG" if row.signal == "long" else "SHORT" if row.signal == "short" else "NO_TRADE"))
     source_strategies = payload.get("source_strategies") or []
     top_contributors = payload.get("top_contributors") or source_strategies[:3]
     blocked_reason = payload.get("blocked_reason_current")
+    dominant_strategy = str(payload.get("strategy_code") or row.strategy_code or "")
+    quality = quality_lookup.get(dominant_strategy, {})
+    recommendations = recommendation_lookup.get(dominant_strategy, [])
+    learning_badges: list[str] = []
+    confidence_adjustment = 0.0
+
+    quality_score = float(quality.get("quality_score") or 0)
+    if quality_score < 20 and quality.get("sample_count", 0) >= 5:
+        learning_badges.append("recent quality degraded")
+        confidence_adjustment -= 0.15
+    if quality_score > 65 and quality.get("sample_count", 0) >= 5:
+        learning_badges.append("decision supported by high-quality recent signals")
+        confidence_adjustment += 0.1
+    if any(item.get("recommendation_type") == "auto_throttle_recommendation" for item in recommendations):
+        learning_badges.append("strategy currently throttled")
+        confidence_adjustment -= 0.1
     timeline = _trace_timeline(db, row.user_id, row.symbol, limit=20)
     if decision == "BLOCKED" and not blocked_reason:
         blocked_reason = timeline[0]["reason_code"] if timeline else None
@@ -97,11 +114,16 @@ def _row_to_decision_card(db: Session, row: UserScannerResult) -> dict:
         "blocked_reason": blocked_reason,
         "cooldown_remaining": int((payload.get("cooldown_state") or {}).get("seconds") or 0),
         "risk_block": (payload.get("risk_state") or {}).get("reason"),
+        "confidence_adjustment": round(confidence_adjustment, 4),
+        "learning_badges": learning_badges,
+        "learning_quality_score": round(quality_score, 4) if quality else None,
         "updated_at": row.generated_at,
     }
 
 
 def list_user_decision_cards(db: Session, user_id: str, limit: int = 50) -> list[dict]:
+    quality_lookup = strategy_quality_lookup(db)
+    recommendation_lookup = strategy_recommendation_lookup(db)
     rows = (
         db.query(UserScannerResult)
         .filter(UserScannerResult.user_id == user_id)
@@ -116,10 +138,12 @@ def list_user_decision_cards(db: Session, user_id: str, limit: int = 50) -> list
         dedupe[row.symbol] = row
         if len(dedupe) >= limit:
             break
-    return [_row_to_decision_card(db, row) for row in dedupe.values()]
+    return [_row_to_decision_card(db, row, quality_lookup, recommendation_lookup) for row in dedupe.values()]
 
 
 def get_user_decision_card(db: Session, user_id: str, symbol: str) -> dict | None:
+    quality_lookup = strategy_quality_lookup(db)
+    recommendation_lookup = strategy_recommendation_lookup(db)
     row = (
         db.query(UserScannerResult)
         .filter(UserScannerResult.user_id == user_id, UserScannerResult.symbol == symbol.upper())
@@ -128,7 +152,7 @@ def get_user_decision_card(db: Session, user_id: str, symbol: str) -> dict | Non
     )
     if row is None:
         return None
-    return _row_to_decision_card(db, row)
+    return _row_to_decision_card(db, row, quality_lookup, recommendation_lookup)
 
 
 def get_user_symbol_explainability(db: Session, user_id: str, symbol: str) -> dict | None:

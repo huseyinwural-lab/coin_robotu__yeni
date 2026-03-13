@@ -2263,6 +2263,9 @@ class DecisionCardResponse(BaseModel):
     blocked_reason: str | None = None
     cooldown_remaining: int = 0
     risk_block: str | None = None
+    confidence_adjustment: float = 0
+    learning_badges: list[str] = Field(default_factory=list)
+    learning_quality_score: float | None = None
     updated_at: datetime
 
 

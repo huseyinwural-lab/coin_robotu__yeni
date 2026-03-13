@@ -1099,6 +1099,86 @@ class StrategyFamilyGate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class LearningDecisionEvent(Base):
+    __tablename__ = "learning_decision_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    decision: Mapped[str] = mapped_column(String(20), default="NO_TRADE", index=True)
+    source_strategies: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    family_scores: Mapped[dict] = mapped_column(JSON, default=dict)
+    regime_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    risk_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    entry_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_favorable_excursion: Mapped[float] = mapped_column(Float, default=0)
+    max_adverse_excursion: Mapped[float] = mapped_column(Float, default=0)
+    hold_duration_minutes: Mapped[float] = mapped_column(Float, default=0)
+    outcome_label: Mapped[str] = mapped_column(String(20), default="OPEN", index=True)
+    pnl_normalized: Mapped[float] = mapped_column(Float, default=0)
+    stop_hit: Mapped[bool] = mapped_column(Boolean, default=False)
+    tp_hit: Mapped[bool] = mapped_column(Boolean, default=False)
+    timed_exit: Mapped[bool] = mapped_column(Boolean, default=False)
+    invalidated: Mapped[bool] = mapped_column(Boolean, default=False)
+    strategy_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    strategy_family: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    scanner_result_id: Mapped[str | None] = mapped_column(String, ForeignKey("user_scanner_results.id"), nullable=True, unique=True, index=True)
+    pending_signal_id: Mapped[str | None] = mapped_column(String, ForeignKey("pending_signals.id"), nullable=True, unique=True, index=True)
+    position_id: Mapped[str | None] = mapped_column(String, ForeignKey("paper_positions.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+
+class StrategyOutcomeMemory(Base):
+    __tablename__ = "strategy_outcome_memory"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    strategy_id: Mapped[str] = mapped_column(String(120), index=True)
+    direction: Mapped[str] = mapped_column(String(10), default="both")
+    regime: Mapped[str] = mapped_column(String(30), default="any")
+    sample_count: Mapped[int] = mapped_column(Integer, default=0)
+    hit_rate: Mapped[float] = mapped_column(Float, default=0)
+    avg_return: Mapped[float] = mapped_column(Float, default=0)
+    avg_mfe: Mapped[float] = mapped_column(Float, default=0)
+    avg_mae: Mapped[float] = mapped_column(Float, default=0)
+    false_allow_rate: Mapped[float] = mapped_column(Float, default=0)
+    false_reject_rate: Mapped[float] = mapped_column(Float, default=0)
+    recent_rolling_score: Mapped[float] = mapped_column(Float, default=0)
+    decay_adjusted_quality_score: Mapped[float] = mapped_column(Float, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class FamilyOutcomeMemory(Base):
+    __tablename__ = "family_outcome_memory"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    family: Mapped[str] = mapped_column(String(30), index=True)
+    regime: Mapped[str] = mapped_column(String(30), default="any")
+    sample_count: Mapped[int] = mapped_column(Integer, default=0)
+    hit_rate: Mapped[float] = mapped_column(Float, default=0)
+    avg_return: Mapped[float] = mapped_column(Float, default=0)
+    volatility_success: Mapped[float] = mapped_column(Float, default=0)
+    conflict_success: Mapped[float] = mapped_column(Float, default=0)
+    solo_vs_combo_success: Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class LearningRecommendation(Base):
+    __tablename__ = "learning_recommendations"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    strategy_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    family: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    recommendation_type: Mapped[str] = mapped_column(String(30), index=True)
+    recommendation_value: Mapped[dict] = mapped_column(JSON, default=dict)
+    note: Mapped[str] = mapped_column(String(280), default="")
+    severity: Mapped[str] = mapped_column(String(20), default="medium")
+    is_applied: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class RegimeSnapshot(Base):
     __tablename__ = "regime_snapshots"
 
