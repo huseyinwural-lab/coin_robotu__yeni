@@ -4224,3 +4224,71 @@
 - **Docker runtime/env akışı: VERIFIED**
 - **Yarn deterministic setup: VERIFIED**
 - **Default admin bootstrap davranışı: VERIFIED**
+
+## 77) 2026-03-13 — Iteration-95 (Sprint-3: Explainability + Strict Gating + Symbol Decision Card)
+
+### Kullanıcı Talebi
+- Sprint-3 aynı turda tamamlanacak:
+  1. User Explainability Panel
+  2. Strategy-family strict gating (admin-tunable)
+  3. Symbol-level decision card
+
+### Uygulananlar
+1. **Strict gating backend katmanı**
+   - Yeni model+tablo: `strategy_family_gates`
+   - Family bazlı konfig: `trend`, `breakout`, `pullback`, `reversal`
+   - Alanlar: `is_enabled`, `long_threshold`, `short_threshold`, `min_strategy_count`, `max_conflict_score`, `regime_match_required`, `risk_clear_required`, `reversal_extra_confirmation`
+
+2. **Admin endpointleri (Sprint-3 contract)**
+   - `GET /api/admin/strategy-family-gates`
+   - `PUT /api/admin/strategy-family-gates`
+   - `GET /api/admin/blocked-reason-timeline/{symbol}`
+   - Gate güncellemeleri audit log’a yazılıyor.
+
+3. **Canonical signal engine v3**
+   - Family strict-gate uygulaması engine içine entegre edildi
+   - Source strategy katkı contract’ı üretimi:
+     - `strategy_id, family, direction, raw_signal, normalized_score, weight, contribution_score, status`
+   - Deterministik final decision etiketleri:
+     - `LONG | SHORT | BLOCKED | NO_TRADE`
+   - Symbol-level karar alanları:
+     - dominant/supporting families, top contributors, entry zone, stop, TP1, TP2, invalidation
+
+4. **User explainability & decision-card endpointleri**
+   - `GET /api/user/decision-cards`
+   - `GET /api/user/decision-cards/{symbol}`
+   - `GET /api/user/explainability/{symbol}`
+   - Response envelope/version alanları: `schema_version`, `engine_version`, `generated_at`
+
+5. **Scanner akışı + timeline görünürlüğü**
+   - Risk block (cooldown, max positions, symbol conflict) durumları payload + trace olarak işleniyor
+   - Blocked reason timeline son 20 event üretimi (signal/gating/risk katmanları)
+
+6. **Frontend entegrasyonları**
+   - UserScannerPage:
+     - Symbol-level decision card section
+     - Explainability panel
+     - Source katkı listesi, family gate durumları, blocked timeline
+   - AdminCanonicalStrategyRegistryPage:
+     - Strategy Family Gates paneli (canlı güncelleme)
+
+7. **Dokümantasyon**
+   - `/app/memory/CANONICAL_SIGNAL_ENGINE_SPRINT2.md` (pseudo-code, data-flow, class mimarisi)
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_92.json`
+  - Backend: **22/22 PASS**
+  - Frontend: **100% PASS**
+  - Doğrulananlar:
+    - Sprint-3 endpoint seti
+    - versioned response contract
+    - deterministic decision labels
+    - family strict gating etkileri
+    - user explainability panel + symbol decision cards
+    - admin family gates panel + save akışı
+
+### Durum
+- **Sprint-3 explainability + strict gating + symbol decision card: COMPLETE**
+- **Scanner run stability (500 regression): COMPLETE**
+- **MOCKED API: VAR**
+  - Email verification delivery provider bu ortamda mocked.
