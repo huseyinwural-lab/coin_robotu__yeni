@@ -634,6 +634,8 @@ def validate_exchange_credentials_for_user(
             return "API key IP whitelist kısıtına takılıyor. Sunucu IP'sini whitelist'e ekleyin veya IP kısıtını kaldırın."
         if "exchange_error_451" in normalized:
             return "Bölgesel erişim kısıtı (451) oluştu. Farklı venue/environment veya uygun endpoint fallback ile doğrulayın."
+        if "exchange_error_400" in normalized:
+            return "Exchange 400 hatası alındı: çoğunlukla API key/secret eşleşmiyor veya ortam (testnet/live) key ile uyumsuz. Key çiftini ve environment seçimini birlikte doğrulayın."
         if "assignment_required" in normalized:
             return "Venue assignment eksik. Exchange connection profilini varsayılan yapıp tekrar deneyin."
         if "settings_mismatch" in normalized:
