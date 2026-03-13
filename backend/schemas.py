@@ -2104,6 +2104,32 @@ class RiskSimulationResponse(BaseModel):
     projected_gate_decision: str
 
 
+class LearningImpactSimulationRequest(BaseModel):
+    strategy_id: str | None = None
+    family: str | None = None
+    recommendation_type: str = "decrease_weight_recommendation"
+    suggested_weight_multiplier: float | None = Field(default=None, ge=0.1, le=3.0)
+
+
+class LearningImpactSimulationResponse(BaseModel):
+    schema_version: str
+    engine_version: str
+    simulated_at: datetime
+    scope: str
+    strategy_id: str | None = None
+    family: str | None = None
+    recommendation_type: str
+    read_only: bool = True
+    projected_risk_score: float
+    projected_gate_decision: str
+    expected_hit_rate_delta: float
+    expected_avg_return_delta: float
+    allocation_drift_delta: float
+    hedge_effect_score: float
+    baseline: dict = Field(default_factory=dict)
+    assumptions: list[str] = Field(default_factory=list)
+
+
 class PortfolioRiskLimitsResponse(BaseModel):
     max_portfolio_leverage: float
     max_symbol_exposure: float

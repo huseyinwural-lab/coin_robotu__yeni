@@ -464,3 +464,139 @@ def strategy_recommendation_lookup(db: Session) -> dict[str, list[dict]]:
             }
         )
     return dict(lookup)
+
+
+def _clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, float(value)))
+
+
+def _gate_decision_from_risk(risk_score: float) -> str:
+    if risk_score < 0.35:
+        return "ALLOW"
+    if risk_score < 0.55:
+        return "ADJUST_POSITION"
+    if risk_score < 0.75:
+        return "REQUIRE_APPROVAL"
+    return "REJECT"
+
+
+def _find_strategy_memory(db: Session, strategy_id: str) -> StrategyOutcomeMemory | None:
+    return (
+        db.query(StrategyOutcomeMemory)
+        .filter(StrategyOutcomeMemory.strategy_id == strategy_id)
+        .order_by(StrategyOutcomeMemory.sample_count.desc(), StrategyOutcomeMemory.updated_at.desc())
+        .first()
+    )
+
+
+def _find_family_memory(db: Session, family: str) -> FamilyOutcomeMemory | None:
+    return (
+        db.query(FamilyOutcomeMemory)
+        .filter(FamilyOutcomeMemory.family == family)
+        .order_by(FamilyOutcomeMemory.sample_count.desc(), FamilyOutcomeMemory.updated_at.desc())
+        .first()
+    )
+
+
+def simulate_learning_recommendation_impact(
+    db: Session,
+    *,
+    strategy_id: str | None,
+    family: str | None,
+    recommendation_type: str,
+    suggested_weight_multiplier: float | None = None,
+) -> dict:
+    _ensure_learning_tables(db)
+    normalized_strategy = str(strategy_id or "").strip() or None
+    normalized_family = str(family or "").strip() or None
+    rec_type = str(recommendation_type or "decrease_weight_recommendation")
+
+    strategy_row = _find_strategy_memory(db, normalized_strategy) if normalized_strategy else None
+    family_row = _find_family_memory(db, normalized_family) if normalized_family else None
+    scope = "strategy" if strategy_row else "family" if family_row else "global"
+
+    baseline_hit_rate = float(strategy_row.hit_rate if strategy_row else family_row.hit_rate if family_row else 52.0)
+    baseline_avg_return = float(strategy_row.avg_return if strategy_row else family_row.avg_return if family_row else 0.001)
+    baseline_false_allow = float(strategy_row.false_allow_rate if strategy_row else 25.0)
+    baseline_quality = float(strategy_row.decay_adjusted_quality_score if strategy_row else 45.0)
+    baseline_conflict = float(family_row.conflict_success if family_row else 20.0)
+
+    base_risk_score = _clamp((baseline_false_allow / 100.0) * 0.55 + ((100.0 - _clamp(baseline_quality, 0, 100)) / 100.0) * 0.45, 0.0, 1.0)
+    if family_row and not strategy_row:
+        base_risk_score = _clamp((100.0 - baseline_hit_rate) / 100.0 * 0.6 + (baseline_conflict / 100.0) * 0.4, 0.0, 1.0)
+
+    weight_multiplier = float(suggested_weight_multiplier or 1.0)
+    risk_delta = 0.0
+    expected_hit_rate_delta = 0.0
+    expected_avg_return_delta = 0.0
+    allocation_drift_delta = 0.0
+    hedge_effect_score = 0.5
+
+    if rec_type == "disable_recommendation":
+        expected_hit_rate_delta = 0.7 if baseline_quality < 25 else -0.2
+        expected_avg_return_delta = 0.001 if baseline_avg_return < 0 else -0.0003
+        risk_delta = -0.18
+        allocation_drift_delta = -0.24
+        hedge_effect_score = 0.74
+    elif rec_type in {"decrease_weight_recommendation", "auto_throttle_recommendation"}:
+        intensity = _clamp(1.0 - weight_multiplier, 0.0, 0.9)
+        expected_hit_rate_delta = 0.5 + (intensity * 2.1)
+        expected_avg_return_delta = 0.0004 + (intensity * 0.0014)
+        risk_delta = -(0.05 + (intensity * 0.2))
+        allocation_drift_delta = -(0.03 + (intensity * 0.17))
+        hedge_effect_score = 0.56 + (intensity * 0.25)
+    elif rec_type in {"increase_weight_recommendation", "weight_boost_recommendation"}:
+        intensity = _clamp(weight_multiplier - 1.0, 0.0, 1.0)
+        expected_hit_rate_delta = 0.3 + (intensity * 1.4)
+        expected_avg_return_delta = 0.0006 + (intensity * 0.0019)
+        risk_delta = 0.05 + (intensity * 0.15)
+        allocation_drift_delta = 0.04 + (intensity * 0.11)
+        hedge_effect_score = 0.46 - (intensity * 0.08)
+
+    if scope == "family":
+        expected_hit_rate_delta += _clamp((50.0 - baseline_conflict) / 100.0, -0.4, 0.6)
+        expected_avg_return_delta += _clamp((float(family_row.volatility_success if family_row else 40.0) - 40.0) / 100000.0, -0.0005, 0.0008)
+
+    projected_risk_score = _clamp(base_risk_score + risk_delta, 0.0, 1.0)
+
+    return {
+        "schema_version": LEARNING_SCHEMA_VERSION,
+        "engine_version": "learning-impact-simulator.v1",
+        "simulated_at": datetime.now(timezone.utc),
+        "scope": scope,
+        "strategy_id": normalized_strategy,
+        "family": normalized_family,
+        "recommendation_type": rec_type,
+        "read_only": True,
+        "projected_risk_score": round(projected_risk_score, 6),
+        "projected_gate_decision": _gate_decision_from_risk(projected_risk_score),
+        "expected_hit_rate_delta": round(expected_hit_rate_delta, 6),
+        "expected_avg_return_delta": round(expected_avg_return_delta, 8),
+        "allocation_drift_delta": round(allocation_drift_delta, 6),
+        "hedge_effect_score": round(_clamp(hedge_effect_score, 0.0, 1.0), 6),
+        "baseline": {
+            "hit_rate": round(baseline_hit_rate, 6),
+            "avg_return": round(baseline_avg_return, 8),
+            "false_allow_rate": round(baseline_false_allow, 6),
+            "quality_score": round(baseline_quality, 6),
+            "conflict_success": round(baseline_conflict, 6),
+            "base_risk_score": round(base_risk_score, 6),
+            "weight_multiplier": round(weight_multiplier, 6),
+        },
+        "assumptions": [
+            "read-only simulation: no production rule changed",
+            "allocation and hedge impact are model-based estimates",
+            "apply action requires explicit admin approval",
+        ],
+    }
+
+
+def simulate_recommendation_row_impact(db: Session, *, recommendation: LearningRecommendation) -> dict:
+    rec_value = recommendation.recommendation_value or {}
+    return simulate_learning_recommendation_impact(
+        db,
+        strategy_id=recommendation.strategy_id,
+        family=recommendation.family,
+        recommendation_type=recommendation.recommendation_type,
+        suggested_weight_multiplier=rec_value.get("suggested_weight_multiplier"),
+    )

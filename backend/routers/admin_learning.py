@@ -6,8 +6,15 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import require_admin
 from models import CanonicalStrategyRegistry, LearningRecommendation, User
+from schemas import LearningImpactSimulationRequest, LearningImpactSimulationResponse
 from services.audit_service import create_audit_log
-from services.learning_memory_service import get_learning_overview, list_learning_events, refresh_learning_memory
+from services.learning_memory_service import (
+    get_learning_overview,
+    list_learning_events,
+    refresh_learning_memory,
+    simulate_learning_recommendation_impact,
+    simulate_recommendation_row_impact,
+)
 
 
 router = APIRouter(prefix="/admin/learning", tags=["admin_learning"])
@@ -120,3 +127,32 @@ def admin_learning_events(
         "generated_at": datetime.now(timezone.utc),
         "items": list_learning_events(db, limit=limit),
     }
+
+
+@router.post("/recommendations/{recommendation_id}/simulate", response_model=LearningImpactSimulationResponse)
+def admin_simulate_learning_recommendation(
+    recommendation_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    recommendation = db.query(LearningRecommendation).filter(LearningRecommendation.id == recommendation_id).first()
+    if recommendation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="learning_recommendation_not_found")
+    return simulate_recommendation_row_impact(db, recommendation=recommendation)
+
+
+@router.post("/simulate-impact", response_model=LearningImpactSimulationResponse)
+def admin_simulate_learning_impact(
+    payload: LearningImpactSimulationRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return simulate_learning_recommendation_impact(
+        db,
+        strategy_id=payload.strategy_id,
+        family=payload.family,
+        recommendation_type=payload.recommendation_type,
+        suggested_weight_multiplier=payload.suggested_weight_multiplier,
+    )

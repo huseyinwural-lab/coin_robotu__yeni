@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,14 @@ export const AdminLearningPanelPage = () => {
   const [overview, setOverview] = useState({ strategy_memory: [], family_memory: [], recommendations: [], events: [], guardrails: {} });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulationHistory, setSimulationHistory] = useState([]);
+  const [simForm, setSimForm] = useState({
+    strategy_id: "",
+    family: "",
+    recommendation_type: "decrease_weight_recommendation",
+    suggested_weight_multiplier: "0.8",
+  });
 
   const loadOverview = async () => {
     setLoading(true);
@@ -48,6 +57,42 @@ export const AdminLearningPanelPage = () => {
     }
   };
 
+  const pushSimulationResult = (payload) => {
+    setSimulationHistory((prev) => [payload, ...prev].slice(0, 20));
+  };
+
+  const simulateRecommendation = async (recommendationId) => {
+    setIsSimulating(true);
+    try {
+      const { data } = await apiClient.post(`/admin/learning/recommendations/${recommendationId}/simulate`);
+      pushSimulationResult(data);
+      toast.success("Recommendation impact simülasyonu üretildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Recommendation simulation başarısız");
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  const simulateGlobalImpact = async () => {
+    setIsSimulating(true);
+    try {
+      const payload = {
+        strategy_id: String(simForm.strategy_id || "").trim() || null,
+        family: String(simForm.family || "").trim() || null,
+        recommendation_type: simForm.recommendation_type,
+        suggested_weight_multiplier: simForm.suggested_weight_multiplier ? Number(simForm.suggested_weight_multiplier) : null,
+      };
+      const { data } = await apiClient.post("/admin/learning/simulate-impact", payload);
+      pushSimulationResult(data);
+      toast.success("Global impact simülasyonu üretildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Global simulation başarısız");
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="admin-learning-panel-page">
       <header className="border border-black/40 bg-lime-300 p-4" data-testid="admin-learning-panel-header">
@@ -62,12 +107,62 @@ export const AdminLearningPanelPage = () => {
         <Button type="button" variant="outline" onClick={refreshLearning} disabled={refreshing} data-testid="admin-learning-panel-refresh-button">
           {refreshing ? "Çalışıyor..." : "Learning Refresh (30g)"}
         </Button>
+        <Link to="/admin/learning-impact-simulator" className="inline-flex" data-testid="admin-learning-panel-open-impact-simulator-link">
+          <Button type="button" variant="outline" data-testid="admin-learning-panel-open-impact-simulator-button">Impact Simulator (Detay)</Button>
+        </Link>
       </div>
 
       {loading ? (
         <div className="border border-slate-700 bg-slate-900 p-4 text-sm" data-testid="admin-learning-panel-loading">Yükleniyor...</div>
       ) : (
         <>
+          <div className="rounded border border-blue-800/50 bg-blue-950/20 p-3" data-testid="admin-learning-impact-global-form-panel">
+            <p className="text-sm font-semibold" data-testid="admin-learning-impact-global-form-title">Learning Recommendation Impact Simulator (Global)</p>
+            <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="admin-learning-impact-global-form-grid">
+              <input
+                value={simForm.strategy_id}
+                onChange={(event) => setSimForm((prev) => ({ ...prev, strategy_id: event.target.value }))}
+                placeholder="strategy_id (opsiyonel)"
+                className="h-10 rounded border border-blue-700 bg-black px-3 text-xs"
+                data-testid="admin-learning-impact-global-strategy-id-input"
+              />
+              <input
+                value={simForm.family}
+                onChange={(event) => setSimForm((prev) => ({ ...prev, family: event.target.value }))}
+                placeholder="family (trend/breakout/...)"
+                className="h-10 rounded border border-blue-700 bg-black px-3 text-xs"
+                data-testid="admin-learning-impact-global-family-input"
+              />
+              <select
+                value={simForm.recommendation_type}
+                onChange={(event) => setSimForm((prev) => ({ ...prev, recommendation_type: event.target.value }))}
+                className="h-10 rounded border border-blue-700 bg-black px-3 text-xs"
+                data-testid="admin-learning-impact-global-recommendation-type-select"
+              >
+                <option value="disable_recommendation">disable_recommendation</option>
+                <option value="decrease_weight_recommendation">decrease_weight_recommendation</option>
+                <option value="increase_weight_recommendation">increase_weight_recommendation</option>
+              </select>
+              <input
+                type="number"
+                step="0.05"
+                min="0.1"
+                max="3"
+                value={simForm.suggested_weight_multiplier}
+                onChange={(event) => setSimForm((prev) => ({ ...prev, suggested_weight_multiplier: event.target.value }))}
+                placeholder="weight multiplier"
+                className="h-10 rounded border border-blue-700 bg-black px-3 text-xs"
+                data-testid="admin-learning-impact-global-weight-multiplier-input"
+              />
+            </div>
+            <div className="mt-2 flex items-center gap-2" data-testid="admin-learning-impact-global-form-actions">
+              <Button type="button" variant="outline" disabled={isSimulating} onClick={simulateGlobalImpact} data-testid="admin-learning-impact-global-simulate-button">
+                {isSimulating ? "Simulating..." : "Simulate Impact"}
+              </Button>
+              <p className="text-xs text-blue-100" data-testid="admin-learning-impact-global-form-note">Read-only simülasyon; Apply ayrı butondur.</p>
+            </div>
+          </div>
+
           <div className="overflow-x-auto border border-slate-700" data-testid="admin-learning-strategy-memory-wrapper">
             <table className="min-w-[1400px] text-xs" data-testid="admin-learning-strategy-memory-table">
               <thead>
@@ -153,10 +248,28 @@ export const AdminLearningPanelPage = () => {
                   <Button type="button" size="sm" variant="outline" disabled={Boolean(item.is_applied)} onClick={() => applyRecommendation(item.id)} data-testid={`admin-learning-recommendation-apply-button-${item.id}`}>
                     {item.is_applied ? "Applied" : "Apply"}
                   </Button>
+                  <Button type="button" size="sm" variant="outline" disabled={isSimulating} onClick={() => simulateRecommendation(item.id)} data-testid={`admin-learning-recommendation-simulate-button-${item.id}`}>
+                    Simulate Impact
+                  </Button>
                 </div>
               ))}
               {(overview.recommendations || []).length === 0 && <p className="text-xs" data-testid="admin-learning-recommendation-empty">Öneri yok.</p>}
             </div>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2" data-testid="admin-learning-impact-simulation-results-grid">
+            {simulationHistory.map((item, idx) => (
+              <article key={`sim-${idx}`} className="rounded border border-blue-700/60 bg-black/30 p-3" data-testid={`admin-learning-impact-simulation-result-card-${idx}`}>
+                <p className="text-xs" data-testid={`admin-learning-impact-simulation-scope-${idx}`}>scope={item.scope} · rec={item.recommendation_type}</p>
+                <p className="text-xs" data-testid={`admin-learning-impact-simulation-project-risk-${idx}`}>projected_risk_score={item.projected_risk_score}</p>
+                <p className="text-xs" data-testid={`admin-learning-impact-simulation-project-gate-${idx}`}>projected_gate_decision={item.projected_gate_decision}</p>
+                <p className="text-xs" data-testid={`admin-learning-impact-simulation-hit-delta-${idx}`}>expected_hit_rate_delta={item.expected_hit_rate_delta}</p>
+                <p className="text-xs" data-testid={`admin-learning-impact-simulation-return-delta-${idx}`}>expected_avg_return_delta={item.expected_avg_return_delta}</p>
+                <p className="text-xs" data-testid={`admin-learning-impact-simulation-drift-delta-${idx}`}>allocation_drift_delta={item.allocation_drift_delta}</p>
+                <p className="text-xs" data-testid={`admin-learning-impact-simulation-hedge-score-${idx}`}>hedge_effect_score={item.hedge_effect_score}</p>
+              </article>
+            ))}
+            {simulationHistory.length === 0 && <p className="text-xs text-slate-300" data-testid="admin-learning-impact-simulation-empty">Henüz simülasyon çalıştırılmadı.</p>}
           </div>
 
           <div className="overflow-x-auto border border-slate-700" data-testid="admin-learning-events-wrapper">
