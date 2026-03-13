@@ -1,0 +1,182 @@
+{
+  "summary": "Iteration 80 - Live Control Status Card Feature Verification - All features PASS",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "features_tested": {
+    "user_signals_live_control_status_card": {
+      "status": "PASS",
+      "description": "Live Control Status card displays on User Signals page with all required fields",
+      "verified_elements": [
+        "Signal Mode (data-testid=user-signals-live-control-mode)",
+        "Bot Runtime (data-testid=user-signals-live-control-bot-runtime)",
+        "Execution Path (data-testid=user-signals-live-control-execution-path)",
+        "Last Signal State (data-testid=user-signals-live-control-latest-signal-state)",
+        "Current Blocker (data-testid=user-signals-live-control-current-blocker)",
+        "Note about ORDER_PRECHECK_FAILED"
+      ]
+    },
+    "user_signals_actions": {
+      "status": "PASS",
+      "description": "Action buttons present and functional on User Signals page",
+      "verified_elements": [
+        "AUTO'ya Al button (data-testid=user-signals-set-auto-mode-button)",
+        "Fix All Blockers button (data-testid=user-signals-fix-all-blockers-button)",
+        "Refresh/Yenile button (data-testid=user-signals-refresh-button)",
+        "Auto Refresh: 15s indicator (data-testid=user-signals-auto-refresh-indicator)"
+      ]
+    },
+    "user_dashboard_live_control_status_card": {
+      "status": "PASS",
+      "description": "Live Control Status card displays on User Dashboard page with all required fields",
+      "verified_elements": [
+        "Signal Mode (data-testid=user-dashboard-live-control-mode)",
+        "Bot Runtime (data-testid=user-dashboard-live-control-bot-runtime)",
+        "Execution Path (data-testid=user-dashboard-live-control-execution-path)",
+        "Last Signal State (data-testid=user-dashboard-live-control-latest-signal-state)",
+        "Current Blocker (data-testid=user-dashboard-live-control-current-blocker)",
+        "Note about ORDER_PRECHECK_FAILED (data-testid=user-dashboard-live-control-note)"
+      ]
+    },
+    "user_dashboard_actions": {
+      "status": "PASS",
+      "description": "Action buttons present and functional on User Dashboard page",
+      "verified_elements": [
+        "AUTO'ya Al button (data-testid=user-dashboard-live-control-set-auto-button)",
+        "Fix All Blockers button (data-testid=user-dashboard-live-control-fix-all-blockers-button)",
+        "Refresh/Yenile button (data-testid=user-dashboard-live-control-refresh-button)",
+        "Auto Refresh: 15s indicator (data-testid=user-dashboard-live-control-status-refresh)"
+      ]
+    },
+    "auto_refresh_15s": {
+      "status": "PASS",
+      "description": "Both pages show 15s auto refresh indicator and have useEffect interval for 15000ms",
+      "code_verified": [
+        "UserSignalsPage.jsx lines 58-63: setInterval with 15000ms",
+        "UserDashboardPage.jsx lines 87-92: setInterval with 15000ms"
+      ]
+    },
+    "scanner_mode_enforcement_regression": {
+      "status": "PASS",
+      "description": "Scanner mode enforcement for active bot users works correctly (AUTO enforce with warning)",
+      "api_test": "POST /api/user/scanner/run with mode=MANUAL returns mode=AUTO and warning 'signal_mode_auto_enforced_for_active_bot'"
+    },
+    "order_precheck_failed_blocking_regression": {
+      "status": "PASS",
+      "description": "ORDER_PRECHECK_FAILED signals remain blocked and are not auto-bypassed",
+      "api_test": "POST /api/user/signals/fix-all-blockers does not contain 'order_precheck_bypassed' action"
+    }
+  },
+  "api_verification": {
+    "signal_mode_get": {
+      "endpoint": "GET /api/user/signal-mode",
+      "status": "PASS",
+      "response_contains": ["mode"]
+    },
+    "signal_mode_set_auto": {
+      "endpoint": "PUT /api/user/signal-mode",
+      "status": "PASS",
+      "request": {"mode": "AUTO"},
+      "response_mode": "AUTO"
+    },
+    "fix_all_blockers": {
+      "endpoint": "POST /api/user/signals/fix-all-blockers",
+      "status": "PASS",
+      "response_contains": ["fixed_count", "remaining_blocked"]
+    },
+    "user_dashboard": {
+      "endpoint": "GET /api/user/dashboard",
+      "status": "PASS"
+    },
+    "user_signals": {
+      "endpoint": "GET /api/user/signals",
+      "status": "PASS"
+    },
+    "bot_profiles": {
+      "endpoint": "GET /api/bot-profiles",
+      "status": "PASS"
+    }
+  },
+  "ui_verification": {
+    "user_signals_page": {
+      "status": "PASS",
+      "elements_verified": {
+        "live_control_status_card": true,
+        "signal_mode_display": "Signal Mode: AUTO",
+        "bot_runtime_display": "Bot Runtime: RUNNING (1)",
+        "execution_path_display": "Execution Path: BOT_AUTO_ACTIVE",
+        "last_signal_state": "BLOCKED (APTUSDT)",
+        "current_blocker": "EXCHANGE_NOT_READY",
+        "auto_refresh_indicator": "Auto Refresh: 15s",
+        "auto_ya_al_button": true,
+        "fix_all_blockers_button": true,
+        "refresh_button": true
+      }
+    },
+    "user_dashboard_page": {
+      "status": "PASS",
+      "elements_verified": {
+        "live_control_status_card": true,
+        "signal_mode_display": "Signal Mode: AUTO",
+        "bot_runtime_display": "Bot Runtime: RUNNING (1)",
+        "execution_path_display": "Execution Path: BOT_AUTO_ACTIVE",
+        "last_signal_state": "BLOCKED (APTUSDT)",
+        "current_blocker": "EXCHANGE_NOT_READY",
+        "auto_refresh_indicator": "Auto Refresh: 15s",
+        "auto_ya_al_button": true,
+        "fix_all_blockers_button": true,
+        "refresh_button": true,
+        "order_precheck_note": true
+      }
+    }
+  },
+  "test_results": {
+    "backend_tests": {
+      "total": 13,
+      "passed": 13,
+      "skipped": 0,
+      "failed": 0,
+      "test_file": "/app/backend/tests/test_iteration80_live_control_status.py"
+    },
+    "frontend_tests": {
+      "playwright_verification": "PASS",
+      "pages_tested": ["User Signals", "User Dashboard"],
+      "all_elements_found": true,
+      "all_actions_functional": true
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration80_live_control_status.py",
+    "/app/test_reports/pytest/pytest_results_iter80_live_control.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "UserSignalsPage.jsx: Live Control Status card implemented at lines 372-382 with correct data-testid attributes",
+    "UserDashboardPage.jsx: Live Control Status card implemented at lines 238-256 with correct data-testid attributes",
+    "Both pages have 15s auto refresh implemented via useEffect with setInterval",
+    "controlPanelState/liveControlState useMemo correctly computes all required fields",
+    "Backend scanner mode enforcement at user_scanner_signal_service.py lines 562-564 works correctly"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration80_live_control_status.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 passed)",
+    "frontend": "100% (all elements verified)"
+  },
+  "test_credentials": {
+    "admin": "admin@platform.dev / Admin12345!",
+    "test_user": "test_iter79_scanner_1773403334@test.com / TestPass123!"
+  },
+  "seed_data_creation": "Used existing approved user from iteration 79",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 80 verified Live Control Status feature: (1) User Signals page has Live Control Status card with Signal Mode, Bot Runtime, Execution Path, Last Signal State, Current Blocker displayed. Actions: AUTO'ya Al, Fix All Blockers, Refresh + 15s auto refresh indicator. (2) User Dashboard page has identical Live Control Status card with same fields and actions. (3) Backend regressions verified: scanner mode enforcement for active bot users (AUTO enforce with warning), ORDER_PRECHECK_FAILED remains blocked. All data-testid attributes correctly prefixed with user-signals-live-control-* and user-dashboard-live-control-*.",
+  "rca_of_the_issue": "N/A - Feature verification, not bug fix"
+}

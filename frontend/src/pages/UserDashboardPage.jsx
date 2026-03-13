@@ -43,32 +43,104 @@ export const UserDashboardPage = () => {
   const [portfolio, setPortfolio] = useState(null);
   const [performance, setPerformance] = useState(null);
   const [riskPolicies, setRiskPolicies] = useState([]);
+  const [signalMode, setSignalMode] = useState(null);
+  const [botProfiles, setBotProfiles] = useState([]);
+  const [recentSignals, setRecentSignals] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [wizardForm, setWizardForm] = useState(null);
   const [isSavingWizard, setIsSavingWizard] = useState(false);
   const [wizardDismissed, setWizardDismissed] = useState(false);
+  const [isControlBusy, setIsControlBusy] = useState(false);
 
-  const load = async () => {
-    setIsLoading(true);
+  const load = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setIsLoading(true);
+    }
     try {
-      const [dashboardRes, portfolioRes, performanceRes, riskPoliciesRes] = await Promise.all([
+      const [dashboardRes, portfolioRes, performanceRes, riskPoliciesRes, modeRes, botsRes, signalsRes] = await Promise.all([
         apiClient.get("/user/dashboard"),
         apiClient.get("/user/portfolio"),
         apiClient.get("/user/performance"),
         apiClient.get("/risk-policies"),
+        apiClient.get("/user/signal-mode"),
+        apiClient.get("/bot-profiles"),
+        apiClient.get("/user/signals", { params: { limit: 50 } }),
       ]);
       setDashboard(dashboardRes.data);
       setPortfolio(portfolioRes.data);
       setPerformance(performanceRes.data);
       setRiskPolicies(riskPoliciesRes.data || []);
+      setSignalMode(modeRes.data || null);
+      setBotProfiles(botsRes.data || []);
+      setRecentSignals(signalsRes.data || []);
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      load({ silent: true });
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const activeBotCount = useMemo(
+    () => (botProfiles || []).filter((item) => item.is_running && item.is_enabled).length,
+    [botProfiles],
+  );
+
+  const liveControlState = useMemo(() => {
+    const rawMode = String(signalMode?.mode || "ASSISTED").toUpperCase();
+    const latestSignal = recentSignals[0] || null;
+    const currentBlocker = recentSignals.find((item) => item.status === "blocked" && item.blocked_reason_code) || null;
+    let executionPath = "MANUAL_FLOW";
+    if (rawMode === "AUTO" && activeBotCount > 0) {
+      executionPath = "BOT_AUTO_ACTIVE";
+    } else if (rawMode === "ASSISTED") {
+      executionPath = "SEMI_AUTO_ACTIVE";
+    }
+    return {
+      rawMode,
+      botRuntime: activeBotCount > 0 ? "RUNNING" : "STOPPED",
+      activeBotCount,
+      executionPath,
+      latestSignalState: latestSignal ? `${String(latestSignal.status || "-").toUpperCase()} (${latestSignal.symbol})` : "-",
+      currentBlocker: currentBlocker?.blocked_reason_code || "-",
+    };
+  }, [activeBotCount, recentSignals, signalMode?.mode]);
+
+  const setSignalModeAuto = async () => {
+    setIsControlBusy(true);
+    try {
+      await apiClient.put("/user/signal-mode", { mode: "AUTO" });
+      toast.success("Signal mode AUTO olarak ayarlandı");
+      await load({ silent: true });
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Signal mode AUTO ayarlanamadı");
+    } finally {
+      setIsControlBusy(false);
+    }
+  };
+
+  const runFixAllBlockers = async () => {
+    setIsControlBusy(true);
+    try {
+      const { data } = await apiClient.post("/user/signals/fix-all-blockers", null, { params: { limit: 250 } });
+      toast.success(`Fix All: fixed=${data?.fixed_count || 0}, remaining=${data?.remaining_blocked || 0}`);
+      await load({ silent: true });
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Fix All Blockers başarısız");
+    } finally {
+      setIsControlBusy(false);
+    }
+  };
 
   const defaultPolicy = useMemo(() => {
     const auto = (riskPolicies || []).find((item) => String(item.name || "").toLowerCase().includes("starter safe (auto)"));
@@ -162,6 +234,26 @@ export const UserDashboardPage = () => {
           Responsive ve erişilebilir özet görünümü. Assisted kuyruk, portföy ve performans tek ekranda.
         </p>
       </header>
+
+      <section className="col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-dashboard-live-control-status-card">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-dashboard-live-control-status-header">
+          <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-dashboard-live-control-status-title">Live Control Status</p>
+          <p className="text-xs text-cyan-100" data-testid="user-dashboard-live-control-status-refresh">Auto Refresh: 15s</p>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="user-dashboard-live-control-status-grid">
+          <p className="text-sm" data-testid="user-dashboard-live-control-mode">Signal Mode: {liveControlState.rawMode}</p>
+          <p className="text-sm" data-testid="user-dashboard-live-control-bot-runtime">Bot Runtime: {liveControlState.botRuntime} ({liveControlState.activeBotCount})</p>
+          <p className="text-sm" data-testid="user-dashboard-live-control-execution-path">Execution Path: {liveControlState.executionPath}</p>
+          <p className="text-sm" data-testid="user-dashboard-live-control-latest-signal-state">Last Signal State: {liveControlState.latestSignalState}</p>
+          <p className="text-sm" data-testid="user-dashboard-live-control-current-blocker">Current Blocker: {liveControlState.currentBlocker}</p>
+          <p className="text-sm" data-testid="user-dashboard-live-control-note">Not: ORDER_PRECHECK_FAILED bypass edilmez, güvenlik için blocked kalır.</p>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2" data-testid="user-dashboard-live-control-actions">
+          <Button variant="outline" disabled={isControlBusy} onClick={setSignalModeAuto} data-testid="user-dashboard-live-control-set-auto-button">AUTO'ya Al</Button>
+          <Button className="bg-cyan-500 text-black hover:bg-cyan-400" disabled={isControlBusy} onClick={runFixAllBlockers} data-testid="user-dashboard-live-control-fix-all-blockers-button">Fix All Blockers</Button>
+          <Button variant="outline" disabled={isControlBusy} onClick={() => load({ silent: true })} data-testid="user-dashboard-live-control-refresh-button">Yenile</Button>
+        </div>
+      </section>
 
       <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-dashboard-metrics-grid" aria-label="Dashboard metrikleri">
         <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Bot" value={dashboard?.bot_count ?? "-"} testId="user-dashboard-metric-bot-count" /></div>

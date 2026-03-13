@@ -11,6 +11,7 @@ export const UserSignalsPage = () => {
   const navigate = useNavigate();
   const [signals, setSignals] = useState([]);
   const [signalMode, setSignalMode] = useState(null);
+  const [botProfiles, setBotProfiles] = useState([]);
   const [portfolio, setPortfolio] = useState(null);
   const [trades, setTrades] = useState([]);
   const [busyId, setBusyId] = useState("");
@@ -26,23 +27,39 @@ export const UserSignalsPage = () => {
   const [animatedSignalIds, setAnimatedSignalIds] = useState([]);
   const alertedSignalIdsRef = useRef(new Set());
 
-  const load = async () => {
-    setIsLoading(true);
-    const [signalsRes, portfolioRes, tradesRes, modeRes] = await Promise.all([
-      apiClient.get("/user/signals", { params: { limit: 120 } }),
-      apiClient.get("/user/portfolio"),
-      apiClient.get("/user/trades", { params: { limit: 120 } }),
-      apiClient.get("/user/signal-mode"),
-    ]);
-    setSignals(signalsRes.data || []);
-    setPortfolio(portfolioRes.data);
-    setTrades(tradesRes.data || []);
-    setSignalMode(modeRes.data || null);
-    setIsLoading(false);
+  const load = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setIsLoading(true);
+    }
+    try {
+      const [signalsRes, portfolioRes, tradesRes, modeRes, botsRes] = await Promise.all([
+        apiClient.get("/user/signals", { params: { limit: 120 } }),
+        apiClient.get("/user/portfolio"),
+        apiClient.get("/user/trades", { params: { limit: 120 } }),
+        apiClient.get("/user/signal-mode"),
+        apiClient.get("/bot-profiles"),
+      ]);
+      setSignals(signalsRes.data || []);
+      setPortfolio(portfolioRes.data);
+      setTrades(tradesRes.data || []);
+      setSignalMode(modeRes.data || null);
+      setBotProfiles(botsRes.data || []);
+    } finally {
+      if (!silent) {
+        setIsLoading(false);
+      }
+    }
   };
 
   useEffect(() => {
     load();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      load({ silent: true });
+    }, 15000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -160,10 +177,6 @@ export const UserSignalsPage = () => {
     }
   };
 
-  if (isLoading) {
-    return <LoadingSkeleton rows={6} testId="user-signals-loading-skeleton" />;
-  }
-
   const openExecuteFromSignal = (signal) => {
     const side = signal.signal === "short" ? "sell" : "buy";
     const marketType = signal.market_type || "spot";
@@ -225,6 +238,41 @@ export const UserSignalsPage = () => {
       setIsBulkFixRunning(false);
     }
   };
+
+  const setSignalModeAuto = async () => {
+    try {
+      await apiClient.put("/user/signal-mode", { mode: "AUTO" });
+      await load();
+      toast.success("Signal mode AUTO olarak ayarlandı");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Signal mode AUTO ayarlanamadı");
+    }
+  };
+
+  const activeBotCount = useMemo(
+    () => (botProfiles || []).filter((item) => item.is_running && item.is_enabled).length,
+    [botProfiles],
+  );
+
+  const controlPanelState = useMemo(() => {
+    const rawMode = String(signalMode?.mode || "ASSISTED").toUpperCase();
+    const latestSignal = signals[0] || null;
+    const currentBlocker = signals.find((item) => item.status === "blocked" && item.blocked_reason_code) || null;
+    let executionPath = "MANUAL_FLOW";
+    if (rawMode === "AUTO" && activeBotCount > 0) {
+      executionPath = "BOT_AUTO_ACTIVE";
+    } else if (rawMode === "ASSISTED") {
+      executionPath = "SEMI_AUTO_ACTIVE";
+    }
+    return {
+      rawMode,
+      botRuntime: activeBotCount > 0 ? "RUNNING" : "STOPPED",
+      activeBotCount,
+      latestSignalState: latestSignal ? `${String(latestSignal.status || "-").toUpperCase()} (${latestSignal.symbol})` : "-",
+      currentBlocker: currentBlocker?.blocked_reason_code || "-",
+      executionPath,
+    };
+  }, [activeBotCount, signalMode?.mode, signals]);
 
   const buildIntentPayload = (signal) => ({
     source_type: "signal",
@@ -288,6 +336,10 @@ export const UserSignalsPage = () => {
     }
   };
 
+  if (isLoading) {
+    return <LoadingSkeleton rows={6} testId="user-signals-loading-skeleton" />;
+  }
+
   return (
     <section className="grid grid-cols-12 gap-4" data-testid="user-signals-page">
       <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-signals-header">
@@ -312,8 +364,22 @@ export const UserSignalsPage = () => {
           <Button className="bg-cyan-500 text-black hover:bg-cyan-400" disabled={isBulkFixRunning} onClick={runFixAllBlockers} data-testid="user-signals-fix-all-blockers-button">
             {isBulkFixRunning ? "Fixing..." : "Fix All Blockers"}
           </Button>
+          <Button variant="outline" onClick={setSignalModeAuto} data-testid="user-signals-set-auto-mode-button">AUTO'ya Al</Button>
+          <span className="text-xs text-slate-400" data-testid="user-signals-auto-refresh-indicator">Auto Refresh: 15s</span>
         </div>
       </header>
+
+      <section className="col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-signals-live-control-status-card">
+        <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-signals-live-control-status-title">Live Control Status</p>
+        <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="user-signals-live-control-status-grid">
+          <p className="text-sm" data-testid="user-signals-live-control-mode">Signal Mode: {controlPanelState.rawMode}</p>
+          <p className="text-sm" data-testid="user-signals-live-control-bot-runtime">Bot Runtime: {controlPanelState.botRuntime} ({controlPanelState.activeBotCount})</p>
+          <p className="text-sm" data-testid="user-signals-live-control-execution-path">Execution Path: {controlPanelState.executionPath}</p>
+          <p className="text-sm" data-testid="user-signals-live-control-latest-signal-state">Last Signal State: {controlPanelState.latestSignalState}</p>
+          <p className="text-sm" data-testid="user-signals-live-control-current-blocker">Current Blocker: {controlPanelState.currentBlocker}</p>
+          <p className="text-sm" data-testid="user-signals-live-control-note">Not: ORDER_PRECHECK_FAILED durumunda sinyal güvenlik için blocked kalır.</p>
+        </div>
+      </section>
 
       <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-signals-metrics-grid">
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-pending-count-card"><p className="text-xs text-slate-500">Pending</p><p className="text-xl font-semibold text-orange-400" data-testid="user-signals-pending-count-value">{pendingSignals.length}</p></div>
