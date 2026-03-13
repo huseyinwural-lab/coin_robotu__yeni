@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-03-13T06:58:00Z",
+  "screen": "/user/risk-policy",
+  "status": "PASS",
+  "validated_fields": [
+    "Policy Name",
+    "Position Size (%)",
+    "ATR Multiplier",
+    "Risk Reward Ratio (RR)",
+    "Max Concurrent Trades",
+    "Max Daily Loss (%)"
+  ],
+  "checks": {
+    "label_input_association": "6/6 PASS",
+    "aria_label": "6/6 PASS",
+    "aria_describedby": "6/6 PASS",
+    "helper_text": "6/6 PASS",
+    "validation_error_state": "PASS"
+  },
+  "source_report": "/app/test_reports/iteration_67.json"
+}

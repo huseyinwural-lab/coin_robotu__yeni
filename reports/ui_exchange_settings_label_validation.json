@@ -1,0 +1,28 @@
+{
+  "generated_at": "2026-03-13T06:58:00Z",
+  "screen": "/user/exchange-settings",
+  "status": "PASS",
+  "sections": {
+    "futures_label_standard": {
+      "fields": [
+        "Leverage",
+        "Margin Mode",
+        "Position Mode",
+        "Risk % Per Trade",
+        "Max Daily Trades",
+        "ATR Stop Multiplier"
+      ],
+      "labels_found": "6/6",
+      "helpers_found": "6/6"
+    },
+    "connection_profile_form": {
+      "labels_found": "6/6",
+      "helpers_found": "6/6"
+    },
+    "main_api_form": {
+      "labels_found": "4/4",
+      "helpers_found": "4/4"
+    }
+  },
+  "source_report": "/app/test_reports/iteration_67.json"
+}

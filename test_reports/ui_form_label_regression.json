@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-03-13T06:58:00Z",
+  "scope": "UI-07 Form Label Regression",
+  "status": "PASS",
+  "backend": "100% (21/21)",
+  "frontend": "100% (79/79)",
+  "pages": [
+    "/user/bot-profiles",
+    "/user/risk-policy",
+    "/user/exchange-settings"
+  ],
+  "checks": [
+    "label presence",
+    "input association",
+    "aria attributes",
+    "helper text",
+    "validation error messages"
+  ],
+  "source": "/app/test_reports/iteration_67.json",
+  "mocked_api": false
+}

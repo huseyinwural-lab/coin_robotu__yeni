@@ -3184,3 +3184,45 @@
 - **P3 COMPLETE**
 - **P4 COMPLETE**
 - **MOCKED API: YOK**
+
+## 52) 2026-03-13 — UI-07 Form Field Label Standardization (Tek İterasyon)
+
+### Kapsam
+- Kullanıcı onayı ile tek iterasyonda şu ekranlarda label standardizasyonu tamamlandı:
+  - `/user/bot-profiles`
+  - `/user/risk-policy`
+  - `/user/exchange-settings`
+
+### Yapılanlar
+- **Bot Profiles** formu:
+  - Bot Name, Exchange, Market Type, Symbols, Strategy, Max Concurrent Trades alanları label+input association ile güncellendi.
+  - `aria-label`, `aria-describedby`, helper-text ve validation error state eklendi.
+- **Risk Policy** formu:
+  - Policy Name, Position Size (%), ATR Multiplier, Risk Reward Ratio (RR), Max Concurrent Trades, Max Daily Loss (%) alanları semantik olarak güncellendi.
+  - Validation state + helper text + erişilebilirlik nitelikleri eklendi.
+- **Exchange Settings**:
+  - Futures alanları label standardı: Leverage, Margin Mode, Position Mode, Risk % Per Trade, Max Daily Trades, ATR Stop Multiplier.
+  - Connection profile ve ana API formu da label+helper+aria standardına taşındı.
+- **Global UI Contract**:
+  - `form-group`, `form-label`, `form-helper-text`, `form-error-text` sınıfları eklendi ve uygulandı.
+- Route standardı:
+  - `/user/bot-profiles`, `/user/risk-policy` aktif.
+  - Legacy route redirect: `/user/bots` -> `/user/bot-profiles`, `/user/risk-policies` -> `/user/risk-policy`.
+
+### Test Sonuçları
+- Testing agent raporu: `/app/test_reports/iteration_67.json`
+  - Backend: **21/21 PASS**
+  - Frontend: **79/79 PASS**
+  - UI-07 kapsamı: **PASS**
+- Regresyon raporu: `/app/test_reports/ui_form_label_regression.json`
+
+### Üretilen Artefactlar
+- `/app/reports/ui_bot_profile_form_validation.json`
+- `/app/reports/ui_risk_policy_form_validation.json`
+- `/app/reports/ui_exchange_settings_label_validation.json`
+- `/app/reports/ui_form_standardization_validation.json`
+- `/app/test_reports/ui_form_label_regression.json`
+
+### Durum
+- **UI-07: COMPLETE**
+- **MOCKED API: YOK**

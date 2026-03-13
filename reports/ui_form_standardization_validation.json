@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-03-13T06:58:00Z",
+  "status": "PASS",
+  "ui_contract": "form-group > form-label > input/select + form-helper-text + form-error-text",
+  "css_rules": [
+    ".form-group { margin-bottom: 14px; }",
+    ".form-label { font-weight: 600; }",
+    ".form-helper-text { margin-top: 4px; font-size: 0.72rem; }",
+    ".form-error-text { margin-top: 4px; font-size: 0.72rem; }"
+  ],
+  "coverage": [
+    "/user/bot-profiles",
+    "/user/risk-policy",
+    "/user/exchange-settings"
+  ],
+  "source_report": "/app/test_reports/iteration_67.json"
+}
