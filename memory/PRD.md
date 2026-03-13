@@ -3818,3 +3818,36 @@
 - **Scanner aktif mod görünürlüğü: COMPLETE**
 - **Revalidate assignment mismatch fix: COMPLETE**
 - **MOCKED API: YOK**
+
+## 67) 2026-03-13 — Iteration-85 (Stabilization after user frustration)
+
+### Kullanıcı Geri Bildirimi
+- "Giriyorum kabul etmiyor" ve regressions konusunda ciddi memnuniyetsizlik bildirildi.
+
+### Uygulanan Stabilizasyon Fixleri
+1. **Exchange Revalidate netleştirildi ve yanlış blokaj azaltıldı**
+   - `live_mode_service.py`
+   - `assignment_required/settings_mismatch` erken blokajı, kullanıcıda eşleşen `UserExchangeConnection` varsa validate için bypass ediliyor.
+   - Legacy settings satırı eşleşen connection ile senkronlanıyor.
+   - Validate response artık `hint` alanı döndürüyor (invalid_key, trade_permission, ip_restriction, 451 vb. için açıklama).
+
+2. **Exchange Settings UI hata anlaşılabilirliği artırıldı**
+   - `UserExchangeSettingsPage.jsx`
+   - Revalidate sonucu için `hint` satırı eklendi.
+   - Hata banner artık context + reason + hint formatında gösteriliyor.
+   - Başarılı validate sonrası eski hata banner temizleniyor.
+
+3. **İstenen görünürlükler doğrulandı**
+   - `RiskPoliciesPage.jsx`: ACTIVE/INACTIVE panel + row badge
+   - `UserScannerPage.jsx`: Active mode indicator card
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_83.json`
+  - Backend: **11/11 PASS**
+  - Frontend: **PASS**
+  - Validate hint + bypass logic + UI göstergeleri doğrulandı.
+
+### Durum
+- **Revalidate stabilizasyonu: COMPLETE**
+- **Risk policy/scanner göstergeleri: COMPLETE**
+- **MOCKED API: YOK**
