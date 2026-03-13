@@ -3651,3 +3651,31 @@
 - **Futures all-select bug: RESOLVED**
 - **disable_futures reset bug: RESOLVED**
 - **MOCKED API: YOK**
+
+## 62) 2026-03-13 — Iteration-80 (Spot+Futures Bot Smoke Test)
+
+### Kullanıcı Talebi
+- Spot ve futures için birer bot açılıp test edilmesi.
+
+### Uygulanan Test Senaryosu
+1. Yeni test user oluşturuldu ve onaylandı.
+2. Spot + futures exchange connection (testnet) eklendi.
+3. Spot bot + futures bot profilleri oluşturuldu.
+4. Spot scanner çalıştırıldı.
+5. Futures execution preview smoke çalıştırıldı.
+
+### Test Sonuç Özeti
+- Bot profilleri başarıyla oluşturuldu.
+- Spot scanner sinyal üretti.
+- Futures preview endpoint çalıştı.
+- Trading'in ilerlememesindeki ana blocker'lar gözlendi:
+  - `MANUAL_APPROVAL_REQUIRED` (mod davranışı)
+  - `ORDER_PRECHECK_FAILED` (credential/precheck kaynaklı)
+
+### Yorum
+- Sistem tarafındaki global kırıklar düzeltilmiş durumda (futures listesi/fallback, disable_futures reset).
+- Hesap bazında botun işlem açması için execution mode + geçerli exchange credential/precheck koşulları sağlanmalı.
+
+### Durum
+- **Spot/Futures bot smoke test: COMPLETE**
+- **MOCKED API: YOK**
