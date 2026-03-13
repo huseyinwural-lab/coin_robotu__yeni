@@ -256,15 +256,18 @@ def scanner_run(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    result = run_user_scanner(
-        db,
-        current_user.id,
-        requested_mode=payload.mode,
-        max_results=payload.max_results,
-        symbol_source=payload.symbol_source,
-        selected_symbols=payload.selected_symbols,
-        symbol_selection_mode=payload.symbol_selection_mode,
-    )
+    try:
+        result = run_user_scanner(
+            db,
+            current_user.id,
+            requested_mode=payload.mode,
+            max_results=payload.max_results,
+            symbol_source=payload.symbol_source,
+            selected_symbols=payload.selected_symbols,
+            symbol_selection_mode=payload.symbol_selection_mode,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"scanner_run_failed:{exc}") from exc
     create_audit_log(
         db,
         action="user_scanner_run",

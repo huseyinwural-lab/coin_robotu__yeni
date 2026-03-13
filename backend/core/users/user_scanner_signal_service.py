@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from db import redis_client
@@ -9,6 +10,7 @@ from models import (
     PaperPosition,
     PendingSignal,
     RiskPolicy,
+    RiskOrchestratorPolicy,
     SignalEvent,
     UserExchangeConnection,
     UserScannerAutomationConfig,
@@ -23,6 +25,7 @@ from services.execution_intent_service import (
 )
 from services.explainability_service import record_decision_trace
 from services.meta_strategy_engine_service import run_meta_strategy_engine
+from services.canonical_strategy_registry_service import GLOBAL_RISK_POLICY
 from services.pipeline.cache_store import get_json
 from services.pipeline.canonical_signal_engine import scan_canonical_universe_for_signals
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
@@ -63,6 +66,26 @@ SIGNAL_REASON_PRIORITY = [
     "ORDER_PRECHECK_FAILED",
     "MANUAL_APPROVAL_REQUIRED",
 ]
+
+
+def _ensure_scanner_tables(db: Session):
+    inspector = inspect(db.bind)
+    existing = set(inspector.get_table_names())
+    required_models = [
+        UserSignalMode,
+        BotProfile,
+        UserScannerResult,
+        SignalEvent,
+        PendingSignal,
+        PaperPosition,
+        RiskPolicy,
+        UserExchangeConnection,
+    ]
+    for model in required_models:
+        table_name = model.__table__.name
+        if table_name not in existing:
+            model.__table__.create(bind=db.bind, checkfirst=True)
+            existing.add(table_name)
 
 
 def _normalize_mode(mode: str | None) -> str:
@@ -802,6 +825,8 @@ def _dispatch_signal_to_execution(
 
 
 def get_or_create_signal_mode(db: Session, user_id: str) -> UserSignalMode:
+    _ensure_scanner_tables(db)
+
     row = db.query(UserSignalMode).filter(UserSignalMode.user_id == user_id).first()
     if row:
         return row
@@ -882,6 +907,7 @@ def run_user_scanner(
     selected_symbols: list[str] | None = None,
     symbol_selection_mode: str = "bot_scope",
 ) -> dict:
+    _ensure_scanner_tables(db)
     mode_row = get_or_create_signal_mode(db, user_id)
     mode = _normalize_mode(requested_mode or mode_row.mode)
     warning_set: set[str] = set()
@@ -919,6 +945,30 @@ def run_user_scanner(
     queued_count = 0
     symbol_direction_seen: dict[str, str] = {}
 
+    risk_policy_row = db.query(RiskOrchestratorPolicy).filter(RiskOrchestratorPolicy.id == "global").first()
+    reference_equity = float(risk_policy_row.reference_equity_usd) if risk_policy_row else 10000.0
+    risk_per_trade_pct = float(GLOBAL_RISK_POLICY.get("risk_per_trade_pct", 1.5))
+    per_trade_notional_cap = max(10.0, round(reference_equity * (risk_per_trade_pct / 100), 4))
+    max_positions = int(GLOBAL_RISK_POLICY.get("max_positions", 5))
+    cooldown_seconds = int(GLOBAL_RISK_POLICY.get("cooldown_symbol_seconds", 21600))
+
+    open_positions_count = (
+        db.query(PaperPosition)
+        .filter(PaperPosition.user_id == user_id, PaperPosition.status == "open")
+        .count()
+    )
+    cooldown_since = datetime.now(timezone.utc) - timedelta(seconds=cooldown_seconds)
+    recent_rows = (
+        db.query(PendingSignal)
+        .filter(
+            PendingSignal.user_id == user_id,
+            PendingSignal.created_at >= cooldown_since,
+            PendingSignal.status.in_(["pending", "sent", "approved", "filled", "blocked", "risk_blocked"]),
+        )
+        .all()
+    )
+    cooldown_symbols = {str(row.symbol or "").upper() for row in recent_rows if row.symbol}
+
     for item in selected:
         signal_value = str(item.get("signal", "none") or "none").lower()
         reason_codes = item.get("reason_codes") or []
@@ -926,20 +976,6 @@ def run_user_scanner(
         score = float(item.get("signal_score") or 0)
         symbol = str(item.get("symbol", "BTCUSDT")).upper()
         strategy_code = str(item.get("strategy_code") or "canonical_unknown")
-        requested_notional = max(10.0, round(score, 4))
-
-        meta_summary = run_meta_strategy_engine(
-            db,
-            user_id=user_id,
-            strategy_id=strategy_code,
-            symbol=symbol,
-            signal_confidence=max(confidence, round(score / 100, 4)),
-            requested_notional=requested_notional,
-        )
-        meta_decision = str(meta_summary.get("meta_engine_decision") or "ALLOW")
-        allocation_source = str(meta_summary.get("allocation_source") or "weight_based")
-        strategy_weight = float(meta_summary.get("strategy_weight") or 1.0)
-        allocation_reason = str(meta_summary.get("strategy_allocation_reason") or "normal_allocation")
 
         scanner_row = UserScannerResult(
             id=str(uuid.uuid4()),
@@ -962,7 +998,30 @@ def run_user_scanner(
         if existing_direction and existing_direction != signal_value:
             warning_set.add("symbol_direction_conflict_blocked")
             continue
+
+        if symbol in cooldown_symbols:
+            warning_set.add("symbol_cooldown_active")
+            continue
+
+        if open_positions_count + queued_count >= max_positions:
+            warning_set.add("max_positions_reached")
+            continue
+
         symbol_direction_seen[symbol] = signal_value
+
+        requested_notional = min(max(10.0, round(score, 4)), per_trade_notional_cap)
+        meta_summary = run_meta_strategy_engine(
+            db,
+            user_id=user_id,
+            strategy_id=strategy_code,
+            symbol=symbol,
+            signal_confidence=max(confidence, round(score / 100, 4)),
+            requested_notional=requested_notional,
+        )
+        meta_decision = str(meta_summary.get("meta_engine_decision") or "ALLOW")
+        allocation_source = str(meta_summary.get("allocation_source") or "weight_based")
+        strategy_weight = float(meta_summary.get("strategy_weight") or 1.0)
+        allocation_reason = str(meta_summary.get("strategy_allocation_reason") or "normal_allocation")
 
         actionable_count += 1
         signal_event = SignalEvent(

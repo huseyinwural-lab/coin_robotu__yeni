@@ -5,20 +5,232 @@ from sqlalchemy.orm import Session
 from models import CanonicalStrategyRegistry, PendingSignal
 
 
-CANONICAL_STRATEGIES: list[dict] = [
-    {"strategy_id": "ichimoku_trend_continuation", "strategy_family": "trend", "market_regime": "trend", "enabled": True, "priority": 10},
-    {"strategy_id": "golden_cross_regime", "strategy_family": "trend", "market_regime": "trend", "enabled": False, "priority": 20},
-    {"strategy_id": "supertrend_flip", "strategy_family": "trend", "market_regime": "trend", "enabled": True, "priority": 15},
-    {"strategy_id": "vortex_directional_cross", "strategy_family": "trend", "market_regime": "trend", "enabled": False, "priority": 30},
-    {"strategy_id": "bollinger_squeeze_breakout", "strategy_family": "breakout", "market_regime": "breakout", "enabled": True, "priority": 12},
-    {"strategy_id": "moving_momentum", "strategy_family": "trend", "market_regime": "trend", "enabled": False, "priority": 25},
-    {"strategy_id": "fibonacci_pullback_continuation", "strategy_family": "pullback", "market_regime": "pullback", "enabled": False, "priority": 35},
-    {"strategy_id": "macd_impulse", "strategy_family": "momentum", "market_regime": "trend", "enabled": True, "priority": 18},
-    {"strategy_id": "fisher_reversal", "strategy_family": "reversal", "market_regime": "reversal", "enabled": False, "priority": 50},
-    {"strategy_id": "divergence_reversal_suite", "strategy_family": "reversal", "market_regime": "reversal", "enabled": False, "priority": 55},
-    {"strategy_id": "structure_breakout", "strategy_family": "breakout", "market_regime": "breakout", "enabled": False, "priority": 22},
-    {"strategy_id": "stochastic_exhaustion_reentry", "strategy_family": "reversal", "market_regime": "reversal", "enabled": False, "priority": 60},
-]
+GLOBAL_RISK_POLICY = {
+    "max_positions": 5,
+    "risk_per_trade_pct": 1.5,
+    "cooldown_symbol_seconds": 21600,
+    "stop_policy": "atr_based",
+    "take_profit_policy": "rr_based",
+    "exit_policy": "trend_flip_or_opposite_signal",
+}
+
+
+def _contract(
+    *,
+    family: str,
+    regime: str,
+    enabled: bool,
+    priority: int,
+    weight: float,
+    entry_long: list[str],
+    entry_short: list[str],
+    exit_long: list[str],
+    exit_short: list[str],
+    stop_loss: dict,
+    take_profit: dict,
+    invalidation: list[str],
+    signal_score: dict,
+) -> dict:
+    return {
+        "strategy_family": family,
+        "market_regime": regime,
+        "enabled": enabled,
+        "priority": priority,
+        "weight": weight,
+        "entry_long": {"rules": entry_long, "version": "v2"},
+        "entry_short": {"rules": entry_short, "version": "v2"},
+        "exit_long": {"rules": exit_long, "version": "v2"},
+        "exit_short": {"rules": exit_short, "version": "v2"},
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "invalidation": {"rules": invalidation, "version": "v2"},
+        "signal_score": signal_score,
+    }
+
+
+CANONICAL_STRATEGIES: dict[str, dict] = {
+    "ichimoku_trend_continuation": _contract(
+        family="trend",
+        regime="trend",
+        enabled=True,
+        priority=10,
+        weight=3,
+        entry_long=["tenkan_cross_up_kijun", "price_above_kumo", "senkou_a_above_senkou_b", "chikou_above_price"],
+        entry_short=["tenkan_cross_down_kijun", "price_below_kumo", "senkou_a_below_senkou_b", "chikou_below_price"],
+        exit_long=["tenkan_below_kijun", "price_below_kijun"],
+        exit_short=["tenkan_above_kijun", "price_above_kijun"],
+        stop_loss={"type": "atr", "multiplier": 2.0},
+        take_profit={"type": "rr", "ratio": 2.5},
+        invalidation=["price_returns_into_kumo"],
+        signal_score={"strong": 3, "medium": 2},
+    ),
+    "golden_cross_regime": _contract(
+        family="trend",
+        regime="trend",
+        enabled=False,
+        priority=20,
+        weight=2,
+        entry_long=["ma50_above_ma200", "price_above_ma50", "ma50_slope_positive"],
+        entry_short=["ma50_below_ma200", "price_below_ma50", "ma50_slope_negative"],
+        exit_long=["ma50_below_ma200"],
+        exit_short=["ma50_above_ma200"],
+        stop_loss={"type": "atr", "multiplier": 1.8},
+        take_profit={"type": "rr", "ratio": 3.0},
+        invalidation=["price_inside_ma_cluster"],
+        signal_score={"base": 2},
+    ),
+    "supertrend_flip": _contract(
+        family="trend",
+        regime="trend",
+        enabled=True,
+        priority=15,
+        weight=2,
+        entry_long=["price_crosses_above_supertrend"],
+        entry_short=["price_crosses_below_supertrend"],
+        exit_long=["supertrend_flip_bearish"],
+        exit_short=["supertrend_flip_bullish"],
+        stop_loss={"type": "supertrend_band"},
+        take_profit={"type": "trailing_stop"},
+        invalidation=["price_sideways_inside_atr_band"],
+        signal_score={"base": 2},
+    ),
+    "vortex_directional_cross": _contract(
+        family="trend",
+        regime="trend",
+        enabled=False,
+        priority=30,
+        weight=2,
+        entry_long=["vortex_plus_crosses_above_minus"],
+        entry_short=["vortex_minus_crosses_above_plus"],
+        exit_long=["opposite_vortex_cross"],
+        exit_short=["opposite_vortex_cross"],
+        stop_loss={"type": "atr", "multiplier": 1.5},
+        take_profit={"type": "rr", "ratio": 2.0},
+        invalidation=["vortex_lines_converge"],
+        signal_score={"base": 2},
+    ),
+    "bollinger_squeeze_breakout": _contract(
+        family="breakout",
+        regime="breakout",
+        enabled=True,
+        priority=12,
+        weight=3,
+        entry_long=["bandwidth_below_percentile", "price_breaks_upper_band", "volume_spike"],
+        entry_short=["bandwidth_below_percentile", "price_breaks_lower_band", "volume_spike"],
+        exit_long=["price_returns_inside_bands"],
+        exit_short=["price_returns_inside_bands"],
+        stop_loss={"type": "atr", "multiplier": 1.5},
+        take_profit={"type": "rr", "ratio": 2.5},
+        invalidation=["breakout_fails_next_3_bars"],
+        signal_score={"breakout": 3},
+    ),
+    "moving_momentum": _contract(
+        family="trend",
+        regime="trend",
+        enabled=False,
+        priority=25,
+        weight=2,
+        entry_long=["ma20_above_ma150", "macd_bullish_cross", "stoch_oversold_recovery"],
+        entry_short=["ma20_below_ma150", "macd_bearish_cross", "stoch_overbought_rejection"],
+        exit_long=["macd_cross_down"],
+        exit_short=["macd_cross_up"],
+        stop_loss={"type": "atr", "multiplier": 1.7},
+        take_profit={"type": "rr", "ratio": 2.0},
+        invalidation=["ma_slope_flat"],
+        signal_score={"base": 2},
+    ),
+    "fibonacci_pullback_continuation": _contract(
+        family="pullback",
+        regime="pullback",
+        enabled=False,
+        priority=35,
+        weight=2,
+        entry_long=["price_above_ma200", "pullback_in_38_61_zone", "bullish_trigger_candle"],
+        entry_short=["price_below_ma200", "pullback_in_38_61_zone", "bearish_trigger_candle"],
+        exit_long=["price_breaks_previous_swing_low"],
+        exit_short=["price_breaks_previous_swing_high"],
+        stop_loss={"type": "swing_below_above"},
+        take_profit={"type": "previous_swing_target"},
+        invalidation=["fib_zone_breaks"],
+        signal_score={"base": 2},
+    ),
+    "macd_impulse": _contract(
+        family="momentum",
+        regime="trend",
+        enabled=True,
+        priority=18,
+        weight=2,
+        entry_long=["macd_above_signal", "histogram_positive", "close_above_recent_high"],
+        entry_short=["macd_below_signal", "histogram_negative", "close_below_recent_low"],
+        exit_long=["histogram_turns_negative"],
+        exit_short=["histogram_turns_positive"],
+        stop_loss={"type": "atr", "multiplier": 1.5},
+        take_profit={"type": "rr", "ratio": 2.0},
+        invalidation=["macd_flat"],
+        signal_score={"base": 2},
+    ),
+    "fisher_reversal": _contract(
+        family="reversal",
+        regime="reversal",
+        enabled=False,
+        priority=50,
+        weight=1,
+        entry_long=["fisher_crosses_up_previous", "fisher_extreme_negative_zone"],
+        entry_short=["fisher_crosses_down_previous", "fisher_extreme_positive_zone"],
+        exit_long=["fisher_peak"],
+        exit_short=["fisher_trough"],
+        stop_loss={"type": "recent_swing"},
+        take_profit={"type": "rr", "ratio": 1.8},
+        invalidation=["fisher_stays_flat"],
+        signal_score={"base": 1},
+    ),
+    "divergence_reversal_suite": _contract(
+        family="reversal",
+        regime="reversal",
+        enabled=False,
+        priority=55,
+        weight=1,
+        entry_long=["price_lower_low", "indicator_higher_low"],
+        entry_short=["price_higher_high", "indicator_lower_high"],
+        exit_long=["trend_continuation_resumes"],
+        exit_short=["trend_continuation_resumes"],
+        stop_loss={"type": "swing_low_high"},
+        take_profit={"type": "mid_range"},
+        invalidation=["divergence_disappears"],
+        signal_score={"base": 1},
+    ),
+    "structure_breakout": _contract(
+        family="breakout",
+        regime="breakout",
+        enabled=False,
+        priority=22,
+        weight=2,
+        entry_long=["descending_trendline_break", "triangle_breakout", "double_bottom_neckline_break"],
+        entry_short=["ascending_trendline_break", "triangle_breakdown", "double_top_neckline_break"],
+        exit_long=["return_inside_structure"],
+        exit_short=["return_inside_structure"],
+        stop_loss={"type": "atr", "multiplier": 1.6},
+        take_profit={"type": "pattern_projection"},
+        invalidation=["false_breakout"],
+        signal_score={"base": 2},
+    ),
+    "stochastic_exhaustion_reentry": _contract(
+        family="reversal",
+        regime="reversal",
+        enabled=False,
+        priority=60,
+        weight=1,
+        entry_long=["stochastic_below_20", "price_breaks_trigger_high"],
+        entry_short=["stochastic_above_80", "price_breaks_trigger_low"],
+        exit_long=["stochastic_above_70"],
+        exit_short=["stochastic_below_30"],
+        stop_loss={"type": "atr", "multiplier": 1.4},
+        take_profit={"type": "rr", "ratio": 1.5},
+        invalidation=["oscillator_stays_extreme"],
+        signal_score={"base": 1},
+    ),
+}
+
 
 LEGACY_CANDIDATES: list[str] = [
     "legacy_ichimoku_variants",
@@ -48,30 +260,68 @@ def _cooldown_seconds(policy: str) -> int:
 def seed_canonical_strategy_registry(db: Session) -> None:
     existing = {row.strategy_id: row for row in db.query(CanonicalStrategyRegistry).all()}
 
-    for item in CANONICAL_STRATEGIES:
-        strategy_id = item["strategy_id"]
+    for strategy_id, item in CANONICAL_STRATEGIES.items():
         if strategy_id in existing:
+            row = existing[strategy_id]
+            row.strategy_family = item["strategy_family"]
+            row.entry_logic_version = "v2"
+            row.exit_logic_version = "v2"
+            row.market_regime = item["market_regime"]
+            row.risk_profile = "global_standardized"
+            row.priority = int(item["priority"])
+            row.cooldown_policy = "symbol:21600s"
+            row.weight = float(item["weight"])
+            row.entry_long = item["entry_long"]
+            row.entry_short = item["entry_short"]
+            row.exit_long = item["exit_long"]
+            row.exit_short = item["exit_short"]
+            row.stop_loss = item["stop_loss"]
+            row.take_profit = item["take_profit"]
+            row.invalidation = item["invalidation"]
+            row.signal_score = item["signal_score"]
+            row.invalid_state_rules = ["double_intent_conflict", "symbol_direction_conflict"]
+            row.cooldown_rules = {"policy": "symbol", "seconds": 21600}
+            row.risk_rules = {
+                "single_symbol_single_direction": True,
+                "atr_stop_required": True,
+                "rr_target_required": True,
+                "max_positions": GLOBAL_RISK_POLICY["max_positions"],
+                "risk_per_trade_pct": GLOBAL_RISK_POLICY["risk_per_trade_pct"],
+            }
+            row.is_legacy_candidate = False
+            row.in_production_path = True
             continue
+
         db.add(
             CanonicalStrategyRegistry(
                 strategy_id=strategy_id,
                 strategy_family=item["strategy_family"],
                 direction="both",
                 market_regime=item["market_regime"],
-                entry_logic_version="v1",
-                exit_logic_version="v1",
-                risk_profile="balanced",
+                entry_logic_version="v2",
+                exit_logic_version="v2",
+                risk_profile="global_standardized",
                 is_enabled=bool(item["enabled"]),
                 priority=int(item["priority"]),
-                cooldown_policy="symbol:180s",
-                weight=1.0,
-                entry_long={"contract": "entry_long", "version": "v1"},
-                entry_short={"contract": "entry_short", "version": "v1"},
-                exit_long={"contract": "exit_long", "version": "v1"},
-                exit_short={"contract": "exit_short", "version": "v1"},
+                cooldown_policy="symbol:21600s",
+                weight=float(item["weight"]),
+                entry_long=item["entry_long"],
+                entry_short=item["entry_short"],
+                exit_long=item["exit_long"],
+                exit_short=item["exit_short"],
+                stop_loss=item["stop_loss"],
+                take_profit=item["take_profit"],
+                invalidation=item["invalidation"],
+                signal_score=item["signal_score"],
                 invalid_state_rules=["double_intent_conflict", "symbol_direction_conflict"],
-                cooldown_rules={"policy": "symbol", "seconds": 180},
-                risk_rules={"single_symbol_single_direction": True, "atr_stop_required": True, "rr_target_required": True},
+                cooldown_rules={"policy": "symbol", "seconds": 21600},
+                risk_rules={
+                    "single_symbol_single_direction": True,
+                    "atr_stop_required": True,
+                    "rr_target_required": True,
+                    "max_positions": GLOBAL_RISK_POLICY["max_positions"],
+                    "risk_per_trade_pct": GLOBAL_RISK_POLICY["risk_per_trade_pct"],
+                },
                 is_legacy_candidate=False,
                 in_production_path=True,
             )
@@ -97,6 +347,10 @@ def seed_canonical_strategy_registry(db: Session) -> None:
                 entry_short={},
                 exit_long={},
                 exit_short={},
+                stop_loss={},
+                take_profit={},
+                invalidation={},
+                signal_score={},
                 invalid_state_rules=["legacy_blocked"],
                 cooldown_rules={"policy": "none"},
                 risk_rules={"mode": "legacy_candidate"},
