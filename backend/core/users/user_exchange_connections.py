@@ -95,8 +95,8 @@ def _bootstrap_from_legacy(db: Session, user_id: str) -> None:
 
 
 def _sync_legacy_default(db: Session, row: UserExchangeConnection) -> None:
-    api_key = decrypt_exchange_secret(row.api_key_encrypted)
-    api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
+    api_key = decrypt_exchange_secret(row.api_key_encrypted).strip()
+    api_secret = decrypt_exchange_secret(row.api_secret_encrypted).strip()
     upsert_user_exchange_connection(
         db,
         user_id=row.user_id,
@@ -158,6 +158,9 @@ def create_user_exchange_connection(
             .update({"is_default": False}, synchronize_session=False)
         )
 
+    clean_api_key = (api_key or "").strip()
+    clean_api_secret = (api_secret or "").strip()
+
     row = UserExchangeConnection(
         id=str(uuid.uuid4()),
         user_id=user_id,
@@ -170,8 +173,8 @@ def create_user_exchange_connection(
         if isinstance(readiness_snapshot, dict)
         else _default_readiness_snapshot(db, user_id, normalized_exchange, normalized_market_type, normalized_environment),
         permission_snapshot=permission_snapshot or [],
-        api_key_encrypted=encrypt_exchange_secret(api_key or ""),
-        api_secret_encrypted=encrypt_exchange_secret(api_secret or ""),
+        api_key_encrypted=encrypt_exchange_secret(clean_api_key),
+        api_secret_encrypted=encrypt_exchange_secret(clean_api_secret),
         created_at=_now(),
         updated_at=_now(),
     )
@@ -239,9 +242,9 @@ def update_user_exchange_connection(
         row.readiness_snapshot = _default_readiness_snapshot(db, user_id, row.exchange, row.market_type, row.environment)
 
     if api_key is not None:
-        row.api_key_encrypted = encrypt_exchange_secret(api_key)
+        row.api_key_encrypted = encrypt_exchange_secret((api_key or "").strip())
     if api_secret is not None:
-        row.api_secret_encrypted = encrypt_exchange_secret(api_secret)
+        row.api_secret_encrypted = encrypt_exchange_secret((api_secret or "").strip())
 
     if is_default is True and not row.is_default:
         (

@@ -521,7 +521,7 @@ def _extract_reason_codes(payload: dict, status_code: int) -> list[str]:
             reason_codes.append("ip_restriction")
         if code in {-2015, -2014, -1022} or "invalid" in message:
             reason_codes.append("invalid_key")
-        if "permission" in message:
+        if "permission" in message and "invalid_key" not in reason_codes:
             reason_codes.append("missing_trade_permission")
 
     if not reason_codes and status_code >= 400:
@@ -717,8 +717,8 @@ def validate_exchange_credentials_for_user(
     if requested_exchange != "binance":
         return _validation_failure(["adapter_not_configured"], 400)
 
-    api_key = decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else ""
-    api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else ""
+    api_key = (decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else "").strip()
+    api_secret = (decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else "").strip()
 
     if not api_key or not api_secret:
         return _validation_failure(["missing_credentials"], 400)
