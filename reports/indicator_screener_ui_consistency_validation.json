@@ -1,0 +1,121 @@
+{
+  "generated_at": "2026-03-13T01:00:00Z",
+  "scope": "U-IS-04 Visual Consistency and UI Closure (F-12..F-18)",
+  "status": "PASS",
+  "feature_validation": {
+    "F-12_header_light_green_standard": {
+      "status": "PASS",
+      "evidence": "Header classes: bg-gradient-to-r from-emerald-100 via-emerald-50 to-lime-100",
+      "screenshot": "iter60_screener_header.jpeg"
+    },
+    "F-12_top_toolbar_alignment": {
+      "status": "PASS",
+      "evidence": "Query Expression field + Run Scan + Reset + Save Query buttons aligned in grid layout",
+      "elements_verified": [
+        "user-indicator-screener-top-toolbar-grid",
+        "user-indicator-screener-top-toolbar-query-field",
+        "user-indicator-screener-top-toolbar-actions",
+        "user-indicator-screener-query-summary-box",
+        "user-indicator-screener-applied-filter-summary-box"
+      ]
+    },
+    "F-13_filter_panel_grouped_layout": {
+      "status": "PASS",
+      "evidence": "All filter groups visible with titles and helper text",
+      "groups_verified": [
+        "Market + Sorting (group-market-sorting)",
+        "Universe + Liquidity (group-universe-liquidity)",
+        "Participation + Result Quality (group-participation-quality)",
+        "Quick Presets (presets-title)"
+      ],
+      "helper_text_present": true
+    },
+    "F-14_dense_table_standard": {
+      "status": "PASS",
+      "evidence": "Table classes: [&_td]:py-1 [&_th]:py-1, sticky header, emerald-50 background",
+      "features_verified": [
+        "Sticky header: sticky top-0 z-20",
+        "Numeric right alignment: text-right tabular-nums",
+        "Sortable header icons: ▲/▼/↕",
+        "Row hover: hover:bg-emerald-50/50",
+        "Row selected: bg-emerald-50",
+        "Compact/Wide toggle: [&_td]:py-1 vs [&_td]:py-2"
+      ]
+    },
+    "F-15_action_color_compliance": {
+      "status": "PASS",
+      "evidence": "Button classes verified for all action types",
+      "button_styles": {
+        "primary_green": "bg-emerald-300 text-slate-950 hover:bg-emerald-200 (Run Scan)",
+        "secondary_neutral": "bg-slate-100 text-slate-900 hover:bg-slate-50 (Save Query, Export CSV)",
+        "warning_amber": "bg-amber-400 text-slate-950 hover:bg-amber-300 (Reset)",
+        "danger_red": "bg-rose-500 text-white hover:bg-rose-400 (defined but not visible in current flow)",
+        "disabled_muted": "disabled:bg-slate-300 disabled:text-slate-500"
+      }
+    },
+    "F-16_state_visual_separation": {
+      "status": "PASS",
+      "evidence": "State contract panel classes verified for different states",
+      "state_styles": {
+        "loading": "border-sky-300 bg-sky-50 text-sky-900",
+        "no_match": "border-emerald-300 bg-emerald-50 text-emerald-900",
+        "empty_universe": "border-amber-300 bg-amber-50 text-amber-900",
+        "invalid_filter_combination": "border-amber-400 bg-amber-50 text-amber-900",
+        "invalid_query": "border-rose-300 bg-rose-50 text-rose-900",
+        "backend_unavailable": "border-rose-300 bg-rose-50 text-rose-900",
+        "rate_limit_throttled": "border-orange-300 bg-orange-50 text-orange-900",
+        "permission_blocked": "border-rose-300 bg-rose-50 text-rose-900"
+      },
+      "screenshots": [
+        "iter60_state_no_match.jpeg",
+        "iter60_state_invalid_query.jpeg"
+      ]
+    },
+    "F-17_active_filter_chips_visibility": {
+      "status": "PASS",
+      "evidence": "Active filter chips panel visible with chips updating on filter changes",
+      "elements_verified": [
+        "user-indicator-screener-active-filters-panel",
+        "user-indicator-screener-active-filters-title",
+        "user-indicator-screener-active-filters-list"
+      ],
+      "chip_styling": "rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs text-emerald-900",
+      "clear_chip_functional": true
+    },
+    "F-18_bridge_context_retention": {
+      "status": "PASS",
+      "evidence": "Open in Execute includes marketType, saved query restores filter_snapshot",
+      "execute_navigation": "/user/execute?symbol={symbol}&marketType={market_type}&side=BUY&quantity=0.001&timeInForce=GTC&source=indicator-screener",
+      "saved_query_filter_snapshot": "filter_snapshot stored on save, restored on applySavedQuery"
+    }
+  },
+  "backend_regression": {
+    "status": "PASS",
+    "endpoints_tested": [
+      "POST /api/user/indicator-screener/run",
+      "GET /api/user/indicator-screener/presets",
+      "GET /api/user/indicator-screener/saved-queries",
+      "GET /api/user/indicator-screener/watchlist"
+    ],
+    "contract_verification": {
+      "applied_filters_returned": true,
+      "active_filter_chips_returned": true,
+      "result_state_separation": true,
+      "filter_payload_processing": true
+    }
+  },
+  "test_credentials": {
+    "user": "indicator.manual@platform.dev / User12345!"
+  },
+  "screenshots": [
+    "iter60_screener_header.jpeg",
+    "iter60_screener_filter_panel.jpeg",
+    "iter60_screener_table_results.jpeg",
+    "iter60_screener_final.jpeg",
+    "iter60_state_no_match.jpeg",
+    "iter60_state_invalid_query.jpeg",
+    "iter60_filter_snapshot_test.jpeg",
+    "iter60_active_chips.jpeg",
+    "iter60_table_with_results.jpeg"
+  ]
+}
