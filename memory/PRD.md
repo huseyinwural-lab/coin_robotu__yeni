@@ -4086,3 +4086,70 @@
 - **Docker compose deterministic startup hardening: COMPLETE**
 - **Runtime env strategy (.env) + examples: COMPLETE**
 - **Admin bootstrap deterministic behavior: COMPLETE**
+
+## 74) 2026-03-13 — Iteration-92 (Sprint-1: Canonical Strategy Registry + Master Signal Engine)
+
+### Kullanıcı Onayı / Scope
+- Sprint-1 onayı: **Faz-1 + Faz-3.1/3.2/3.3**
+- Legacy stratejiler: production path dışı + `legacy/` klasörüne arşiv
+- Score eşikleri: **threshold=5**, **reject_threshold=2**
+- İlk aktif 4 çekirdek: `ichimoku_trend_continuation`, `supertrend_flip`, `bollinger_squeeze_breakout`, `macd_impulse`
+- Admin ekran kapsamı: registry yönetimi + quality/risk/cooldown/false allow-reject metrikleri
+
+### Uygulananlar
+1. **Canonical Strategy Registry (Backend)**
+   - Yeni tablo/model: `canonical_strategy_registry`
+   - Alanlar: `strategy_id`, `strategy_family`, `direction`, `market_regime`, `entry_logic_version`, `exit_logic_version`, `risk_profile`, `is_enabled`, `priority`, `cooldown_policy` (+ contract/rule/metric alanları)
+   - Bootstrap seed:
+     - 12 canonical strategy kayıtları
+     - 9 legacy candidate (production dışı, disabled)
+
+2. **Legacy arşivleme**
+   - Legacy explorer modülleri taşındı:
+     - `services/pipeline/legacy/spot_strategy_service.py`
+     - `services/pipeline/legacy/strategy_engine.py`
+   - Eski path’lerde wrapper bırakıldı (geri uyumluluk)
+
+3. **Master Signal Engine (Sprint-1)**
+   - Yeni engine: `services/pipeline/canonical_signal_engine.py`
+   - Score contract:
+     - strong +3, medium +2, weak +1, contradiction -2
+     - intent thresholds: `5 / 2`
+   - Sprint-1 aktif evaluator’lar:
+     - Ichimoku Trend Continuation
+     - SuperTrend Flip
+     - Bollinger Squeeze Breakout
+     - MACD Impulse
+   - `run_user_scanner` production path canonical engine’den beslenir
+   - **Fallback long kaldırıldı**
+   - Aynı sembolde zıt yön çakışma bloklandı (`symbol_direction_conflict_blocked`)
+
+4. **Admin yönetim paneli**
+   - Yeni backend router: `/api/admin/canonical-strategies/*`
+     - `GET /registry`
+     - `PUT /registry/{strategy_id}`
+     - `POST /registry/refresh-metrics`
+   - Yeni frontend sayfa:
+     - `/admin/canonical-strategy-registry`
+     - enable/disable, direction, regime, priority, cooldown, weight, forced disable reason güncelleme
+     - quality/risk/cooldown/false allow-reject metrikleri görünür
+     - legacy candidate paneli
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_90.json`
+  - Backend: **20/20 PASS**
+  - Frontend: **100% PASS**
+  - Doğrulananlar:
+    - canonical registry seed ve API akışları
+    - scanner canonical engine geçişi
+    - fallback long removal
+    - symbol direction conflict blocking
+    - admin canonical registry UI + sidebar route
+    - legacy module wrapper/archival yapısı
+
+### Durum
+- **Sprint-1 canonical registry + contract + master engine: COMPLETE**
+- **Legacy explorer production path çıkarımı: COMPLETE**
+- **Admin yönetim ekranı (B kapsamı): COMPLETE**
+- **MOCKED API: VAR**
+  - Email verification delivery provider bu ortamda mocked.
