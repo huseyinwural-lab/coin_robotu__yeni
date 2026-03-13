@@ -37,6 +37,23 @@
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
 ## 5) What Has Been Implemented
+### 2026-03-13 (User-side Learning Impact Simulator yerleşimi)
+- User tarafına **Learning Recommendation Impact Simulator** yerleştirildi:
+  - Dashboard’da stratejik köşe widget (`user-dashboard-learning-impact-corner`)
+  - Symbol Detail sayfasında stratejik köşe widget (`user-symbol-detail-learning-impact-corner`)
+- DecisionCard’a hızlı tetikleme eklendi:
+  - `Impact Simulate` butonu ile widget context’i (strategy_id/family) güncellenir.
+- User güvenlik/izin kuralı uygulandı:
+  - Simülasyon sadece read-only (`POST /api/user/learning-simulator/simulate`)
+  - Ayrı aksiyon: `Admin’e Öneri Gönder` (`POST /api/user/learning-simulator/suggestions`)
+  - Kullanıcı kendi gönderilerini listeleyebilir (`GET /api/user/learning-simulator/suggestions`)
+  - Admin tüm user önerilerini görebilir (`GET /api/admin/learning/user-suggestions`)
+- Tooltip destekli tam metrik seti user UI’da aktif:
+  - `projected_risk_score`, `projected_gate_decision`, `expected_hit_rate_delta`, `expected_avg_return_delta`, `allocation_drift_delta`, `hedge_effect_score`
+- Test/Doğrulama:
+  - self-test başarılı
+  - testing agent: `/app/test_reports/iteration_97.json` → backend **21/21**, frontend **%100**
+
 ### 2026-03-13 (Learning Recommendation Impact Simulator eklendi)
 - Yeni backend simulator API’leri eklendi (read-only):
   - `POST /api/admin/learning/simulate-impact` (global form simülasyonu)
