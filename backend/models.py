@@ -195,6 +195,37 @@ class UserScannerResult(Base):
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
+class UserIndicatorSavedQuery(Base):
+    __tablename__ = "user_indicator_saved_queries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120), default="")
+    exchange: Mapped[str] = mapped_column(String(30), default="binance")
+    market_type: Mapped[str] = mapped_column(String(20), default="spot")
+    timeframe: Mapped[str] = mapped_column(String(10), default="15m")
+    query_expression: Mapped[str] = mapped_column(Text, default="")
+    symbol_universe: Mapped[list[str]] = mapped_column(JSON, default=list)
+    result_limit: Mapped[int] = mapped_column(Integer, default=50)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UserIndicatorWatchlist(Base):
+    __tablename__ = "user_indicator_watchlist"
+    __table_args__ = (
+        UniqueConstraint("user_id", "exchange", "market_type", "symbol", name="uq_user_indicator_watchlist_symbol"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    exchange: Mapped[str] = mapped_column(String(30), default="binance")
+    market_type: Mapped[str] = mapped_column(String(20), default="spot")
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class PendingSignal(Base):
     __tablename__ = "pending_signals"
 

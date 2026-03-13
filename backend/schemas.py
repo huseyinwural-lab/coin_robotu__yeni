@@ -1414,6 +1414,115 @@ class UserScannerOverviewResponse(BaseModel):
     latest_generated_at: datetime | None
 
 
+class IndicatorScreenerRunRequest(BaseModel):
+    exchange: str = "binance"
+    market_type: str = "spot"
+    timeframe: str = "15m"
+    query_expression: str
+    symbol_universe: list[str] | str | None = "all"
+    limit: int = Field(default=50, ge=1, le=300)
+
+
+class IndicatorScreenerRowResponse(BaseModel):
+    index: int
+    exchange: str
+    market_type: str
+    symbol: str
+    timeframe: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    rsi14: float
+    rsi7: float
+    ema20: float
+    ema50: float
+    sma20: float
+    sma50: float
+    fibo_161_8: float
+    fibo_127_2: float
+    fibo_100: float
+    fibo_78_6: float
+    matched_rules: list[str]
+    matched_fields: list[str]
+    updated_at: str | None
+    evaluated_at: str | None
+    data_source: str | None
+    cache_hit: bool
+    fresh_fetch: bool
+    last_candle_time: str | None
+
+
+class IndicatorScreenerRunResponse(BaseModel):
+    matched_symbols: list[str]
+    evaluated_count: int
+    match_count: int
+    query_valid: bool
+    query_error: str | None
+    calculation_timestamp: str
+    rows: list[IndicatorScreenerRowResponse]
+    evaluated_symbols: list[str]
+    skipped_symbols: list[str]
+    limit: int
+    universe_mode: str | None = None
+    universe_count: int | None = None
+    exchange: str | None = None
+    market_type: str | None = None
+    timeframe: str | None = None
+
+
+class IndicatorScreenerPresetResponse(BaseModel):
+    preset_key: str
+    title: str
+    query_expression: str
+
+
+class UserIndicatorSavedQueryCreateRequest(BaseModel):
+    name: str = ""
+    exchange: str = "binance"
+    market_type: str = "spot"
+    timeframe: str = "15m"
+    query_expression: str
+    symbol_universe: list[str] = Field(default_factory=list)
+    result_limit: int = Field(default=50, ge=1, le=300)
+
+
+class UserIndicatorSavedQueryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    name: str
+    exchange: str
+    market_type: str
+    timeframe: str
+    query_expression: str
+    symbol_universe: list[str]
+    result_limit: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserIndicatorWatchlistCreateRequest(BaseModel):
+    exchange: str = "binance"
+    market_type: str = "spot"
+    symbol: str
+    note: str = ""
+
+
+class UserIndicatorWatchlistResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    exchange: str
+    market_type: str
+    symbol: str
+    note: str
+    created_at: datetime
+
+
 class UserWeeklyReportStubResponse(BaseModel):
     status: str
     report_id: str | None

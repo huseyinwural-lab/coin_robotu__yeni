@@ -1,0 +1,103 @@
+{
+  "summary": "Indicator Query Engine IQ-01 to IQ-06 + IQ-10 comprehensive testing completed. Backend: 22/22 tests passed. Frontend: All critical flows verified via Playwright.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_indicator_screener_iq_comprehensive.py",
+    "/app/test_reports/pytest/pytest_results_iter58_iq.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_indicator_screener_iq_comprehensive.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "indicator.manual@platform.dev / User12345!",
+  "seed_data_creation": "Users created via test utils: indicator.screener.iq_comprehensive@platform.dev, indicator.screener.phase1-3@platform.dev",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "IQ-01 to IQ-06 and IQ-10 features fully tested. All existing phase 1-3 tests (13 tests) continue to pass. New comprehensive test file adds 22 additional tests covering full scope.",
+  "test_scope_coverage": {
+    "IQ-01": {
+      "status": "PASSED",
+      "description": "POST /run - rsi14<30, rsi7<30, combined AND/OR/() query",
+      "tests": [
+        "test_iq01_rsi14_single_condition",
+        "test_iq01_rsi7_single_condition",
+        "test_iq01_combined_and_condition",
+        "test_iq01_combined_or_condition",
+        "test_iq01_parenthesis_grouped_condition"
+      ]
+    },
+    "IQ-02": {
+      "status": "PASSED",
+      "description": "Invalid query parse: drop table, unknown indicator, parenthesis error with explanatory errors",
+      "tests": [
+        "test_iq02_drop_table_sql_injection_attempt",
+        "test_iq02_unknown_indicator_field",
+        "test_iq02_unclosed_parenthesis_error",
+        "test_iq02_empty_query_expression"
+      ]
+    },
+    "IQ-03": {
+      "status": "PASSED",
+      "description": "Determinism: same payload returns consistent matched_symbols and match_count",
+      "tests": ["test_iq03_same_payload_consistent_results"]
+    },
+    "IQ-04": {
+      "status": "PASSED",
+      "description": "GET /presets returns expected presets (oversold_rsi14, oversold_rsi7, double_oversold)",
+      "tests": ["test_iq04_presets_returns_expected_keys"]
+    },
+    "IQ-05": {
+      "status": "PASSED",
+      "description": "Saved Query CRUD: /saved-queries GET/POST/DELETE",
+      "tests": [
+        "test_iq05_saved_query_create_list_delete",
+        "test_iq05_saved_query_delete_nonexistent_returns_404"
+      ]
+    },
+    "IQ-06": {
+      "status": "PASSED",
+      "description": "Watchlist CRUD: /watchlist GET/POST/DELETE",
+      "tests": [
+        "test_iq06_watchlist_add_list_delete",
+        "test_iq06_watchlist_delete_nonexistent_returns_404",
+        "test_iq06_watchlist_empty_symbol_returns_400"
+      ]
+    },
+    "IQ-10": {
+      "status": "PASSED",
+      "description": "Response contract: query_valid/query_error/evaluated_count/match_count",
+      "tests": [
+        "test_iq10_run_response_has_required_fields",
+        "test_iq10_invalid_query_still_returns_200_with_error_info"
+      ]
+    }
+  },
+  "frontend_test_coverage": {
+    "page_load": "PASSED - Filter panel, presets, query textarea all render correctly",
+    "preset_loading": "PASSED - Clicking preset loads query expression",
+    "run_query": "PASSED - Run button executes query, results display in summary and table",
+    "clear_button": "PASSED - Clears filters and results",
+    "save_query": "PASSED - Save Query button saves to backend, toast notification shown",
+    "export_csv": "PASSED - Button visible and functional",
+    "density_toggle": "PASSED - Compact/Wide toggle works",
+    "sortable_table": "PASSED - Column sorting functional",
+    "open_in_execute": "PASSED - Navigates to /user/execute with symbol and source params",
+    "add_to_watchlist": "PASSED - Adds symbol to watchlist, toast notification shown",
+    "create_signal_rule": "PASSED - Button is disabled (feature flag)",
+    "error_vs_empty_state": "PASSED - Invalid query shows error banner with message, empty result shows empty state text"
+  },
+  "binance_adapter_notes": "Binance spot REST endpoints work. Futures also tested and working. Fallback to Binance US endpoint when global returns 451 as designed."
+}

@@ -42,6 +42,7 @@ const userNavItems = [
   { to: "/user/portfolio", label: "Portfolio", icon: BarChartBig, testId: "nav-user-portfolio-link" },
   { to: "/user/trades", label: "Trades", icon: Activity, testId: "nav-user-trades-link" },
   { to: "/user/scanner", label: "Scanner", icon: Gauge, testId: "nav-user-scanner-link" },
+  { to: "/user/indicator-screener", label: "Indicator Screener", icon: LineChart, testId: "nav-user-indicator-screener-link" },
   { to: "/user/signals", label: "Signals", icon: Radio, testId: "nav-user-signals-link" },
   { to: "/user/reports", label: "Reports", icon: FileText, testId: "nav-user-reports-link" },
   { to: "/user/execute", label: "Execute", icon: Wrench, testId: "nav-user-execute-link" },

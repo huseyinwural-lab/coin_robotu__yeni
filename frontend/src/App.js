@@ -54,6 +54,7 @@ import { UserDashboardPage } from "@/pages/UserDashboardPage";
 import { UserPortfolioPage } from "@/pages/UserPortfolioPage";
 import { UserTradesPage } from "@/pages/UserTradesPage";
 import { UserScannerPage } from "@/pages/UserScannerPage";
+import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
 import { UserReportsPage } from "@/pages/UserReportsPage";
 import { UserExecutePage } from "@/pages/UserExecutePage";
@@ -162,6 +163,7 @@ function App() {
             <Route path="portfolio" element={<UserPortfolioPage />} />
             <Route path="trades" element={<UserTradesPage />} />
             <Route path="scanner" element={<UserScannerPage />} />
+            <Route path="indicator-screener" element={<UserIndicatorScreenerPage />} />
             <Route path="signals" element={<UserSignalsPage />} />
             <Route path="reports" element={<UserReportsPage />} />
             <Route path="execute" element={<UserExecutePage />} />

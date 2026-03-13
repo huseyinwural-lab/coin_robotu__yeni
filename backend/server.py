@@ -52,6 +52,7 @@ from routers import (
     user_platform,
     user_reports,
     user_scanner_signals,
+    user_indicator_screener,
     user_risk,
     strategy_templates,
     strategy_domain,
@@ -97,6 +98,7 @@ api_router.include_router(risk_policies.router)
 api_router.include_router(user_risk.router)
 api_router.include_router(user_platform.router)
 api_router.include_router(user_scanner_signals.router)
+api_router.include_router(user_indicator_screener.router)
 api_router.include_router(user_execution.router)
 api_router.include_router(user_explainability.router)
 api_router.include_router(user_reports.router)
