@@ -3777,3 +3777,44 @@
 ### Durum
 - **User menu reorder: COMPLETE**
 - **MOCKED API: YOK**
+
+## 66) 2026-03-13 — Iteration-84 (Risk Policy Status + Scanner Mode Indicator + Revalidate Fix)
+
+### Kullanıcı Talebi
+- Risk Policy'de policy aktif mi pasif mi net görünsün.
+- Scanner'da hangi modun aktif olduğu net görünsün.
+- Revalidate API doğru key girilse de kabul etmeme sorunu acil kontrol/çözüm.
+
+### Uygulananlar
+1) **Risk Policy aktif/pasif göstergesi**
+- `RiskPoliciesPage.jsx`
+  - Üstte `risk-policies-active-indicator-panel` eklendi
+  - `Policy Status: ACTIVE/INACTIVE`
+  - `Active Policy: <name>`
+  - Satır bazında `ACTIVE/INACTIVE` badge eklendi
+
+2) **Scanner aktif mod göstergesi**
+- `UserScannerPage.jsx`
+  - `user-scanner-active-mode-indicator-card` eklendi
+  - Alanlar: `Active Mode`, `Execution Path`, `Source`, `Symbol Mode`
+
+3) **Revalidate (exchange validate) sorunu**
+- `live_mode_service.py`
+  - Kullanıcıda eşleşen `UserExchangeConnection` varsa,
+    `assignment_required/settings_mismatch` yüzünden erken bloklama kaldırıldı
+  - Legacy settings satırı eşleşen connection credential'larıyla senkronlanıyor
+  - Sonuç: validate artık assignment mismatch yerine gerçek credential/provider nedenine düşüyor (örn. `invalid_key`, `exchange_error_451`).
+
+### Test
+- Testing agent raporu: `/app/test_reports/iteration_82.json`
+  - Özet: **All tests PASS**
+  - Risk policy indicator PASS
+  - Scanner active mode indicator PASS
+  - Exchange validate assignment bypass/sync logic PASS
+  - Regresyonlar PASS
+
+### Durum
+- **Risk Policy ACTIVE/INACTIVE görünürlüğü: COMPLETE**
+- **Scanner aktif mod görünürlüğü: COMPLETE**
+- **Revalidate assignment mismatch fix: COMPLETE**
+- **MOCKED API: YOK**
