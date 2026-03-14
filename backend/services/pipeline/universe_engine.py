@@ -297,6 +297,7 @@ def debug_effective_universe(
         "market_symbols_count": len(market_symbols),
         "after_blacklist": len(after_blacklist_symbols),
         "after_scanner_mode": len(after_scanner_mode_symbols),
+        "after_liquidity": len(after_scanner_mode_symbols),
         "after_liquidity_filter": len(after_scanner_mode_symbols),
         "final_symbols": after_scanner_mode_symbols,
         "after_permission_rules": len(permission_symbols),

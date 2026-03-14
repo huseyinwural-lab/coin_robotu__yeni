@@ -15,17 +15,19 @@ export const AdminUniverseMonitorPage = () => {
   const [breakdown, setBreakdown] = useState({ user_breakdown: [], regime_breakdown: [] });
   const [heatmap, setHeatmap] = useState({ items: [] });
   const [rollout, setRollout] = useState(null);
+  const [fallbackEvents, setFallbackEvents] = useState([]);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [summaryRes, debugRes, trendRes, breakdownRes, heatmapRes, rolloutRes] = await Promise.all([
+      const [summaryRes, debugRes, trendRes, breakdownRes, heatmapRes, rolloutRes, fallbackEventsRes] = await Promise.all([
         apiClient.get("/admin/universe-monitor", { params: { market_type: "spot", scanner_mode: mode, top_n: 300 } }),
         apiClient.get("/debug/effective-universe", { params: { market_type: "spot", scanner_mode: mode, top_n: 300 } }),
         apiClient.get("/admin/universe-monitor/trends", { params: { window: windowSize } }),
         apiClient.get("/admin/universe-monitor/breakdown", { params: { window: windowSize } }),
         apiClient.get("/admin/universe-monitor/freshness-heatmap", { params: { window: windowSize } }),
         apiClient.get("/admin/universe-monitor/rollout/status"),
+        apiClient.get("/admin/universe-monitor/fallback-events", { params: { limit: 80 } }),
       ]);
       setSummary(summaryRes.data || null);
       setDebugPayload(debugRes.data || null);
@@ -33,6 +35,7 @@ export const AdminUniverseMonitorPage = () => {
       setBreakdown(breakdownRes.data || { user_breakdown: [], regime_breakdown: [] });
       setHeatmap(heatmapRes.data || { items: [] });
       setRollout(rolloutRes.data || null);
+      setFallbackEvents(fallbackEventsRes?.data?.items || []);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Universe monitor verisi alınamadı");
     } finally {
@@ -153,6 +156,8 @@ export const AdminUniverseMonitorPage = () => {
           ["blocked by liquidity", summary?.blocked_by_liquidity, "admin-universe-monitor-blocked-liquidity"],
           ["stale blocks", summary?.stale_blocks, "admin-universe-monitor-stale-blocks"],
           ["worker utilization", summary?.worker_utilization, "admin-universe-monitor-worker-utilization"],
+          ["fallback active", String(summary?.fallback_active ?? false), "admin-universe-monitor-fallback-active"],
+          ["fallback healthy streak", summary?.fallback_healthy_streak, "admin-universe-monitor-fallback-healthy-streak"],
         ].map(([label, value, key]) => (
           <article key={key} className="rounded border border-slate-700 bg-slate-900 p-3" data-testid={`${key}-card`}>
             <p className="text-xs text-slate-400">{label}</p>
@@ -245,6 +250,22 @@ export const AdminUniverseMonitorPage = () => {
             </p>
           ))}
           {(heatmap?.items || []).length === 0 && <p className="text-xs text-rose-200" data-testid="admin-universe-monitor-freshness-heatmap-empty">Heatmap verisi yok.</p>}
+        </div>
+      </article>
+
+      <article className="rounded border border-amber-800/50 bg-amber-950/20 p-3" data-testid="admin-universe-monitor-fallback-events-panel">
+        <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="admin-universe-monitor-fallback-events-title">Fallback Timeline</p>
+        <div className="mt-2 max-h-64 space-y-1 overflow-auto" data-testid="admin-universe-monitor-fallback-events-list">
+          {fallbackEvents.map((item, idx) => (
+            <div key={item.id || idx} className="rounded border border-amber-700/50 p-2" data-testid={`admin-universe-monitor-fallback-event-${idx}`}>
+              <p className="text-xs" data-testid={`admin-universe-monitor-fallback-event-timestamp-${idx}`}>timestamp: {String(item.timestamp || "-")}</p>
+              <p className="text-xs" data-testid={`admin-universe-monitor-fallback-event-trigger-metric-${idx}`}>trigger_metric: {item.trigger_metric || "-"}</p>
+              <p className="text-xs" data-testid={`admin-universe-monitor-fallback-event-threshold-breach-${idx}`}>threshold_breach: {JSON.stringify(item.threshold_breach || {})}</p>
+              <p className="text-xs" data-testid={`admin-universe-monitor-fallback-event-exit-reason-${idx}`}>exit_reason: {item.exit_reason || "-"}</p>
+              <p className="text-xs" data-testid={`admin-universe-monitor-fallback-event-cycle-snapshot-${idx}`}>cycle_snapshot: {JSON.stringify(item.cycle_snapshot || {})}</p>
+            </div>
+          ))}
+          {fallbackEvents.length === 0 && <p className="text-xs text-amber-200" data-testid="admin-universe-monitor-fallback-events-empty">Fallback event kaydı yok.</p>}
         </div>
       </article>
 

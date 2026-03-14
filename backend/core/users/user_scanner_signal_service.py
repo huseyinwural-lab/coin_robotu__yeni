@@ -31,7 +31,12 @@ from services.pipeline.cache_store import get_json, incr_counter, set_json
 from services.pipeline.canonical_signal_engine import scan_canonical_universe_for_signals
 from services.pipeline.universe_engine import apply_scanner_mode, build_effective_universe, normalize_scanner_mode
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
-from services.scanner_observability_service import get_rollout_state, record_scanner_perf_snapshot
+from services.scanner_observability_service import (
+    get_rollout_state,
+    record_fallback_event,
+    record_scanner_perf_snapshot,
+    resolve_fallback_mode,
+)
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
 ALLOWED_SIGNAL_MODES = {"ASSISTED", "AUTO", "MANUAL"}
@@ -1039,6 +1044,7 @@ def run_user_scanner(
     symbol_selection_mode: str = "all_market_symbols",
 ) -> dict:
     cycle_started = perf_counter()
+    run_id = str(uuid.uuid4())
     _ensure_scanner_tables(db)
     mode_row = get_or_create_signal_mode(db, user_id)
     mode = _normalize_mode(requested_mode or mode_row.mode)
@@ -1057,21 +1063,59 @@ def run_user_scanner(
     latest_global_perf = get_json(redis_client, "scanner:perf:latest:global") or {}
 
     normalized_selection_mode = _normalize_symbol_selection_mode(symbol_selection_mode)
-    effective_selection_mode = normalized_selection_mode
-    overload_fallback_applied = False
-    if normalized_selection_mode == "all_market_symbols":
-        latest_cycle_latency = float(latest_global_perf.get("cycle_duration_ms") or 0)
-        latest_stale_blocks = float(latest_global_perf.get("stale_block_count") or 0)
-        latest_symbols_eval = float(latest_global_perf.get("symbols_evaluated") or 0)
-        stale_rate = latest_stale_blocks / max(latest_symbols_eval, 1.0)
-        if queue_backlog > 20 or latest_cycle_latency > 1500 or stale_rate > 0.05:
-            effective_selection_mode = "top_volume"
-            overload_fallback_applied = True
-            warning_set.add("auto_top_volume_fallback_enabled")
+    latest_cycle_latency = float(latest_global_perf.get("cycle_duration_ms") or queue_state.get("cycle_latency_ms") or 0)
+    latest_stale_blocks = float(latest_global_perf.get("stale_block_count") or queue_state.get("stale_blocks") or 0)
+    latest_symbols_eval = float(latest_global_perf.get("symbols_evaluated") or 0)
+    stale_rate = latest_stale_blocks / max(latest_symbols_eval, 1.0)
+
+    fallback_resolution = resolve_fallback_mode(
+        redis_client,
+        requested_mode=normalized_selection_mode,
+        queue_backlog=queue_backlog,
+        cycle_latency_ms=latest_cycle_latency,
+        stale_rate=stale_rate,
+    )
+    effective_selection_mode = str(fallback_resolution.get("effective_mode") or normalized_selection_mode)
+    overload_fallback_applied = bool(fallback_resolution.get("overload_fallback_applied"))
+    fallback_trigger_metric = fallback_resolution.get("trigger_metric")
+    fallback_threshold_breach = fallback_resolution.get("threshold_breach") or {}
+    fallback_exit_reason = fallback_resolution.get("exit_reason")
+    fallback_state = fallback_resolution.get("state") or {}
+
+    if overload_fallback_applied:
+        warning_set.add("auto_top_volume_fallback_enabled")
+    if fallback_resolution.get("transition_event") == "trigger":
+        warning_set.add("fallback_triggered")
+    elif fallback_resolution.get("transition_event") == "exit":
+        warning_set.add("fallback_exited")
+
+    if fallback_resolution.get("transition_event") in {"trigger", "exit"}:
+        record_fallback_event(
+            db,
+            run_id=run_id,
+            event_type=str(fallback_resolution.get("transition_event")),
+            requested_mode=normalized_selection_mode,
+            effective_mode=effective_selection_mode,
+            trigger_metric=fallback_trigger_metric,
+            threshold_breach=fallback_threshold_breach,
+            exit_reason=fallback_exit_reason,
+            cycle_snapshot={
+                "queue_backlog": queue_backlog,
+                "cycle_latency_ms": latest_cycle_latency,
+                "stale_rate": stale_rate,
+                "symbols_evaluated": latest_symbols_eval,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
     universe_payload = build_effective_universe(db, redis_client)
-    market_scope = [str(item).upper() for item in (universe_payload.get("spot_symbols") or [])]
-    advisory_lookup = (universe_payload.get("liquidity_advisory") or {}).get("spot") or {}
+    spot_scope = [str(item).upper() for item in (universe_payload.get("spot_symbols") or [])]
+    futures_scope = [str(item).upper() for item in (universe_payload.get("futures_symbols") or [])]
+    market_scope = list(dict.fromkeys([*spot_scope, *futures_scope]))
+    advisory_lookup = {
+        **((universe_payload.get("liquidity_advisory") or {}).get("spot") or {}),
+        **((universe_payload.get("liquidity_advisory") or {}).get("futures") or {}),
+    }
     volume_lookup = {
         symbol: float((advisory_lookup.get(symbol) or {}).get("quote_volume") or 0)
         for symbol in market_scope
@@ -1123,7 +1167,6 @@ def run_user_scanner(
         "ignore_for_now": [],
         "decision_scope": [],
     }
-    run_id = str(uuid.uuid4())
     rollout_state = get_rollout_state(db)
     rollout_stage = str(rollout_state.current_stage or "top_volume_subset")
     dropped_symbol_count = 0
@@ -1579,6 +1622,10 @@ def run_user_scanner(
         "requested_selection_mode": normalized_selection_mode,
         "effective_selection_mode": effective_selection_mode,
         "overload_fallback_applied": overload_fallback_applied,
+        "fallback_trigger_metric": fallback_trigger_metric,
+        "fallback_threshold_breach": fallback_threshold_breach,
+        "fallback_exit_reason": fallback_exit_reason,
+        "fallback_state": fallback_state,
         "rollout_stage": rollout_stage,
         "top_slow_symbols": top_slow_symbols,
         "top_slow_strategies": top_slow_strategies,

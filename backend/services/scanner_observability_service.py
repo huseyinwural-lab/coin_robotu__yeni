@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from models import (
     IndicatorComputationCache,
+    ScannerFallbackEvent,
     ScannerPerformanceSnapshot,
     UniverseRolloutState,
     UserScannerResult,
@@ -16,6 +17,18 @@ from models import (
 from services.pipeline.cache_store import get_json, set_json
 
 ROLLOUT_STAGES = ["top_volume_subset", "mid_segment", "full_market"]
+FALLBACK_STATE_KEY = "scanner:fallback:state"
+FALLBACK_TRIGGER_THRESHOLDS = {
+    "cycle_latency_ms": 1500.0,
+    "queue_backlog": 20.0,
+    "stale_rate": 0.05,
+}
+FALLBACK_EXIT_THRESHOLDS = {
+    "cycle_latency_ms": 900.0,
+    "queue_backlog": 8.0,
+    "stale_rate": 0.02,
+}
+FALLBACK_EXIT_CONSECUTIVE_CYCLES = 3
 
 
 def _ensure_tables(db: Session) -> None:
@@ -23,6 +36,7 @@ def _ensure_tables(db: Session) -> None:
     table_names = set(inspector.get_table_names())
     for table in (
         IndicatorComputationCache.__table__,
+        ScannerFallbackEvent.__table__,
         ScannerPerformanceSnapshot.__table__,
         UniverseRolloutState.__table__,
     ):
@@ -134,12 +148,16 @@ def get_rollout_state(db: Session) -> UniverseRolloutState:
     if row is None:
         row = UniverseRolloutState(
             id="global",
-            current_stage="top_volume_subset",
+            current_stage="full_market",
             recommended_stage=None,
             recommendation_payload={},
             requires_admin_approval=True,
         )
         db.add(row)
+        db.commit()
+        db.refresh(row)
+    elif not row.current_stage:
+        row.current_stage = "full_market"
         db.commit()
         db.refresh(row)
     return row
@@ -158,6 +176,191 @@ def record_scanner_perf_snapshot(db: Session, *, user_id: str, run_id: str, metr
     db.commit()
     db.refresh(row)
     return row
+
+
+def _to_float(value, fallback: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(fallback)
+
+
+def get_fallback_state(cache) -> dict:
+    raw = get_json(cache, FALLBACK_STATE_KEY) or {}
+    return {
+        "active": bool(raw.get("active", False)),
+        "healthy_streak": int(raw.get("healthy_streak", 0)),
+        "last_trigger_metric": raw.get("last_trigger_metric"),
+        "last_threshold_breach": raw.get("last_threshold_breach") or {},
+        "last_exit_reason": raw.get("last_exit_reason"),
+        "updated_at": raw.get("updated_at"),
+    }
+
+
+def set_fallback_state(cache, state: dict) -> None:
+    payload = {
+        "active": bool(state.get("active", False)),
+        "healthy_streak": int(state.get("healthy_streak", 0)),
+        "last_trigger_metric": state.get("last_trigger_metric"),
+        "last_threshold_breach": state.get("last_threshold_breach") or {},
+        "last_exit_reason": state.get("last_exit_reason"),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    set_json(cache, FALLBACK_STATE_KEY, payload)
+
+
+def resolve_fallback_mode(
+    cache,
+    *,
+    requested_mode: str,
+    queue_backlog: int,
+    cycle_latency_ms: float,
+    stale_rate: float,
+) -> dict:
+    normalized_requested = str(requested_mode or "all_market_symbols").lower()
+    if normalized_requested != "all_market_symbols":
+        return {
+            "requested_mode": normalized_requested,
+            "effective_mode": normalized_requested,
+            "overload_fallback_applied": False,
+            "trigger_metric": None,
+            "threshold_breach": {},
+            "exit_reason": None,
+            "state": get_fallback_state(cache),
+            "transition_event": None,
+        }
+
+    current_state = get_fallback_state(cache)
+    active = bool(current_state.get("active", False))
+    healthy_streak = int(current_state.get("healthy_streak", 0))
+
+    trigger_breach = {
+        "cycle_latency_ms": _to_float(cycle_latency_ms) > FALLBACK_TRIGGER_THRESHOLDS["cycle_latency_ms"],
+        "queue_backlog": _to_float(queue_backlog) > FALLBACK_TRIGGER_THRESHOLDS["queue_backlog"],
+        "stale_rate": _to_float(stale_rate) > FALLBACK_TRIGGER_THRESHOLDS["stale_rate"],
+    }
+    trigger_any = any(trigger_breach.values())
+
+    healthy_for_exit = (
+        _to_float(cycle_latency_ms) < FALLBACK_EXIT_THRESHOLDS["cycle_latency_ms"]
+        and _to_float(queue_backlog) < FALLBACK_EXIT_THRESHOLDS["queue_backlog"]
+        and _to_float(stale_rate) < FALLBACK_EXIT_THRESHOLDS["stale_rate"]
+    )
+
+    transition_event = None
+    trigger_metric = None
+    exit_reason = None
+    threshold_breach_payload = {
+        "trigger_thresholds": FALLBACK_TRIGGER_THRESHOLDS,
+        "exit_thresholds": FALLBACK_EXIT_THRESHOLDS,
+        "current": {
+            "cycle_latency_ms": round(_to_float(cycle_latency_ms), 4),
+            "queue_backlog": int(_to_float(queue_backlog)),
+            "stale_rate": round(_to_float(stale_rate), 6),
+        },
+        "breach": trigger_breach,
+        "healthy_for_exit": healthy_for_exit,
+        "required_consecutive_healthy_cycles": FALLBACK_EXIT_CONSECUTIVE_CYCLES,
+    }
+
+    if active:
+        if healthy_for_exit:
+            healthy_streak += 1
+            if healthy_streak >= FALLBACK_EXIT_CONSECUTIVE_CYCLES:
+                active = False
+                healthy_streak = 0
+                exit_reason = "healthy_for_3_consecutive_cycles"
+                transition_event = "exit"
+        else:
+            healthy_streak = 0
+    else:
+        if trigger_any:
+            active = True
+            healthy_streak = 0
+            if trigger_breach["cycle_latency_ms"]:
+                trigger_metric = "cycle_latency_ms"
+            elif trigger_breach["queue_backlog"]:
+                trigger_metric = "queue_backlog"
+            else:
+                trigger_metric = "stale_rate"
+            transition_event = "trigger"
+
+    state_payload = {
+        "active": active,
+        "healthy_streak": healthy_streak,
+        "last_trigger_metric": trigger_metric or current_state.get("last_trigger_metric"),
+        "last_threshold_breach": threshold_breach_payload,
+        "last_exit_reason": exit_reason or current_state.get("last_exit_reason"),
+    }
+    set_fallback_state(cache, state_payload)
+
+    effective_mode = "top_volume" if active else "all_market_symbols"
+    return {
+        "requested_mode": normalized_requested,
+        "effective_mode": effective_mode,
+        "overload_fallback_applied": active,
+        "trigger_metric": trigger_metric,
+        "threshold_breach": threshold_breach_payload,
+        "exit_reason": exit_reason,
+        "state": state_payload,
+        "transition_event": transition_event,
+    }
+
+
+def record_fallback_event(
+    db: Session,
+    *,
+    run_id: str | None,
+    event_type: str,
+    requested_mode: str,
+    effective_mode: str,
+    trigger_metric: str | None,
+    threshold_breach: dict,
+    exit_reason: str | None,
+    cycle_snapshot: dict,
+) -> ScannerFallbackEvent:
+    _ensure_tables(db)
+    row = ScannerFallbackEvent(
+        run_id=run_id,
+        event_type=event_type,
+        requested_mode=requested_mode,
+        effective_mode=effective_mode,
+        trigger_metric=trigger_metric,
+        threshold_breach=threshold_breach or {},
+        exit_reason=exit_reason,
+        cycle_snapshot=cycle_snapshot or {},
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_fallback_events(db: Session, *, limit: int = 80) -> list[dict]:
+    _ensure_tables(db)
+    rows = (
+        db.query(ScannerFallbackEvent)
+        .order_by(ScannerFallbackEvent.created_at.desc())
+        .limit(max(1, min(limit, 500)))
+        .all()
+    )
+    items = []
+    for row in rows:
+        items.append(
+            {
+                "id": row.id,
+                "run_id": row.run_id,
+                "event_type": row.event_type,
+                "requested_mode": row.requested_mode,
+                "effective_mode": row.effective_mode,
+                "trigger_metric": row.trigger_metric,
+                "threshold_breach": row.threshold_breach or {},
+                "exit_reason": row.exit_reason,
+                "cycle_snapshot": row.cycle_snapshot or {},
+                "timestamp": row.created_at,
+            }
+        )
+    return items
 
 
 def _kpi_score(metrics: dict) -> dict:

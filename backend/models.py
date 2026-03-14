@@ -1352,13 +1352,28 @@ class UniverseRolloutState(Base):
     __tablename__ = "universe_rollout_state"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default="global")
-    current_stage: Mapped[str] = mapped_column(String(40), default="top_volume_subset")
+    current_stage: Mapped[str] = mapped_column(String(40), default="full_market")
     recommended_stage: Mapped[str | None] = mapped_column(String(40), nullable=True)
     recommendation_payload: Mapped[dict] = mapped_column(JSON, default=dict)
     requires_admin_approval: Mapped[bool] = mapped_column(Boolean, default=True)
     approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ScannerFallbackEvent(Base):
+    __tablename__ = "scanner_fallback_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    run_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(20), index=True)  # trigger | exit
+    requested_mode: Mapped[str] = mapped_column(String(40), default="all_market_symbols")
+    effective_mode: Mapped[str] = mapped_column(String(40), default="all_market_symbols")
+    trigger_metric: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    threshold_breach: Mapped[dict] = mapped_column(JSON, default=dict)
+    exit_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    cycle_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
 @event.listens_for(ExecutionMetric, "before_update", propagate=True)

@@ -12,9 +12,11 @@ from services.scanner_observability_service import (
     approve_rollout_transition,
     export_perf_trend_csv,
     get_freshness_heatmap,
+    get_fallback_state,
     get_monitor_breakdown,
     get_perf_trend,
     get_rollout_state,
+    list_fallback_events,
     recommend_rollout_transition,
 )
 
@@ -94,6 +96,7 @@ def admin_universe_monitor_summary(
 
     queue_state = get_json(redis_client, "scanner:queue:state") or {}
     perf_state = get_json(redis_client, "scanner:perf:latest:global") or {}
+    fallback_state = get_fallback_state(redis_client)
 
     return {
         "market_type": market_type,
@@ -112,6 +115,10 @@ def admin_universe_monitor_summary(
         "stale_blocks": int(queue_state.get("stale_blocks") or perf_state.get("stale_block_count") or 0),
         "dropped_evaluations": int(queue_state.get("dropped_jobs") or 0) + int(perf_state.get("dropped_symbol_count") or 0),
         "worker_utilization": float(queue_state.get("worker_utilization") or 0),
+        "fallback_active": bool(fallback_state.get("active", False)),
+        "fallback_healthy_streak": int(fallback_state.get("healthy_streak", 0)),
+        "fallback_last_trigger_metric": fallback_state.get("last_trigger_metric"),
+        "fallback_last_exit_reason": fallback_state.get("last_exit_reason"),
         "top_slow_strategies": list(perf_state.get("top_slow_strategies") or []),
         "top_slow_symbols": list(perf_state.get("top_slow_symbols") or []),
         "recent_scanned_symbols": len(scanned_symbols),
@@ -163,6 +170,19 @@ def admin_freshness_heatmap(
 ):
     _ = current_admin
     return get_freshness_heatmap(db, window=window)
+
+
+@router.get("/fallback-events")
+def admin_fallback_events(
+    limit: int = Query(default=80, ge=1, le=500),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return {
+        "generated_at": datetime.now(timezone.utc),
+        "items": list_fallback_events(db, limit=limit),
+    }
 
 
 @router.get("/rollout/status")
