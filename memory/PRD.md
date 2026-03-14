@@ -37,6 +37,22 @@
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
 ## 5) What Has Been Implemented
+### 2026-03-14 (Full Market Açılışı + Anlık Latency/Stale Takibi + Auto Top-Volume Fallback)
+- **Canlı konfig uygulandı:** admin override listeleri boşaltıldı ve tam market kapsamı aktif edildi.
+  - `spot_universe=[]`, `futures_universe=[]`, `whitelist=[]`, `disable_futures=false`
+  - `phase4 live symbol_whitelist=[]` (allow-all)
+- **Tam market kapsamı doğrulandı:**
+  - Debug endpoint: spot **198** sembol, futures **302+** sembol (exchange anlık listesine göre)
+- **P0-B performans metrikleri anlık takip aktif:**
+  - `/api/admin/universe-monitor` ve `/admin/universe-monitor` üzerinden cycle latency, queue depth, stale blocks, dropped eval, worker utilization canlı takip
+  - UI auto-refresh (10sn) ile panel sürekli güncel
+- **Yük altında otomatik koruma uygulandı:**
+  - Scanner `all_market_symbols` modundayken backlog/latency/stale-rate eşiği aşılırsa otomatik `top_volume` fallback devreye girer
+  - `scanner_perf` alanları: `requested_selection_mode`, `effective_selection_mode`, `overload_fallback_applied`
+- **Test sonucu:**
+  - Testing agent: `/app/test_reports/iteration_102.json`
+  - Backend **12/12 PASS**, Frontend **%100 PASS**
+
 ### 2026-03-14 (P1 + P1/P2 + Backlog + Heatmap Pack tamamlandı)
 - **Task 7 — Indicator cache (Redis + DB fallback) aktif edildi**
   - Yeni model: `IndicatorComputationCache`
