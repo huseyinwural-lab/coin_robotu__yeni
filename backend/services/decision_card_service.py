@@ -80,7 +80,7 @@ def _resolve_block_category(*, payload: dict, blocked_reason: str | None, risk_b
     if blocked_key in permission_codes or reason_codes.intersection(permission_codes):
         return "symbol_permission_block"
 
-    data_codes = {"no_data", "data_unavailable", "stale_indicator_snapshot"}
+    data_codes = {"no_data", "data_unavailable", "stale_indicator_snapshot", "stale_data_block"}
     if blocked_key in data_codes or reason_codes.intersection(data_codes):
         return "data_unavailable"
 

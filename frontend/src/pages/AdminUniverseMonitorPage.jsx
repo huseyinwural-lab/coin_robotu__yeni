@@ -58,7 +58,7 @@ export const AdminUniverseMonitorPage = () => {
         </Button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-5" data-testid="admin-universe-monitor-metrics-grid">
+      <div className="grid gap-3 md:grid-cols-5 xl:grid-cols-10" data-testid="admin-universe-monitor-metrics-grid">
         <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-universe-monitor-total-exchange-card">
           <p className="text-xs text-slate-400">total exchange symbols</p>
           <p className="text-xl font-bold" data-testid="admin-universe-monitor-total-exchange-value">{summary?.total_exchange_symbols ?? "-"}</p>
@@ -66,6 +66,18 @@ export const AdminUniverseMonitorPage = () => {
         <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-universe-monitor-active-scan-card">
           <p className="text-xs text-slate-400">active scan symbols</p>
           <p className="text-xl font-bold" data-testid="admin-universe-monitor-active-scan-value">{summary?.active_scan_symbols ?? "-"}</p>
+        </article>
+        <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-universe-monitor-evaluated-this-cycle-card">
+          <p className="text-xs text-slate-400">symbols evaluated this cycle</p>
+          <p className="text-xl font-bold" data-testid="admin-universe-monitor-evaluated-this-cycle-value">{summary?.symbols_evaluated_this_cycle ?? "-"}</p>
+        </article>
+        <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-universe-monitor-cycle-latency-card">
+          <p className="text-xs text-slate-400">average cycle latency (ms)</p>
+          <p className="text-xl font-bold" data-testid="admin-universe-monitor-cycle-latency-value">{summary?.average_cycle_latency_ms ?? "-"}</p>
+        </article>
+        <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-universe-monitor-queue-depth-card">
+          <p className="text-xs text-slate-400">queue depth</p>
+          <p className="text-xl font-bold" data-testid="admin-universe-monitor-queue-depth-value">{summary?.queue_depth ?? "-"}</p>
         </article>
         <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-universe-monitor-blocked-permission-card">
           <p className="text-xs text-slate-400">blocked by permission</p>
@@ -78,6 +90,43 @@ export const AdminUniverseMonitorPage = () => {
         <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-universe-monitor-blocked-liquidity-card">
           <p className="text-xs text-slate-400">blocked by liquidity</p>
           <p className="text-xl font-bold" data-testid="admin-universe-monitor-blocked-liquidity-value">{summary?.blocked_by_liquidity ?? "-"}</p>
+        </article>
+        <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-universe-monitor-stale-blocks-card">
+          <p className="text-xs text-slate-400">stale blocks</p>
+          <p className="text-xl font-bold" data-testid="admin-universe-monitor-stale-blocks-value">{summary?.stale_blocks ?? "-"}</p>
+        </article>
+        <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-universe-monitor-dropped-evaluations-card">
+          <p className="text-xs text-slate-400">dropped evaluations</p>
+          <p className="text-xl font-bold" data-testid="admin-universe-monitor-dropped-evaluations-value">{summary?.dropped_evaluations ?? "-"}</p>
+        </article>
+        <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-universe-monitor-worker-utilization-card">
+          <p className="text-xs text-slate-400">worker utilization</p>
+          <p className="text-xl font-bold" data-testid="admin-universe-monitor-worker-utilization-value">{summary?.worker_utilization ?? "-"}</p>
+        </article>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2" data-testid="admin-universe-monitor-slow-panels">
+        <article className="rounded border border-slate-800 bg-slate-900 p-3" data-testid="admin-universe-monitor-top-slow-strategies-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="admin-universe-monitor-top-slow-strategies-title">Top Slow Strategies</p>
+          <div className="mt-2 space-y-1" data-testid="admin-universe-monitor-top-slow-strategies-list">
+            {(summary?.top_slow_strategies || []).slice(0, 10).map((item, idx) => (
+              <p key={`slow-strategy-${idx}`} className="text-xs" data-testid={`admin-universe-monitor-top-slow-strategy-${idx}`}>
+                {item.strategy_id} · avg={item.avg_ms}ms · calls={item.calls}
+              </p>
+            ))}
+            {(summary?.top_slow_strategies || []).length === 0 && <p className="text-xs text-slate-500" data-testid="admin-universe-monitor-top-slow-strategies-empty">Veri yok.</p>}
+          </div>
+        </article>
+        <article className="rounded border border-slate-800 bg-slate-900 p-3" data-testid="admin-universe-monitor-top-slow-symbols-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="admin-universe-monitor-top-slow-symbols-title">Top Slow Symbols</p>
+          <div className="mt-2 space-y-1" data-testid="admin-universe-monitor-top-slow-symbols-list">
+            {(summary?.top_slow_symbols || []).slice(0, 10).map((item, idx) => (
+              <p key={`slow-symbol-${idx}`} className="text-xs" data-testid={`admin-universe-monitor-top-slow-symbol-${idx}`}>
+                {item.symbol} · {item.elapsed_ms}ms
+              </p>
+            ))}
+            {(summary?.top_slow_symbols || []).length === 0 && <p className="text-xs text-slate-500" data-testid="admin-universe-monitor-top-slow-symbols-empty">Veri yok.</p>}
+          </div>
         </article>
       </div>
 

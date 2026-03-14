@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
+from time import perf_counter
 
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
@@ -26,7 +27,7 @@ from services.execution_intent_service import (
 from services.explainability_service import record_decision_trace
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.canonical_strategy_registry_service import GLOBAL_RISK_POLICY
-from services.pipeline.cache_store import get_json
+from services.pipeline.cache_store import get_json, incr_counter, set_json
 from services.pipeline.canonical_signal_engine import scan_canonical_universe_for_signals
 from services.pipeline.universe_engine import apply_scanner_mode, build_effective_universe, normalize_scanner_mode
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
@@ -36,6 +37,11 @@ ALLOWED_SIGNAL_MODES = {"ASSISTED", "AUTO", "MANUAL"}
 DEFAULT_SIGNAL_MODE = "MANUAL"
 ALLOWED_SCANNER_SOURCES = {"crypto", "stock"}
 ALLOWED_SCANNER_SELECTION_MODES = {"all_market_symbols", "top_volume", "manual_selection"}
+FRESHNESS_SLA_SECONDS = {
+    "3m": 90,
+    "5m": 150,
+    "15m": 360,
+}
 
 SIGNAL_PENDING_REASON_HINTS = {
     "MANUAL_APPROVAL_REQUIRED": (
@@ -52,6 +58,10 @@ SIGNAL_PENDING_REASON_HINTS = {
     "ORDER_PRECHECK_FAILED": ("Order precheck başarısız.", "Preview hata kodlarını inceleyip parametreleri düzeltin."),
     "EXECUTION_DISABLED": ("Execution strategy tarafından devre dışı.", "Meta strategy / bot strategy eşleşmesini düzeltin."),
     "SIGNAL_EXPIRED": ("Signal süresi doldu.", "Yeni sinyal üretimi bekleyin veya scanner yeniden çalıştırın."),
+    "STALE_DATA_BLOCK": (
+        "Veri snapshot yaşı freshness SLA eşiğini aştı.",
+        "Taze candle/snapshot gelene kadar sinyal trade intent'e çevrilmez.",
+    ),
 }
 
 SIGNAL_REASON_PRIORITY = [
@@ -62,6 +72,7 @@ SIGNAL_REASON_PRIORITY = [
     "RISK_LIMIT_BLOCKED",
     "EXCHANGE_NOT_READY",
     "MARKET_DATA_STALE",
+    "STALE_DATA_BLOCK",
     "SYMBOL_NOT_ALLOWED",
     "EXECUTION_DISABLED",
     "ORDER_PRECHECK_FAILED",
@@ -105,6 +116,123 @@ def _normalize_symbol_selection_mode(selection_mode: str | None) -> str:
     normalized = normalize_scanner_mode(selection_mode)
     candidate = normalized.strip().lower()
     return candidate if candidate in ALLOWED_SCANNER_SELECTION_MODES else "all_market_symbols"
+
+
+def _freshness_threshold_for_timeframe(timeframe: str | None) -> int:
+    return int(FRESHNESS_SLA_SECONDS.get(str(timeframe or "15m").lower(), FRESHNESS_SLA_SECONDS["15m"]))
+
+
+def _is_stale_snapshot(age_seconds: float | int | None, timeframe: str | None = "15m") -> bool:
+    try:
+        age = float(age_seconds or 0)
+    except (TypeError, ValueError):
+        age = 0.0
+    return age > float(_freshness_threshold_for_timeframe(timeframe))
+
+
+def _build_candidate_tiers(
+    *,
+    user_open_symbols: set[str],
+    scanner_scope: list[str],
+    advisory_lookup: dict,
+    volume_lookup: dict[str, float],
+    event_hints: set[str],
+    normalized_selection_mode: str,
+) -> dict[str, list[str]]:
+    scope_unique = [str(symbol).upper() for symbol in scanner_scope if str(symbol).strip()]
+    scope_unique = list(dict.fromkeys(scope_unique))
+    if not scope_unique:
+        return {"candidate_high": [], "candidate_medium": [], "candidate_low": [], "ignore_for_now": [], "decision_scope": []}
+
+    ranked_by_volume = sorted(scope_unique, key=lambda item: float(volume_lookup.get(item, 0.0)), reverse=True)
+    top_volume_40 = set(ranked_by_volume[:40])
+    top_volume_120 = set(ranked_by_volume[:120])
+
+    candidate_high_set = set(symbol for symbol in scope_unique if symbol in user_open_symbols or symbol in event_hints or symbol in top_volume_40)
+    candidate_medium_set = set(symbol for symbol in scope_unique if symbol in top_volume_120 and symbol not in candidate_high_set)
+    ignore_set = set(
+        symbol
+        for symbol in scope_unique
+        if str((advisory_lookup.get(symbol) or {}).get("advisory_state") or "") == "data_unavailable"
+    )
+    candidate_low_set = set(scope_unique) - candidate_high_set - candidate_medium_set - ignore_set
+
+    if normalized_selection_mode == "manual_selection":
+        decision_scope = [symbol for symbol in scope_unique if symbol not in ignore_set]
+    else:
+        decision_scope = [
+            symbol
+            for symbol in scope_unique
+            if symbol in candidate_high_set or symbol in candidate_medium_set
+        ]
+        if not decision_scope:
+            decision_scope = [symbol for symbol in scope_unique if symbol not in ignore_set][:120]
+
+    return {
+        "candidate_high": [symbol for symbol in scope_unique if symbol in candidate_high_set],
+        "candidate_medium": [symbol for symbol in scope_unique if symbol in candidate_medium_set],
+        "candidate_low": [symbol for symbol in scope_unique if symbol in candidate_low_set],
+        "ignore_for_now": [symbol for symbol in scope_unique if symbol in ignore_set],
+        "decision_scope": decision_scope,
+    }
+
+
+def _parse_candle_time(raw_value) -> datetime | None:
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, datetime):
+        return raw_value if raw_value.tzinfo else raw_value.replace(tzinfo=timezone.utc)
+    if isinstance(raw_value, (int, float)):
+        ts = float(raw_value)
+        if ts > 10_000_000_000:
+            ts = ts / 1000.0
+        try:
+            return datetime.fromtimestamp(ts, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    value = str(raw_value).strip()
+    if not value:
+        return None
+    if value.isdigit():
+        return _parse_candle_time(int(value))
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _snapshot_age_seconds(symbol: str, timeframe: str = "15m") -> float | None:
+    candles = get_json(redis_client, f"market_data_store:{symbol}:{timeframe}") or get_json(redis_client, f"market:candles:{symbol}:{timeframe}") or []
+    if not candles:
+        return None
+    latest = candles[-1]
+    if not isinstance(latest, dict):
+        return None
+    close_raw = latest.get("close_time") or latest.get("timestamp") or latest.get("time")
+    close_dt = _parse_candle_time(close_raw)
+    if close_dt is None:
+        return None
+    return max(0.0, (datetime.now(timezone.utc) - close_dt).total_seconds())
+
+
+def _acquire_symbol_lock(lock_key: str, token: str, ttl_seconds: int = 90) -> bool:
+    try:
+        acquired = redis_client.set(lock_key, token, ex=ttl_seconds, nx=True)
+        return bool(acquired)
+    except TypeError:
+        existing = redis_client.get(lock_key)
+        if existing:
+            return False
+        redis_client.set(lock_key, token)
+        return True
+
+
+def _release_symbol_lock(lock_key: str) -> None:
+    try:
+        redis_client.delete(lock_key)
+    except Exception:
+        pass
 
 
 def _normalize_selected_symbols(symbols: list[str] | None) -> list[str]:
@@ -909,6 +1037,7 @@ def run_user_scanner(
     selected_symbols: list[str] | None = None,
     symbol_selection_mode: str = "all_market_symbols",
 ) -> dict:
+    cycle_started = perf_counter()
     _ensure_scanner_tables(db)
     mode_row = get_or_create_signal_mode(db, user_id)
     mode = _normalize_mode(requested_mode or mode_row.mode)
@@ -922,6 +1051,9 @@ def run_user_scanner(
         mode_row.mode = mode
         mode_row.updated_at = datetime.now(timezone.utc)
 
+    queue_state = get_json(redis_client, "scanner:queue:state") or {}
+    queue_backlog = int(queue_state.get("depth") or 0)
+
     normalized_selection_mode = _normalize_symbol_selection_mode(symbol_selection_mode)
     universe_payload = build_effective_universe(db, redis_client)
     market_scope = [str(item).upper() for item in (universe_payload.get("spot_symbols") or [])]
@@ -934,6 +1066,16 @@ def run_user_scanner(
     schema_version = "decision-card.v1"
     scoped_symbols = _user_symbols_scope(db, user_id)
     normalized_selected_symbols = [str(item).strip().upper() for item in (selected_symbols or []) if str(item).strip()]
+    open_symbols = {
+        str(item.symbol or "").upper()
+        for item in db.query(PaperPosition).filter(PaperPosition.user_id == user_id, PaperPosition.status == "open").all()
+        if item.symbol
+    }
+    event_hints = {
+        str(item).upper()
+        for item in ((get_json(redis_client, "scanner:event-hints") or {}).get("symbols") or [])
+        if str(item).strip()
+    }
 
     if str(symbol_source or "crypto").lower() != "crypto":
         warning_set.add("scanner_currently_supports_crypto_only")
@@ -951,29 +1093,81 @@ def run_user_scanner(
             volume_map=volume_lookup,
         )
 
+    candidate_tiers = {
+        "candidate_high": [],
+        "candidate_medium": [],
+        "candidate_low": [],
+        "ignore_for_now": [],
+        "decision_scope": [],
+    }
+    run_id = str(uuid.uuid4())
+    dropped_symbol_count = 0
+    duplicate_suppressed_count = 0
+    acquired_symbol_locks: list[str] = []
+
     if scanner_scope:
-        payload = scan_canonical_universe_for_signals(
-            db,
-            redis_client,
-            max_symbols=max(len(scanner_scope), max_results, 30),
-            symbols_override=scanner_scope,
+        candidate_tiers = _build_candidate_tiers(
+            user_open_symbols=open_symbols,
+            scanner_scope=scanner_scope,
+            advisory_lookup=advisory_lookup,
+            volume_lookup=volume_lookup,
+            event_hints=event_hints,
+            normalized_selection_mode=normalized_selection_mode,
         )
-        ranked = payload.get("top_ranked", [])
-        engine_version = str(payload.get("engine_version") or "canonical-engine.v3")
-        schema_version = str(payload.get("schema_version") or "decision-card.v1")
+        decision_scope_raw = candidate_tiers.get("decision_scope") or []
+        decision_scope: list[str] = []
+        for symbol in decision_scope_raw:
+            lock_key = f"scanner:symbol:lock:{symbol}"
+            lock_acquired = _acquire_symbol_lock(lock_key, run_id, ttl_seconds=90)
+            if lock_acquired:
+                acquired_symbol_locks.append(lock_key)
+                decision_scope.append(symbol)
+            else:
+                duplicate_suppressed_count += 1
+
+        dropped_symbol_count = max(0, len(scanner_scope) - len(decision_scope))
+        dropped_symbol_count += duplicate_suppressed_count
+        if dropped_symbol_count > 0:
+            warning_set.add("low_priority_symbols_deferred")
+        if duplicate_suppressed_count > 0:
+            warning_set.add("same_symbol_duplicate_suppressed")
+
+        try:
+            payload = scan_canonical_universe_for_signals(
+                db,
+                redis_client,
+                max_symbols=max(len(decision_scope), max_results, 30),
+                symbols_override=decision_scope,
+            )
+            ranked = payload.get("top_ranked", [])
+            engine_version = str(payload.get("engine_version") or "canonical-engine.v3")
+            schema_version = str(payload.get("schema_version") or "decision-card.v1")
+            scan_performance = payload.get("performance") or {}
+        finally:
+            for key in acquired_symbol_locks:
+                _release_symbol_lock(key)
     else:
         ranked = []
+        scan_performance = {}
 
     selected = ranked[:max_results]
     selected_symbols = [str(item.get("symbol", "BTCUSDT")).upper() for item in selected]
 
     db.query(UserScannerResult).filter(UserScannerResult.user_id == user_id).delete()
 
-    run_id = str(uuid.uuid4())
     bot = _default_bot_for_user(db, user_id, selected_symbols)
     actionable_count = 0
     queued_count = 0
     symbol_direction_seen: dict[str, str] = {}
+    stale_evaluation_count = 0
+    stale_block_count = 0
+    snapshot_age_total = 0.0
+    snapshot_age_count = 0
+
+    candidate_high_set = set(candidate_tiers.get("candidate_high") or [])
+    candidate_medium_set = set(candidate_tiers.get("candidate_medium") or [])
+    candidate_low_set = set(candidate_tiers.get("candidate_low") or [])
+    ignore_set = set(candidate_tiers.get("ignore_for_now") or [])
 
     risk_policy_row = db.query(RiskOrchestratorPolicy).filter(RiskOrchestratorPolicy.id == "global").first()
     reference_equity = float(risk_policy_row.reference_equity_usd) if risk_policy_row else 10000.0
@@ -982,11 +1176,7 @@ def run_user_scanner(
     max_positions = int(GLOBAL_RISK_POLICY.get("max_positions", 5))
     cooldown_seconds = int(GLOBAL_RISK_POLICY.get("cooldown_symbol_seconds", 21600))
 
-    open_positions_count = (
-        db.query(PaperPosition)
-        .filter(PaperPosition.user_id == user_id, PaperPosition.status == "open")
-        .count()
-    )
+    open_positions_count = len(open_symbols)
     cooldown_since = datetime.now(timezone.utc) - timedelta(seconds=cooldown_seconds)
     recent_rows = (
         db.query(PendingSignal)
@@ -1007,6 +1197,39 @@ def run_user_scanner(
         score = float(item.get("signal_score") or 0)
         symbol = str(item.get("symbol", "BTCUSDT")).upper()
         strategy_code = str(item.get("strategy_code") or "canonical_unknown")
+        snapshot_age_sec = item.get("indicator_snapshot_age_sec")
+        if snapshot_age_sec is None:
+            snapshot_age_sec = _snapshot_age_seconds(symbol, "15m")
+        if snapshot_age_sec is not None:
+            snapshot_age_total += float(snapshot_age_sec)
+            snapshot_age_count += 1
+
+        freshness_threshold = _freshness_threshold_for_timeframe("15m")
+        if _is_stale_snapshot(snapshot_age_sec, "15m"):
+            stale_evaluation_count += 1
+            stale_block_count += 1
+            warning_set.add("stale_data_block")
+            signal_value = "none"
+            final_decision = "BLOCKED"
+            reason_codes = list(dict.fromkeys([*(reason_codes or []), "stale_data_block", "data_unavailable"]))
+            item = {
+                **item,
+                "final_decision": "BLOCKED",
+                "signal": "none",
+                "blocked_reason_current": "STALE_DATA_BLOCK",
+                "risk_state": {"state": "blocked", "reason": "stale_data_block"},
+                "cooldown_state": {"state": "clear"},
+            }
+
+        candidate_class = "ignore_for_now"
+        if symbol in candidate_high_set:
+            candidate_class = "candidate_high"
+        elif symbol in candidate_medium_set:
+            candidate_class = "candidate_medium"
+        elif symbol in candidate_low_set:
+            candidate_class = "candidate_low"
+        elif symbol in ignore_set:
+            candidate_class = "ignore_for_now"
 
         scanner_row = UserScannerResult(
             id=str(uuid.uuid4()),
@@ -1023,6 +1246,9 @@ def run_user_scanner(
                 "final_decision": final_decision,
                 "schema_version": schema_version,
                 "engine_version": engine_version,
+                "indicator_snapshot_age_sec": snapshot_age_sec,
+                "freshness_sla_seconds": freshness_threshold,
+                "candidate_class": candidate_class,
             },
         )
         db.add(scanner_row)
@@ -1281,6 +1507,45 @@ def run_user_scanner(
     if actionable_count == 0 and selected:
         warning_set.add("no_actionable_signal_generated")
 
+    cycle_duration_ms = round((perf_counter() - cycle_started) * 1000, 4)
+    avg_snapshot_age_sec = round(snapshot_age_total / max(snapshot_age_count, 1), 4) if snapshot_age_count > 0 else None
+    symbols_evaluated = int(scan_performance.get("symbols_evaluated") or len(candidate_tiers.get("decision_scope") or []))
+    avg_symbol_eval_ms = float(scan_performance.get("avg_symbol_eval_ms") or (cycle_duration_ms / max(symbols_evaluated, 1)))
+    top_slow_symbols = list(scan_performance.get("top_slow_symbols") or [])
+    top_slow_strategies = list(scan_performance.get("top_slow_strategies") or [])
+
+    scanner_perf_payload = {
+        "schema_version": "scanner-perf.v1",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "user_id": user_id,
+        "run_id": run_id,
+        "total_active_symbols": len(scanner_scope),
+        "decision_scope_symbols": len(candidate_tiers.get("decision_scope") or []),
+        "candidate_high": len(candidate_tiers.get("candidate_high") or []),
+        "candidate_medium": len(candidate_tiers.get("candidate_medium") or []),
+        "candidate_low": len(candidate_tiers.get("candidate_low") or []),
+        "ignore_for_now": len(candidate_tiers.get("ignore_for_now") or []),
+        "cycle_duration_ms": cycle_duration_ms,
+        "symbols_evaluated": symbols_evaluated,
+        "avg_symbol_eval_ms": round(avg_symbol_eval_ms, 4),
+        "snapshot_age_avg_sec": avg_snapshot_age_sec,
+        "queue_backlog": queue_backlog,
+        "dropped_symbol_count": int(dropped_symbol_count),
+        "same_symbol_duplicate_suppression": int(duplicate_suppressed_count),
+        "stale_evaluation_count": int(stale_evaluation_count),
+        "stale_block_count": int(stale_block_count),
+        "freshness_sla_seconds": FRESHNESS_SLA_SECONDS,
+        "backpressure_mode": "low_priority_defer + stale_drop + explainability_degrade",
+        "top_slow_symbols": top_slow_symbols,
+        "top_slow_strategies": top_slow_strategies,
+    }
+    set_json(redis_client, f"scanner:perf:latest:{user_id}", scanner_perf_payload)
+    set_json(redis_client, "scanner:perf:latest:global", scanner_perf_payload)
+    if stale_block_count > 0:
+        incr_counter(redis_client, "scanner:metrics:stale_blocks:day", stale_block_count)
+    if dropped_symbol_count > 0:
+        incr_counter(redis_client, "scanner:metrics:dropped_symbols:day", dropped_symbol_count)
+
     db.commit()
     pending_total = (
         db.query(PendingSignal)
@@ -1297,6 +1562,7 @@ def run_user_scanner(
         "generated_at": datetime.now(timezone.utc),
         "selected_symbols": selected_symbols,
         "warnings": sorted(warning_set),
+        "scanner_perf": scanner_perf_payload,
     }
 
 

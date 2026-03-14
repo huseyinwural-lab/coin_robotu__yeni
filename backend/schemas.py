@@ -1353,6 +1353,7 @@ class UserScannerRunResponse(BaseModel):
     generated_at: datetime
     selected_symbols: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    scanner_perf: dict = Field(default_factory=dict)
 
 
 class UserScannerAutomationConfigUpdateRequest(BaseModel):

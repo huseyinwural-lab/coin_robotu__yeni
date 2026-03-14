@@ -7,6 +7,7 @@ from db import get_db, redis_client
 from deps import require_admin
 from models import User, UserScannerResult
 from services.pipeline.universe_engine import debug_effective_universe
+from services.pipeline.cache_store import get_json
 
 
 router = APIRouter(prefix="/admin/universe-monitor", tags=["admin_universe_monitor"])
@@ -82,14 +83,28 @@ def admin_universe_monitor_summary(
         if reasons.intersection(liquidity_codes):
             blocked_by_liquidity += 1
 
+    queue_state = get_json(redis_client, "scanner:queue:state") or {}
+    perf_state = get_json(redis_client, "scanner:perf:latest:global") or {}
+
     return {
         "market_type": market_type,
         "scanner_mode": debug_payload.get("scanner_mode"),
         "total_exchange_symbols": debug_payload.get("market_symbols_count", 0),
         "active_scan_symbols": debug_payload.get("after_scanner_mode", 0),
+        "total_scanned_symbols": int(perf_state.get("total_active_symbols") or debug_payload.get("after_scanner_mode", 0)),
+        "symbols_evaluated_this_cycle": int(perf_state.get("symbols_evaluated") or 0),
+        "average_cycle_latency_ms": float(perf_state.get("cycle_duration_ms") or queue_state.get("cycle_latency_ms") or 0),
+        "avg_symbol_eval_ms": float(perf_state.get("avg_symbol_eval_ms") or 0),
+        "snapshot_age_avg_sec": perf_state.get("snapshot_age_avg_sec"),
+        "queue_depth": int(queue_state.get("depth") or 0),
         "blocked_by_permission": blocked_by_permission,
         "blocked_by_risk": blocked_by_risk,
         "blocked_by_liquidity": blocked_by_liquidity,
+        "stale_blocks": int(queue_state.get("stale_blocks") or perf_state.get("stale_block_count") or 0),
+        "dropped_evaluations": int(queue_state.get("dropped_jobs") or 0) + int(perf_state.get("dropped_symbol_count") or 0),
+        "worker_utilization": float(queue_state.get("worker_utilization") or 0),
+        "top_slow_strategies": list(perf_state.get("top_slow_strategies") or []),
+        "top_slow_symbols": list(perf_state.get("top_slow_symbols") or []),
         "recent_scanned_symbols": len(scanned_symbols),
         "final_symbols": debug_payload.get("final_symbols", []),
         "generated_at": datetime.now(timezone.utc),

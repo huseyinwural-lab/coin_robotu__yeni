@@ -109,6 +109,10 @@
       "title": "Data Unavailable",
       "description": "Symbol için yeterli veya güncel veri bulunamadığı için karar üretimi sınırlı kaldı."
     },
+    "STALE_DATA_BLOCK": {
+      "title": "Stale Data Block",
+      "description": "Snapshot age freshness SLA eşiğini aştığı için trade intent engellendi."
+    },
     "LIQUIDITY_VOLUME_LOW": {
       "title": "Liquidity Advisory: Low Volume",
       "description": "Hacim eşik altında; confidence düşürülerek risk farkındalığı artırıldı."

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from time import perf_counter
 
 from db import SessionLocal, redis_client
 from models import (
@@ -118,6 +119,8 @@ class PipelineRuntime:
             db = SessionLocal()
             try:
                 now = datetime.now(timezone.utc)
+                max_workers = 3
+                queue_depth_threshold = 20
                 profile_rows = (
                     db.query(UserScannerAutomationProfile)
                     .filter(UserScannerAutomationProfile.auto_enabled.is_(True))
@@ -130,6 +133,18 @@ class PipelineRuntime:
                     .filter(UserScannerAutomationConfig.auto_enabled.is_(True))
                     .all()
                 )
+
+                job_queue: list[dict] = []
+
+                def _job_priority(mode_value: str, has_open_positions: bool) -> int:
+                    mode = str(mode_value or "all_market_symbols").lower()
+                    if has_open_positions:
+                        return 100
+                    if mode == "manual_selection":
+                        return 80
+                    if mode == "top_volume":
+                        return 60
+                    return 40
 
                 for row in profile_rows:
                     interval_seconds = max(180, int(row.interval_seconds or 180))
@@ -153,25 +168,25 @@ class PipelineRuntime:
                     if user is None:
                         continue
 
-                    try:
-                        result = run_user_scanner(
-                            db,
-                            user.id,
-                            requested_mode=None,
-                            max_results=int(row.max_results or 25),
-                            symbol_source=str(row.symbol_source or "crypto"),
-                            selected_symbols=list(row.selected_symbols or []),
-                            symbol_selection_mode=str(row.symbol_selection_mode or "all_market_symbols"),
-                        )
-                        row.last_run_at = now
-                        row.last_run_status = "success"
-                        row.last_run_error = None
-                        row.last_run_id = str(result.get("run_id") or "")
-                        row.last_actionable_count = int(result.get("actionable_count") or 0)
-                    except Exception as exc:
-                        row.last_run_at = now
-                        row.last_run_status = "error"
-                        row.last_run_error = str(exc)[:240]
+                    has_open_positions = (
+                        db.query(PaperPosition)
+                        .filter(PaperPosition.user_id == user.id, PaperPosition.status == "open")
+                        .count()
+                        > 0
+                    )
+                    job_queue.append(
+                        {
+                            "job_type": "profile",
+                            "row": row,
+                            "user_id": user.id,
+                            "mode": str(row.symbol_selection_mode or "all_market_symbols"),
+                            "symbol_source": str(row.symbol_source or "crypto"),
+                            "selected_symbols": list(row.selected_symbols or []),
+                            "max_results": int(row.max_results or 25),
+                            "priority": _job_priority(str(row.symbol_selection_mode or "all_market_symbols"), has_open_positions),
+                            "interval_seconds": interval_seconds,
+                        }
+                    )
 
                 for row in legacy_rows:
                     if row.user_id in profiled_user_ids:
@@ -197,25 +212,145 @@ class PipelineRuntime:
                     if user is None:
                         continue
 
+                    has_open_positions = (
+                        db.query(PaperPosition)
+                        .filter(PaperPosition.user_id == user.id, PaperPosition.status == "open")
+                        .count()
+                        > 0
+                    )
+                    job_queue.append(
+                        {
+                            "job_type": "legacy",
+                            "row": row,
+                            "user_id": user.id,
+                            "mode": str(row.symbol_selection_mode or "all_market_symbols"),
+                            "symbol_source": str(row.symbol_source or "crypto"),
+                            "selected_symbols": list(row.selected_symbols or []),
+                            "max_results": int(row.max_results or 25),
+                            "priority": _job_priority(str(row.symbol_selection_mode or "all_market_symbols"), has_open_positions),
+                            "interval_seconds": interval_seconds,
+                        }
+                    )
+
+                job_queue.sort(key=lambda item: (int(item.get("priority") or 0), item.get("user_id")), reverse=True)
+                queue_depth = len(job_queue)
+
+                queue_partition = {
+                    "crypto": sum(1 for job in job_queue if job.get("symbol_source") == "crypto"),
+                    "stock": sum(1 for job in job_queue if job.get("symbol_source") == "stock"),
+                }
+
+                deferred_jobs = 0
+                dropped_jobs = 0
+                stale_jobs = 0
+                if queue_depth > queue_depth_threshold:
+                    filtered_jobs = []
+                    for job in job_queue:
+                        if int(job.get("priority") or 0) < 60:
+                            deferred_jobs += 1
+                            row = job["row"]
+                            row.last_run_status = "deferred"
+                            row.last_run_error = "backpressure_low_priority_deferred"
+                            continue
+                        filtered_jobs.append(job)
+                    job_queue = filtered_jobs
+
+                processed_jobs = 0
+                cycle_started = perf_counter()
+                for index, job in enumerate(job_queue):
+                    row = job["row"]
+                    user_id = job["user_id"]
+                    lock_key = f"scanner:lock:user:{user_id}"
+                    if self.cache.get(lock_key):
+                        dropped_jobs += 1
+                        row.last_run_status = "dropped"
+                        row.last_run_error = "duplicate_user_run_suppressed"
+                        continue
+
+                    try:
+                        self.cache.set(lock_key, "1", ex=120)
+                    except TypeError:
+                        self.cache.set(lock_key, "1")
+                    processed_jobs += 1
+                    worker_slot = index % max_workers
                     try:
                         result = run_user_scanner(
                             db,
-                            user.id,
+                            user_id,
                             requested_mode=None,
-                            max_results=int(row.max_results or 25),
-                            symbol_source=str(row.symbol_source or "crypto"),
-                            selected_symbols=list(row.selected_symbols or []),
-                            symbol_selection_mode=str(row.symbol_selection_mode or "all_market_symbols"),
+                            max_results=job["max_results"],
+                            symbol_source=job["symbol_source"],
+                            selected_symbols=job["selected_symbols"],
+                            symbol_selection_mode=job["mode"],
                         )
                         row.last_run_at = now
                         row.last_run_status = "success"
                         row.last_run_error = None
                         row.last_run_id = str(result.get("run_id") or "")
                         row.last_actionable_count = int(result.get("actionable_count") or 0)
+
+                        stale_in_run = int(((result.get("scanner_perf") or {}).get("stale_block_count") or 0))
+                        stale_jobs += stale_in_run
                     except Exception as exc:
                         row.last_run_at = now
                         row.last_run_status = "error"
                         row.last_run_error = str(exc)[:240]
+                        retry_budget = 1
+                        if retry_budget > 0:
+                            try:
+                                result = run_user_scanner(
+                                    db,
+                                    user_id,
+                                    requested_mode=None,
+                                    max_results=job["max_results"],
+                                    symbol_source=job["symbol_source"],
+                                    selected_symbols=job["selected_symbols"],
+                                    symbol_selection_mode=job["mode"],
+                                )
+                                row.last_run_status = "success"
+                                row.last_run_error = None
+                                row.last_run_id = str(result.get("run_id") or "")
+                                row.last_actionable_count = int(result.get("actionable_count") or 0)
+                            except Exception:
+                                pass
+                    finally:
+                        self.cache.delete(lock_key)
+                        set_json(
+                            self.cache,
+                            "scanner:worker:last",
+                            {
+                                "worker_slot": worker_slot,
+                                "user_id": user_id,
+                                "at": now.isoformat(),
+                            },
+                        )
+
+                cycle_latency_ms = round((perf_counter() - cycle_started) * 1000, 4)
+                worker_utilization = round(min(1.0, processed_jobs / max(max_workers, 1)), 4)
+                set_json(
+                    self.cache,
+                    "scanner:queue:state",
+                    {
+                        "generated_at": now.isoformat(),
+                        "depth": queue_depth,
+                        "active_workers": min(processed_jobs, max_workers),
+                        "max_workers": max_workers,
+                        "worker_utilization": worker_utilization,
+                        "cycle_latency_ms": cycle_latency_ms,
+                        "processed_jobs": processed_jobs,
+                        "deferred_jobs": deferred_jobs,
+                        "dropped_jobs": dropped_jobs,
+                        "stale_blocks": stale_jobs,
+                        "queue_partition": queue_partition,
+                        "backpressure_policy": "low_priority_defer + stale_drop + explainability_degrade",
+                    },
+                )
+                if deferred_jobs > 0:
+                    incr_counter(self.cache, "scanner:metrics:deferred_jobs:day", deferred_jobs)
+                if dropped_jobs > 0:
+                    incr_counter(self.cache, "scanner:metrics:dropped_jobs:day", dropped_jobs)
+                if stale_jobs > 0:
+                    incr_counter(self.cache, "scanner:metrics:stale_blocks:day", stale_jobs)
 
                 db.commit()
             except Exception as exc:
@@ -699,6 +834,22 @@ class PipelineRuntime:
         while self._running:
             event = await self.candle_queue.get()
             started = asyncio.get_event_loop().time()
+            try:
+                hints = get_json(self.cache, "scanner:event-hints") or {}
+                symbols = [str(item).upper() for item in (hints.get("symbols") or []) if str(item).strip()]
+                symbol = str(event.symbol or "").upper().strip()
+                if symbol and symbol not in symbols:
+                    symbols = [symbol, *symbols]
+                elif symbol:
+                    symbols = [symbol, *[item for item in symbols if item != symbol]]
+                hints_payload = {
+                    "generated_at": utc_now_iso(),
+                    "symbols": symbols[:300],
+                    "event_timeframe": str(event.timeframe or ""),
+                }
+                set_json(self.cache, "scanner:event-hints", hints_payload)
+            except Exception:
+                pass
             db = SessionLocal()
             try:
                 if kill_switch_state(self.cache).get("active", False):

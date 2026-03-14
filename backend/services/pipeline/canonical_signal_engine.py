@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from time import perf_counter
 from statistics import fmean, pstdev
 
 from sqlalchemy.orm import Session
@@ -428,6 +429,7 @@ def scan_canonical_universe_for_signals(
     max_symbols: int = 50,
     symbols_override: list[str] | None = None,
 ) -> dict:
+    cycle_started = perf_counter()
     universe = build_effective_universe(db, cache)
     advisory_lookup = (universe.get("liquidity_advisory") or {}).get("spot") or {}
     if symbols_override:
@@ -439,7 +441,10 @@ def scan_canonical_universe_for_signals(
     family_gates = {row["family"]: row for row in [strategy_family_gate_payload(item) for item in list_strategy_family_gates(db)]}
 
     ranked_rows: list[dict] = []
+    symbol_perf: list[dict] = []
+    strategy_perf: dict[str, dict] = {}
     for symbol in symbols:
+        symbol_started = perf_counter()
         candles = get_json(cache, f"market_data_store:{symbol}:15m") or get_json(cache, f"market:candles:{symbol}:15m") or []
         if len(candles) < 80:
             ranked_rows.append(
@@ -473,6 +478,7 @@ def scan_canonical_universe_for_signals(
                     "engine_version": ENGINE_VERSION,
                 }
             )
+            symbol_perf.append({"symbol": symbol, "elapsed_ms": round((perf_counter() - symbol_started) * 1000, 4)})
             continue
 
         indicators = calculate_indicator_snapshot(candles)
@@ -516,6 +522,7 @@ def scan_canonical_universe_for_signals(
                     "engine_version": ENGINE_VERSION,
                 }
             )
+            symbol_perf.append({"symbol": symbol, "elapsed_ms": round((perf_counter() - symbol_started) * 1000, 4)})
             continue
         breakout_condition = _safe_float(indicators.get("atr_pct"), 0.0) >= 0.01
         pullback_trend_clear = abs(_safe_float(indicators.get("ema50"), 0) - _safe_float(indicators.get("ema200"), 0)) / max(
@@ -526,8 +533,13 @@ def scan_canonical_universe_for_signals(
         family_scores: dict[str, dict] = {}
 
         for strategy in strategies:
+            strategy_started = perf_counter()
             normalized_family = _normalized_family(strategy.strategy_family)
             raw_long, raw_short, reasons = _evaluate_strategy(strategy.strategy_id, candles, indicators)
+            strategy_elapsed = (perf_counter() - strategy_started) * 1000
+            stat = strategy_perf.setdefault(strategy.strategy_id, {"strategy_id": strategy.strategy_id, "calls": 0, "total_ms": 0.0})
+            stat["calls"] += 1
+            stat["total_ms"] += strategy_elapsed
             weighted_long = float(raw_long) * float(strategy.weight or 1)
             weighted_short = float(raw_short) * float(strategy.weight or 1)
             raw_signal = _resolve_raw_signal(raw_long, raw_short)
@@ -775,6 +787,7 @@ def scan_canonical_universe_for_signals(
                 "engine_version": ENGINE_VERSION,
             }
         )
+        symbol_perf.append({"symbol": symbol, "elapsed_ms": round((perf_counter() - symbol_started) * 1000, 4)})
 
     priority_map = {"LONG": 4, "SHORT": 3, "BLOCKED": 2, "NO_TRADE": 1}
     ranked_rows.sort(
@@ -785,6 +798,22 @@ def scan_canonical_universe_for_signals(
         reverse=True,
     )
     executable = [row for row in ranked_rows if row.get("signal") in {"long", "short"}]
+    cycle_duration_ms = (perf_counter() - cycle_started) * 1000
+    top_slow_symbols = sorted(symbol_perf, key=lambda item: float(item.get("elapsed_ms") or 0), reverse=True)[:20]
+    strategy_perf_rows = []
+    for item in strategy_perf.values():
+        calls = int(item.get("calls") or 0)
+        total_ms = float(item.get("total_ms") or 0.0)
+        strategy_perf_rows.append(
+            {
+                "strategy_id": item.get("strategy_id"),
+                "calls": calls,
+                "total_ms": round(total_ms, 4),
+                "avg_ms": round(total_ms / max(calls, 1), 4),
+            }
+        )
+    strategy_perf_rows.sort(key=lambda item: float(item.get("avg_ms") or 0), reverse=True)
+
     payload = {
         "schema_version": SCHEMA_VERSION,
         "engine_version": ENGINE_VERSION,
@@ -803,6 +832,13 @@ def scan_canonical_universe_for_signals(
             "contradiction": -2,
             "global_risk": GLOBAL_RISK_POLICY,
             "generated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "performance": {
+            "cycle_duration_ms": round(cycle_duration_ms, 4),
+            "symbols_evaluated": len(symbols),
+            "avg_symbol_eval_ms": round(cycle_duration_ms / max(len(symbols), 1), 4),
+            "top_slow_symbols": top_slow_symbols,
+            "top_slow_strategies": strategy_perf_rows[:20],
         },
     }
     set_json(cache, "canonical_strategy:last_scan", payload)
