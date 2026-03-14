@@ -1318,6 +1318,49 @@ class UserLearningSimulationSuggestion(Base):
     reviewed_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
 
 
+class IndicatorComputationCache(Base):
+    __tablename__ = "indicator_computation_cache"
+    __table_args__ = (
+        UniqueConstraint("cache_key", name="uq_indicator_computation_cache_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    cache_key: Mapped[str] = mapped_column(String(280), index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    timeframe: Mapped[str] = mapped_column(String(12), index=True)
+    bar_close_time: Mapped[str] = mapped_column(String(64), index=True)
+    indicator_name: Mapped[str] = mapped_column(String(80), index=True)
+    params_version: Mapped[str] = mapped_column(String(40), index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ScannerPerformanceSnapshot(Base):
+    __tablename__ = "scanner_performance_snapshots"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    run_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    stage: Mapped[str] = mapped_column(String(40), default="top_volume_subset", index=True)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class UniverseRolloutState(Base):
+    __tablename__ = "universe_rollout_state"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default="global")
+    current_stage: Mapped[str] = mapped_column(String(40), default="top_volume_subset")
+    recommended_stage: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    recommendation_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    requires_admin_approval: Mapped[bool] = mapped_column(Boolean, default=True)
+    approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 @event.listens_for(ExecutionMetric, "before_update", propagate=True)
 def _block_execution_metric_update(_, __, ___):
     raise ValueError("execution_metric_immutable")

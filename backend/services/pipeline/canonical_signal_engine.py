@@ -9,6 +9,7 @@ from services.canonical_strategy_registry_service import GLOBAL_RISK_POLICY, ena
 from services.pipeline.cache_store import get_json, set_json, utc_now_iso
 from services.pipeline.legacy.spot_strategy_service import calculate_indicator_snapshot
 from services.pipeline.universe_engine import build_effective_universe
+from services.scanner_observability_service import get_indicator_cache, set_indicator_cache
 from services.strategy_family_gate_service import list_strategy_family_gates, strategy_family_gate_payload
 
 
@@ -16,6 +17,7 @@ THRESHOLD = 5
 REJECT_THRESHOLD = 2
 ENGINE_VERSION = "canonical-engine.v3"
 SCHEMA_VERSION = "decision-card.v1"
+INDICATOR_PARAMS_VERSION = "canonical-indicators.v1"
 STRATEGY_FAMILY_REGIME = {
     "trend": "trend",
     "breakout": "breakout",
@@ -481,7 +483,32 @@ def scan_canonical_universe_for_signals(
             symbol_perf.append({"symbol": symbol, "elapsed_ms": round((perf_counter() - symbol_started) * 1000, 4)})
             continue
 
-        indicators = calculate_indicator_snapshot(candles)
+        last_candle = candles[-1] if candles else {}
+        bar_close_time = str((last_candle or {}).get("close_time") or (last_candle or {}).get("timestamp") or "latest")
+        cached_indicators = get_indicator_cache(
+            db,
+            cache,
+            symbol=symbol,
+            timeframe="15m",
+            bar_close_time=bar_close_time,
+            indicator_name="core_indicator_bundle",
+            params_version=INDICATOR_PARAMS_VERSION,
+        )
+        if cached_indicators is not None:
+            indicators = cached_indicators
+        else:
+            indicators = calculate_indicator_snapshot(candles)
+            set_indicator_cache(
+                db,
+                cache,
+                symbol=symbol,
+                timeframe="15m",
+                bar_close_time=bar_close_time,
+                indicator_name="core_indicator_bundle",
+                params_version=INDICATOR_PARAMS_VERSION,
+                payload=indicators,
+                ttl_seconds=3600,
+            )
         regime = _regime_label(candles, indicators)
         entry = _safe_float(indicators.get("close"), 0.0)
         atr = max(_safe_float(indicators.get("atr14"), 0.0), 0.0000001)

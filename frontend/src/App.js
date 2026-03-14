@@ -69,6 +69,7 @@ import { AdminCanonicalStrategyRegistryPage } from "@/pages/AdminCanonicalStrate
 import { AdminLearningPanelPage } from "@/pages/AdminLearningPanelPage";
 import { AdminLearningImpactSimulatorPage } from "@/pages/AdminLearningImpactSimulatorPage";
 import { AdminUniverseMonitorPage } from "@/pages/AdminUniverseMonitorPage";
+import { AdminFreshnessHeatmapPage } from "@/pages/AdminFreshnessHeatmapPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -147,6 +148,7 @@ function App() {
             <Route path="learning-panel" element={<AdminLearningPanelPage />} />
             <Route path="learning-impact-simulator" element={<AdminLearningImpactSimulatorPage />} />
             <Route path="universe-monitor" element={<AdminUniverseMonitorPage />} />
+            <Route path="freshness-heatmap" element={<AdminFreshnessHeatmapPage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />
             <Route path="correlation-matrix" element={<CorrelationMatrixPage />} />
             <Route path="execution-states" element={<ExecutionStatesPage />} />

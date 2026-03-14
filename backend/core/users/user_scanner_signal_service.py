@@ -31,6 +31,7 @@ from services.pipeline.cache_store import get_json, incr_counter, set_json
 from services.pipeline.canonical_signal_engine import scan_canonical_universe_for_signals
 from services.pipeline.universe_engine import apply_scanner_mode, build_effective_universe, normalize_scanner_mode
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
+from services.scanner_observability_service import get_rollout_state, record_scanner_perf_snapshot
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
 ALLOWED_SIGNAL_MODES = {"ASSISTED", "AUTO", "MANUAL"}
@@ -1071,11 +1072,20 @@ def run_user_scanner(
         for item in db.query(PaperPosition).filter(PaperPosition.user_id == user_id, PaperPosition.status == "open").all()
         if item.symbol
     }
+    hints_payload = get_json(redis_client, "scanner:event-hints") or {}
     event_hints = {
         str(item).upper()
-        for item in ((get_json(redis_client, "scanner:event-hints") or {}).get("symbols") or [])
+        for item in (hints_payload.get("symbols") or [])
         if str(item).strip()
     }
+    for item in (hints_payload.get("items") or []):
+        symbol_hint = str(item.get("symbol") or "").upper().strip()
+        if not symbol_hint:
+            continue
+        score_hint = float(item.get("score") or 0)
+        reasons_hint = [str(reason) for reason in (item.get("reasons") or [])]
+        if score_hint >= 1.5 or any(reason in {"volume_spike", "spread_jump", "position_activity"} for reason in reasons_hint):
+            event_hints.add(symbol_hint)
 
     if str(symbol_source or "crypto").lower() != "crypto":
         warning_set.add("scanner_currently_supports_crypto_only")
@@ -1101,6 +1111,8 @@ def run_user_scanner(
         "decision_scope": [],
     }
     run_id = str(uuid.uuid4())
+    rollout_state = get_rollout_state(db)
+    rollout_stage = str(rollout_state.current_stage or "top_volume_subset")
     dropped_symbol_count = 0
     duplicate_suppressed_count = 0
     acquired_symbol_locks: list[str] = []
@@ -1116,6 +1128,13 @@ def run_user_scanner(
         )
         decision_scope_raw = candidate_tiers.get("decision_scope") or []
         decision_scope: list[str] = []
+
+        if normalized_selection_mode != "manual_selection":
+            if rollout_stage == "top_volume_subset":
+                decision_scope_raw = decision_scope_raw[:60]
+            elif rollout_stage == "mid_segment":
+                decision_scope_raw = decision_scope_raw[:160]
+
         for symbol in decision_scope_raw:
             lock_key = f"scanner:symbol:lock:{symbol}"
             lock_acquired = _acquire_symbol_lock(lock_key, run_id, ttl_seconds=90)
@@ -1168,6 +1187,7 @@ def run_user_scanner(
     candidate_medium_set = set(candidate_tiers.get("candidate_medium") or [])
     candidate_low_set = set(candidate_tiers.get("candidate_low") or [])
     ignore_set = set(candidate_tiers.get("ignore_for_now") or [])
+    explainability_degrade = queue_backlog > 20
 
     risk_policy_row = db.query(RiskOrchestratorPolicy).filter(RiskOrchestratorPolicy.id == "global").first()
     reference_equity = float(risk_policy_row.reference_equity_usd) if risk_policy_row else 10000.0
@@ -1231,6 +1251,21 @@ def run_user_scanner(
         elif symbol in ignore_set:
             candidate_class = "ignore_for_now"
 
+        row_payload = {
+            **item,
+            "final_decision": final_decision,
+            "schema_version": schema_version,
+            "engine_version": engine_version,
+            "indicator_snapshot_age_sec": snapshot_age_sec,
+            "freshness_sla_seconds": freshness_threshold,
+            "candidate_class": candidate_class,
+            "explainability_degraded": explainability_degrade,
+        }
+        if explainability_degrade:
+            row_payload["source_strategies"] = list((row_payload.get("source_strategies") or [])[:3])
+            row_payload["blocked_reason_timeline"] = []
+            row_payload["explanation_templates"] = list((row_payload.get("explanation_templates") or [])[:2])
+
         scanner_row = UserScannerResult(
             id=str(uuid.uuid4()),
             run_id=run_id,
@@ -1241,15 +1276,7 @@ def run_user_scanner(
             confidence=confidence,
             signal_score=score,
             reason_codes=reason_codes,
-            payload={
-                **item,
-                "final_decision": final_decision,
-                "schema_version": schema_version,
-                "engine_version": engine_version,
-                "indicator_snapshot_age_sec": snapshot_age_sec,
-                "freshness_sla_seconds": freshness_threshold,
-                "candidate_class": candidate_class,
-            },
+            payload=row_payload,
         )
         db.add(scanner_row)
         db.flush()
@@ -1536,6 +1563,7 @@ def run_user_scanner(
         "stale_block_count": int(stale_block_count),
         "freshness_sla_seconds": FRESHNESS_SLA_SECONDS,
         "backpressure_mode": "low_priority_defer + stale_drop + explainability_degrade",
+        "rollout_stage": rollout_stage,
         "top_slow_symbols": top_slow_symbols,
         "top_slow_strategies": top_slow_strategies,
     }
@@ -1545,6 +1573,7 @@ def run_user_scanner(
         incr_counter(redis_client, "scanner:metrics:stale_blocks:day", stale_block_count)
     if dropped_symbol_count > 0:
         incr_counter(redis_client, "scanner:metrics:dropped_symbols:day", dropped_symbol_count)
+    record_scanner_perf_snapshot(db, user_id=user_id, run_id=run_id, metrics=scanner_perf_payload)
 
     db.commit()
     pending_total = (

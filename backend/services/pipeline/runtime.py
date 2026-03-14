@@ -837,14 +837,51 @@ class PipelineRuntime:
             try:
                 hints = get_json(self.cache, "scanner:event-hints") or {}
                 symbols = [str(item).upper() for item in (hints.get("symbols") or []) if str(item).strip()]
+                items = {str(item.get("symbol") or "").upper(): item for item in (hints.get("items") or []) if str(item.get("symbol") or "").strip()}
                 symbol = str(event.symbol or "").upper().strip()
                 if symbol and symbol not in symbols:
                     symbols = [symbol, *symbols]
                 elif symbol:
                     symbols = [symbol, *[item for item in symbols if item != symbol]]
+
+                reasons = ["candle_close"]
+                score = 1.0
+                ticker = get_json(self.cache, f"market:ticker:{symbol}") or {}
+                spread_payload = get_json(self.cache, f"market:spread:{symbol}") or {}
+                volume_now = float(ticker.get("quote_volume") or 0)
+                spread_now = float(spread_payload.get("spread_bps") or 0)
+                baseline_key = f"scanner:event-baseline:{symbol}"
+                baseline = get_json(self.cache, baseline_key) or {}
+                volume_prev = float(baseline.get("quote_volume") or 0)
+                spread_prev = float(baseline.get("spread_bps") or 0)
+
+                if volume_prev > 0 and volume_now > (volume_prev * 1.35):
+                    reasons.append("volume_spike")
+                    score += 1.0
+                if spread_prev > 0 and spread_now > (spread_prev * 1.5):
+                    reasons.append("spread_jump")
+                    score += 0.8
+
+                items[symbol] = {
+                    "symbol": symbol,
+                    "score": round(score, 4),
+                    "reasons": reasons,
+                    "updated_at": utc_now_iso(),
+                }
+
+                set_json(
+                    self.cache,
+                    baseline_key,
+                    {
+                        "quote_volume": volume_now,
+                        "spread_bps": spread_now,
+                        "updated_at": utc_now_iso(),
+                    },
+                )
                 hints_payload = {
                     "generated_at": utc_now_iso(),
                     "symbols": symbols[:300],
+                    "items": list(items.values())[:300],
                     "event_timeframe": str(event.timeframe or ""),
                 }
                 set_json(self.cache, "scanner:event-hints", hints_payload)
@@ -855,6 +892,31 @@ class PipelineRuntime:
                 if kill_switch_state(self.cache).get("active", False):
                     continue
                 universe = build_effective_universe(db, self.cache)
+                try:
+                    active_position_count = (
+                        db.query(PaperPosition)
+                        .filter(PaperPosition.symbol == event.symbol, PaperPosition.status == "open")
+                        .count()
+                    )
+                    if active_position_count > 0:
+                        hints = get_json(self.cache, "scanner:event-hints") or {}
+                        items = {str(item.get("symbol") or "").upper(): item for item in (hints.get("items") or []) if str(item.get("symbol") or "").strip()}
+                        symbol = str(event.symbol or "").upper().strip()
+                        existing = items.get(symbol) or {"symbol": symbol, "score": 1.0, "reasons": []}
+                        reasons = [str(reason) for reason in (existing.get("reasons") or [])]
+                        if "position_activity" not in reasons:
+                            reasons.append("position_activity")
+                        existing["score"] = round(float(existing.get("score") or 1.0) + 1.2, 4)
+                        existing["reasons"] = reasons
+                        existing["updated_at"] = utc_now_iso()
+                        items[symbol] = existing
+                        hints["items"] = list(items.values())[:300]
+                        symbols = [symbol, *[item for item in (hints.get("symbols") or []) if str(item).upper() != symbol]]
+                        hints["symbols"] = [str(item).upper() for item in symbols[:300]]
+                        hints["generated_at"] = utc_now_iso()
+                        set_json(self.cache, "scanner:event-hints", hints)
+                except Exception:
+                    pass
                 if event.timeframe == "15m":
                     symbol_candles = get_json(self.cache, f"market:candles:{event.symbol}:15m") or []
                     if symbol_candles:

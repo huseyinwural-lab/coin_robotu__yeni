@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
@@ -8,6 +8,15 @@ from deps import require_admin
 from models import User, UserScannerResult
 from services.pipeline.universe_engine import debug_effective_universe
 from services.pipeline.cache_store import get_json
+from services.scanner_observability_service import (
+    approve_rollout_transition,
+    export_perf_trend_csv,
+    get_freshness_heatmap,
+    get_monitor_breakdown,
+    get_perf_trend,
+    get_rollout_state,
+    recommend_rollout_transition,
+)
 
 
 router = APIRouter(prefix="/admin/universe-monitor", tags=["admin_universe_monitor"])
@@ -109,3 +118,84 @@ def admin_universe_monitor_summary(
         "final_symbols": debug_payload.get("final_symbols", []),
         "generated_at": datetime.now(timezone.utc),
     }
+
+
+@router.get("/trends")
+def admin_universe_monitor_trends(
+    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return get_perf_trend(db, window=window)
+
+
+@router.get("/export.csv")
+def admin_universe_monitor_export_csv(
+    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    content = export_perf_trend_csv(db, window=window)
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=universe_monitor_{window}.csv"},
+    )
+
+
+@router.get("/breakdown")
+def admin_universe_monitor_breakdown(
+    window: str = Query(default="7d", pattern="^(24h|7d|30d)$"),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return get_monitor_breakdown(db, window=window)
+
+
+@router.get("/freshness-heatmap")
+def admin_freshness_heatmap(
+    window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return get_freshness_heatmap(db, window=window)
+
+
+@router.get("/rollout/status")
+def admin_rollout_status(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    row = get_rollout_state(db)
+    return {
+        "current_stage": row.current_stage,
+        "recommended_stage": row.recommended_stage,
+        "recommendation_payload": row.recommendation_payload or {},
+        "requires_admin_approval": bool(row.requires_admin_approval),
+        "approved_by": row.approved_by,
+        "approved_at": row.approved_at,
+        "updated_at": row.updated_at,
+    }
+
+
+@router.post("/rollout/recommend")
+def admin_rollout_recommend(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    latest = get_json(redis_client, "scanner:perf:latest:global") or {}
+    return recommend_rollout_transition(db, latest_metrics=latest)
+
+
+@router.post("/rollout/approve")
+def admin_rollout_approve(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return approve_rollout_transition(db, admin_user_id=current_admin.id)
