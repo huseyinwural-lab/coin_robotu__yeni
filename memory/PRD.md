@@ -42,6 +42,11 @@
 - Veri/işlev değişmedi; sadece görsel yerleşim sırası güncellendi.
 - Smoke doğrulama screenshot alındı: wizard bölümünün üstte render edildiği doğrulandı.
 
+### 2026-03-14 (User Dashboard structure block üste taşındı)
+- Kullanıcı görseline göre dashboarddaki alt kısımdaki yapı (`metrics grid + dashboard snapshot + quick summary`) üst bölgeye taşındı.
+- Yeni sıralama: `Header -> Onboarding Wizard -> Metrics + Snapshot + Quick Summary -> diğer paneller`.
+- Smoke doğrulama screenshot alındı; ilgili blok artık sayfanın üst yarısında görünüyor.
+
 ### 2026-03-14 (Fallback Timeline + Trigger/Breach/Exit/Cycle Snapshot)
 - Kullanıcı talebine göre fallback olayları için tam izleme zinciri eklendi:
   - Yeni model: `ScannerFallbackEvent`

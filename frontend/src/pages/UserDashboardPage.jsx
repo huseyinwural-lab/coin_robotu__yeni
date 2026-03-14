@@ -346,6 +346,39 @@ export const UserDashboardPage = () => {
         </section>
       )}
 
+      <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-dashboard-metrics-grid" aria-label="Dashboard metrikleri">
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Bot" value={dashboard?.bot_count ?? "-"} testId="user-dashboard-metric-bot-count" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Running" value={dashboard?.running_bot_count ?? "-"} testId="user-dashboard-metric-running-bot-count" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Risk Policy" value={dashboard?.risk_policy_count ?? "-"} testId="user-dashboard-metric-risk-policy-count" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Open Positions" value={dashboard?.open_positions_count ?? "-"} tone="orange" testId="user-dashboard-metric-open-positions" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Pending" value={dashboard?.pending_signals_count ?? "-"} tone="orange" testId="user-dashboard-metric-pending-signals" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Heartbeat" value={dashboard?.heartbeat ?? "-"} tone="blue" testId="user-dashboard-metric-heartbeat" /></div>
+      </div>
+
+      <div className="col-span-12 lg:col-span-8" data-testid="user-dashboard-chart-col">
+        <ResponsiveMiniLineChart
+          data={chartData}
+          xKey="metric"
+          yKey="value"
+          title="Dashboard Snapshot"
+          testId="user-dashboard-responsive-chart"
+        />
+      </div>
+
+      <div className="col-span-12 lg:col-span-4 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-dashboard-summary-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-dashboard-summary-title">Quick Summary</p>
+        <p className="mt-2 text-sm" data-testid="user-dashboard-current-capital">Current Capital: {dashboard?.current_capital ?? "-"}</p>
+        <p className="mt-1 text-sm" data-testid="user-dashboard-available-balance">Available Balance: {dashboard?.available_balance ?? "-"}</p>
+        <p className="mt-1 text-sm" data-testid="user-dashboard-closed-pnl">Closed PnL: {portfolio?.closed_pnl ?? "-"}</p>
+        <p className="mt-1 text-sm" data-testid="user-dashboard-win-rate">Win Rate: {performance?.win_rate ?? "-"}</p>
+        <div className="mt-3 rounded border border-cyan-900/40 bg-cyan-950/20 p-3" data-testid="user-dashboard-risk-policy-health-card">
+          <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-dashboard-risk-policy-health-title">Risk Policy Health Score</p>
+          <p className="mt-1 text-2xl font-black" data-testid="user-dashboard-risk-policy-health-score">{riskHealth.score}</p>
+          <p className="text-xs text-cyan-100" data-testid="user-dashboard-risk-policy-health-level">level: {riskHealth.level}</p>
+          <p className="text-xs text-cyan-100" data-testid="user-dashboard-risk-policy-health-message">{riskHealth.message}</p>
+        </div>
+      </div>
+
       <section className="col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-dashboard-live-control-status-card">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-dashboard-live-control-status-header">
           <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-dashboard-live-control-status-title">Live Control Status</p>
@@ -397,39 +430,6 @@ export const UserDashboardPage = () => {
           />
         </div>
       </section>
-
-      <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-dashboard-metrics-grid" aria-label="Dashboard metrikleri">
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Bot" value={dashboard?.bot_count ?? "-"} testId="user-dashboard-metric-bot-count" /></div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Running" value={dashboard?.running_bot_count ?? "-"} testId="user-dashboard-metric-running-bot-count" /></div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Risk Policy" value={dashboard?.risk_policy_count ?? "-"} testId="user-dashboard-metric-risk-policy-count" /></div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Open Positions" value={dashboard?.open_positions_count ?? "-"} tone="orange" testId="user-dashboard-metric-open-positions" /></div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Pending" value={dashboard?.pending_signals_count ?? "-"} tone="orange" testId="user-dashboard-metric-pending-signals" /></div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Heartbeat" value={dashboard?.heartbeat ?? "-"} tone="blue" testId="user-dashboard-metric-heartbeat" /></div>
-      </div>
-
-      <div className="col-span-12 lg:col-span-8" data-testid="user-dashboard-chart-col">
-        <ResponsiveMiniLineChart
-          data={chartData}
-          xKey="metric"
-          yKey="value"
-          title="Dashboard Snapshot"
-          testId="user-dashboard-responsive-chart"
-        />
-      </div>
-
-      <div className="col-span-12 lg:col-span-4 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-dashboard-summary-panel">
-        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-dashboard-summary-title">Quick Summary</p>
-        <p className="mt-2 text-sm" data-testid="user-dashboard-current-capital">Current Capital: {dashboard?.current_capital ?? "-"}</p>
-        <p className="mt-1 text-sm" data-testid="user-dashboard-available-balance">Available Balance: {dashboard?.available_balance ?? "-"}</p>
-        <p className="mt-1 text-sm" data-testid="user-dashboard-closed-pnl">Closed PnL: {portfolio?.closed_pnl ?? "-"}</p>
-        <p className="mt-1 text-sm" data-testid="user-dashboard-win-rate">Win Rate: {performance?.win_rate ?? "-"}</p>
-        <div className="mt-3 rounded border border-cyan-900/40 bg-cyan-950/20 p-3" data-testid="user-dashboard-risk-policy-health-card">
-          <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-dashboard-risk-policy-health-title">Risk Policy Health Score</p>
-          <p className="mt-1 text-2xl font-black" data-testid="user-dashboard-risk-policy-health-score">{riskHealth.score}</p>
-          <p className="text-xs text-cyan-100" data-testid="user-dashboard-risk-policy-health-level">level: {riskHealth.level}</p>
-          <p className="text-xs text-cyan-100" data-testid="user-dashboard-risk-policy-health-message">{riskHealth.message}</p>
-        </div>
-      </div>
 
       <ExplainabilityDrawer
         isOpen={isExplainabilityDrawerOpen}
