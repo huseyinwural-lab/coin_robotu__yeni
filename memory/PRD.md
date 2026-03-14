@@ -37,6 +37,35 @@
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
 ## 5) What Has Been Implemented
+### 2026-03-14 (Universe Expansion Performance Guard — P0-A + P0-B)
+- **Ölçüm katmanı aktif edildi (Task 1):**
+  - Scanner run çıktısına `scanner_perf` bloğu eklendi:
+    - `total_active_symbols`, `cycle_duration_ms`, `avg_symbol_eval_ms`, `snapshot_age_avg_sec`
+    - `queue_backlog`, `dropped_symbol_count`, `stale_evaluation_count`, `stale_block_count`
+    - `candidate_high/medium/low/ignore_for_now` ve `decision_scope_symbols`
+  - Canonical scan tarafına performans enstrümantasyonu eklendi:
+    - `top_slow_symbols`, `top_slow_strategies`
+- **Freshness SLA guard eklendi (Task 2):**
+  - SLA eşikleri: `3m=90sn`, `5m=150sn`, `15m=360sn`
+  - Snapshot yaşına göre stale değerlendirmeler `STALE_DATA_BLOCK` ile bloklanıyor; stale veriyle trade intent açılmıyor.
+- **Katmanlı öncelik + discovery/decision split uygulandı (Task 3 & 4):**
+  - `candidate_high`, `candidate_medium`, `candidate_low`, `ignore_for_now` sınıfları üretildi.
+  - Discovery kapsamı korunurken decision scan aday kapsamına indirgeniyor (`decision_scope`).
+- **Ağır yük korumaları (Task 6 & 10) devrede:**
+  - Queue/backpressure state cache eklendi (`scanner:queue:state`)
+  - Low priority defer, stale/drop sayaçları, duplicate suppression (symbol lock) eklendi.
+  - Worker utilization/cycle latency metrikleri queue state’e yazılıyor.
+- **Event-hint hibrit yaklaşım (Task 8):**
+  - Orchestrator candle event’lerinden `scanner:event-hints` güncelleniyor; aday önceliğine sinyal oluyor.
+- **Universe Monitor genişletildi (Task 11):**
+  - `/api/admin/universe-monitor` performans alanları eklendi:
+    - `symbols_evaluated_this_cycle`, `average_cycle_latency_ms`, `queue_depth`, `stale_blocks`, `dropped_evaluations`, `worker_utilization`
+    - `top_slow_strategies`, `top_slow_symbols`
+  - `/admin/universe-monitor` UI bu metrikleri kart/panel olarak gösteriyor.
+- **Test sonucu:**
+  - Testing agent raporu: `/app/test_reports/iteration_100.json`
+  - Backend **11/11 PASS**, Frontend **%100 PASS**.
+
 ### 2026-03-14 (Universe Restriction Fix + Monitor Pack)
 - **Universe akışı yeni mimariye geçirildi**:
   - `effective_symbols` artık geniş evren prensibine göre hesaplanıyor (`market_symbols - blacklist` + opsiyonel whitelist kısıtı).
