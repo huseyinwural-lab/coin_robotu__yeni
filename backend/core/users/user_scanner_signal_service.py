@@ -1054,8 +1054,21 @@ def run_user_scanner(
 
     queue_state = get_json(redis_client, "scanner:queue:state") or {}
     queue_backlog = int(queue_state.get("depth") or 0)
+    latest_global_perf = get_json(redis_client, "scanner:perf:latest:global") or {}
 
     normalized_selection_mode = _normalize_symbol_selection_mode(symbol_selection_mode)
+    effective_selection_mode = normalized_selection_mode
+    overload_fallback_applied = False
+    if normalized_selection_mode == "all_market_symbols":
+        latest_cycle_latency = float(latest_global_perf.get("cycle_duration_ms") or 0)
+        latest_stale_blocks = float(latest_global_perf.get("stale_block_count") or 0)
+        latest_symbols_eval = float(latest_global_perf.get("symbols_evaluated") or 0)
+        stale_rate = latest_stale_blocks / max(latest_symbols_eval, 1.0)
+        if queue_backlog > 20 or latest_cycle_latency > 1500 or stale_rate > 0.05:
+            effective_selection_mode = "top_volume"
+            overload_fallback_applied = True
+            warning_set.add("auto_top_volume_fallback_enabled")
+
     universe_payload = build_effective_universe(db, redis_client)
     market_scope = [str(item).upper() for item in (universe_payload.get("spot_symbols") or [])]
     advisory_lookup = (universe_payload.get("liquidity_advisory") or {}).get("spot") or {}
@@ -1097,7 +1110,7 @@ def run_user_scanner(
 
         scanner_scope = apply_scanner_mode(
             market_scope,
-            mode=normalized_selection_mode,
+            mode=effective_selection_mode,
             selected_symbols=manual_scope,
             top_n=max(max_results, 120),
             volume_map=volume_lookup,
@@ -1124,12 +1137,12 @@ def run_user_scanner(
             advisory_lookup=advisory_lookup,
             volume_lookup=volume_lookup,
             event_hints=event_hints,
-            normalized_selection_mode=normalized_selection_mode,
+            normalized_selection_mode=effective_selection_mode,
         )
         decision_scope_raw = candidate_tiers.get("decision_scope") or []
         decision_scope: list[str] = []
 
-        if normalized_selection_mode != "manual_selection":
+        if effective_selection_mode != "manual_selection":
             if rollout_stage == "top_volume_subset":
                 decision_scope_raw = decision_scope_raw[:60]
             elif rollout_stage == "mid_segment":
@@ -1563,6 +1576,9 @@ def run_user_scanner(
         "stale_block_count": int(stale_block_count),
         "freshness_sla_seconds": FRESHNESS_SLA_SECONDS,
         "backpressure_mode": "low_priority_defer + stale_drop + explainability_degrade",
+        "requested_selection_mode": normalized_selection_mode,
+        "effective_selection_mode": effective_selection_mode,
+        "overload_fallback_applied": overload_fallback_applied,
         "rollout_stage": rollout_stage,
         "top_slow_symbols": top_slow_symbols,
         "top_slow_strategies": top_slow_strategies,

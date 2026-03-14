@@ -44,6 +44,13 @@ export const AdminUniverseMonitorPage = () => {
     load();
   }, [mode, windowSize]);
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      load();
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [mode, windowSize]);
+
   const latestTrendPoint = useMemo(() => trend?.latest || trend?.points?.[trend.points.length - 1] || null, [trend]);
 
   const requestRolloutRecommendation = async () => {
