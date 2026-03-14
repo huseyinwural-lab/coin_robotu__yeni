@@ -67,6 +67,52 @@ def _trace_timeline(db: Session, user_id: str, symbol: str, limit: int = 20) -> 
     return items
 
 
+def _resolve_block_category(*, payload: dict, blocked_reason: str | None, risk_block: str | None, cooldown_seconds: int) -> str | None:
+    reason_codes = {str(item or "").strip().lower() for item in (payload.get("reason_codes") or []) if str(item or "").strip()}
+    blocked_key = str(blocked_reason or "").strip().lower()
+
+    permission_codes = {
+        "symbol_not_allowed",
+        "symbol_permission_block",
+        "symbol_not_allowed_by_whitelist",
+        "symbol_not_allowed_by_live_config",
+    }
+    if blocked_key in permission_codes or reason_codes.intersection(permission_codes):
+        return "symbol_permission_block"
+
+    data_codes = {"no_data", "data_unavailable", "stale_indicator_snapshot"}
+    if blocked_key in data_codes or reason_codes.intersection(data_codes):
+        return "data_unavailable"
+
+    cooldown_codes = {"symbol_cooldown", "cooldown_active", "symbol_cooldown_active"}
+    if cooldown_seconds > 0 or blocked_key in cooldown_codes or reason_codes.intersection(cooldown_codes):
+        return "cooldown_block"
+
+    risk_codes = {"risk_limit_blocked", "position_limit_reached", "max_positions_reached"}
+    if risk_block or blocked_key in risk_codes or reason_codes.intersection(risk_codes):
+        return "risk_block"
+
+    gate_codes = {
+        "family_gate_missing",
+        "regime_mismatch",
+        "long_threshold_not_met",
+        "short_threshold_not_met",
+        "min_strategy_count_not_met",
+        "conflict_score_exceeded",
+        "breakout_condition_missing",
+        "pullback_trend_unclear",
+        "reversal_requires_confirmation",
+        "reversal_extra_confirmation_required",
+        "threshold_not_met",
+    }
+    if blocked_key in gate_codes or reason_codes.intersection(gate_codes):
+        return "gate_block"
+
+    if blocked_key:
+        return "risk_block"
+    return None
+
+
 def _row_to_decision_card(db: Session, row: UserScannerResult, quality_lookup: dict[str, dict], recommendation_lookup: dict[str, list[dict]]) -> dict:
     payload = row.payload or {}
     decision = _normalize_decision(payload.get("final_decision") or ("LONG" if row.signal == "long" else "SHORT" if row.signal == "short" else "NO_TRADE"))
@@ -93,6 +139,15 @@ def _row_to_decision_card(db: Session, row: UserScannerResult, quality_lookup: d
     if decision == "BLOCKED" and not blocked_reason:
         blocked_reason = timeline[0]["reason_code"] if timeline else None
 
+    cooldown_seconds = int((payload.get("cooldown_state") or {}).get("seconds") or 0)
+    risk_block = (payload.get("risk_state") or {}).get("reason")
+    block_category = _resolve_block_category(
+        payload=payload,
+        blocked_reason=blocked_reason,
+        risk_block=risk_block,
+        cooldown_seconds=cooldown_seconds,
+    )
+
     return {
         "schema_version": payload.get("schema_version") or SCHEMA_VERSION,
         "engine_version": payload.get("engine_version") or ENGINE_VERSION,
@@ -113,8 +168,9 @@ def _row_to_decision_card(db: Session, row: UserScannerResult, quality_lookup: d
         "take_profit_2": payload.get("take_profit_2") or payload.get("take_profit"),
         "invalidation": payload.get("invalidation") or {},
         "blocked_reason": blocked_reason,
-        "cooldown_remaining": int((payload.get("cooldown_state") or {}).get("seconds") or 0),
-        "risk_block": (payload.get("risk_state") or {}).get("reason"),
+        "block_category": block_category,
+        "cooldown_remaining": cooldown_seconds,
+        "risk_block": risk_block,
         "risk_state": payload.get("risk_state") or {"state": "unknown"},
         "confidence_adjustment": round(confidence_adjustment, 4),
         "learning_badges": learning_badges,

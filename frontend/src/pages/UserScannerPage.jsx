@@ -50,7 +50,7 @@ export const UserScannerPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
   const [symbolSource, setSymbolSource] = useState("crypto");
-  const [symbolMode, setSymbolMode] = useState("top_active_50");
+  const [symbolMode, setSymbolMode] = useState("all_market_symbols");
   const [selectedSymbols, setSelectedSymbols] = useState([]);
   const [automationConfig, setAutomationConfig] = useState(null);
   const [automationProfiles, setAutomationProfiles] = useState([]);
@@ -299,17 +299,17 @@ export const UserScannerPage = () => {
           setActiveProfileId(selectedProfile.id);
           setProfileIntervalInput(Number(selectedProfile.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS));
           setSymbolSource(selectedProfile.symbol_source || "crypto");
-          setSymbolMode(selectedProfile.symbol_selection_mode || "top_active_50");
+          setSymbolMode(selectedProfile.symbol_selection_mode || "all_market_symbols");
           setSelectedSymbols(Array.isArray(selectedProfile.selected_symbols) ? selectedProfile.selected_symbols : []);
         } else if (automation) {
           setActiveProfileId("");
           setSymbolSource(automation.symbol_source || "crypto");
-          setSymbolMode(automation.symbol_selection_mode || "top_active_50");
+          setSymbolMode(automation.symbol_selection_mode || "all_market_symbols");
           setSelectedSymbols(Array.isArray(automation.selected_symbols) ? automation.selected_symbols : []);
         }
         if (persistedSelection) {
           setSymbolSource(persistedSelection.symbol_source || "crypto");
-          setSymbolMode(persistedSelection.symbol_selection_mode || "top_active_50");
+          setSymbolMode(persistedSelection.symbol_selection_mode || "all_market_symbols");
           setSelectedSymbols(Array.isArray(persistedSelection.selected_symbols) ? persistedSelection.selected_symbols : []);
           setSelectionSavedAt(persistedSelection.saved_at || null);
         }

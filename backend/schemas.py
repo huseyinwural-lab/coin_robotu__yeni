@@ -1339,7 +1339,7 @@ class UserScannerRunRequest(BaseModel):
     mode: str | None = None
     max_results: int = Field(default=20, ge=5, le=100)
     symbol_source: str = "crypto"
-    symbol_selection_mode: str = "bot_scope"
+    symbol_selection_mode: str = "all_market_symbols"
     selected_symbols: list[str] = Field(default_factory=list)
 
 
@@ -1360,7 +1360,7 @@ class UserScannerAutomationConfigUpdateRequest(BaseModel):
     interval_seconds: int = Field(default=180, ge=180, le=180)
     max_results: int = Field(default=25, ge=5, le=100)
     symbol_source: str = "crypto"
-    symbol_selection_mode: str = "top_active_50"
+    symbol_selection_mode: str = "all_market_symbols"
     selected_symbols: list[str] = Field(default_factory=list)
 
 
@@ -1392,7 +1392,7 @@ class UserScannerAutomationProfileCreateRequest(BaseModel):
     interval_seconds: int = Field(default=180, ge=180, le=3600)
     max_results: int = Field(default=25, ge=5, le=100)
     symbol_source: str = "crypto"
-    symbol_selection_mode: str = "top_active_50"
+    symbol_selection_mode: str = "all_market_symbols"
     selected_symbols: list[str] = Field(default_factory=list)
 
 
@@ -1403,7 +1403,7 @@ class UserScannerAutomationProfileUpdateRequest(BaseModel):
     interval_seconds: int = Field(default=180, ge=180, le=3600)
     max_results: int = Field(default=25, ge=5, le=100)
     symbol_source: str = "crypto"
-    symbol_selection_mode: str = "top_active_50"
+    symbol_selection_mode: str = "all_market_symbols"
     selected_symbols: list[str] = Field(default_factory=list)
 
 
@@ -1433,7 +1433,7 @@ class UserScannerAutomationProfileResponse(BaseModel):
 class UserScannerSymbolSelectionUpdateRequest(BaseModel):
     scanner_id: str = Field(default="default", min_length=1, max_length=60)
     symbol_source: str = "crypto"
-    symbol_selection_mode: str = "top_active_50"
+    symbol_selection_mode: str = "all_market_symbols"
     selected_symbols: list[str] = Field(default_factory=list)
 
 
@@ -2337,6 +2337,7 @@ class DecisionCardResponse(BaseModel):
     take_profit_2: float | None = None
     invalidation: dict = Field(default_factory=dict)
     blocked_reason: str | None = None
+    block_category: str | None = None
     cooldown_remaining: int = 0
     risk_block: str | None = None
     risk_state: dict = Field(default_factory=dict)

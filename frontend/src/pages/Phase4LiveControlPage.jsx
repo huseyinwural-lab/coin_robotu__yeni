@@ -12,7 +12,7 @@ const initialConfig = {
   market_type: "futures_testnet",
   safe_mode_enabled: true,
   live_mode_enabled: false,
-  symbol_whitelist: ["BTCUSDT"],
+  symbol_whitelist: [],
   max_position_pct: 0.1,
   leverage_cap: 1,
   max_trades_per_hour: 6,
@@ -25,6 +25,7 @@ const initialConfig = {
 
 export const Phase4LiveControlPage = () => {
   const [config, setConfig] = useState(initialConfig);
+  const [symbolWhitelistInput, setSymbolWhitelistInput] = useState("");
   const [readiness, setReadiness] = useState(null);
   const [connectivity, setConnectivity] = useState(null);
   const [readinessScore, setReadinessScore] = useState(null);
@@ -55,6 +56,7 @@ export const Phase4LiveControlPage = () => {
         apiClient.get("/phase4/admin/permission-status"),
       ]);
       setConfig(configData);
+      setSymbolWhitelistInput((configData?.symbol_whitelist || []).join(","));
       setReadiness(readinessData);
       setConnectivity(connectivityData);
       setReadinessScore(readinessScoreData);
@@ -75,7 +77,10 @@ export const Phase4LiveControlPage = () => {
     try {
       await apiClient.put("/phase4/live-config", {
         ...config,
-        symbol_whitelist: ["BTCUSDT"],
+        symbol_whitelist: symbolWhitelistInput
+          .split(",")
+          .map((item) => item.trim().toUpperCase())
+          .filter(Boolean),
         max_position_pct: Number(config.max_position_pct),
         leverage_cap: Number(config.leverage_cap),
         max_trades_per_hour: Number(config.max_trades_per_hour),
@@ -192,6 +197,15 @@ export const Phase4LiveControlPage = () => {
         <Input type="number" value={config.leverage_cap} onChange={(event) => setConfig((prev) => ({ ...prev, leverage_cap: event.target.value }))} data-testid="phase4-config-leverage-input" />
         <Input type="number" value={config.max_trades_per_hour} onChange={(event) => setConfig((prev) => ({ ...prev, max_trades_per_hour: event.target.value }))} data-testid="phase4-config-max-trades-input" />
         <Input type="number" value={config.max_notional_exposure} onChange={(event) => setConfig((prev) => ({ ...prev, max_notional_exposure: event.target.value }))} data-testid="phase4-config-max-notional-input" />
+        <Input
+          value={symbolWhitelistInput}
+          onChange={(event) => setSymbolWhitelistInput(event.target.value)}
+          placeholder="symbol_whitelist CSV (boş = allow all)"
+          data-testid="phase4-config-symbol-whitelist-input"
+        />
+        <p className="md:col-span-2 text-xs text-slate-400" data-testid="phase4-config-symbol-whitelist-hint">
+          symbol_whitelist boş bırakılırsa allow-all davranışı aktiftir.
+        </p>
 
         <div className="md:col-span-2 flex flex-wrap gap-3" data-testid="phase4-config-toggle-row">
           <label className="flex items-center gap-2 text-sm" data-testid="phase4-config-safe-mode-label">

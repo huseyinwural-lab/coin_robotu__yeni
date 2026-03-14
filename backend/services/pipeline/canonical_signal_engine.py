@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from models import CanonicalStrategyRegistry
 from services.canonical_strategy_registry_service import GLOBAL_RISK_POLICY, enabled_production_strategies
 from services.pipeline.cache_store import get_json, set_json, utc_now_iso
-from services.pipeline.legacy.spot_strategy_service import calculate_indicator_snapshot, get_spot_tradable_universe
+from services.pipeline.legacy.spot_strategy_service import calculate_indicator_snapshot
+from services.pipeline.universe_engine import build_effective_universe
 from services.strategy_family_gate_service import list_strategy_family_gates, strategy_family_gate_payload
 
 
@@ -420,9 +421,20 @@ def _resolve_levels(entry: float, atr: float, decision: str, top_strategy: Canon
     return entry, entry, entry
 
 
-def scan_canonical_universe_for_signals(db: Session, cache, *, max_symbols: int = 50) -> dict:
-    universe = get_spot_tradable_universe(cache)
-    symbols = [symbol.upper() for symbol in universe.get("symbols", [])][:max_symbols]
+def scan_canonical_universe_for_signals(
+    db: Session,
+    cache,
+    *,
+    max_symbols: int = 50,
+    symbols_override: list[str] | None = None,
+) -> dict:
+    universe = build_effective_universe(db, cache)
+    advisory_lookup = (universe.get("liquidity_advisory") or {}).get("spot") or {}
+    if symbols_override:
+        symbols = sorted({str(symbol or "").upper().strip() for symbol in symbols_override if str(symbol or "").strip()})
+    else:
+        symbols = [symbol.upper() for symbol in (universe.get("spot_symbols") or [])]
+    symbols = symbols[: max(1, min(int(max_symbols or 50), 2000))]
     strategies = enabled_production_strategies(db)
     family_gates = {row["family"]: row for row in [strategy_family_gate_payload(item) for item in list_strategy_family_gates(db)]}
 
@@ -643,6 +655,16 @@ def scan_canonical_universe_for_signals(db: Session, cache, *, max_symbols: int 
         aggregate_short = sum(c["weighted_short"] for c in contributions if c["status"] == "accepted")
         winning_side = "long" if aggregate_long > aggregate_short else "short" if aggregate_short > aggregate_long else "none"
         confidence = round(min(max(max(aggregate_long, aggregate_short) / 12, 0), 1), 4)
+        liquidity_advisory = advisory_lookup.get(symbol) or {}
+        confidence_penalty = _safe_float(liquidity_advisory.get("confidence_penalty"), 0.0)
+        risk_score_bonus = _safe_float(liquidity_advisory.get("risk_score_bonus"), 0.0)
+        if liquidity_advisory.get("data_available") is False:
+            reason_codes.append("data_unavailable")
+        if liquidity_advisory.get("volume_low"):
+            reason_codes.append("liquidity_volume_low")
+        if liquidity_advisory.get("spread_high"):
+            reason_codes.append("liquidity_spread_high")
+        adjusted_confidence = round(max(0.0, min(1.0, confidence - confidence_penalty)), 4)
 
         final_decision = "NO_TRADE"
         blocked_reason = None
@@ -702,11 +724,11 @@ def scan_canonical_universe_for_signals(db: Session, cache, *, max_symbols: int 
                 "signal": signal,
                 "final_decision": final_decision,
                 "signal_score": round(float(max(aggregate_long, aggregate_short)), 4),
-                "signal_strength": confidence,
+                "signal_strength": adjusted_confidence,
                 "long_score": round(float(aggregate_long), 4),
                 "short_score": round(float(aggregate_short), 4),
                 "winning_side": winning_side,
-                "decision_confidence": confidence,
+                "decision_confidence": adjusted_confidence,
                 "source_strategies": [
                     {
                         "strategy_id": c["strategy_id"],
@@ -723,10 +745,15 @@ def scan_canonical_universe_for_signals(db: Session, cache, *, max_symbols: int 
                 "family_scores": family_scores,
                 "blocked_reason_current": blocked_reason,
                 "blocked_reason_timeline": [],
-                "risk_state": {"state": "clear"},
+                "risk_state": {
+                    "state": "advisory" if risk_score_bonus > 0 else "clear",
+                    "reason": "liquidity_advisory" if risk_score_bonus > 0 else "clear",
+                    "risk_score_bonus": round(risk_score_bonus, 6),
+                },
                 "cooldown_state": {"state": "clear"},
                 "regime_state": {"state": "resolved", "market_regime": regime},
                 "reason_codes": sorted(set(reason_codes)),
+                "liquidity_advisory": liquidity_advisory,
                 "market_regime": regime,
                 "dominant_family": dominant_family,
                 "supporting_families": [

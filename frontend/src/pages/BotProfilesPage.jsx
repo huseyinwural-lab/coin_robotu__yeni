@@ -25,7 +25,7 @@ export const BotProfilesPage = () => {
   const [form, setForm] = useState(initialForm);
   const [formErrors, setFormErrors] = useState({});
   const [symbolSource, setSymbolSource] = useState("crypto");
-  const [symbolMode, setSymbolMode] = useState("top_active_50");
+  const [symbolMode, setSymbolMode] = useState("all_market_symbols");
   const [selectedSymbols, setSelectedSymbols] = useState(["BTCUSDT", "ETHUSDT"]);
 
   const fetchItems = async () => {
@@ -87,7 +87,7 @@ export const BotProfilesPage = () => {
       setEditingId(null);
       setForm(initialForm);
       setSelectedSymbols(["BTCUSDT", "ETHUSDT"]);
-      setSymbolMode("top_active_50");
+      setSymbolMode("all_market_symbols");
       setFormErrors({});
       fetchItems();
     } catch (error) {
@@ -103,7 +103,7 @@ export const BotProfilesPage = () => {
       max_concurrent_trades: item.leverage,
     });
     setSymbolSource("crypto");
-    setSymbolMode("custom_list");
+    setSymbolMode("manual_selection");
     setSelectedSymbols(item.symbols || []);
     setFormErrors({});
   };
@@ -246,7 +246,7 @@ export const BotProfilesPage = () => {
                 setEditingId(null);
                 setForm(initialForm);
                 setSelectedSymbols(["BTCUSDT", "ETHUSDT"]);
-                setSymbolMode("top_active_50");
+                setSymbolMode("all_market_symbols");
                 setFormErrors({});
               }}
               data-testid="bot-form-cancel-edit-button"

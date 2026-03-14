@@ -14,7 +14,14 @@ from services.indicator_screener.market_data_provider import BinanceMarketDataPr
 
 
 ALLOWED_SOURCES = {"crypto", "stock"}
-ALLOWED_MODES = {"all_exchange", "top_active_50", "top_active_100", "custom_list"}
+ALLOWED_MODES = {"all_market_symbols", "top_volume", "manual_selection"}
+MODE_ALIASES = {
+    "all_exchange": "all_market_symbols",
+    "top_active_50": "top_volume",
+    "top_active_100": "top_volume",
+    "custom_list": "manual_selection",
+    "bot_scope": "manual_selection",
+}
 ALPHA_PROVIDER_KEY = "alpha_vantage"
 
 
@@ -31,8 +38,9 @@ def _normalize_source(source: str | None) -> str:
 
 
 def _normalize_mode(mode: str | None) -> str:
-    candidate = str(mode or "all_exchange").strip().lower()
-    return candidate if candidate in ALLOWED_MODES else "all_exchange"
+    candidate = str(mode or "all_market_symbols").strip().lower()
+    candidate = MODE_ALIASES.get(candidate, candidate)
+    return candidate if candidate in ALLOWED_MODES else "all_market_symbols"
 
 
 def _normalize_symbol_list(symbols: list[str] | str | None) -> list[str]:
@@ -241,7 +249,7 @@ def resolve_symbol_universe(
         if not alpha_key:
             warnings.append("alpha_vantage_key_missing")
         else:
-            if normalized_mode in {"all_exchange", "custom_list"}:
+            if normalized_mode in {"all_market_symbols", "manual_selection"}:
                 rows = _alpha_listing_rows(alpha_key, exchanges=["NASDAQ", "NYSE"])
             else:
                 rows = _alpha_top_active_rows(alpha_key)
@@ -250,11 +258,9 @@ def resolve_symbol_universe(
         rows = [row for row in rows if search in str(row.get("symbol", "")) or search in str(row.get("company_name", ""))]
 
     selected: list[str] = []
-    if normalized_mode == "top_active_50":
-        selected = [row["symbol"] for row in rows[:50]]
-    elif normalized_mode == "top_active_100":
+    if normalized_mode == "top_volume":
         selected = [row["symbol"] for row in rows[:100]]
-    elif normalized_mode == "custom_list":
+    elif normalized_mode == "manual_selection":
         available = {row["symbol"] for row in rows}
         for symbol in custom_symbols:
             if symbol in available or normalized_source == "stock":

@@ -101,6 +101,22 @@
       "title": "Symbol Not Allowed",
       "description": "Symbol allow-list dışında kaldı."
     },
+    "SYMBOL_PERMISSION_BLOCK": {
+      "title": "Symbol Permission Block",
+      "description": "Symbol permission katmanında kısıtlı olduğu için işlem engellendi."
+    },
+    "DATA_UNAVAILABLE": {
+      "title": "Data Unavailable",
+      "description": "Symbol için yeterli veya güncel veri bulunamadığı için karar üretimi sınırlı kaldı."
+    },
+    "LIQUIDITY_VOLUME_LOW": {
+      "title": "Liquidity Advisory: Low Volume",
+      "description": "Hacim eşik altında; confidence düşürülerek risk farkındalığı artırıldı."
+    },
+    "LIQUIDITY_SPREAD_HIGH": {
+      "title": "Liquidity Advisory: High Spread",
+      "description": "Spread yüksek; risk skoruna ek yük bindirildi."
+    },
     "ORDER_TYPE_NOT_ALLOWED": {
       "title": "Order Type Not Allowed",
       "description": "Seçilen order tipi policy tarafından engellendi."

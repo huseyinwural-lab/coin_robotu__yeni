@@ -6,16 +6,32 @@ import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 
 const MODE_OPTIONS = [
-  { value: "all_exchange", label: "Borsadaki tümü" },
-  { value: "top_active_50", label: "En aktif 50" },
-  { value: "top_active_100", label: "En aktif 100" },
-  { value: "custom_list", label: "Kendi listem" },
+  { value: "all_market_symbols", label: "Tüm market sembolleri" },
+  { value: "top_volume", label: "Hacme göre üst semboller" },
+  { value: "manual_selection", label: "Manual seçim" },
 ];
 
 const SOURCE_OPTIONS = [
   { value: "crypto", label: "Kripto" },
   { value: "stock", label: "Senet" },
 ];
+
+const normalizeModeValue = (mode) => {
+  const raw = String(mode || "all_market_symbols").toLowerCase();
+  if (raw === "all_exchange") {
+    return "all_market_symbols";
+  }
+  if (raw === "top_active_50" || raw === "top_active_100") {
+    return "top_volume";
+  }
+  if (raw === "custom_list" || raw === "bot_scope") {
+    return "manual_selection";
+  }
+  if (["all_market_symbols", "top_volume", "manual_selection"].includes(raw)) {
+    return raw;
+  }
+  return "all_market_symbols";
+};
 
 const normalizeSymbols = (symbols) => {
   if (!Array.isArray(symbols)) {
@@ -46,6 +62,7 @@ export const SymbolSelectorPanel = ({
   const [providerConfig, setProviderConfig] = useState(null);
 
   const normalizedSelectedSymbols = useMemo(() => normalizeSymbols(selectedSymbols), [selectedSymbols]);
+  const normalizedMode = useMemo(() => normalizeModeValue(mode), [mode]);
 
   const loadProviderConfig = async () => {
     try {
@@ -68,7 +85,7 @@ export const SymbolSelectorPanel = ({
   const loadUniverse = async ({ forceMode } = {}) => {
     setIsLoading(true);
     try {
-      const activeMode = forceMode || mode;
+      const activeMode = normalizeModeValue(forceMode || normalizedMode);
       const { data } = await apiClient.get("/symbol-selector/universe", {
         params: {
           source,
@@ -86,7 +103,7 @@ export const SymbolSelectorPanel = ({
         toast.warning("Senet listesi için Alpha Vantage API key gerekli (Admin > Market Universe). ");
       }
 
-      if (activeMode !== "custom_list") {
+      if (activeMode !== "manual_selection") {
         const next = normalizeSymbols(data?.selected_symbols || []);
         if (multi) {
           onSelectedSymbolsChange(next);
@@ -109,7 +126,7 @@ export const SymbolSelectorPanel = ({
 
   useEffect(() => {
     loadUniverse();
-  }, [mode, source, exchange, marketType]);
+  }, [normalizedMode, source, exchange, marketType]);
 
   const toggleSymbol = (symbol) => {
     const nextSet = new Set(normalizedSelectedSymbols);
@@ -175,7 +192,7 @@ export const SymbolSelectorPanel = ({
 
         <label className="space-y-1" data-testid={`${testIdPrefix}-mode-field`}>
           <span className="text-xs text-slate-400">Seçim Modu</span>
-          <select value={mode} onChange={(event) => onModeChange(event.target.value)} className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-sm" data-testid={`${testIdPrefix}-mode-select`}>
+          <select value={normalizedMode} onChange={(event) => onModeChange(event.target.value)} className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-sm" data-testid={`${testIdPrefix}-mode-select`}>
             {MODE_OPTIONS.map((item) => (
               <option key={item.value} value={item.value} data-testid={`${testIdPrefix}-mode-option-${item.value}`}>{item.label}</option>
             ))}

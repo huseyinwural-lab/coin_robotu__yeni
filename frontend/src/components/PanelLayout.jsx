@@ -88,6 +88,7 @@ const adminOnlyItems = [
   { to: "/admin/canonical-strategy-registry", label: "Canonical Strategy Registry", icon: ClipboardList, testId: "nav-canonical-strategy-registry-link" },
   { to: "/admin/learning-panel", label: "Learning Panel", icon: LineChart, testId: "nav-admin-learning-panel-link" },
   { to: "/admin/learning-impact-simulator", label: "Learning Impact Simulator", icon: LineChart, testId: "nav-admin-learning-impact-simulator-link" },
+  { to: "/admin/universe-monitor", label: "Universe Monitor", icon: Globe, testId: "nav-admin-universe-monitor-link" },
   { to: "/admin/portfolio-risk", label: "Portfolio Risk", icon: ShieldAlert, testId: "nav-portfolio-risk-link" },
   { to: "/admin/strategy-intelligence", label: "Strategy Intelligence", icon: Radar, testId: "nav-strategy-intelligence-link" },
   { to: "/admin/positions-monitor", label: "Positions Monitor", icon: Activity, testId: "nav-positions-monitor-link" },

@@ -28,13 +28,14 @@ from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.canonical_strategy_registry_service import GLOBAL_RISK_POLICY
 from services.pipeline.cache_store import get_json
 from services.pipeline.canonical_signal_engine import scan_canonical_universe_for_signals
+from services.pipeline.universe_engine import apply_scanner_mode, build_effective_universe, normalize_scanner_mode
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
 ALLOWED_SIGNAL_MODES = {"ASSISTED", "AUTO", "MANUAL"}
 DEFAULT_SIGNAL_MODE = "MANUAL"
 ALLOWED_SCANNER_SOURCES = {"crypto", "stock"}
-ALLOWED_SCANNER_SELECTION_MODES = {"bot_scope", "all_exchange", "top_active_50", "top_active_100", "custom_list"}
+ALLOWED_SCANNER_SELECTION_MODES = {"all_market_symbols", "top_volume", "manual_selection"}
 
 SIGNAL_PENDING_REASON_HINTS = {
     "MANUAL_APPROVAL_REQUIRED": (
@@ -101,8 +102,9 @@ def _normalize_symbol_source(source: str | None) -> str:
 
 
 def _normalize_symbol_selection_mode(selection_mode: str | None) -> str:
-    candidate = str(selection_mode or "top_active_50").strip().lower()
-    return candidate if candidate in ALLOWED_SCANNER_SELECTION_MODES else "top_active_50"
+    normalized = normalize_scanner_mode(selection_mode)
+    candidate = normalized.strip().lower()
+    return candidate if candidate in ALLOWED_SCANNER_SELECTION_MODES else "all_market_symbols"
 
 
 def _normalize_selected_symbols(symbols: list[str] | None) -> list[str]:
@@ -168,7 +170,7 @@ def get_or_create_scanner_automation_config(db: Session, user_id: str) -> UserSc
         interval_seconds=180,
         max_results=25,
         symbol_source="crypto",
-        symbol_selection_mode="top_active_50",
+        symbol_selection_mode="all_market_symbols",
         selected_symbols=[],
         last_run_status="idle",
         last_actionable_count=0,
@@ -905,7 +907,7 @@ def run_user_scanner(
     max_results: int = 20,
     symbol_source: str = "crypto",
     selected_symbols: list[str] | None = None,
-    symbol_selection_mode: str = "bot_scope",
+    symbol_selection_mode: str = "all_market_symbols",
 ) -> dict:
     _ensure_scanner_tables(db)
     mode_row = get_or_create_signal_mode(db, user_id)
@@ -920,22 +922,48 @@ def run_user_scanner(
         mode_row.mode = mode
         mode_row.updated_at = datetime.now(timezone.utc)
 
-    payload = scan_canonical_universe_for_signals(db, redis_client, max_symbols=max(max_results, 30))
-    ranked = payload.get("top_ranked", [])
-    engine_version = str(payload.get("engine_version") or "canonical-engine.v3")
-    schema_version = str(payload.get("schema_version") or "decision-card.v1")
+    normalized_selection_mode = _normalize_symbol_selection_mode(symbol_selection_mode)
+    universe_payload = build_effective_universe(db, redis_client)
+    market_scope = [str(item).upper() for item in (universe_payload.get("spot_symbols") or [])]
+    advisory_lookup = (universe_payload.get("liquidity_advisory") or {}).get("spot") or {}
+    volume_lookup = {
+        symbol: float((advisory_lookup.get(symbol) or {}).get("quote_volume") or 0)
+        for symbol in market_scope
+    }
+    engine_version = "canonical-engine.v3"
+    schema_version = "decision-card.v1"
     scoped_symbols = _user_symbols_scope(db, user_id)
     normalized_selected_symbols = [str(item).strip().upper() for item in (selected_symbols or []) if str(item).strip()]
 
     if str(symbol_source or "crypto").lower() != "crypto":
         warning_set.add("scanner_currently_supports_crypto_only")
+        scanner_scope: list[str] = []
+    else:
+        manual_scope = normalized_selected_symbols
+        if normalized_selection_mode == "manual_selection" and not manual_scope and scoped_symbols:
+            manual_scope = sorted(scoped_symbols)
+
+        scanner_scope = apply_scanner_mode(
+            market_scope,
+            mode=normalized_selection_mode,
+            selected_symbols=manual_scope,
+            top_n=max(max_results, 120),
+            volume_map=volume_lookup,
+        )
+
+    if scanner_scope:
+        payload = scan_canonical_universe_for_signals(
+            db,
+            redis_client,
+            max_symbols=max(len(scanner_scope), max_results, 30),
+            symbols_override=scanner_scope,
+        )
+        ranked = payload.get("top_ranked", [])
+        engine_version = str(payload.get("engine_version") or "canonical-engine.v3")
+        schema_version = str(payload.get("schema_version") or "decision-card.v1")
+    else:
         ranked = []
 
-    if normalized_selected_symbols:
-        selected_scope = set(normalized_selected_symbols)
-        ranked = [item for item in ranked if str(item.get("symbol", "")).upper() in selected_scope]
-    elif str(symbol_selection_mode or "bot_scope").lower() == "bot_scope" and scoped_symbols:
-        ranked = [item for item in ranked if str(item.get("symbol", "")).upper() in scoped_symbols]
     selected = ranked[:max_results]
     selected_symbols = [str(item.get("symbol", "BTCUSDT")).upper() for item in selected]
 

@@ -34,6 +34,7 @@ from routers import (
     admin_learning,
     admin_strategy_family_gates,
     admin_strategy_intelligence,
+    admin_universe_monitor,
     admin_closure,
     admin_users,
     alerts,
@@ -63,6 +64,7 @@ from routers import (
     user_scanner_signals,
     user_scanner_symbol_selection,
     user_learning_simulator,
+    debug_effective_universe,
     user_indicator_screener,
     user_risk,
     strategy_templates,
@@ -113,6 +115,7 @@ api_router.include_router(user_execution.router)
 api_router.include_router(user_trading.router)
 api_router.include_router(user_explainability.router)
 api_router.include_router(user_reports.router)
+api_router.include_router(debug_effective_universe.router)
 api_router.include_router(strategy_templates.router)
 api_router.include_router(strategy_domain.router)
 api_router.include_router(audit_logs.router)
@@ -123,6 +126,7 @@ api_router.include_router(symbol_selector.router)
 api_router.include_router(ops_alerts.router)
 api_router.include_router(user_approvals.router)
 api_router.include_router(admin_users.router)
+api_router.include_router(admin_universe_monitor.router)
 api_router.include_router(exchange.router)
 api_router.include_router(venues.router)
 api_router.include_router(audit.router)

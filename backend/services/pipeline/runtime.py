@@ -161,7 +161,7 @@ class PipelineRuntime:
                             max_results=int(row.max_results or 25),
                             symbol_source=str(row.symbol_source or "crypto"),
                             selected_symbols=list(row.selected_symbols or []),
-                            symbol_selection_mode=str(row.symbol_selection_mode or "top_active_50"),
+                            symbol_selection_mode=str(row.symbol_selection_mode or "all_market_symbols"),
                         )
                         row.last_run_at = now
                         row.last_run_status = "success"
@@ -205,7 +205,7 @@ class PipelineRuntime:
                             max_results=int(row.max_results or 25),
                             symbol_source=str(row.symbol_source or "crypto"),
                             selected_symbols=list(row.selected_symbols or []),
-                            symbol_selection_mode=str(row.symbol_selection_mode or "top_active_50"),
+                            symbol_selection_mode=str(row.symbol_selection_mode or "all_market_symbols"),
                         )
                         row.last_run_at = now
                         row.last_run_status = "success"

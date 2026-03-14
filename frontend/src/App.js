@@ -68,6 +68,7 @@ import { AdminCrossDashboardConsistencyPage } from "@/pages/AdminCrossDashboardC
 import { AdminCanonicalStrategyRegistryPage } from "@/pages/AdminCanonicalStrategyRegistryPage";
 import { AdminLearningPanelPage } from "@/pages/AdminLearningPanelPage";
 import { AdminLearningImpactSimulatorPage } from "@/pages/AdminLearningImpactSimulatorPage";
+import { AdminUniverseMonitorPage } from "@/pages/AdminUniverseMonitorPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -145,6 +146,7 @@ function App() {
             <Route path="canonical-strategy-registry" element={<AdminCanonicalStrategyRegistryPage />} />
             <Route path="learning-panel" element={<AdminLearningPanelPage />} />
             <Route path="learning-impact-simulator" element={<AdminLearningImpactSimulatorPage />} />
+            <Route path="universe-monitor" element={<AdminUniverseMonitorPage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />
             <Route path="correlation-matrix" element={<CorrelationMatrixPage />} />
             <Route path="execution-states" element={<ExecutionStatesPage />} />

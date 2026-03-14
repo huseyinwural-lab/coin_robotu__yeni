@@ -26,7 +26,7 @@ export const AdminStrategyIntelligencePage = () => {
   });
   const [simulationResult, setSimulationResult] = useState(null);
   const [simulationSymbolSource, setSimulationSymbolSource] = useState("crypto");
-  const [simulationSymbolMode, setSimulationSymbolMode] = useState("top_active_50");
+  const [simulationSymbolMode, setSimulationSymbolMode] = useState("all_market_symbols");
   const [simulationSelectedSymbols, setSimulationSelectedSymbols] = useState(["BTCUSDT"]);
 
   useEffect(() => {

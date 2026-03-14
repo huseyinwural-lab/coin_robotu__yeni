@@ -31,7 +31,7 @@ def symbol_universe(
     source: str = Query(default="crypto"),
     exchange: str = Query(default="binance"),
     market_type: str = Query(default="spot"),
-    mode: str = Query(default="all_exchange"),
+    mode: str = Query(default="all_market_symbols"),
     selected_symbols: str = Query(default=""),
     query: str = Query(default=""),
     quote_asset_filter: str = Query(default="ALL"),

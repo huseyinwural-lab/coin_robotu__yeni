@@ -51,7 +51,7 @@ from services.venue_service import check_user_venue_access, seed_binance_venue_r
 BINANCE_FUTURES_TESTNET_REST = "https://testnet.binancefuture.com"
 BINANCE_FUTURES_TESTNET_WS = "wss://stream.binancefuture.com/ws"
 BINANCE_SPOT_TESTNET_REST = "https://testnet.binance.vision"
-SAFE_SYMBOL_WHITELIST = ["BTCUSDT"]
+DEFAULT_TEST_SYMBOL = "BTCUSDT"
 MAX_SAFE_POSITION_PCT = 0.1
 MAX_SAFE_LEVERAGE = 1
 MAX_SAFE_NOTIONAL_EXPOSURE = 150
@@ -434,10 +434,18 @@ def _enforce_controlled_limits(config: LiveActivationConfig):
     config.market_type = "futures_testnet"
 
     if config.safe_mode_enabled:
-        config.symbol_whitelist = SAFE_SYMBOL_WHITELIST.copy()
         config.max_position_pct = min(config.max_position_pct, MAX_SAFE_POSITION_PCT)
         config.leverage_cap = min(config.leverage_cap, MAX_SAFE_LEVERAGE)
         config.max_notional_exposure = min(config.max_notional_exposure, MAX_SAFE_NOTIONAL_EXPOSURE)
+
+
+def _resolve_test_symbol(config: LiveActivationConfig | None) -> str:
+    whitelist = list((config.symbol_whitelist or []) if config else [])
+    for symbol in whitelist:
+        normalized = str(symbol or "").strip().upper()
+        if normalized:
+            return normalized
+    return DEFAULT_TEST_SYMBOL
 
 
 def get_or_create_exchange_settings(db: Session, user_id: str) -> UserExchangeSetting:
@@ -1246,7 +1254,8 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     if permission["status"] != "ready":
         raise ValueError("Permission check başarısız. Önce API key doğrulamasını geçmelisiniz.")
 
-    symbol = SAFE_SYMBOL_WHITELIST[0]
+    config = get_or_create_live_config(db)
+    symbol = _resolve_test_symbol(config)
     strategy_type, direction = _resolve_strategy_context(db, user.id)
     side = "BUY" if direction == "long" else "SELL"
     volatility_pct = _market_volatility_pct()
@@ -1484,7 +1493,8 @@ def run_exchange_test_order_market(
     api_key = decrypt_secret(settings_row.api_key_encrypted)
     api_secret = decrypt_secret(settings_row.api_secret_encrypted)
 
-    symbol = SAFE_SYMBOL_WHITELIST[0]
+    config = get_or_create_live_config(db)
+    symbol = _resolve_test_symbol(config)
     side = "BUY"
     ticker = get_market_ticker(symbol)
     mid_price = float(ticker["mid_price"] or 0)
@@ -2406,7 +2416,7 @@ def get_or_create_live_config(db: Session) -> LiveActivationConfig:
         market_type="futures_testnet",
         safe_mode_enabled=True,
         live_mode_enabled=False,
-        symbol_whitelist=SAFE_SYMBOL_WHITELIST.copy(),
+        symbol_whitelist=[],
         max_position_pct=MAX_SAFE_POSITION_PCT,
         leverage_cap=MAX_SAFE_LEVERAGE,
         max_trades_per_hour=6,
@@ -2446,8 +2456,7 @@ def build_readiness_report(config: LiveActivationConfig, api_key: str | None = N
     permission = adapter.permission_check(api_key, api_secret)
     endpoint_probe = adapter.ping()
     safe_limits_ok = (
-        set(config.symbol_whitelist) == set(SAFE_SYMBOL_WHITELIST)
-        and config.max_position_pct <= MAX_SAFE_POSITION_PCT
+        config.max_position_pct <= MAX_SAFE_POSITION_PCT
         and config.leverage_cap <= MAX_SAFE_LEVERAGE
         and config.max_notional_exposure <= MAX_SAFE_NOTIONAL_EXPOSURE
     )

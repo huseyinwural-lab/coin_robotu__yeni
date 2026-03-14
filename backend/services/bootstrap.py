@@ -12,6 +12,8 @@ from models import (
     RiskExposureGroup,
     RiskOrchestratorPolicy,
     User,
+    UserScannerAutomationConfig,
+    UserScannerAutomationProfile,
     UserRole,
 )
 from services.audit_service import create_audit_log
@@ -69,8 +71,8 @@ def _seed_admin_control(db: Session):
         max_open_positions_cap=10,
         minimum_volume_usd=1000000,
         max_spread_bps=40,
-        spot_universe=["BTCUSDT", "ETHUSDT", "BNBUSDT"],
-        futures_universe=["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        spot_universe=[],
+        futures_universe=[],
         whitelist=[],
         blacklist=[],
         emergency_mode=False,
@@ -266,7 +268,7 @@ def _seed_live_activation_config(db: Session):
             market_type="futures_testnet",
             safe_mode_enabled=True,
             live_mode_enabled=False,
-            symbol_whitelist=["BTCUSDT"],
+            symbol_whitelist=[],
             max_position_pct=0.1,
             leverage_cap=1,
             max_trades_per_hour=6,
@@ -280,6 +282,31 @@ def _seed_live_activation_config(db: Session):
     db.commit()
 
 
+def _migrate_universe_defaults(db: Session):
+    control = db.query(AdminControl).filter(AdminControl.id == "global").first()
+    if control:
+        control.whitelist = []
+        control.blacklist = []
+        control.spot_universe = list(control.spot_universe or [])
+        control.futures_universe = list(control.futures_universe or [])
+        if control.minimum_volume_usd is None:
+            control.minimum_volume_usd = 1000000
+        if control.max_spread_bps is None:
+            control.max_spread_bps = 40
+
+    live_config = db.query(LiveActivationConfig).filter(LiveActivationConfig.id == "global").first()
+    if live_config and live_config.symbol_whitelist is None:
+        live_config.symbol_whitelist = []
+
+    for row in db.query(UserScannerAutomationConfig).all():
+        row.symbol_selection_mode = "all_market_symbols"
+
+    for row in db.query(UserScannerAutomationProfile).all():
+        row.symbol_selection_mode = "all_market_symbols"
+
+    db.commit()
+
+
 def seed_default_admin():
     db = SessionLocal()
     try:
@@ -290,6 +317,7 @@ def seed_default_admin():
         _seed_backtest_cards(db)
         _seed_live_activation_config(db)
         _seed_risk_orchestrator_policy(db)
+        _migrate_universe_defaults(db)
         seed_canonical_strategy_registry(db)
         seed_strategy_family_gates(db)
         seed_binance_venue_registry(db)

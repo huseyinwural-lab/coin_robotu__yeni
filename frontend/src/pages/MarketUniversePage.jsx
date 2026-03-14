@@ -11,8 +11,8 @@ const initialForm = {
   max_open_positions_cap: 10,
   minimum_volume_usd: 1000000,
   max_spread_bps: 40,
-  spot_universe: "BTCUSDT,ETHUSDT,BNBUSDT",
-  futures_universe: "BTCUSDT,ETHUSDT,SOLUSDT",
+  spot_universe: "",
+  futures_universe: "",
   whitelist: "",
   blacklist: "",
   emergency_mode: false,
@@ -30,9 +30,9 @@ export const MarketUniversePage = () => {
   const [spotSource, setSpotSource] = useState("crypto");
   const [futuresSource, setFuturesSource] = useState("crypto");
   const [stockSource, setStockSource] = useState("stock");
-  const [spotMode, setSpotMode] = useState("all_exchange");
-  const [futuresMode, setFuturesMode] = useState("all_exchange");
-  const [stockMode, setStockMode] = useState("custom_list");
+  const [spotMode, setSpotMode] = useState("all_market_symbols");
+  const [futuresMode, setFuturesMode] = useState("all_market_symbols");
+  const [stockMode, setStockMode] = useState("manual_selection");
   const [alphaKeyInput, setAlphaKeyInput] = useState("");
   const [providerConfig, setProviderConfig] = useState(null);
 
@@ -120,7 +120,7 @@ export const MarketUniversePage = () => {
     <section className="space-y-4" data-testid="market-universe-page">
       <header className="border border-blue-900 bg-slate-900 p-4" data-testid="market-universe-header">
         <h2 className="text-4xl font-black uppercase tracking-tight text-blue-300" data-testid="market-universe-title">Market Universe Yönetimi</h2>
-        <p className="mt-2 text-sm text-slate-400" data-testid="market-universe-description">Admin kurallarına göre tarama evreni ve global risk cap ayarlanır.</p>
+        <p className="mt-2 text-sm text-slate-400" data-testid="market-universe-description">Universe geniş tutulur; whitelist sadece geçici kısıt için kullanılır. Hacim/spread filtreleri advisory modda confidence/risk etkisi üretir.</p>
       </header>
 
       <form onSubmit={submit} className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="market-universe-form">
@@ -130,6 +130,12 @@ export const MarketUniversePage = () => {
         <Input value={form.futures_universe} onChange={(event) => setForm((prev) => ({ ...prev, futures_universe: event.target.value }))} placeholder="Futures symbols CSV" data-testid="universe-futures-input" />
         <Input value={form.whitelist} onChange={(event) => setForm((prev) => ({ ...prev, whitelist: event.target.value }))} placeholder="Whitelist CSV" data-testid="universe-whitelist-input" />
         <Input value={form.blacklist} onChange={(event) => setForm((prev) => ({ ...prev, blacklist: event.target.value }))} placeholder="Blacklist CSV" data-testid="universe-blacklist-input" />
+        <p className="md:col-span-2 text-xs text-slate-400" data-testid="market-universe-override-hint">
+          Spot/Futures Universe alanları boş bırakılırsa exchange market symbols kullanılır (optional override).
+        </p>
+        <p className="md:col-span-2 text-xs text-slate-400" data-testid="market-universe-liquidity-advisory-hint">
+          minimum_volume_usd ve max_spread_bps advisory-only çalışır; symbol elenmez, confidence/risk etkilenir.
+        </p>
 
         <div className="flex flex-wrap gap-3 md:col-span-2" data-testid="universe-toggle-row">
           <label className="flex items-center gap-2 text-sm" data-testid="universe-emergency-toggle-label">

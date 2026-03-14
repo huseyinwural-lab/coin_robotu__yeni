@@ -33,7 +33,7 @@ def get_user_scanner_symbol_selection(
             user_id=user_id,
             scanner_id=scanner_id,
             symbol_source="crypto",
-            symbol_selection_mode="top_active_50",
+            symbol_selection_mode="all_market_symbols",
             selected_symbols=[],
             saved_at=now,
         )
@@ -69,14 +69,14 @@ def upsert_user_scanner_symbol_selection(
             user_id=user_id,
             scanner_id=scanner_id,
             symbol_source=str(symbol_source or "crypto"),
-            symbol_selection_mode=str(symbol_selection_mode or "top_active_50"),
+            symbol_selection_mode=str(symbol_selection_mode or "all_market_symbols"),
             selected_symbols=normalized_symbols,
             saved_at=now,
         )
         db.add(row)
     else:
         row.symbol_source = str(symbol_source or row.symbol_source or "crypto")
-        row.symbol_selection_mode = str(symbol_selection_mode or row.symbol_selection_mode or "top_active_50")
+        row.symbol_selection_mode = str(symbol_selection_mode or row.symbol_selection_mode or "all_market_symbols")
         row.selected_symbols = normalized_symbols
         row.saved_at = now
 

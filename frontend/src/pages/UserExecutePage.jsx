@@ -55,7 +55,7 @@ export const UserExecutePage = () => {
     updatedAt: null,
   });
   const [symbolSelectorSource, setSymbolSelectorSource] = useState("crypto");
-  const [symbolSelectorMode, setSymbolSelectorMode] = useState("top_active_50");
+  const [symbolSelectorMode, setSymbolSelectorMode] = useState("all_market_symbols");
   const [symbolSelectorSelection, setSymbolSelectorSelection] = useState([defaultForm.symbol]);
 
   const selectedConnection = useMemo(
