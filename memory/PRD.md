@@ -37,6 +37,19 @@
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
 ## 5) What Has Been Implemented
+### 2026-03-14 (Fallback Timeline + Trigger/Breach/Exit/Cycle Snapshot)
+- Kullanıcı talebine göre fallback olayları için tam izleme zinciri eklendi:
+  - Yeni model: `ScannerFallbackEvent`
+  - Yeni endpoint: `GET /api/admin/universe-monitor/fallback-events`
+  - Event alanları: `timestamp`, `trigger_metric`, `threshold_breach`, `exit_reason`, `cycle_snapshot`
+- Fallback state machine güncellendi:
+  - Trigger: `cycle_latency>1500 OR queue_backlog>20 OR stale_rate>5%`
+  - Exit: `latency<900 AND backlog<8 AND stale_rate<2%` koşulu **3 ardışık döngü**
+  - `scanner_perf` içine fallback alanları eklendi (`requested/effective mode`, `fallback_state`, trigger/exit detayları)
+- Full-market davranışı korunarak fallback yalnız overload anında devreye girecek şekilde doğrulandı.
+- Admin Universe Monitor UI’ya **Fallback Timeline paneli** eklendi; istenen tüm alanlar tek satırda görünür.
+- Test sonucu: `/app/test_reports/iteration_103.json` → backend **14/14 PASS**, frontend **%100 PASS**.
+
 ### 2026-03-14 (Full Market Açılışı + Anlık Latency/Stale Takibi + Auto Top-Volume Fallback)
 - **Canlı konfig uygulandı:** admin override listeleri boşaltıldı ve tam market kapsamı aktif edildi.
   - `spot_universe=[]`, `futures_universe=[]`, `whitelist=[]`, `disable_futures=false`
