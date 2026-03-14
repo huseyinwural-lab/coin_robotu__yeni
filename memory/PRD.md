@@ -37,6 +37,34 @@
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
 ## 5) What Has Been Implemented
+### 2026-03-14 (Universe Restriction Fix + Monitor Pack)
+- **Universe akışı yeni mimariye geçirildi**:
+  - `effective_symbols` artık geniş evren prensibine göre hesaplanıyor (`market_symbols - blacklist` + opsiyonel whitelist kısıtı).
+  - `whitelist=[]` olduğunda `allow_all=true` davranışı aktif.
+  - `spot_universe` / `futures_universe` alanları **optional override** olarak yorumlanıyor (boşsa exchange market symbols).
+- **Liquidity filtreleri advisory-only** hale getirildi:
+  - exclusion kaldırıldı; `confidence_penalty` ve `risk_score_bonus` üretimi eklendi.
+  - canonical signal payload’ına `liquidity_advisory` ve ilgili reason code’lar (`liquidity_volume_low`, `liquidity_spread_high`, `data_unavailable`) eklendi.
+- **Scanner mode kontratı yenilendi**:
+  - desteklenen modlar: `all_market_symbols`, `top_volume`, `manual_selection`
+  - legacy modlar için geriye uyum alias map eklendi (`all_exchange`, `top_active_*`, `custom_list`, `bot_scope`).
+  - default mode: `all_market_symbols` (model + schema + runtime + persistence).
+- **Decision Card blok nedeni ayrımı genişletildi**:
+  - yeni alan: `block_category`
+  - kategoriler: `risk_block`, `cooldown_block`, `gate_block`, `symbol_permission_block`, `data_unavailable`.
+- **Yeni debug/monitor API’leri**:
+  - `GET /api/debug/effective-universe` (admin only)
+  - `GET /api/admin/universe-monitor`
+- **Yeni admin panel**:
+  - route: `/admin/universe-monitor`
+  - metrikler: total exchange symbols, active scan symbols, blocked by permission/risk/liquidity + debug breakdown.
+- **Phase4 whitelist davranışı netleştirildi**:
+  - live config default `symbol_whitelist=[]`
+  - UI’da whitelist input + “boş = allow all” açıklaması eklendi.
+- **Testing**:
+  - Self-test + testing agent raporu `/app/test_reports/iteration_99.json`
+  - Backend: **12/12 PASS**, Frontend: **%100 PASS**.
+
 ### 2026-03-13 (User-side Learning Impact Simulator yerleşimi)
 - User tarafına **Learning Recommendation Impact Simulator** yerleştirildi:
   - Dashboard’da stratejik köşe widget (`user-dashboard-learning-impact-corner`)
