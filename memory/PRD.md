@@ -37,6 +37,11 @@
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
 ## 5) What Has Been Implemented
+### 2026-03-14 (User Dashboard layout adjustment)
+- Kullanıcı talebine göre `UserDashboardPage` içinde **Onboarding Risk Wizard** bloğu sayfanın en altından üst bölüme taşındı (header’dan hemen sonra).
+- Veri/işlev değişmedi; sadece görsel yerleşim sırası güncellendi.
+- Smoke doğrulama screenshot alındı: wizard bölümünün üstte render edildiği doğrulandı.
+
 ### 2026-03-14 (Fallback Timeline + Trigger/Breach/Exit/Cycle Snapshot)
 - Kullanıcı talebine göre fallback olayları için tam izleme zinciri eklendi:
   - Yeni model: `ScannerFallbackEvent`

@@ -307,6 +307,45 @@ export const UserDashboardPage = () => {
         </p>
       </header>
 
+      {defaultPolicy && wizardForm && !wizardDismissed && (
+        <section className="col-span-12 rounded border border-amber-500/40 bg-amber-950/10 p-4" data-testid="user-dashboard-risk-onboarding-wizard">
+          <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="user-dashboard-risk-onboarding-title">Onboarding Risk Wizard</p>
+          <p className="mt-1 text-sm text-amber-100" data-testid="user-dashboard-risk-onboarding-description">Başlangıç policy değerlerini hızlıca özelleştir, sonra istersen Risk Policy sayfasından detaylandır.</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="user-dashboard-risk-onboarding-grid">
+            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-name-field">
+              <span className="text-xs text-amber-200">Policy Name</span>
+              <Input value={wizardForm.name} onChange={(event) => setWizardForm((prev) => ({ ...prev, name: event.target.value }))} data-testid="user-dashboard-risk-onboarding-name-input" />
+            </label>
+            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-position-field">
+              <span className="text-xs text-amber-200">Position Size %</span>
+              <Input type="number" step="0.1" value={wizardForm.position_size_pct} onChange={(event) => setWizardForm((prev) => ({ ...prev, position_size_pct: event.target.value }))} data-testid="user-dashboard-risk-onboarding-position-input" />
+            </label>
+            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-daily-loss-field">
+              <span className="text-xs text-amber-200">Daily Loss %</span>
+              <Input type="number" step="0.1" value={wizardForm.daily_loss_cutoff_pct} onChange={(event) => setWizardForm((prev) => ({ ...prev, daily_loss_cutoff_pct: event.target.value }))} data-testid="user-dashboard-risk-onboarding-daily-loss-input" />
+            </label>
+            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-max-open-field">
+              <span className="text-xs text-amber-200">Max Open</span>
+              <Input type="number" value={wizardForm.max_open_positions} onChange={(event) => setWizardForm((prev) => ({ ...prev, max_open_positions: event.target.value }))} data-testid="user-dashboard-risk-onboarding-max-open-input" />
+            </label>
+            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-max-leverage-field">
+              <span className="text-xs text-amber-200">Max Leverage</span>
+              <Input type="number" value={wizardForm.max_leverage} onChange={(event) => setWizardForm((prev) => ({ ...prev, max_leverage: event.target.value }))} data-testid="user-dashboard-risk-onboarding-max-leverage-input" />
+            </label>
+            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-rr-field">
+              <span className="text-xs text-amber-200">Risk Reward Ratio</span>
+              <Input type="number" step="0.1" value={wizardForm.risk_reward_ratio} onChange={(event) => setWizardForm((prev) => ({ ...prev, risk_reward_ratio: event.target.value }))} data-testid="user-dashboard-risk-onboarding-rr-input" />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="user-dashboard-risk-onboarding-actions">
+            <Button onClick={saveOnboardingPolicy} disabled={isSavingWizard} data-testid="user-dashboard-risk-onboarding-save-button">
+              {isSavingWizard ? "Kaydediliyor..." : "Kaydet ve Tamamla"}
+            </Button>
+            <Button variant="outline" onClick={dismissWizard} data-testid="user-dashboard-risk-onboarding-dismiss-button">Sonra Yap</Button>
+          </div>
+        </section>
+      )}
+
       <section className="col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-dashboard-live-control-status-card">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-dashboard-live-control-status-header">
           <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-dashboard-live-control-status-title">Live Control Status</p>
@@ -391,45 +430,6 @@ export const UserDashboardPage = () => {
           <p className="text-xs text-cyan-100" data-testid="user-dashboard-risk-policy-health-message">{riskHealth.message}</p>
         </div>
       </div>
-
-      {defaultPolicy && wizardForm && !wizardDismissed && (
-        <section className="col-span-12 rounded border border-amber-500/40 bg-amber-950/10 p-4" data-testid="user-dashboard-risk-onboarding-wizard">
-          <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="user-dashboard-risk-onboarding-title">Onboarding Risk Wizard</p>
-          <p className="mt-1 text-sm text-amber-100" data-testid="user-dashboard-risk-onboarding-description">Başlangıç policy değerlerini hızlıca özelleştir, sonra istersen Risk Policy sayfasından detaylandır.</p>
-          <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="user-dashboard-risk-onboarding-grid">
-            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-name-field">
-              <span className="text-xs text-amber-200">Policy Name</span>
-              <Input value={wizardForm.name} onChange={(event) => setWizardForm((prev) => ({ ...prev, name: event.target.value }))} data-testid="user-dashboard-risk-onboarding-name-input" />
-            </label>
-            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-position-field">
-              <span className="text-xs text-amber-200">Position Size %</span>
-              <Input type="number" step="0.1" value={wizardForm.position_size_pct} onChange={(event) => setWizardForm((prev) => ({ ...prev, position_size_pct: event.target.value }))} data-testid="user-dashboard-risk-onboarding-position-input" />
-            </label>
-            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-daily-loss-field">
-              <span className="text-xs text-amber-200">Daily Loss %</span>
-              <Input type="number" step="0.1" value={wizardForm.daily_loss_cutoff_pct} onChange={(event) => setWizardForm((prev) => ({ ...prev, daily_loss_cutoff_pct: event.target.value }))} data-testid="user-dashboard-risk-onboarding-daily-loss-input" />
-            </label>
-            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-max-open-field">
-              <span className="text-xs text-amber-200">Max Open</span>
-              <Input type="number" value={wizardForm.max_open_positions} onChange={(event) => setWizardForm((prev) => ({ ...prev, max_open_positions: event.target.value }))} data-testid="user-dashboard-risk-onboarding-max-open-input" />
-            </label>
-            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-max-leverage-field">
-              <span className="text-xs text-amber-200">Max Leverage</span>
-              <Input type="number" value={wizardForm.max_leverage} onChange={(event) => setWizardForm((prev) => ({ ...prev, max_leverage: event.target.value }))} data-testid="user-dashboard-risk-onboarding-max-leverage-input" />
-            </label>
-            <label className="space-y-1" data-testid="user-dashboard-risk-onboarding-rr-field">
-              <span className="text-xs text-amber-200">Risk Reward Ratio</span>
-              <Input type="number" step="0.1" value={wizardForm.risk_reward_ratio} onChange={(event) => setWizardForm((prev) => ({ ...prev, risk_reward_ratio: event.target.value }))} data-testid="user-dashboard-risk-onboarding-rr-input" />
-            </label>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2" data-testid="user-dashboard-risk-onboarding-actions">
-            <Button onClick={saveOnboardingPolicy} disabled={isSavingWizard} data-testid="user-dashboard-risk-onboarding-save-button">
-              {isSavingWizard ? "Kaydediliyor..." : "Kaydet ve Tamamla"}
-            </Button>
-            <Button variant="outline" onClick={dismissWizard} data-testid="user-dashboard-risk-onboarding-dismiss-button">Sonra Yap</Button>
-          </div>
-        </section>
-      )}
 
       <ExplainabilityDrawer
         isOpen={isExplainabilityDrawerOpen}
