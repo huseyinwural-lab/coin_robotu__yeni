@@ -37,6 +37,38 @@
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
 ## 5) What Has Been Implemented
+### 2026-03-14 (P1 + P1/P2 + Backlog + Heatmap Pack tamamlandı)
+- **Task 7 — Indicator cache (Redis + DB fallback) aktif edildi**
+  - Yeni model: `IndicatorComputationCache`
+  - Cache key standardı: `symbol + timeframe + bar_close_time + indicator_name + params_version`
+  - Canonical scan indicator bundle hesaplarında cache read/write entegrasyonu yapıldı.
+- **Task 8 — Event-driven trigger zenginleştirmesi**
+  - Event-hint mekanizması volume spike / spread jump / position activity sinyallerini skorlayarak üretir.
+  - Orchestrator bu hintleri candidate önceliğine taşır (polling + event-hint hibrit).
+- **Task 12 — Aşamalı rollout orkestrasyonu (KPI recommendation + admin approval)**
+  - Yeni model: `UniverseRolloutState`
+  - Stage akışı: `top_volume_subset -> mid_segment -> full_market`
+  - Endpointler:
+    - `GET /api/admin/universe-monitor/rollout/status`
+    - `POST /api/admin/universe-monitor/rollout/recommend`
+    - `POST /api/admin/universe-monitor/rollout/approve`
+  - Scanner decision scope rollout stage’e göre otomatik sınırlanır.
+- **Universe monitor trend + export + breakdown tamamlandı**
+  - Yeni model: `ScannerPerformanceSnapshot`
+  - Endpointler:
+    - `GET /api/admin/universe-monitor/trends?window=24h|7d|30d`
+    - `GET /api/admin/universe-monitor/export.csv?window=24h|7d|30d`
+    - `GET /api/admin/universe-monitor/breakdown`
+    - `GET /api/admin/universe-monitor/freshness-heatmap`
+  - UI:
+    - `/admin/universe-monitor` içine trend özet, CSV export, rollout paneli, user/regime breakdown ve **embedded heatmap** eklendi.
+    - Ayrı sayfa: `/admin/freshness-heatmap` (24s/7g/30g switch).
+- **Freshness SLA Breach Heatmap (hem embedded hem ayrı page)**
+  - Symbol/timeframe stale-rate yoğunluğu gösterimi eklendi.
+- **Test sonucu**
+  - Testing agent raporu: `/app/test_reports/iteration_101.json`
+  - Backend **13/13 PASS**, Frontend **%100 PASS**.
+
 ### 2026-03-14 (Universe Expansion Performance Guard — P0-A + P0-B)
 - **Ölçüm katmanı aktif edildi (Task 1):**
   - Scanner run çıktısına `scanner_perf` bloğu eklendi:
