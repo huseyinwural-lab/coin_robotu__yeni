@@ -64,6 +64,22 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-15 (P0 — SYMBOL-DRIVEN SCANNER CORRECTION PACKAGE tamamlandı)
+- **BTC gate bağımlılığı kaldırıldı (core scanner/score akışı):**
+  - `spot_dynamic_score_engine` artık market bağlamını BTC mumlarından değil **çoklu sembol snapshot** üzerinden türetiyor.
+  - Hard gate olarak `btc_regime_hostile` ve `freeze_guard_active` kaldırıldı; seçimler sembol bazlı setup + skor eşiği ile ilerliyor.
+  - Yeni alanlar: `market_bias_regime`, `risk_guard`; geriye uyumluluk için `btc_regime` ve `freeze_guard` aliasları korunuyor.
+- **Runtime tetikleme BTC’ye kilitli olmaktan çıkarıldı:**
+  - `_process_spot_pullback_selection` artık yalnızca `timeframe=15m` kontrolüyle çalışıyor (BTCUSDT şartı yok).
+  - Sayaç/rapor akışına `signals_rejected_market_bias` ve `signals_rejected_market_stress` eklendi (legacy aliaslar korunuyor).
+- **Relative strength prefilter BTC benchmark bağımlılığından çıkarıldı:**
+  - `relative_strength_cluster_scanner_v2` için `benchmark_mode='btc'` artık `cluster` olarak resolve ediliyor.
+  - `market` benchmark modu destekleniyor; `futures_strategy_service` prefilter çağrıları `cluster` moduna hizalandı.
+- **Test kapsaması ve sonuçlar:**
+  - Yeni test dosyaları: `test_symbol_driven_scanner_no_btc_gate.py` (+ testing agent kapsam testi: `test_btc_gate_removal_comprehensive.py`).
+  - Rapor: `/app/test_reports/iteration_109.json` → backend **100% PASS**.
+  - Lokal doğrulama: `18 passed` (`test_symbol_driven_scanner_no_btc_gate.py`, `test_relative_strength_cluster_scanner_v2.py`, `test_btc_gate_removal_comprehensive.py`).
+
 ### 2026-03-14 (User Dashboard layout adjustment)
 - Kullanıcı talebine göre `UserDashboardPage` içinde **Onboarding Risk Wizard** bloğu sayfanın en altından üst bölüme taşındı (header’dan hemen sonra).
 - Veri/işlev değişmedi; sadece görsel yerleşim sırası güncellendi.
