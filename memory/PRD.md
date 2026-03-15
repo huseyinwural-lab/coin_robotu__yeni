@@ -4811,3 +4811,70 @@
 - **FAZ-5:** COMPLETE
 - **FAZ-6:** COMPLETE
 
+## 83) 2026-03-15 — Yayın Öncesi Son Kapatma Paketi (Bootstrap Admin + CI Portability + Frontend Build/Smoke)
+
+### Uygulananlar
+1. **Default bootstrap admin netleştirme**
+   - Kanonik bootstrap admin:
+     - `admin@platform.local`
+     - `Admin12345!`
+   - `.env.example` ve README bu değerlere hizalandı.
+   - Bootstrap davranışı korunuyor: users doluysa recreate/reset yok.
+
+2. **Admin profil/şifre güncelleme akışı**
+   - Yeni servis: `backend/services/admin_profile_service.py`
+   - Yeni auth endpointleri:
+     - `PATCH /api/auth/admin/profile`
+     - `POST /api/auth/admin/password/change`
+   - Admin panel sonrası self-update akışı API seviyesinde doğrulandı.
+
+3. **Credential cleanup final**
+   - `backend/tests/**` ve `tests/**` içinde dağınık `admin@platform.dev` izleri temizlendi.
+   - Testlerde env/helper standardı kullanımı tekilleştirildi.
+   - `Admin12345!` yalnız bootstrap/password testlerinde bırakıldı.
+
+4. **CI script portability (repo-relative)**
+   - Güncellenen scriptler:
+     - `scripts/ci_stage_gate.sh`
+     - `scripts/ci_prod_gate.sh`
+     - `scripts/ci_formula_gate.sh`
+     - `scripts/ci_contract_gate.sh`
+     - `scripts/ci_execution_contract_gate.sh`
+     - `scripts/ci_alembic_drift_gate.sh`
+   - `/app` hardcoded path bağımlılıkları kaldırıldı; `ROOT` repo-relative çözümleme eklendi.
+
+5. **Frontend build zinciri kapanışı**
+   - `frontend/yarn.lock` doğrulandı (mevcut ve güncel).
+   - `yarn install --frozen-lockfile` doğrulandı.
+   - `.gitignore` içinden lockfile standardını bozabilecek hatalı satırlar temizlendi.
+
+6. **Release checklist / operasyon notları**
+   - Yeni dokümanlar:
+     - `docs/13_release_checklist.md`
+     - `docs/14_operations_notes.md`
+   - README’ye smoke checklist + operasyon notları eklendi.
+
+### Test/Doğrulama
+- Bootstrap/admin akışı:
+  - `POST /api/auth/login/admin` (`admin@platform.local` / `Admin12345!`) ✅
+  - `PATCH /api/auth/admin/profile` ✅
+  - `POST /api/auth/admin/password/change` ✅
+- Unit testler:
+  - `test_bootstrap_admin_first_install.py` ✅
+  - `test_admin_profile_update.py` ✅
+  - `test_admin_password_change.py` ✅
+- Hermetic runtime test paketi: ✅ (10 passed)
+- CI gate scriptleri:
+  - `bash scripts/ci_alembic_drift_gate.sh` ✅
+  - `bash scripts/ci_stage_gate.sh` ✅
+  - `bash scripts/ci_prod_gate.sh` ✅
+- Frontend:
+  - `yarn install --frozen-lockfile` ✅
+  - Frontend smoke checklist (`landing + login butonları + console`) ✅
+- Final bağımsız doğrulama:
+  - `deep_testing_backend_v2` sonucu: **6/6 PASS** ✅
+
+### Durum
+- **Yayın Öncesi Son Kapatma Paketi:** COMPLETE
+- **Kalanlar:** Çoklu borsa adapter gerçek entegrasyonu (Bybit/OKX) backlog/P1
+
