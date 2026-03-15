@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 import requests
 
-SNAPSHOT_PATH = Path("/app/contracts/api_contract_snapshot.json")
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SNAPSHOT_PATH = ROOT_DIR / "contracts" / "api_contract_snapshot.json"
 ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "")
 ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
@@ -18,7 +19,7 @@ def _resolve_base_url() -> str:
     if direct:
         return direct
 
-    env_path = Path("/app/frontend/.env")
+    env_path = ROOT_DIR / "frontend" / ".env"
     if env_path.exists():
         for raw_line in env_path.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()

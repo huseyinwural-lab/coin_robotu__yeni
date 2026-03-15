@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 import requests
 
-CONTRACT_PATH = Path("/app/contracts/execution_intent_contract.json")
+ROOT_DIR = Path(__file__).resolve().parents[1]
+CONTRACT_PATH = ROOT_DIR / "contracts" / "execution_intent_contract.json"
 ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "")
 ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
@@ -16,7 +17,7 @@ def _resolve_base_url() -> str:
     direct = os.environ.get("REACT_APP_BACKEND_URL", "").strip().rstrip("/")
     if direct:
         return direct
-    env_path = Path("/app/frontend/.env")
+    env_path = ROOT_DIR / "frontend" / ".env"
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if line.startswith("REACT_APP_BACKEND_URL="):
