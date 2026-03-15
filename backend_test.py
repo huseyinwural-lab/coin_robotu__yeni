@@ -1,301 +1,566 @@
 #!/usr/bin/env python3
 """
-Final Backend Validation Test - Son düzeltme mini paketi
-Executes the comprehensive validation steps as requested.
+User Live Trading Dashboard Backend API Deep Testing
+Test live trading dashboard backend APIs for functionality, security, and user isolation
 """
 
-import requests
-import subprocess
+import csv
 import json
 import os
-import sys
-from datetime import datetime
+import uuid
+from pathlib import Path
+from typing import Dict, Any
 
-# Base configuration
-BACKEND_URL = "https://btc-gate-removal.preview.emergentagent.com"
-API_BASE = f"{BACKEND_URL}/api"
+import requests
 
-class ValidationTester:
+
+def resolve_base_url() -> str:
+    """Resolve backend URL from environment or frontend/.env file"""
+    env_base = os.environ.get("REACT_APP_BACKEND_URL", "").strip().rstrip("/")
+    if env_base:
+        return env_base
+    
+    frontend_env = Path("/app/frontend/.env")
+    if frontend_env.exists():
+        for line in frontend_env.read_text(encoding="utf-8").splitlines():
+            if line.startswith("REACT_APP_BACKEND_URL="):
+                return line.split("=", 1)[1].strip().rstrip("/")
+    
+    raise RuntimeError("REACT_APP_BACKEND_URL bulunamadı")
+
+
+BASE_URL = resolve_base_url()
+ADMIN_EMAIL = "admin@platform.local"
+ADMIN_PASSWORD = "Admin12345!"
+
+print(f"🔗 Testing Backend URL: {BASE_URL}")
+print(f"👤 Admin Credentials: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
+
+# Admin-scope fields that should NOT appear in user responses
+FORBIDDEN_ADMIN_TOKENS = [
+    "queue_depth", 
+    "fallback_state", 
+    "kill_switch", 
+    "cluster_exposure", 
+    "global", 
+    "risk_veto", 
+    "admin_scope",
+    "system_wide",
+    "raw_diagnostics"
+]
+
+
+class TestResults:
     def __init__(self):
-        self.admin_token = None
-        self.user_token = None
-        self.results = []
+        self.passed = []
+        self.failed = []
         
-    def log_result(self, test_name, passed, details=""):
-        """Log test result"""
-        status = "PASS" if passed else "FAIL"
-        self.results.append({
-            "test": test_name,
-            "status": status,
-            "details": details,
-            "timestamp": datetime.now().isoformat()
-        })
-        print(f"[{status}] {test_name}: {details}")
+    def add_pass(self, test_name: str, details: str = ""):
+        self.passed.append(f"✅ {test_name}: {details}")
         
-    def test_1_alembic_drift_gate(self):
-        """Test 1: bash scripts/ci_alembic_drift_gate.sh"""
-        try:
-            result = subprocess.run(
-                ["bash", "/app/scripts/ci_alembic_drift_gate.sh"],
-                cwd="/app",
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-            
-            if result.returncode == 0:
-                self.log_result("1) Alembic Drift Gate", True, result.stdout.strip())
-            else:
-                self.log_result("1) Alembic Drift Gate", False, f"Exit code: {result.returncode}, Error: {result.stderr}")
-        except Exception as e:
-            self.log_result("1) Alembic Drift Gate", False, f"Exception: {str(e)}")
-    
-    def test_2_stage_gate(self):
-        """Test 2: bash scripts/ci_stage_gate.sh"""
-        try:
-            result = subprocess.run(
-                ["bash", "/app/scripts/ci_stage_gate.sh"],
-                cwd="/app",
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            if result.returncode == 0:
-                self.log_result("2) Stage Gate", True, result.stdout.strip())
-            else:
-                self.log_result("2) Stage Gate", False, f"Exit code: {result.returncode}, Error: {result.stderr}")
-        except Exception as e:
-            self.log_result("2) Stage Gate", False, f"Exception: {str(e)}")
-    
-    def test_3_prod_gate(self):
-        """Test 3: bash scripts/ci_prod_gate.sh"""
-        try:
-            result = subprocess.run(
-                ["bash", "/app/scripts/ci_prod_gate.sh"],
-                cwd="/app",
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            if result.returncode == 0:
-                self.log_result("3) Prod Gate", True, result.stdout.strip())
-            else:
-                self.log_result("3) Prod Gate", False, f"Exit code: {result.returncode}, Error: {result.stderr}")
-        except Exception as e:
-            self.log_result("3) Prod Gate", False, f"Exception: {str(e)}")
-    
-    def test_4_health_endpoint(self):
-        """Test 4: GET /api/health"""
-        try:
-            response = requests.get(f"{API_BASE}/health", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "ok":
-                    self.log_result("4) GET /api/health", True, f"Status: {data.get('status')}")
-                else:
-                    self.log_result("4) GET /api/health", False, f"Unexpected response: {data}")
-            else:
-                self.log_result("4) GET /api/health", False, f"HTTP {response.status_code}: {response.text}")
-        except Exception as e:
-            self.log_result("4) GET /api/health", False, f"Exception: {str(e)}")
-    
-    def test_5_admin_login(self):
-        """Test 5: POST /api/auth/login/admin (admin@platform.local / Admin12345!)"""
-        try:
-            payload = {
-                "email": "admin@platform.local",
-                "password": "Admin12345!"
-            }
-            
-            response = requests.post(f"{API_BASE}/auth/login/admin", json=payload, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if "access_token" in data:
-                    self.admin_token = data["access_token"]
-                    self.log_result("5) POST /api/auth/login/admin", True, "Admin login successful, token acquired")
-                else:
-                    self.log_result("5) POST /api/auth/login/admin", False, f"No access_token in response: {data}")
-            else:
-                self.log_result("5) POST /api/auth/login/admin", False, f"HTTP {response.status_code}: {response.text}")
-        except Exception as e:
-            self.log_result("5) POST /api/auth/login/admin", False, f"Exception: {str(e)}")
-    
-    def test_6_universe_monitor(self):
-        """Test 6: GET /api/admin/universe-monitor"""
-        if not self.admin_token:
-            self.log_result("6) GET /api/admin/universe-monitor", False, "No admin token available")
-            return
-            
-        try:
-            headers = {"Authorization": f"Bearer {self.admin_token}"}
-            response = requests.get(f"{API_BASE}/admin/universe-monitor", headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                # Check for key fields that should exist
-                required_fields = ["market_type", "scanner_mode", "total_exchange_symbols"]
-                missing_fields = [f for f in required_fields if f not in data]
+    def add_fail(self, test_name: str, error: str):
+        self.failed.append(f"❌ {test_name}: {error}")
+        
+    def print_summary(self):
+        print("\n" + "="*80)
+        print("🎯 LIVE TRADING DASHBOARD API TEST SONUÇLARI")
+        print("="*80)
+        
+        if self.passed:
+            print(f"\n✅ BAŞARILI TESTLER ({len(self.passed)}):")
+            for result in self.passed:
+                print(f"   {result}")
                 
-                if not missing_fields:
-                    self.log_result("6) GET /api/admin/universe-monitor", True, f"Response has {len(data)} fields")
-                else:
-                    self.log_result("6) GET /api/admin/universe-monitor", False, f"Missing fields: {missing_fields}")
-            else:
-                self.log_result("6) GET /api/admin/universe-monitor", False, f"HTTP {response.status_code}: {response.text}")
-        except Exception as e:
-            self.log_result("6) GET /api/admin/universe-monitor", False, f"Exception: {str(e)}")
+        if self.failed:
+            print(f"\n❌ BAŞARISIZ TESTLER ({len(self.failed)}):")
+            for result in self.failed:
+                print(f"   {result}")
+                
+        total = len(self.passed) + len(self.failed)
+        success_rate = (len(self.passed) / total * 100) if total > 0 else 0
+        
+        print(f"\n📊 ÖZET: {len(self.passed)}/{total} test başarılı (%{success_rate:.1f})")
+        
+        return len(self.failed) == 0
+
+
+def get_admin_headers() -> Dict[str, str]:
+    """Get admin authentication headers"""
+    try:
+        response = requests.post(
+            f"{BASE_URL}/api/auth/login/admin",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"Admin login failed: {response.status_code} - {response.text}")
+            
+        token = response.json().get("access_token")
+        if not token:
+            raise Exception("access_token missing from admin login response")
+            
+        return {"Authorization": f"Bearer {token}"}
+        
+    except Exception as e:
+        raise Exception(f"Admin auth error: {str(e)}")
+
+
+def register_approve_login_user(admin_headers: Dict[str, str], email_prefix: str) -> Dict[str, Any]:
+    """Register, approve, and login a new user"""
+    try:
+        email = f"{email_prefix}_{uuid.uuid4().hex[:8]}@example.com"
+        password = "TestUser123!"
+        
+        # 1. Register user
+        register_resp = requests.post(
+            f"{BASE_URL}/api/auth/register",
+            json={"email": email, "password": password},
+            timeout=30
+        )
+        
+        if register_resp.status_code != 200:
+            raise Exception(f"User registration failed: {register_resp.status_code} - {register_resp.text}")
+            
+        user_data = register_resp.json()
+        user_id = user_data.get("id")
+        
+        if not user_id:
+            raise Exception("User ID missing from registration response")
+        
+        # 2. Admin approve user
+        approve_resp = requests.post(
+            f"{BASE_URL}/api/auth/admin/user-approval-requests/{user_id}/approve",
+            headers=admin_headers,
+            timeout=30
+        )
+        
+        if approve_resp.status_code != 200:
+            raise Exception(f"User approval failed: {approve_resp.status_code} - {approve_resp.text}")
+        
+        # 3. Login as user
+        login_resp = requests.post(
+            f"{BASE_URL}/api/auth/login/user",
+            json={"email": email, "password": password},
+            timeout=30
+        )
+        
+        if login_resp.status_code != 200:
+            raise Exception(f"User login failed: {login_resp.status_code} - {login_resp.text}")
+            
+        user_token = login_resp.json().get("access_token")
+        if not user_token:
+            raise Exception("User access_token missing from login response")
+            
+        return {
+            "headers": {"Authorization": f"Bearer {user_token}"},
+            "email": email,
+            "user_id": user_id
+        }
+        
+    except Exception as e:
+        raise Exception(f"User setup error: {str(e)}")
+
+
+def create_bot_profile(user_headers: Dict[str, str], bot_name: str, symbol: str) -> str:
+    """Create a bot profile for a user"""
+    try:
+        bot_data = {
+            "name": bot_name,
+            "exchange": "binance",
+            "market_type": "spot",
+            "symbols": [symbol],
+            "strategy_type": "spot_pullback_v1",
+            "timeframe": "15m",
+            "trend_timeframe": "1h",
+            "leverage": 1,
+            "is_enabled": True,
+            "is_running": True
+        }
+        
+        response = requests.post(
+            f"{BASE_URL}/api/bot-profiles",
+            headers=user_headers,
+            json=bot_data,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"Bot creation failed: {response.status_code} - {response.text}")
+            
+        bot_id = response.json().get("id")
+        if not bot_id:
+            raise Exception("Bot ID missing from response")
+            
+        return bot_id
+        
+    except Exception as e:
+        raise Exception(f"Bot creation error: {str(e)}")
+
+
+def test_live_dashboard_endpoints(results: TestResults):
+    """Test 1: All live dashboard endpoints return 200 with valid windows"""
     
-    def test_7_user_scanner_flow(self):
-        """Test 7: GET /api/user/scanner/symbol-selection (register+approve+login)"""
-        import uuid
-        test_email = f"test_final_validation_{int(datetime.now().timestamp())}@test.com"
+    print("\n🔍 1. ENDPOINT STATUS KONTROLÜ")
+    print("-" * 50)
+    
+    try:
+        # Get admin and user credentials
+        admin_headers = get_admin_headers()
+        user_a = register_approve_login_user(admin_headers, "live_test_a")
+        
+        # Create bot for user to have some data
+        try:
+            create_bot_profile(user_a["headers"], "TestBot-A", "BTCUSDT")
+        except:
+            # Bot creation may fail but endpoint testing can continue
+            pass
+        
+        endpoints = [
+            "/api/user/live/summary",
+            "/api/user/live/positions", 
+            "/api/user/live/performance",
+            "/api/user/live/risk",
+            "/api/user/live/execution-quality",
+            "/api/user/live/strategies",
+            "/api/user/live/trades",
+            "/api/user/live/daily-report"
+        ]
+        
+        windows = ["1h", "6h", "24h"]
+        
+        endpoint_results = []
+        for endpoint in endpoints:
+            for window in windows:
+                try:
+                    params = {"window": window} if "positions" not in endpoint else {}
+                    response = requests.get(
+                        f"{BASE_URL}{endpoint}",
+                        params=params,
+                        headers=user_a["headers"],
+                        timeout=30
+                    )
+                    
+                    if response.status_code == 200:
+                        endpoint_results.append(f"✅ {endpoint}?window={window}")
+                    else:
+                        endpoint_results.append(f"❌ {endpoint}?window={window} - {response.status_code}")
+                        
+                except Exception as e:
+                    endpoint_results.append(f"❌ {endpoint}?window={window} - Error: {str(e)}")
+        
+        failed_count = len([r for r in endpoint_results if "❌" in r])
+        passed_count = len(endpoint_results) - failed_count
+        
+        if failed_count == 0:
+            results.add_pass("Endpoint Status", f"Tüm {passed_count} endpoint/window kombinasyonu çalışıyor")
+        else:
+            results.add_fail("Endpoint Status", f"{failed_count}/{len(endpoint_results)} endpoint başarısız")
+            
+        # Print details
+        for result in endpoint_results[:10]:  # Show first 10 for brevity
+            print(f"   {result}")
+        if len(endpoint_results) > 10:
+            print(f"   ... ve {len(endpoint_results) - 10} daha")
+            
+    except Exception as e:
+        results.add_fail("Endpoint Status", f"Test setup error: {str(e)}")
+
+
+def test_user_data_isolation(results: TestResults):
+    """Test 2: User A data should not appear in User B responses"""
+    
+    print("\n🔍 2. KULLANICI VERİ İZOLASYONU")
+    print("-" * 50)
+    
+    try:
+        admin_headers = get_admin_headers()
+        
+        # Create two separate users
+        user_a = register_approve_login_user(admin_headers, "isolation_a")
+        user_b = register_approve_login_user(admin_headers, "isolation_b")
+        
+        print(f"   User A: {user_a['email']}")
+        print(f"   User B: {user_b['email']}")
+        
+        # Create distinctive bots for each user
+        bot_a_name = f"IsolationBot-A-{uuid.uuid4().hex[:6]}"
+        bot_b_name = f"IsolationBot-B-{uuid.uuid4().hex[:6]}"
         
         try:
-            # Step 7a: User registration
-            reg_payload = {
-                "first_name": "Final",
-                "last_name": "ValidationUser", 
-                "phone_number": "+905551234567",
-                "email": test_email,
-                "password": "TestPass123!",
-                "confirm_password": "TestPass123!"
-            }
-            
-            reg_response = requests.post(f"{API_BASE}/auth/register", json=reg_payload, timeout=10)
-            if reg_response.status_code != 200:
-                self.log_result("7) User Scanner Flow", False, f"Registration failed: HTTP {reg_response.status_code}")
-                return
-            
-            reg_data = reg_response.json()
-            user_id = reg_data.get("id")  # Registration returns "id" not "user_id"
-            if not user_id:
-                self.log_result("7) User Scanner Flow", False, "No user_id in registration response")
-                return
-            
-            # Step 7b: Admin approve user
-            if not self.admin_token:
-                self.log_result("7) User Scanner Flow", False, "No admin token for approval")
-                return
+            create_bot_profile(user_a["headers"], bot_a_name, "ADAUSDT")
+            create_bot_profile(user_b["headers"], bot_b_name, "ETHUSDT")
+        except:
+            # Continue testing even if bot creation fails
+            pass
+        
+        # Test User A cannot see User B data
+        test_endpoints = [
+            "/api/user/live/summary",
+            "/api/user/live/trades", 
+            "/api/user/live/daily-report/export?format=json"
+        ]
+        
+        isolation_violations = []
+        
+        for endpoint in test_endpoints:
+            try:
+                response = requests.get(
+                    f"{BASE_URL}{endpoint}",
+                    params={"window": "24h"},
+                    headers=user_a["headers"],
+                    timeout=30
+                )
                 
-            approve_payload = {"ids": [user_id]}  # API expects "ids" not "user_ids"
-            headers = {"Authorization": f"Bearer {self.admin_token}"}
-            approve_response = requests.post(
-                f"{API_BASE}/admin/user-approvals/bulk-approve",
-                json=approve_payload,
-                headers=headers,
-                timeout=10
-            )
+                if response.status_code == 200:
+                    response_text = str(response.json() if endpoint.endswith("json") else response.text).lower()
+                    
+                    # Check if User A sees User B's data
+                    if user_b["email"].lower() in response_text:
+                        isolation_violations.append(f"User A görüyor User B email in {endpoint}")
+                    
+                    if bot_b_name.lower() in response_text:
+                        isolation_violations.append(f"User A görüyor User B bot in {endpoint}")
+                    
+                    # Check if User A sees their own data (should)
+                    if bot_a_name.lower() not in response_text and "summary" in endpoint:
+                        print(f"   ⚠️  User A kendi bot'ını görmüyor: {endpoint}")
+                        
+            except Exception as e:
+                print(f"   ⚠️  Error testing {endpoint}: {str(e)}")
+        
+        if not isolation_violations:
+            results.add_pass("User Data Isolation", "User A ve User B verileri birbirinden izole")
+        else:
+            results.add_fail("User Data Isolation", f"{len(isolation_violations)} izolasyon ihlali: " + "; ".join(isolation_violations[:3]))
             
-            if approve_response.status_code != 200:
-                self.log_result("7) User Scanner Flow", False, f"Approval failed: HTTP {approve_response.status_code}")
-                return
-            
-            # Step 7c: User login
-            login_payload = {
-                "email": test_email,
-                "password": "TestPass123!"
-            }
-            
-            login_response = requests.post(f"{API_BASE}/auth/login", json=login_payload, timeout=10)
-            if login_response.status_code != 200:
-                self.log_result("7) User Scanner Flow", False, f"User login failed: HTTP {login_response.status_code}")
-                return
-            
-            login_data = login_response.json()
-            user_token = login_data.get("access_token")
-            if not user_token:
-                self.log_result("7) User Scanner Flow", False, "No access_token in user login response")
-                return
-            
-            # Step 7d: Test scanner symbol selection
-            user_headers = {"Authorization": f"Bearer {user_token}"}
-            scanner_response = requests.get(
-                f"{API_BASE}/user/scanner/symbol-selection",
-                headers=user_headers,
-                timeout=10
-            )
-            
-            if scanner_response.status_code == 200:
-                data = scanner_response.json()
-                required_fields = ["user_id", "scanner_id", "symbol_selection_mode"]
-                missing_fields = [f for f in required_fields if f not in data]
+    except Exception as e:
+        results.add_fail("User Data Isolation", f"Test error: {str(e)}")
+
+
+def test_admin_scope_security(results: TestResults):
+    """Test 3: No admin-scope fields in user responses"""
+    
+    print("\n🔍 3. ADMİN SCOPE GÜVENLİK KONTROLÜ")
+    print("-" * 50)
+    
+    try:
+        admin_headers = get_admin_headers()
+        user = register_approve_login_user(admin_headers, "security_test")
+        
+        # Test all user endpoints for admin token leakage
+        test_endpoints = [
+            "/api/user/live/summary",
+            "/api/user/live/positions",
+            "/api/user/live/performance", 
+            "/api/user/live/risk",
+            "/api/user/live/execution-quality",
+            "/api/user/live/strategies",
+            "/api/user/live/trades",
+            "/api/user/live/daily-report",
+            "/api/user/live/daily-report/export?format=json"
+        ]
+        
+        admin_leaks = []
+        
+        for endpoint in test_endpoints:
+            try:
+                response = requests.get(
+                    f"{BASE_URL}{endpoint}",
+                    params={"window": "24h"},
+                    headers=user["headers"],
+                    timeout=30
+                )
                 
-                if not missing_fields:
-                    self.log_result("7) User Scanner Flow", True, f"Complete flow successful, scanner data has {len(data)} fields")
+                if response.status_code == 200:
+                    response_lower = str(response.json() if "json" in endpoint else response.text).lower()
+                    
+                    for forbidden_token in FORBIDDEN_ADMIN_TOKENS:
+                        if forbidden_token in response_lower:
+                            admin_leaks.append(f"'{forbidden_token}' leaked in {endpoint}")
+                            
+            except Exception as e:
+                print(f"   ⚠️  Error testing {endpoint}: {str(e)}")
+        
+        if not admin_leaks:
+            results.add_pass("Admin Scope Security", f"Admin-scope alanlar user response'larında yok ({len(FORBIDDEN_ADMIN_TOKENS)} token kontrol edildi)")
+        else:
+            results.add_fail("Admin Scope Security", f"{len(admin_leaks)} admin token leaked: " + "; ".join(admin_leaks[:3]))
+            
+        # Show some checked tokens
+        print(f"   Kontrol edilen admin tokenlar: {', '.join(FORBIDDEN_ADMIN_TOKENS[:5])}...")
+            
+    except Exception as e:
+        results.add_fail("Admin Scope Security", f"Test error: {str(e)}")
+
+
+def test_admin_access_control(results: TestResults):
+    """Test 4: Admin tokens should get 403 on user endpoints (require_user)"""
+    
+    print("\n🔍 4. ADMİN ACCESS CONTROL")
+    print("-" * 50)
+    
+    try:
+        admin_headers = get_admin_headers()
+        
+        # Try to access user endpoints with admin token
+        user_endpoints = [
+            "/api/user/live/summary",
+            "/api/user/live/positions",
+            "/api/user/live/performance"
+        ]
+        
+        access_violations = []
+        correct_denials = []
+        
+        for endpoint in user_endpoints:
+            try:
+                response = requests.get(
+                    f"{BASE_URL}{endpoint}",
+                    params={"window": "1h"},
+                    headers=admin_headers,
+                    timeout=30
+                )
+                
+                if response.status_code == 403:
+                    correct_denials.append(endpoint)
                 else:
-                    self.log_result("7) User Scanner Flow", False, f"Scanner response missing fields: {missing_fields}")
-            else:
-                self.log_result("7) User Scanner Flow", False, f"Scanner endpoint failed: HTTP {scanner_response.status_code}")
-                
-        except Exception as e:
-            self.log_result("7) User Scanner Flow", False, f"Exception: {str(e)}")
-    
-    def test_8_grep_legacy_admin_domain(self):
-        """Test 8: eski admin domain izlerini repo kaynaklarında doğrula"""
-        try:
-            legacy_domain = "admin@platform" + ".dev"
-            result = subprocess.run(
-                [
-                    "grep",
-                    "-R",
-                    legacy_domain,
-                    ".",
-                    "--exclude=backend_test.py",
-                    "--exclude-dir=memory",
-                    "--exclude=test_result.md",
-                ],
-                cwd="/app",
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+                    access_violations.append(f"{endpoint} returned {response.status_code} (expected 403)")
+                    
+            except Exception as e:
+                access_violations.append(f"{endpoint} error: {str(e)}")
+        
+        if not access_violations:
+            results.add_pass("Admin Access Control", f"Admin token doğru şekilde {len(correct_denials)} user endpoint'ten 403 alıyor")
+        else:
+            results.add_fail("Admin Access Control", f"{len(access_violations)} access control ihlali: " + "; ".join(access_violations))
             
-            # For grep, exit code 1 means "no matches found" which is what we want
-            # Exit code 0 means matches found
-            if result.returncode == 1:
-                self.log_result("8) grep legacy admin domain", True, "No occurrences found (expected)")
-            elif result.returncode == 0:
-                matches = result.stdout.strip().split('\n')
-                self.log_result("8) grep legacy admin domain", False, f"Found {len(matches)} occurrences: {result.stdout[:200]}...")
-            else:
-                self.log_result("8) grep legacy admin domain", False, f"Grep error: {result.stderr}")
-        except Exception as e:
-            self.log_result("8) grep legacy admin domain", False, f"Exception: {str(e)}")
+        print(f"   Admin'e doğru şekilde yasaklanan endpoint sayısı: {len(correct_denials)}")
+            
+    except Exception as e:
+        results.add_fail("Admin Access Control", f"Test error: {str(e)}")
+
+
+def test_csv_export_functionality(results: TestResults):
+    """Test 5: CSV export content-type and structure validation"""
     
-    def run_all_tests(self):
-        """Run all validation tests"""
-        print("=== Final Backend Validation - Son düzeltme mini paketi ===")
-        print(f"Testing against: {BACKEND_URL}")
-        print("")
+    print("\n🔍 5. CSV EXPORT KONTROLÜ") 
+    print("-" * 50)
+    
+    try:
+        admin_headers = get_admin_headers()
+        user = register_approve_login_user(admin_headers, "csv_test")
         
-        # Execute tests in order
-        self.test_1_alembic_drift_gate()
-        self.test_2_stage_gate()
-        self.test_3_prod_gate()
-        self.test_4_health_endpoint()
-        self.test_5_admin_login()
-        self.test_6_universe_monitor()
-        self.test_7_user_scanner_flow()
-        self.test_8_grep_legacy_admin_domain()
+        # Test both JSON and CSV formats
+        export_results = []
         
-        # Summary
-        print("\n=== FINAL SUMMARY ===")
-        passed = sum(1 for r in self.results if r["status"] == "PASS")
-        total = len(self.results)
+        for format_type in ["json", "csv"]:
+            try:
+                response = requests.get(
+                    f"{BASE_URL}/api/user/live/daily-report/export",
+                    params={"format": format_type, "window": "24h"},
+                    headers=user["headers"],
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    if format_type == "csv":
+                        # Check content-type for CSV
+                        content_type = response.headers.get("content-type", "")
+                        if "text/csv" in content_type:
+                            export_results.append(f"✅ CSV content-type correct: {content_type}")
+                        else:
+                            export_results.append(f"❌ CSV content-type wrong: {content_type}")
+                        
+                        # Check CSV structure
+                        csv_content = response.text
+                        lines = csv_content.strip().split('\n')
+                        if len(lines) >= 2:  # Header + data row
+                            header_line = lines[0]
+                            expected_headers = ["date", "window", "trades_today", "win_rate", "pnl_today"]
+                            
+                            header_check = all(header in header_line for header in expected_headers)
+                            if header_check:
+                                export_results.append(f"✅ CSV headers valid: {len(expected_headers)} required headers present")
+                            else:
+                                export_results.append(f"❌ CSV headers missing some required fields")
+                        else:
+                            export_results.append(f"❌ CSV structure invalid: {len(lines)} lines")
+                    
+                    elif format_type == "json":
+                        # JSON format check
+                        try:
+                            json_data = response.json()
+                            if isinstance(json_data, dict) and "report_id" in json_data:
+                                export_results.append(f"✅ JSON format valid with report_id")
+                            else:
+                                export_results.append(f"❌ JSON format invalid structure")
+                        except:
+                            export_results.append(f"❌ JSON format parse error")
+                else:
+                    export_results.append(f"❌ Export {format_type} failed: {response.status_code}")
+                    
+            except Exception as e:
+                export_results.append(f"❌ Export {format_type} error: {str(e)}")
         
-        print(f"Tests completed: {passed}/{total} PASSED")
-        print("")
+        # Count results
+        failed_exports = len([r for r in export_results if "❌" in r])
         
-        for result in self.results:
-            status_symbol = "✅" if result["status"] == "PASS" else "❌"
-            print(f"{status_symbol} {result['test']}: {result['details']}")
+        if failed_exports == 0:
+            results.add_pass("CSV Export", "JSON ve CSV export formatları çalışıyor, content-type ve headers doğru")
+        else:
+            results.add_fail("CSV Export", f"{failed_exports} export validation hatası")
+            
+        # Show export test details
+        for result in export_results:
+            print(f"   {result}")
+            
+    except Exception as e:
+        results.add_fail("CSV Export", f"Test error: {str(e)}")
+
+
+def main():
+    """Run all live trading dashboard API tests"""
+    
+    print("🚀 USER LIVE TRADING DASHBOARD API DEEP TEST")
+    print("=" * 80)
+    print(f"Backend URL: {BASE_URL}")
+    print(f"Test Admin: {ADMIN_EMAIL}")
+    
+    results = TestResults()
+    
+    try:
+        # Test 1: Endpoint status and windows
+        test_live_dashboard_endpoints(results)
         
-        # Return overall success
-        return passed == total
+        # Test 2: User data isolation (scope)
+        test_user_data_isolation(results)
+        
+        # Test 3: Admin-scope field security
+        test_admin_scope_security(results)
+        
+        # Test 4: Admin access control (require_user)
+        test_admin_access_control(results)
+        
+        # Test 5: CSV export functionality
+        test_csv_export_functionality(results)
+        
+    except KeyboardInterrupt:
+        print("\n⚠️  Test interrupted by user")
+    except Exception as e:
+        print(f"\n💥 Critical test error: {str(e)}")
+        results.add_fail("Test Framework", str(e))
+    
+    # Print final results
+    success = results.print_summary()
+    
+    if success:
+        print("\n🎉 TÜM TESTLER BAŞARILI! Live Trading Dashboard API'leri production ready.")
+    else:
+        print(f"\n⚠️  {len(results.failed)} test başarısız. Lütfen hataları düzeltin.")
+    
+    return 0 if success else 1
+
 
 if __name__ == "__main__":
-    tester = ValidationTester()
-    success = tester.run_all_tests()
-    sys.exit(0 if success else 1)
+    exit(main())
