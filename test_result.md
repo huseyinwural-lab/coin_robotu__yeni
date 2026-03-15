@@ -116,6 +116,9 @@ frontend:
       - working: true
         agent: "testing"
         comment: "Frontend smoke test PASSED. Frontend URL https://market-scanner-prod.preview.emergentagent.com accessible without blank page. HTML content properly loaded with expected structure. System available for user access without deployment issues."
+      - working: true
+        agent: "testing"
+        comment: "SMOKE TEST RE-VALIDATION PASSED (2026-03-15). Landing page smoke validation successfully completed: 1) ✓ Landing page loads correctly at https://market-scanner-prod.preview.emergentagent.com (HTTP 200). 2) ✓ Page is NOT blank - 517 characters of visible content detected. Page displays 'XILO-USER TRADING ENGINE' header with complete UI structure. 3) ✓ 'Kullanıcı Girişi' (User Login) button visible and accessible in top-right navigation. 4) ✓ 'Admin Girişi' (Admin Login) button visible and accessible in top-right navigation. 5) ✓ ZERO critical runtime errors detected in console logs. No page errors, no critical console errors. Screenshot captured: smoke_test_landing_page.png showing landing page with registration form (HESAP AÇ section with First Name, Last Name, Phone Number, E-posta, Şifre, Şifre Tekrarı fields), execution mode badge (Execution Mode: MOCK), platform status (Platform: Online, Execution Engine: İşlemde), and feature highlights at bottom. All smoke test criteria PASSED. Frontend is production-ready and accessible."
 
   - task: "Admin User Approvals Page - UI Rendering and Navigation"
     implemented: true
@@ -667,9 +670,11 @@ metadata:
 
 test_plan:
   current_focus:
-    - "FAZ-1 + FAZ-2 hardening validation completed successfully - All requirements verified"
+    - "Frontend Smoke Test - Landing Page Validation"
   stuck_tasks: []
   test_all: false
+  - agent: "testing"
+    message: "FRONTEND SMOKE TEST RE-VALIDATION COMPLETED - ALL TESTS PASSED (2026-03-15). Quick smoke-level validation of production frontend completed successfully with all requirements met: 1) ✓ URL Accessibility: Landing page at https://market-scanner-prod.preview.emergentagent.com loads successfully (HTTP 200 status). 2) ✓ No Blank Page: Page contains 517 characters of visible content. Displays complete UI with 'XILO-USER TRADING ENGINE' header, registration form (HESAP AÇ section), and feature highlights. 3) ✓ User Login Visible: 'Kullanıcı Girişi' button found and visible in top-right navigation. 4) ✓ Admin Login Visible: 'Admin Girişi' button found and visible in top-right navigation. 5) ✓ No Critical Errors: ZERO critical runtime errors detected in console logs. No page errors, no critical console errors during page load. SCREENSHOT: smoke_test_landing_page.png captured showing full landing page layout with both login buttons visible. OVERALL RESULT: 🟢 PASS - All smoke test criteria validated. Frontend deployment healthy and accessible for user/admin access."
   test_priority: "high_first"
 
 agent_communication:
