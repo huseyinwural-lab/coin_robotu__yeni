@@ -28,8 +28,6 @@ def get_universe(_: User = Depends(get_current_user)):
 def refresh_universe(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     universe_payload = refresh_spot_tradable_universe(pipeline_runtime.cache)
     symbols = universe_payload.get("symbols", [])
-    if "BTCUSDT" not in symbols:
-        symbols = [*symbols, "BTCUSDT"]
     bootstrap_payload = bootstrap_market_data_store(pipeline_runtime.cache, symbols, MIN_15M_CANDLES)
     create_audit_log(
         db,

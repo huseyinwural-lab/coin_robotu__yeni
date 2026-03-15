@@ -104,12 +104,16 @@ export const AdminStrategyObservabilityPage = () => {
           <p className="text-2xl font-bold" data-testid="rejection-trend-value">{rejection?.signals_rejected_trend_strength ?? 0}</p>
         </div>
         <div className="border border-black/25 bg-orange-100 p-3" data-testid="rejection-btc-card">
-          <p className="text-xs uppercase">Rejected by BTC</p>
-          <p className="text-2xl font-bold" data-testid="rejection-btc-value">{rejection?.signals_rejected_btc_regime ?? 0}</p>
+          <p className="text-xs uppercase">Rejected by Market Bias</p>
+          <p className="text-2xl font-bold" data-testid="rejection-btc-value">
+            {rejection?.signals_rejected_market_bias ?? rejection?.signals_rejected_btc_regime ?? 0}
+          </p>
         </div>
         <div className="border border-black/25 bg-orange-100 p-3" data-testid="rejection-freeze-card">
-          <p className="text-xs uppercase">Rejected by Freeze</p>
-          <p className="text-2xl font-bold" data-testid="rejection-freeze-value">{rejection?.signals_rejected_freeze_guard ?? 0}</p>
+          <p className="text-xs uppercase">Rejected by Market Stress</p>
+          <p className="text-2xl font-bold" data-testid="rejection-freeze-value">
+            {rejection?.signals_rejected_market_stress ?? rejection?.signals_rejected_freeze_guard ?? 0}
+          </p>
         </div>
         <div className="border border-black/25 bg-orange-100 p-3" data-testid="rejection-threshold-card">
           <p className="text-xs uppercase">Rejected by Threshold</p>

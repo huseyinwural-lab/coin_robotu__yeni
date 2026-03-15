@@ -174,8 +174,12 @@ def get_rejection_analytics(db: Session, *, window: str):
     after_hard_gate = base_query.filter(StrategyObservabilityEvent.hard_gate_pass.is_(True)).count()
     selected = base_query.filter(StrategyObservabilityEvent.event_type == "selected_for_execution").count()
     rejected_trend = base_query.filter(StrategyObservabilityEvent.rejection_reason == "trend_strength_weak").count()
-    rejected_btc = base_query.filter(StrategyObservabilityEvent.rejection_reason == "btc_regime_hostile").count()
-    rejected_freeze = base_query.filter(StrategyObservabilityEvent.rejection_reason == "freeze_guard_active").count()
+    rejected_market_bias = base_query.filter(
+        StrategyObservabilityEvent.rejection_reason.in_(["market_bias_hostile", "btc_regime_hostile"])
+    ).count()
+    rejected_market_stress = base_query.filter(
+        StrategyObservabilityEvent.rejection_reason.in_(["market_stress_guard_active", "freeze_guard_active"])
+    ).count()
     rejected_threshold = base_query.filter(StrategyObservabilityEvent.rejection_reason == "adjusted_score_below_threshold").count()
 
     return {
@@ -183,8 +187,10 @@ def get_rejection_analytics(db: Session, *, window: str):
         "signals_total": total,
         "signals_after_hard_gate": after_hard_gate,
         "signals_rejected_trend_strength": rejected_trend,
-        "signals_rejected_btc_regime": rejected_btc,
-        "signals_rejected_freeze_guard": rejected_freeze,
+        "signals_rejected_market_bias": rejected_market_bias,
+        "signals_rejected_market_stress": rejected_market_stress,
+        "signals_rejected_btc_regime": rejected_market_bias,
+        "signals_rejected_freeze_guard": rejected_market_stress,
         "signals_rejected_threshold": rejected_threshold,
         "signals_selected": selected,
     }
@@ -271,6 +277,8 @@ def get_strategy_observability_report(db: Session, *, window: str):
         "signals_selected": rejection.get("signals_selected", 0),
         "signals_rejected_breakdown": {
             "trend_strength": rejection.get("signals_rejected_trend_strength", 0),
+            "market_bias": rejection.get("signals_rejected_market_bias", 0),
+            "market_stress": rejection.get("signals_rejected_market_stress", 0),
             "btc_regime": rejection.get("signals_rejected_btc_regime", 0),
             "freeze_guard": rejection.get("signals_rejected_freeze_guard", 0),
             "threshold": rejection.get("signals_rejected_threshold", 0),

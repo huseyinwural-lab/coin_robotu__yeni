@@ -60,11 +60,11 @@ REGIME_MULTIPLIERS = {
 
 
 @dataclass
-class BtcContext:
+class DynamicMarketContext:
     market_regime: str
-    btc_regime: str
-    freeze_active: bool
-    freeze_reason: str | None
+    market_bias_regime: str
+    risk_guard_active: bool
+    risk_guard_reason: str | None
     multiplier_set: dict
     multiplier_version: str
     multiplier_clamp_events: list[dict]
@@ -92,58 +92,110 @@ def get_spot_strategy_config(cache, params: dict | None = None) -> dict:
     return cfg
 
 
-def _derive_btc_signal_regime(btc_candles: list[dict]) -> str:
-    if len(btc_candles) < 60:
-        return "neutral"
-    indicators = calculate_indicator_snapshot(btc_candles)
-    btc_close = indicators["close"]
-    btc_ema50 = indicators["ema50"]
-    btc_rsi = indicators["rsi14"]
-    recent = btc_candles[-4:]
-
-    breakdown = False
-    for candle in recent:
-        open_price = _safe_float(candle.get("open"))
-        close_price = _safe_float(candle.get("close"))
-        move_pct = ((close_price - open_price) / open_price) * 100 if open_price else 0.0
-        if move_pct <= -1.5:
-            breakdown = True
-            break
-
-    if breakdown:
-        return "hostile"
-    if btc_close > btc_ema50 and btc_rsi >= 48:
-        return "supportive"
-    return "neutral"
-
-
-def _classify_market_regime(btc_candles: list[dict]) -> str:
-    if len(btc_candles) < 120:
+def _classify_market_regime(snapshot: dict) -> str:
+    sample_count = int(snapshot.get("sample_count", 0))
+    if sample_count <= 0:
         return "RANGING"
-    indicators = calculate_indicator_snapshot(btc_candles)
-    atr_pct = indicators.get("atr_pct", 0.0)
-    ema50 = indicators.get("ema50", 0.0)
-    ema200 = indicators.get("ema200", 0.0)
-    rsi14 = indicators.get("rsi14", 50.0)
+    volatile_ratio = _safe_float(snapshot.get("volatile_ratio"), 0.0)
+    bullish_ratio = _safe_float(snapshot.get("bullish_ratio"), 0.0)
+    avg_return_3 = _safe_float(snapshot.get("avg_return_3"), 0.0)
 
-    if atr_pct >= 0.02:
+    if volatile_ratio >= 0.45:
         return "VOLATILE"
-    if ema50 > ema200 and rsi14 >= 52:
+    if bullish_ratio >= 0.55 and avg_return_3 >= 0:
         return "TRENDING"
     return "RANGING"
 
 
-def _update_market_regime_state(cache, btc_candles: list[dict]) -> dict:
+def _derive_market_bias_regime(snapshot: dict) -> str:
+    sample_count = int(snapshot.get("sample_count", 0))
+    if sample_count <= 0:
+        return "neutral"
+
+    bullish_ratio = _safe_float(snapshot.get("bullish_ratio"), 0.0)
+    bearish_ratio = _safe_float(snapshot.get("bearish_ratio"), 0.0)
+    avg_return_3 = _safe_float(snapshot.get("avg_return_3"), 0.0)
+
+    if bearish_ratio >= 0.7 and avg_return_3 <= -0.8:
+        return "hostile"
+    if bullish_ratio >= 0.6 and avg_return_3 >= 0.35:
+        return "supportive"
+    return "neutral"
+
+
+def _build_market_snapshot(cache, symbols: list[str]) -> dict:
+    rows: list[dict] = []
+    cycle_marker = "-"
+    for symbol in symbols:
+        candles = get_json(cache, f"market_data_store:{symbol}:15m") or get_json(cache, f"market:candles:{symbol}:15m") or []
+        if len(candles) < 220:
+            continue
+        sliced = candles[-500:]
+        indicators = calculate_indicator_snapshot(sliced)
+        ema50 = indicators.get("ema50", 0.0)
+        ema200 = indicators.get("ema200", 0.0)
+        rsi14 = indicators.get("rsi14", 50.0)
+        atr_pct = indicators.get("atr_pct", 0.0)
+
+        recent = sliced[-4:]
+        first_open = _safe_float(recent[0].get("open")) if recent else 0.0
+        last_close = _safe_float(recent[-1].get("close")) if recent else 0.0
+        return_3 = ((last_close - first_open) / first_open) * 100 if first_open else 0.0
+
+        current_open = _safe_float(sliced[-1].get("open"))
+        current_close = _safe_float(sliced[-1].get("close"))
+        return_1 = ((current_close - current_open) / current_open) * 100 if current_open else 0.0
+
+        rows.append(
+            {
+                "bullish": ema50 > ema200 and rsi14 >= 52,
+                "bearish": ema50 < ema200 and rsi14 <= 48,
+                "volatile": atr_pct >= 0.02,
+                "return_1": return_1,
+                "return_3": return_3,
+            }
+        )
+        marker = str((sliced[-1] or {}).get("end") or "-")
+        if marker > cycle_marker:
+            cycle_marker = marker
+
+    sample_count = len(rows)
+    if sample_count == 0:
+        return {
+            "sample_count": 0,
+            "bullish_ratio": 0.0,
+            "bearish_ratio": 0.0,
+            "volatile_ratio": 0.0,
+            "avg_return_1": 0.0,
+            "avg_return_3": 0.0,
+            "cycle_marker": cycle_marker,
+        }
+
+    bullish_ratio = sum(1 for row in rows if row["bullish"]) / sample_count
+    bearish_ratio = sum(1 for row in rows if row["bearish"]) / sample_count
+    volatile_ratio = sum(1 for row in rows if row["volatile"]) / sample_count
+    avg_return_1 = sum(row["return_1"] for row in rows) / sample_count
+    avg_return_3 = sum(row["return_3"] for row in rows) / sample_count
+    return {
+        "sample_count": sample_count,
+        "bullish_ratio": round(bullish_ratio, 6),
+        "bearish_ratio": round(bearish_ratio, 6),
+        "volatile_ratio": round(volatile_ratio, 6),
+        "avg_return_1": round(avg_return_1, 6),
+        "avg_return_3": round(avg_return_3, 6),
+        "cycle_marker": cycle_marker,
+    }
+
+
+def _update_market_regime_state(cache, raw_regime: str, cycle_marker: str) -> dict:
     raw_state = get_json(cache, "spot_strategy:market_regime_state") or {}
-    raw_regime = _classify_market_regime(btc_candles)
-    last_candle_end = str((btc_candles[-1] or {}).get("end")) if btc_candles else "-"
     active_regime = raw_state.get("active_regime", raw_regime)
     pending_regime = raw_state.get("pending_regime")
     pending_count = int(raw_state.get("pending_count", 0))
     last_processed_candle = raw_state.get("last_candle_end")
     changed = False
 
-    if last_processed_candle != last_candle_end:
+    if last_processed_candle != cycle_marker:
         if raw_regime == active_regime:
             pending_regime = None
             pending_count = 0
@@ -165,7 +217,7 @@ def _update_market_regime_state(cache, btc_candles: list[dict]) -> dict:
         "raw_regime": raw_regime,
         "pending_regime": pending_regime,
         "pending_count": pending_count,
-        "last_candle_end": last_candle_end,
+        "last_candle_end": cycle_marker,
         "changed": changed,
         "generated_at": utc_now_iso(),
     }
@@ -197,58 +249,12 @@ def _resolve_multiplier_payload(regime: str) -> dict:
     }
 
 
-def _update_btc_freeze_guard(cache, btc_candles: list[dict], freeze_duration_candles: int) -> dict:
-    raw_state = get_json(cache, "spot_strategy:freeze_guard_state") or {}
-    remaining = int(raw_state.get("remaining_candles", 0))
-    active = bool(raw_state.get("active", False))
-    reason = raw_state.get("reason")
-    last_candle_end = str((btc_candles[-1] or {}).get("end")) if btc_candles else "-"
-    last_processed_candle = raw_state.get("last_candle_end")
-
-    if not btc_candles:
-        return {
-            "active": active,
-            "remaining_candles": remaining,
-            "reason": reason,
-            "last_candle_end": last_processed_candle,
-        }
-
-    if last_processed_candle != last_candle_end:
-        if len(btc_candles) >= 1:
-            open_price = _safe_float(btc_candles[-1].get("open"))
-            close_price = _safe_float(btc_candles[-1].get("close"))
-            move_1 = ((close_price - open_price) / open_price) * 100 if open_price else 0.0
-        else:
-            move_1 = 0.0
-
-        if len(btc_candles) >= 3:
-            recent = btc_candles[-3:]
-            first_open = _safe_float(recent[0].get("open"))
-            last_close = _safe_float(recent[-1].get("close"))
-            move_3 = ((last_close - first_open) / first_open) * 100 if first_open else 0.0
-        else:
-            move_3 = 0.0
-
-        trigger = move_1 <= -1.5 or move_3 <= -2.2
-        if trigger:
-            remaining = max(freeze_duration_candles, 1)
-            active = True
-            reason = "btc_hostile_freeze_triggered"
-        elif active and remaining > 0:
-            remaining -= 1
-            if remaining <= 0:
-                active = False
-                reason = None
-
-    payload = {
-        "active": active,
-        "remaining_candles": max(remaining, 0),
-        "reason": reason,
-        "last_candle_end": last_candle_end,
+def _resolve_risk_guard_state() -> dict:
+    return {
+        "active": False,
+        "reason": None,
         "generated_at": utc_now_iso(),
     }
-    set_json(cache, "spot_strategy:freeze_guard_state", payload)
-    return payload
 
 
 def _derive_component_scores(candles: list[dict], indicators: dict, strategy_id: str) -> dict:
@@ -378,17 +384,19 @@ def _base_and_adjusted_scores(component_scores: dict, multiplier_set: dict) -> t
     return round(base_score, 4), round(adjusted_score, 4)
 
 
-def _prepare_btc_context(cache, btc_candles: list[dict], cfg: dict) -> BtcContext:
-    regime_state = _update_market_regime_state(cache, btc_candles)
-    freeze_state = _update_btc_freeze_guard(cache, btc_candles, int(cfg.get("freeze_duration_candles", 2)))
+def _prepare_market_context(cache, symbols: list[str], cfg: dict) -> DynamicMarketContext:
+    snapshot = _build_market_snapshot(cache, symbols)
+    raw_regime = _classify_market_regime(snapshot)
+    regime_state = _update_market_regime_state(cache, raw_regime, str(snapshot.get("cycle_marker") or "-"))
+    risk_guard_state = _resolve_risk_guard_state()
     multiplier_payload = _resolve_multiplier_payload(regime_state["active_regime"])
     set_json(cache, "spot_strategy:multiplier_contract", multiplier_payload)
-    btc_regime = _derive_btc_signal_regime(btc_candles)
-    return BtcContext(
+    market_bias_regime = _derive_market_bias_regime(snapshot)
+    return DynamicMarketContext(
         market_regime=regime_state["active_regime"],
-        btc_regime=btc_regime,
-        freeze_active=bool(freeze_state.get("active", False)),
-        freeze_reason=freeze_state.get("reason"),
+        market_bias_regime=market_bias_regime,
+        risk_guard_active=bool(risk_guard_state.get("active", False)),
+        risk_guard_reason=risk_guard_state.get("reason"),
         multiplier_set=multiplier_payload["multiplier_set"],
         multiplier_version=multiplier_payload["multiplier_version"],
         multiplier_clamp_events=multiplier_payload.get("multiplier_clamp_events", []),
@@ -399,7 +407,7 @@ def _prepare_btc_context(cache, btc_candles: list[dict], cfg: dict) -> BtcContex
 def _evaluate_symbol_candidate(
     symbol: str,
     candles: list[dict],
-    btc_context: BtcContext,
+    dynamic_context: DynamicMarketContext,
     open_symbols: set[str],
     threshold: float,
     strategy_id: str,
@@ -414,10 +422,6 @@ def _evaluate_symbol_candidate(
     hard_rejections: list[str] = []
     if component_scores["trend_strength"] == "weak":
         hard_rejections.append("trend_strength_weak")
-    if btc_context.btc_regime == "hostile":
-        hard_rejections.append("btc_regime_hostile")
-    if btc_context.freeze_active:
-        hard_rejections.append("freeze_guard_active")
     if symbol.upper() in open_symbols:
         hard_rejections.append("symbol_position_open")
     if not strategy_active:
@@ -484,7 +488,7 @@ def _evaluate_symbol_candidate(
     threshold_pass = False
 
     if not hard_rejections:
-        base_score, adjusted_score = _base_and_adjusted_scores(component_scores, btc_context.multiplier_set)
+        base_score, adjusted_score = _base_and_adjusted_scores(component_scores, dynamic_context.multiplier_set)
         score_delta = round(adjusted_score - base_score, 4)
         threshold_pass = adjusted_score >= threshold
 
@@ -520,10 +524,11 @@ def _evaluate_symbol_candidate(
         "score_delta": round(score_delta, 4),
         "hard_gate_pass": len(hard_rejections) == 0,
         "threshold_pass": threshold_pass,
-        "market_regime": btc_context.market_regime,
-        "btc_regime": btc_context.btc_regime,
-        "multiplier_version": btc_context.multiplier_version,
-        "multiplier_set": btc_context.multiplier_set,
+        "market_regime": dynamic_context.market_regime,
+        "market_bias_regime": dynamic_context.market_bias_regime,
+        "btc_regime": dynamic_context.market_bias_regime,
+        "multiplier_version": dynamic_context.multiplier_version,
+        "multiplier_set": dynamic_context.multiplier_set,
         "trend_strength": component_scores["trend_strength"],
         "pullback_quality": component_scores["pullback_quality"],
         "relative_volume": component_scores["relative_volume"],
@@ -541,7 +546,7 @@ def _evaluate_symbol_candidate(
             "ema50": round(indicators.get("ema50", 0.0), 6),
             "ema200": round(indicators.get("ema200", 0.0), 6),
             "vwap": round(indicators.get("vwap", 0.0), 6),
-            "freeze_guard_active": btc_context.freeze_active,
+            "risk_guard_active": dynamic_context.risk_guard_active,
             "strategy_name": strategy_name,
             "breakout_level": round(
                 max((_safe_float(item.get("high")) for item in (candles[-21:-1] if len(candles) > 21 else candles[:-1])), default=close),
@@ -575,6 +580,13 @@ def _build_selection_metrics(candidates: list[dict], selected: list[dict]) -> di
         strategy_id = str(item.get("strategy_id", "unknown"))
         selected_by_strategy[strategy_id] = selected_by_strategy.get(strategy_id, 0) + 1
 
+    rejected_market_bias = sum(
+        1 for item in candidates if "market_bias_hostile" in item.get("reason_codes", [])
+    )
+    rejected_market_stress = sum(
+        1 for item in candidates if "market_stress_guard_active" in item.get("reason_codes", [])
+    )
+
     return {
         "signals_total": len(candidates),
         "signals_after_hard_gate": sum(1 for item in candidates if item.get("hard_gate_pass")),
@@ -583,12 +595,10 @@ def _build_selection_metrics(candidates: list[dict], selected: list[dict]) -> di
         "signals_rejected_trend_strength": sum(
             1 for item in candidates if "trend_strength_weak" in item.get("reason_codes", [])
         ),
-        "signals_rejected_btc_regime": sum(
-            1 for item in candidates if "btc_regime_hostile" in item.get("reason_codes", [])
-        ),
-        "signals_rejected_freeze_guard": sum(
-            1 for item in candidates if "freeze_guard_active" in item.get("reason_codes", [])
-        ),
+        "signals_rejected_market_bias": rejected_market_bias,
+        "signals_rejected_market_stress": rejected_market_stress,
+        "signals_rejected_btc_regime": rejected_market_bias,
+        "signals_rejected_freeze_guard": rejected_market_stress,
         "signals_rejected_threshold": sum(
             1 for item in candidates if "adjusted_score_below_threshold" in item.get("reason_codes", [])
         ),
@@ -610,9 +620,8 @@ def run_dynamic_selection_cycle(
     cfg = get_spot_strategy_config(cache, params)
     threshold = _safe_float(cfg.get("min_adjusted_score"), 55.0)
     normalized_symbols = sorted({symbol.upper() for symbol in symbols if symbol})
-    btc_candles = get_json(cache, "market_data_store:BTCUSDT:15m") or get_json(cache, "market:candles:BTCUSDT:15m") or []
-    btc_context = _prepare_btc_context(cache, btc_candles, cfg)
-    active_strategy_id = REGIME_STRATEGY_MAP.get(btc_context.market_regime, "spot_pullback_v1")
+    dynamic_context = _prepare_market_context(cache, normalized_symbols, cfg)
+    active_strategy_id = REGIME_STRATEGY_MAP.get(dynamic_context.market_regime, "spot_pullback_v1")
     strategy_active_set = {str(item) for item in cfg.get("active_strategies", [])}
     strategy_active = active_strategy_id in strategy_active_set
     active_strategy_name = STRATEGY_NAME_MAP.get(active_strategy_id, active_strategy_id.upper())
@@ -638,15 +647,16 @@ def run_dynamic_selection_cycle(
                     "score_delta": 0,
                     "hard_gate_pass": False,
                     "threshold_pass": False,
-                    "market_regime": btc_context.market_regime,
-                    "btc_regime": btc_context.btc_regime,
-                    "multiplier_version": btc_context.multiplier_version,
-                    "multiplier_set": btc_context.multiplier_set,
+                    "market_regime": dynamic_context.market_regime,
+                    "market_bias_regime": dynamic_context.market_bias_regime,
+                    "btc_regime": dynamic_context.market_bias_regime,
+                    "multiplier_version": dynamic_context.multiplier_version,
+                    "multiplier_set": dynamic_context.multiplier_set,
                     "trend_strength": "weak",
                     "pullback_quality": "low",
                     "relative_volume": 0,
                     "component_scores": {},
-                    "metadata": {"freeze_guard_active": btc_context.freeze_active},
+                    "metadata": {"risk_guard_active": dynamic_context.risk_guard_active},
                 }
             )
             continue
@@ -655,7 +665,7 @@ def run_dynamic_selection_cycle(
             _evaluate_symbol_candidate(
                 symbol,
                 candles[-500:],
-                btc_context,
+                dynamic_context,
                 open_symbols,
                 threshold,
                 strategy_id=active_strategy_id,
@@ -681,19 +691,24 @@ def run_dynamic_selection_cycle(
 
     payload = {
         "generated_at": utc_now_iso(),
-        "market_regime": btc_context.market_regime,
+        "market_regime": dynamic_context.market_regime,
         "active_strategy_id": active_strategy_id,
         "active_strategy_name": active_strategy_name,
         "active_strategy_enabled": strategy_active,
         "regime_strategy_map": REGIME_STRATEGY_MAP,
-        "btc_regime": btc_context.btc_regime,
-        "regime_state": btc_context.regime_state,
-        "multiplier_version": btc_context.multiplier_version,
-        "multiplier_set": btc_context.multiplier_set,
-        "multiplier_clamp_events": btc_context.multiplier_clamp_events,
+        "market_bias_regime": dynamic_context.market_bias_regime,
+        "btc_regime": dynamic_context.market_bias_regime,
+        "regime_state": dynamic_context.regime_state,
+        "multiplier_version": dynamic_context.multiplier_version,
+        "multiplier_set": dynamic_context.multiplier_set,
+        "multiplier_clamp_events": dynamic_context.multiplier_clamp_events,
+        "risk_guard": {
+            "active": dynamic_context.risk_guard_active,
+            "reason": dynamic_context.risk_guard_reason,
+        },
         "freeze_guard": {
-            "active": btc_context.freeze_active,
-            "reason": btc_context.freeze_reason,
+            "active": dynamic_context.risk_guard_active,
+            "reason": dynamic_context.risk_guard_reason,
         },
         "threshold": threshold,
         "available_slots": max(available_slots, 0),

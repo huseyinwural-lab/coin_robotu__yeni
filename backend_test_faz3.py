@@ -15,7 +15,7 @@ import time
 
 class FAZ3ValidationTest:
     def __init__(self):
-        self.base_url = "https://trading-bot-ops.preview.emergentagent.com"
+        self.base_url = "https://btc-gate-removal.preview.emergentagent.com"
         self.admin_token = None
         self.test_user_email = f"test_user_faz3_{uuid.uuid4().hex[:8]}@test.com"
         self.test_user_password = "TestPassword123!"

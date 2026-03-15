@@ -441,8 +441,6 @@ class PipelineRuntime:
                 if should_refresh:
                     payload = refresh_spot_tradable_universe(self.cache)
                     symbols = payload.get("symbols", [])
-                    if "BTCUSDT" not in symbols:
-                        symbols = [*symbols, "BTCUSDT"]
                     bootstrap_result = bootstrap_market_data_store(self.cache, symbols)
                     create_audit_log(
                         db,
@@ -489,6 +487,8 @@ class PipelineRuntime:
                     "spot_strategy:signals_above_threshold:day",
                     "spot_strategy:signals_selected:day",
                     "spot_strategy:rejected:trend_strength_weak",
+                    "spot_strategy:rejected:market_bias_hostile",
+                    "spot_strategy:rejected:market_stress_guard",
                     "spot_strategy:rejected:btc_regime_hostile",
                     "spot_strategy:rejected:freeze_guard",
                     "spot_strategy:rejected:threshold",
@@ -509,6 +509,8 @@ class PipelineRuntime:
             "signals_above_threshold": "spot_strategy:signals_above_threshold:day",
             "signals_selected": "spot_strategy:signals_selected:day",
             "signals_rejected_trend_strength": "spot_strategy:rejected:trend_strength_weak",
+            "signals_rejected_market_bias": "spot_strategy:rejected:market_bias_hostile",
+            "signals_rejected_market_stress": "spot_strategy:rejected:market_stress_guard",
             "signals_rejected_btc_regime": "spot_strategy:rejected:btc_regime_hostile",
             "signals_rejected_freeze_guard": "spot_strategy:rejected:freeze_guard",
             "signals_rejected_threshold": "spot_strategy:rejected:threshold",
@@ -519,7 +521,7 @@ class PipelineRuntime:
                 incr_counter(self.cache, cache_key, value)
 
     def _process_spot_pullback_selection(self, db, *, bot: BotProfile, user: User, event, universe: dict, params: dict):
-        if event.timeframe != "15m" or event.symbol != "BTCUSDT":
+        if event.timeframe != "15m":
             return
 
         idempotency_key = f"idempotency:spot-pullback-cycle:{bot.id}:{event.timestamp.strftime('%Y%m%d%H%M')}"
@@ -563,8 +565,10 @@ class PipelineRuntime:
                 "market_regime": selection.get("market_regime"),
                 "active_strategy_id": selection.get("active_strategy_id"),
                 "active_strategy_enabled": selection.get("active_strategy_enabled"),
+                "market_bias_regime": selection.get("market_bias_regime"),
                 "btc_regime": selection.get("btc_regime"),
                 "threshold": selection.get("threshold"),
+                "risk_guard": selection.get("risk_guard"),
                 "freeze_guard": selection.get("freeze_guard"),
             },
         )
@@ -655,7 +659,7 @@ class PipelineRuntime:
                 secondary_candles=get_json(self.cache, f"market:candles:{candidate['symbol']}:1h") or [],
                 spread_bps=float((get_json(self.cache, f"market:spread:{candidate['symbol']}") or {}).get("spread_bps", 9999)),
                 params=params,
-                context={"btc_candles": get_json(self.cache, "market:candles:BTCUSDT:15m") or []},
+                context={},
             )
             signal.signal = "long"
             signal.direction = "long"
@@ -1004,6 +1008,8 @@ class PipelineRuntime:
                                     reason = signal.reason_codes[0]
                                     reason_map = {
                                         "trend_strength_weak": "spot_strategy:rejected:trend_strength_weak",
+                                        "market_bias_hostile": "spot_strategy:rejected:market_bias_hostile",
+                                        "market_stress_guard_active": "spot_strategy:rejected:market_stress_guard",
                                         "btc_regime_hostile": "spot_strategy:rejected:btc_regime_hostile",
                                         "volume_spike_missing": "spot_strategy:rejected:relative_volume_low",
                                         "signal_score_below_executable": "spot_strategy:rejected:pullback_quality_low",

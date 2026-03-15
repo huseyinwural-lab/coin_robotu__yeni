@@ -1,143 +1,157 @@
 <analysis>**original_problem_statement:**
-The user, a highly technical product owner, is directing the final implementation and rollout of a professional-grade trading bot. The project's architecture is now considered complete. The current and final objective is to implement the MASTER FINAL COMPLETION TASK ORDER (from user message #710). This comprehensive order focuses on operational readiness and usability hardening, NOT new feature development.
+The user, a technical product owner, is overseeing the final development stages of a professional-grade trading bot. The project's scope has evolved from completing the initial UI/UX separation and operational readiness tasks to performing critical backend refactoring based on insights gained during testing.
 
-The key directives are:
-1.  **Panel Separation (FAZ-1):** Fully separate the Admin and User panels.
-2.  **Admin Menu Architecture (FAZ-2, FAZ-3):** Reorganize the admin sidebar into collapsible (açılır/kapanır) categories, preserving all existing menu items.
-3.  **Secure Deletion (FAZ-4, FAZ-5, FAZ-6):** Implement secure, confirmed delete operations for Users, Bots, and API Keys across both panels.
-4.  **User Configuration (FAZ-7):** Allow users to configure their own bots within admin-defined safety limits.
-5.  **Live Deployment (FAZ-8):** Execute a multi-stage operational rollout plan, from stability testing to full production.
-6.  **Final Calibration & Checks (FAZ-9, FAZ-10):** Use live data to finalize system calibrations and perform final checks before project closure.
+The current primary objective is to implement the SYMBOL-DRIVEN SCANNER CORRECTION PACKAGE (user message #369). This is a comprehensive backend refactoring effort to decouple the system's core trading logic from its dependency on Bitcoin (BTC) as a market gatekeeper. The goal is to make the bot truly symbol-driven, allowing it to identify and act on opportunities in altcoins regardless of BTC's specific trend.
 
-The ultimate goal is to transition the system from a development state to a 100% production-ready, operable, and secure trading engine.
+This task supersedes the previous operational rollout plan (FAZ-8), which is now on hold. The user has explicitly directed the agent to execute this refactoring task to correct a fundamental flaw in the trading logic before proceeding with further live testing.
 
 **User's preferred language**: Turkish. The next agent MUST communicate exclusively in Turkish.
 
 **what currently exists?**
-The application is a feature-complete, sophisticated trading bot with a FastAPI backend, React frontend, PostgreSQL database, and Redis for caching. The system has a 3-tiered scanner (Discovery -> Qualification -> Decision), a comprehensive Risk Engine, CI/CD gates that are passing, and an extensive backend test suite.
+The application is a sophisticated trading bot with a FastAPI backend, React frontend, PostgreSQL database, and Redis cache.
 
-The previous agent successfully implemented the development-focused phases (FAZ-1 to FAZ-7) of the MASTER FINAL COMPLETION TASK ORDER. This included a major refactoring of the frontend to separate Admin and User roles, a complete overhaul of the Admin sidebar to be organized and collapsible, and the implementation of secure credential management and entity deletion workflows on both the frontend and backend. The system is stable and has passed a full round of testing via the testing agent after these changes.
+Key components and recent updates:
+-   **Separated Admin/User Panels:** The application has distinct  and  routes and layouts.
+-   **Live Trading Dashboard:** A new, comprehensive dashboard exists at , providing a single-pane-of-glass view of system health, trading performance, risk metrics, and more. This was part of a large, recently completed task package.
+-   **Refactored Admin Menu:** The admin sidebar's information architecture has been reorganized into logical, collapsible categories (CORE, STRATEGY, RISK & EXECUTION, etc.).
+-   **Consistent UI Theme:** Admin panel form elements (, , etc.) have been globally styled with a light green theme to match the existing UI design language.
+-   **Dynamic Symbol Handling:** The user-facing pages (, ) have been refactored to remove hardcoded  dependencies. Symbol selection is now dynamic, based on the chosen exchange's available USDT pairs, and the selection is persisted in .
+-   **Reporting & Export APIs:** The backend features new API endpoints () to serve data to the dashboard and provide exportable daily reports in JSON and CSV formats.
+-   **Mocked Services:** The core exchange execution adapters (Bybit/OKX) remain in a **mocked** state, as per the user's original directive for initial testing phases.
 
 **Last working item**:
--   **Last item agent was working:** The agent completed the implementation and testing of FAZ-1 through FAZ-7 of the user's MASTER FINAL COMPLETION TASK ORDER. This involved major frontend and backend changes to separate user/admin panels, create a new collapsible admin menu, and add secure delete functionalities with confirmation modals. The agent received a test report, fixed all identified bugs, and updated all project documentation (, , ) to reflect the completion of this large task package.
--   **Status:** FINISHED (Development phases FAZ 1-7 are complete and tested). The project is now ready for the operational phases.
--   **Agent Testing Done:** Y
--   **Which testing method agent to use?** Manual testing by the user is the next step. The agent should guide the user on how to verify the new admin panel, user deletion flows, and exchange settings page. No further automated testing is required for the work just completed.
+-   **Last item agent was working:** The agent began implementing the SYMBOL-DRIVEN SCANNER CORRECTION PACKAGE task. After receiving a detailed task order from the user (message #369) and getting clarifications (message #372), the agent started exploring the specified backend files to identify and plan the removal of BTC-dependent logic.
+-   **Status:** IN PROGRESS
+-   **Agent Testing Done:** N
+-   **Which testing method agent to use?** backend testing agent. The user's request for this task includes the creation of a new test suite (, etc.) and integration with CI gates. This requires the backend testing agent for verification.
 -   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-There are no pending bugs or issues. The remaining work consists of executing the operational phases of the user's final task order.
+-   **Issue 1:** The user has not yet reviewed or verified the major feature package completed just before the current task was assigned. This includes the Live Trading Dashboard, the Admin Menu refactor, and the UI theme fix.
+    -   **Status:** USER VERIFICATION PENDING
+    -   **Priority:** P1 (To be addressed after the current P0 task is completed).
 
 **In progress Task List**:
-None. The previous task block (FAZ 1-7) is complete.
+-   **Task 1: SYMBOL-DRIVEN SCANNER CORRECTION PACKAGE (P0 - HIGHEST PRIORITY)**
+    -   **Where to resume:** The agent has a clear, user-approved plan and has already started exploring the target files. The next step is to start applying patches to the backend services as specified in the user's task order (message #369), starting with  and  to remove BTC gate logic.
+    -   **What will be achieved with this?** This will fundamentally correct the trading logic, making the bot independent of BTC's market movements. It will enable the scanner and risk engine to evaluate all symbols based on their own merits and market context, preventing missed opportunities during alt-seasons or periods of BTC consolidation.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** Backend.
+    -   **Blocked on something:** No.
 
 **Upcoming and Future Tasks**
-The remaining tasks are from the MASTER FINAL COMPLETION TASK ORDER (message #710).
-
-*   **Upcoming Tasks (P0 - HIGHEST PRIORITY):**
-    *   **FAZ-8 — CANLIYA ÇIKIŞ OPERASYON PAKETİ (Live Deployment Operations Package):** This is the immediate next step. It is an operational plan to be executed with the user, not a coding task.
-        *   **DEPLOY-2: Exchange Execution Activation:** Guide the user to the  page. Per user choice, this is currently **MOCKED**. The agent must explain that for subsequent steps (Canary, Live), real API keys must be entered and validated here.
-        *   **DEPLOY-3: MOCK Stability Test:** Execute the  script and monitor for 24 hours.
-        *   **DEPLOY-4: Canary Trading:** Guide the user to enter real keys, then run .
-        *   **DEPLOY-5: Limited Universe (Top 10):** Run .
-        *   **DEPLOY-6: Top Volume Universe (Top 50):** Run .
-        *   **DEPLOY-7: Full Production:** Run .
-    *   **FAZ-9 — EXECUTION QUALITY FINAL CALIBRATION:** After sufficient live data is collected from the deployment phases, re-run the calibration analysis to finalize the execution quality thresholds.
-    *   **FAZ-10 — FINAL CHECK:** A final review of all system components and metrics to confirm production readiness before formally closing the project.
-
-*   **Future Tasks (P1/Backlog):**
-    *   **Advanced Improvements (from user message #542):** Smart Order Routing, Automated Regime-to-Risk Profile Switching, Post-trade Explainability 2.0, Canary Automation.
-    *   **CI/Docker Validation (from FINAL-8 in message #542):** Run the  script in a suitable environment to formally verify image reproducibility.
+-   **User Verification (P1):** Guide the user to review the new Live Trading Dashboard, the refactored admin menu, and the updated form styling.
+-   **Live Deployment Operations (FAZ-8, P1 - On Hold):** Resume the operational rollout plan once the current refactoring is complete and verified.
+    -   **DEPLOY-3:** Restart and monitor the  test.
+    -   **DEPLOY-4:** Guide user to enter real keys for Canary Trading.
+    -   **DEPLOY-5 -> DEPLOY-7:** Proceed with phased production rollout.
+-   **Final System Checks (FAZ-9 & FAZ-10, P2):** Final calibration and checks before project closure.
+-   **Advanced Improvements (Backlog):** Smart Order Routing, Automated Regime-to-Risk Profile Switching, etc.
 
 **Completed work in this session**
--   **FAZ-1: Admin/User Panel Separation:** Implemented distinct routing, layouts, and navigation for  and  sections of the application.
--   **FAZ-2 & FAZ-3: Admin Menu Overhaul:** Re-architected the admin sidebar into collapsible categories (CORE, RISK & EXECUTION, etc.), made it scrollable, and fixed the logout button to the bottom, all while preserving every original menu item.
--   **FAZ-4, FAZ-5, FAZ-6: Secure Deletion Workflows:** Implemented backend and frontend logic for deleting Users (with soft/hard delete options), Bots, API Keys, and Strategies. Added confirmation modals (Are you sure? and type DELETE to confirm) and audit logging for all delete actions.
--   **FAZ-7: User Configuration Framework:** Built the initial pages and API endpoints to allow users to manage their own settings within admin-defined boundaries.
--   **Exchange Credential Management:** Created a new  page to securely save and validate (mocked) API keys for Bybit and OKX. Credentials are encrypted on the backend.
--   **UI Polish:** Updated primary action buttons across the admin panel to a consistent green color ().
--   **Deployment Automation:** Created shell scripts (, ) to orchestrate the operational rollout phases.
+-   **Live Trading Dashboard & Reporting Package:**
+    -   Created a new backend service () and API router () to aggregate and serve system-wide metrics.
+    -   Built a new frontend page () with multiple cards to display System Health, Trading Performance, Risk Engine stats, etc.
+    -   Implemented time-windowed queries () and export functionality (JSON, CSV) for daily reports.
+-   **Admin Menu Information Architecture Refactor:**
+    -   Restructured the admin menu in  by creating a new  category and re-assigning operational pages like .
+    -   Configured default collapsible states for menu groups to improve usability.
+    -   Added redirects in  to ensure backward compatibility for old URLs.
+-   **Admin Form Input Theme Fix:**
+    -   Applied a global CSS override in  to style all form elements (, ) with a consistent light-green theme, resolving UI inconsistencies.
+-   **Dynamic Symbol Selection Refactor:**
+    -   Removed hardcoded  from  and .
+    -   The UI now dynamically fetches and displays USDT pairs based on the selected exchange connection.
+    -   Updated backend endpoints (, ) to accept a  parameter.
+
+**Earlier issues found/mentioned but not fixed**
+There are no known issues that the agent identified but failed to address. The agent has been methodically working through user requests. A potential blind spot exists in the test report from the  run (see **What agent forgot to execute**).
+
+**Known issue recurrence from previous fork**
+-   None.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Role-Based Access Control (RBAC):** Frontend and backend are now structured to serve different experiences and permissions for 'Admin' vs 'User' roles.
--   **Operational Runbook as Code:** The user's phased deployment plan has been codified into executable shell scripts () for consistency and repeatability.
--   **Collapsible Menu UI:** A custom React hook () manages the state of menu categories in the new , providing a cleaner UX.
--   **Secure Deletion Pattern:** A standardized pattern using confirmation modals and backend audit logging is now used for all destructive actions.
--   **Credential Encryption-at-Rest:** The  uses the core  service to ensure API secrets are never stored in plain text in the database.
+-   **Centralized Operations Dashboard:** A single-pane-of-glass UI for monitoring all subsystems (scanner, risk, execution, performance) in real-time.
+-   **Standardized API Reporting:** A dedicated set of backend endpoints for providing structured, time-windowed data for both the UI and external analysis.
+-   **Global CSS Theming:** Using global CSS overrides to enforce a consistent UI theme for form elements efficiently.
+-   **Information Architecture Refactoring:** Reorganizing application navigation and menu structures to align with user operational workflows.
+-   **Symbol-Driven Logic (In Progress):** Refactoring the core system to remove hardcoded dependencies on a single asset (BTC) and instead use dynamic, symbol-specific context for decision-making.
 
 **key DB schema**
--   **exchange_credentials:** 
--   **audit_logs:** 
--   **users:** The  column has been added to support soft deletes (, ).
+-   No database schema changes were made in this session.
 
 **changes in tech stack**
--   None.
+-   **JavaScript/JSX Adoption:** The frontend codebase, which was previously described as using TypeScript (), has seen recent significant additions and modifications using JavaScript () and JSX (). The next agent should follow this new pattern for consistency.
 
 **All files of reference**
--   **User Directive:** Message #710 (MASTER FINAL COMPLETION TASK ORDER) is the source of truth for all remaining work.
--   **User Choices:** Message #716 provides the specific implementation choices (mocked keys, soft delete default, etc.).
--   **New/Updated Key Files:**
-    -   : Main router for admin/user separation.
-    -   : New admin shell with collapsible menu.
-    -   : New page for API key management.
-    -   : Backend logic for secure credential handling.
-    -    and : For tracking critical actions.
-    -   : New script to execute the live rollout plan.
+-   **Current Task Directive:** User message #369 (SYMBOL-DRIVEN SCANNER CORRECTION PACKAGE) is the source of truth for the current P0 task. The files listed within are the primary focus.
+-   **New Dashboard Files:**
+    -   
+    -   
+    -   
+-   **Refactored Core UI Files:**
+    -    (Menu structure)
+    -    (Routing and redirects)
+    -    (Global form theme)
 
 **key api endpoints**
--   : Manage exchange API keys.
--   : Test exchange API key connectivity (currently mocked).
--   : Soft-delete a user.
--   : Permanently delete a user.
--   : Endpoint for recording audit trail events.
+-   
+-   
+-   
+-   
+-   
+-   
+-   
 
 **Critical Info for New Agent**
 -   **MUST communicate in Turkish.**
--   Your role is now that of an **Operations Engineer**, guiding the user through a live deployment. The primary development work is complete.
--   The immediate next step is to begin **FAZ-8: The Live Deployment Plan**. Start with DEPLOY-2, explaining to the user that real API keys are required to proceed beyond the mocked validation and stability tests.
--   Follow the deployment plan in  and the user's task order (message #710) exactly. Do not propose new features or code changes. The project goal is to **close out** by completing the existing plan.
--   The user has already provided credentials:  / . Use these to guide them through the admin panel.
+-   Your primary, immediate focus is the SYMBOL-DRIVEN SCANNER CORRECTION PACKAGE as detailed in user message #369. This is a critical backend refactoring task.
+-   The user-approved plan for this task is in messages #371 & #372. Follow it.
+-   The operational rollout plan (FAZ-8) is on hold. Do not attempt to proceed with it.
+-   The previous large feature set (Live Dashboard, Menu Refactor, UI Theme) is considered complete but is pending user verification. Do not modify these unless the user reports a bug.
+-   Note the frontend's shift from  to /. New frontend work should follow the  convention.
 
 **documents and test reports created in this job**
--   /app/test_reports/iteration_107.json
--   /app/memory/PRD.md (Updated)
--   /app/memory/ROADMAP.md (Updated)
--   /app/memory/CHANGELOG.md (Updated)
--   /app/scripts/run_deployment.sh (New)
--   /app/scripts/run_docker_validation.sh (New)
+-   
+-    (Updated)
+-    (New)
+-    (New)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **#716 (LATEST):** User provides 5 explicit choices for the implementation of the final task order (e.g., use mocked keys for now, default to soft delete). **(Actioned)**
-2.  **#710:** User provides the MASTER FINAL COMPLETION TASK ORDER and instructs the agent to implement it one-to-one to finish the project. **(In Progress - FAZ 1-7 complete, FAZ 8-10 pending)**
-3.  **#708:** User asked for login credentials because they couldn't log in. **(Resolved)**
-4.  **#542:** User provided a detailed TRADING ENGINE — MASTER FINAL TASK ORDER. This was superseded by the simplified version in #710. **(Superseded)**
-5.  **#540:** User asks for a detailed report on all remaining action items and potential improvements. **(Resolved)**
-6.  **#288:** User provided a very detailed TRADING ENGINE MASTER CLOSURE PACKAGE. This was a precursor to the final task orders. **(Superseded)**
-7.  **#286:** User asks for a detailed report on all remaining action items and potential improvements. **(Resolved)**
-8.  **#145 & #142:** User provides a detailed Risk Engine Implementation Package. **(Completed)**
-9.  **#5:** User provides initial choices for the agent's plan. **(Actioned)**
-10. **#1051 (from previous summary):** User stated that a previous mini-package was incomplete. **(Resolved, all work has since been completed and verified)**.
+1.  **#372:** User provided clear 'A'/'B' choices to the agent's clarifying questions about the Symbol-Driven refactor. **(Actioned, plan confirmed)**
+2.  **#371:** Agent asked clarifying questions about the new refactoring task. **(Resolved)**
+3.  **#369:** User submitted a large, new task order: SYMBOL-DRIVEN SCANNER CORRECTION PACKAGE to remove all BTC dependencies from the core logic. **(This is the current P0 task)**
+4.  **#230:** User provided clear 'A'/'B' choices for the Live Trading Dashboard package implementation. **(Actioned & Completed)**
+5.  **#229:** Agent asked clarifying questions about the three-part task order. **(Resolved)**
+6.  **#227:** User submitted a large, three-part task order: create a Live Trading Dashboard, fix the Admin UI theme, and refactor the Admin Menu architecture. **(Actioned & Completed)**
+7.  **#125:** User provided clear 'A'/'B' choices for making the symbol selection dynamic. **(Actioned & Completed)**
+8.  **#122:** Agent asked clarifying questions about the dynamic symbol request. **(Resolved)**
+9.  **#119:** User requested to make the symbol selection dynamic on user pages to remove the hardcoded BTC dependency. **(Actioned & Completed)**
+10. **#87:** User asked for a status check on three specific items (Kill-switch links, data flow for non-BTC symbols, login error handling). **(Actioned & Resolved, led to task #119)**
 
 **Project Health Check:**
 -   **Broken:** None.
--   **Mocked:** Exchange execution (Bybit/OKX adapters) is explicitly mocked per user's choice. This is the main blocker for full live trading.
+-   **Mocked:** Exchange execution (Bybit/OKX adapters). The core logic is being refactored, but the final execution step remains mocked.
 
 **3rd Party Integrations**
--   PostgreSQL: Primary database.
--   Redis: Caching layer.
--   Binance API: Primary source for live market data.
--   **Bybit/OKX:** Adapters have been built and integrated but are in a **mocked** state pending user-provided credentials.
+-   PostgreSQL
+-   Redis
+-   Binance API
+-   Bybit/OKX (Adapters built, functionality mocked)
 
 **Testing status**
--   **Testing agent used after significant changes:** YES. The agent successfully used  to validate the large set of changes for FAZ 1-7.
--   **Test files created:** The testing agent added , which the main agent then stabilized and integrated.
--   **Known regressions:** None. The test suite is passing, and CI gates are green.
+-   **Testing agent used after significant changes:** YES,  was used after implementing the Live Dashboard package.
+-   **Troubleshoot agent used after agent stuck in loop:** NO
+-   **Test files created:**
+    -   
+    -   
+-   **Known regressions:** None reported, but the results of the last test run were not explicitly detailed.
 
 **Credentials to test flow:**
 -   **Admin Login:**  / 
 
 **What agent forgot to execute**
-The agent has diligently followed the user's latest and most specific instructions. The remaining tasks (FAZ 8-10) are the defined next steps for the operational rollout and were not forgotten.</analysis>
+-   The agent ran the  after the large dashboard implementation but did not explicitly report on the findings from the generated test report () or detail any fixes made as a result. While it's possible no critical issues were found, the next agent should be aware of this potential information gap and could optionally review the report before starting new backend tests.</analysis>

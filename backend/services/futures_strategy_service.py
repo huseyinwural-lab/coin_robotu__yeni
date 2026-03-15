@@ -234,7 +234,7 @@ def _build_prefilter_shadow_rows(market_states: list[dict]) -> list[dict]:
                 "avg_breakout_potential": round(avg_breakout, 6),
             }
         else:
-            benchmark_mode = "cluster" if prefilter_id.endswith("_alt") else "btc"
+            benchmark_mode = "cluster"
             result = prefilter.scan(market_rows, benchmark_mode=benchmark_mode)
             selected_count = len(result.get("selected_symbols") or [])
             avg_strength = 0.0

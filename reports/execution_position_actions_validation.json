@@ -1,7 +1,7 @@
 {
   "generated_at": "2026-03-12T21:24:25.469704+00:00",
   "iteration": "53",
-  "base_url": "https://trading-bot-ops.preview.emergentagent.com",
+  "base_url": "https://btc-gate-removal.preview.emergentagent.com",
   "open_position_intent": {
     "intent_id": "0a86e2be-3f59-4569-9651-5e3fd089d8f7",
     "status": "PREVIEWED"

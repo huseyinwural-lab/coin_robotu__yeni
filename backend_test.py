@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 
 # Base configuration
-BACKEND_URL = "https://trading-bot-ops.preview.emergentagent.com"
+BACKEND_URL = "https://btc-gate-removal.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 class ValidationTester:

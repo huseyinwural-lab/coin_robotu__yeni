@@ -9,24 +9,29 @@ class RelativeStrengthClusterScannerV2:
     def __init__(self, config: RelativeStrengthScannerConfig | None = None):
         self.config = config or RelativeStrengthScannerConfig()
 
-    def _benchmark_map(self, market_states: list[dict], benchmark_mode: str) -> dict[str, float]:
-        mode = benchmark_mode.lower()
-        if mode == "btc":
-            btc_row = next((row for row in market_states if str(row.get("symbol", "")).upper() == "BTCUSDT"), None)
-            btc_return = float((btc_row or {}).get("return_20", 0.0))
-            return {str(row.get("symbol", "")).upper(): btc_return for row in market_states}
+    def _benchmark_map(self, market_states: list[dict], benchmark_mode: str) -> tuple[str, dict[str, float]]:
+        mode = str(benchmark_mode or "cluster").lower()
+        if mode == "market":
+            returns = [float(row.get("return_20", 0.0)) for row in market_states]
+            market_mean = (sum(returns) / len(returns)) if returns else 0.0
+            return "market", {str(row.get("symbol", "")).upper(): market_mean for row in market_states}
+
+        resolved_mode = "cluster"
 
         cluster_returns: dict[str, list[float]] = defaultdict(list)
         for row in market_states:
             cluster_returns[str(row.get("cluster", "default"))].append(float(row.get("return_20", 0.0)))
         cluster_mean = {cluster: (sum(values) / len(values) if values else 0.0) for cluster, values in cluster_returns.items()}
-        return {
-            str(row.get("symbol", "")).upper(): cluster_mean.get(str(row.get("cluster", "default")), 0.0)
-            for row in market_states
-        }
+        return (
+            resolved_mode,
+            {
+                str(row.get("symbol", "")).upper(): cluster_mean.get(str(row.get("cluster", "default")), 0.0)
+                for row in market_states
+            },
+        )
 
-    def scan(self, market_states: list[dict], benchmark_mode: str = "btc") -> dict:
-        benchmark = self._benchmark_map(market_states, benchmark_mode)
+    def scan(self, market_states: list[dict], benchmark_mode: str = "cluster") -> dict:
+        resolved_mode, benchmark = self._benchmark_map(market_states, benchmark_mode)
         candidates: list[dict] = []
 
         for row in market_states:
@@ -55,7 +60,8 @@ class RelativeStrengthClusterScannerV2:
         ranked = sorted(candidates, key=lambda item: item["relative_strength"], reverse=True)[: self.config.top_n]
         return {
             "prefilter": self.prefilter_type,
-            "benchmark_mode": benchmark_mode,
+            "benchmark_mode": resolved_mode,
+            "benchmark_mode_requested": benchmark_mode,
             "selected_symbols": [item["symbol"] for item in ranked],
             "candidates": ranked,
         }
