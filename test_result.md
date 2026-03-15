@@ -122,6 +122,9 @@ frontend:
       - working: true
         agent: "testing"
         comment: "FAZ-1/FAZ-2 FINAL VALIDATION: Frontend smoke test PASSED. Landing page loads correctly at https://market-scanner-prod.preview.emergentagent.com (10777 chars, not blank page). Frontend accessible and rendering properly. React SPA loading correctly with expected HTML structure. Admin/User login entry functionality available through dynamic rendering. Frontend deployment healthy and ready for user access."
+      - working: true
+        agent: "testing"
+        comment: "SMOKE TEST QUICK VALIDATION PASSED (User Request). Landing page critical entry elements validation completed: 1) ✓ URL accessible: https://market-scanner-prod.preview.emergentagent.com loads successfully. 2) ✓ Landing NOT blank: 517 characters of visible content detected. 3) ✓ 'Kullanıcı Girişi' button: Visible and clickable in top-right navigation. 4) ✓ 'Admin Girişi' button: Visible and clickable in top-right navigation. 5) ✓ NO critical console errors detected. All 4 smoke test criteria PASSED."
 
   - task: "Admin User Approvals Page - UI Rendering and Navigation"
     implemented: true
