@@ -18,6 +18,7 @@ Key Features Tested:
 8. Replay run creates exactly one risk_policy_audit_events record
 9. Regression: lifecycle-proof + risk-summary endpoints functional
 """
+import os
 
 import json
 import os
@@ -38,7 +39,7 @@ class TestAuthFixtures:
     def get_admin_token():
         response = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"},
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         )
         assert response.status_code == 200, f"Admin login failed: {response.text}"
         return response.json()["access_token"]

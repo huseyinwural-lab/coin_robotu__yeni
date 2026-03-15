@@ -34,7 +34,7 @@ def api_client():
 def admin_token(api_client):
     response = api_client.post(
         f"{API_BASE}/auth/login",
-        json={"email": "admin@platform.dev", "password": "Admin12345!"},
+        json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         timeout=30,
     )
     if response.status_code != 200:

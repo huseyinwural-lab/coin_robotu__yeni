@@ -27,8 +27,8 @@ def _resolve_base_url() -> str:
 
 
 BASE_URL = _resolve_base_url()
-ADMIN_EMAIL = "admin@platform.dev"
-ADMIN_PASSWORD = "Admin12345!"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 
 def _unique_email(prefix: str = "phase6test") -> str:

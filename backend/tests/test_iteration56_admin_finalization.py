@@ -32,8 +32,8 @@ class TestAdminAuthentication:
     def test_admin_login(self):
         """Test admin login with valid credentials"""
         response = requests.post(f"{BASE_URL}/api/auth/login/admin", json={
-            "email": "admin@platform.dev",
-            "password": "Admin12345!"
+            "email": os.environ.get("TEST_ADMIN_EMAIL", ""),
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
         }, timeout=20)
         assert response.status_code == 200, f"Admin login failed: {response.text}"
         data = response.json()
@@ -45,8 +45,8 @@ class TestAdminAuthentication:
 def admin_headers():
     """Get admin auth headers"""
     response = requests.post(f"{BASE_URL}/api/auth/login/admin", json={
-        "email": "admin@platform.dev",
-        "password": "Admin12345!"
+        "email": os.environ.get("TEST_ADMIN_EMAIL", ""),
+        "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
     }, timeout=20)
     if response.status_code == 200:
         token = response.json().get("access_token")

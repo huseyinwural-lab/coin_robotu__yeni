@@ -33,7 +33,7 @@ class TestRiskPoliciesRegression:
         # Login as admin
         login_response = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"},
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         )
         assert login_response.status_code == 200
         token = login_response.json().get("access_token")
@@ -103,7 +103,7 @@ class TestExchangeValidateHint:
         # Login as admin
         login_response = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"},
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         )
         if login_response.status_code == 200:
             self.token = login_response.json().get("access_token")
@@ -263,7 +263,7 @@ class TestVenueOptionsEndpoint:
     def setup_auth(self):
         login_response = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"},
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         )
         if login_response.status_code == 200:
             self.token = login_response.json().get("access_token")
@@ -300,7 +300,7 @@ class TestExchangeReadinessChecklist:
     def setup_auth(self):
         login_response = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"},
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         )
         if login_response.status_code == 200:
             self.token = login_response.json().get("access_token")

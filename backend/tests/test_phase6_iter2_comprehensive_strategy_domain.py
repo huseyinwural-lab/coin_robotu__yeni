@@ -32,7 +32,7 @@ def admin_token() -> str:
     """Authenticate as admin and return token."""
     response = requests.post(
         f"{BASE_URL}/api/auth/login/admin",
-        json={"email": "admin@platform.dev", "password": "Admin12345!"},
+        json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         timeout=20,
     )
     assert response.status_code == 200, f"Admin login failed: {response.text}"

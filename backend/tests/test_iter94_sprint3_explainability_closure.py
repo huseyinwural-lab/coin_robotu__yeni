@@ -2,7 +2,7 @@
 Iteration 94 - Sprint-3 Explainability Closure Tests
 Tests: Decision Cards, Explainability Drawer, Strategy Family Gates, 10s Polling
 User: TEST_phase4iter2_pipeline@example.com / TestPassword123!
-Admin: admin@platform.dev / Admin12345!
+Admin: TEST_ADMIN_EMAIL / TEST_ADMIN_PASSWORD
 """
 import os
 import time
@@ -34,8 +34,8 @@ class TestSprint3ExplainabilityAPIs:
         
         # Admin login
         admin_login_res = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@platform.dev",
-            "password": "Admin12345!"
+            "email": os.environ.get("TEST_ADMIN_EMAIL", ""),
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
         })
         if admin_login_res.status_code == 200:
             self.admin_token = admin_login_res.json().get("access_token")

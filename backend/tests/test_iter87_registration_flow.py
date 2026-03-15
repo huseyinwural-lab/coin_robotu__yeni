@@ -155,8 +155,8 @@ class TestAdminLogin:
     def test_admin_login_success(self):
         """Test admin can login successfully"""
         login_payload = {
-            "email": "admin@platform.dev",
-            "password": "Admin12345!"
+            "email": os.environ.get("TEST_ADMIN_EMAIL", ""),
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
         }
         
         response = requests.post(f"{BASE_URL}/api/auth/login/admin", json=login_payload)

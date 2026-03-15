@@ -22,7 +22,7 @@ class TestRiskPoliciesRegression:
         """Get admin token for testing"""
         response = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"}
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
         )
         if response.status_code == 200:
             return response.json().get("access_token")
@@ -86,7 +86,7 @@ class TestScannerRegression:
         # Try admin login if user login fails
         response = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"}
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
         )
         if response.status_code == 200:
             return response.json().get("access_token")
@@ -178,7 +178,7 @@ class TestExchangeValidateNoAssignmentRequired:
         """Get admin token"""
         response = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"}
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
         )
         if response.status_code == 200:
             return response.json().get("access_token")
@@ -364,7 +364,7 @@ class TestExchangeValidateWithVenueAssignment:
         """Create user, approve them, and assign venue access"""
         admin_login = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"}
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
         )
         if admin_login.status_code != 200:
             pytest.skip("Admin login failed")

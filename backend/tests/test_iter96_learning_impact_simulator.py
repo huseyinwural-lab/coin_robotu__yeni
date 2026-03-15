@@ -17,8 +17,8 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 def admin_token():
     """Obtain admin JWT token."""
     resp = requests.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@platform.dev",
-        "password": "Admin12345!"
+        "email": os.environ.get("TEST_ADMIN_EMAIL", ""),
+        "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
     })
     if resp.status_code != 200:
         pytest.skip(f"Admin login failed: {resp.status_code} - {resp.text}")

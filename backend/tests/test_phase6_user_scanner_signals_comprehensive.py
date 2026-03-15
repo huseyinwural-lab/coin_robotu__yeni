@@ -40,8 +40,8 @@ class TestPhase6ScannerSignalsAPI:
     def admin_token(self):
         """Get admin token"""
         response = requests.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@platform.dev",
-            "password": "Admin12345!"
+            "email": os.environ.get("TEST_ADMIN_EMAIL", ""),
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
         })
         assert response.status_code == 200, f"Admin login failed: {response.text}"
         return response.json().get("access_token")

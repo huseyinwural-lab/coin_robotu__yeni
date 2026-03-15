@@ -31,8 +31,8 @@ BASE_URL = _resolve_base_url()
 # Test credentials
 USER_EMAIL = "e2_conn_last@example.com"
 USER_PASSWORD = "User12345!"
-ADMIN_EMAIL = "admin@platform.dev"
-ADMIN_PASSWORD = "Admin12345!"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 
 class TestUserExchangeConnectionsCRUD:

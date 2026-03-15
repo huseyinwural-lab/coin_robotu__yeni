@@ -23,8 +23,8 @@ class TestFallbackTimelineAPI:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Setup - get admin token"""
-        self.admin_email = "admin@platform.dev"
-        self.admin_password = "Admin12345!"
+        self.admin_email = os.environ.get("TEST_ADMIN_EMAIL", "")
+        self.admin_password = os.environ.get("TEST_ADMIN_PASSWORD", "")
         self.user_email = "TEST_phase4iter2_pipeline@example.com"
         self.user_password = "TestPassword123!"
         

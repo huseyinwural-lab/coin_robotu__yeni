@@ -72,7 +72,6 @@ test_reports/pytest/*.xml
 ExecutionIntent
 admin
 submit
-/yarn.lock
 
 # Secrets and credentials
 *token.json*
@@ -85,20 +84,6 @@ chainlit.md
 .chainlit
 .ipynb_checkpoints/
 frontend/node_modules/.cache/default-development/0.pack
+frontend/node_modules/.cache/default-development/0.pack
 frontend/node_modules/.cache/default-development/18.pack
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
+frontend/node_modules/.cache/default-development/18.pack

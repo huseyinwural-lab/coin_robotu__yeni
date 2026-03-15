@@ -21,7 +21,7 @@ def admin_token():
     """Get admin authentication token"""
     response = requests.post(
         f"{BASE_URL}/api/auth/login/admin",
-        json={"email": "admin@platform.dev", "password": "Admin12345!"},
+        json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
     )
     assert response.status_code == 200, f"Admin login failed: {response.text}"
     return response.json()["access_token"]
@@ -53,7 +53,7 @@ def user_token_and_id():
     # Need admin token first
     admin_resp = requests.post(
         f"{BASE_URL}/api/auth/login/admin",
-        json={"email": "admin@platform.dev", "password": "Admin12345!"},
+        json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
     )
     admin_token = admin_resp.json()["access_token"]
     admin_headers = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}

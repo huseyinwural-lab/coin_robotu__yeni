@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/app"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND_DIR="$ROOT/backend"
 
 echo "[drift-gate] static guard: startup create_all kontrolü"
@@ -18,7 +18,7 @@ fi
 
 echo "[drift-gate] alembic autogenerate drift kontrolü"
 set +e
-CHECK_OUTPUT=$(cd "$BACKEND_DIR" && PYTHONPATH=/app/backend alembic check 2>&1)
+CHECK_OUTPUT=$(cd "$BACKEND_DIR" && PYTHONPATH="$BACKEND_DIR" alembic check 2>&1)
 CHECK_EXIT=$?
 set -e
 

@@ -9,8 +9,8 @@ import pytest
 import requests
 
 SNAPSHOT_PATH = Path("/app/contracts/api_contract_snapshot.json")
-ADMIN_EMAIL = "admin@platform.dev"
-ADMIN_PASSWORD = "Admin12345!"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 
 def _resolve_base_url() -> str:

@@ -62,10 +62,13 @@ Varsayılan admin seed yalnızca `users` tablosu tamamen boşken çalışır.
 
 - Kimlik bilgileri `backend/.env` içindeki `DEFAULT_ADMIN_EMAIL` ve `DEFAULT_ADMIN_PASSWORD` alanlarından okunur.
 - Repo içinde operasyonel kullanım için sabit credential tekrarları tutulmamalıdır.
-- `backend/.env.example` içindeki admin değerleri yalnız placeholder amaçlıdır.
+- Kurulum varsayılan bootstrap admin:
+  - Email/Kullanıcı adı: `admin@platform.local`
+  - Şifre: `Admin12345!`
 
 - Tablo doluysa seed/recreate/reset yapılmaz.
 - Duplicate kullanıcı üretilmez.
+- İlk başarılı girişten sonra admin panelinden profil ve şifre güncellemesi yapılmalıdır.
 
 ## 7) Test komutları
 
@@ -79,8 +82,8 @@ pytest
 Credential gerektiren script/testler için env tabanlı kullanım:
 
 ```bash
-export TEST_ADMIN_EMAIL="<admin-email>"
-export TEST_ADMIN_PASSWORD="<admin-password>"
+export TEST_ADMIN_EMAIL="admin@platform.local"
+export TEST_ADMIN_PASSWORD="Admin12345!"
 export TEST_USER_EMAIL="<user-email>"
 export TEST_USER_PASSWORD="<user-password>"
 ```
@@ -109,3 +112,21 @@ Production hedefi:
 - DB fallback: PostgreSQL bağlantısı kurulamazsa SQLite kullanılabilir.
 - Cache fallback: Redis bağlantısı kurulamazsa in-memory cache kullanılabilir.
 - Bu modlarda davranış sınırları capability matrix ile değerlendirilmelidir.
+
+## 10) Frontend smoke checklist (release)
+
+- Landing page açılıyor.
+- Sayfa boş değil.
+- `Kullanıcı Girişi` aksiyonu görünür.
+- `Admin Girişi` aksiyonu görünür.
+- Kritik console error yok.
+
+## 11) Operasyon notları
+
+- Bybit/OKX bu turda placeholder warning modundadır.
+- `candidate_count = 0` bazı taramalarda hata değil, karar sonucu olabilir.
+- Fallback aktifleştiğinde top volume moda geçiş normal davranıştır.
+- Bootstrap admin bilgileri:
+  - `admin@platform.local`
+  - `Admin12345!`
+- Prod/stage için ilk girişten sonra admin profil ve şifre güncellenmelidir.

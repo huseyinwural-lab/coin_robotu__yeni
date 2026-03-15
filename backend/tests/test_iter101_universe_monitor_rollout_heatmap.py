@@ -28,7 +28,7 @@ class TestUniverseMonitorRolloutHeatmap:
         """Login as admin and store token"""
         response = requests.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"},
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         )
         if response.status_code == 200:
             self.admin_token = response.json().get("access_token")

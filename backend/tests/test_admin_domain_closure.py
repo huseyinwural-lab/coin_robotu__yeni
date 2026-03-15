@@ -22,8 +22,8 @@ class TestAdminAuth:
 
     def test_admin_login(self):
         response = requests.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@platform.dev",
-            "password": "Admin12345!"
+            "email": os.environ.get("TEST_ADMIN_EMAIL", ""),
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
         })
         assert response.status_code == 200, f"Admin login failed: {response.text}"
         data = response.json()
@@ -36,8 +36,8 @@ class TestAdminAuth:
 @pytest.fixture(scope="module")
 def admin_token():
     response = requests.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@platform.dev",
-        "password": "Admin12345!"
+        "email": os.environ.get("TEST_ADMIN_EMAIL", ""),
+        "password": os.environ.get("TEST_ADMIN_PASSWORD", "")
     })
     assert response.status_code == 200
     return response.json()["access_token"]

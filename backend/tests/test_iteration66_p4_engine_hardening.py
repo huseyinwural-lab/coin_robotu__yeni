@@ -21,7 +21,7 @@ def admin_token():
     """Admin login fixture"""
     response = requests.post(
         f"{BASE_URL}/api/auth/login/admin",
-        json={"email": "admin@platform.dev", "password": "Admin12345!"}
+        json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
     )
     if response.status_code == 200:
         return response.json().get("access_token")
@@ -615,7 +615,7 @@ class TestHealthAndAuth:
         """Admin authentication"""
         response = requests.post(
             f"{BASE_URL}/api/auth/login/admin",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"}
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
         )
         assert response.status_code == 200
         assert "access_token" in response.json()

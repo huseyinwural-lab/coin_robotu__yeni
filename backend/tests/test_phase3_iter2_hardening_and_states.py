@@ -64,7 +64,7 @@ def admin_headers(api_client):
     # module: admin auth fixture for phase3 hardening/state endpoints
     login = api_client.post(
         f"{API_BASE}/auth/login",
-        json={"email": "admin@platform.dev", "password": "Admin12345!"},
+        json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         timeout=25,
     )
     if login.status_code != 200:

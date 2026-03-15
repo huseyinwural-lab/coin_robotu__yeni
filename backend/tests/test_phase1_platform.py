@@ -23,7 +23,7 @@ def api_client():
 
 @pytest.fixture(scope="session")
 def admin_auth(api_client):
-    payload = {"email": "admin@platform.dev", "password": "Admin12345!"}
+    payload = {"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
     response = api_client.post(f"{API_BASE}/auth/login", json=payload, timeout=20)
     if response.status_code != 200:
         pytest.skip(f"Admin login failed with status {response.status_code}")

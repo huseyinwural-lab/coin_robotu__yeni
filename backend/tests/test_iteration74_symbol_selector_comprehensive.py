@@ -21,7 +21,7 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
     BASE_URL = "https://market-scanner-prod.preview.emergentagent.com"
 
-ADMIN_CREDENTIALS = {"email": "admin@platform.dev", "password": "Admin12345!"}
+ADMIN_CREDENTIALS = {"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
 
 
 @pytest.fixture(scope="module")

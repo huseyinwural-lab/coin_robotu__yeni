@@ -25,7 +25,7 @@ class TestPhase4Iter5EnvAwareReleaseGate:
         # Login as admin
         login_res = self.session.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"},
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         )
         assert login_res.status_code == 200
         self.admin_token = login_res.json()["access_token"]
@@ -236,7 +236,7 @@ class TestPhase4Iter5AdminReleaseGatePolicy:
         self.session.headers.update({"Content-Type": "application/json"})
         login_res = self.session.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"},
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         )
         assert login_res.status_code == 200
         self.admin_token = login_res.json()["access_token"]
@@ -285,7 +285,7 @@ class TestPhase4Iter5MonitoringEndpoints:
         self.session.headers.update({"Content-Type": "application/json"})
         login_res = self.session.post(
             f"{BASE_URL}/api/auth/login",
-            json={"email": "admin@platform.dev", "password": "Admin12345!"},
+            json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         )
         assert login_res.status_code == 200
         self.admin_token = login_res.json()["access_token"]

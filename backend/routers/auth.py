@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core.users.user_registry import (
@@ -20,13 +21,28 @@ from schemas import (
     EmailVerificationRequest,
     EmailVerificationResponse,
     EmailVerificationVerifyRequest,
-    LoginRequest,
     RegisterRequest,
     UserResponse,
 )
 from services.audit_service import create_audit_log
+from services.admin_profile_service import change_admin_password, update_admin_profile
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+class AdminProfileUpdateRequest(BaseModel):
+    email: str | None = None
+    full_name: str | None = None
+
+
+class AdminPasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class LocalLoginRequest(BaseModel):
+    email: str
+    password: str
 
 
 @router.post("/register", response_model=UserResponse)
@@ -77,7 +93,7 @@ def get_auth_onboarding_status(email: str, db: Session = Depends(get_db)):
 
 
 def _login_with_policy(
-    payload: LoginRequest,
+    payload: LocalLoginRequest,
     db: Session,
     target_role: UserRole | None = None,
     allowed_roles: set[UserRole] | None = None,
@@ -97,23 +113,70 @@ def _login_with_policy(
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LocalLoginRequest, db: Session = Depends(get_db)):
     return _login_with_policy(payload, db)
 
 
 @router.post("/login/admin", response_model=AuthResponse)
-def admin_login(payload: LoginRequest, db: Session = Depends(get_db)):
+def admin_login(payload: LocalLoginRequest, db: Session = Depends(get_db)):
     return _login_with_policy(payload, db, allowed_roles={UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS})
 
 
 @router.post("/login/user", response_model=AuthResponse)
-def user_login(payload: LoginRequest, db: Session = Depends(get_db)):
+def user_login(payload: LocalLoginRequest, db: Session = Depends(get_db)):
     return _login_with_policy(payload, db, target_role=UserRole.USER)
 
 
 @router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.patch("/admin/profile", response_model=UserResponse)
+def patch_admin_profile(
+    payload: AdminProfileUpdateRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    updated = update_admin_profile(
+        db,
+        current_admin,
+        email=payload.email,
+        full_name=payload.full_name,
+    )
+    create_audit_log(
+        db,
+        action="admin_profile_updated",
+        entity_type="user",
+        entity_id=updated.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"email": updated.email},
+    )
+    return updated
+
+
+@router.post("/admin/password/change", response_model=UserResponse)
+def post_admin_password_change(
+    payload: AdminPasswordChangeRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    updated = change_admin_password(
+        db,
+        current_admin,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
+    create_audit_log(
+        db,
+        action="admin_password_changed",
+        entity_type="user",
+        entity_id=updated.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+    )
+    return updated
 
 
 @router.get("/admin/user-approval-requests", response_model=list[UserResponse])

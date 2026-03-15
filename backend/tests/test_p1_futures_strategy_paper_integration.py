@@ -32,7 +32,7 @@ def auth_token():
     """Authenticate and get admin token"""
     response = requests.post(
         f"{BASE_URL}/api/auth/login",
-        json={"email": "admin@platform.dev", "password": "Admin12345!"},
+        json={"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")},
         headers={"Content-Type": "application/json"},
     )
     if response.status_code == 200:

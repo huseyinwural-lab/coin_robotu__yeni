@@ -29,8 +29,8 @@ BASE_URL = get_base_url()
 
 USER_EMAIL = "e2_conn_last@example.com"
 USER_PASSWORD = "User12345!"
-ADMIN_EMAIL = "admin@platform.dev"
-ADMIN_PASSWORD = "Admin12345!"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "")
 
 
 @pytest.fixture(scope="module")

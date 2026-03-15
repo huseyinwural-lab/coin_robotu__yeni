@@ -1,17 +1,24 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from core.security import hash_password
 from db import get_db
 from deps import require_admin
 from models import User, UserRole
-from schemas import AdminUserCreateRequest, UserResponse, UserRoleUpdateRequest, UserStatusUpdateRequest
+from schemas import UserResponse, UserRoleUpdateRequest, UserStatusUpdateRequest
 from services.audit_service import create_audit_log
 
 router = APIRouter(prefix="/admin/users", tags=["admin_users"])
 ADMIN_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}
+
+
+class LocalAdminUserCreateRequest(BaseModel):
+    email: str
+    password: str
+    role: str = "admin"
 
 
 def _ensure_can_modify(current_admin: User, target: User):
@@ -67,7 +74,7 @@ def list_users(
 
 @router.post("/admin-create", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_admin_user(
-    payload: AdminUserCreateRequest,
+    payload: LocalAdminUserCreateRequest,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):

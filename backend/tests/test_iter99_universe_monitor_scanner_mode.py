@@ -14,7 +14,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 
-ADMIN_CREDENTIALS = {"email": "admin@platform.dev", "password": "Admin12345!"}
+ADMIN_CREDENTIALS = {"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
 USER_CREDENTIALS = {"email": "TEST_phase4iter2_pipeline@example.com", "password": "TestPassword123!"}
 
 
