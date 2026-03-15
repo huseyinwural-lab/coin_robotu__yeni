@@ -24,12 +24,24 @@ def admin_runtime_universe_summary(
     effective_mode = "top_volume" if bool(fallback_state.get("active", False)) else scanner_mode
     universe = get_full_market_universe(db, redis_client, scanner_mode=effective_mode, selected_symbols=[], top_n=top_n)
     exchange_snapshot = get_exchange_universe_snapshot(scanner_mode=effective_mode, top_n=top_n)
+    latest_runtime = get_latest_global_runtime_snapshot(redis_client)
+    freshness = latest_runtime.get("freshness") or {}
+    backpressure = latest_runtime.get("backpressure") or {}
+    event_priority = (latest_runtime.get("event_priority") or {}).get("distribution") or {"high": 0, "medium": 0, "low": 0}
+    explainability = latest_runtime.get("explainability_summary") or {}
     return {
         "scanner_mode_requested": scanner_mode,
         "scanner_mode_effective": effective_mode,
         "fallback_state": fallback_state,
         "universe": universe,
         "exchange_snapshot": exchange_snapshot,
+        "freshness_sla_bucket": freshness.get("sla_bucket", "normal"),
+        "stale_skip_count": int(freshness.get("stale_skip_count") or 0),
+        "queue_depth_state": backpressure.get("queue_depth_state", "normal"),
+        "backpressure_active": bool(backpressure.get("active", False)),
+        "event_priority_distribution": event_priority,
+        "fallback_reason_code": str(fallback_state.get("reason_code") or "none"),
+        "explainability": explainability,
     }
 
 
@@ -38,4 +50,6 @@ def admin_runtime_latest_scan(
     current_admin: User = Depends(require_admin),
 ):
     _ = current_admin
-    return get_latest_global_runtime_snapshot(redis_client)
+    payload = get_latest_global_runtime_snapshot(redis_client)
+    payload["fallback_reason_code"] = str((payload.get("fallback_state") or {}).get("reason_code") or "none")
+    return payload

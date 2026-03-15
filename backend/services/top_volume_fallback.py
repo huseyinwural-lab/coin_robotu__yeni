@@ -71,6 +71,7 @@ def evaluate_top_volume_fallback(cache) -> dict:
 
     payload = {
         "active": bool(active),
+        "reason_code": str(last_trigger_metric or "none") if active else "none",
         "healthy_streak": healthy_streak,
         "last_trigger_metric": last_trigger_metric,
         "last_exit_reason": last_exit_reason,

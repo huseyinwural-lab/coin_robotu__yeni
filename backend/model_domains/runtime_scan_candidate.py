@@ -19,3 +19,14 @@ class RuntimeScanCandidate(Base):
     risk_score: Mapped[float] = mapped_column(Float, default=0.0)
     decision: Mapped[str] = mapped_column(String(10), index=True, default="PASS")
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
+
+    def to_learning_seed(self) -> dict:
+        return {
+            "symbol": self.symbol,
+            "decision": self.decision,
+            "decision_timestamp": self.scan_timestamp.isoformat() if self.scan_timestamp else None,
+            "outcome_placeholder": None,
+            "strategy_attribution": self.strategy_signal,
+            "filter_attribution": "risk_filter" if float(self.risk_score or 0) > 0 else None,
+            "confidence": float(self.confidence or 0),
+        }

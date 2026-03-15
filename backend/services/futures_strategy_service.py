@@ -1490,13 +1490,25 @@ def build_runtime_bot_decision(cache, symbol: str) -> dict:
     funding_alignment = bool(market_state.get("funding_alignment", True))
 
     decision = "PASS"
+    risk_filter_reason = None
+    decision_reason = "trend_funding_alignment"
     if trend_direction in {"LONG", "SHORT"} and spread_state != "SHOCK" and funding_alignment:
         decision = trend_direction
+    else:
+        decision_reason = "risk_or_liquidity_guard"
+        if spread_state == "SHOCK":
+            risk_filter_reason = "spread_shock"
+        elif not funding_alignment:
+            risk_filter_reason = "funding_misalignment"
 
     return {
         "symbol": str(symbol or "").upper(),
         "decision": decision,
         "confidence": float(market_state.get("trend_strength") or 0.0),
-        "reason": "trend_funding_alignment" if decision in {"LONG", "SHORT"} else "risk_or_liquidity_guard",
+        "reason": decision_reason,
+        "strategy_name": "futures_trend_follow_v1",
+        "signal_strength": float(market_state.get("trend_strength") or 0.0),
+        "risk_filter_reason": risk_filter_reason,
+        "decision_reason": decision_reason,
         "market_state": market_state,
     }

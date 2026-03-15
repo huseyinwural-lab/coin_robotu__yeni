@@ -12,5 +12,9 @@ jobs:
         run: chmod +x scripts/*.sh
       - name: Run alembic drift gate
         run: bash scripts/ci_alembic_drift_gate.sh
+      - name: Run hermetic runtime tests
+        run: |
+          cd backend
+          PYTHONPATH=/app/backend pytest -q tests/test_full_market_scan.py tests/test_top_volume_fallback.py tests/test_decision_contract.py tests/test_runtime_candidate_persistence.py tests/test_freshness_policy.py tests/test_event_priority_scheduler.py
       - name: Run prod release gate
         run: bash scripts/ci_prod_gate.sh

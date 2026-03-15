@@ -1124,3 +1124,18 @@ def summarize_execution_eligibility(intent: UserExecutionIntent) -> dict:
         "execution_eligible": str(intent.status or "").upper() in eligible_statuses,
         "status": str(intent.status or ""),
     }
+
+
+def build_intent_explainability(normalized_payload: dict) -> dict:
+    payload = dict(normalized_payload or {})
+    strategy_name = str(payload.get("strategy_binding") or "manual_execution")
+    confidence = float(payload.get("confidence") or 0.0)
+    risk_reasons = payload.get("risk_reasons") or []
+    risk_filter_reason = str(risk_reasons[0]) if risk_reasons else None
+    decision_reason = str(payload.get("decision_reason") or payload.get("intent_type") or "execution_intent")
+    return {
+        "strategy_name": strategy_name,
+        "signal_strength": confidence,
+        "risk_filter_reason": risk_filter_reason,
+        "decision_reason": decision_reason,
+    }

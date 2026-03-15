@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
+from services.pipeline.cache_store import get_json
 from services.pipeline.universe_engine import apply_scanner_mode, debug_effective_universe
 
 
@@ -42,6 +43,8 @@ def get_full_market_universe(
     selected_symbols: list[str] | None = None,
     top_n: int = 50,
 ) -> dict:
+    runtime_state = get_json(cache, "scanner:runtime:latest:global") or {}
+    runtime_metrics = runtime_state.get("runtime_metrics") or {}
     spot_debug = debug_effective_universe(
         db,
         cache,
@@ -68,6 +71,8 @@ def get_full_market_universe(
         "spot_universe_size": int(spot_debug.get("after_scanner_mode") or 0),
         "futures_universe_size": int(futures_debug.get("after_scanner_mode") or 0),
         "combined_universe_size": len(combined_symbols),
+        "snapshot_age_ms": float(runtime_metrics.get("snapshot_age_ms") or 0.0),
+        "stale_skip_count": int(runtime_metrics.get("stale_skip_count") or 0),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 

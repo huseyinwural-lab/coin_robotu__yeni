@@ -72,6 +72,7 @@ class PipelineRuntime:
         self._scanner_automation_task: asyncio.Task | None = None
         self._last_release_gate_status: str | None = None
         self._last_kill_switch_active: bool = False
+        self._scanner_loop_sleep_seconds: int = 15
         self._running = False
 
     async def start(self):
@@ -116,7 +117,7 @@ class PipelineRuntime:
 
     async def _scanner_automation_loop(self):
         while self._running:
-            await asyncio.sleep(15)
+            await asyncio.sleep(max(5, int(self._scanner_loop_sleep_seconds or 15)))
             db = SessionLocal()
             try:
                 now = datetime.now(timezone.utc)
@@ -257,6 +258,10 @@ class PipelineRuntime:
                     job_queue = filtered_jobs
 
                 processed_jobs = 0
+                next_sleep_seconds = 15
+                backpressure_active_any = False
+                fallback_reason_code = "none"
+                event_priority_agg = {"high": 0, "medium": 0, "low": 0}
                 cycle_started = perf_counter()
                 for index, job in enumerate(job_queue):
                     row = job["row"]
@@ -289,7 +294,16 @@ class PipelineRuntime:
                         row.last_run_id = str(result.get("run_id") or "")
                         row.last_actionable_count = int(result.get("actionable_count") or 0)
 
+                        backpressure = result.get("backpressure") or {}
+                        event_priority = (result.get("event_priority") or {}).get("distribution") or {}
+                        next_sleep_seconds = max(next_sleep_seconds, int(backpressure.get("scan_interval_seconds") or 15))
+                        backpressure_active_any = backpressure_active_any or bool(backpressure.get("active", False))
+                        fallback_reason_code = str((result.get("fallback_state") or {}).get("last_trigger_metric") or fallback_reason_code)
+                        for key in ["high", "medium", "low"]:
+                            event_priority_agg[key] += int(event_priority.get(key) or 0)
+
                         stale_in_run = int(((result.get("scanner_perf") or {}).get("stale_block_count") or 0))
+                        stale_in_run += int(((result.get("freshness") or {}).get("stale_skip_count") or 0))
                         stale_jobs += stale_in_run
                     except Exception as exc:
                         row.last_run_at = now
@@ -310,6 +324,8 @@ class PipelineRuntime:
                                 row.last_run_error = None
                                 row.last_run_id = str(result.get("run_id") or "")
                                 row.last_actionable_count = int(result.get("actionable_count") or 0)
+                                backpressure = result.get("backpressure") or {}
+                                next_sleep_seconds = max(next_sleep_seconds, int(backpressure.get("scan_interval_seconds") or 15))
                             except Exception:
                                 pass
                     finally:
@@ -342,6 +358,9 @@ class PipelineRuntime:
                         "stale_blocks": stale_jobs,
                         "queue_partition": queue_partition,
                         "backpressure_policy": "low_priority_defer + stale_drop + explainability_degrade",
+                        "backpressure_active": backpressure_active_any,
+                        "event_priority_distribution": event_priority_agg,
+                        "fallback_reason_code": fallback_reason_code,
                     },
                 )
                 if deferred_jobs > 0:
@@ -350,6 +369,8 @@ class PipelineRuntime:
                     incr_counter(self.cache, "scanner:metrics:dropped_jobs:day", dropped_jobs)
                 if stale_jobs > 0:
                     incr_counter(self.cache, "scanner:metrics:stale_blocks:day", stale_jobs)
+
+                self._scanner_loop_sleep_seconds = max(5, min(120, int(next_sleep_seconds)))
 
                 db.commit()
             except Exception as exc:
