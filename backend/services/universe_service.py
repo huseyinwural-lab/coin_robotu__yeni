@@ -4,7 +4,7 @@ import re
 from sqlalchemy.orm import Session
 
 from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
-from services.pipeline.cache_store import get_json
+from services.pipeline.cache_store import get_counter, get_json
 from services.pipeline.universe_engine import apply_scanner_mode, debug_effective_universe
 
 
@@ -71,6 +71,9 @@ def get_full_market_universe(
     )
 
     combined_symbols = _normalize_symbols(list(spot_debug.get("final_symbols") or []) + list(futures_debug.get("final_symbols") or []))
+    quality_warning_count = get_counter(cache, "risk:metrics:execution_quality_warning_count") if cache else 0
+    stale_reject_count = get_counter(cache, "risk:metrics:stale_reject_count") if cache else 0
+    spread_reject_count = get_counter(cache, "risk:metrics:spread_reject_count") if cache else 0
     return {
         "scanner_mode": str(scanner_mode or "all_market_symbols").lower(),
         "spot_symbols": list(spot_debug.get("final_symbols") or []),
@@ -81,6 +84,9 @@ def get_full_market_universe(
         "combined_universe_size": len(combined_symbols),
         "snapshot_age_ms": float(runtime_metrics.get("snapshot_age_ms") or 0.0),
         "stale_skip_count": int(runtime_metrics.get("stale_skip_count") or 0),
+        "execution_quality_warning_count": int(quality_warning_count),
+        "risk_stale_reject_count": int(stale_reject_count),
+        "risk_spread_reject_count": int(spread_reject_count),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 

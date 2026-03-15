@@ -20,6 +20,10 @@ PYTHONPATH="$ROOT/backend" pytest -q \
   tests/test_discovery_scan.py \
   tests/test_qualification_scan.py \
   tests/test_tiered_scan_pipeline.py \
+  tests/test_risk_engine_exposure_limits.py \
+  tests/test_risk_engine_stale_spread_veto.py \
+  tests/test_risk_engine_daily_loss_cooldown.py \
+  tests/test_kill_switch.py \
   tests/test_bootstrap_admin_first_install.py \
   tests/test_admin_profile_update.py \
   tests/test_admin_password_change.py

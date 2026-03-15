@@ -11,6 +11,7 @@ from services.execution_precheck_service import list_execution_presets, validate
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.portfolio_risk_service import portfolio_risk_check
 from services.position_management_service import sync_position_state
+from services.risk_engine_service import evaluate_risk_decision
 from services.strategy_intelligence_service import (
     evaluate_capital_rebalance,
     evaluate_conflict_warning,
@@ -41,6 +42,19 @@ def _safe_price(symbol: str) -> float:
         return float(parsed.get("last_price") or parsed.get("mid_price") or 100)
     except Exception:
         return 100.0
+
+
+def _safe_spread_bps(symbol: str) -> float:
+    payload = redis_client.get(f"market:spread:{symbol}")
+    if payload and isinstance(payload, bytes):
+        payload = payload.decode("utf-8")
+    try:
+        import json
+
+        parsed = json.loads(payload) if isinstance(payload, str) else {}
+        return float(parsed.get("spread_bps") or 0.0)
+    except Exception:
+        return 0.0
 
 
 def _default_bot(db: Session, user_id: str, market_type: str) -> BotProfile:
@@ -320,6 +334,15 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     }
 
     risk_adjustment_reason = None
+    risk_engine_result = {
+        "risk_decision": "ALLOW",
+        "reason_codes": [],
+        "warnings": [],
+        "size_multiplier": 1.0,
+        "adjusted_notional_usdt": float(adjusted_notional),
+        "adjusted_leverage": int(normalized.get("leverage") or payload.get("leverage") or 1),
+        "metrics": {},
+    }
     if validation.get("validation_status") == "valid" and adjusted_notional >= 0:
         risk_impact = portfolio_risk_check(
             db,
@@ -356,6 +379,45 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
             risk_adjustment_reason = "position_size_adjusted_by_portfolio_risk"
         elif risk_decision == "REQUIRE_APPROVAL":
             precheck_flags.append("portfolio_risk_manual_approval_required")
+
+        direction = _side_to_direction(normalized.get("side") or payload.get("side") or "buy")
+        strategy_decision = "SHORT" if direction == "sell" else "LONG"
+        risk_engine_result = evaluate_risk_decision(
+            db,
+            redis_client,
+            user_id=user_id,
+            symbol=symbol,
+            strategy_decision=strategy_decision,
+            market_type=str(normalized.get("market_type") or payload.get("market_type") or "spot"),
+            proposed_notional_usdt=float(adjusted_notional or 0),
+            strategy_code=strategy_binding,
+            requested_leverage=int(normalized.get("leverage") or payload.get("leverage") or 1),
+            snapshot_age_ms=float((payload.get("signal_bridge_context") or {}).get("snapshot_age_ms") or 0),
+            spread_bps=_safe_spread_bps(symbol),
+            execution_latency_ms=float((payload.get("signal_bridge_context") or {}).get("execution_latency_ms") or 0),
+            slippage_pct=float((payload.get("signal_bridge_context") or {}).get("slippage_pct") or 0),
+            orderbook_depth_score=float((payload.get("signal_bridge_context") or {}).get("orderbook_depth_score") or 1.0),
+            liquidation_distance_pct=float(payload.get("liquidation_distance_pct") or 999.0),
+        )
+        risk_engine_decision = str(risk_engine_result.get("risk_decision") or "ALLOW")
+
+        if risk_engine_decision in {"PASS", "BLOCK"}:
+            if intent_type in RISK_REDUCTION_ACTIONS:
+                precheck_flags.append("risk_engine_override_for_risk_reduction")
+                risk_engine_result["risk_decision"] = "ALLOW"
+            else:
+                validation["validation_status"] = "rejected"
+                precheck_reasons.extend(risk_engine_result.get("reason_codes") or ["risk_engine_veto"])
+        elif risk_engine_decision == "REDUCE_SIZE":
+            adjusted_notional = float(risk_engine_result.get("adjusted_notional_usdt") or adjusted_notional)
+            if normalized.get("position_size_mode") == "fixed_notional":
+                normalized["position_size_value"] = round(adjusted_notional, 4)
+            if normalized.get("size") is not None and notional > 0:
+                ratio = max(min(adjusted_notional / max(notional, 1e-6), 1.0), 0.0)
+                normalized["size"] = round(float(normalized.get("size") or 0) * ratio, 6)
+            precheck_flags.append("risk_engine_reduce_size")
+
+        precheck_flags.extend(risk_engine_result.get("warnings") or [])
 
     if intent_type == "OPEN_POSITION" and requested_environment == "live" and not venue_allowed:
         validation["validation_status"] = "rejected"
@@ -409,8 +471,16 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         precheck_flags.append("hedge_suggestion_generated")
 
     final_reject_codes = sorted(set(precheck_reasons))
-    final_risk_flags = sorted(set(precheck_flags + (risk_impact.get("risk_flags") or [])))
-    gate_decision = str(risk_impact.get("decision") or "ALLOW")
+    final_risk_flags = sorted(
+        set(
+            [
+                *precheck_flags,
+                *(risk_impact.get("risk_flags") or []),
+                *(risk_engine_result.get("reason_codes") or []),
+            ]
+        )
+    )
+    gate_decision = str(risk_engine_result.get("risk_decision") or risk_impact.get("decision") or "ALLOW")
 
     if bool(payload.get("signal_bridge_context")) and requested_environment == "testnet":
         soft_override_codes = {"strategy_conflict_loser", "symbol_not_allowed", "assignment_required", "venue_access_blocked"}
@@ -436,6 +506,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     normalized["strategy_conflict"] = conflict_result
     normalized["capital_rebalance"] = rebalance_result
     normalized["hedge_suggestion"] = hedge_suggestion
+    normalized["risk_engine"] = risk_engine_result
 
     if normalized.get("size") is not None:
         action_size = _to_float(normalized.get("size"), action_size)
@@ -532,6 +603,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     validation["normalized_order_payload"] = normalized
     validation["meta_strategy_summary"] = meta_summary
     validation["portfolio_risk_impact"] = risk_impact
+    validation["risk_engine"] = risk_engine_result
     validation["gate_decision"] = gate_decision
     validation["meta_engine_decision"] = meta_decision
     validation["intent_type"] = intent_type

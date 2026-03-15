@@ -10,6 +10,7 @@ from services.event_priority_service import build_event_priority_distribution
 from services.freshness_policy import evaluate_freshness, resolve_sla_bucket
 from services.pipeline.cache_store import get_json, set_json
 from services.qualification_scan_service import run_qualification_scan
+from services.risk_engine_service import build_admin_risk_status, evaluate_risk_decision
 from services.top_volume_fallback import evaluate_top_volume_fallback
 from services.universe_service import get_full_market_universe
 
@@ -141,7 +142,14 @@ def run_scanner_runtime(
     pass_reason_counter: dict[str, int] = {}
     risk_filtered_count = 0
     fallback_decision_count = 0
+    risk_action_distribution: dict[str, int] = {"ALLOW": 0, "REDUCE_SIZE": 0, "PASS": 0, "BLOCK": 0}
+    risk_veto_count = 0
+    risk_reduce_count = 0
+    risk_reasons_counter: dict[str, int] = {}
+    total_notional_before_risk = 0.0
+    total_notional_after_risk = 0.0
     scanner_perf = scan_payload.get("scanner_perf") or {}
+    scanner_cycle_latency_ms = float(scanner_perf.get("cycle_duration_ms") or 0.0)
     runtime_snapshot_age_ms = float(scanner_perf.get("snapshot_age_avg_sec") or 0.0) * 1000.0
     queue_depth = int(scanner_perf.get("queue_depth") or 0)
 
@@ -155,6 +163,55 @@ def run_scanner_runtime(
         confidence = float(item.get("confidence") or 0)
         reason_codes = item.get("reason_codes") or []
         reason = str(reason_codes[0] if reason_codes else "no_reason")
+        market_type = _market_type_for_symbol(symbol, spot_symbols=spot_set, futures_symbols=futures_set)
+        strategy_name = str(item.get("strategy_name") or item.get("strategy_code") or "unknown")
+        proposed_notional = float(item.get("notional") or item.get("proposed_notional") or max(confidence, 0.2) * 100.0)
+        requested_leverage = int(
+            (item.get("leverage_decision") or {}).get("final_leverage")
+            or item.get("leverage")
+            or (3 if market_type == "futures" else 1)
+        )
+        spread_payload = get_json(cache, f"market:spread:{symbol}") or {}
+        spread_bps = float(spread_payload.get("spread_bps") or 0.0)
+        slippage_pct = float(item.get("slippage_pct") or 0.0)
+        liquidity_distance = float(item.get("liquidation_distance_pct") or 100.0)
+
+        try:
+            risk_result = evaluate_risk_decision(
+                db,
+                cache,
+                user_id=user_id,
+                symbol=symbol,
+                strategy_decision=base_decision,
+                market_type=market_type,
+                proposed_notional_usdt=proposed_notional,
+                strategy_code=strategy_name,
+                requested_leverage=requested_leverage,
+                snapshot_age_ms=runtime_snapshot_age_ms,
+                spread_bps=spread_bps,
+                execution_latency_ms=float(scanner_cycle_latency_ms),
+                slippage_pct=slippage_pct,
+                orderbook_depth_score=float(item.get("orderbook_depth_score") or 1.0),
+                liquidation_distance_pct=liquidity_distance,
+            )
+        except Exception:
+            risk_result = {
+                "risk_decision": "ALLOW",
+                "reason_codes": [],
+                "warnings": [],
+                "adjusted_notional_usdt": proposed_notional,
+                "metrics": {},
+            }
+        risk_decision = str(risk_result.get("risk_decision") or "ALLOW")
+        risk_action_distribution[risk_decision] = int(risk_action_distribution.get(risk_decision, 0)) + 1
+        if risk_decision in {"PASS", "BLOCK"}:
+            risk_veto_count += 1
+        if risk_decision == "REDUCE_SIZE":
+            risk_reduce_count += 1
+        for code in risk_result.get("reason_codes") or []:
+            risk_reasons_counter[code] = int(risk_reasons_counter.get(code, 0)) + 1
+        total_notional_before_risk += proposed_notional
+        total_notional_after_risk += float(risk_result.get("adjusted_notional_usdt") or 0.0)
         if freshness_check.is_stale:
             stale_skip_count += 1
             stale_skip_symbols.append(symbol)
@@ -165,10 +222,17 @@ def run_scanner_runtime(
             decision = base_decision
             risk_filter_reason = "risk_filter" if "risk" in reason else None
 
+        if risk_decision in {"PASS", "BLOCK"}:
+            decision = "PASS"
+            reason = "+".join((risk_result.get("reason_codes") or ["risk_engine_veto"])[:3])
+            risk_filter_reason = "risk_engine_veto"
+        elif risk_decision == "REDUCE_SIZE":
+            reason = reason if reason != "no_reason" else "risk_engine_reduce_size"
+            risk_filter_reason = "risk_engine_reduce_size"
+
         strategy_signal = str(item.get("signal") or item.get("strategy_signal") or decision).upper()
         risk_score = float(item.get("risk_score") or item.get("portfolio_risk_score") or 0)
-        market_type = _market_type_for_symbol(symbol, spot_symbols=spot_set, futures_symbols=futures_set)
-        strategy_name = str(item.get("strategy_name") or item.get("strategy_code") or "unknown")
+        risk_score = max(risk_score, float(risk_result.get("metrics", {}).get("trade_risk_pct") or 0.0))
         signal_strength = float(item.get("signal_strength") or confidence)
         decision_reason = str(item.get("decision_reason") or reason)
 
@@ -290,6 +354,15 @@ def run_scanner_runtime(
             "adjusted_max_results": adjusted_max_results,
         },
         "event_priority": event_priority,
+        "risk_engine": {
+            "decision_distribution": risk_action_distribution,
+            "veto_count": risk_veto_count,
+            "reduce_size_count": risk_reduce_count,
+            "reason_distribution": risk_reasons_counter,
+            "notional_before_risk": round(total_notional_before_risk, 6),
+            "notional_after_risk": round(total_notional_after_risk, 6),
+            "latest_status": build_admin_risk_status(db, cache) if hasattr(db, "query") else {},
+        },
         "explainability_summary": {
             "strategy_decision_distribution": strategy_distribution,
             "pass_reasons": pass_reason_counter,
@@ -297,6 +370,8 @@ def run_scanner_runtime(
             "stale_filtered_count": stale_skip_count,
             "fallback_decision_count": fallback_decision_count,
             "fallback_reason_code": fallback_reason_code,
+            "risk_veto_count": risk_veto_count,
+            "risk_reduce_count": risk_reduce_count,
         },
         "runtime_metrics": {
             "scan_latency_ms": round(float(scanner_perf.get("cycle_duration_ms") or runtime_latency_ms), 4),

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from services.pipeline.cache_store import get_json, set_json
+from services.pipeline.cache_store import get_counter, get_json, set_json
 
 
 FALLBACK_STATE_KEY = "scanner:runtime:fallback_state"
@@ -41,6 +41,9 @@ def evaluate_top_volume_fallback(cache) -> dict:
     queue_depth = _to_int(runtime_metrics.get("queue_depth"), _to_int(queue_state.get("depth"), 0))
     candidate_count = _to_int(runtime_metrics.get("candidate_count"), 0)
     backpressure = _to_float(queue_state.get("worker_utilization"), 0.0)
+    stale_reject_count = get_counter(cache, "risk:metrics:stale_reject_count")
+    spread_reject_count = get_counter(cache, "risk:metrics:spread_reject_count")
+    quality_warning_count = get_counter(cache, "risk:metrics:execution_quality_warning_count")
 
     enter_reasons = []
     if scan_latency_ms > 4000:
@@ -53,6 +56,12 @@ def evaluate_top_volume_fallback(cache) -> dict:
         enter_reasons.append("queue_depth")
     if backpressure > 0.9:
         enter_reasons.append("pipeline_backpressure")
+    if stale_reject_count >= 10:
+        enter_reasons.append("stale_reject_spike")
+    if spread_reject_count >= 10:
+        enter_reasons.append("spread_reject_spike")
+    if quality_warning_count >= 20:
+        enter_reasons.append("execution_quality_warning_spike")
 
     active = bool(current_state.get("active", False))
     healthy_streak = int(current_state.get("healthy_streak", 0))
@@ -89,6 +98,9 @@ def evaluate_top_volume_fallback(cache) -> dict:
             "queue_depth": queue_depth,
             "candidate_count": candidate_count,
             "pipeline_backpressure": round(backpressure, 6),
+            "stale_reject_count": int(stale_reject_count),
+            "spread_reject_count": int(spread_reject_count),
+            "execution_quality_warning_count": int(quality_warning_count),
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

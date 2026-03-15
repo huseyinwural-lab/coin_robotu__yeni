@@ -34,6 +34,7 @@ from services.futures_microstructure_service import build_microstructure_status
 from services.futures_risk_monitor_service import build_futures_risk_status
 from services.pipeline.cache_store import read_candles
 from services.pipeline.universe_engine import build_effective_universe
+from services.risk_engine_service import load_risk_config
 
 
 def _safe_json(raw, default):
@@ -599,6 +600,29 @@ def run_futures_strategy_paper_cycle(db: Session, cache, user_id: str, symbols: 
             row["strategy"] = strategy_id
             row["strategy_type"] = row.get("strategy_type") or strategy_id
         decisions.extend(cycle_rows)
+
+    risk_config = load_risk_config(cache)
+    leverage_cap = float(risk_config.get("max_leverage") or 5)
+    min_liq_distance = float(risk_config.get("min_liquidation_distance_pct") or 6.0)
+    for row in decisions:
+        leverage_decision = dict(row.get("leverage_decision") or {})
+        final_leverage = float(leverage_decision.get("final_leverage") or 1.0)
+        size_ratio = float(leverage_decision.get("position_size_ratio") or 1.0)
+        if final_leverage > leverage_cap:
+            clamp_ratio = max(min(leverage_cap / max(final_leverage, 1.0), 1.0), 0.1)
+            leverage_decision["final_leverage"] = round(leverage_cap, 4)
+            leverage_decision["position_size_ratio"] = round(min(size_ratio, clamp_ratio), 4)
+            row.setdefault("reason_codes", []).append("risk_engine_max_leverage_cap")
+        liquidation_distance = float(
+            leverage_decision.get("liquidation_distance_pct")
+            or row.get("liquidation_distance")
+            or row.get("liquidation_distance_pct")
+            or 999.0
+        )
+        if liquidation_distance < min_liq_distance:
+            row["decision"] = "REJECT"
+            row.setdefault("reason_codes", []).append("risk_engine_liquidation_distance_veto")
+        row["leverage_decision"] = leverage_decision
 
     lifecycle_registry = _safe_json(cache.get(f"futures:strategy:lifecycle:{user_id}"), {}) if cache else {}
     lifecycle_registry = _seed_legacy_disabled_lifecycle(lifecycle_registry, legacy_shadow_strategy_ids)

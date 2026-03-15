@@ -1,0 +1,34 @@
+{
+  "report_id": "ffa5a095a9d7728f",
+  "user_id": "6cb9eebf-feab-4b59-89ce-53d55c3eba73",
+  "week_start": "2026-03-09T00:00:00+00:00",
+  "week_end": "2026-03-16T00:00:00+00:00",
+  "created_at": "2026-03-15T15:18:29.438052+00:00",
+  "artifact_files": {
+    "weekly_performance_report.pdf": "/app/artifacts/reports/6cb9eebf-feab-4b59-89ce-53d55c3eba73/ffa5a095a9d7728f/weekly_performance_report.pdf",
+    "weekly_trades.csv": "/app/artifacts/reports/6cb9eebf-feab-4b59-89ce-53d55c3eba73/ffa5a095a9d7728f/weekly_trades.csv",
+    "weekly_strategy_stats.json": "/app/artifacts/reports/6cb9eebf-feab-4b59-89ce-53d55c3eba73/ffa5a095a9d7728f/weekly_strategy_stats.json"
+  },
+  "sha256": {
+    "weekly_performance_report.pdf": "3aa93209d1469a42853572b3c0c7c11b911baa8b2d6bf8434adc0821f0f490ba",
+    "weekly_trades.csv": "fbf6c7ede51d69297776f709a1608de739d412fb022a4c84cb9d89aae2e46334",
+    "weekly_strategy_stats.json": "718673fac7ad007ddf52425212f7875d3bdca3d4f493b4681b6b73b0af3ca6eb"
+  },
+  "generator_version": "pg01_v1",
+  "summary": {
+    "weekly_pnl": 0,
+    "gross_pnl": 0,
+    "gross_loss": 0,
+    "net_pnl": 0,
+    "win_rate": 0.0,
+    "loss_rate": 0.0,
+    "max_drawdown": 0.0,
+    "average_holding_time": 0.0,
+    "best_trade": 0.0,
+    "worst_trade": 0.0,
+    "strategy_contribution": {},
+    "symbol_contribution": {},
+    "unrealized_snapshot": 0,
+    "status": "empty_week"
+  }
+}

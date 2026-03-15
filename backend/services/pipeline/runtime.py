@@ -28,6 +28,7 @@ from services.pipeline.kill_switch_service import (
     kill_switch_state,
     pause_all_bots_for_kill_switch,
 )
+from services.risk_engine_service import is_risk_kill_switch_active
 from services.pipeline.market_data_engine import MarketDataEngine
 from services.pipeline.risk_engine import evaluate_risk
 from services.pipeline.spot_dynamic_score_engine import run_dynamic_selection_cycle
@@ -909,7 +910,7 @@ class PipelineRuntime:
                 pass
             db = SessionLocal()
             try:
-                if kill_switch_state(self.cache).get("active", False):
+                if kill_switch_state(self.cache).get("active", False) or is_risk_kill_switch_active(self.cache):
                     continue
                 universe = build_effective_universe(db, self.cache)
                 try:
@@ -1368,6 +1369,10 @@ class PipelineRuntime:
         release_gate_status = self.cache.get("phase4:release_gate:status") or "UNKNOWN"
         release_gate_last_checked = self.cache.get("phase4:release_gate:last_checked") or "-"
         kill_state = kill_switch_state(self.cache)
+        risk_kill_switch_active = is_risk_kill_switch_active(self.cache)
+        kill_reasons = list(kill_state.get("reasons", []))
+        if risk_kill_switch_active and "risk_kill_switch_enabled" not in kill_reasons:
+            kill_reasons.append("risk_kill_switch_enabled")
         return {
             "websocket_status": ws.get("status", self.market_data_engine.websocket_status),
             "heartbeat": ws.get("heartbeat", self.market_data_engine.last_heartbeat),
@@ -1388,8 +1393,8 @@ class PipelineRuntime:
             "release_gate_last_checked": release_gate_last_checked,
             "execution_errors_5m": get_counter(self.cache, "metrics:execution_errors:5m"),
             "risk_anomalies_5m": get_counter(self.cache, "metrics:risk_anomalies:5m"),
-            "global_trading_pause": bool(kill_state.get("active", False)),
-            "kill_switch_reasons": kill_state.get("reasons", []),
+            "global_trading_pause": bool(kill_state.get("active", False) or risk_kill_switch_active),
+            "kill_switch_reasons": kill_reasons,
         }
 
     def hardening_summary(self, db):

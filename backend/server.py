@@ -66,6 +66,7 @@ from routers import (
     debug_effective_universe,
     user_scanner_router,
     admin_universe_router,
+    admin_risk_router,
     user_indicator_screener,
     user_risk,
     strategy_templates,
@@ -130,6 +131,7 @@ api_router.include_router(user_approvals.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(admin_universe_monitor.router)
 api_router.include_router(admin_universe_router.router)
+api_router.include_router(admin_risk_router.router)
 api_router.include_router(exchange.router)
 api_router.include_router(venues.router)
 api_router.include_router(audit.router)

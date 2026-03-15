@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from db import get_db, redis_client
 from deps import require_admin
 from models import User
+from services.risk_engine_service import build_admin_risk_status
 from services.scanner_runtime import get_latest_global_runtime_snapshot
 from services.top_volume_fallback import evaluate_top_volume_fallback
 from services.universe_service import get_exchange_universe_snapshot, get_full_market_universe
@@ -30,6 +31,7 @@ def admin_runtime_universe_summary(
     event_priority = (latest_runtime.get("event_priority") or {}).get("distribution") or {"high": 0, "medium": 0, "low": 0}
     explainability = latest_runtime.get("explainability_summary") or {}
     tiered_scan = latest_runtime.get("tiered_scan") or {}
+    risk_overview = build_admin_risk_status(db, redis_client)
     return {
         "scanner_mode_requested": scanner_mode,
         "scanner_mode_effective": effective_mode,
@@ -43,6 +45,7 @@ def admin_runtime_universe_summary(
         "event_priority_distribution": event_priority,
         "fallback_reason_code": str(fallback_state.get("reason_code") or "none"),
         "tiered_scan": tiered_scan,
+        "risk_overview": risk_overview,
         "explainability": explainability,
     }
 
