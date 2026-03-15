@@ -47,6 +47,14 @@ const assignmentSeedForm = {
   live_allowed: false,
 };
 
+const executionCredentialSeedForm = {
+  bybit_api_key: "",
+  bybit_secret: "",
+  okx_api_key: "",
+  okx_secret: "",
+  okx_passphrase: "",
+};
+
 const boolLabel = (value) => (value ? "true" : "false");
 
 export const AdminExchangesPage = () => {
@@ -57,6 +65,8 @@ export const AdminExchangesPage = () => {
   const [assignments, setAssignments] = useState([]);
   const [approvedUsers, setApprovedUsers] = useState([]);
   const [healthSummary, setHealthSummary] = useState(null);
+  const [executionCredentials, setExecutionCredentials] = useState(null);
+  const [executionValidation, setExecutionValidation] = useState(null);
 
   const [exchangeDrafts, setExchangeDrafts] = useState({});
   const [capabilityDrafts, setCapabilityDrafts] = useState({});
@@ -65,6 +75,7 @@ export const AdminExchangesPage = () => {
   const [capabilityForm, setCapabilityForm] = useState(capabilitySeedForm);
   const [allowedMarketForm, setAllowedMarketForm] = useState(allowedMarketSeedForm);
   const [assignmentForm, setAssignmentForm] = useState(assignmentSeedForm);
+  const [executionCredentialForm, setExecutionCredentialForm] = useState(executionCredentialSeedForm);
 
   const exchangeCodes = useMemo(() => exchanges.map((item) => item.exchange_code), [exchanges]);
 
@@ -78,6 +89,7 @@ export const AdminExchangesPage = () => {
         assignmentsRes,
         usersRes,
         healthRes,
+        credentialsRes,
       ] = await Promise.all([
         apiClient.get("/venues/admin/exchanges"),
         apiClient.get("/venues/admin/capabilities"),
@@ -85,6 +97,7 @@ export const AdminExchangesPage = () => {
         apiClient.get("/venues/admin/user-assignments"),
         apiClient.get("/auth/admin/user-approval-requests?status=approved"),
         apiClient.get("/venues/admin/health-summary"),
+        apiClient.get("/venues/admin/execution-credentials"),
       ]);
 
       const nextExchanges = exchangesRes.data || [];
@@ -96,6 +109,7 @@ export const AdminExchangesPage = () => {
       setAssignments(assignmentsRes.data || []);
       setApprovedUsers(usersRes.data || []);
       setHealthSummary(healthRes.data || null);
+      setExecutionCredentials(credentialsRes.data || null);
 
       setExchangeDrafts(
         Object.fromEntries(
@@ -285,6 +299,35 @@ export const AdminExchangesPage = () => {
     }
   };
 
+  const saveExecutionCredentials = async (event) => {
+    event.preventDefault();
+    const payload = Object.fromEntries(
+      Object.entries(executionCredentialForm).filter(([, value]) => String(value || "").trim().length > 0),
+    );
+    if (Object.keys(payload).length === 0) {
+      toast.warning("Kaydetmek için en az bir credential alanı girin");
+      return;
+    }
+    try {
+      const response = await apiClient.patch("/venues/admin/execution-credentials", payload);
+      setExecutionCredentials(response.data || null);
+      setExecutionCredentialForm(executionCredentialSeedForm);
+      toast.success("Exchange execution credential ayarları kaydedildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Credential ayarları kaydedilemedi");
+    }
+  };
+
+  const runExecutionValidation = async () => {
+    try {
+      const response = await apiClient.post("/venues/admin/execution-validation");
+      setExecutionValidation(response.data || null);
+      toast.success("Execution activation doğrulaması tamamlandı");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Execution validation çalıştırılamadı");
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="admin-exchanges-page">
       <header className="border border-orange-700 bg-slate-900 p-4" data-testid="admin-exchanges-header">
@@ -315,6 +358,81 @@ export const AdminExchangesPage = () => {
           {(healthSummary?.capability_mismatch || []).map((item) => (
             <p key={item} className="mt-1 text-sm text-yellow-300" data-testid={`admin-exchange-capability-mismatch-item-${item.replace(":", "-")}`}>{item}</p>
           ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-execution-settings-grid">
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-execution-credential-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-execution-credential-title">Admin → Exchange Settings (Execution Activation)</p>
+          <form className="grid gap-2 md:grid-cols-2" onSubmit={saveExecutionCredentials} data-testid="admin-execution-credential-form">
+            <Input
+              value={executionCredentialForm.bybit_api_key}
+              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_api_key: event.target.value }))}
+              placeholder="bybit_api_key"
+              data-testid="admin-execution-bybit-api-key-input"
+            />
+            <Input
+              value={executionCredentialForm.bybit_secret}
+              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_secret: event.target.value }))}
+              placeholder="bybit_secret"
+              data-testid="admin-execution-bybit-secret-input"
+            />
+            <Input
+              value={executionCredentialForm.okx_api_key}
+              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, okx_api_key: event.target.value }))}
+              placeholder="okx_api_key"
+              data-testid="admin-execution-okx-api-key-input"
+            />
+            <Input
+              value={executionCredentialForm.okx_secret}
+              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, okx_secret: event.target.value }))}
+              placeholder="okx_secret"
+              data-testid="admin-execution-okx-secret-input"
+            />
+            <Input
+              value={executionCredentialForm.okx_passphrase}
+              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, okx_passphrase: event.target.value }))}
+              placeholder="okx_passphrase"
+              data-testid="admin-execution-okx-passphrase-input"
+            />
+            <div className="flex items-center gap-2 md:col-span-2" data-testid="admin-execution-credential-actions-row">
+              <Button data-testid="admin-execution-credential-config-update-button">Credential Kaydet</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setExecutionCredentialForm(executionCredentialSeedForm)}
+                data-testid="admin-execution-credential-reset-button"
+              >
+                Formu Temizle
+              </Button>
+            </div>
+          </form>
+
+          <div className="rounded border border-slate-700 p-3 text-sm" data-testid="admin-execution-credential-summary">
+            <p data-testid="admin-execution-has-bybit-credentials">has_bybit_credentials: {boolLabel(Boolean(executionCredentials?.has_bybit_credentials))}</p>
+            <p data-testid="admin-execution-has-okx-credentials">has_okx_credentials: {boolLabel(Boolean(executionCredentials?.has_okx_credentials))}</p>
+            <p data-testid="admin-execution-masked-bybit-key">bybit_api_key: {executionCredentials?.masked?.bybit_api_key || "missing"}</p>
+            <p data-testid="admin-execution-masked-bybit-secret">bybit_secret: {executionCredentials?.masked?.bybit_secret || "missing"}</p>
+            <p data-testid="admin-execution-masked-okx-key">okx_api_key: {executionCredentials?.masked?.okx_api_key || "missing"}</p>
+            <p data-testid="admin-execution-masked-okx-secret">okx_secret: {executionCredentials?.masked?.okx_secret || "missing"}</p>
+            <p data-testid="admin-execution-masked-okx-passphrase">okx_passphrase: {executionCredentials?.masked?.okx_passphrase || "missing"}</p>
+          </div>
+        </div>
+
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-execution-validation-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-execution-validation-title">Execution Activation Validation</p>
+          <Button type="button" onClick={runExecutionValidation} data-testid="admin-execution-validation-apply-button">Validation Çalıştır</Button>
+          <div className="space-y-2 rounded border border-slate-700 p-3 text-sm" data-testid="admin-execution-validation-results">
+            <p data-testid="admin-execution-validation-adapter-smoke">adapter_smoke_test: {executionValidation?.validation?.adapter_smoke_test || "n/a"}</p>
+            <p data-testid="admin-execution-validation-precision">precision_validation: {executionValidation?.validation?.precision_validation || "n/a"}</p>
+            <p data-testid="admin-execution-validation-lot-size">lot_size_validation: {executionValidation?.validation?.lot_size_validation || "n/a"}</p>
+            <p data-testid="admin-execution-validation-submit">order_submit_test: {executionValidation?.validation?.order_submit_test || "n/a"}</p>
+            <p data-testid="admin-execution-validation-cancel">cancel_test: {executionValidation?.validation?.cancel_test || "n/a"}</p>
+            <p data-testid="admin-execution-validation-retry">retry_behavior: {executionValidation?.validation?.retry_behavior || "n/a"}</p>
+          </div>
+          <p className="text-xs text-slate-400" data-testid="admin-execution-validation-note">
+            Not: Credential yoksa execution testleri fail-safe olarak MOCKED döner.
+          </p>
         </div>
       </div>
 

@@ -16,18 +16,20 @@ export const AdminUniverseMonitorPage = () => {
   const [heatmap, setHeatmap] = useState({ items: [] });
   const [rollout, setRollout] = useState(null);
   const [fallbackEvents, setFallbackEvents] = useState([]);
+  const [runtimeSummary, setRuntimeSummary] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [summaryRes, debugRes, trendRes, breakdownRes, heatmapRes, rolloutRes, fallbackEventsRes] = await Promise.all([
-        apiClient.get("/admin/universe-monitor", { params: { market_type: "spot", scanner_mode: mode, top_n: 300 } }),
-        apiClient.get("/debug/effective-universe", { params: { market_type: "spot", scanner_mode: mode, top_n: 300 } }),
+      const [summaryRes, debugRes, trendRes, breakdownRes, heatmapRes, rolloutRes, fallbackEventsRes, runtimeSummaryRes] = await Promise.all([
+        apiClient.get("/admin/universe-monitor", { params: { market_type: "spot", scanner_mode: mode, top_n: 200 } }),
+        apiClient.get("/debug/effective-universe", { params: { market_type: "spot", scanner_mode: mode, top_n: 200 } }),
         apiClient.get("/admin/universe-monitor/trends", { params: { window: windowSize } }),
         apiClient.get("/admin/universe-monitor/breakdown", { params: { window: windowSize } }),
         apiClient.get("/admin/universe-monitor/freshness-heatmap", { params: { window: windowSize } }),
         apiClient.get("/admin/universe-monitor/rollout/status"),
         apiClient.get("/admin/universe-monitor/fallback-events", { params: { limit: 80 } }),
+        apiClient.get("/admin/universe/runtime-summary", { params: { scanner_mode: mode, top_n: 200 } }),
       ]);
       setSummary(summaryRes.data || null);
       setDebugPayload(debugRes.data || null);
@@ -36,8 +38,11 @@ export const AdminUniverseMonitorPage = () => {
       setHeatmap(heatmapRes.data || { items: [] });
       setRollout(rolloutRes.data || null);
       setFallbackEvents(fallbackEventsRes?.data?.items || []);
+      setRuntimeSummary(runtimeSummaryRes?.data || null);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Universe monitor verisi alınamadı");
+      const detail = error?.response?.data?.detail;
+      const errorMessage = typeof detail === "string" ? detail : (Array.isArray(detail) ? detail.map(d => d?.msg || JSON.stringify(d)).join(", ") : "Universe monitor verisi alınamadı");
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -164,6 +169,72 @@ export const AdminUniverseMonitorPage = () => {
             <p className="text-xl font-bold" data-testid={`${key}-value`}>{value ?? "-"}</p>
           </article>
         ))}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="admin-runtime-risk-overview-grid">
+        {[
+          ["portfolio_exposure", runtimeSummary?.risk_overview?.portfolio_exposure, "admin-runtime-risk-portfolio-exposure"],
+          ["symbol_exposure_count", (runtimeSummary?.risk_overview?.symbol_exposure || []).length, "admin-runtime-risk-symbol-exposure-count"],
+          ["cluster_exposure_count", (runtimeSummary?.risk_overview?.cluster_exposure || []).length, "admin-runtime-risk-cluster-exposure-count"],
+          ["daily_loss_pct", runtimeSummary?.risk_overview?.daily_loss?.daily_loss_pct, "admin-runtime-risk-daily-loss-pct"],
+          ["execution_quality_score", runtimeSummary?.risk_overview?.execution_quality_score, "admin-runtime-risk-execution-quality-score"],
+          ["fallback_state", String(runtimeSummary?.risk_overview?.fallback_state?.active ?? false), "admin-runtime-risk-fallback-state"],
+          ["queue_depth", runtimeSummary?.risk_overview?.queue_depth, "admin-runtime-risk-queue-depth"],
+          ["stale_reject_count", runtimeSummary?.risk_overview?.stale_reject_count, "admin-runtime-risk-stale-reject-count"],
+          ["spread_reject_count", runtimeSummary?.risk_overview?.spread_reject_count, "admin-runtime-risk-spread-reject-count"],
+          ["cooldown_state", Object.keys(runtimeSummary?.risk_overview?.cooldown_state || {}).length, "admin-runtime-risk-cooldown-state"],
+          ["kill_switch_state", String(runtimeSummary?.risk_overview?.kill_switch_state?.pipeline_kill_switch_active ?? false), "admin-runtime-risk-kill-switch-state"],
+        ].map(([label, value, key]) => (
+          <article key={key} className="rounded border border-emerald-800/40 bg-emerald-950/20 p-3" data-testid={`${key}-card`}>
+            <p className="text-xs uppercase tracking-widest text-emerald-200">{label}</p>
+            <p className="mt-1 text-lg font-semibold" data-testid={`${key}-value`}>{value ?? "-"}</p>
+          </article>
+        ))}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2" data-testid="admin-runtime-observability-trend-grid">
+        <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-runtime-observability-latency-trend-card">
+          <p className="text-xs uppercase tracking-widest text-slate-300">execution latency trend</p>
+          <div className="mt-2 space-y-1 text-xs" data-testid="admin-runtime-observability-latency-trend-list">
+            {(runtimeSummary?.observability_trends?.execution_latency_trend || []).slice(-8).map((item, idx) => (
+              <p key={`latency-${idx}`} data-testid={`admin-runtime-observability-latency-trend-item-${idx}`}>{item.ts} · {item.value}</p>
+            ))}
+          </div>
+        </article>
+        <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-runtime-observability-veto-trend-card">
+          <p className="text-xs uppercase tracking-widest text-slate-300">risk veto rate trend</p>
+          <div className="mt-2 space-y-1 text-xs" data-testid="admin-runtime-observability-veto-trend-list">
+            {(runtimeSummary?.observability_trends?.risk_veto_rate_trend || []).slice(-8).map((item, idx) => (
+              <p key={`veto-${idx}`} data-testid={`admin-runtime-observability-veto-trend-item-${idx}`}>{item.ts} · {item.value}</p>
+            ))}
+          </div>
+        </article>
+        <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-runtime-observability-scanner-latency-trend-card">
+          <p className="text-xs uppercase tracking-widest text-slate-300">scanner cycle latency trend</p>
+          <div className="mt-2 space-y-1 text-xs" data-testid="admin-runtime-observability-scanner-latency-trend-list">
+            {(runtimeSummary?.observability_trends?.scanner_cycle_latency_trend || []).slice(-8).map((item, idx) => (
+              <p key={`scanner-latency-${idx}`} data-testid={`admin-runtime-observability-scanner-latency-trend-item-${idx}`}>{item.ts} · {item.value}</p>
+            ))}
+          </div>
+        </article>
+        <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-runtime-observability-fallback-trend-card">
+          <p className="text-xs uppercase tracking-widest text-slate-300">fallback activation trend</p>
+          <div className="mt-2 space-y-1 text-xs" data-testid="admin-runtime-observability-fallback-trend-list">
+            {(runtimeSummary?.observability_trends?.fallback_activation_rate_trend || []).slice(-8).map((item, idx) => (
+              <p key={`fallback-${idx}`} data-testid={`admin-runtime-observability-fallback-trend-item-${idx}`}>{item.ts} · {item.value}</p>
+            ))}
+          </div>
+        </article>
+        <article className="rounded border border-slate-700 bg-slate-900 p-3 md:col-span-2" data-testid="admin-runtime-observability-pnl-trend-card">
+          <p className="text-xs uppercase tracking-widest text-slate-300">PnL trend</p>
+          <div className="mt-2 grid gap-1 text-xs md:grid-cols-2" data-testid="admin-runtime-observability-pnl-trend-list">
+            {(runtimeSummary?.risk_overview?.pnl_trend || []).slice(-12).map((item, idx) => (
+              <p key={`pnl-${idx}`} data-testid={`admin-runtime-observability-pnl-trend-item-${idx}`}>
+                {item.closed_at} · {item.symbol} · pnl={item.realized_pnl}
+              </p>
+            ))}
+          </div>
+        </article>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2" data-testid="admin-universe-monitor-rollout-panels">

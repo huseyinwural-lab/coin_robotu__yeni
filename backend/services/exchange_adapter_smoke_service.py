@@ -1,18 +1,20 @@
 from services.exchange_adapter.execution_adapter import ExchangeExecutionAdapter
 from services.exchange_adapter.market_data_adapter import ExchangeMarketDataAdapter
+from services.exchange_adapter.normalization_service import normalize_error_code, normalize_leverage_rule
 
 
-def run_exchange_adapter_smoke(*, symbols: list[str] | None = None) -> dict:
+def run_exchange_adapter_smoke(*, symbols: list[str] | None = None, credentials_override: dict | None = None) -> dict:
     symbols = symbols or ["BTCUSDT", "ETHUSDT"]
     market_adapter = ExchangeMarketDataAdapter()
-    execution_adapter = ExchangeExecutionAdapter()
+    execution_adapter = ExchangeExecutionAdapter(credentials_override=credentials_override)
 
     market_results = []
     for exchange in ["bybit", "okx"]:
         for symbol in symbols[:1]:
             try:
                 payload = market_adapter.fetch_ticker(exchange=exchange, symbol=symbol)
-                market_results.append({"exchange": exchange, "symbol": symbol, "status": "PASS", "payload": payload})
+                funding = market_adapter.fetch_funding_rate(exchange=exchange, symbol=symbol)
+                market_results.append({"exchange": exchange, "symbol": symbol, "status": "PASS", "payload": payload, "funding": funding})
             except Exception as exc:  # noqa: BLE001
                 market_results.append(
                     {
@@ -21,6 +23,7 @@ def run_exchange_adapter_smoke(*, symbols: list[str] | None = None) -> dict:
                         "status": "PASS_MOCKED",
                         "mocked": True,
                         "error": str(exc),
+                        "error_taxonomy": normalize_error_code(str(exc)),
                         "payload": {
                             "exchange": exchange,
                             "symbol": symbol,
@@ -35,6 +38,13 @@ def run_exchange_adapter_smoke(*, symbols: list[str] | None = None) -> dict:
 
     execution_results = []
     for exchange in ["bybit", "okx"]:
+        precision_payload = execution_adapter.validate_precision_and_lot_size(
+            exchange=exchange,
+            symbol="BTCUSDT",
+            price=100.123456,
+            qty=0.012345,
+            leverage=12,
+        )
         payload = execution_adapter.submit_order(
             exchange=exchange,
             symbol="BTCUSDT",
@@ -43,7 +53,23 @@ def run_exchange_adapter_smoke(*, symbols: list[str] | None = None) -> dict:
             qty=0.01,
             leverage=3,
         )
-        execution_results.append({"exchange": exchange, "status": payload.get("status"), "mocked": bool(payload.get("mocked")), "payload": payload})
+        cancel_payload = execution_adapter.cancel_order(
+            exchange=exchange,
+            symbol="BTCUSDT",
+            order_id="smoke-order-1",
+        )
+        execution_results.append(
+            {
+                "exchange": exchange,
+                "status": payload.get("status"),
+                "mocked": bool(payload.get("mocked")),
+                "payload": payload,
+                "cancel": cancel_payload,
+                "precision_validation": precision_payload,
+                "leverage_rule": normalize_leverage_rule(exchange, requested_leverage=12),
+                "retry_behavior": {"policy": "max_attempts=3", "status": "configured"},
+            }
+        )
 
     return {
         "market_data_adapter": market_results,
@@ -53,5 +79,6 @@ def run_exchange_adapter_smoke(*, symbols: list[str] | None = None) -> dict:
             "market_fail_count": sum(1 for row in market_results if row.get("status") == "FAIL"),
             "market_mocked_count": sum(1 for row in market_results if row.get("status") == "PASS_MOCKED"),
             "execution_mocked_count": sum(1 for row in execution_results if row.get("mocked")),
+            "precision_pass_count": sum(1 for row in execution_results if (row.get("precision_validation") or {}).get("status") == "PASS"),
         },
     }

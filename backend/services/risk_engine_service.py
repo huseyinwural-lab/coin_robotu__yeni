@@ -45,6 +45,39 @@ DEFAULT_RISK_CONFIG = {
     "changed_at": datetime.now(timezone.utc).isoformat(),
 }
 
+RISK_POLICY_PROFILES = {
+    "conservative": {
+        "max_risk_per_trade_pct": 1.0,
+        "max_total_exposure_pct": 35.0,
+        "max_symbol_exposure_pct": 15.0,
+        "max_cluster_exposure_pct": 20.0,
+        "max_leverage": 3,
+        "execution_quality_threshold": 72.0,
+        "spread_threshold_bps": 20.0,
+        "stale_data_threshold_ms": 90_000,
+    },
+    "balanced": {
+        "max_risk_per_trade_pct": 2.0,
+        "max_total_exposure_pct": 50.0,
+        "max_symbol_exposure_pct": 25.0,
+        "max_cluster_exposure_pct": 35.0,
+        "max_leverage": 5,
+        "execution_quality_threshold": 65.0,
+        "spread_threshold_bps": 30.0,
+        "stale_data_threshold_ms": 120_000,
+    },
+    "aggressive": {
+        "max_risk_per_trade_pct": 3.5,
+        "max_total_exposure_pct": 50.0,
+        "max_symbol_exposure_pct": 35.0,
+        "max_cluster_exposure_pct": 45.0,
+        "max_leverage": 8,
+        "execution_quality_threshold": 58.0,
+        "spread_threshold_bps": 40.0,
+        "stale_data_threshold_ms": 150_000,
+    },
+}
+
 
 def _config_path() -> Path:
     return Path(__file__).resolve().parents[1] / "config" / "risk_engine_config.json"
@@ -52,6 +85,10 @@ def _config_path() -> Path:
 
 def _config_backup_path() -> Path:
     return Path(__file__).resolve().parents[1] / "config" / "risk_engine_config_backup.json"
+
+
+def _policy_overrides_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "config" / "risk_policy_overrides.json"
 
 
 def _to_float(value, default: float) -> float:
@@ -179,6 +216,65 @@ def rollback_risk_config(cache, *, changed_by: str = "admin") -> dict:
     set_json(cache, RISK_CONFIG_CACHE_KEY, restored)
     set_json(cache, RISK_CONFIG_RELOAD_KEY, {"reloaded_at": datetime.now(timezone.utc).isoformat(), "rollback": True})
     return restored
+
+
+def get_policy_profiles() -> dict:
+    return {
+        "profiles": RISK_POLICY_PROFILES,
+        "default_profile": "balanced",
+    }
+
+
+def apply_policy_profile(cache, *, profile: str, changed_by: str = "admin") -> dict:
+    profile_key = str(profile or "").lower().strip()
+    if profile_key not in RISK_POLICY_PROFILES:
+        raise ValueError("unknown_policy_profile")
+    patch_payload = {**RISK_POLICY_PROFILES[profile_key], "active_profile": profile_key}
+    return patch_risk_config(cache, patch_payload, changed_by=changed_by)
+
+
+def get_policy_overrides() -> dict:
+    path = _policy_overrides_path()
+    if not path.exists():
+        payload = {"global": {}, "tenants": {}, "users": {}}
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+        return payload
+    try:
+        parsed = json.loads(path.read_text())
+        if isinstance(parsed, dict):
+            return {
+                "global": parsed.get("global") or {},
+                "tenants": parsed.get("tenants") or {},
+                "users": parsed.get("users") or {},
+            }
+    except Exception:
+        pass
+    payload = {"global": {}, "tenants": {}, "users": {}}
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    return payload
+
+
+def upsert_policy_overrides(*, scope: str, key: str, values: dict) -> dict:
+    payload = get_policy_overrides()
+    scope_key = str(scope or "").lower().strip()
+    if scope_key not in {"global", "tenants", "users"}:
+        raise ValueError("invalid_scope")
+    if scope_key == "global":
+        payload["global"] = values or {}
+    else:
+        payload[scope_key][str(key or "default")] = values or {}
+    _policy_overrides_path().write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+    return payload
+
+
+def resolve_effective_config_for_user(cache, *, user_id: str, tenant_id: str | None = None) -> dict:
+    base_config = load_risk_config(cache)
+    overrides = get_policy_overrides()
+    effective = {**base_config, **(overrides.get("global") or {})}
+    if tenant_id:
+        effective.update((overrides.get("tenants") or {}).get(str(tenant_id), {}) or {})
+    effective.update((overrides.get("users") or {}).get(str(user_id), {}) or {})
+    return _normalized_config(effective)
 
 
 def _position_notional(row: PaperPosition) -> float:
@@ -343,7 +439,7 @@ def evaluate_risk_decision(
     orderbook_depth_score: float = 1.0,
     liquidation_distance_pct: float | None = None,
 ) -> dict:
-    config = load_risk_config(cache)
+    config = resolve_effective_config_for_user(cache, user_id=user_id)
     symbol_upper = str(symbol or "").upper().strip()
     strategy_decision_upper = str(strategy_decision or "PASS").upper().strip()
     action = "ALLOW"
@@ -564,6 +660,13 @@ def evaluate_risk_decision(
 def build_admin_risk_status(db, cache) -> dict:
     config = load_risk_config(cache)
     open_positions = db.query(PaperPosition).filter(PaperPosition.status == "open").all()
+    closed_positions = (
+        db.query(PaperPosition)
+        .filter(PaperPosition.closed_at.is_not(None))
+        .order_by(PaperPosition.closed_at.desc())
+        .limit(120)
+        .all()
+    )
     total_exposure = sum(_position_notional(row) for row in open_positions)
 
     symbol_exposure: dict[str, float] = {}
@@ -581,6 +684,15 @@ def build_admin_risk_status(db, cache) -> dict:
                 matched_cluster = cluster_id
                 break
         cluster_exposure[matched_cluster] = cluster_exposure.get(matched_cluster, 0.0) + _position_notional(row)
+
+    pnl_trend = [
+        {
+            "closed_at": row.closed_at.isoformat() if row.closed_at else None,
+            "realized_pnl": round(float(row.realized_pnl or 0.0), 6),
+            "symbol": str(row.symbol or "").upper().strip(),
+        }
+        for row in reversed(closed_positions)
+    ]
 
     latest_runtime = get_json(cache, RISK_RUNTIME_STATE_KEY) or {}
     scanner_runtime = get_json(cache, "scanner:runtime:latest:global") or {}
@@ -611,6 +723,7 @@ def build_admin_risk_status(db, cache) -> dict:
         "spread_reject_count": int(get_counter(cache, "risk:metrics:spread_reject_count")),
         "execution_quality_warning": int(get_counter(cache, "risk:metrics:execution_quality_warning_count")),
         "cooldown_state": risk_result.get("cooldown_state") or {},
+        "pnl_trend": pnl_trend,
         "kill_switch_state": {
             "risk_kill_switch_enabled": bool(config.get("kill_switch_enabled", False)),
             "pipeline_kill_switch_active": bool(pipeline_switch.get("active", False)),

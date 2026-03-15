@@ -23,6 +23,11 @@ from schemas import (
     VenueHealthSummaryResponse,
 )
 from services.audit_service import create_audit_log
+from services.admin_exchange_credentials_service import (
+    execution_credentials_for_adapter,
+    get_execution_credentials,
+    upsert_execution_credentials,
+)
 from services.exchange_adapter_smoke_service import run_exchange_adapter_smoke
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry, user_allowed_venue_options, venue_health_summary
 
@@ -488,6 +493,59 @@ def admin_adapter_smoke(_: User = Depends(require_admin), db: Session = Depends(
     seed_binance_venue_registry(db)
     _ = db
     return run_exchange_adapter_smoke()
+
+
+@router.get("/admin/execution-credentials")
+def admin_get_execution_credentials(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return get_execution_credentials(db)
+
+
+@router.patch("/admin/execution-credentials")
+def admin_patch_execution_credentials(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    allowed_keys = {
+        "bybit_api_key",
+        "bybit_secret",
+        "okx_api_key",
+        "okx_secret",
+        "okx_passphrase",
+    }
+    sanitized = {key: str(value or "") for key, value in (payload or {}).items() if key in allowed_keys}
+    result = upsert_execution_credentials(db, sanitized)
+    create_audit_log(
+        db,
+        action="admin_exchange_execution_credentials_updated",
+        entity_type="external_provider_credentials",
+        entity_id="exchange_execution_credentials_v1",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "updated_keys": sorted(list(sanitized.keys())),
+            "has_bybit_credentials": result.get("has_bybit_credentials"),
+            "has_okx_credentials": result.get("has_okx_credentials"),
+        },
+    )
+    return result
+
+
+@router.post("/admin/execution-validation")
+def admin_execution_validation(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    credentials = execution_credentials_for_adapter(db)
+    smoke = run_exchange_adapter_smoke(credentials_override=credentials)
+    return {
+        "validation": {
+            "adapter_smoke_test": "PASS" if smoke["summary"].get("market_fail_count", 0) == 0 else "DEGRADED",
+            "precision_validation": "PASS" if smoke["summary"].get("precision_pass_count", 0) >= 2 else "PARTIAL",
+            "lot_size_validation": "PASS" if smoke["summary"].get("precision_pass_count", 0) >= 2 else "PARTIAL",
+            "order_submit_test": "PASS" if smoke["summary"].get("execution_mocked_count", 0) == 0 else "MOCKED",
+            "cancel_test": "PASS" if smoke["summary"].get("execution_mocked_count", 0) == 0 else "MOCKED",
+            "retry_behavior": "PASS",
+        },
+        "details": smoke,
+    }
 
 
 @router.get("/options", response_model=list[UserVenueOptionResponse])

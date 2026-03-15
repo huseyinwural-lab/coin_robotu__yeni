@@ -1,29 +1,19 @@
 import {
   Activity,
-  AlertOctagon,
-  AlertTriangle,
-  Archive,
   BarChart3,
   BarChartBig,
   ClipboardList,
-  CircuitBoard,
-  Cpu,
   FileText,
   Gauge,
   Globe,
-  History,
   KeyRound,
   LineChart,
-  ListChecks,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Radio,
-  Radar,
-  Scale,
   Settings2,
   ShieldAlert,
-  ShieldCheck,
   TrendingUp,
   UserCog,
   Wrench,
@@ -55,54 +45,17 @@ const userNavItems = [
 ];
 
 const adminOnlyItems = [
-  { to: "/admin/dashboard", label: "Admin Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
-  { to: "/admin/cross-dashboard-consistency", label: "Cross Dashboard Consistency", icon: BarChart3, testId: "nav-admin-cross-dashboard-consistency-link" },
-  { to: "/admin/users/admins", label: "Admin Kullanıcıları", icon: UserCog, testId: "nav-admin-users-admins-link" },
-  { to: "/admin/users/customers", label: "User Kullanıcıları", icon: UserCog, testId: "nav-admin-users-customers-link" },
-  { to: "/admin/user-approvals", label: "Kullanıcı Onayları", icon: ListChecks, testId: "nav-admin-user-approvals-link" },
-  { to: "/admin/system-alerts", label: "System Alerts", icon: AlertTriangle, testId: "nav-admin-system-alerts-link" },
-  { to: "/admin/strategy-observability", label: "Strategy Observability", icon: Activity, testId: "nav-admin-strategy-observability-link" },
-  { to: "/admin/futures/risk-monitor", label: "Futures Risk Monitor", icon: ShieldAlert, testId: "nav-admin-futures-risk-monitor-link" },
-  { to: "/admin/futures/liquidation-protection", label: "Liquidation Protection", icon: ShieldCheck, testId: "nav-admin-futures-liquidation-protection-link" },
-  { to: "/admin/futures/strategy-analytics", label: "Strategy Analytics", icon: BarChart3, testId: "nav-admin-futures-strategy-analytics-link" },
-  { to: "/admin/futures/strategy-governance", label: "Strategy Governance", icon: ShieldAlert, testId: "nav-admin-futures-strategy-governance-link" },
-  { to: "/admin/futures/cluster-risk", label: "Cluster Risk", icon: CircuitBoard, testId: "nav-admin-futures-cluster-risk-link" },
-  { to: "/admin/futures/capital-governance", label: "Capital Governance", icon: BarChartBig, testId: "nav-admin-futures-capital-governance-link" },
-  { to: "/admin/futures/tail-risk", label: "Tail Risk", icon: AlertOctagon, testId: "nav-admin-futures-tail-risk-link" },
-  { to: "/admin/futures/live-readiness", label: "Live Readiness", icon: Gauge, testId: "nav-admin-futures-live-readiness-link" },
-  { to: "/admin/futures/scaling-validation", label: "Scaling Validation", icon: Scale, testId: "nav-admin-futures-scaling-validation-link" },
-  { to: "/admin/futures/microstructure-guard", label: "Microstructure Guard", icon: Activity, testId: "nav-admin-futures-microstructure-guard-link" },
-  { to: "/admin/futures/testnet-control", label: "Testnet Control", icon: Radio, testId: "nav-admin-futures-testnet-control-link" },
-  { to: "/admin/exchanges", label: "Exchanges", icon: Globe, testId: "nav-admin-exchanges-link" },
-  { to: "/admin/proofs", label: "Proof Panel", icon: ShieldCheck, testId: "nav-admin-proofs-link" },
-  { to: "/admin/reports/archive", label: "Reports Archive", icon: Archive, testId: "nav-reports-archive-link" },
-  { to: "/admin/strategies", label: "Strategies", icon: ClipboardList, testId: "nav-admin-strategies-link" },
-  { to: "/admin/risk-orchestrator", label: "Risk Orchestrator", icon: ShieldAlert, testId: "nav-risk-orchestrator-link" },
-  { to: "/admin/risk-orchestrator/analytics", label: "Risk Analytics", icon: BarChart3, testId: "nav-risk-analytics-link" },
-  { to: "/admin/runtime/quarantine", label: "Runtime Quarantine", icon: AlertTriangle, testId: "nav-runtime-quarantine-link" },
-  { to: "/admin/runtime/recovery", label: "Runtime Recovery", icon: History, testId: "nav-runtime-recovery-link" },
-  { to: "/admin/market-universe", label: "Market Universe", icon: Globe, testId: "nav-market-universe-link" },
-  { to: "/admin/execution-policies", label: "Execution Policies", icon: Settings2, testId: "nav-execution-policies-link" },
-  { to: "/admin/execution-queue", label: "Execution Queue", icon: Wrench, testId: "nav-execution-queue-link" },
-  { to: "/admin/strategy-allocation", label: "Strategy Allocation", icon: BarChartBig, testId: "nav-strategy-allocation-link" },
-  { to: "/admin/canonical-strategy-registry", label: "Canonical Strategy Registry", icon: ClipboardList, testId: "nav-canonical-strategy-registry-link" },
-  { to: "/admin/learning-panel", label: "Learning Panel", icon: LineChart, testId: "nav-admin-learning-panel-link" },
-  { to: "/admin/learning-impact-simulator", label: "Learning Impact Simulator", icon: LineChart, testId: "nav-admin-learning-impact-simulator-link" },
-  { to: "/admin/universe-monitor", label: "Universe Monitor", icon: Globe, testId: "nav-admin-universe-monitor-link" },
-  { to: "/admin/freshness-heatmap", label: "Freshness Heatmap", icon: Activity, testId: "nav-admin-freshness-heatmap-link" },
-  { to: "/admin/portfolio-risk", label: "Portfolio Risk", icon: ShieldAlert, testId: "nav-portfolio-risk-link" },
-  { to: "/admin/strategy-intelligence", label: "Strategy Intelligence", icon: Radar, testId: "nav-strategy-intelligence-link" },
-  { to: "/admin/positions-monitor", label: "Positions Monitor", icon: Activity, testId: "nav-positions-monitor-link" },
-  { to: "/admin/exposure-groups", label: "Exposure Groups", icon: ShieldAlert, testId: "nav-exposure-groups-link" },
-  { to: "/admin/correlation-matrix", label: "Correlation Matrix", icon: CircuitBoard, testId: "nav-correlation-matrix-link" },
-  { to: "/admin/execution-states", label: "Execution States", icon: Cpu, testId: "nav-execution-states-link" },
-  { to: "/admin/hardening-checklist", label: "Hardening Checklist", icon: ShieldCheck, testId: "nav-hardening-checklist-link" },
-  { to: "/admin/failed-events", label: "Failed Events", icon: AlertTriangle, testId: "nav-failed-events-link" },
-  { to: "/admin/state-rebuild", label: "State Rebuild Logs", icon: History, testId: "nav-state-rebuild-link" },
-  { to: "/admin/backtest-cards", label: "Backtest Cards", icon: BarChartBig, testId: "nav-backtest-cards-link" },
-  { to: "/admin/monitoring", label: "Monitoring", icon: Activity, testId: "nav-monitoring-link" },
-  { to: "/admin/phase4-live", label: "Phase-4 Live Control", icon: Radio, testId: "nav-phase4-live-link" },
-  { to: "/admin/audit-logs", label: "Audit Logs", icon: ClipboardList, testId: "nav-audit-logs-link" },
+  { to: "/admin/dashboard", label: "Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
+  { to: "/admin/monitoring", label: "System Status", icon: Activity, testId: "nav-admin-system-status-link" },
+  { to: "/admin/universe-monitor", label: "Scanner Monitor", icon: Gauge, testId: "nav-admin-scanner-monitor-link" },
+  { to: "/admin/futures/strategy-analytics", label: "Strategy Analytics", icon: BarChart3, testId: "nav-admin-strategy-analytics-link" },
+  { to: "/admin/risk-orchestrator", label: "Risk Engine", icon: ShieldAlert, testId: "nav-admin-risk-engine-link" },
+  { to: "/admin/execution-queue", label: "Execution Monitor", icon: Wrench, testId: "nav-admin-execution-monitor-link" },
+  { to: "/admin/users/customers", label: "Users", icon: UserCog, testId: "nav-admin-users-link" },
+  { to: "/admin/strategies", label: "Bots", icon: ClipboardList, testId: "nav-admin-bots-link" },
+  { to: "/admin/exchanges", label: "Exchange Settings", icon: Globe, testId: "nav-admin-exchange-settings-link" },
+  { to: "/admin/execution-policies", label: "System Config", icon: Settings2, testId: "nav-admin-system-config-link" },
+  { to: "/admin/audit-logs", label: "Logs", icon: FileText, testId: "nav-admin-logs-link" },
 ];
 
 export const PanelLayout = () => {
@@ -122,7 +75,7 @@ export const PanelLayout = () => {
     ? "border-black bg-orange-400 text-black"
     : "border-orange-500 bg-slate-800 text-orange-400";
   const logoutButtonClass = isAdmin
-    ? "border-black bg-orange-400 text-black hover:bg-orange-500"
+    ? "border-black bg-[#4CAF50] text-white hover:bg-[#43a047]"
     : "border-slate-700 bg-transparent text-slate-200 hover:border-orange-500 hover:text-orange-500";
 
   useEffect(() => {
@@ -212,7 +165,7 @@ export const PanelLayout = () => {
             )}
           </div>
 
-          <nav className="min-h-0 flex-1 space-y-2 pr-1 pb-2" data-testid="sidebar-navigation" aria-label="Sidebar linkleri">
+          <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 pb-2" data-testid="sidebar-navigation" aria-label="Sidebar linkleri">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -239,7 +192,7 @@ export const PanelLayout = () => {
 
           <Button
             variant="outline"
-            className={`mt-4 w-full shrink-0 ${logoutButtonClass}`}
+            className={`mt-auto w-full shrink-0 sticky bottom-0 ${logoutButtonClass}`}
             onClick={() => {
               logout();
               navigate(isAdmin ? "/admin/login" : "/user/login");

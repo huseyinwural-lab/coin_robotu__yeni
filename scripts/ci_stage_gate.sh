@@ -28,7 +28,9 @@ PYTHONPATH="$ROOT/backend" pytest -q \
   tests/test_scanner_regime_tuning.py \
   tests/test_execution_quality_calibration.py \
   tests/test_exchange_adapter_smoke.py \
+  tests/test_exchange_execution_activation.py \
   tests/test_risk_engine_api_contracts.py \
+  tests/test_risk_policy_profiles.py \
   tests/test_bootstrap_admin_first_install.py \
   tests/test_admin_profile_update.py \
   tests/test_admin_password_change.py

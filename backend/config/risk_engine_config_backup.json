@@ -1,5 +1,5 @@
 {
-  "max_risk_per_trade_pct": 2.8,
+  "max_risk_per_trade_pct": 2.0,
   "max_total_exposure_pct": 50.0,
   "max_symbol_exposure_pct": 25.0,
   "max_cluster_exposure_pct": 35.0,
@@ -16,9 +16,10 @@
   "strategy_cooldown_minutes": 30,
   "global_cooldown_minutes": 60,
   "kill_switch_enabled": false,
-  "config_version": 4,
-  "changed_by": "admin-2",
-  "changed_at": "2026-03-15T16:10:55.343903+00:00",
-  "updated_at": "2026-03-15T16:10:55.344658+00:00",
-  "backup_at": "2026-03-15T16:10:55.344660+00:00"
+  "config_version": 9,
+  "changed_by": "d333b78b-3bd2-4030-8fe7-f7e241fcd899",
+  "changed_at": "2026-03-15T16:41:53.600354+00:00",
+  "updated_at": "2026-03-15T16:41:54.752427+00:00",
+  "backup_at": "2026-03-15T16:41:54.752429+00:00",
+  "active_profile": "balanced"
 }

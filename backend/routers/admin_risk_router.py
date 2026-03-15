@@ -3,18 +3,22 @@ from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
 from deps import require_admin
-from models import User
+from models import AuditLog, User
 from services.audit_service import create_audit_log
 from services.execution_quality_calibration_service import (
     calibrate_execution_quality_thresholds,
     get_latest_execution_quality_calibration,
 )
 from services.risk_engine_service import (
+    apply_policy_profile,
     build_admin_risk_status,
+    get_policy_overrides,
+    get_policy_profiles,
     load_risk_config,
     patch_risk_config,
     reload_risk_config,
     rollback_risk_config,
+    upsert_policy_overrides,
 )
 
 
@@ -147,3 +151,79 @@ def calibrate_execution_quality(
 def latest_execution_quality_calibration(current_admin: User = Depends(require_admin)):
     _ = current_admin
     return get_latest_execution_quality_calibration(redis_client)
+
+
+@router.get("/config/timeline")
+def risk_config_timeline(limit: int = 50, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.entity_type == "risk_config")
+        .order_by(AuditLog.created_at.desc())
+        .limit(max(1, min(int(limit), 500)))
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "action": row.action,
+                "changed_by": row.actor_user_id,
+                "changed_at": row.created_at.isoformat() if row.created_at else None,
+                "details": row.details or {},
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.get("/config/profiles")
+def risk_profiles(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return get_policy_profiles()
+
+
+@router.post("/config/profiles/{profile_id}/apply")
+def apply_risk_profile(profile_id: str, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    payload = apply_policy_profile(redis_client, profile=profile_id, changed_by=current_admin.id)
+    create_audit_log(
+        db,
+        action="admin_risk_profile_applied",
+        entity_type="risk_config",
+        entity_id="global",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "profile": profile_id,
+            "config_version": payload.get("config_version"),
+        },
+    )
+    return payload
+
+
+@router.get("/config/overrides")
+def get_overrides(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return get_policy_overrides()
+
+
+@router.patch("/config/overrides")
+def patch_overrides(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    scope = str((payload or {}).get("scope") or "global")
+    key = str((payload or {}).get("key") or "default")
+    values = (payload or {}).get("values") or {}
+    result = upsert_policy_overrides(scope=scope, key=key, values=values)
+    create_audit_log(
+        db,
+        action="admin_risk_policy_override_updated",
+        entity_type="risk_config",
+        entity_id="global",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"scope": scope, "key": key, "values": values},
+    )
+    return result
