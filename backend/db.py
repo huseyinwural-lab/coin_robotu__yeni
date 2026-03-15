@@ -150,6 +150,7 @@ engine = _build_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 redis_client = _build_redis_client()
+_sqlite_migration_checked = False
 
 
 def _ensure_sqlite_phase4_columns():
@@ -157,7 +158,30 @@ def _ensure_sqlite_phase4_columns():
         logger.info("Legacy runtime SQLite DDL patcher disabled; Alembic is the only migration source.")
 
 
+def _ensure_sqlite_migrations_applied() -> None:
+    global _sqlite_migration_checked
+    if _sqlite_migration_checked:
+        return
+    _sqlite_migration_checked = True
+
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'")
+        ).first()
+    if row is not None:
+        return
+
+    logger.warning("SQLite ortamında alembic_version bulunamadı; Alembic upgrade head uygulanıyor.")
+    from services.migration_service import run_alembic_upgrade
+
+    run_alembic_upgrade()
+
+
 def get_db():
+    _ensure_sqlite_migrations_applied()
     db = SessionLocal()
     try:
         yield db
