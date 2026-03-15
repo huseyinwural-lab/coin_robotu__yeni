@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
+import re
 
 from services.pipeline.cache_store import get_json
+
+
+_SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{2,20}USDT$")
 
 
 def _symbol_score(cache, symbol: str) -> tuple[float, list[str]]:
@@ -37,7 +41,11 @@ def _symbol_score(cache, symbol: str) -> tuple[float, list[str]]:
 
 
 def run_discovery_scan(cache, universe_symbols: list[str], *, max_candidates: int) -> dict:
-    normalized = [str(symbol or "").upper().strip() for symbol in universe_symbols if str(symbol or "").strip().upper().endswith("USDT")]
+    normalized = [
+        str(symbol or "").upper().strip()
+        for symbol in universe_symbols
+        if _SYMBOL_PATTERN.match(str(symbol or "").upper().strip())
+    ]
     rows = []
 
     for symbol in normalized:

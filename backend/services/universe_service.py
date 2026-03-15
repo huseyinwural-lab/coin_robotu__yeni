@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import re
 
 from sqlalchemy.orm import Session
 
@@ -8,6 +9,7 @@ from services.pipeline.universe_engine import apply_scanner_mode, debug_effectiv
 
 
 SUPPORTED_EXCHANGES = ["binance", "bybit", "okx"]
+SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{2,20}USDT$")
 
 
 def _normalize_symbols(symbols: list[str]) -> list[str]:
@@ -15,7 +17,7 @@ def _normalize_symbols(symbols: list[str]) -> list[str]:
         {
             str(symbol or "").strip().upper()
             for symbol in symbols
-            if str(symbol or "").strip() and str(symbol or "").strip().upper().endswith("USDT")
+            if SYMBOL_PATTERN.match(str(symbol or "").strip().upper())
         }
     )
 

@@ -1,5 +1,29 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-15
+### Iteration-104 — #797 Mini Paket Kapanışı + 3-Katmanlı Scanner Entegrasyonu
+- **P0 mini paket eksikleri kapatıldı**:
+  - Repo credential cleanup tamamlandı (deprecated admin domain literal izi kaldırıldı).
+  - `.gitignore` hijyen düzeltmesi yapıldı (duplike/bozuk satırlar temizlendi).
+  - CI portability ve gate zinciri yeniden doğrulandı.
+- **Tiered scanner runtime canlıya alındı**:
+  - Discovery → Qualification → Decision orkestrasyonu `scanner_runtime.py` içinde devreye alındı.
+  - Backpressure/tier cap alanları genişletildi: `discovery_cap`, `qualification_cap`, `decision_cap`.
+  - Decision kernel çağrısı `manual_selection` ile qualified sembol setine daraltıldı.
+  - Admin runtime summary’ye `tiered_scan` objesi eklendi.
+- **CPU koruma / fallback hizası**:
+  - `ScanScheduler` yük durumuna göre tier cap’leri dinamik düşürüyor.
+  - Fallback aktifken cap’ler otomatik daha konservatif hale geliyor.
+- **Yeni testler**:
+  - `backend/tests/test_discovery_scan.py`
+  - `backend/tests/test_qualification_scan.py`
+  - `backend/tests/test_tiered_scan_pipeline.py`
+  - `backend/tests/test_api_tiered_scanner.py` (agent eklemesi, API contract doğrulaması)
+- **CI script güncellemesi**:
+  - `scripts/ci_stage_gate.sh` ve `scripts/ci_prod_gate.sh` içine tiered test dosyaları eklendi.
+- **Düşük öncelikli kalite iyileştirmesi**:
+  - Discovery/universe normalizasyonunda alfanümerik USDT sembol filtresi uygulanarak spam/test token gürültüsü azaltıldı.
+
 ## 2026-03-12
 ### Iteration-54 — Phase-9B Strategy Intelligence
 - Yeni servisler eklendi:

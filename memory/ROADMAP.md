@@ -75,3 +75,24 @@
 1. Legacy endpoint cleanup ve teknik borç azaltımı
 2. Advanced PDF reporting görsel kalite upgrade
 3. Strategy performance attribution raporları (haftalık/aylık)
+
+---
+
+## 2026-03-15 Güncel Öncelik Haritası
+
+### P0 (Kapatıldı)
+- #797 Son Düzeltme Mini Paketi eksikleri doğrulandı ve kapatıldı.
+- CI gate’ler (drift/stage/prod), frontend frozen-lockfile kurulumu, admin login smoke PASS.
+- Credential cleanup final (deprecated admin domain literal izi kaldırıldı).
+
+### P1 (Aktif)
+1. Tiered scanner mimarisinin canlı koşullarda tuning’i:
+   - discovery/qualification/decision cap ayarlarının volatilite rejimine göre optimize edilmesi
+   - fallback tetik/çıkış eşiklerinin production telemetriye göre rafine edilmesi
+2. TopVolumeFallback ile tier cap azaltımının daha agresif/konservatif profil seçenekleri
+3. Tiered pipeline API/contract regresyonlarının CI içinde genişletilmesi
+
+### P2 (Bekleyen)
+1. Bybit/OKX gerçek adapter entegrasyonu (placeholder yerine canlı adapter)
+2. Release gate `execution_quality_score` warning kök neden analizi
+3. Admin sol menü scroll UX düzeltmesi

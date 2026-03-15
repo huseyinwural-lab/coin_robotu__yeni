@@ -170,7 +170,7 @@ class TestCredentialCleanup:
     """Verify no deprecated credentials in codebase"""
 
     def test_no_admin_platform_dev_credential(self):
-        """Ensure admin@platform.dev is not in production code (excluding test files)"""
+        """Ensure deprecated admin domain is not in production code (excluding test files)"""
         import subprocess
         # Search in backend source code excluding tests
         result = subprocess.run(

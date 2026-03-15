@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import re
 from time import perf_counter
 
 from core.users.user_scanner_signal_service import run_user_scanner
@@ -11,6 +12,9 @@ from services.pipeline.cache_store import get_json, set_json
 from services.qualification_scan_service import run_qualification_scan
 from services.top_volume_fallback import evaluate_top_volume_fallback
 from services.universe_service import get_full_market_universe
+
+
+SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{2,20}USDT$")
 
 
 def _decision_label(value: str) -> str:
@@ -33,7 +37,7 @@ def _normalize_symbols(symbols: list[str]) -> list[str]:
         {
             str(symbol or "").upper().strip()
             for symbol in (symbols or [])
-            if str(symbol or "").upper().strip().endswith("USDT")
+            if SYMBOL_PATTERN.match(str(symbol or "").upper().strip())
         }
     )
 

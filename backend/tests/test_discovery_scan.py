@@ -25,10 +25,11 @@ def test_discovery_scan_ranks_and_caps_candidates():
 
     payload = run_discovery_scan(
         cache,
-        ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPBTC"],
+        ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPBTC", "测试测试USDT"],
         max_candidates=2,
     )
 
     assert payload["universe_size"] == 3
     assert len(payload["discovery_candidates"]) == 2
     assert payload["discovery_candidate_symbols"][0] == "BTCUSDT"
+    assert "测试测试USDT" not in payload["discovery_candidate_symbols"]

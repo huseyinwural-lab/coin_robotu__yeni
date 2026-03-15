@@ -4925,3 +4925,51 @@
 ### Durum
 - **R1/R2/R3/R4 Mini Paket:** COMPLETE (docker CLI ortam kısıtı notuyla)
 
+## 85) 2026-03-15 — Eksik Mini Paket Kapanışı + 3-Katmanlı Scanner (Discovery→Qualification→Decision)
+
+### Uygulananlar
+1. **#797 mini paket eksik kapanışı (P0)**
+   - Credential cleanup güçlendirildi: deprecated admin domain literal izleri temizlendi.
+   - `.gitignore` hijyen düzeltmesi yapıldı (bozuk/duplike satır temizliği).
+   - Frontend frozen lockfile doğrulaması tekrarlandı.
+
+2. **Tiered scanner runtime orkestrasyonu (P1)**
+   - `scanner_runtime.run_scanner_runtime` artık üç aşamalı akışla çalışıyor:
+     - Layer-1 Discovery (`run_discovery_scan`)
+     - Layer-2 Qualification (`run_qualification_scan`)
+     - Layer-3 Decision Kernel (`run_user_scanner`, `manual_selection` ile daraltılmış aday seti)
+   - Runtime payload’a `tiered_scan` objesi eklendi (`caps`, `discovery`, `qualification`, `decision_kernel`).
+
+3. **CPU koruma ve cap yönetimi**
+   - `scan_scheduler` içinde `discovery_cap`, `qualification_cap`, `decision_cap` dinamik hesaplanıyor.
+   - Yük/fallback durumunda cap’ler otomatik düşürülüyor.
+
+4. **Admin runtime görünürlüğü**
+   - `GET /api/admin/universe/runtime-summary` artık `tiered_scan` alanını da döndürüyor.
+
+5. **Tiered test paketi + CI entegrasyonu**
+   - Yeni testler:
+     - `backend/tests/test_discovery_scan.py`
+     - `backend/tests/test_qualification_scan.py`
+     - `backend/tests/test_tiered_scan_pipeline.py`
+   - `ci_stage_gate.sh` ve `ci_prod_gate.sh` içine yeni test dosyaları eklendi.
+
+6. **Düşük öncelikli kalite düzeltmesi**
+   - Discovery/universe normalizasyonu alfanümerik USDT pattern ile sıkılaştırıldı.
+   - Böylece exchange tarafındaki spam/test token karakterleri decision pipeline’a taşınmıyor.
+
+### Test/Doğrulama
+- `pytest -q tests/test_full_market_scan.py tests/test_discovery_scan.py tests/test_qualification_scan.py tests/test_tiered_scan_pipeline.py` ✅ (5 passed)
+- `bash /app/scripts/ci_alembic_drift_gate.sh` ✅
+- `bash /app/scripts/ci_stage_gate.sh` ✅ (14 passed + release warning accepted)
+- `bash /app/scripts/ci_prod_gate.sh` ✅ (14 passed + release warning accepted)
+- `cd /app/frontend && yarn install --frozen-lockfile --non-interactive` ✅
+- `POST /api/auth/login/admin` (`admin@platform.local` / `Admin12345!`) ✅
+- Frontend smoke (landing + login aksiyonları görünür, blank değil) ✅
+- Testing agent raporu: `/app/test_reports/iteration_104.json` ✅ (backend %100, frontend %100)
+
+### Durum
+- **P0 mini paket eksikleri:** CLOSED
+- **Tiered scanner ilk sürüm entegrasyonu:** ACTIVE ve TEST-PASS
+- **Açık risk/not:** release gate `execution_quality_score` warning hâlâ backlog maddesi
+
