@@ -4730,3 +4730,84 @@
 - **FAZ-3B:** COMPLETE
 - **FAZ-3C:** COMPLETE
 - **FAZ-4:** NEXT (Freshness + Backpressure + Event Priority)
+
+## 82) 2026-03-15 — FAZ-4 + FAZ-5 + FAZ-6 Kapanışı (Runtime Hardening + Explainability + Hermetic CI)
+
+### Uygulananlar
+1. **FAZ-4 Freshness + Backpressure + Event Priority**
+   - Yeni servis: `backend/services/freshness_policy.py`
+     - SLA bucket: `high(3m)`, `normal(5m)`, `low(15m)`
+     - stale değerlendirme ve reason code üretimi
+   - Yeni servis: `backend/services/event_priority_service.py`
+     - candle close / volume spike / spread jump / position activity sinyallerinden priority score ve dağılım
+   - `scanner_runtime.py`
+     - freshness enforce + stale skip sayımı/alanları
+     - backpressure payload alanları
+     - event priority distribution alanları
+   - `scan_scheduler.py`
+     - queue_depth/latency/snapshot_age bazlı backpressure policy
+     - scan interval artırma + max_results küçültme
+   - `pipeline/runtime.py`
+     - dinamik scanner loop sleep süresi
+     - queue state içinde backpressure/event-priority/fallback reason görünürlüğü
+   - `top_volume_fallback.py`
+     - reason_code ve geniş metrik seti ile fallback tetikleme
+   - `admin_universe_router.py`
+     - runtime summary’e freshness/backpressure/event priority/fallback reason alanları eklendi
+
+2. **FAZ-5 Explainability + Learning data zemini**
+   - Runtime decision contract genişletildi:
+     - `strategy_name`, `signal_strength`, `risk_filter_reason`, `decision_reason`
+   - `futures_strategy_service.py` runtime decision helper explainability alanlarıyla hizalandı.
+   - `execution_intent_service.py` explainability özet helper eklendi.
+   - `scanner_runtime.py`
+     - explainability summary (strategy dağılımı, pass nedenleri, risk/stale/fallback sayıları)
+     - decision feedback event payload üretimi
+   - Yeni dosya: `backend/model_domains/decision_feedback_event.py` (learning hazırlık veri yapısı)
+   - `runtime_scan_candidate.py`
+     - learning seed helper (`decision_timestamp`, `outcome_placeholder`, attribution alanları)
+
+3. **FAZ-6 Hermetic test + CI genişletmesi**
+   - Yeni testler:
+     - `backend/tests/test_full_market_scan.py`
+     - `backend/tests/test_top_volume_fallback.py`
+     - `backend/tests/test_decision_contract.py`
+     - `backend/tests/test_runtime_candidate_persistence.py`
+     - `backend/tests/test_freshness_policy.py`
+     - `backend/tests/test_event_priority_scheduler.py`
+   - CI script güncellemeleri:
+     - `scripts/ci_stage_gate.sh`
+     - `scripts/ci_prod_gate.sh`
+     - hermetic runtime test paketi zorunlu hale getirildi
+   - Workflow güncellemeleri:
+     - `.github/workflows/stage-gate.yml`
+     - `.github/workflows/prod-gate.yml`
+     - runtime test adımı eklendi
+
+### Migration Notu
+- Bu turda yeni migration eklenmedi (talimata uygun).
+- Strict drift gate korunarak çalışıyor.
+
+### Test/Doğrulama
+- Hermetic test paketi:
+  - `pytest -q tests/test_full_market_scan.py tests/test_top_volume_fallback.py tests/test_decision_contract.py tests/test_runtime_candidate_persistence.py tests/test_freshness_policy.py tests/test_event_priority_scheduler.py` ✅ (7 passed)
+- Gate scriptleri:
+  - `bash /app/scripts/ci_alembic_drift_gate.sh` ✅
+  - `bash /app/scripts/ci_stage_gate.sh` ✅
+  - `bash /app/scripts/ci_prod_gate.sh` ✅
+- Endpoint regresyonları:
+  - `GET /api/health` ✅
+  - `POST /api/auth/login/admin` ✅
+  - `GET /api/admin/universe-monitor` ✅
+  - `GET /api/user/scanner/symbol-selection` ✅
+- FAZ-4 alan doğrulaması (`/api/admin/universe/runtime-summary`):
+  - `freshness_sla_bucket`, `stale_skip_count`, `queue_depth_state`, `backpressure_active`, `event_priority_distribution`, `fallback_reason_code` ✅
+- FAZ-5 decision contract doğrulaması (`/api/user/scanner/runtime/run`):
+  - `strategy_name`, `signal_strength`, `risk_filter_reason`, `decision_reason` ✅
+- `deep_testing_backend_v2` kapsam doğrulaması: **16/16 PASS** ✅
+
+### Durum
+- **FAZ-4:** COMPLETE
+- **FAZ-5:** COMPLETE
+- **FAZ-6:** COMPLETE
+
