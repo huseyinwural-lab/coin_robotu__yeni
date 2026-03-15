@@ -125,6 +125,9 @@ frontend:
       - working: true
         agent: "testing"
         comment: "SMOKE TEST QUICK VALIDATION PASSED (User Request). Landing page critical entry elements validation completed: 1) ✓ URL accessible: https://market-scanner-prod.preview.emergentagent.com loads successfully. 2) ✓ Landing NOT blank: 517 characters of visible content detected. 3) ✓ 'Kullanıcı Girişi' button: Visible and clickable in top-right navigation. 4) ✓ 'Admin Girişi' button: Visible and clickable in top-right navigation. 5) ✓ NO critical console errors detected. All 4 smoke test criteria PASSED."
+      - working: true
+        agent: "testing"
+        comment: "QUICK SMOKE TEST PASSED (2026-03-15 Latest). Rapid frontend smoke validation completed successfully: 1) ✓ URL loads: https://market-scanner-prod.preview.emergentagent.com returns HTTP 200. 2) ✓ Page NOT blank: 517 characters of visible content. Landing displays 'XILO-USER TRADING ENGINE' header, registration form (HESAP AÇ), and execution mode badge. 3) ✓ Login actions visible: Both 'Kullanıcı Girişi' (User Login) and 'Admin Girişi' (Admin Login) buttons visible in top-right navigation. 4) ✓ No critical console errors: ZERO critical errors detected in browser console. Screenshot: smoke_test_quick.png. RESULT: ✅ PASS - Frontend healthy and accessible."
 
   - task: "Admin User Approvals Page - UI Rendering and Navigation"
     implemented: true
