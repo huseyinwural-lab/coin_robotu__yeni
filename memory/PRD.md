@@ -64,6 +64,27 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-15 (User Live Trading Dashboard Package — ayrık user mimarisi)
+- **Ayrı user-scope backend katmanı eklendi (admin’dan türetilmedi):**
+  - Yeni service: `backend/services/user_live_dashboard_service.py`
+  - Yeni router: `backend/routers/user_live_dashboard_router.py`
+  - Yeni endpointler: `/api/user/live/{summary,positions,performance,risk,execution-quality,strategies,trades,daily-report,daily-report/export}`
+- **Güvenlik/mimari kural uygulandı:**
+  - Tüm sorgular `current_user.id` scope’unda çalışıyor.
+  - `require_user` ile admin token erişimi 403.
+  - User response sözleşmesinde admin/global alanlar (queue_depth, kill_switch, global scanner vb.) sızdırılmadı.
+- **Frontend user canlı ekranı eklendi:**
+  - Yeni sayfa: `frontend/src/pages/user/UserLiveTradingDashboardPage.jsx`
+  - Yeni route: `/user/live-trading-dashboard`
+  - User menüsüne “Live Trading” eklendi (`PanelLayout.jsx`)
+  - JSON/CSV export butonları + window seçimi (1h/6h/24h) aktif.
+- **Test kapsaması:**
+  - `test_user_live_dashboard_scope.py`
+  - `test_user_live_dashboard_export.py`
+  - `test_user_live_dashboard_contract.py`
+  - (testing agent ekledi) `test_user_live_dashboard_full.py`
+  - Sonuçlar: lokal `pytest` 36 PASS, testing agent raporu `/app/test_reports/iteration_110.json` %100 PASS.
+
 ### 2026-03-15 (P0 — SYMBOL-DRIVEN SCANNER CORRECTION PACKAGE tamamlandı)
 - **BTC gate bağımlılığı kaldırıldı (core scanner/score akışı):**
   - `spot_dynamic_score_engine` artık market bağlamını BTC mumlarından değil **çoklu sembol snapshot** üzerinden türetiyor.
