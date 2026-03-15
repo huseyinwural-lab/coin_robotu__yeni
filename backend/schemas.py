@@ -651,6 +651,7 @@ class ExchangeTestOrderResponse(BaseModel):
     order_id: str
     exchange_order_id: str
     client_order_id: str
+    symbol: str
     exchange: str
     market_type: str
     environment: str

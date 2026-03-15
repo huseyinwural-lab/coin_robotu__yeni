@@ -17,7 +17,7 @@ const defaultForm = {
   exchange: "binance",
   environment: "testnet",
   market_type: "spot",
-  symbol: "BTCUSDT",
+  symbol: "",
   side: "buy",
   order_type: "market",
   position_size_mode: "fixed_notional",
@@ -32,6 +32,8 @@ const defaultForm = {
   strategy_binding: "",
   holding_profile: "intraday",
 };
+
+const USER_EXECUTE_SYMBOL_STORAGE_KEY = "user-execute-selected-symbol-v1";
 
 export const UserExecutePage = () => {
   const [searchParams] = useSearchParams();
@@ -56,7 +58,13 @@ export const UserExecutePage = () => {
   });
   const [symbolSelectorSource, setSymbolSelectorSource] = useState("crypto");
   const [symbolSelectorMode, setSymbolSelectorMode] = useState("all_market_symbols");
-  const [symbolSelectorSelection, setSymbolSelectorSelection] = useState([defaultForm.symbol]);
+  const [symbolSelectorSelection, setSymbolSelectorSelection] = useState(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+    const stored = String(window.localStorage.getItem(USER_EXECUTE_SYMBOL_STORAGE_KEY) || "").trim().toUpperCase();
+    return stored ? [stored] : [];
+  });
 
   const selectedConnection = useMemo(
     () => connections.find((item) => item.id === selectedConnectionId) || null,
@@ -93,7 +101,7 @@ export const UserExecutePage = () => {
       setSelectedConnectionId(preselectedConnectionId);
 
       const source = searchParams.get("source") || "manual";
-      const symbol = searchParams.get("symbol") || "BTCUSDT";
+      const symbolFromQuery = searchParams.get("symbol") || "";
       const side = searchParams.get("side") || "buy";
       const marketType = searchParams.get("market_type") || "spot";
       const exchange = searchParams.get("exchange") || defaultConnection?.exchange || "binance";
@@ -115,13 +123,15 @@ export const UserExecutePage = () => {
       const hasExplicitQuery = Boolean(searchParams.get("source") || searchParams.get("symbol") || searchParams.get("market_type"));
       const storedContext = readExecutionContext();
       const effectiveContext = !hasExplicitQuery ? storedContext : null;
+      const storedSymbol = typeof window !== "undefined" ? String(window.localStorage.getItem(USER_EXECUTE_SYMBOL_STORAGE_KEY) || "").trim().toUpperCase() : "";
+      const initialSymbol = (effectiveContext?.symbol || symbolFromQuery || storedSymbol || "").toUpperCase();
       setFlowContext(effectiveContext);
 
       setForm((prev) => ({
         ...prev,
         source_type: effectiveContext?.source || source,
         source_ref_id: searchParams.get("source_ref_id") || "",
-        symbol: effectiveContext?.symbol || symbol,
+        symbol: initialSymbol,
         side: effectiveContext?.side || side,
         market_type: effectiveContext?.market_type || marketType,
         exchange,
@@ -130,20 +140,60 @@ export const UserExecutePage = () => {
         exchange_connection_id: preselectedConnectionId,
       }));
       setIsLoading(false);
-
-      const initialSymbol = (effectiveContext?.symbol || symbol || "BTCUSDT").toUpperCase();
-      setSymbolSelectorSelection([initialSymbol]);
+      setSymbolSelectorSelection(initialSymbol ? [initialSymbol] : []);
     };
     load();
   }, [searchParams]);
 
   useEffect(() => {
     const first = (symbolSelectorSelection || [])[0];
-    if (!first) {
+    const normalized = first ? first.toUpperCase() : "";
+    setForm((prev) => ({ ...prev, symbol: normalized }));
+
+    if (typeof window !== "undefined") {
+      if (normalized) {
+        window.localStorage.setItem(USER_EXECUTE_SYMBOL_STORAGE_KEY, normalized);
+      } else {
+        window.localStorage.removeItem(USER_EXECUTE_SYMBOL_STORAGE_KEY);
+      }
+    }
+  }, [symbolSelectorSelection]);
+
+  useEffect(() => {
+    if (!selectedConnection) {
       return;
     }
-    setForm((prev) => ({ ...prev, symbol: first.toUpperCase() }));
-  }, [symbolSelectorSelection]);
+
+    const ensureVenueDefaultSymbol = async () => {
+      try {
+        const { data } = await apiClient.get("/symbol-selector/universe", {
+          params: {
+            source: "crypto",
+            exchange: selectedConnection.exchange,
+            market_type: selectedConnection.market_type,
+            mode: "all_market_symbols",
+            selected_symbols: "",
+            query: "",
+            quote_asset_filter: "USDT",
+          },
+        });
+        const symbols = (data?.selected_symbols || []).map((item) => String(item || "").trim().toUpperCase()).filter(Boolean);
+        const active = String(symbolSelectorSelection?.[0] || "").trim().toUpperCase();
+        const storedSymbol = typeof window !== "undefined" ? String(window.localStorage.getItem(USER_EXECUTE_SYMBOL_STORAGE_KEY) || "").trim().toUpperCase() : "";
+        const preferredSymbol = active && symbols.includes(active)
+          ? active
+          : storedSymbol && symbols.includes(storedSymbol)
+            ? storedSymbol
+            : symbols[0] || "";
+
+        setSymbolSelectorSelection(preferredSymbol ? [preferredSymbol] : []);
+      } catch {
+        setSymbolSelectorSelection([]);
+      }
+    };
+
+    ensureVenueDefaultSymbol();
+  }, [selectedConnection]);
 
   useEffect(() => {
     if (!selectedConnection) {
@@ -419,9 +469,10 @@ export const UserExecutePage = () => {
             exchange={form.exchange}
             marketType={form.market_type}
             source={symbolSelectorSource}
-            onSourceChange={setSymbolSelectorSource}
+            onSourceChange={(next) => setSymbolSelectorSource(next === "stock" ? "crypto" : next)}
             mode={symbolSelectorMode}
             onModeChange={setSymbolSelectorMode}
+            quoteAssetFilter="USDT"
             selectedSymbols={symbolSelectorSelection}
             onSelectedSymbolsChange={setSymbolSelectorSelection}
             multi={false}

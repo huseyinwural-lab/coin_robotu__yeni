@@ -45,6 +45,7 @@ export const SymbolSelectorPanel = ({
   testIdPrefix,
   exchange = "binance",
   marketType = "spot",
+  quoteAssetFilter = "ALL",
   multi = true,
   selectedSymbols,
   onSelectedSymbolsChange,
@@ -94,7 +95,7 @@ export const SymbolSelectorPanel = ({
           mode: activeMode,
           selected_symbols: normalizedSelectedSymbols.join(","),
           query: search,
-          quote_asset_filter: "ALL",
+          quote_asset_filter: quoteAssetFilter,
         },
       });
       setRows(data?.rows || []);
@@ -126,7 +127,7 @@ export const SymbolSelectorPanel = ({
 
   useEffect(() => {
     loadUniverse();
-  }, [normalizedMode, source, exchange, marketType]);
+  }, [normalizedMode, source, exchange, marketType, quoteAssetFilter]);
 
   const toggleSymbol = (symbol) => {
     const nextSet = new Set(normalizedSelectedSymbols);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { MetricCard } from "@/components/MetricCard";
+import { SymbolSelectorPanel } from "@/components/SymbolSelectorPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
@@ -28,6 +29,8 @@ const fallbackVenue = {
   market_type: "futures",
   environment: "testnet",
 };
+
+const USER_EXCHANGE_SYMBOL_STORAGE_KEY = "user-exchange-selected-symbol-v1";
 
 const initialFuturesContext = {
   leverage: 3,
@@ -66,6 +69,10 @@ export const UserExchangeSettingsPage = () => {
   const [isConnectionSaving, setIsConnectionSaving] = useState(false);
   const [connectionErrors, setConnectionErrors] = useState({});
   const [riskFormErrors, setRiskFormErrors] = useState({});
+  const [symbolSelectorSource, setSymbolSelectorSource] = useState("crypto");
+  const [symbolSelectorMode, setSymbolSelectorMode] = useState("all_market_symbols");
+  const [symbolSelectorSelection, setSymbolSelectorSelection] = useState([]);
+  const [selectedSymbol, setSelectedSymbol] = useState("");
 
   const exchangeOptions = useMemo(() => {
     const list = [...new Set(venueOptions.map((item) => item.exchange))];
@@ -96,10 +103,9 @@ export const UserExchangeSettingsPage = () => {
 
   const loadAll = useCallback(async () => {
     try {
-      const [settingsRes, permissionRes, tickerRes, readinessRes, riskRes, overviewRes, venueOptionsRes, connectionsRes] = await Promise.all([
+      const [settingsRes, permissionRes, readinessRes, riskRes, overviewRes, venueOptionsRes, connectionsRes] = await Promise.all([
         apiClient.get("/phase4/exchange-settings"),
         apiClient.get("/phase4/permission-status"),
-        apiClient.get("/market/ticker?symbol=BTCUSDT"),
         apiClient.get("/exchange/readiness-checklist", {
           params: {
             exchange: selectedVenue.exchange,
@@ -114,7 +120,6 @@ export const UserExchangeSettingsPage = () => {
       ]);
       setSettings(settingsRes.data);
       setPermission(permissionRes.data);
-      setTicker(tickerRes.data);
       setReadiness(readinessRes.data);
       setRiskSettings(riskRes.data);
       setPortfolioOverview(overviewRes.data);
@@ -146,6 +151,66 @@ export const UserExchangeSettingsPage = () => {
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    const loadDefaultSymbolForVenue = async () => {
+      try {
+        const { data } = await apiClient.get("/symbol-selector/universe", {
+          params: {
+            source: "crypto",
+            exchange: selectedVenue.exchange,
+            market_type: selectedVenue.market_type,
+            mode: "all_market_symbols",
+            selected_symbols: "",
+            query: "",
+            quote_asset_filter: "USDT",
+          },
+        });
+
+        const symbols = (data?.selected_symbols || []).map((item) => String(item || "").trim().toUpperCase()).filter(Boolean);
+        const storedSymbol = typeof window !== "undefined" ? String(window.localStorage.getItem(USER_EXCHANGE_SYMBOL_STORAGE_KEY) || "").trim().toUpperCase() : "";
+        const nextSymbol = storedSymbol && symbols.includes(storedSymbol) ? storedSymbol : (symbols[0] || "");
+
+        setSymbolSelectorSelection(nextSymbol ? [nextSymbol] : []);
+        setSelectedSymbol(nextSymbol);
+      } catch {
+        setSymbolSelectorSelection([]);
+        setSelectedSymbol("");
+      }
+    };
+
+    loadDefaultSymbolForVenue();
+  }, [selectedVenue.exchange, selectedVenue.market_type]);
+
+  useEffect(() => {
+    const nextSymbol = String(symbolSelectorSelection?.[0] || "").trim().toUpperCase();
+    setSelectedSymbol(nextSymbol);
+  }, [symbolSelectorSelection]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (selectedSymbol) {
+        window.localStorage.setItem(USER_EXCHANGE_SYMBOL_STORAGE_KEY, selectedSymbol);
+      } else {
+        window.localStorage.removeItem(USER_EXCHANGE_SYMBOL_STORAGE_KEY);
+      }
+    }
+
+    const loadTicker = async () => {
+      if (!selectedSymbol) {
+        setTicker(null);
+        return;
+      }
+      try {
+        const { data } = await apiClient.get("/market/ticker", { params: { symbol: selectedSymbol } });
+        setTicker(data);
+      } catch {
+        setTicker(null);
+      }
+    };
+
+    loadTicker();
+  }, [selectedSymbol]);
 
   useEffect(() => {
     setForm((prev) => ({
@@ -430,6 +495,12 @@ export const UserExchangeSettingsPage = () => {
       return;
     }
 
+    if (!selectedSymbol) {
+      setTestOrderBanner("symbol_unavailable_for_selected_venue: Seçili venue için USDT sembolü bulunamadı.");
+      toast.error("Seçili venue için uygun sembol bulunamadı");
+      return;
+    }
+
     setIsTesting(true);
     setTestOrderBanner("");
     try {
@@ -438,6 +509,7 @@ export const UserExchangeSettingsPage = () => {
           exchange: selectedVenue.exchange,
           market_type: selectedVenue.market_type,
           environment: selectedVenue.environment,
+          symbol: selectedSymbol,
           leverage: futuresContext.leverage,
           margin_mode: futuresContext.margin_mode,
           position_side: futuresContext.position_side,
@@ -446,7 +518,7 @@ export const UserExchangeSettingsPage = () => {
       setTestOrderResult(data);
       setLatestQuality({
         execution_id: data.order_id,
-        symbol: "BTCUSDT",
+        symbol: data.symbol || selectedSymbol,
         status: data.status,
         strategy_type: data.strategy_type,
         volatility_regime: data.volatility_regime,
@@ -910,6 +982,29 @@ export const UserExchangeSettingsPage = () => {
         )}
       </div>
 
+      <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-test-symbol-selector-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-test-symbol-selector-title">Trade Symbol Selection</p>
+        <p className="mt-1 text-xs text-slate-400" data-testid="user-test-symbol-selector-description">
+          Venue bazlı USDT pair listesi otomatik yüklenir. Seçim localStorage ile korunur.
+        </p>
+        <div className="mt-3" data-testid="user-test-symbol-selector-wrapper">
+          <SymbolSelectorPanel
+            testIdPrefix="user-exchange-symbol-selector"
+            source={symbolSelectorSource}
+            onSourceChange={(next) => setSymbolSelectorSource(next === "stock" ? "crypto" : next)}
+            mode={symbolSelectorMode}
+            onModeChange={setSymbolSelectorMode}
+            exchange={selectedVenue.exchange}
+            marketType={selectedVenue.market_type}
+            quoteAssetFilter="USDT"
+            selectedSymbols={symbolSelectorSelection}
+            onSelectedSymbolsChange={setSymbolSelectorSelection}
+            multi={false}
+          />
+        </div>
+        <p className="mt-2 text-sm text-emerald-300" data-testid="user-test-selected-symbol-summary">Seçili sembol: {selectedSymbol || "-"}</p>
+      </div>
+
       {selectedVenue.market_type === "futures" && (
         <div className="grid gap-2 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-test-futures-context-grid">
           <div className="form-group" data-testid="user-test-futures-leverage-group">
@@ -968,6 +1063,7 @@ export const UserExchangeSettingsPage = () => {
         <MetricCard label="can_trade" value={String(validateResult?.can_trade ?? false)} tone={validateResult?.can_trade ? "orange" : "red"} testId="user-exchange-validate-can-trade" />
         <MetricCard label="mid_price" value={ticker?.mid_price ?? "-"} tone="blue" testId="user-exchange-mid-price" />
       </div>
+      <p className="text-xs text-slate-400" data-testid="user-exchange-mid-price-symbol-label">ticker_symbol={selectedSymbol || "-"}</p>
 
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-readiness-checklist-card">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-readiness-checklist-title">Readiness Checklist</p>
@@ -995,7 +1091,8 @@ export const UserExchangeSettingsPage = () => {
 
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-quality-regime-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-exchange-quality-regime-title">Quality Normalization</p>
-        <p className="mt-2 text-sm text-slate-300" data-testid="user-exchange-quality-strategy">strategy={latestQuality?.strategy_type || "-"}</p>
+        <p className="mt-2 text-sm text-slate-300" data-testid="user-exchange-quality-symbol">symbol={latestQuality?.symbol || selectedSymbol || "-"}</p>
+        <p className="mt-1 text-sm text-slate-300" data-testid="user-exchange-quality-strategy">strategy={latestQuality?.strategy_type || "-"}</p>
         <p className="mt-1 text-sm text-slate-300" data-testid="user-exchange-quality-volatility-regime">volatility_regime={latestQuality?.volatility_regime || "-"}</p>
         <p className="mt-1 text-sm text-slate-300" data-testid="user-exchange-quality-volatility-pct">volatility_pct={latestQuality?.volatility_pct ?? "-"}</p>
       </div>
@@ -1079,6 +1176,7 @@ export const UserExchangeSettingsPage = () => {
           <p data-testid="user-test-order-exchange">exchange: {testOrderResult?.exchange || selectedVenue.exchange}</p>
           <p data-testid="user-test-order-market-type">market_type: {testOrderResult?.market_type || selectedVenue.market_type}</p>
           <p data-testid="user-test-order-environment">environment: {testOrderResult?.environment || selectedVenue.environment}</p>
+          <p data-testid="user-test-order-symbol">symbol: {testOrderResult?.symbol || selectedSymbol || "-"}</p>
           <p data-testid="user-test-order-status">order status: {testOrderResult?.status || "awaiting_valid_key"}</p>
           <p data-testid="user-test-order-final-status">final status: {testOrderResult?.final_status || "-"}</p>
           <p data-testid="user-test-order-exchange-order-id">exchange order id: {testOrderResult?.exchange_order_id || "-"}</p>

@@ -70,6 +70,7 @@ def exchange_test_order(
     exchange: str | None = Query(default=None),
     market_type: str = Query(default="futures"),
     environment: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
     leverage: int = Query(default=1),
     margin_mode: str = Query(default="cross"),
     position_side: str = Query(default="BOTH"),
@@ -113,6 +114,7 @@ def exchange_test_order(
                 "exchange": readiness.get("exchange"),
                 "market_type": readiness.get("market_type"),
                 "environment": readiness.get("environment"),
+                "symbol": symbol,
                 "message": f"Binance Testnet API key ve secret doğrulanmadan gerçek test-order çalıştırılamaz. ({reason_message})",
             },
         )
@@ -124,6 +126,7 @@ def exchange_test_order(
             exchange=readiness.get("exchange") or "binance",
             market_type=readiness.get("market_type") or "futures",
             environment=readiness.get("environment") or "testnet",
+            symbol=symbol,
             leverage=leverage,
             margin_mode=margin_mode,
             position_side=position_side,
@@ -160,6 +163,7 @@ def exchange_test_order(
                 "exchange": readiness.get("exchange"),
                 "market_type": readiness.get("market_type"),
                 "environment": readiness.get("environment"),
+                "symbol": symbol,
                 "quantity": quantity,
             },
         )
@@ -172,6 +176,7 @@ def exchange_test_order(
                 "exchange": readiness.get("exchange"),
                 "market_type": readiness.get("market_type"),
                 "environment": readiness.get("environment"),
+                "symbol": symbol,
             },
         ) from exc
 
@@ -195,6 +200,7 @@ def exchange_test_order(
         order_id=metric.order_id,
         exchange_order_id=metric.exchange_order_id,
         client_order_id=metric.client_order_id,
+        symbol=metric.symbol,
         exchange=metric.exchange,
         market_type=metric.market_type,
         environment=metric.environment,
@@ -222,6 +228,7 @@ def exchange_execution_order(
     exchange: str | None = Query(default=None),
     market_type: str = Query(default="futures"),
     environment: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
     leverage: int = Query(default=1),
     margin_mode: str = Query(default="cross"),
     position_side: str = Query(default="BOTH"),
@@ -232,6 +239,7 @@ def exchange_execution_order(
         exchange=exchange,
         market_type=market_type,
         environment=environment,
+        symbol=symbol,
         leverage=leverage,
         margin_mode=margin_mode,
         position_side=position_side,

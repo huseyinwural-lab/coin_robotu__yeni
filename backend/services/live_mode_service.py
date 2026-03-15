@@ -1448,6 +1448,7 @@ def run_exchange_test_order_market(
     exchange: str,
     market_type: str,
     environment: str,
+    symbol: str | None = None,
     leverage: int = 1,
     margin_mode: str = "cross",
     position_side: str = "BOTH",
@@ -1494,7 +1495,8 @@ def run_exchange_test_order_market(
     api_secret = decrypt_secret(settings_row.api_secret_encrypted)
 
     config = get_or_create_live_config(db)
-    symbol = _resolve_test_symbol(config)
+    requested_symbol = str(symbol or "").strip().upper()
+    symbol = requested_symbol or _resolve_test_symbol(config)
     side = "BUY"
     ticker = get_market_ticker(symbol)
     mid_price = float(ticker["mid_price"] or 0)
