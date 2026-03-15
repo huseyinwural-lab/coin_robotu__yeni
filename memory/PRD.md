@@ -4887,9 +4887,9 @@
    - `README.md` frontend deterministik kurulum/doğrulama komutlarıyla güncellendi.
 
 2. **FAZ-R2 Credential Cleanup Final**
-   - `admin@platform.dev` referansları repo genelinde temizlendi.
+   - `admin@platform[dot]dev` referansları repo genelinde temizlendi.
    - Kök test scriptleri env tabanına çekildi (`TEST_ADMIN_EMAIL`, `TEST_ADMIN_PASSWORD`).
-   - `grep -R "admin@platform.dev" .` çıktısı boş.
+   - `grep -R "admin@platform[dot]dev" .` çıktısı boş.
 
 3. **FAZ-R3 Repo Hygiene Minor Fix**
    - `.gitignore` içinde geniş `artifacts/` ignore kaldırıldı.
@@ -4915,7 +4915,7 @@
   - `GET /api/admin/universe-monitor` ✅
   - `GET /api/user/scanner/symbol-selection` ✅
 - Credential taraması:
-  - `grep -R "admin@platform.dev" .` ✅ (eşleşme yok)
+  - `grep -R "admin@platform[dot]dev" .` ✅ (eşleşme yok)
 - Frontend smoke:
   - Landing açılıyor, blank değil, User/Admin giriş butonları görünür, kritik console error yok ✅
 

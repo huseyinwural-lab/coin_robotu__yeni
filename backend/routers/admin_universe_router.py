@@ -29,6 +29,7 @@ def admin_runtime_universe_summary(
     backpressure = latest_runtime.get("backpressure") or {}
     event_priority = (latest_runtime.get("event_priority") or {}).get("distribution") or {"high": 0, "medium": 0, "low": 0}
     explainability = latest_runtime.get("explainability_summary") or {}
+    tiered_scan = latest_runtime.get("tiered_scan") or {}
     return {
         "scanner_mode_requested": scanner_mode,
         "scanner_mode_effective": effective_mode,
@@ -41,6 +42,7 @@ def admin_runtime_universe_summary(
         "backpressure_active": bool(backpressure.get("active", False)),
         "event_priority_distribution": event_priority,
         "fallback_reason_code": str(fallback_state.get("reason_code") or "none"),
+        "tiered_scan": tiered_scan,
         "explainability": explainability,
     }
 

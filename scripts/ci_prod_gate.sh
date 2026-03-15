@@ -17,6 +17,9 @@ PYTHONPATH="$ROOT/backend" pytest -q \
   tests/test_runtime_candidate_persistence.py \
   tests/test_freshness_policy.py \
   tests/test_event_priority_scheduler.py \
+  tests/test_discovery_scan.py \
+  tests/test_qualification_scan.py \
+  tests/test_tiered_scan_pipeline.py \
   tests/test_bootstrap_admin_first_install.py \
   tests/test_admin_profile_update.py \
   tests/test_admin_password_change.py

@@ -1,193 +1,177 @@
 <analysis>**original_problem_statement:**
-The user, a highly technical product owner, is directing the final hardening phase of a complex trading bot. The project has evolved through multiple sprints of architectural refactoring, moving from a disorganized script collection to a professional-grade strategy engine with explainability and learning capabilities.
+The user, a highly technical product owner, is directing the final hardening and architectural enhancement of a complex, full-stack trading bot. The project has moved through multiple phases of refactoring and stabilization (repo hygiene, database migration discipline, runtime hardening) and is now functionally complete according to the initial Final Hardening plan (message #894).
 
-The current and final objective is to execute a comprehensive Final Hardening + Cleanup + Runtime Alignment Package defined by the user. This is a multi-phase task designed to make the system fully production-ready by addressing accumulated technical debt and inconsistencies. The goal is to create a system that is:
-- **Kurulabilir (Installable):** Clean repository with reliable setup and bootstrap processes.
-- **Göç edebilir (Migratable):** A single, authoritative database migration strategy (Alembic).
-- **Test edilebilir (Testable):** A hermetic and comprehensive testing suite (Unit, Integration, E2E).
-- **Gözlemlenebilir (Observable):** Rich admin panels for monitoring universe, performance, and system health.
-- **Tam market tarayan (Full-market scanning):** The bot's universe should encompass all spot and futures symbols by default, with the bot's own logic making trade decisions.
-- **Bot-karar odaklı (Bot-decision focused):** Configuration should not restrict the bot's universe; filtering and decision-making are the bot's responsibility, with performance fallbacks (e.g., to Top Volume) under load.
+The current and final objective is to implement two directives provided by the user in tandem:
+1.  Address any remaining missing items from the Son düzeltme mini paketi (Final fix mini-package, from user message #797).
+2.  Implement a new, 3-tiered scanner architecture (Discovery -> Qualification -> Decision) to ensure CPU performance and scalability when scanning the full market, as detailed in user message #1048.
 
-This final package is detailed in the user's message #894 and is broken down into six phases (FAZ-1 to FAZ-6), which constitute the complete and final roadmap.
+The overall goal remains to produce a system that is Installable (Kurulabilir), Migratable (Göç edebilir), Testable (Test edilebilir), Observable (Gözlemlenebilir), and capable of scanning the full market in a robust, performant, and bot-decision-focused manner.
 
-**User's preferred language**: **Turkish**. The user is highly fluent and provides detailed technical directives in Turkish. The next agent MUST communicate exclusively in Turkish.
+**User's preferred language**: Turkish. The user is highly fluent and provides detailed technical directives in Turkish. The next agent MUST communicate exclusively in Turkish.
 
 **what currently exists?**
-The application is a full-stack trading bot. Major architectural work has been completed on the core strategy engine, the Explainability layer (Decision Cards), the Learning layer (backend models), and a sophisticated performance management system. This system includes features like layered scanning, indicator caching, backpressure handling, and an automatic Top Volume fallback mechanism to manage high load when scanning the full market.
+The application is a sophisticated trading bot with a FastAPI backend, React frontend, PostgreSQL database, and Redis for caching. The system has undergone extensive hardening:
+- **FAZ-1 & FAZ-2:** Repo hygiene, setup procedures, and database migration discipline (Alembic-only) are complete and enforced by CI gates.
+- **FAZ-3, 4, 5, 6:** The core runtime is functional. This includes a single-layer full-market scanner, a Top Volume fallback mechanism, backpressure and freshness (SLA) policies, and foundational explainability/learning data points.
+- **Testing:** A comprehensive hermetic backend test suite exists, integrated into CI, and is currently passing.
+- **Credentials:** A standardized bootstrap admin () is created on first install.
+- **Build:** The frontend build is deterministic via a  file.
 
-However, the rapid development has resulted in significant technical debt. The current state is characterized by:
-- Inconsistent setup and repository hygiene.
-- A fragmented data model and multiple conflicting database migration methods.
-- Runtime behavior that is not fully aligned with the final architectural vision.
-- A lack of a robust, hermetic testing framework.
-
-The agent had just begun to implement the user's final, all-encompassing hardening plan.
+The system is stable and passes all tests, but the current single-layer scanner architecture does not meet the performance requirements for production, prompting the user to order the implementation of a more scalable 3-tiered scanning pipeline.
 
 **Last working item**:
--   **Last item agent was working:** The agent was starting the implementation of the user's massive Final Hardening + Cleanup + Runtime Alignment Paketi (from user message #894). The agent had just formulated a plan to begin with FAZ-1, which focuses on repository hygiene, cleaning up build artifacts, and standardizing the setup process.
+-   **Last item agent was working:** The agent began implementing the new 3-tiered scanner architecture requested by the user in message #1048. It started by exploring the existing runtime files and then created two new service files for the first two layers of the new pipeline.
+    - Created file: 
+    - Created file: 
 -   **Status:** IN PROGRESS
 -   **Agent Testing Done:** N
--   **Which testing method agent to use?** both
-    -   The user's final plan (FAZ-6) explicitly requires the creation of a full, hermetic testing pipeline. This will involve the backend testing agent for API contract and integration tests, and the frontend testing agent for component and E2E critical path tests.
+-   **Which testing method agent to use?** backend testing agent. The user's plan requires creating new backend tests for the tiered pipeline (, , ) and running them in CI.
 -   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Implement the Final Hardening + Cleanup + Runtime Alignment Package (P0)**
+-   **Issue 1: Address missing items from the Son düzeltme mini paketi. (P0 - HIGHEST PRIORITY)**
 
 **Issues Detail:**
--   **Issue 1: Implement the Final Hardening + Cleanup + Runtime Alignment Package**
-    -   **Attempted fixes:** The agent has acknowledged the user's comprehensive plan and started planning the execution of FAZ-1.
-    -   **Next debug checklist:** This is not a bug, but a large, structured implementation plan. The next step is to execute the plan defined in user message #894, starting with FAZ-1 and proceeding sequentially through FAZ-6.
-        1.  **Execute FAZ-1:** Clean the repo, fix , standardize , unify package manager (yarn install v1.22.22
-[1/4] Resolving packages...
-[2/4] Fetching packages...
-[3/4] Linking dependencies...
-[4/4] Building fresh packages...
-success Saved lockfile.
-Done in 0.03s.), and secure the bootstrap admin creation.
-        2.  **Execute FAZ-2:** Refactor  into domain-specific files, remove all non-Alembic schema modification logic, and fix Redis fallback semantics.
-        3.  **Execute FAZ-3 to FAZ-6:** Continue implementing the remaining phases as detailed in the user's final PRD.
-    -   **Why fix this issue and what will be achieved with the fix?** Completing this entire package is the final goal of the project. It will transition the application from a rapidly developed prototype into a stable, reliable, and maintainable production-grade system.
-    -   **Status:** IN PROGRESS
+-   **Issue 1: Address missing items from the Son düzeltme mini paketi.**
+    -   **Attempted fixes:** The previous agent claimed to have completed this package in a  call (message #1048). However, the user immediately followed up (message #1051), stating, Son düzeltme mini paketi eksikler var 1. görev listesinde var onları ve verdiğim 2. görev listesi ile birlikte uygula (The final fix mini-package has missing items from the 1st task list, implement them together with the 2nd task list I gave you). The agent then proceeded to work only on the 2nd task list (the tiered scanner), ignoring the user's explicit instruction to fix the pending items.
+    -   **Next debug checklist:**
+        1.  Halt work on the tiered scanner immediately.
+        2.  Explicitly state to the user that you are now addressing their concern about the missing items.
+        3.  Thoroughly re-examine the task list from user message #797.
+        4.  Compare each item against the codebase and the agent's last  summary (#1048) to identify any discrepancies or incompletely implemented tasks.
+        5.  Report your findings to the user and implement any required fixes to fully complete the Son düzeltme mini paketi.
+    -   **Why fix this issue and what will be achieved with the fix?** This is a critical trust issue. The user has explicitly stated that work is incomplete. Ignoring this will lead to user frustration. Completing it will confirm all repo hygiene, CI portability, and build determinism tasks are fully closed before layering on more complexity.
+    -   **Status:** NOT STARTED (by the last agent, despite user instruction).
     -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** both
-    -   **Blocked on other issue:** No
+    -   **Should Test frontend/backend/both after fix?** both (CI gates, frontend build, and credential checks).
+    -   **Blocked on other issue:** No.
 
 **In progress Task List**:
--   **Task 1: FAZ-1 — Kurulum, Repo Hijyeni ve Çalıştırılabilirlik Kapanışı (P0)**
-    -   **Where to resume:** The agent needs to start applying the changes for repo cleanup as per its last plan. This includes removing generated artifacts, updating , and ensuring the README is accurate.
-    -   **What will be achieved with this?** A clean, reliable, and reproducible setup process for any developer cloning the repository.
+-   **Task 1: Implement the 3-Tiered Scanner Architecture (P1)**
+    -   **Where to resume:** This task should be resumed *after* resolving the pending issue above. The agent has created  and . The next steps are to implement the logic within these services and refactor , , and  to use the new three-layer pipeline (Discovery -> Qualification -> Decision).
+    -   **What will be achieved with this?** A highly scalable, CPU-efficient scanning architecture that can safely scan the entire market by progressively filtering candidates through lightweight, then medium-weight, then heavy analysis layers.
     -   **Status:** IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** both
-    -   **Blocked on something:** No
+    -   **Should Test frontend/backend/both after fix?** backend
+    -   **Blocked on something:** Blocked on **Issue 1: Address missing items from the Son düzeltme mini paketi**.
 
 **Upcoming and Future Tasks**
-The entire remaining roadmap is defined by the user's Final Hardening package from message #894.
-
-*   **Upcoming Tasks (P0):**
-    *   **FAZ-2 — Veri Modeli, Migration ve Persistence Disiplinini Tekilleştir:** Unify database migrations under Alembic, refactor the monolithic , and align Redis fallback behavior with production semantics.
-    *   **FAZ-3 — Universe, Scanner ve Runtime Davranışını Nihai Mimariye Hizala:** Solidify the full market scan principle, unify spot and futures processing, clean up legacy runtime logic, and remove hard-coded liquidity filters.
-    *   **FAZ-4 — Performans, Freshness ve Backpressure Kapanışı:** Production-harden the Freshness SLA enforcement, stabilize the queue/worker management policies, and complete the event-driven hint model.
-    *   **FAZ-6 — Test, CI ve Teslim Kapanışı:** Make all tests hermetic (independent of the environment), structure the test pyramid (unit, integration, E2E), and define a CI validation pipeline.
-
-*   **Future Tasks (P1):**
-    *   **FAZ-5 — Explainability, Learning ve Admin Operasyon Katmanını Kapat:** Finalize the integration of all user-facing explainability components (, ) and admin observability panels (, , ) to ensure they are complete and consistent.
+*   **Upcoming Tasks (P1):**
+    *   Implement CPU protection rules for the tiered scanner (e.g., , ).
+    *   Integrate the  mechanism with the new tiered pipeline, so it can reduce both the universe size and the candidate caps under load.
+    *   Create and pass the new hermetic tests for the tiered scanner as requested by the user (, , ).
+*   **Future Tasks (P2 / Backlog):**
+    *   **Bybit/OKX Adapter Integration:** Implement full support for Bybit and OKX exchanges to replace the current placeholder warnings.
+    *   **Release Gate Warning:** Investigate and resolve the  warning in CI gates.
+    *   **Docker Build Verification:** The  command for the frontend failed in the agent's environment due to a missing Docker CLI. This needs to be verified in a suitable environment.
+    *   **UI Bug:** The admin left menu is not scrollable (long-standing, low-priority).
 
 **Completed work in this session**
--   **Universe & Performance Architecture Overhaul:**
-    -   Refactored the system to scan the full market (spot + futures) instead of relying on restrictive whitelists.
-    -   Implemented a Top Volume Fallback mechanism to automatically manage system load.
-    -   Built extensive performance guardrails: tiered scanning, indicator caching (Redis), backpressure handling, and freshness SLAs to prevent trading on stale data.
-    -   Created admin observability panels:  and .
--   **Default Admin User Creation:** Fixed a critical bug where the default admin user was not being created, and made the bootstrap process idempotent.
--   **Explainability & Learning Features:**
-    -   Completed the initial build of the user-facing  and .
-    -   Implemented a Learning Recommendation Impact Simulator for both admin and user roles.
--   **UI Adjustments:**
-    -   Moved the  list to the top of the User Dashboard as requested.
+-   **FAZ-1 to FAZ-6 Hardening:** Completed the user's entire multi-phase hardening plan, including:
+    -   Repo hygiene, Alembic migration discipline, CI drift gates.
+    -   Initial (single-layer) runtime scanner with full-market scanning, candidate persistence, and normalized  decision contract.
+    -   Futures execution alignment (, ).
+    -   Freshness SLA, backpressure policies, and an event-priority scheduler.
+    -   Explainability fields in decision payloads and groundwork for the learning module.
+    -   A comprehensive hermetic test suite for the runtime, integrated into CI.
+-   **Yayın Öncesi Son Kapatma Paketi (Pre-Release Final Closure Package):**
+    -   Standardized bootstrap admin creation ().
+    -   Finalized test credential cleanup across the repo.
+    -   Made all CI scripts portable and repo-relative.
+    -   Ensured frontend build determinism by creating and committing .
 
 **Earlier issues found/mentioned but not fixed**
--   **Issue 1: Admin left menu is not scrollable.** (Low Priority) This is a long-standing UI bug from the initial handoff that has been consistently deferred.
--   **Issue 2: Save user's manual symbol selection on the scanner page.** (Medium Priority) This feature was requested early on but was superseded by larger architectural changes. The final PRD (message #894) re-defines the scanner modes, but the persistence logic for the  mode still needs to be explicitly implemented and verified as part of FAZ-3.
+-   The user believes there are still outstanding items from the Son düzeltme mini paketi (message #797), which the previous agent did not address.
 
 **Known issue recurrence from previous fork**
--   **Issue: Symbol Not Allowed due to hidden configuration.** The agent fixed the core logic for universe selection multiple times, but the issue recurred because of active  lists in configuration files. The user had to repeatedly point out that the system was still not scanning the full market. This indicates a weakness in fully diagnosing and resolving configuration-related problems. The final fix was to empty all override lists.
+-   **Issue:** Incorrect universe selection due to hidden configuration.
+-   **Recurrence count:** High in previous forks.
+-   **Status:** RESOLVED. This was architecturally addressed by the full market scan principle and removing all static whitelists/blacklists from config. The new tiered scanner introduces new complexity, so vigilance is required to prevent similar silent filtering bugs from reappearing.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Bot-Driven Universe Selection:** The core principle that the bot should see the entire market and use its own logic to select opportunities, rather than being limited by static configuration lists.
--   **Performance Fallback:** An automatic mechanism where the system detects high load (latency, queue depth) and switches from full market scanning to a less resource-intensive Top Volume mode.
--   **Backpressure Handling:** A set of strategies (deferring low-priority jobs, dropping stale jobs) to ensure system stability under heavy load.
--   **Freshness SLA:** A strict rule that prevents the engine from making decisions based on data that is older than a defined threshold, resulting in a .
--   **Tiered / Two-Stage Scanning:** A performance optimization where a lightweight discovery scan identifies potential candidates across the wide universe, and a more intensive decision scan runs only on those candidates.
--   **Indicator Caching:** Using Redis (with a DB fallback) to cache the results of expensive indicator calculations, keyed by symbol, timeframe, and bar time to avoid redundant computations.
--   **Alembic-Only Migrations:** The user mandated that all database schema changes MUST be handled through Alembic migrations to ensure consistency and prevent schema drift.
+-   **Tiered Scanning:** The new core architecture. A 3-layer pipeline to manage performance.
+    -   **Layer-1 (Discovery Scan):** Lightweight, high-recall scan on the full  universe.
+    -   **Layer-2 (Qualification Scan):** Medium-cost analysis (e.g., trend, liquidity) on a capped set of discovery candidates.
+    -   **Layer-3 (Decision Kernel):** Heavy, full strategy execution on a small, highly qualified set of candidates to produce  decisions.
+-   **Bot-Driven Universe Selection:** The bot sees the entire market; its own logic, not config files, determines tradeable symbols.
+-   **Performance Fallback:** An automatic switch to a Top Volume universe when system stress (latency, queue depth) is detected.
+-   **Alembic-Only Migrations:** All DB schema changes are handled by Alembic, enforced by a strict CI gate.
+-   **Freshness SLA & Backpressure:** Policies to prevent trading on stale data and to manage system load by adjusting scan intervals.
 
 **key DB schema**
-The user's final plan includes a major refactoring of the Pydantic/SQLAlchemy models in  into domain-specific files (auth, scanner, strategy, risk, etc.) under a new  directory structure. No new tables were specified, but this refactoring is a P0 task.
+-   **runtime_scan_candidates:**  - Persists the results of each scan cycle.
+-   **users:** 
+
+**changes in tech stack**
+-   None.
 
 **All files of reference**
--   **User-Provided PRD:** The content of user messages **#894** (Final Hardening), **#822** (Universe Model Alignment), and **#535** (Performance Guard) are the primary sources of truth for all remaining work.
--   **Core Backend Logic:**
+-   **Primary User Directives:**
+    -   Message #1048 (part 2): Defines the 3-tiered scanner architecture.
+    -   Message #797: Defines the Son düzeltme mini paketi.
+    -   Message #1051: Explicitly states that #797 is not fully complete and must be finished alongside #1048.
+-   **Key Implementation Files (for current task):**
     -   
     -   
     -   
-    -   
--   **Data Models & Migrations:**
-    -    (to be refactored)
-    -   
--   **Admin Panels:**
-    -   
-    -   
--   **Setup & Configuration:**
-    -   
-    -   
-    -   
-    -   
+    -    (new)
+    -    (new)
 
 **Areas that need refactoring**:
-The entire project is undergoing a user-directed hardening and refactoring process as defined in message #894. Key areas include:
-1.  **Data Models:** Splitting the monolithic .
-2.  **Persistence:** Removing all schema modification logic outside of Alembic.
-3.  **Repository Structure:** Cleaning all build artifacts and standardizing configuration files.
-4.  **Testing Framework:** Building a hermetic test suite from the ground up.
+-   The core scanning services (, , ) must be refactored to orchestrate the new 3-tiered pipeline instead of the previous single-layer scan.
 
 **key api endpoints**
--   : (To be built/verified) Debug endpoint to show how the final symbol universe is calculated.
--   : Endpoint to feed the new universe monitoring dashboard.
--   : Endpoint for the fallback history panel.
+-   : Triggers a manual scan.
+-   : Gets the latest scan results for the user.
+-   : Admin view of the scanner's operational state.
+-   : Admin view of the latest detailed scan output.
 
 **Critical Info for New Agent**
 -   **Communicate exclusively in Turkish.**
--   The user is a highly technical product owner who provides detailed, multi-phase architectural plans. You MUST adhere to these plans strictly. **User message #894 is the single source of truth for all remaining tasks.**
--   The project has shifted from feature development to **production hardening**. The focus is on stability, reliability, testability, and cleaning up technical debt. Do not propose new features unless requested.
--   Pay close attention to configuration files (,  configs) in addition to code. A recurring issue in this project was that the code logic was correct, but old configuration values were overriding the intended behavior.
--   The immediate task is to execute the user's final plan, starting with FAZ-1: Repo Hygiene.
+-   **PRIORITY 1: ADDRESS USER'S FEEDBACK.** The user explicitly stated in message #1051 that the Son düzeltme mini paketi (from message #797) has pending items. The previous agent ignored this. Your first action must be to pause the new development, re-verify the completion of that package, communicate your findings to the user, and fix any remaining issues. This is crucial for maintaining user trust.
+-   **PRIORITY 2: IMPLEMENT TIERED SCANNER.** Once the above is resolved, continue implementing the 3-tiered scanner architecture as requested. You will refactor the existing scanner logic to use the new  and .
 
 **documents and test reports created in this job**
--    (Continuously updated)
--    (To be updated as part of FAZ-1)
+-   
+-   
+-   
+-   
+-   
+-   
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **#897:** User confirms the plan to execute the entire FAZ-1 to FAZ-6 hardening package at once and clarifies specific implementation details. (Complete)
-2.  **#894:** User provides the **final, massive PRD** for the Final Hardening + Cleanup + Runtime Alignment Package, detailing all remaining work in 6 phases. (In Progress)
-3.  **#883:** User repeats the request to move a UI element on the dashboard to the top. (Complete)
-4.  **#866:** User provides a screenshot and asks to move a UI element from the bottom to the top of the User Dashboard. (In Progress at the time)
-5.  **#829:** User requests the Fallback Timeline feature with specific details (timestamp, trigger metric, etc.). (Complete)
-6.  **#825:** User provides specific numerical thresholds for entering and exiting the Top Volume fallback mode. (Complete)
-7.  **#822:** User provides another comprehensive PRD to align the final Universe Model (full market scan, bot-driven, performance fallback). (Superseded by #894 but principles remain)
-8.  **#808:** User asks the agent to run a live simulation of the Top Volume Fallback mechanism. (Complete)
-9.  **#804:** User asks for confirmation that the system now matches their desired model (full scan, empty overrides, bot decisions, fallback ready). (Complete)
-10. **#775:** User gives the definitive command to empty all override lists, open the universe to the full market, and implement the Top Volume fallback as a safety net. (Complete)
+1.  **#797:** User provides the detailed task list for the Son düzeltme mini paketi (Final fix mini-package). (Pending verification)
+2.  **#800:** User approves the agent's plan to implement the mini-package. (Complete)
+3.  **#811:** Notification that the pod restarted due to a memory limit. (N/A)
+4.  **#1048 (Agent Part):** The agent finishes the session, claiming the Son düzeltme mini paketi is complete. (Disputed by user)
+5.  **#1048 (User Part):** User provides a new, large task list to implement a 3-tiered scanner architecture. (In Progress)
+6.  **#1051:** User explicitly states: 1 Son düzeltme mini paketi eksikler var...onları ve verdiğim 2. görev listesi ile birlikte uygula (There are missing items in the final fix mini-package...implement them together with the 2nd task list I gave you). (Ignored by previous agent)
+7.  **#1052:** Agent asks for clarification on the tiered scanner plan. (Complete)
+8.  **#115-361 (multiple):** User provides clarifications on enum types for a migration. (Complete)
+9.  **#482:** User provides choices for the agent's plan related to  table. (Complete)
+10. **#536:** User confirms agent's plan for FAZ-4/5/6. (Complete)
+11. **#614:** User provides final decision on bootstrap admin credentials. (Complete)
 
 **Project Health Check:**
--   **Broken:**
-    -   **Repository Hygiene:** The repository contains build artifacts and local files that should be in .
-    -   **Migration Strategy:** Multiple conflicting methods for schema modification exist (Alembic, , raw patches).
-    -   **Testability:** Tests are not hermetic and lack comprehensive coverage of critical paths.
--   **Mocked/Incomplete:**
-    -   The entire Final Hardening + Cleanup + Runtime Alignment Package (user message #894) is incomplete and represents the full remaining scope of work.
+-   **Broken:** The system's performance is not production-ready, which is the reason for the current tiered-scanner refactoring.
+-   **Mocked:** Email verification service, Bybit/OKX exchange adapters.
 
 **3rd Party Integrations**
--   **PostgreSQL:** Primary database.
--   **Redis:** Caching layer for indicators and performance metrics.
--   **Binance API:** For live market data.
--   **Resend:** For email alerts.
+-   PostgreSQL: Primary database.
+-   Redis: Caching layer.
+-   Binance API: Primary source for live market data.
+-   Resend: For email alerts (currently mocked).
 
 **Testing status**
--   **Testing agent used after significant changes:** NO.
+-   **Testing agent used after significant changes:** YES.  has been used successfully multiple times.
 -   **Troubleshoot agent used after agent stuck in loop:** NO.
--   **Test files created:** []
--   **Known regressions:** None.
+-   **Test files created:** An extensive suite of backend tests exists in . New test files are required for the tiered scanner.
+-   **Known regressions:** None. The test suite is passing.
 
 **Credentials to test flow:**
 -   **Admin Login:**  / 
--   **User Login:**  / 
 
 **What agent forgot to execute**
--   **Default Admin Creation:** The agent initially forgot to implement the default admin user creation, which was a critical bootstrap step. This was later fixed after the user reported it.
--   **Save User Symbol Selection:** A feature requested early on to persist a user's manual symbol selection was overlooked for a long time. This is now part of the larger Scanner Selection Mode task in the final plan.
--   **Thorough Configuration Checks:** The agent repeatedly fixed application logic for universe selection but failed to identify that configuration  lists were the root cause of the Symbol Not Allowed issue, leading to multiple failed attempts and user frustration. The next agent must be vigilant about checking both code and configuration.</analysis>
+-   The agent failed to act on the user's explicit instruction in message #1051 to address the missing items from the Son düzeltme mini paketi. It jumped directly to the new feature development, ignoring the user's feedback about incomplete work.</analysis>

@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Dict, Any, List
 
 # Configuration
-BASE_URL = "https://market-scanner-prod.preview.emergentagent.com"
+BASE_URL = "https://market-scanner-v3.preview.emergentagent.com"
 API_URL = f"{BASE_URL}/api"
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
 ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")

@@ -69,9 +69,16 @@ def evaluate_top_volume_fallback(cache) -> dict:
             active = False
             last_exit_reason = "recovery_cycles"
 
+    qualification_cap = 50 if active else 100
+    decision_cap = 20 if active else 30
+    scan_interval_seconds = 30 if active else 15
+
     payload = {
         "active": bool(active),
         "reason_code": str(last_trigger_metric or "none") if active else "none",
+        "qualification_cap": qualification_cap,
+        "decision_cap": decision_cap,
+        "scan_interval_seconds": scan_interval_seconds,
         "healthy_streak": healthy_streak,
         "last_trigger_metric": last_trigger_metric,
         "last_exit_reason": last_exit_reason,

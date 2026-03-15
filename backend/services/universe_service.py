@@ -11,7 +11,13 @@ SUPPORTED_EXCHANGES = ["binance", "bybit", "okx"]
 
 
 def _normalize_symbols(symbols: list[str]) -> list[str]:
-    return sorted({str(symbol or "").strip().upper() for symbol in symbols if str(symbol or "").strip()})
+    return sorted(
+        {
+            str(symbol or "").strip().upper()
+            for symbol in symbols
+            if str(symbol or "").strip() and str(symbol or "").strip().upper().endswith("USDT")
+        }
+    )
 
 
 def _exchange_symbols(exchange: str, market_type: str) -> list[str]:

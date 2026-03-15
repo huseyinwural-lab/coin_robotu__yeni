@@ -19,7 +19,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://market-scanner-prod.preview.emergentagent.com"
+    BASE_URL = "https://market-scanner-v3.preview.emergentagent.com"
 
 ADMIN_CREDENTIALS = {"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
 

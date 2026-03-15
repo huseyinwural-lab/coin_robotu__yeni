@@ -7,7 +7,7 @@ import requests
 import subprocess
 import time
 
-BASE_URL = "https://market-scanner-prod.preview.emergentagent.com"
+BASE_URL = "https://market-scanner-v3.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 def test_1_admin_login():

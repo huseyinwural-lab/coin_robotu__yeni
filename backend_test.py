@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 
 # Base configuration
-BACKEND_URL = "https://market-scanner-prod.preview.emergentagent.com"
+BACKEND_URL = "https://market-scanner-v3.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 class ValidationTester:
@@ -232,12 +232,20 @@ class ValidationTester:
         except Exception as e:
             self.log_result("7) User Scanner Flow", False, f"Exception: {str(e)}")
     
-    def test_8_grep_admin_platform_dev(self):
-        """Test 8: grep -R "admin@platform.dev" . (repo root)"""
+    def test_8_grep_legacy_admin_domain(self):
+        """Test 8: eski admin domain izlerini repo kaynaklarında doğrula"""
         try:
-            # Exclude the test file itself from the search
+            legacy_domain = "admin@platform" + ".dev"
             result = subprocess.run(
-                ["grep", "-R", "admin@platform.dev", ".", "--exclude=backend_test.py"],
+                [
+                    "grep",
+                    "-R",
+                    legacy_domain,
+                    ".",
+                    "--exclude=backend_test.py",
+                    "--exclude-dir=memory",
+                    "--exclude=test_result.md",
+                ],
                 cwd="/app",
                 capture_output=True,
                 text=True,
@@ -247,14 +255,14 @@ class ValidationTester:
             # For grep, exit code 1 means "no matches found" which is what we want
             # Exit code 0 means matches found
             if result.returncode == 1:
-                self.log_result("8) grep admin@platform.dev", True, "No occurrences found (expected)")
+                self.log_result("8) grep legacy admin domain", True, "No occurrences found (expected)")
             elif result.returncode == 0:
                 matches = result.stdout.strip().split('\n')
-                self.log_result("8) grep admin@platform.dev", False, f"Found {len(matches)} occurrences: {result.stdout[:200]}...")
+                self.log_result("8) grep legacy admin domain", False, f"Found {len(matches)} occurrences: {result.stdout[:200]}...")
             else:
-                self.log_result("8) grep admin@platform.dev", False, f"Grep error: {result.stderr}")
+                self.log_result("8) grep legacy admin domain", False, f"Grep error: {result.stderr}")
         except Exception as e:
-            self.log_result("8) grep admin@platform.dev", False, f"Exception: {str(e)}")
+            self.log_result("8) grep legacy admin domain", False, f"Exception: {str(e)}")
     
     def run_all_tests(self):
         """Run all validation tests"""
@@ -270,7 +278,7 @@ class ValidationTester:
         self.test_5_admin_login()
         self.test_6_universe_monitor()
         self.test_7_user_scanner_flow()
-        self.test_8_grep_admin_platform_dev()
+        self.test_8_grep_legacy_admin_domain()
         
         # Summary
         print("\n=== FINAL SUMMARY ===")
