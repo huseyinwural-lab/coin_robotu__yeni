@@ -2,6 +2,8 @@ import {
   Activity,
   BarChart3,
   BarChartBig,
+  ChevronDown,
+  ChevronRight,
   ClipboardList,
   FileText,
   Gauge,
@@ -45,17 +47,88 @@ const userNavItems = [
 ];
 
 const adminOnlyItems = [
-  { to: "/admin/dashboard", label: "Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
-  { to: "/admin/monitoring", label: "System Status", icon: Activity, testId: "nav-admin-system-status-link" },
-  { to: "/admin/universe-monitor", label: "Scanner Monitor", icon: Gauge, testId: "nav-admin-scanner-monitor-link" },
-  { to: "/admin/futures/strategy-analytics", label: "Strategy Analytics", icon: BarChart3, testId: "nav-admin-strategy-analytics-link" },
-  { to: "/admin/risk-orchestrator", label: "Risk Engine", icon: ShieldAlert, testId: "nav-admin-risk-engine-link" },
-  { to: "/admin/execution-queue", label: "Execution Monitor", icon: Wrench, testId: "nav-admin-execution-monitor-link" },
-  { to: "/admin/users/customers", label: "Users", icon: UserCog, testId: "nav-admin-users-link" },
-  { to: "/admin/strategies", label: "Bots", icon: ClipboardList, testId: "nav-admin-bots-link" },
-  { to: "/admin/exchanges", label: "Exchange Settings", icon: Globe, testId: "nav-admin-exchange-settings-link" },
-  { to: "/admin/execution-policies", label: "System Config", icon: Settings2, testId: "nav-admin-system-config-link" },
-  { to: "/admin/audit-logs", label: "Logs", icon: FileText, testId: "nav-admin-logs-link" },
+  {
+    id: "core",
+    label: "CORE",
+    defaultOpen: true,
+    items: [
+      { to: "/admin/dashboard", label: "Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
+      { to: "/admin/monitoring", label: "System Status", icon: Activity, testId: "nav-admin-system-status-link" },
+      { to: "/admin/universe-monitor", label: "Scanner Monitor", icon: Gauge, testId: "nav-admin-scanner-monitor-link" },
+      { to: "/admin/futures/strategy-analytics", label: "Strategy Analytics", icon: BarChart3, testId: "nav-admin-strategy-analytics-link" },
+    ],
+  },
+  {
+    id: "risk-execution",
+    label: "RISK & EXECUTION",
+    defaultOpen: true,
+    items: [
+      { to: "/admin/risk-orchestrator", label: "Risk Engine", icon: ShieldAlert, testId: "nav-admin-risk-engine-link" },
+      { to: "/admin/execution-queue", label: "Execution Monitor", icon: Wrench, testId: "nav-admin-execution-monitor-link" },
+    ],
+  },
+  {
+    id: "operations",
+    label: "OPERATIONS",
+    defaultOpen: true,
+    items: [
+      { to: "/admin/strategies", label: "Bots", icon: ClipboardList, testId: "nav-admin-bots-link" },
+      { to: "/admin/users/customers", label: "Users", icon: UserCog, testId: "nav-admin-users-link" },
+      { to: "/admin/exchanges", label: "Exchange Settings", icon: Globe, testId: "nav-admin-exchange-settings-link" },
+    ],
+  },
+  {
+    id: "system",
+    label: "SYSTEM",
+    defaultOpen: true,
+    items: [
+      { to: "/admin/execution-policies", label: "System Config", icon: Settings2, testId: "nav-admin-system-config-link" },
+      { to: "/admin/audit-logs", label: "Logs", icon: FileText, testId: "nav-admin-logs-link" },
+    ],
+  },
+  {
+    id: "advanced",
+    label: "ARAŞTIRMA / ADVANCED",
+    defaultOpen: false,
+    items: [
+      { to: "/admin/futures/risk-monitor", label: "futures/risk-monitor", icon: LineChart, testId: "nav-admin-advanced-futures-risk-monitor-link" },
+      { to: "/admin/futures/liquidation-protection", label: "futures/liquidation-protection", icon: LineChart, testId: "nav-admin-advanced-futures-liquidation-protection-link" },
+      { to: "/admin/futures/strategy-governance", label: "futures/strategy-governance", icon: LineChart, testId: "nav-admin-advanced-futures-strategy-governance-link" },
+      { to: "/admin/futures/cluster-risk", label: "futures/cluster-risk", icon: LineChart, testId: "nav-admin-advanced-futures-cluster-risk-link" },
+      { to: "/admin/futures/capital-governance", label: "futures/capital-governance", icon: LineChart, testId: "nav-admin-advanced-futures-capital-governance-link" },
+      { to: "/admin/futures/tail-risk", label: "futures/tail-risk", icon: LineChart, testId: "nav-admin-advanced-futures-tail-risk-link" },
+      { to: "/admin/futures/live-readiness", label: "futures/live-readiness", icon: LineChart, testId: "nav-admin-advanced-futures-live-readiness-link" },
+      { to: "/admin/futures/scaling-validation", label: "futures/scaling-validation", icon: LineChart, testId: "nav-admin-advanced-futures-scaling-validation-link" },
+      { to: "/admin/futures/microstructure-guard", label: "futures/microstructure-guard", icon: LineChart, testId: "nav-admin-advanced-futures-microstructure-guard-link" },
+      { to: "/admin/futures/testnet-control", label: "futures/testnet-control", icon: LineChart, testId: "nav-admin-advanced-futures-testnet-control-link" },
+      { to: "/admin/proofs", label: "proofs", icon: FileText, testId: "nav-admin-advanced-proofs-link" },
+      { to: "/admin/reports/archive", label: "reports/archive", icon: FileText, testId: "nav-admin-advanced-reports-archive-link" },
+      { to: "/admin/runtime/quarantine", label: "runtime/quarantine", icon: ShieldAlert, testId: "nav-admin-advanced-runtime-quarantine-link" },
+      { to: "/admin/runtime/recovery", label: "runtime/recovery", icon: ShieldAlert, testId: "nav-admin-advanced-runtime-recovery-link" },
+      { to: "/admin/strategy-allocation", label: "strategy-allocation", icon: BarChart3, testId: "nav-admin-advanced-strategy-allocation-link" },
+      { to: "/admin/portfolio-risk", label: "portfolio-risk", icon: ShieldAlert, testId: "nav-admin-advanced-portfolio-risk-link" },
+      { to: "/admin/positions-monitor", label: "positions-monitor", icon: Activity, testId: "nav-admin-advanced-positions-monitor-link" },
+      { to: "/admin/strategy-intelligence", label: "strategy-intelligence", icon: BarChart3, testId: "nav-admin-advanced-strategy-intelligence-link" },
+      { to: "/admin/canonical-strategy-registry", label: "canonical-strategy-registry", icon: ClipboardList, testId: "nav-admin-advanced-canonical-strategy-registry-link" },
+      { to: "/admin/learning-panel", label: "learning-panel", icon: ClipboardList, testId: "nav-admin-advanced-learning-panel-link" },
+      { to: "/admin/learning-impact-simulator", label: "learning-impact-simulator", icon: ClipboardList, testId: "nav-admin-advanced-learning-impact-simulator-link" },
+      { to: "/admin/freshness-heatmap", label: "freshness-heatmap", icon: Gauge, testId: "nav-admin-advanced-freshness-heatmap-link" },
+      { to: "/admin/risk-orchestrator/analytics", label: "risk-orchestrator/analytics", icon: BarChart3, testId: "nav-admin-advanced-risk-orchestrator-analytics-link" },
+      { to: "/admin/phase4-live", label: "phase4-live", icon: Wrench, testId: "nav-admin-advanced-phase4-live-link" },
+      { to: "/admin/exposure-groups", label: "exposure-groups", icon: ShieldAlert, testId: "nav-admin-advanced-exposure-groups-link" },
+      { to: "/admin/correlation-matrix", label: "correlation-matrix", icon: BarChart3, testId: "nav-admin-advanced-correlation-matrix-link" },
+      { to: "/admin/execution-states", label: "execution-states", icon: Activity, testId: "nav-admin-advanced-execution-states-link" },
+      { to: "/admin/hardening-checklist", label: "hardening-checklist", icon: ShieldAlert, testId: "nav-admin-advanced-hardening-checklist-link" },
+      { to: "/admin/failed-events", label: "failed-events", icon: ShieldAlert, testId: "nav-admin-advanced-failed-events-link" },
+      { to: "/admin/state-rebuild", label: "state-rebuild", icon: Wrench, testId: "nav-admin-advanced-state-rebuild-link" },
+      { to: "/admin/backtest-cards", label: "backtest-cards", icon: BarChart3, testId: "nav-admin-advanced-backtest-cards-link" },
+      { to: "/admin/cross-dashboard-consistency", label: "cross-dashboard-consistency", icon: Gauge, testId: "nav-admin-advanced-cross-dashboard-consistency-link" },
+      { to: "/admin/user-approvals", label: "user-approvals", icon: UserCog, testId: "nav-admin-advanced-user-approvals-link" },
+      { to: "/admin/system-alerts", label: "system-alerts", icon: Activity, testId: "nav-admin-advanced-system-alerts-link" },
+      { to: "/admin/strategy-observability", label: "strategy-observability", icon: Gauge, testId: "nav-admin-advanced-strategy-observability-link" },
+      { to: "/admin/market-universe", label: "market-universe", icon: Globe, testId: "nav-admin-advanced-market-universe-link" },
+    ],
+  },
 ];
 
 export const PanelLayout = () => {
@@ -66,8 +139,11 @@ export const PanelLayout = () => {
   const [nowTick, setNowTick] = useState(Date.now());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [adminGroupOpen, setAdminGroupOpen] = useState(() =>
+    Object.fromEntries(adminOnlyItems.map((group) => [group.id, group.defaultOpen])),
+  );
   const isAdmin = adminRoles.has(user?.role);
-  const navItems = isAdmin ? adminOnlyItems : userNavItems;
+  const navItems = isAdmin ? [] : userNavItems;
   const roleThemeClass = isAdmin ? "admin-ops-theme" : "user-theme";
   const sidebarClass = isAdmin ? "border-orange-700 bg-orange-300" : "border-slate-800 bg-slate-900";
   const brandTitleClass = isAdmin ? "text-black" : "text-orange-500";
@@ -119,6 +195,37 @@ export const PanelLayout = () => {
     return `expires in ${min}m ${sec}s`;
   }, [gateBadge, nowTick]);
 
+  const renderNavLink = (item) => {
+    const Icon = item.icon;
+
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        data-testid={item.testId}
+        aria-label={`${item.label} sayfasına git`}
+        className={({ isActive }) =>
+          `flex items-center gap-2 border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+            isActive
+              ? activeNavClass
+              : "border-slate-700 text-slate-200 hover:border-slate-500 hover:text-white"
+          }`
+        }
+        onClick={() => setSidebarOpen(false)}
+      >
+        <Icon size={16} />
+        <span className={sidebarCollapsed ? "hidden md:inline" : "inline"}>{item.label}</span>
+      </NavLink>
+    );
+  };
+
+  const toggleAdminGroup = (groupId) => {
+    setAdminGroupOpen((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  };
+
   return (
     <div className={`${roleThemeClass} h-screen overflow-hidden bg-slate-950 text-slate-100`} data-testid="panel-layout-wrapper">
       <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-emerald-300 bg-emerald-100/95 px-4 py-3 text-slate-900 backdrop-blur" data-testid="panel-sticky-header" aria-label="Panel üst navigasyon">
@@ -166,28 +273,37 @@ export const PanelLayout = () => {
           </div>
 
           <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 pb-2" data-testid="sidebar-navigation" aria-label="Sidebar linkleri">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  data-testid={item.testId}
-                  aria-label={`${item.label} sayfasına git`}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
-                      isActive
-                        ? activeNavClass
-                        : "border-slate-700 text-slate-200 hover:border-slate-500 hover:text-white"
-                    }`
-                  }
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <Icon size={16} />
-                  <span className={sidebarCollapsed ? "hidden md:inline" : "inline"}>{item.label}</span>
-                </NavLink>
-              );
-            })}
+            {isAdmin ? (
+              <div className="space-y-3" data-testid="admin-menu-groups">
+                {adminOnlyItems.map((group) => {
+                  const isOpen = adminGroupOpen[group.id] ?? group.defaultOpen;
+
+                  return (
+                    <section key={group.id} className="rounded border border-black/30 bg-black/10 p-2" data-testid={`admin-menu-group-${group.id}`}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-2 rounded border border-black/20 bg-black/5 px-2 py-1 text-xs font-semibold uppercase tracking-wider text-black hover:bg-black/10"
+                        onClick={() => toggleAdminGroup(group.id)}
+                        data-testid={`admin-menu-group-toggle-${group.id}`}
+                        aria-expanded={isOpen}
+                        aria-controls={`admin-menu-group-items-${group.id}`}
+                      >
+                        <span>{group.label}</span>
+                        {isOpen ? <ChevronDown size={14} data-testid={`admin-menu-group-icon-open-${group.id}`} /> : <ChevronRight size={14} data-testid={`admin-menu-group-icon-closed-${group.id}`} />}
+                      </button>
+
+                      {isOpen && (
+                        <div className="mt-2 space-y-2" id={`admin-menu-group-items-${group.id}`} data-testid={`admin-menu-group-items-${group.id}`}>
+                          {group.items.map(renderNavLink)}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
+            ) : (
+              navItems.map(renderNavLink)
+            )}
           </nav>
 
           <Button
