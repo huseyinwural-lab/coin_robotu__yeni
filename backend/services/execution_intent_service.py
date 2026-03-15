@@ -16,6 +16,7 @@ from services.strategy_intelligence_service import (
     evaluate_conflict_warning,
     evaluate_hedge_suggestion,
 )
+from services.universe_service import resolve_symbol_market_type
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
 ALLOWED_SUBMIT_SOURCE_STATES = {"PREVIEWED"}
@@ -57,7 +58,7 @@ def _default_bot(db: Session, user_id: str, market_type: str) -> BotProfile:
         strategy_type="manual_execution",
         timeframe="15m",
         trend_timeframe="1h",
-        leverage=1,
+        leverage=3 if str(market_type or "spot").lower() == "futures" else 1,
         is_enabled=True,
         is_running=False,
     )
@@ -665,22 +666,25 @@ def _calc_realized_pnl(position: PaperPosition, exit_price: float, quantity: flo
 
 
 def _open_position_from_intent(db: Session, intent: UserExecutionIntent, normalized: dict) -> PaperPosition:
-    bot = _default_bot(db, intent.user_id, str(normalized.get("market_type") or "spot"))
     symbol = str(normalized.get("symbol") or intent.symbol or "BTCUSDT")
+    requested_market_type = str(normalized.get("market_type") or "").strip().lower()
+    market_type = requested_market_type if requested_market_type in {"spot", "futures"} else resolve_symbol_market_type(db, redis_client, symbol)
+    bot = _default_bot(db, intent.user_id, market_type)
     entry_price = _safe_price(symbol)
     quantity = round(max(float(intent.notional or 0) / max(entry_price, 1), 0.001), 6)
     side = str(normalized.get("side") or "buy").lower()
     position_side = "long" if side in {"buy", "long"} else "short"
+    leverage_default = 3 if market_type == "futures" else 1
 
     position = PaperPosition(
         id=str(uuid.uuid4()),
         user_id=intent.user_id,
         bot_profile_id=bot.id,
         symbol=symbol,
-        market_type=str(normalized.get("market_type") or "spot"),
+        market_type=market_type,
         side=position_side,
         quantity=quantity,
-        leverage=int(normalized.get("leverage") or 1),
+        leverage=int(normalized.get("leverage") or leverage_default),
         entry_price=entry_price,
         stop_loss=float(intent.stop_price) if intent.stop_price is not None else round(entry_price * 0.99, 6),
         take_profit=float(intent.take_profit_price)

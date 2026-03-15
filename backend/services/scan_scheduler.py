@@ -1,3 +1,6 @@
+from datetime import datetime, timezone
+
+from services.pipeline.cache_store import set_json
 from services.scanner_runtime import run_scanner_runtime
 
 
@@ -15,7 +18,7 @@ class ScanScheduler:
         selected_symbols: list[str],
         max_results: int,
     ) -> dict:
-        return run_scanner_runtime(
+        result = run_scanner_runtime(
             db,
             self.cache,
             user_id=user_id,
@@ -24,3 +27,14 @@ class ScanScheduler:
             symbol_source=symbol_source,
             max_results=max_results,
         )
+        set_json(
+            self.cache,
+            f"scanner:working_set:user:{user_id}",
+            {
+                "candidate_symbols": result.get("candidate_symbols") or [],
+                "candidate_count": int(result.get("candidate_count") or 0),
+                "effective_mode": result.get("effective_mode"),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        return result

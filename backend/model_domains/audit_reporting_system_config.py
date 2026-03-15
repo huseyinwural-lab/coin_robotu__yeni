@@ -7,6 +7,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
 from model_domains.shared import utcnow
+from model_domains.runtime_scan_candidate import RuntimeScanCandidate
+
+_runtime_scan_candidate_registered = RuntimeScanCandidate
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

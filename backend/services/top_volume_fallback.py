@@ -23,6 +23,8 @@ def _to_int(value, default: int = 0) -> int:
 def evaluate_top_volume_fallback(cache) -> dict:
     queue_state = get_json(cache, "scanner:queue:state") or {}
     perf_state = get_json(cache, "scanner:perf:latest:global") or {}
+    runtime_state = get_json(cache, "scanner:runtime:latest:global") or {}
+    runtime_metrics = runtime_state.get("runtime_metrics") or {}
     current_state = get_json(cache, FALLBACK_STATE_KEY) or {
         "active": False,
         "healthy_streak": 0,
@@ -30,16 +32,23 @@ def evaluate_top_volume_fallback(cache) -> dict:
         "last_exit_reason": None,
     }
 
-    scan_latency_ms = _to_float(perf_state.get("cycle_duration_ms"), _to_float(queue_state.get("cycle_latency_ms"), 0.0))
-    market_data_age_ms = _to_float(perf_state.get("snapshot_age_avg_sec"), 0.0) * 1000.0
-    queue_depth = _to_int(queue_state.get("depth"), 0)
+    scan_latency_ms = _to_float(
+        runtime_metrics.get("scan_latency_ms"),
+        _to_float(perf_state.get("cycle_duration_ms"), _to_float(queue_state.get("cycle_latency_ms"), 0.0)),
+    )
+    decision_latency_ms = _to_float(runtime_metrics.get("decision_latency_ms"), 0.0)
+    snapshot_age_ms = _to_float(runtime_metrics.get("snapshot_age_ms"), _to_float(perf_state.get("snapshot_age_avg_sec"), 0.0) * 1000.0)
+    queue_depth = _to_int(runtime_metrics.get("queue_depth"), _to_int(queue_state.get("depth"), 0))
+    candidate_count = _to_int(runtime_metrics.get("candidate_count"), 0)
     backpressure = _to_float(queue_state.get("worker_utilization"), 0.0)
 
     enter_reasons = []
     if scan_latency_ms > 4000:
         enter_reasons.append("scan_latency_ms")
-    if market_data_age_ms > 150000:
-        enter_reasons.append("market_data_age_ms")
+    if decision_latency_ms > 3000:
+        enter_reasons.append("decision_latency_ms")
+    if snapshot_age_ms > 150000:
+        enter_reasons.append("snapshot_age_ms")
     if queue_depth > 50:
         enter_reasons.append("queue_depth")
     if backpressure > 0.9:
@@ -67,8 +76,10 @@ def evaluate_top_volume_fallback(cache) -> dict:
         "last_exit_reason": last_exit_reason,
         "metrics": {
             "scan_latency_ms": round(scan_latency_ms, 4),
-            "market_data_age_ms": round(market_data_age_ms, 4),
+            "decision_latency_ms": round(decision_latency_ms, 4),
+            "snapshot_age_ms": round(snapshot_age_ms, 4),
             "queue_depth": queue_depth,
+            "candidate_count": candidate_count,
             "pipeline_backpressure": round(backpressure, 6),
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),

@@ -1,359 +1,390 @@
 #!/usr/bin/env python3
 """
-FAZ-2C + FAZ-3 Backend Test Package
-Quick validation of critical endpoints
+FAZ-3A/3B/3C Backend Validation Test Suite
+Turkish Requirements Validation Package
+
+Tests:
+1) Drift & migration - Alembic drift gate validation
+2) Required endpoint regression - Core API endpoints 
+3) New runtime endpoints - 4 runtime endpoints validation
+4) Candidate persistence - Database table validation
+5) Futures execution alignment - Symbol resolution test
 """
 
-import requests
-import subprocess
+import os
 import sys
+import subprocess
+import requests
 import json
-from typing import Dict, Any, Tuple
+from datetime import datetime
 
-# Configuration
-BASE_URL = "https://market-scanner-prod.preview.emergentagent.com"
+# Backend URL from environment
+BACKEND_URL = "https://market-scanner-prod.preview.emergentagent.com/api"
+
+# Test admin credentials
 ADMIN_EMAIL = "admin@platform.dev"
 ADMIN_PASSWORD = "Admin12345!"
 
-class BackendTester:
-    def __init__(self):
-        self.admin_token = None
-        self.user_token = None
-        self.results = []
-        
-    def log_result(self, test_name: str, status: str, details: str = ""):
-        """Log test result"""
-        self.results.append({
-            "test": test_name,
-            "status": status,
-            "details": details
-        })
-        print(f"{status}: {test_name} - {details}")
-    
-    def run_drift_gate(self) -> bool:
-        """Test 1: Drift gate strict"""
-        try:
-            result = subprocess.run(
-                ["bash", "/app/scripts/ci_alembic_drift_gate.sh"],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            
-            if result.returncode == 0:
-                self.log_result("Drift Gate Strict", "PASS", result.stdout.strip())
-                return True
-            else:
-                self.log_result("Drift Gate Strict", "FAIL", result.stderr.strip())
-                return False
-        except Exception as e:
-            self.log_result("Drift Gate Strict", "FAIL", f"Error: {e}")
-            return False
-    
-    def test_health_endpoint(self) -> bool:
-        """Test 2.1: Health endpoint"""
-        try:
-            response = requests.get(f"{BASE_URL}/api/health", timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "ok":
-                    self.log_result("Health Endpoint", "PASS", "Status: ok")
-                    return True
-                else:
-                    self.log_result("Health Endpoint", "FAIL", f"Unexpected response: {data}")
-                    return False
-            else:
-                self.log_result("Health Endpoint", "FAIL", f"HTTP {response.status_code}")
-                return False
-        except Exception as e:
-            self.log_result("Health Endpoint", "FAIL", f"Error: {e}")
-            return False
-    
-    def test_admin_login(self) -> bool:
-        """Test 2.2: Admin login"""
-        try:
-            payload = {
-                "email": ADMIN_EMAIL,
-                "password": ADMIN_PASSWORD
-            }
-            
-            response = requests.post(f"{BASE_URL}/api/auth/login/admin", json=payload, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if "access_token" in data:
-                    self.admin_token = data["access_token"]
-                    self.log_result("Admin Login", "PASS", "Token obtained")
-                    return True
-                else:
-                    self.log_result("Admin Login", "FAIL", f"No access_token in response: {data}")
-                    return False
-            else:
-                self.log_result("Admin Login", "FAIL", f"HTTP {response.status_code}: {response.text}")
-                return False
-        except Exception as e:
-            self.log_result("Admin Login", "FAIL", f"Error: {e}")
-            return False
-    
-    def test_universe_monitor(self) -> bool:
-        """Test 2.3: Universe monitor"""
-        if not self.admin_token:
-            self.log_result("Universe Monitor", "FAIL", "No admin token available")
-            return False
-            
-        try:
-            headers = {"Authorization": f"Bearer {self.admin_token}"}
-            response = requests.get(f"{BASE_URL}/api/admin/universe-monitor", headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                field_count = len(data)
-                self.log_result("Universe Monitor", "PASS", f"{field_count} fields returned")
-                return True
-            else:
-                self.log_result("Universe Monitor", "FAIL", f"HTTP {response.status_code}")
-                return False
-        except Exception as e:
-            self.log_result("Universe Monitor", "FAIL", f"Error: {e}")
-            return False
-    
-    def test_user_scanner_flow(self) -> bool:
-        """Test 2.4: User scanner symbol selection (simplified)"""
-        # For speed, we'll use existing test user from previous tests
-        test_email = "test_user_reg_1773349041@test.com"
-        test_password = "TestPassword123!"
-        
-        try:
-            # Try user login first
-            payload = {
-                "email": test_email,
-                "password": test_password
-            }
-            
-            response = requests.post(f"{BASE_URL}/api/auth/login", json=payload, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if "access_token" in data:
-                    user_token = data["access_token"]
-                    
-                    # Test scanner endpoint
-                    headers = {"Authorization": f"Bearer {user_token}"}
-                    scanner_response = requests.get(f"{BASE_URL}/api/user/scanner/symbol-selection", headers=headers, timeout=10)
-                    
-                    if scanner_response.status_code == 200:
-                        scanner_data = scanner_response.json()
-                        field_count = len(scanner_data)
-                        self.log_result("User Scanner Flow", "PASS", f"Scanner data: {field_count} fields")
-                        return True
-                    else:
-                        self.log_result("User Scanner Flow", "FAIL", f"Scanner HTTP {scanner_response.status_code}")
-                        return False
-                else:
-                    self.log_result("User Scanner Flow", "FAIL", "No user access_token")
-                    return False
-            else:
-                self.log_result("User Scanner Flow", "FAIL", f"User login HTTP {response.status_code}")
-                return False
-        except Exception as e:
-            self.log_result("User Scanner Flow", "FAIL", f"Error: {e}")
-            return False
-    
-    def test_runtime_summary(self) -> bool:
-        """Test 3.1: Runtime summary"""
-        if not self.admin_token:
-            self.log_result("Runtime Summary", "FAIL", "No admin token available")
-            return False
-            
-        try:
-            headers = {"Authorization": f"Bearer {self.admin_token}"}
-            response = requests.get(f"{BASE_URL}/api/admin/universe/runtime-summary", headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                # Check for key fields
-                required_fields = ["scanner_mode_effective", "fallback_state"]
-                missing_fields = [f for f in required_fields if f not in data]
-                
-                if not missing_fields:
-                    field_count = len(data)
-                    self.log_result("Runtime Summary", "PASS", f"{field_count} fields, key fields present")
-                    return True
-                else:
-                    self.log_result("Runtime Summary", "FAIL", f"Missing fields: {missing_fields}")
-                    return False
-            else:
-                self.log_result("Runtime Summary", "FAIL", f"HTTP {response.status_code}")
-                return False
-        except Exception as e:
-            self.log_result("Runtime Summary", "FAIL", f"Error: {e}")
-            return False
-    
-    def test_runtime_latest_scan(self) -> bool:
-        """Test 3.2: Runtime latest scan"""
-        if not self.admin_token:
-            self.log_result("Runtime Latest Scan", "FAIL", "No admin token available")
-            return False
-            
-        try:
-            headers = {"Authorization": f"Bearer {self.admin_token}"}
-            response = requests.get(f"{BASE_URL}/api/admin/universe/runtime-latest-scan", headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                field_count = len(data)
-                self.log_result("Runtime Latest Scan", "PASS", f"{field_count} fields returned")
-                return True
-            else:
-                self.log_result("Runtime Latest Scan", "FAIL", f"HTTP {response.status_code}")
-                return False
-        except Exception as e:
-            self.log_result("Runtime Latest Scan", "FAIL", f"Error: {e}")
-            return False
-    
-    def test_user_runtime_run(self) -> bool:
-        """Test 3.3: User runtime run"""
-        # Get user token first
-        test_email = "test_user_reg_1773349041@test.com"
-        test_password = "TestPassword123!"
-        
-        try:
-            # User login
-            payload = {
-                "email": test_email,
-                "password": test_password
-            }
-            
-            response = requests.post(f"{BASE_URL}/api/auth/login", json=payload, timeout=10)
-            
-            if response.status_code != 200:
-                self.log_result("User Runtime Run", "FAIL", f"User login HTTP {response.status_code}")
-                return False
-                
-            data = response.json()
-            user_token = data.get("access_token")
-            
-            if not user_token:
-                self.log_result("User Runtime Run", "FAIL", "No user access_token")
-                return False
-            
-            # Test runtime run
-            headers = {"Authorization": f"Bearer {user_token}"}
-            run_response = requests.post(f"{BASE_URL}/api/user/scanner/runtime/run", headers=headers, timeout=10)
-            
-            if run_response.status_code == 200:
-                run_data = run_response.json()
-                # Check for key fields
-                required_fields = ["candidate_symbols", "decision_count", "fallback_active"]
-                missing_fields = [f for f in required_fields if f not in run_data]
-                
-                if not missing_fields:
-                    field_count = len(run_data)
-                    self.log_result("User Runtime Run", "PASS", f"{field_count} fields, key fields present")
-                    return True
-                else:
-                    self.log_result("User Runtime Run", "FAIL", f"Missing fields: {missing_fields}")
-                    return False
-            else:
-                self.log_result("User Runtime Run", "FAIL", f"HTTP {run_response.status_code}")
-                return False
-        except Exception as e:
-            self.log_result("User Runtime Run", "FAIL", f"Error: {e}")
-            return False
-    
-    def test_user_runtime_snapshot(self) -> bool:
-        """Test 3.4: User runtime snapshot"""
-        # Get user token first
-        test_email = "test_user_reg_1773349041@test.com"
-        test_password = "TestPassword123!"
-        
-        try:
-            # User login
-            payload = {
-                "email": test_email,
-                "password": test_password
-            }
-            
-            response = requests.post(f"{BASE_URL}/api/auth/login", json=payload, timeout=10)
-            
-            if response.status_code != 200:
-                self.log_result("User Runtime Snapshot", "FAIL", f"User login HTTP {response.status_code}")
-                return False
-                
-            data = response.json()
-            user_token = data.get("access_token")
-            
-            if not user_token:
-                self.log_result("User Runtime Snapshot", "FAIL", "No user access_token")
-                return False
-            
-            # Test runtime snapshot
-            headers = {"Authorization": f"Bearer {user_token}"}
-            snapshot_response = requests.get(f"{BASE_URL}/api/user/scanner/runtime/snapshot", headers=headers, timeout=10)
-            
-            if snapshot_response.status_code == 200:
-                snapshot_data = snapshot_response.json()
-                field_count = len(snapshot_data)
-                self.log_result("User Runtime Snapshot", "PASS", f"{field_count} fields returned")
-                return True
-            else:
-                self.log_result("User Runtime Snapshot", "FAIL", f"HTTP {snapshot_response.status_code}")
-                return False
-        except Exception as e:
-            self.log_result("User Runtime Snapshot", "FAIL", f"Error: {e}")
-            return False
-    
-    def run_all_tests(self) -> Dict[str, Any]:
-        """Run all tests in sequence"""
-        print("="*50)
-        print("FAZ-2C + FAZ-3 Backend Test Package")
-        print("="*50)
-        
-        test_functions = [
-            self.run_drift_gate,
-            self.test_health_endpoint,
-            self.test_admin_login,
-            self.test_universe_monitor,
-            self.test_user_scanner_flow,
-            self.test_runtime_summary,
-            self.test_runtime_latest_scan,
-            self.test_user_runtime_run,
-            self.test_user_runtime_snapshot
-        ]
-        
-        passed = 0
-        total = len(test_functions)
-        
-        for test_func in test_functions:
-            if test_func():
-                passed += 1
-        
-        print("="*50)
-        print(f"SONUÇ: {passed}/{total} PASSED")
-        
-        if passed == total:
-            print("GENEL DURUM: ✅ ALL PASS")
+# Global auth tokens for reuse
+admin_token = None
+user_token = None
+
+def log_test(test_name, status, details=""):
+    """Log test results with Turkish status"""
+    status_tr = "GEÇTI" if status == "PASS" else "BAŞARISIZ"
+    print(f"[{status_tr}] {test_name}")
+    if details:
+        print(f"    {details}")
+
+def run_command(cmd, description):
+    """Run shell command and return result"""
+    try:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd="/app")
+        return result.returncode == 0, result.stdout, result.stderr
+    except Exception as e:
+        return False, "", str(e)
+
+def authenticate_admin():
+    """Get admin authentication token"""
+    global admin_token
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/auth/login/admin",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+            timeout=10
+        )
+        if response.status_code == 200:
+            admin_token = response.json()["access_token"]
+            return True, response.json()
         else:
-            print("GENEL DURUM: ❌ SOME FAILED")
+            return False, f"Status: {response.status_code}, Body: {response.text}"
+    except Exception as e:
+        return False, str(e)
+
+def register_and_approve_user():
+    """Register a test user and get approval, then login"""
+    global user_token
+    try:
+        # Register user
+        test_email = f"test_user_faz3_{int(datetime.now().timestamp())}@test.com"
+        reg_response = requests.post(
+            f"{BACKEND_URL}/auth/register",
+            json={
+                "email": test_email,
+                "password": "TestUser123!",
+                "first_name": "Test",
+                "last_name": "User"
+            },
+            timeout=10
+        )
+        if reg_response.status_code != 200:
+            return False, f"Registration failed: {reg_response.status_code} - {reg_response.text}"
         
-        return {
-            "total_tests": total,
-            "passed": passed,
-            "failed": total - passed,
-            "success_rate": passed / total,
-            "results": self.results
-        }
+        user_id = reg_response.json()["id"]
+        
+        # Admin approves user  
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        approve_response = requests.post(
+            f"{BACKEND_URL}/admin/user-approvals/bulk-approve",
+            json={"ids": [user_id]},
+            headers=headers,
+            timeout=10
+        )
+        if approve_response.status_code != 200:
+            return False, f"Approval failed: {approve_response.status_code} - {approve_response.text}"
+        
+        # User login
+        login_response = requests.post(
+            f"{BACKEND_URL}/auth/login",
+            json={"email": test_email, "password": "TestUser123!"},
+            timeout=10
+        )
+        if login_response.status_code == 200:
+            user_token = login_response.json()["access_token"]
+            return True, {"email": test_email, "user_id": user_id}
+        else:
+            return False, f"User login failed: {login_response.status_code} - {login_response.text}"
+            
+    except Exception as e:
+        return False, str(e)
+
+# TEST 1: Drift & Migration Validation
+def test_1_drift_migration():
+    """Test 1) Drift & migration - bash /app/scripts/ci_alembic_drift_gate.sh PASS olmalı"""
+    print("\n=== TEST 1: Drift & Migration Validation ===")
+    
+    success, stdout, stderr = run_command("bash /app/scripts/ci_alembic_drift_gate.sh", "Alembic drift gate")
+    
+    if success and "PASS" in stdout:
+        log_test("1A) Alembic Drift Gate", "PASS", stdout.strip())
+        return True
+    else:
+        log_test("1A) Alembic Drift Gate", "FAIL", f"stdout: {stdout}, stderr: {stderr}")
+        return False
+
+# TEST 2: Required Endpoint Regression  
+def test_2_endpoint_regression():
+    """Test 2) Zorunlu endpoint regresyon - 4 critical endpoints"""
+    print("\n=== TEST 2: Required Endpoint Regression ===")
+    
+    passed = 0
+    total = 4
+    
+    # 2A) GET /api/health
+    try:
+        response = requests.get(f"{BACKEND_URL}/health", timeout=10)
+        if response.status_code == 200 and response.json().get("status") == "ok":
+            log_test("2A) GET /api/health", "PASS", "Health check OK")
+            passed += 1
+        else:
+            log_test("2A) GET /api/health", "FAIL", f"Status: {response.status_code}, Body: {response.text}")
+    except Exception as e:
+        log_test("2A) GET /api/health", "FAIL", str(e))
+    
+    # 2B) POST /api/auth/login/admin
+    success, result = authenticate_admin()
+    if success:
+        log_test("2B) POST /api/auth/login/admin", "PASS", f"Admin login successful, token received")
+        passed += 1
+    else:
+        log_test("2B) POST /api/auth/login/admin", "FAIL", result)
+        return False  # Can't continue without admin auth
+    
+    # 2C) GET /api/admin/universe-monitor
+    try:
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = requests.get(f"{BACKEND_URL}/admin/universe-monitor", headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            required_fields = ["market_type", "scanner_mode", "total_exchange_symbols", "symbols_evaluated_this_cycle"]
+            if all(field in data for field in required_fields):
+                log_test("2C) GET /api/admin/universe-monitor", "PASS", f"Data contains {len(data)} fields")
+                passed += 1
+            else:
+                log_test("2C) GET /api/admin/universe-monitor", "FAIL", f"Missing required fields")
+        else:
+            log_test("2C) GET /api/admin/universe-monitor", "FAIL", f"Status: {response.status_code}")
+    except Exception as e:
+        log_test("2C) GET /api/admin/universe-monitor", "FAIL", str(e))
+    
+    # 2D) GET /api/user/scanner/symbol-selection (with user flow)
+    user_success, user_result = register_and_approve_user()
+    if user_success:
+        try:
+            headers = {"Authorization": f"Bearer {user_token}"}
+            response = requests.get(f"{BACKEND_URL}/user/scanner/symbol-selection", headers=headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["user_id", "scanner_id", "symbol_selection_mode", "selected_symbols"]
+                if all(field in data for field in required_fields):
+                    log_test("2D) GET /api/user/scanner/symbol-selection", "PASS", f"User scanner data: {len(data)} fields")
+                    passed += 1
+                else:
+                    log_test("2D) GET /api/user/scanner/symbol-selection", "FAIL", f"Missing required fields")
+            else:
+                log_test("2D) GET /api/user/scanner/symbol-selection", "FAIL", f"Status: {response.status_code}")
+        except Exception as e:
+            log_test("2D) GET /api/user/scanner/symbol-selection", "FAIL", str(e))
+    else:
+        log_test("2D) GET /api/user/scanner/symbol-selection", "FAIL", f"User registration/approval failed: {user_result}")
+    
+    return passed == total
+
+# TEST 3: New Runtime Endpoints
+def test_3_runtime_endpoints():
+    """Test 3) Yeni runtime endpointler - 4 new runtime endpoints"""
+    print("\n=== TEST 3: New Runtime Endpoints ===")
+    
+    passed = 0
+    total = 4
+    
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    
+    # 3A) GET /api/admin/universe/runtime-summary
+    try:
+        response = requests.get(f"{BACKEND_URL}/admin/universe/runtime-summary", headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            required_fields = ["scanner_mode_effective", "fallback_state", "universe"]
+            if all(field in data for field in required_fields):
+                log_test("3A) GET /api/admin/universe/runtime-summary", "PASS", f"Contains scanner_mode_effective: {data.get('scanner_mode_effective')}")
+                passed += 1
+            else:
+                log_test("3A) GET /api/admin/universe/runtime-summary", "FAIL", f"Missing required fields")
+        else:
+            log_test("3A) GET /api/admin/universe/runtime-summary", "FAIL", f"Status: {response.status_code}")
+    except Exception as e:
+        log_test("3A) GET /api/admin/universe/runtime-summary", "FAIL", str(e))
+    
+    # 3B) GET /api/admin/universe/runtime-latest-scan  
+    try:
+        response = requests.get(f"{BACKEND_URL}/admin/universe/runtime-latest-scan", headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            log_test("3B) GET /api/admin/universe/runtime-latest-scan", "PASS", f"Latest scan data: {len(str(data))} chars")
+            passed += 1
+        else:
+            log_test("3B) GET /api/admin/universe/runtime-latest-scan", "FAIL", f"Status: {response.status_code}")
+    except Exception as e:
+        log_test("3B) GET /api/admin/universe/runtime-latest-scan", "FAIL", str(e))
+    
+    # 3C) POST /api/user/scanner/runtime/run
+    if user_token:
+        try:
+            user_headers = {"Authorization": f"Bearer {user_token}"}
+            response = requests.post(
+                f"{BACKEND_URL}/user/scanner/runtime/run",
+                headers=user_headers,
+                params={"symbol_selection_mode": "all_market_symbols", "max_results": 50},
+                timeout=15
+            )
+            if response.status_code == 200:
+                data = response.json()
+                # Check for decisions[] structure
+                decisions = data.get("decisions", [])
+                runtime_metrics = data.get("runtime_metrics", {})
+                
+                decision_valid = True
+                if decisions:
+                    decision_keys = set(decisions[0].keys()) if decisions else set()
+                    required_decision_keys = {"symbol", "decision", "confidence", "reason"}
+                    if not required_decision_keys.issubset(decision_keys):
+                        decision_valid = False
+                
+                metrics_valid = True
+                required_metrics = {"scan_latency_ms", "decision_latency_ms", "snapshot_age_ms", "queue_depth", "candidate_count"}
+                if not required_metrics.issubset(set(runtime_metrics.keys())):
+                    metrics_valid = False
+                
+                if decision_valid and metrics_valid:
+                    log_test("3C) POST /api/user/scanner/runtime/run", "PASS", f"Decisions: {len(decisions)}, Metrics: {len(runtime_metrics)} fields")
+                    passed += 1
+                else:
+                    log_test("3C) POST /api/user/scanner/runtime/run", "FAIL", f"Invalid structure - decisions_ok: {decision_valid}, metrics_ok: {metrics_valid}")
+            else:
+                log_test("3C) POST /api/user/scanner/runtime/run", "FAIL", f"Status: {response.status_code}")
+        except Exception as e:
+            log_test("3C) POST /api/user/scanner/runtime/run", "FAIL", str(e))
+    else:
+        log_test("3C) POST /api/user/scanner/runtime/run", "FAIL", "No user token available")
+    
+    # 3D) GET /api/user/scanner/runtime/snapshot
+    if user_token:
+        try:
+            user_headers = {"Authorization": f"Bearer {user_token}"}
+            response = requests.get(f"{BACKEND_URL}/user/scanner/runtime/snapshot", headers=user_headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                log_test("3D) GET /api/user/scanner/runtime/snapshot", "PASS", f"Snapshot data: {len(str(data))} chars")
+                passed += 1
+            else:
+                log_test("3D) GET /api/user/scanner/runtime/snapshot", "FAIL", f"Status: {response.status_code}")
+        except Exception as e:
+            log_test("3D) GET /api/user/scanner/runtime/snapshot", "FAIL", str(e))
+    else:
+        log_test("3D) GET /api/user/scanner/runtime/snapshot", "FAIL", "No user token available")
+    
+    return passed == total
+
+# TEST 4: Candidate Persistence
+def test_4_candidate_persistence():
+    """Test 4) Candidate persistence - runtime_scan_candidates table validation"""
+    print("\n=== TEST 4: Candidate Persistence ===")
+    
+    passed = 0
+    total = 2
+    
+    # 4A) Check table exists via migration logs
+    success, stdout, stderr = run_command("grep -r 'runtime_scan_candidates' /app/backend/migrations/versions/ || echo 'not found'", "Check migration files")
+    if success and "runtime_scan_candidates" in stdout:
+        log_test("4A) runtime_scan_candidates table migration", "PASS", "Migration file found")
+        passed += 1
+    else:
+        log_test("4A) runtime_scan_candidates table migration", "FAIL", "Migration file not found")
+    
+    # 4B) Check model definition
+    success, stdout, stderr = run_command("grep -A 10 'class RuntimeScanCandidate' /app/backend/model_domains/runtime_scan_candidate.py", "Check model definition")
+    if success and "symbol" in stdout and "market_type" in stdout:
+        required_columns = ["symbol", "market_type", "scan_timestamp", "strategy_signal", "risk_score", "decision", "confidence"]
+        found_columns = sum(1 for col in required_columns if col in stdout)
+        if found_columns >= 6:  # Most columns should be present
+            log_test("4B) RuntimeScanCandidate model columns", "PASS", f"Found {found_columns}/{len(required_columns)} required columns")
+            passed += 1
+        else:
+            log_test("4B) RuntimeScanCandidate model columns", "FAIL", f"Only found {found_columns}/{len(required_columns)} columns")
+    else:
+        log_test("4B) RuntimeScanCandidate model columns", "FAIL", "Model definition not found or missing key fields")
+    
+    return passed == total
+
+# TEST 5: Futures Execution Alignment
+def test_5_futures_execution():
+    """Test 5) Futures execution alignment - symbol market_type resolution"""
+    print("\n=== TEST 5: Futures Execution Alignment ===")
+    
+    # This is a "hafif kontrol" (light check) - just ensure no 500 errors
+    # Test with a futures symbol if available, or check that spot/futures distinction works
+    
+    try:
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        # Test both spot and futures market types don't return 500
+        spot_response = requests.get(f"{BACKEND_URL}/admin/universe-monitor?market_type=spot", headers=headers, timeout=10)
+        futures_response = requests.get(f"{BACKEND_URL}/admin/universe-monitor?market_type=futures", headers=headers, timeout=10)
+        
+        spot_ok = spot_response.status_code != 500
+        futures_ok = futures_response.status_code != 500
+        
+        if spot_ok and futures_ok:
+            log_test("5A) Futures/Spot market_type resolution", "PASS", f"Spot: {spot_response.status_code}, Futures: {futures_response.status_code}")
+            return True
+        else:
+            log_test("5A) Futures/Spot market_type resolution", "FAIL", f"Spot: {spot_response.status_code}, Futures: {futures_response.status_code}")
+            return False
+            
+    except Exception as e:
+        log_test("5A) Futures/Spot market_type resolution", "FAIL", str(e))
+        return False
 
 def main():
-    tester = BackendTester()
-    results = tester.run_all_tests()
+    """Run all FAZ-3A/3B/3C validation tests"""
+    print("=== FAZ-3A/3B/3C Backend Doğrulama Paketi ===")
+    print(f"Backend URL: {BACKEND_URL}")
+    print(f"Test Time: {datetime.now().isoformat()}")
     
-    # Exit with error code if any tests failed
-    if results["failed"] > 0:
-        sys.exit(1)
+    results = {
+        "drift_migration": False,
+        "endpoint_regression": False, 
+        "runtime_endpoints": False,
+        "candidate_persistence": False,
+        "futures_execution": False
+    }
+    
+    # Run all tests
+    results["drift_migration"] = test_1_drift_migration()
+    results["endpoint_regression"] = test_2_endpoint_regression()
+    results["runtime_endpoints"] = test_3_runtime_endpoints()
+    results["candidate_persistence"] = test_4_candidate_persistence()
+    results["futures_execution"] = test_5_futures_execution()
+    
+    # Summary
+    print("\n=== TEST SUMMARY ===")
+    passed_count = sum(1 for result in results.values() if result)
+    total_count = len(results)
+    
+    for test_name, result in results.items():
+        status = "GEÇTI" if result else "BAŞARISIZ"
+        print(f"[{status}] {test_name}")
+    
+    print(f"\nToplam: {passed_count}/{total_count} test geçti")
+    
+    if passed_count == total_count:
+        print("🟢 FAZ-3A/3B/3C validation PASSED - Tüm testler başarılı!")
+        return 0
     else:
-        sys.exit(0)
+        print("🔴 FAZ-3A/3B/3C validation FAILED - Bazı testler başarısız!")
+        return 1
 
 if __name__ == "__main__":
-    main()
+    exit_code = main()
+    sys.exit(exit_code)

@@ -110,3 +110,14 @@ def get_exchange_universe_snapshot(scanner_mode: str = "all_market_symbols", top
         "warnings": warnings,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def resolve_symbol_market_type(db: Session, cache, symbol: str) -> str:
+    normalized = str(symbol or "").strip().upper()
+    if not normalized:
+        return "spot"
+    universe = get_full_market_universe(db, cache, scanner_mode="all_market_symbols", selected_symbols=[], top_n=50)
+    futures = {str(item).upper() for item in universe.get("futures_symbols") or []}
+    if normalized in futures:
+        return "futures"
+    return "spot"
