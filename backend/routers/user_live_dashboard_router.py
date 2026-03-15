@@ -1,0 +1,109 @@
+from fastapi import APIRouter, Depends, Query, Response
+from sqlalchemy.orm import Session
+
+from db import get_db
+from deps import require_user
+from models import User
+from services.user_live_dashboard_service import (
+    build_user_live_daily_report,
+    build_user_live_execution_quality,
+    build_user_live_performance,
+    build_user_live_positions,
+    build_user_live_risk,
+    build_user_live_strategies,
+    build_user_live_summary,
+    build_user_live_trades,
+    export_user_live_daily_report_csv,
+)
+
+router = APIRouter(prefix="/user/live", tags=["user_live_dashboard"])
+
+
+@router.get("/summary")
+def user_live_summary(
+    window: str = Query(default="1h", pattern="^(1h|6h|24h)$"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_live_summary(db, current_user.id, window=window)
+
+
+@router.get("/positions")
+def user_live_positions(
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_live_positions(db, current_user.id)
+
+
+@router.get("/performance")
+def user_live_performance(
+    window: str = Query(default="24h", pattern="^(1h|6h|24h)$"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_live_performance(db, current_user.id, window=window)
+
+
+@router.get("/risk")
+def user_live_risk(
+    window: str = Query(default="24h", pattern="^(1h|6h|24h)$"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_live_risk(db, current_user.id, window=window)
+
+
+@router.get("/execution-quality")
+def user_live_execution_quality(
+    window: str = Query(default="24h", pattern="^(1h|6h|24h)$"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_live_execution_quality(db, current_user.id, window=window)
+
+
+@router.get("/strategies")
+def user_live_strategies(
+    window: str = Query(default="24h", pattern="^(1h|6h|24h)$"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_live_strategies(db, current_user.id, window=window)
+
+
+@router.get("/trades")
+def user_live_trades(
+    window: str = Query(default="24h", pattern="^(1h|6h|24h)$"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_live_trades(db, current_user.id, window=window)
+
+
+@router.get("/daily-report")
+def user_live_daily_report(
+    window: str = Query(default="24h", pattern="^(1h|6h|24h)$"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_live_daily_report(db, current_user.id, window=window)
+
+
+@router.get("/daily-report/export")
+def user_live_daily_report_export(
+    format: str = Query(default="json", pattern="^(json|csv)$"),
+    window: str = Query(default="24h", pattern="^(1h|6h|24h)$"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    report = build_user_live_daily_report(db, current_user.id, window=window)
+    if format == "csv":
+        content = export_user_live_daily_report_csv(report)
+        filename = f"user_live_daily_report_{report.get('date', 'latest')}.csv"
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    return report

@@ -64,6 +64,7 @@ from routers import (
     user_scanner_signals,
     user_scanner_symbol_selection,
     user_learning_simulator,
+    user_live_dashboard_router,
     debug_effective_universe,
     user_scanner_router,
     admin_universe_router,
@@ -114,6 +115,7 @@ api_router.include_router(user_scanner_signals.router)
 api_router.include_router(user_scanner_symbol_selection.router)
 api_router.include_router(user_scanner_router.router)
 api_router.include_router(user_learning_simulator.router)
+api_router.include_router(user_live_dashboard_router.router)
 api_router.include_router(user_indicator_screener.router)
 api_router.include_router(user_execution.router)
 api_router.include_router(user_trading.router)

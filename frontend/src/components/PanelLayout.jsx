@@ -30,13 +30,14 @@ import { apiClient } from "@/lib/api";
 
 const userNavItems = [
   { to: "/user/dashboard", label: "User Dashboard", icon: BarChart3, testId: "nav-user-dashboard-link" },
+  { to: "/user/bot-profiles", label: "Bot Profilleri", icon: TrendingUp, testId: "nav-bot-profiles-link" },
+  { to: "/user/positions", label: "Positions", icon: Activity, testId: "nav-user-positions-link" },
+  { to: "/user/live-trading-dashboard", label: "Live Trading", icon: Gauge, testId: "nav-user-live-trading-dashboard-link" },
+  { to: "/user/trades", label: "Trade History", icon: Activity, testId: "nav-user-trades-link" },
   { to: "/user/exchange-settings", label: "Exchange Settings", icon: KeyRound, testId: "nav-user-exchange-settings-link" },
   { to: "/user/risk-policy", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
-  { to: "/user/bot-profiles", label: "Bot Profilleri", icon: TrendingUp, testId: "nav-bot-profiles-link" },
   { to: "/user/scanner", label: "Scanner", icon: Gauge, testId: "nav-user-scanner-link" },
   { to: "/user/signals", label: "Signals", icon: Radio, testId: "nav-user-signals-link" },
-  { to: "/user/trades", label: "Trades", icon: Activity, testId: "nav-user-trades-link" },
-  { to: "/user/positions", label: "Positions", icon: Activity, testId: "nav-user-positions-link" },
   { to: "/user/strategies", label: "Strategy Template", icon: ClipboardList, testId: "nav-strategy-templates-link" },
   { to: "/user/indicator-screener", label: "Indicator Screener", icon: LineChart, testId: "nav-user-indicator-screener-link" },
   { to: "/user/portfolio", label: "Portfolio", icon: BarChartBig, testId: "nav-user-portfolio-link" },

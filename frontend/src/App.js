@@ -59,6 +59,7 @@ import { UserSymbolDecisionDetailPage } from "@/pages/UserSymbolDecisionDetailPa
 import { UserReportsPage } from "@/pages/UserReportsPage";
 import { UserExecutePage } from "@/pages/UserExecutePage";
 import { UserPositionsPage } from "@/pages/UserPositionsPage";
+import UserLiveTradingDashboardPage from "@/pages/user/UserLiveTradingDashboardPage";
 import { AdminExecutionQueuePage } from "@/pages/AdminExecutionQueuePage";
 import { AdminStrategyAllocationPage } from "@/pages/AdminStrategyAllocationPage";
 import { AdminPortfolioRiskPage } from "@/pages/AdminPortfolioRiskPage";
@@ -194,6 +195,7 @@ function App() {
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
             <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />
             <Route path="positions" element={<UserPositionsPage />} />
+            <Route path="live-trading-dashboard" element={<UserLiveTradingDashboardPage />} />
             <Route path="paper-positions" element={<PaperPositionsPage />} />
             <Route path="exchange-mock" element={<Navigate to="/user/dashboard" replace />} />
           </Route>
