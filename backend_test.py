@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 
 # Get backend URL from environment variable
-BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://gating-layer-sprint.preview.emergentagent.com")
+BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://market-scanner-prod.preview.emergentagent.com")
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials

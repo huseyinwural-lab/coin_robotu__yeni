@@ -1,174 +1,184 @@
 <analysis>**original_problem_statement:**
-The user, a technically proficient product owner, is directing a massive architectural refactor of a trading bot application. The project has moved from fixing initial setup and Dockerization issues to a multi-sprint implementation of a new professional-grade trading strategy engine.
+The user, a highly technical product owner, is directing the final hardening phase of a complex trading bot. The project has evolved through multiple sprints of architectural refactoring, moving from a disorganized script collection to a professional-grade strategy engine with explainability and learning capabilities.
 
-The core goal is to replace a collection of disorganized explorer scripts with a robust, centralized, and explainable system.
+The current and final objective is to execute a comprehensive Final Hardening + Cleanup + Runtime Alignment Package defined by the user. This is a multi-phase task designed to make the system fully production-ready by addressing accumulated technical debt and inconsistencies. The goal is to create a system that is:
+- **Kurulabilir (Installable):** Clean repository with reliable setup and bootstrap processes.
+- **Göç edebilir (Migratable):** A single, authoritative database migration strategy (Alembic).
+- **Test edilebilir (Testable):** A hermetic and comprehensive testing suite (Unit, Integration, E2E).
+- **Gözlemlenebilir (Observable):** Rich admin panels for monitoring universe, performance, and system health.
+- **Tam market tarayan (Full-market scanning):** The bot's universe should encompass all spot and futures symbols by default, with the bot's own logic making trade decisions.
+- **Bot-karar odaklı (Bot-decision focused):** Configuration should not restrict the bot's universe; filtering and decision-making are the bot's responsibility, with performance fallbacks (e.g., to Top Volume) under load.
 
-The project is being developed in sprints defined by the user:
--   **Sprint 1 (Completed):** Build the foundational  and . Deprecate old strategies and activate 4 new core strategies.
--   **Sprint 2 (Completed):** Implement detailed, symmetric (long/short) contracts for all 12 canonical strategies defined by the user.
--   **Sprint 3 (In Progress):** Build the Explainability layer. This includes an admin panel for Strict Gating (controlling strategy families) and a user-facing Decision Card to explain *why* a trade decision (LONG, SHORT, BLOCKED) was made for each symbol.
--   **Sprint 4 (Upcoming):** Build the Memory/Learning layer to track strategy performance over time and provide data-driven recommendations to the admin.
+This final package is detailed in the user's message #894 and is broken down into six phases (FAZ-1 to FAZ-6), which constitute the complete and final roadmap.
 
-The most recent user directive was to complete Sprint 3.
-
-**User's preferred language**: **Turkish**. The user provides highly detailed, technical product requirement documents (PRDs) in Turkish. The next agent MUST communicate exclusively in Turkish.
+**User's preferred language**: **Turkish**. The user is highly fluent and provides detailed technical directives in Turkish. The next agent MUST communicate exclusively in Turkish.
 
 **what currently exists?**
-The application is a full-stack trading bot platform. The backend has undergone a significant architectural overhaul, replacing the old strategy logic with a new . This engine processes signals from a  containing 12 canonical strategies (4 of which are active).
+The application is a full-stack trading bot. Major architectural work has been completed on the core strategy engine, the Explainability layer (Decision Cards), the Learning layer (backend models), and a sophisticated performance management system. This system includes features like layered scanning, indicator caching, backpressure handling, and an automatic Top Volume fallback mechanism to manage high load when scanning the full market.
 
-For Sprint 3, the following components have been built:
--   **Backend:** New Pydantic models (, ), database models (), services, and API endpoints (, ) to support the explainability feature.
--   **Frontend (Admin):** An admin page () has been created to allow admins to enable/disable and configure thresholds for strategy families (Trend, Breakout, etc.).
--   **Frontend (User):** The UI component for the Symbol-Level Decision Card () is currently being built to display the decision data from the backend.
+However, the rapid development has resulted in significant technical debt. The current state is characterized by:
+- Inconsistent setup and repository hygiene.
+- A fragmented data model and multiple conflicting database migration methods.
+- Runtime behavior that is not fully aligned with the final architectural vision.
+- A lack of a robust, hermetic testing framework.
+
+The agent had just begun to implement the user's final, all-encompassing hardening plan.
 
 **Last working item**:
--   **Last item agent was working:** Implementing the frontend for the Symbol-Level Decision Card. The agent was building the React component () to visualize the complex decision payload, including final decision (LONG/SHORT/BLOCKED), confidence scores, contributing strategies, and block reasons.
+-   **Last item agent was working:** The agent was starting the implementation of the user's massive Final Hardening + Cleanup + Runtime Alignment Paketi (from user message #894). The agent had just formulated a plan to begin with FAZ-1, which focuses on repository hygiene, cleaning up build artifacts, and standardizing the setup process.
 -   **Status:** IN PROGRESS
 -   **Agent Testing Done:** N
 -   **Which testing method agent to use?** both
-    -   **Backend testing agent:** To verify the new, complex endpoints like  and  return correct data structures and handle updates properly.
-    -   **Frontend testing agent:** To test the full user and admin flows for Sprint 3. This includes:
-        1.  Verifying the  component correctly renders all possible states (LONG, SHORT, BLOCKED, NO_TRADE).
-        2.  Verifying the  admin page can successfully update the gating rules and that these changes are reflected in the user-facing .
+    -   The user's final plan (FAZ-6) explicitly requires the creation of a full, hermetic testing pipeline. This will involve the backend testing agent for API contract and integration tests, and the frontend testing agent for component and E2E critical path tests.
 -   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Complete Sprint 3 Implementation (P0)**
+-   **Issue 1: Implement the Final Hardening + Cleanup + Runtime Alignment Package (P0)**
 
 **Issues Detail:**
--   **Issue 1: Complete Sprint 3 Implementation**
-    -   **Attempted fixes:** The agent has successfully built most of the backend infrastructure and the admin-facing UI for strategy gating. The work is now focused on the user-facing UI.
-    -   **Next debug checklist:**
-        1.  Finalize the JSX and logic in  to correctly display all data from the  endpoint.
-        2.  Implement the  component, which should be triggered from the  to show more granular details like strategy contribution scores and the blocked-reason timeline.
-        3.  Integrate the  list into the main user dashboard/scanner page so the user can see the latest decision for each symbol.
-        4.  Ensure real-time updates or a polling mechanism is in place to refresh the decision cards.
-    -   **Why fix this issue and what will be achieved with the fix?** Completing this will finish the Explainability sprint (Sprint 3), a critical step that makes the bot's complex decision-making process transparent to both the user and the admin.
+-   **Issue 1: Implement the Final Hardening + Cleanup + Runtime Alignment Package**
+    -   **Attempted fixes:** The agent has acknowledged the user's comprehensive plan and started planning the execution of FAZ-1.
+    -   **Next debug checklist:** This is not a bug, but a large, structured implementation plan. The next step is to execute the plan defined in user message #894, starting with FAZ-1 and proceeding sequentially through FAZ-6.
+        1.  **Execute FAZ-1:** Clean the repo, fix , standardize , unify package manager (yarn install v1.22.22
+[1/4] Resolving packages...
+[2/4] Fetching packages...
+[3/4] Linking dependencies...
+[4/4] Building fresh packages...
+success Saved lockfile.
+Done in 0.03s.), and secure the bootstrap admin creation.
+        2.  **Execute FAZ-2:** Refactor  into domain-specific files, remove all non-Alembic schema modification logic, and fix Redis fallback semantics.
+        3.  **Execute FAZ-3 to FAZ-6:** Continue implementing the remaining phases as detailed in the user's final PRD.
+    -   **Why fix this issue and what will be achieved with the fix?** Completing this entire package is the final goal of the project. It will transition the application from a rapidly developed prototype into a stable, reliable, and maintainable production-grade system.
     -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
     -   **Should Test frontend/backend/both after fix?** both
     -   **Blocked on other issue:** No
 
 **In progress Task List**:
--   **Task 1: Finalize User-Facing Explainability UI (P0)**
-    -   **Where to resume:** .
-    -   **What will be achieved with this?** The user will have a clear, card-based view for each symbol, showing the bot's final decision and the primary reasons behind it.
+-   **Task 1: FAZ-1 — Kurulum, Repo Hijyeni ve Çalıştırılabilirlik Kapanışı (P0)**
+    -   **Where to resume:** The agent needs to start applying the changes for repo cleanup as per its last plan. This includes removing generated artifacts, updating , and ensuring the README is accurate.
+    -   **What will be achieved with this?** A clean, reliable, and reproducible setup process for any developer cloning the repository.
     -   **Status:** IN PROGRESS
     -   **Should Test frontend/backend/both after fix?** both
     -   **Blocked on something:** No
 
 **Upcoming and Future Tasks**
--   **Upcoming Tasks (Sprint 4 - Hafıza / Memory):**
-    -   **Task 1 (P0):** Implement the Learning Event Model to log the detailed context and outcome of every trade decision for later analysis.
-    -   **Task 2 (P0):** Create a Strategy Outcome Memory service to process the event logs and calculate performance metrics (e.g., hit rate, average return, false-allow rate) for each strategy and strategy family.
-    -   **Task 3 (P1):** Build the Admin Learning Panel to display these performance metrics, show quality degradation alerts, and present admin-approved recommendations (e.g., disable strategy X, lower weight for strategy Y).
-    -   **Task 4 (P1):** Implement Learning Guardrails to ensure the learning system only generates *recommendations* and never automatically modifies production rules without explicit admin approval.
-    -   **Task 5 (P2):** Add simple, safe learning-driven insights to the user UI, such as a decision confidence score or a recently degraded quality warning.
--   **Future Tasks:**
-    -   Add a Walk-forward quality metric to automatically suggest strategy weights based on rolling performance.
-    -   Implement user-based multiple automation profiles (e.g., scalp-3m, swing-15m).
+The entire remaining roadmap is defined by the user's Final Hardening package from message #894.
+
+*   **Upcoming Tasks (P0):**
+    *   **FAZ-2 — Veri Modeli, Migration ve Persistence Disiplinini Tekilleştir:** Unify database migrations under Alembic, refactor the monolithic , and align Redis fallback behavior with production semantics.
+    *   **FAZ-3 — Universe, Scanner ve Runtime Davranışını Nihai Mimariye Hizala:** Solidify the full market scan principle, unify spot and futures processing, clean up legacy runtime logic, and remove hard-coded liquidity filters.
+    *   **FAZ-4 — Performans, Freshness ve Backpressure Kapanışı:** Production-harden the Freshness SLA enforcement, stabilize the queue/worker management policies, and complete the event-driven hint model.
+    *   **FAZ-6 — Test, CI ve Teslim Kapanışı:** Make all tests hermetic (independent of the environment), structure the test pyramid (unit, integration, E2E), and define a CI validation pipeline.
+
+*   **Future Tasks (P1):**
+    *   **FAZ-5 — Explainability, Learning ve Admin Operasyon Katmanını Kapat:** Finalize the integration of all user-facing explainability components (, ) and admin observability panels (, , ) to ensure they are complete and consistent.
 
 **Completed work in this session**
--   **Major Architectural Refactor (Strategy Engine - Sprints 1 & 2):**
-    -   Deprecated dozens of old, disorganized explorer strategies.
-    -   Implemented a canonical  with 12 new, professionally defined strategies.
-    -   Built a  to score and aggregate signals from the registry into a final deterministic decision.
-    -   Created extensive documentation for the new engine architecture ().
--   **Feature Implementation (Sprint 3 - In Progress):**
-    -   Built the complete backend and admin UI for Strategy Family Gating.
-    -   Built the backend data models and API endpoints for the Decision Card and Explainability features.
--   **Critical Environment Fixes:**
-    -   Resolved numerous Docker, dependency (, , ), and environment variable () issues to ensure the project runs reliably from a clean  command.
-    -   Created a  with clear, step-by-step setup instructions.
-    -   Implemented a default admin user bootstrap service that runs only on initial DB setup.
--   **Other Features:**
-    -   Implemented an automatic 3-minute scanner trigger with a UI toggle.
-    -   Completed the user registration form by adding  and  fields.
+-   **Universe & Performance Architecture Overhaul:**
+    -   Refactored the system to scan the full market (spot + futures) instead of relying on restrictive whitelists.
+    -   Implemented a Top Volume Fallback mechanism to automatically manage system load.
+    -   Built extensive performance guardrails: tiered scanning, indicator caching (Redis), backpressure handling, and freshness SLAs to prevent trading on stale data.
+    -   Created admin observability panels:  and .
+-   **Default Admin User Creation:** Fixed a critical bug where the default admin user was not being created, and made the bootstrap process idempotent.
+-   **Explainability & Learning Features:**
+    -   Completed the initial build of the user-facing  and .
+    -   Implemented a Learning Recommendation Impact Simulator for both admin and user roles.
+-   **UI Adjustments:**
+    -   Moved the  list to the top of the User Dashboard as requested.
 
 **Earlier issues found/mentioned but not fixed**
--   **Issue 1: Admin left menu is not scrollable.** This is a long-standing, very low-priority UI bug that has been correctly deferred in favor of major architectural work.
--   **Issue 2: Save user's symbol selection on the scanner page.** In user message #62, the user requested that the scanner's symbol selection be saved. The agent implemented the auto-scan feature from the same message but missed this part of the request.
+-   **Issue 1: Admin left menu is not scrollable.** (Low Priority) This is a long-standing UI bug from the initial handoff that has been consistently deferred.
+-   **Issue 2: Save user's manual symbol selection on the scanner page.** (Medium Priority) This feature was requested early on but was superseded by larger architectural changes. The final PRD (message #894) re-defines the scanner modes, but the persistence logic for the  mode still needs to be explicitly implemented and verified as part of FAZ-3.
 
 **Known issue recurrence from previous fork**
--   None. The user did re-paste a large request for Docker fixes, but the agent correctly identified it as a duplicate, audited the existing (correct) solution, and made a minor clarification in the .
+-   **Issue: Symbol Not Allowed due to hidden configuration.** The agent fixed the core logic for universe selection multiple times, but the issue recurred because of active  lists in configuration files. The user had to repeatedly point out that the system was still not scanning the full market. This indicates a weakness in fully diagnosing and resolving configuration-related problems. The final fix was to empty all override lists.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Master Signal Engine:** A central service that receives raw signals from multiple strategies, normalizes them into scores, applies weights, resolves conflicts, and produces a single, deterministic trade intent (LONG, SHORT, or NO_TRADE).
--   **Strategy Registry:** A canonical, database-driven list of the 12 approved trading strategies. This prevents the use of arbitrary or deprecated logic.
--   **Strategy Family Gating:** An admin-controlled layer that can enable/disable or set score thresholds for entire families of strategies (e.g., Trend, Reversal), allowing for dynamic adaptation to market conditions without code changes.
--   **Explainability Data Contract:** A rich, structured data payload sent from the backend to the frontend that details every step of a decision, including contribution scores from each strategy and the specific reason for any blocks.
+-   **Bot-Driven Universe Selection:** The core principle that the bot should see the entire market and use its own logic to select opportunities, rather than being limited by static configuration lists.
+-   **Performance Fallback:** An automatic mechanism where the system detects high load (latency, queue depth) and switches from full market scanning to a less resource-intensive Top Volume mode.
+-   **Backpressure Handling:** A set of strategies (deferring low-priority jobs, dropping stale jobs) to ensure system stability under heavy load.
+-   **Freshness SLA:** A strict rule that prevents the engine from making decisions based on data that is older than a defined threshold, resulting in a .
+-   **Tiered / Two-Stage Scanning:** A performance optimization where a lightweight discovery scan identifies potential candidates across the wide universe, and a more intensive decision scan runs only on those candidates.
+-   **Indicator Caching:** Using Redis (with a DB fallback) to cache the results of expensive indicator calculations, keyed by symbol, timeframe, and bar time to avoid redundant computations.
+-   **Alembic-Only Migrations:** The user mandated that all database schema changes MUST be handled through Alembic migrations to ensure consistency and prevent schema drift.
 
 **key DB schema**
--   : {strategy_id, name, family, description, is_enabled, weight}
--   : {family_name, is_enabled, long_threshold, short_threshold, min_strategy_count}
--   : {email, hashed_password, firstName, lastName, ...}
-
-**changes in tech stack**
--   None.
+The user's final plan includes a major refactoring of the Pydantic/SQLAlchemy models in  into domain-specific files (auth, scanner, strategy, risk, etc.) under a new  directory structure. No new tables were specified, but this refactoring is a P0 task.
 
 **All files of reference**
--   **Currently In-Progress:**
-    -   
--   **Key Files for Sprint 3:**
-    -    (needs to be updated to incorporate gating)
-    -    (contains  model)
+-   **User-Provided PRD:** The content of user messages **#894** (Final Hardening), **#822** (Universe Model Alignment), and **#535** (Performance Guard) are the primary sources of truth for all remaining work.
+-   **Core Backend Logic:**
     -   
     -   
     -   
--   **Documentation:**
+    -   
+-   **Data Models & Migrations:**
+    -    (to be refactored)
+    -   
+-   **Admin Panels:**
+    -   
+    -   
+-   **Setup & Configuration:**
+    -   
+    -   
     -   
     -   
 
 **Areas that need refactoring**:
--   None. The current work is a deliberate and structured refactor itself.
+The entire project is undergoing a user-directed hardening and refactoring process as defined in message #894. Key areas include:
+1.  **Data Models:** Splitting the monolithic .
+2.  **Persistence:** Removing all schema modification logic outside of Alembic.
+3.  **Repository Structure:** Cleaning all build artifacts and standardizing configuration files.
+4.  **Testing Framework:** Building a hermetic test suite from the ground up.
 
 **key api endpoints**
--   : Get a list of decision cards for all symbols.
--   : Get the detailed explainability payload for a symbol.
--   : Get the current gating rules.
--   : Update the gating rules.
+-   : (To be built/verified) Debug endpoint to show how the final symbol universe is calculated.
+-   : Endpoint to feed the new universe monitoring dashboard.
+-   : Endpoint for the fallback history panel.
 
 **Critical Info for New Agent**
--   **MUST communicate in Turkish.**
--   The project is in the middle of a large, user-directed architectural refactor. Adhere strictly to the user's PRDs for Sprint 3 and the upcoming Sprint 4.
--   The immediate task is to complete the frontend implementation for the Explainability feature, specifically the  component.
--   The backend and frontend are now tightly coupled via complex data contracts. Refer to the Pydantic models in  as the source of truth for the frontend data structure.
--   Do not get distracted by minor UI issues. The user's priority is the functional completion of the strategy engine sprints.
+-   **Communicate exclusively in Turkish.**
+-   The user is a highly technical product owner who provides detailed, multi-phase architectural plans. You MUST adhere to these plans strictly. **User message #894 is the single source of truth for all remaining tasks.**
+-   The project has shifted from feature development to **production hardening**. The focus is on stability, reliability, testability, and cleaning up technical debt. Do not propose new features unless requested.
+-   Pay close attention to configuration files (,  configs) in addition to code. A recurring issue in this project was that the code logic was correct, but old configuration values were overriding the intended behavior.
+-   The immediate task is to execute the user's final plan, starting with FAZ-1: Repo Hygiene.
 
 **documents and test reports created in this job**
--   
--   
--    (Continuously updated by the agent)
+-    (Continuously updated)
+-    (To be updated as part of FAZ-1)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **#737 (Agent):** (Thinking) Planning to create . (In Progress)
-2.  **#668 - #736 (Agent):** Agent implementing Sprint 3. (In Progress)
-3.  **#667 (User):** a - Confirmed the agent's plan to proceed. (Complete)
-4.  **#664 (User):** Provided a detailed PRD for Sprint 3 (Göz) and Sprint 4 (Hafıza) and asked to close out the previous discussion. (In Progress)
-5.  **#544 (User):** tamam başla (okay start) - Instructed the agent to start the next task. (Complete)
-6.  **#543 (Agent):** Confirmed the closure of a set of future tasks, moving them to the backlog. (Complete)
-7.  **#542 (User):** bunu toplu kapatalım (let's close this out collectively) - Confirmed the agent's summary of future tasks to be moved to the backlog. (Complete)
-8.  **#540 (User):** Asked for a collective report of all Next Action Items, Future/Backlog and Potansiyel improvement to close the topic. (Complete)
-9.  **#530 (User):** Confirmed the agent's plan to audit and apply minimal patches to the Docker setup issues. (Complete)
-10. **#527 (User):** Re-pasted the entire Docker setup problem description from an earlier message. (Complete)
+1.  **#897:** User confirms the plan to execute the entire FAZ-1 to FAZ-6 hardening package at once and clarifies specific implementation details. (Complete)
+2.  **#894:** User provides the **final, massive PRD** for the Final Hardening + Cleanup + Runtime Alignment Package, detailing all remaining work in 6 phases. (In Progress)
+3.  **#883:** User repeats the request to move a UI element on the dashboard to the top. (Complete)
+4.  **#866:** User provides a screenshot and asks to move a UI element from the bottom to the top of the User Dashboard. (In Progress at the time)
+5.  **#829:** User requests the Fallback Timeline feature with specific details (timestamp, trigger metric, etc.). (Complete)
+6.  **#825:** User provides specific numerical thresholds for entering and exiting the Top Volume fallback mode. (Complete)
+7.  **#822:** User provides another comprehensive PRD to align the final Universe Model (full market scan, bot-driven, performance fallback). (Superseded by #894 but principles remain)
+8.  **#808:** User asks the agent to run a live simulation of the Top Volume Fallback mechanism. (Complete)
+9.  **#804:** User asks for confirmation that the system now matches their desired model (full scan, empty overrides, bot decisions, fallback ready). (Complete)
+10. **#775:** User gives the definitive command to empty all override lists, open the universe to the full market, and implement the Top Volume fallback as a safety net. (Complete)
 
 **Project Health Check:**
--   **Broken:** None.
+-   **Broken:**
+    -   **Repository Hygiene:** The repository contains build artifacts and local files that should be in .
+    -   **Migration Strategy:** Multiple conflicting methods for schema modification exist (Alembic, , raw patches).
+    -   **Testability:** Tests are not hermetic and lack comprehensive coverage of critical paths.
 -   **Mocked/Incomplete:**
-    -   The user-facing Explainability UI (, ) is not yet complete.
-    -   The entire Learning layer (Sprint 4) is unimplemented.
+    -   The entire Final Hardening + Cleanup + Runtime Alignment Package (user message #894) is incomplete and represents the full remaining scope of work.
 
 **3rd Party Integrations**
 -   **PostgreSQL:** Primary database.
--   **Redis:** Caching.
--   **Binance API:** For live market data and order execution (Futures Testnet).
+-   **Redis:** Caching layer for indicators and performance metrics.
+-   **Binance API:** For live market data.
 -   **Resend:** For email alerts.
 
 **Testing status**
--   **Testing agent used after significant changes:** NO, not yet for the Sprint 3 work as it is still in progress.
+-   **Testing agent used after significant changes:** NO.
 -   **Troubleshoot agent used after agent stuck in loop:** NO.
 -   **Test files created:** []
 -   **Known regressions:** None.
@@ -178,4 +188,6 @@ For Sprint 3, the following components have been built:
 -   **User Login:**  / 
 
 **What agent forgot to execute**
--   In user message #62, the user requested two features: 1) an automatic 3-minute scan, and 2) the ability to **save the scanner's symbol selection**. The agent successfully implemented the auto-scan but appears to have completely overlooked the request to save the user's symbol selection. This remains an unaddressed feature request.</analysis>
+-   **Default Admin Creation:** The agent initially forgot to implement the default admin user creation, which was a critical bootstrap step. This was later fixed after the user reported it.
+-   **Save User Symbol Selection:** A feature requested early on to persist a user's manual symbol selection was overlooked for a long time. This is now part of the larger Scanner Selection Mode task in the final plan.
+-   **Thorough Configuration Checks:** The agent repeatedly fixed application logic for universe selection but failed to identify that configuration  lists were the root cause of the Symbol Not Allowed issue, leading to multiple failed attempts and user frustration. The next agent must be vigilant about checking both code and configuration.</analysis>
