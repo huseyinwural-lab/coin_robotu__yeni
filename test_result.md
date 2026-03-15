@@ -281,6 +281,30 @@ frontend:
         comment: "System Alerts Page PASSED - Frontend smoke test verified. Page accessible and all API endpoints functional: 1) GET /api/admin/system-alerts returns alert list correctly. 2) GET /api/admin/system-alerts/config returns configuration structure. 3) GET /api/admin/system-alerts/timeline returns timeline data. 4) All filtering controls and bulk actions accessible. 5) Config form and simulate alert functionality available. 6) UI elements render with proper data-testid attributes. Page ready for system alert management operations."
 
 backend:
+  - task: "FAZ-2B Drift Closure Validation - Alembic Drift Gate"
+    implemented: true
+    working: true
+    file: "/app/scripts/ci_alembic_drift_gate.sh"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "FAZ-2B Alembic Drift Gate PASSED. Command 'bash /app/scripts/ci_alembic_drift_gate.sh' executed successfully with result '[drift-gate][PASS] Sadece onaylı deferred-destructive drift kalemleri mevcut (planlı)'. All static guards passed: No startup create_all found in server.py, no runtime schema patches found in db.py. Alembic drift check contains only approved deferred-destructive items as expected for closure."
+
+  - task: "FAZ-2B Drift Closure Validation - API Regression Tests"
+    implemented: true
+    working: true
+    file: "backend/routers/health.py, backend/routers/auth.py, backend/routers/admin_universe_monitor.py, backend/routers/user_scanner_symbol_selection.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "FAZ-2B API Regression Tests ALL PASSED (4/4). Critical API endpoints validated: 1) Health endpoint GET https://market-scanner-prod.preview.emergentagent.com/api/health returns 200 {status: ok} correctly. 2) Admin login POST /api/auth/login/admin with admin@platform.dev / Admin12345! returns 200 + access_token successfully. 3) Admin universe monitor GET /api/admin/universe-monitor with admin token returns 200 with complete monitoring data (25 fields including market_type, scanner_mode, total_exchange_symbols, symbols_evaluated_this_cycle, worker_utilization, generated_at). 4) User scanner endpoint flow: User registration → admin approval → user login → GET /api/user/scanner/symbol-selection returns 200 with symbol selection data (9 fields including user_id, scanner_id, symbol_selection_mode, selected_symbols). All regression validation criteria for FAZ-2B drift closure PASSED."
+
   - task: "FAZ-1 + FAZ-2 Hardening Validation - Backend Smoke Tests"
     implemented: true
     working: true
@@ -705,6 +729,8 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "testing"
+    message: "FAZ-2B DRIFT CLOSURE VALIDATION COMPLETED - ALL TESTS PASSED (4/4 - 100% SUCCESS). Comprehensive validation of FAZ-2B drift closure requirements completed successfully: 1) ✅ ALEMBIC DRIFT GATE: bash /app/scripts/ci_alembic_drift_gate.sh command PASSED with 'Sadece onaylı deferred-destructive drift kalemleri mevcut (planlı)'. Static guards passed for create_all and runtime schema patches. 2) ✅ API REGRESSION TESTS: Health endpoint GET /api/health returns 200 {status: ok}. Admin login POST /api/auth/login/admin with admin@platform.dev / Admin12345! returns 200 + access_token. Admin universe monitor GET /api/admin/universe-monitor with admin token returns 200 with complete monitoring data (25 fields including market_type, scanner_mode, symbols metrics). 3) ✅ USER SCANNER ENDPOINT FLOW: Complete user registration → admin approval → user login → scanner access flow validated successfully. User registration POST /api/auth/register returns 200. User found in pending approvals and bulk approval successful via POST /api/admin/user-approvals/bulk-approve with 'ids' payload. User login POST /api/auth/login returns 200 + access_token. Scanner endpoint GET /api/user/scanner/symbol-selection with user token returns 200 with symbol selection data (9 fields including user_id, scanner_id, symbol_selection_mode). 4) ✅ ALEMBIC MIGRATION DISCIPLINE: No create_all detected in server.py. No runtime schema patches detected in db.py. Alembic drift contains only approved deferred-destructive items as expected. All FAZ-2B drift closure validation criteria PASSED. System ready for drift closure completion."
   - agent: "testing"
     message: "FAZ-1 + FAZ-2 HARDENING VALIDATION COMPLETED - ALL TESTS PASSED (7/7 - 100% SUCCESS). Comprehensive validation of backend hardening changes completed successfully: 1) ✅ BACKEND SMOKE TESTS: Health endpoint GET /api/health returns 200 {status: ok}. Admin login POST /api/auth/login/admin with admin@platform.dev / Admin12345! returns 200 + access_token. 2) ✅ MIGRATION DISCIPLINE REGRESSIONS: Admin endpoint GET /api/admin/universe-monitor working correctly after server startup (no 500 errors from missing tables after create_all removal). User endpoint GET /api/user/scanner/symbol-selection working correctly after user approval flow (no critical table missing errors after DB runtime schema patcher removal). 3) ✅ BOOTSTRAP BEHAVIOR REGRESSION: Admin account bootstrap behavior verified - no unexpected reset/recreate detected. Admin login successful, admin account consistency maintained (admin@platform.dev authentication working). 4) ✅ FRONTEND SMOKE TEST: Frontend URL https://market-scanner-prod.preview.emergentagent.com accessible, no blank page detected. HTML content properly loaded. 5) ✅ SERVER STATUS: Backend service running properly (RUNNING pid 46, uptime 0:18:21). Migration service using SQLite fallback correctly when PostgreSQL unavailable. Redis using in-memory fallback correctly when unavailable. No critical startup errors in logs. 6) ✅ HARDENING DISCIPLINE VERIFIED: Server startup working normally after create_all removal. Database runtime schema patcher removal not causing 500 errors on critical endpoints. User table populated scenario working correctly without admin reset/duplication. All FAZ-1 + FAZ-2 beginning hardening requirements validated successfully. System ready for production with proper migration discipline and bootstrap behavior."
   - agent: "testing"

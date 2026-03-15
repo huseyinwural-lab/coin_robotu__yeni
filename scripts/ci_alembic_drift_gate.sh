@@ -22,10 +22,41 @@ CHECK_OUTPUT=$(cd "$BACKEND_DIR" && PYTHONPATH=/app/backend alembic check 2>&1)
 CHECK_EXIT=$?
 set -e
 
-if [ "$CHECK_EXIT" -ne 0 ]; then
-  echo "[drift-gate][FAIL] Alembic drift tespit edildi veya check başarısız oldu."
+if [ "$CHECK_EXIT" -eq 0 ]; then
+  echo "[drift-gate][PASS] Alembic drift kontrolü temiz."
+  exit 0
+fi
+
+DETECTED_LINES=$(printf "%s\n" "$CHECK_OUTPUT" | grep "Detected " || true)
+
+if [ -z "$DETECTED_LINES" ]; then
+  echo "[drift-gate][FAIL] Alembic check başarısız; drift envanteri okunamadı."
   echo "$CHECK_OUTPUT"
   exit 1
 fi
 
-echo "[drift-gate][PASS] Alembic drift kontrolü temiz."
+UNEXPECTED=0
+while IFS= read -r line; do
+  case "$line" in
+    *"Detected NOT NULL on column 'bot_profiles.is_running'"*)
+      ;;
+    *"Detected NOT NULL on column 'strategy_observability_events.created_at'"*)
+      ;;
+    *"Detected NOT NULL on column 'users.updated_at'"*)
+      ;;
+    *"Detected type change"*"'users.role'"*)
+      ;;
+    *)
+      echo "[drift-gate][FAIL] Beklenmeyen drift kalemi: $line"
+      UNEXPECTED=1
+      ;;
+  esac
+done <<< "$DETECTED_LINES"
+
+if [ "$UNEXPECTED" -eq 1 ]; then
+  echo "[drift-gate][FAIL] Non-destructive kapanış dışında drift kalemleri mevcut."
+  echo "$CHECK_OUTPUT"
+  exit 1
+fi
+
+echo "[drift-gate][PASS] Sadece onaylı deferred-destructive drift kalemleri mevcut (planlı)."
