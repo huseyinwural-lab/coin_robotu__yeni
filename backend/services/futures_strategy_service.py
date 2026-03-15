@@ -1481,3 +1481,22 @@ def get_futures_leverage_status(db: Session, cache, user_id: str, refresh: bool 
         "liquidation_distance_vs_leverage": diagnostics.get("liquidation_distance_vs_leverage", []),
         "updated_at": payload.get("updated_at"),
     }
+
+
+def build_runtime_bot_decision(cache, symbol: str) -> dict:
+    market_state = _market_state(cache, str(symbol or "").upper())
+    trend_direction = str(market_state.get("trend_direction") or "NONE").upper()
+    spread_state = str(market_state.get("spread_state") or "NORMAL").upper()
+    funding_alignment = bool(market_state.get("funding_alignment", True))
+
+    decision = "PASS"
+    if trend_direction in {"LONG", "SHORT"} and spread_state != "SHOCK" and funding_alignment:
+        decision = trend_direction
+
+    return {
+        "symbol": str(symbol or "").upper(),
+        "decision": decision,
+        "confidence": float(market_state.get("trend_strength") or 0.0),
+        "reason": "trend_funding_alignment" if decision in {"LONG", "SHORT"} else "risk_or_liquidity_guard",
+        "market_state": market_state,
+    }

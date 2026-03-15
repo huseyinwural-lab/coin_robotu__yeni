@@ -1106,3 +1106,17 @@ def list_user_execution_intents(db: Session, user_id: str, limit: int = 50) -> l
 
 def get_execution_presets() -> list[dict]:
     return list_execution_presets()
+
+
+def summarize_execution_eligibility(intent: UserExecutionIntent) -> dict:
+    market_type = str(intent.market_type or "spot").lower()
+    contract_type = "perpetual" if market_type == "futures" else "spot"
+    eligible_statuses = {"PREVIEWED", "QUEUED", "RELEASED", "APPROVED"}
+    return {
+        "intent_id": intent.id,
+        "symbol": str(intent.symbol or "").upper(),
+        "market_type": market_type,
+        "contract_type": contract_type,
+        "execution_eligible": str(intent.status or "").upper() in eligible_statuses,
+        "status": str(intent.status or ""),
+    }

@@ -50,3 +50,9 @@ Bu kalemler veri güvenliği etkisi nedeniyle bu iterasyonda uygulanmaz.
 3. `POST /api/auth/login/admin`
 4. `GET /api/admin/universe-monitor`
 5. `GET /api/user/scanner/symbol-selection`
+
+## FAZ-2C Uygulama Kapanışı
+- Non-destructive drift kalemleri `20260315_0041` ile kapatıldı.
+- Destructive drift kalemleri `20260315_0042/0043/0044` zinciri ile kapatıldı.
+- Drift gate strict moda alındı (allowlist kaldırıldı).
+- Kapanış sonrası `alembic check` temiz çıktı verdi.

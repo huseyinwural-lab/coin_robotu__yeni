@@ -64,6 +64,8 @@ from routers import (
     user_scanner_symbol_selection,
     user_learning_simulator,
     debug_effective_universe,
+    user_scanner_router,
+    admin_universe_router,
     user_indicator_screener,
     user_risk,
     strategy_templates,
@@ -108,6 +110,7 @@ api_router.include_router(user_risk.router)
 api_router.include_router(user_platform.router)
 api_router.include_router(user_scanner_signals.router)
 api_router.include_router(user_scanner_symbol_selection.router)
+api_router.include_router(user_scanner_router.router)
 api_router.include_router(user_learning_simulator.router)
 api_router.include_router(user_indicator_screener.router)
 api_router.include_router(user_execution.router)
@@ -126,6 +129,7 @@ api_router.include_router(ops_alerts.router)
 api_router.include_router(user_approvals.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(admin_universe_monitor.router)
+api_router.include_router(admin_universe_router.router)
 api_router.include_router(exchange.router)
 api_router.include_router(venues.router)
 api_router.include_router(audit.router)

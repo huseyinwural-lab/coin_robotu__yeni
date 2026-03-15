@@ -18,7 +18,6 @@ from models import (
     UserScannerAutomationConfig,
     UserScannerAutomationProfile,
 )
-from core.users.user_scanner_signal_service import run_user_scanner
 from services.audit_service import create_audit_log
 from services.execution_policy_service import get_policy_for_strategy
 from services.failed_event_service import create_failed_event, mark_failed_event_resolved, mark_failed_event_retry
@@ -42,6 +41,7 @@ from services.strategy_observability_service import log_risk_outcome_event, log_
 from services.pipeline.strategy_engine import evaluate_strategy
 from services.pipeline.universe_engine import build_effective_universe
 from services.live_mode_service import enforce_release_gate
+from services.scan_scheduler import ScanScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,7 @@ SPOT_STRATEGY_TYPES = {
 class PipelineRuntime:
     def __init__(self, cache):
         self.cache = cache
+        self.scan_scheduler = ScanScheduler(cache)
         self.candle_queue: asyncio.Queue = asyncio.Queue(maxsize=5000)
         self.market_data_engine = MarketDataEngine(cache, self.candle_queue)
         self._orchestrator_task: asyncio.Task | None = None
@@ -274,10 +275,9 @@ class PipelineRuntime:
                     processed_jobs += 1
                     worker_slot = index % max_workers
                     try:
-                        result = run_user_scanner(
+                        result = self.scan_scheduler.run_user_scan(
                             db,
-                            user_id,
-                            requested_mode=None,
+                            user_id=user_id,
                             max_results=job["max_results"],
                             symbol_source=job["symbol_source"],
                             selected_symbols=job["selected_symbols"],
@@ -298,10 +298,9 @@ class PipelineRuntime:
                         retry_budget = 1
                         if retry_budget > 0:
                             try:
-                                result = run_user_scanner(
+                                result = self.scan_scheduler.run_user_scan(
                                     db,
-                                    user_id,
-                                    requested_mode=None,
+                                    user_id=user_id,
                                     max_results=job["max_results"],
                                     symbol_source=job["symbol_source"],
                                     selected_symbols=job["selected_symbols"],

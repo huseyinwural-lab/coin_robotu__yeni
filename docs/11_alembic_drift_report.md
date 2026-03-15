@@ -56,3 +56,11 @@
 ## Ek teknik not
 - Boş bir SQLite DB üzerinde `alembic upgrade head` denemesi, mevcut tarihsel migration zincirinin legacy tablo varsayımlarına bağlı olduğunu gösterdi (`NoSuchTableError: users`).
 - Bu iterasyonda mevcut migration dosyaları değiştirilmedi; yalnız drift envanteri ve non-destructive kapanış uygulanmıştır.
+
+## FAZ-2C uygulama sonucu
+- Uygulanan migration dosyaları:
+  - `20260315_0042_destructive_backfill_prepare.py`
+  - `20260315_0043_users_role_enum_alignment.py`
+  - `20260315_0044_nullable_alignment.py`
+- `alembic check` sonucu: **No new upgrade operations detected.**
+- `bash /app/scripts/ci_alembic_drift_gate.sh` sonucu: **PASS (strict mode)**
