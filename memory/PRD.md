@@ -36,6 +36,33 @@
 - Exchange mock execution akışı
 - Dokümantasyon çıktıları (sayfa haritaları, mimari, şema, policy, adapter sözleşmesi)
 
+## 4.1) 2026-03-15 — Kullanıcı Onaylı Final Kapanış Paketi (Master Final Implementation Order)
+
+### Tercih Gerekçesi (Kullanıcı beyanı)
+- Sistem mimari ve kod açısından tamamlanma aşamasında.
+- Son paket iki hedefe odaklanır:
+  1. Admin/User panel mimarisinin kapanışı (ayrım, menü mimarisi, güvenli silme).
+  2. Canlıya çıkış doğrulaması (kod geliştirme değil, operasyonel rollout doğrulaması).
+- Bu paket tamamlandığında sistem; mimari, admin operasyonları, user operasyonları ve deployment doğrulaması açısından tamamlanmış kabul edilir.
+
+### Master Final Implementation Order (Kullanıcı kaydı)
+- **FAZ-1 — Panel Ayrımı:** `/admin` ve `/user` tam ayrım.
+- **FAZ-2 — Admin Menü Yapısı:** Menüler korunacak, kategori + collapsible mimari.
+- **FAZ-3 — Menü Davranışı:** collapsible groups, `overflow-y-auto`, logout sticky bottom, advanced varsayılan kapalı.
+- **FAZ-4 — Admin Silme İşlemleri:** user/bot/api key silme; user soft-delete default, hard-delete ikinci onaylı.
+- **FAZ-5 — User Silme İşlemleri:** bot stop + open orders cancel + bot delete; api key delete; strategy delete.
+- **FAZ-6 — Silme Güvenliği:** kritik varlıklarda `type DELETE to confirm`.
+- **FAZ-7 — User Konfigürasyon Özgürlüğü:** risk/strategy/scanner ayarları admin safe bounds içinde kullanıcı tarafından değiştirilebilir.
+- **FAZ-8 — Deployment Doğrulama:** kod değişimi yok; release freeze + rollout adımları (DEPLOY-1..7).
+- **FAZ-9 — Execution Kalibrasyonu:** canlı loglar ile false_allow/false_block/false_reduce üzerinden data-driven threshold güncellemesi.
+- **FAZ-10 — Son Kontrol:** panel, güvenli delete, collapsible menü, CI, deployment rollout PASS kapanışı.
+
+### 2026-03-15 Operasyon Tercihleri (Bu fork için kullanıcı onayı)
+- DEPLOY-2: **MOCKED** doğrulama ile devam.
+- DEPLOY-3: Önce panel son kontrol, sonra mock-stability başlat.
+- Aşama geçişleri: Her aşama sonrası tek tek kullanıcı onayıyla ilerleme.
+- Doğrulama hesabı: `admin@platform.local`.
+
 ## 5) What Has Been Implemented
 ### 2026-03-14 (User Dashboard layout adjustment)
 - Kullanıcı talebine göre `UserDashboardPage` içinde **Onboarding Risk Wizard** bloğu sayfanın en altından üst bölüme taşındı (header’dan hemen sonra).
