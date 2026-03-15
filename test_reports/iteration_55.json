@@ -26,7 +26,7 @@
     "backend": "100% (23/23 tests passed)",
     "frontend": "100% (all pages load and render correctly)"
   },
-  "test_credentials": "Admin: admin@platform.dev / Admin12345! | User: test_user_iter53@example.com / TestPass123!",
+  "test_credentials": "Admin: admin@platform.local / Admin12345! | User: test_user_iter53@example.com / TestPass123!",
   "seed_data_creation": "No new seed data created",
   "retest_needed": false,
   "should_main_agent_self_test": false,

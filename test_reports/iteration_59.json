@@ -24,7 +24,7 @@
   },
   "test_credentials": {
     "user": "indicator.manual@platform.dev / User12345!",
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "None - used existing test users",
   "retest_needed": false,

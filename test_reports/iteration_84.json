@@ -94,7 +94,7 @@
   },
   "test_credentials": {
     "user": "test_iter84_{uuid}@test.com / TestPass123!",
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "Created new test user with exchange connections for each test scenario",
   "retest_needed": false,

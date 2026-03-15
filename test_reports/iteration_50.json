@@ -32,7 +32,7 @@
   },
   "test_credentials": {
     "user": "iter50comp_wuztkmzp@example.com / Iter50CompTest!",
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "Test users created via registration + admin approval flow during tests",
   "retest_needed": false,

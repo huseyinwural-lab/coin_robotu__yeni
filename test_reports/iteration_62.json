@@ -31,7 +31,7 @@
     "backend": "100% (35/35 tests passed)",
     "frontend": "100% (all Admin P0 pages load and function correctly)"
   },
-  "test_credentials": "Admin: admin@platform.dev / Admin12345!",
+  "test_credentials": "Admin: admin@platform.local / Admin12345!",
   "seed_data_creation": "Test failed event seeded via UI",
   "retest_needed": false,
   "should_main_agent_self_test": false,

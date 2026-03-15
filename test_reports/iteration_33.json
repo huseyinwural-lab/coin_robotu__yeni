@@ -31,7 +31,7 @@
     "frontend": "100% (All 6 diagnostics UI components render correctly)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "None - diagnostics data generated from live paper cycle",
   "retest_needed": false,

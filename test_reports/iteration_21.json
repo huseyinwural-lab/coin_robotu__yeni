@@ -43,7 +43,7 @@
     "frontend": "100% (Admin Strategies page: create/version/activate/archive/kernel-evaluate flows working)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "Multiple strategy definitions and versions created during testing (codes: ui-test-*, test-strat-*, kernel-test-*, etc.)",
   "retest_needed": false,

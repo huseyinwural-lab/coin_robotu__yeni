@@ -58,7 +58,7 @@
     },
     "admin_login": {
       "status": "PASS",
-      "credentials": "admin@platform.dev / Admin12345!",
+      "credentials": "admin@platform.local / Admin12345!",
       "redirect_after_login": "/admin/dashboard"
     }
   },
@@ -76,7 +76,7 @@
     "frontend": "100% (5/5 features verified)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!",
+    "admin": "admin@platform.local / Admin12345!",
     "test_users_created": [
       "test_iter87_reg_*@testmail.com",
       "test_iter87_nophone_*@testmail.com",

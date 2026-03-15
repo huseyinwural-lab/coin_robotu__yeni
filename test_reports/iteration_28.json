@@ -34,7 +34,7 @@
     "frontend": "100% (Strategy Observability page + Admin regression pages working)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "None - used existing scan data from previous iterations",
   "retest_needed": false,

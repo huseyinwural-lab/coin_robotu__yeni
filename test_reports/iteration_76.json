@@ -80,7 +80,7 @@
     "frontend": "100% (UI loads correctly, conditional rendering works)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!",
+    "admin": "admin@platform.local / Admin12345!",
     "test_user": "TEST_iter76_approval_9c6b1435@test.com / TestPass123!"
   },
   "seed_data_creation": "Created multiple TEST_iter76_* users during testing with auto-created risk policies",

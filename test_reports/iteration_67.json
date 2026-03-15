@@ -30,7 +30,7 @@
     "frontend": "100% (79/79 UI checks passed)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!",
+    "admin": "admin@platform.local / Admin12345!",
     "user": "e2_conn_last@example.com / User12345!"
   },
   "seed_data_creation": "TEST_UI07_* prefixed test data created for API testing",

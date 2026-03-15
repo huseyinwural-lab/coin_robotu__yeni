@@ -116,7 +116,7 @@ def test_scanner_with_existing_user():
     # Based on test_result.md, there should be approved users
     test_emails = [
         "test_user_reg_1773349041@test.com",  # From test history
-        "admin@platform.dev",  # Sometimes users can also be admins
+        "admin@platform.local",  # Sometimes users can also be admins
     ]
     
     for email in test_emails:

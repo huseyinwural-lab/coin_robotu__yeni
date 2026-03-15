@@ -92,7 +92,7 @@
     "frontend": "100% (UI verified)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "",
   "retest_needed": false,

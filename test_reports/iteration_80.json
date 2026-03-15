@@ -171,7 +171,7 @@
     "frontend": "100% (all elements verified)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!",
+    "admin": "admin@platform.local / Admin12345!",
     "test_user": "test_iter79_scanner_1773403334@test.com / TestPass123!"
   },
   "seed_data_creation": "Used existing approved user from iteration 79",

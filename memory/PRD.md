@@ -984,7 +984,7 @@
 - [x] Alert delivery **email-only gerçek kanal başarı doğrulaması** (Option C)
 
 ### Kalan P0
-1. (Opsiyonel) `ALERT_FROM=admin@platform.dev` kullanımı için Resend domain verify (`platform.dev`) tamamlamak
+1. (Opsiyonel) `ALERT_FROM=admin@platform.local` kullanımı için Resend domain verify (`platform.dev`) tamamlamak
 2. (Opsiyonel) Slack webhook ekleyip ikinci kanal aktivasyonunu tamamlamak
 
 ## 9) 2026-03-11 — Admin Domain Final Step (Option C: Email-only Activation)
@@ -996,7 +996,7 @@
 - Testing agent raporu: `/app/test_reports/iteration_24.json` (backend 9/9, frontend 100%).
 
 ### Not (Provider Constraint)
-- `ALERT_FROM=admin@platform.dev` değeri Resend domain doğrulaması yapılmadığı için doğrudan gönderimde `domain not verified` hatası üretir.
+- `ALERT_FROM=admin@platform.local` değeri Resend domain doğrulaması yapılmadığı için doğrudan gönderimde `domain not verified` hatası üretir.
 - `ALERT_TO` alanında yazım düzeltmesi (`huseyinwural@gmail.com`) ile hesap sahibi test alıcısına başarılı gönderim doğrulandı.
 
 ## 10) 2026-03-11 — Spot Strategy Engine Faz-1 (P0) Uygulandı
@@ -4829,7 +4829,7 @@
    - Admin panel sonrası self-update akışı API seviyesinde doğrulandı.
 
 3. **Credential cleanup final**
-   - `backend/tests/**` ve `tests/**` içinde dağınık `admin@platform.dev` izleri temizlendi.
+   - `backend/tests/**` ve `tests/**` içinde dağınık `admin@platform.local` izleri temizlendi.
    - Testlerde env/helper standardı kullanımı tekilleştirildi.
    - `Admin12345!` yalnız bootstrap/password testlerinde bırakıldı.
 

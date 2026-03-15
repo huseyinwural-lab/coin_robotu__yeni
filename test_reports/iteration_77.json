@@ -100,7 +100,7 @@
     "frontend": "100% (all UI elements verified)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!",
+    "admin": "admin@platform.local / Admin12345!",
     "test_user": "TEST_iter77_ui_9245626f@test.com / TestPass123!"
   },
   "seed_data_creation": "Created test user TEST_iter77_ui_9245626f@test.com with auto-created 'Starter Safe (Auto)' risk policy",

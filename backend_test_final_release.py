@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Final Release Validation Test Suite
 Tests the 6 specific items mentioned in the release validation request.
@@ -25,8 +26,8 @@ class FinalReleaseValidator:
         
         # Try both platform.local and platform.dev (based on test_result.md history)
         test_credentials = [
-            ("admin@platform.local", "Admin12345!"),
-            ("admin@platform.dev", "Admin12345!")
+            (os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local"), os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")),
+            (os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local"), os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!"))
         ]
         
         for email, password in test_credentials:
@@ -82,7 +83,7 @@ class FinalReleaseValidator:
         try:
             password_response = requests.post(
                 f"{API_BASE}/auth/admin/password/change",
-                json={"current_password": "Admin12345!", "new_password": "Admin12345!"},
+                json={"current_password": os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!"), "new_password": os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")},
                 headers=headers,
                 timeout=10
             )

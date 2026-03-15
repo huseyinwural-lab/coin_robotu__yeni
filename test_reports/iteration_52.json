@@ -37,7 +37,7 @@
     "frontend": "100% (Admin pages verified)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "Test created risk cluster L3_TEST, strategy allocations for throttled_test_strategy, disabled_test_strategy, test_strategy_state",
   "retest_needed": false,

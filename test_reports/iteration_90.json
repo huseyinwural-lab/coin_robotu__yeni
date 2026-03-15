@@ -134,7 +134,7 @@
     "frontend": "100% (all UI elements verified)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!",
+    "admin": "admin@platform.local / Admin12345!",
     "user": "TEST_phase4iter2_pipeline@example.com / TestPassword123!"
   },
   "seed_data_creation": "Bootstrap seeds 12 canonical + 9 legacy strategies into canonical_strategy_registry table",

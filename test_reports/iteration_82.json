@@ -88,7 +88,7 @@
   },
   "test_credentials": {
     "user": "test_iter79_scanner_1773403334@test.com / TestPass123!",
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "Used existing approved user from iteration 79",
   "retest_needed": false,

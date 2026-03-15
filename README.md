@@ -33,12 +33,26 @@ cp frontend/.env.example frontend/.env
 - Deterministik build: `frontend/yarn.lock` + Dockerfile `yarn install --frozen-lockfile --non-interactive`
 - Monorepo kökünde package manager kullanılmaz.
 
+Doğrulama:
+
+```bash
+cd frontend
+yarn install
+yarn install --frozen-lockfile --non-interactive
+```
+
 ## 3) Docker ile ayağa kaldırma
 
 ```bash
 docker compose config
 docker compose up -d --build
 docker compose ps
+```
+
+Frontend Docker build doğrulaması:
+
+```bash
+docker build -f frontend/Dockerfile .
 ```
 
 ## 4) Servis URL’leri

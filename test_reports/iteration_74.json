@@ -42,7 +42,7 @@
     "backend": "69% (20/29 tests passed)",
     "frontend": "Admin pages 100%, User pages not fully tested due to auth constraints"
   },
-  "test_credentials": "Admin: admin@platform.dev / Admin12345!",
+  "test_credentials": "Admin: admin@platform.local / Admin12345!",
   "seed_data_creation": "Created test watchlists with prefix TEST_iter74_*",
   "retest_needed": false,
   "should_main_agent_self_test": true,

@@ -39,12 +39,12 @@ from datetime import datetime
 BACKEND_URL = "https://market-scanner-prod.preview.emergentagent.com/api"
 
 # Test admin credentials - using the platform.local variant as mentioned in review
-TEST_ADMIN_EMAIL = "admin@platform.local"  
-TEST_ADMIN_PASSWORD = "Admin12345!"
+TEST_ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")  
+TEST_ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")
 
 # Default admin credentials - for comparison
-DEFAULT_ADMIN_EMAIL = "admin@platform.dev"
-DEFAULT_ADMIN_PASSWORD = "Admin12345!"
+DEFAULT_ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
+DEFAULT_ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")
 
 # Global auth tokens
 admin_token = None
@@ -143,14 +143,14 @@ def test_1_bootstrap_admin():
     else:
         log_test("1A) Login admin@platform.local (REQUIRED)", "FAIL", f"CRITICAL: {result}")
         
-        # 1B) Fallback: Try with default admin@platform.dev for continued testing
+        # 1B) Fallback: Try with default admin@platform.local for continued testing
         success_fallback, token_fallback, result_fallback = authenticate_admin(DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD)
         if success_fallback:
-            log_test("1B) Login admin@platform.dev (fallback for testing)", "PASS", f"Fallback successful, but admin@platform.local MISSING")
+            log_test("1B) Login admin@platform.local (fallback for testing)", "PASS", f"Fallback successful, but admin@platform.local MISSING")
             admin_token = token_fallback
             # Don't increment passed count - this is a fallback, not a success
         else:
-            log_test("1B) Login admin@platform.dev (fallback)", "FAIL", result_fallback)
+            log_test("1B) Login admin@platform.local (fallback)", "FAIL", result_fallback)
             return False  # Cannot continue without admin auth
     
     # 1C) Bootstrap behavior regression test - check user count doesn't get reset

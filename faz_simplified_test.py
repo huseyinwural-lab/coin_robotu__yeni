@@ -13,8 +13,8 @@ from typing import Dict, Any, List, Tuple
 
 # Configuration
 BACKEND_URL = "https://market-scanner-prod.preview.emergentagent.com/api"
-ADMIN_EMAIL = "admin@platform.dev"
-ADMIN_PASSWORD = "Admin12345!"
+ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
+ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")
 
 def run_test(test_name: str, test_func) -> Tuple[bool, str]:
     """Run a single test and return (success, details)"""

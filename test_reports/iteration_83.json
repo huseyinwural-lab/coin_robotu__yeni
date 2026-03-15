@@ -118,7 +118,7 @@
   },
   "test_credentials": {
     "user": "test_iter83_user_1773408317@test.com / TestPass123!",
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "Created new approved user and exchange connection profile for testing",
   "retest_needed": false,

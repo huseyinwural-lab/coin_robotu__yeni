@@ -27,7 +27,7 @@
     "frontend": "100% (all tabs and panels verified)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!",
+    "admin": "admin@platform.local / Admin12345!",
     "user": "TEST_phase4iter4@example.com / TestPassword123!"
   },
   "seed_data_creation": "None - used existing test user",

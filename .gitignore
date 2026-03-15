@@ -58,11 +58,10 @@ dump.rdb
 # Generated artifacts
 .cache/
 .screenshots/
-artifacts/
+artifacts/tmp/
+artifacts/cache/
 backend/exports/**
 !backend/exports/.gitkeep
-artifacts/reports/**
-!artifacts/reports/.gitkeep
 test_reports/**
 !test_reports/.gitkeep
 test_reports/artifacts_iter*/
@@ -84,6 +83,4 @@ chainlit.md
 .chainlit
 .ipynb_checkpoints/
 frontend/node_modules/.cache/default-development/0.pack
-frontend/node_modules/.cache/default-development/0.pack
-frontend/node_modules/.cache/default-development/18.pack
 frontend/node_modules/.cache/default-development/18.pack

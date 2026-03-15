@@ -31,7 +31,7 @@
     "frontend": "100% (all UI elements verified)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!",
+    "admin": "admin@platform.local / Admin12345!",
     "user": "TEST_phase4iter4@example.com / TestPassword123!"
   },
   "seed_data_creation": "User venue assignment created for TEST_phase4iter4@example.com to binance (spot+futures, testnet)",

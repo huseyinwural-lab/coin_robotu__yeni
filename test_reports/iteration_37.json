@@ -31,7 +31,7 @@
     "frontend": "100% (All Phase 5.6 UI panels render correctly)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "None",
   "retest_needed": false,

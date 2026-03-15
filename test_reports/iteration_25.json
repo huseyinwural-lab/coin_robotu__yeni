@@ -30,7 +30,7 @@
     "frontend": "Skipped per request - backend only testing"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "None - tested real Binance API data with synthetic fallback",
   "retest_needed": false,

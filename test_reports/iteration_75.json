@@ -302,7 +302,7 @@
     "frontend": "100% (58/58 menus passing)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!",
+    "admin": "admin@platform.local / Admin12345!",
     "user": "TEST_iter75_user@test.com / TestPass123!"
   },
   "seed_data_creation": "Created and approved TEST_iter75_user@test.com for user panel testing",

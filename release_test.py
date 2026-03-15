@@ -4,7 +4,7 @@ Release Validation Backend Test Suite
 Yayın Öncesi Son Kapatma Paketi Doğrulaması
 
 Tests requested in review:
-1) Bootstrap admin - admin@platform.dev / Admin12345! login validation
+1) Bootstrap admin - admin@platform.local / Admin12345! login validation
 2) Admin profile/password update - PATCH profile, POST password change, re-login
 3) CI portability/gate - ci_alembic_drift_gate.sh, ci_stage_gate.sh, ci_prod_gate.sh
 4) Frontend release smoke checklist - backend support validation
@@ -22,8 +22,8 @@ from datetime import datetime
 BACKEND_URL = "https://market-scanner-prod.preview.emergentagent.com/api"
 
 # Test admin credentials
-ADMIN_EMAIL = "admin@platform.dev"
-ADMIN_PASSWORD = "Admin12345!"
+ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
+ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")
 
 # Global auth tokens
 admin_token = None
@@ -38,7 +38,7 @@ def log_test(test_name, status, details=""):
 def test_1_bootstrap_admin():
     """Test 1: Bootstrap admin validation"""
     print("\n=== TEST 1: Bootstrap Admin Validation ===")
-    print("Testing admin@platform.dev / Admin12345! login...")
+    print("Testing admin@platform.local / Admin12345! login...")
     
     global admin_token
     try:

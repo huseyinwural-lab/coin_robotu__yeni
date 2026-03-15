@@ -34,7 +34,7 @@
     "frontend": "100% (All widgets, cards, tables, panels render correctly)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "None - no positions exist so empty states shown",
   "retest_needed": false,

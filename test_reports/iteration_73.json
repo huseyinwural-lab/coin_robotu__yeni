@@ -22,7 +22,7 @@
     "backend": "100% (21/21 tests passed)",
     "frontend": "100% (all UI components verified)"
   },
-  "test_credentials": "admin@platform.dev / Admin12345!",
+  "test_credentials": "admin@platform.local / Admin12345!",
   "seed_data_creation": "None - used existing data",
   "retest_needed": false,
   "should_main_agent_self_test": false,

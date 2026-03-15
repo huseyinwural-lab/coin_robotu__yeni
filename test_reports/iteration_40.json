@@ -43,7 +43,7 @@
     "frontend": "100% (all panel verification checks passed)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "None - capital calculations are deterministic from portfolio equity and strategy registry",
   "retest_needed": false,

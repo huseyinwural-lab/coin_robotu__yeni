@@ -29,7 +29,7 @@
   },
   "test_credentials": {
     "user": "ct_ux_iter49_ghjujb4q@example.com / CtUxPass123!",
-    "admin": "admin@platform.dev / Admin12345!"
+    "admin": "admin@platform.local / Admin12345!"
   },
   "seed_data_creation": "Created test user via registration + admin approval flow",
   "retest_needed": false,

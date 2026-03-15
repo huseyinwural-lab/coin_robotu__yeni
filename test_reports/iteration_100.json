@@ -23,7 +23,7 @@
     "frontend": "100% (all P0-B metric cards and panels verified)"
   },
   "test_credentials": {
-    "admin": "admin@platform.dev / Admin12345!",
+    "admin": "admin@platform.local / Admin12345!",
     "user": "TEST_phase4iter2_pipeline@example.com / TestPassword123!"
   },
   "seed_data_creation": "None required - existing test data used",

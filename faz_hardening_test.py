@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 FAZ-1 + FAZ-2 Backend Hardening Validation Test
 
@@ -21,8 +22,8 @@ from typing import Dict, Any
 # Configuration
 BASE_URL = "https://market-scanner-prod.preview.emergentagent.com"
 API_URL = f"{BASE_URL}/api"
-ADMIN_EMAIL = "admin@platform.dev"
-ADMIN_PASSWORD = "Admin12345!"
+ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
+ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")
 
 class TestResults:
     def __init__(self):

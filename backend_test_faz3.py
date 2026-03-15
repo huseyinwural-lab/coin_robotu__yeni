@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 FAZ-2C + FAZ-3 Backend Validation Test
 Backend validation for drift gate and new FAZ-3 endpoints
@@ -86,15 +87,15 @@ class FAZ3ValidationTest:
             return False
 
     def test_admin_login(self):
-        """Test 3: POST /api/auth/login/admin (admin@platform.dev / Admin12345!)"""
+        """Test 3: POST /api/auth/login/admin (admin@platform.local / Admin12345!)"""
         print("\n" + "=" * 60)
         print("TEST 3: Admin Login")
         print("=" * 60)
         
         try:
             payload = {
-                "email": "admin@platform.dev",
-                "password": "Admin12345!"
+                "email": os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local"),
+                "password": os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")
             }
             
             response = requests.post(
