@@ -5039,3 +5039,106 @@ Risk Engine final sözleşmesi:
 - `frontend/**` değiştirilmedi.
 - **MOCKED** kalanlar: Bybit/OKX adapterleri ve bazı Resend mail akışları.
 
+## 87) 2026-03-15 — MASTER CLOSURE PACKAGE (CLOSE-1..CLOSE-7)
+
+### Kapsam
+Yeni feature yerine production-hardening kapanış paketi uygulandı:
+- execution quality kalibrasyon altyapısı
+- risk config governance hardening
+- scanner+risk rejim tuning
+- CI contract/regression genişletme
+- multi-exchange adapter altyapısı
+- admin observability hardening
+- deployment dry-run planı
+
+### Uygulananlar
+1. **CLOSE-1 Execution Quality Calibration**
+   - `execution_quality_service.py` scoring modeline `partial_fill_rate` ve `reject_rate` dahil edildi.
+   - `execution_quality_calibration_service.py` eklendi:
+     - replay dataset üretimi (execution/decision/risk veto logları)
+     - `false_allow_rate`, `false_block_rate`, `false_reduce_rate`
+     - threshold önerisi (`execution_quality_threshold`, `spread_threshold_bps`, `stale_data_threshold_ms`)
+   - Endpointler:
+     - `POST /api/admin/risk/execution-quality/calibrate`
+     - `GET /api/admin/risk/execution-quality/calibration`
+   - Veri yetersizliğinde standart sonuç: `policy_documented_warning`.
+
+2. **CLOSE-2 Risk Config Governance Hardening**
+   - Safe bounds reject aktif:
+     - `max_risk_per_trade_pct <= 5`
+     - `max_total_exposure_pct <= 50`
+     - `max_leverage <= 10`
+   - Bound ihlalinde PATCH artık HTTP 400 reject.
+   - Versioning metadata:
+     - `config_version`, `changed_by`, `changed_at`
+   - Last-known-good backup + rollback:
+     - `backend/config/risk_engine_config_backup.json`
+     - `POST /api/admin/risk/config/rollback`
+
+3. **CLOSE-3 Tiered Scanner + Risk Engine Tuning**
+   - `scanner_regime_service.py` eklendi.
+   - Rejim profilleri uygulandı:
+     - normal: `700/120/25`
+     - volatile: `500/80/15`
+     - stress: `300/40/8`
+   - Rejim girdileri:
+     - volatility index
+     - spread regime
+     - latency regime
+     - execution quality trend
+   - Fallback tetik genişletmesi:
+     - `latency_spike`, `queue_depth`, `execution_quality_drop`
+
+4. **CLOSE-4 CI Contract & Regression Genişletme**
+   - Yeni testler:
+     - `test_risk_config_governance.py`
+     - `test_scanner_regime_tuning.py`
+     - `test_execution_quality_calibration.py`
+     - `test_exchange_adapter_smoke.py`
+     - `test_risk_engine_api_contracts.py`
+   - Stage/prod gate test listesi güncellendi.
+
+5. **CLOSE-5 Multi-Exchange Adapter Altyapısı**
+   - Yeni paket: `backend/services/exchange_adapter/`
+     - `market_data_adapter.py`
+     - `execution_adapter.py`
+     - `precision_normalizer.py`
+     - `symbol_mapper.py`
+     - `retry_handler.py`
+   - Smoke servisi + endpoint:
+     - `backend/services/exchange_adapter_smoke_service.py`
+     - `GET /api/venues/admin/adapter-smoke`
+   - Venue registry seed Bybit/OKX ile genişletildi.
+   - Bybit 403 koşulunda smoke FAIL yerine degraded `PASS_MOCKED` fallback.
+
+6. **CLOSE-6 Admin Observability Hardening**
+   - `runtime-summary` genişletildi:
+     - `risk_overview`
+     - `observability_trends`
+   - Trend servisi eklendi:
+     - execution latency trend
+     - risk veto rate trend
+     - scanner cycle latency trend
+     - fallback activation rate trend
+
+7. **CLOSE-7 Deployment Plan (Dry-Run)**
+   - `ci_alembic_drift_gate`, `ci_stage_gate`, `ci_prod_gate` tekrar PASS.
+   - release gate preview ortamında `permission_check_fail` nedeni policy-documented şekilde raporlanıyor.
+   - Operasyonel closure dokümanı oluşturuldu:
+     - `/app/docs/15_master_closure_package_report.md`
+
+### Test/Doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_106.json` ✅
+  - Backend %100, Frontend %100
+  - CLOSE-1..CLOSE-7 acceptance noktaları PASS
+- CI gate:
+  - Stage: 34 passed
+  - Prod: 34 passed
+- API smoke:
+  - risk config reject/rollback/calibration endpointleri doğrulandı
+  - adapter smoke endpoint doğrulandı (market data PASS/PASS_MOCKED, execution **MOCKED**)
+
+### Durum
+- MASTER CLOSURE package backend kapsamı tamamlandı.
+- Kalan production bağımlılığı: Bybit/OKX canlı execution credentials sağlandığında adapter execution path live modda açılacak.
+

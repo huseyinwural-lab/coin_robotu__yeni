@@ -87,15 +87,16 @@
 - RISK-1..RISK-6 parametrik Risk Engine paketi backend’de devreye alındı.
 
 ### P1 (Aktif)
-1. Tiered scanner + Risk Engine birlikte canlı koşul tuning’i:
-   - discovery/qualification/decision cap ayarlarının volatilite rejimine göre optimize edilmesi
-   - fallback tetik/çıkış eşiklerinin production telemetriye göre rafine edilmesi
+1. Tiered scanner + Risk Engine canlı telemetri tuning (post-closure):
+   - regime girdilerini canlı market feed ile stabilize etme
+   - fallback tetik/çıkış eşiklerini production gözlemiyle rafine etme
 2. Risk config policy hardening:
    - tenant/team bazlı risk profilleri
    - audit trail’de config diff/rollback görünürlüğü
 3. Tiered + risk pipeline API/contract regresyonlarının CI içinde genişletilmesi
 
 ### P2 (Bekleyen)
-1. Bybit/OKX gerçek adapter entegrasyonu (placeholder yerine canlı adapter)
-2. Release gate `execution_quality_score` warning kök neden analizi
+1. Bybit/OKX gerçek execution adapter entegrasyonu (şu an keysiz modda **MOCKED**)
+2. Execution quality kalibrasyonunu canlı execution logları ile yeniden çalıştırma (şu an policy-documented fallback aktif)
 3. Admin sol menü scroll UX düzeltmesi
+4. Docker image reproducibility doğrulaması (uygun docker runtime ortamında)

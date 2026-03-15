@@ -1,6 +1,42 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-15
+### Iteration-106 — TRADING ENGINE MASTER CLOSURE PACKAGE (CLOSE-1..CLOSE-7)
+- **CLOSE-1 Execution Quality Calibration**
+  - `execution_quality_service.py` metrik seti genişletildi (`partial_fill_rate`, `reject_rate` dahil).
+  - `execution_quality_calibration_service.py` eklendi (replay dataset + false_allow/false_block/false_reduce analizi + threshold önerisi).
+  - Admin endpointleri eklendi: `POST /api/admin/risk/execution-quality/calibrate`, `GET /api/admin/risk/execution-quality/calibration`.
+  - Düşük veri koşulunda `policy_documented_warning` çıktısı standartlaştırıldı.
+- **CLOSE-2 Governance Hardening**
+  - Safe bounds reject: `max_risk_per_trade_pct<=5`, `max_total_exposure_pct<=50`, `max_leverage<=10`.
+  - `PATCH /api/admin/risk/config` ihlal durumunda HTTP 400 reject.
+  - Config versioning metadata: `config_version`, `changed_by`, `changed_at`.
+  - Backup/rollback: `risk_engine_config_backup.json`, `POST /api/admin/risk/config/rollback`.
+- **CLOSE-3 Tiered+Risk Tuning**
+  - `scanner_regime_service.py` eklendi.
+  - Rejim profilleri: normal `700/120/25`, volatile `500/80/15`, stress `300/40/8`.
+  - Rejim girdileri: volatility index, spread regime, latency regime, execution quality trend.
+  - Fallback tetik genişletmesi: `latency_spike`, `queue_depth`, `execution_quality_drop`.
+- **CLOSE-4 CI/Regression genişletme**
+  - Yeni deterministic testler eklendi:
+    - `test_risk_config_governance.py`
+    - `test_scanner_regime_tuning.py`
+    - `test_execution_quality_calibration.py`
+    - `test_exchange_adapter_smoke.py`
+    - `test_risk_engine_api_contracts.py`
+  - Stage/prod gate listeleri güncellendi; toplam paket 34 test PASS.
+- **CLOSE-5 Multi-exchange altyapı**
+  - `services/exchange_adapter/` paketi eklendi (market_data_adapter, execution_adapter, precision_normalizer, symbol_mapper, retry_handler).
+  - `GET /api/venues/admin/adapter-smoke` eklendi.
+  - Bybit market data 403 durumunda degraded `PASS_MOCKED` fallback ile smoke stabil hale getirildi.
+- **CLOSE-6 Admin observability**
+  - `runtime-summary` yanıtına `observability_trends` eklendi.
+  - `observability_trend_service.py` ile execution latency / risk veto rate / scanner cycle / fallback activation trendleri tutuluyor.
+- **CLOSE-7 deployment dry-run**
+  - drift/stage/prod gate tekrar PASS.
+  - release gate preview’de `permission_check_fail` için policy-documented kabul çıktısı eklendi.
+  - Runbook + closure raporu dokümante edildi: `/app/docs/15_master_closure_package_report.md`.
+
 ### Iteration-105 — RISK-1..RISK-6 Parametrik Risk Engine Paketi
 - **Yeni servis katmanı eklendi**:
   - `backend/services/risk_engine_service.py` (ALLOW/REDUCE_SIZE/PASS/BLOCK final veto)

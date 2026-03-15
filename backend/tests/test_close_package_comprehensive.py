@@ -3,10 +3,25 @@ CLOSE-1..CLOSE-7 Comprehensive API Contract Tests
 Tests trading engine master closure package endpoints and policies
 """
 import os
+from pathlib import Path
+
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+
+def _resolve_base_url() -> str:
+    from_env = os.environ.get("REACT_APP_BACKEND_URL", "").strip().rstrip("/")
+    if from_env:
+        return from_env
+    env_file = Path(__file__).resolve().parents[2] / "frontend" / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            if line.startswith("REACT_APP_BACKEND_URL="):
+                return line.split("=", 1)[1].strip().rstrip("/")
+    return ""
+
+
+BASE_URL = _resolve_base_url()
 TEST_ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@platform.local")
 TEST_ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Admin12345!")
 
@@ -14,8 +29,10 @@ TEST_ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Admin12345!")
 @pytest.fixture(scope="module")
 def admin_token():
     """Get admin authentication token"""
+    if not BASE_URL:
+        pytest.skip("REACT_APP_BACKEND_URL not configured")
     resp = requests.post(
-        f"{BASE_URL}/api/auth/login",
+        f"{BASE_URL}/api/auth/login/admin",
         json={"email": TEST_ADMIN_EMAIL, "password": TEST_ADMIN_PASSWORD},
         timeout=10,
     )
