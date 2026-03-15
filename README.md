@@ -8,6 +8,7 @@
 - `backend/tests/*` ve `tests/*` (test katmanları)
 
 Runtime çıktıları (`*.db`, test artefact görselleri, snapshot/debug çıktıları) kaynak kod kapsamı dışında tutulmalıdır.
+Repo artefact sınıflandırma politikası: `docs/10_repo_artifact_policy.md`
 
 ## 1) Environment hazırlığı
 
@@ -61,6 +62,7 @@ Varsayılan admin seed yalnızca `users` tablosu tamamen boşken çalışır.
 
 - Kimlik bilgileri `backend/.env` içindeki `DEFAULT_ADMIN_EMAIL` ve `DEFAULT_ADMIN_PASSWORD` alanlarından okunur.
 - Repo içinde operasyonel kullanım için sabit credential tekrarları tutulmamalıdır.
+- `backend/.env.example` içindeki admin değerleri yalnız placeholder amaçlıdır.
 
 - Tablo doluysa seed/recreate/reset yapılmaz.
 - Duplicate kullanıcı üretilmez.
@@ -72,6 +74,15 @@ Backend (lokal):
 ```bash
 cd backend
 pytest
+```
+
+Credential gerektiren script/testler için env tabanlı kullanım:
+
+```bash
+export TEST_ADMIN_EMAIL="<admin-email>"
+export TEST_ADMIN_PASSWORD="<admin-password>"
+export TEST_USER_EMAIL="<user-email>"
+export TEST_USER_PASSWORD="<user-password>"
 ```
 
 Frontend (lokal):

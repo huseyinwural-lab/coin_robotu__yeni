@@ -52,12 +52,19 @@ yarn-error.log*
 *.sqlite3
 backend/trading_platform_local.db
 trading_platform_local.db
+backend/test_learning.db
 dump.rdb
 
 # Generated artifacts
 .cache/
 .screenshots/
 artifacts/
+backend/exports/**
+!backend/exports/.gitkeep
+artifacts/reports/**
+!artifacts/reports/.gitkeep
+test_reports/**
+!test_reports/.gitkeep
 test_reports/artifacts_iter*/
 test_reports/pytest/*.xml
 
@@ -78,10 +85,4 @@ chainlit.md
 .chainlit
 .ipynb_checkpoints/
 frontend/node_modules/.cache/default-development/0.pack
-frontend/node_modules/.cache/default-development/0.pack
 frontend/node_modules/.cache/default-development/18.pack
-frontend/node_modules/.cache/default-development/18.pack
--e 
-# Environment files
-*.env
-*.env.*

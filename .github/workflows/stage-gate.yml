@@ -8,5 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Make CI scripts executable
+        run: chmod +x scripts/*.sh
+      - name: Run alembic drift gate
+        run: bash scripts/ci_alembic_drift_gate.sh
       - name: Run stage release gate
         run: bash scripts/ci_stage_gate.sh
