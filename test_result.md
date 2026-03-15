@@ -1100,6 +1100,66 @@ backend:
       - working: true
         agent: "testing"
         comment: "Iteration-52 Phase-9A Backend Test PASSED. GET /api/user/execution/intents/{id}/decision-trace endpoint working correctly with ALL Phase9A fields present at trace level: portfolio_risk_score: 0.0017, strategy_allocation_reason: 'normal_allocation', meta_engine_decision: 'ALLOW'. Decision trace timeline properly populated with execution preview data. User authentication working properly. Decision traceability fully functional."
+
+  - task: "Release Validation - Bootstrap Admin Authentication"
+    implemented: true
+    working: true
+    file: "backend/routers/auth.py, backend/services/bootstrap.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "RELEASE VALIDATION PASSED. Bootstrap admin login with admin@platform.dev / Admin12345! working correctly (role: super_admin). Admin account persists without unexpected resets when users database populated. Bootstrap regression test verified - no create/reset behavior when users exist. Bootstrap service functioning correctly for production deployment."
+
+  - task: "Release Validation - Admin Profile and Password Management"
+    implemented: true
+    working: true
+    file: "backend/routers/auth.py, backend/services/admin_profile_service.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "RELEASE VALIDATION PASSED. Admin profile/password update flow fully functional: 1) POST /api/auth/login/admin working correctly. 2) PATCH /api/auth/admin/profile working correctly (profile update successful). 3) POST /api/auth/admin/password/change working correctly (password change from Admin12345! to NewAdminPassword123! successful). 4) Login with new password working correctly. Complete admin management authentication flow operational for production."
+
+  - task: "Release Validation - CI Portability and Gate Scripts"
+    implemented: true
+    working: true
+    file: "/app/scripts/ci_alembic_drift_gate.sh, /app/scripts/ci_stage_gate.sh, /app/scripts/ci_prod_gate.sh"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "RELEASE VALIDATION PASSED. All CI portability/gate scripts working correctly: 1) bash scripts/ci_alembic_drift_gate.sh PASSED (exit code 0) - Alembic drift controls verified. 2) bash scripts/ci_stage_gate.sh PASSED (exit code 0) - Formula gate status PASS. 3) bash scripts/ci_prod_gate.sh PASSED (exit code 0) - Formula gate status PASS. All CI gates operational without errors, ready for production CI/CD pipeline."
+
+  - task: "Release Validation - Frontend Release Smoke Backend Support"
+    implemented: true
+    working: true
+    file: "backend/routers/health.py, backend/routers/auth.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "RELEASE VALIDATION PASSED. Frontend release smoke checklist backend support verified: 1) Landing accessibility - Backend health check passed (GET /api/health returns 200 {status: ok}). 2) Admin login action visibility - Admin login endpoint accessible and functional. 3) User login action visibility - User login endpoint accessible (proper error responses for invalid credentials). Backend support for frontend smoke testing fully operational."
+
+  - task: "Release Validation - Critical Endpoint Regression Tests"
+    implemented: true
+    working: true
+    file: "backend/routers/health.py, backend/routers/admin_universe_monitor.py, backend/routers/user_scanner_symbol_selection.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "RELEASE VALIDATION PASSED. Critical endpoint regression tests successful: 1) GET /api/health PASSED (Status 200, response: {status: ok}). 2) GET /api/admin/universe-monitor PASSED (Status 200, 4150+ chars response with admin token). 3) GET /api/user/scanner/symbol-selection PASSED (Status 200 with user token after complete registration+approval+login flow). All critical API endpoints accessible and functional for production release."
 frontend:
   - task: "User Positions Page - Table Columns and Action Controls"
     implemented: true
@@ -1194,3 +1254,6 @@ agent_communication:
 
   - agent: "testing"
     message: "FAZ-4 + FAZ-5 + FAZ-6 DOĞRULAMA PAKETİ COMPLETED - ALL TESTS PASSED (16/16 - 100% SUCCESS RATE). Date: 2026-03-15. Comprehensive validation of FAZ-4, FAZ-5, and FAZ-6 requirements completed successfully with perfect score: 1) GATE/CI VALIDATION (3/3 PASSED): ✅ bash /app/scripts/ci_alembic_drift_gate.sh PASS -> '[drift-gate][PASS] Alembic drift kontrolü temiz.' ✅ bash /app/scripts/ci_stage_gate.sh PASS -> All tests and gates passed including runtime test package (7 passed, 2 warnings). ✅ bash /app/scripts/ci_prod_gate.sh PASS -> All tests and gates passed (7 passed, 2 warnings). 2) HERMETIC TEST PAKETİ (6/6 PASSED): ✅ backend/tests/test_full_market_scan.py PASS -> 1 passed in 0.38s. ✅ backend/tests/test_top_volume_fallback.py PASS -> 1 passed in 0.02s. ✅ backend/tests/test_decision_contract.py PASS -> 1 passed, 2 warnings in 0.74s. ✅ backend/tests/test_runtime_candidate_persistence.py PASS -> 1 passed, 2 warnings in 0.75s. ✅ backend/tests/test_freshness_policy.py PASS -> 2 passed in 0.02s. ✅ backend/tests/test_event_priority_scheduler.py PASS -> 1 passed in 0.02s. 3) ENDPOINT REGRESYONLARI (4/4 PASSED): ✅ GET /api/health -> Status 200, Response: {status: ok}. ✅ POST /api/auth/login/admin -> Status 200, Token received successfully. ✅ GET /api/admin/universe-monitor -> Status 200, 25 fields returned. ✅ GET /api/user/scanner/symbol-selection -> API accessible, found 10 active users for testing. 4) FAZ-4 RUNTIME ALANLARI (1/1 PASSED): ✅ /api/admin/universe/runtime-summary ALL 6 REQUIRED FIELDS VERIFIED: freshness_sla_bucket: normal, stale_skip_count: 0, queue_depth_state: normal, backpressure_active: False, event_priority_distribution: {high: 0, medium: 0, low: 0}, fallback_reason_code: none. 5) FAZ-5 DECISION EXPLAINABILITY CONTRACT (1/1 PASSED): ✅ Decision contract endpoints accessible and working correctly (verified via admin endpoint accessibility and existing test contracts). 6) FAZ-6 CI DOĞRULAMASI (1/1 PASSED): ✅ Runtime test package validation -> ci_stage_gate.sh and ci_prod_gate.sh both contain all 6 required runtime tests (test_full_market_scan.py, test_top_volume_fallback.py, test_decision_contract.py, test_runtime_candidate_persistence.py, test_freshness_policy.py, test_event_priority_scheduler.py). SONUÇ: ✅ ALL PASS - Hiçbir test başarısız değil. Tüm gate/CI scriptleri çalışıyor. Tüm hermetic testler geçiyor. Tüm endpoint regresyonlar başarılı. FAZ-4 runtime fields mevcut. FAZ-5 decision explainability contract working. FAZ-6 CI workflow scripts runtime testleri içeriyor. Backend production-ready. TOTAL: 16/16 tests PASSED!"
+
+  - agent: "testing"
+    message: "RELEASE VALIDATION COMPLETED - ALL TESTS PASSED (5/5 - 100% SUCCESS RATE). Date: 2026-03-15. Yayın öncesi son kapatma paketi doğrulaması successfully completed: 1) ✅ BOOTSTRAP ADMIN VALIDATION: Admin login with admin@platform.dev / Admin12345! working correctly. Role: super_admin. Admin account persists without unexpected resets during users populated scenario. Bootstrap behavior regression test passed. 2) ✅ ADMIN PROFILE/PASSWORD UPDATE: POST /api/auth/login/admin verified. PATCH /api/auth/admin/profile working correctly (profile update successful). POST /api/auth/admin/password/change working correctly (password changed from Admin12345! to NewAdminPassword123!). Yeni şifre ile tekrar login successful. Original password restored for other tests. Complete admin profile and password management flow operational. 3) ✅ CI PORTABILITY/GATE VALIDATION: bash scripts/ci_alembic_drift_gate.sh PASSED (exit code 0) - Alembic drift kontrolü static guards verified. bash scripts/ci_stage_gate.sh PASSED (exit code 0) - Formula gate status PASS. bash scripts/ci_prod_gate.sh PASSED (exit code 0) - Formula gate status PASS. All CI gate scripts working correctly without errors. 4) ✅ FRONTEND RELEASE SMOKE CHECKLIST BACKEND: Landing erişilebilir - Backend health check passed (GET /api/health returns 200 {status: ok}). Admin login aksiyonu görünür - Admin login endpoint accessible and functional. User login aksiyonu görünür - User login endpoint accessible (proper 400/401 response for invalid credentials). Backend support for frontend smoke tests verified. 5) ✅ ENDPOINT REGRESSION TESTS: GET /api/health PASSED (Status 200, response: {status: ok}). GET /api/admin/universe-monitor PASSED (Status 200, 4150+ chars response with admin token). GET /api/user/scanner/symbol-selection PASSED (Status 200 with user token after registration+approval+login flow). User registration→admin approval→user login flow working correctly. All critical regression endpoints accessible and functional. RELEASE STATUS: ✅ ALL 5 TEST CATEGORIES PASSED. Backend ready for production release. No blocking issues detected. Bootstrap admin working. Admin management endpoints functional. CI gates operational. Frontend backend support verified. Core API endpoints accessible. Production deployment approved."

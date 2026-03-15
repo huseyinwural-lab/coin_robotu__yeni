@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-FAZ-3A/3B/3C Backend Validation Test Suite
-Turkish Requirements Validation Package
+Release Validation Backend Test Suite
+Yayın Öncesi Son Kapatma Paketi Doğrulaması
 
-Tests:
-1) Drift & migration - Alembic drift gate validation
-2) Required endpoint regression - Core API endpoints 
-3) New runtime endpoints - 4 runtime endpoints validation
-4) Candidate persistence - Database table validation
-5) Futures execution alignment - Symbol resolution test
+Tests requested in review:
+1) Bootstrap admin - admin@platform.dev / Admin12345! login validation
+2) Admin profile/password update - PATCH profile, POST password change, re-login
+3) CI portability/gate - ci_alembic_drift_gate.sh, ci_stage_gate.sh, ci_prod_gate.sh
+4) Frontend release smoke checklist - backend support validation
+5) Endpoint regression - health, universe-monitor, scanner symbol-selection
 """
 
 import os
