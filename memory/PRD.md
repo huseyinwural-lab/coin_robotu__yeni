@@ -4973,3 +4973,69 @@
 - **Tiered scanner ilk sürüm entegrasyonu:** ACTIVE ve TEST-PASS
 - **Açık risk/not:** release gate `execution_quality_score` warning hâlâ backlog maddesi
 
+## 86) 2026-03-15 — RISK-1..RISK-6 Parametrik Risk Engine Paketi
+
+### Hedef
+Strategy kararlarını doğrudan execution’a göndermeden önce Risk Engine veto katmanından geçirmek:
+
+`Strategy -> Decision -> Risk Engine -> Execution`
+
+Risk Engine final sözleşmesi:
+- `ALLOW`
+- `REDUCE_SIZE`
+- `PASS`
+- `BLOCK`
+
+### Uygulanan Kapsam
+1. **RISK-1 Karar sözleşmesi + veto katmanı**
+   - `backend/services/risk_engine_service.py` eklendi.
+   - Scanner runtime kararları Risk Engine’den geçirilerek final PASS/BLOCK veto ve REDUCE_SIZE uygulanıyor.
+
+2. **RISK-2 Exposure / symbol / cluster limitleri**
+   - `wallet_usdt_balance`, `open_exposure_usdt`, `pending_exposure_usdt`, `cluster_exposure_usdt` hesapları eklendi.
+   - Cluster çözümleme için `backend/services/correlation_cluster_service.py` eklendi (DB group + fallback cluster mantığı).
+
+3. **RISK-3 Futures margin/leverage güvenliği**
+   - `futures_strategy_service` içinde `max_leverage` cap ve `min_liquidation_distance_pct` veto uygulandı.
+
+4. **RISK-4 Execution quality / stale / spread veto**
+   - `backend/services/execution_quality_service.py` eklendi.
+   - stale/spread/quality sinyallerinden PASS/BLOCK/REDUCE davranışı uygulanıyor.
+   - `top_volume_fallback` ve `universe_service` risk kalite metriklerini okuyor.
+
+5. **RISK-5 Daily loss / consecutive loss / cooldown**
+   - `backend/services/cooldown_service.py` eklendi.
+   - daily loss ve consecutive loss temelli global/strategy/symbol cooldown devrede.
+
+6. **RISK-6 Kill-switch + admin görünürlüğü**
+   - Risk config endpointleri:
+     - `GET /api/admin/risk/config`
+     - `PATCH /api/admin/risk/config`
+     - `POST /api/admin/risk/config/reload`
+     - `GET /api/admin/risk/status`
+   - `admin_universe/runtime-summary` içine `risk_overview` eklendi.
+   - Pipeline global pause hesabına risk kill-switch etkisi dahil edildi.
+
+### Dinamik Risk Config (Hard-coded’suz çalışma prensibi)
+- Config dosyası: `backend/config/risk_engine_config.json`
+- Runtime cache key: `risk:config:active`
+- Reload: `/api/admin/risk/config/reload`
+- PATCH ile değişiklikler kalıcı yazılır ve anında runtime’a yansır.
+
+### Test Durumu
+- Unit testler:
+  - `test_risk_engine_exposure_limits.py` ✅
+  - `test_risk_engine_stale_spread_veto.py` ✅
+  - `test_risk_engine_daily_loss_cooldown.py` ✅
+  - `test_kill_switch.py` ✅
+- CI gate:
+  - `ci_stage_gate.sh` ✅
+  - `ci_prod_gate.sh` ✅
+- Testing agent raporu:
+  - `/app/test_reports/iteration_105.json` ✅ (backend/frontend %100)
+
+### Notlar / Kısıtlar
+- `backend/migrations/**` değiştirilmedi.
+- `frontend/**` değiştirilmedi.
+- **MOCKED** kalanlar: Bybit/OKX adapterleri ve bazı Resend mail akışları.
+

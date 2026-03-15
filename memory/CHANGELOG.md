@@ -1,6 +1,33 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-15
+### Iteration-105 — RISK-1..RISK-6 Parametrik Risk Engine Paketi
+- **Yeni servis katmanı eklendi**:
+  - `backend/services/risk_engine_service.py` (ALLOW/REDUCE_SIZE/PASS/BLOCK final veto)
+  - `backend/services/correlation_cluster_service.py` (symbol->cluster çözümleme)
+  - `backend/services/execution_quality_service.py` (stale/spread/slippage/latency kalite skoru)
+  - `backend/services/cooldown_service.py` (symbol/strategy/global cooldown state)
+  - `backend/config/risk_engine_config.json` (runtime reload edilebilir parametrik risk config)
+- **Admin yönetim endpointleri eklendi**:
+  - `GET /api/admin/risk/config`
+  - `PATCH /api/admin/risk/config`
+  - `POST /api/admin/risk/config/reload`
+  - `GET /api/admin/risk/status`
+- **Runtime entegrasyonları**:
+  - `scanner_runtime` içinde Decision→Risk Engine→Execution akışı; risk veto/reduce dağılımı `risk_engine` bloğu ile snapshot’a yazılıyor.
+  - `execution_intent_service` preview akışına risk engine veto/reduce entegrasyonu eklendi.
+  - `pipeline/runtime` global pause hesabına risk kill-switch dahil edildi.
+  - `futures_strategy_service` için max leverage cap + liquidation distance veto uygulandı.
+  - `admin_universe/runtime-summary` yanıtına `risk_overview` eklendi.
+- **Test paketi**:
+  - `test_risk_engine_exposure_limits.py`
+  - `test_risk_engine_stale_spread_veto.py`
+  - `test_risk_engine_daily_loss_cooldown.py`
+  - `test_kill_switch.py`
+  - `test_risk_engine_api_contracts.py` (testing agent contract paketi)
+- **CI gate güncellemesi**:
+  - stage/prod gate listelerine risk testleri dahil edildi; geçiş doğrulandı.
+
 ### Iteration-104 — #797 Mini Paket Kapanışı + 3-Katmanlı Scanner Entegrasyonu
 - **P0 mini paket eksikleri kapatıldı**:
   - Repo credential cleanup tamamlandı (deprecated admin domain literal izi kaldırıldı).
