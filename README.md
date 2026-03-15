@@ -1,64 +1,100 @@
-# Trading Platform — Docker Quickstart
+# Trading Platform — Final Hardening Quickstart
 
-## 1) Environment dosyalarını oluştur
+## 0) Repo içeriği ve zorunlu dosyalar
+
+- `backend/.env.example`
+- `frontend/.env.example`
+- `backend/migrations/*` (Alembic zinciri)
+- `backend/tests/*` ve `tests/*` (test katmanları)
+
+Runtime çıktıları (`*.db`, test artefact görselleri, snapshot/debug çıktıları) kaynak kod kapsamı dışında tutulmalıdır.
+
+## 1) Environment hazırlığı
 
 ```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 ```
 
-`frontend/.env` içinde backend URL'i browser erişimine göre ayarlayın:
+`frontend/.env`:
 
-- Local kullanım: `REACT_APP_BACKEND_URL=http://localhost:8001`
-- Sunucu/LAN kullanım: `REACT_APP_BACKEND_URL=http://<HOST_IP>:8001`
+- Local: `REACT_APP_BACKEND_URL=http://localhost:8001`
+- LAN/Sunucu: `REACT_APP_BACKEND_URL=http://<HOST_IP>:8001`
 
-Not: Browser `http://backend:8001` hostname’ini çözmez; bu değer sadece Docker network içi servisler için uygundur.
+`backend/.env`:
 
-`backend/.env` içindeki `CORS_ORIGINS` değerine de aynı host/IP origin'ini ekleyin:
-
+- `CORS_ORIGINS` içine frontend origin’lerini ekleyin
 - Örnek: `http://localhost:3000,http://127.0.0.1:3000,http://<HOST_IP>:3000`
-- Not: `<HOST_IP>` placeholder'ını gerçek sunucu/LAN IP adresinizle değiştirin.
 
-Package manager:
+## 2) Frontend package manager standardı
 
-- Frontend için deterministik kurulum: **Yarn** (`yarn.lock` + Dockerfile `--frozen-lockfile`).
-- Monorepo kökünde package manager kullanılmaz; frontend dizini dışındaki lock dosyaları runtime parçası değildir.
+- Resmi frontend kurulum modeli: **Yarn**
+- Deterministik build: `frontend/yarn.lock` + Dockerfile `yarn install --frozen-lockfile --non-interactive`
+- Monorepo kökünde package manager kullanılmaz.
 
-Repo hijyeni notu:
-
-- Lokal artefact dosyaları (ör. `*.db`, `*.db-journal`, `.screenshots/`, geçici test görselleri) repoya commit edilmemelidir.
-
-## 2) Compose doğrulama
+## 3) Docker ile ayağa kaldırma
 
 ```bash
 docker compose config
-```
-
-## 3) Build + çalıştır
-
-```bash
 docker compose up -d --build
-```
-
-## 4) Durum kontrol
-
-```bash
 docker compose ps
 ```
 
-## 5) Erişim URL'leri
+## 4) Servis URL’leri
 
-- Frontend: `http://localhost:3000` (veya `http://<HOST_IP>:3000`)
-- Backend API: `http://localhost:8001/api` (veya `http://<HOST_IP>:8001/api`)
+- Frontend: `http://localhost:3000` veya `http://<HOST_IP>:3000`
+- Backend API: `http://localhost:8001/api` veya `http://<HOST_IP>:8001/api`
 
-## 6) Varsayılan admin (ilk kurulum / boş DB)
+## 5) Startup akışı (gerçek çalışma sırası)
 
-- Email: `admin@platform.dev`
-- Password: `Admin12345!`
+Backend startup sırası:
 
-Bootstrap davranışı deterministic'tir:
+1. Alembic migration `head`
+2. Bootstrap seed kontrolleri
+3. Runtime servis başlangıcı
 
-- Sadece `users` tablosu tamamen boşken varsayılan admin oluşturulur.
-- Tablo boş değilse tekrar oluşturulmaz.
-- Duplicate oluşmaz.
-- Yeni admin ekleyip varsayılan admin'i sildiğinizde (tablo boş olmadığı sürece) otomatik yeniden oluşmaz.
+Not: Startup içinde `create_all` kullanılmaz; schema otoritesi Alembic’tir.
+
+## 6) Varsayılan admin bootstrap davranışı
+
+Varsayılan admin seed yalnızca `users` tablosu tamamen boşken çalışır.
+
+- Kimlik bilgileri `backend/.env` içindeki `DEFAULT_ADMIN_EMAIL` ve `DEFAULT_ADMIN_PASSWORD` alanlarından okunur.
+- Repo içinde operasyonel kullanım için sabit credential tekrarları tutulmamalıdır.
+
+- Tablo doluysa seed/recreate/reset yapılmaz.
+- Duplicate kullanıcı üretilmez.
+
+## 7) Test komutları
+
+Backend (lokal):
+
+```bash
+cd backend
+pytest
+```
+
+Frontend (lokal):
+
+```bash
+cd frontend
+yarn test
+```
+
+## 8) Development vs Production farkları
+
+Development:
+
+- PostgreSQL erişilemezse SQLite fallback devreye alınabilir.
+- Redis erişilemezse in-memory fallback devreye alınabilir.
+
+Production hedefi:
+
+- PostgreSQL + Redis zorunlu kabul edilir.
+- Fallback modları production eşdeğeri sayılmaz; yalnız geliştirme/teşhis amaçlıdır.
+
+## 9) Fallback davranış özeti
+
+- DB fallback: PostgreSQL bağlantısı kurulamazsa SQLite kullanılabilir.
+- Cache fallback: Redis bağlantısı kurulamazsa in-memory cache kullanılabilir.
+- Bu modlarda davranış sınırları capability matrix ile değerlendirilmelidir.
