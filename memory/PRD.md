@@ -4561,3 +4561,46 @@
 - **Human-in-the-loop learning guardrail: COMPLETE**
 - **MOCKED API: VAR**
   - Email verification delivery provider bu ortamda mocked.
+
+## 79) 2026-03-15 — FAZ-1 Repo Hijyeni + FAZ-2 Migration Disiplini Başlangıcı
+
+### Kullanıcı Onayı
+- Uygulama sırası: **A (FAZ-1→2→3→4→5→6 sıralı)**
+- Test stratejisi: **A (Her faz sonunda self-test + kritik fazlarda testing agent)**
+- Repo hijyeni: **A (agresif ama güvenli temizleme; silme sadece talimata uygun)**
+
+### Uygulananlar
+1. **FAZ-1 repo hijyeni kapaması (ilk blok)**
+   - Kök `.gitignore` dosyası tamamen normalize edildi; bozuk/tekrarlı satırlar temizlendi.
+   - Lokal artefact ignore kapsamı netleştirildi (`*.db`, `*.db-journal`, `.screenshots/`, geçici test artefact patternleri, kök `yarn.lock` vb.).
+   - `README.md` deterministic kurulum notları güçlendirildi (Yarn standardı, repo hijyeni notu, bootstrap davranışı netliği).
+
+2. **Admin bootstrap güvenliği/deterministikliği**
+   - `backend/services/bootstrap.py` içinde default admin seed davranışı sıkılaştırıldı:
+     - Artık sadece `users` tablosu **tamamen boşsa** admin oluşturulur.
+     - Var olan kullanıcılar varken admin rol/şifre reseti yapılmaz.
+
+3. **FAZ-2 migration disiplini başlangıcı (Alembic-only hat temizliği)**
+   - `backend/server.py` startup akışından `Base.metadata.create_all(...)` kaldırıldı.
+   - `backend/db.py` içindeki runtime schema patcher (`PRAGMA/ALTER/CREATE TABLE IF NOT EXISTS`) devre dışı bırakıldı.
+   - `run_auto_migrations` şema değiştirmeyecek şekilde no-op uyarı davranışına çekildi.
+   - Böylece schema değişimi için kaynak otorite Alembic hattına hizalandı.
+
+### Test/Doğrulama
+- Backend self-test:
+  - `GET /api/health` ✅
+  - `POST /api/auth/login/admin` ✅
+  - `_seed_admin` davranış kontrolü (user doluyken reset yok): `hash_changed=False` ✅
+- Log doğrulaması:
+  - Hot-reload sonrası backend startup ve endpoint erişimi stabil ✅
+- `deep_testing_backend_v2` sonucu: **7/7 PASS** ✅
+- `auto_frontend_testing_agent` smoke sonucu: **5/5 PASS** ✅
+
+### Durum
+- **FAZ-1 (repo hijyeni ilk blok): COMPLETE**
+- **FAZ-2 (migration/persistence disiplini ilk blok): IN PROGRESS**
+
+### Sonraki P0 Adım
+1. `backend/models.py` monolit yapıyı domain dosyalarına bölmek (uyumluluk katmanı korunarak).
+2. Alembic zinciri ile model metadata tam hizasını doğrulamak (drift kontrolü).
+3. Redis fallback semantiğini production hizalı net davranış modeline çekmek.
