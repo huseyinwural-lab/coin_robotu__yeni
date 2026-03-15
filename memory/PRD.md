@@ -5250,3 +5250,66 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Bybit/OKX canlı credential gelmeden execution submit/cancel live doğrulama tamamlanamaz (**MOCKED** kalır).
 - FINAL-2 DEPLOY-3..7 zaman bazlı rollout adımları operasyon penceresinde uygulanacaktır.
 
+---
+
+## 2026-03-15 — LIVE TRADING DASHBOARD + RAPORLAMA + MENU IA + ADMIN FORM THEME (Tek İterasyon)
+
+### Uygulanan Paketler
+1. **Live Trading Dashboard (Admin tek ekran)**
+   - Yeni route: `/admin/live-trading-dashboard`
+   - Bölümler: System Health, Trading Performance, Risk Engine, Scanner Health, Execution Quality, Learning Snapshot, Critical Alerts
+   - 1h/6h/24h pencere seçimi, yenileme, daily JSON/CSV export aksiyonları
+   - Standart rapor metinleri (1 saatlik + günlük) UI içinde hazırlandı
+
+2. **Backend Live Trading API Paketi**
+   - Yeni endpointler:
+     - `GET /api/admin/live-trading/summary?window=1h|6h|24h`
+     - `GET /api/admin/live-trading/scanner-health`
+     - `GET /api/admin/live-trading/execution-quality`
+     - `GET /api/admin/live-trading/risk-summary`
+     - `GET /api/admin/live-trading/daily-report`
+     - `GET /api/admin/live-trading/learning-summary`
+     - `GET /api/admin/live-trading/daily-report/export?format=json|csv`
+   - Alert threshold’lar kullanıcı tercihi doğrultusunda policy’den türetildi (sabit hardcode yerine)
+
+3. **Admin Form Theme Global Override (Açık Yeşil)**
+   - `input/select/textarea/dropdown` alanları admin temasında global olarak `#dff7df` tabanına taşındı
+   - focus/disabled/placeholder ve react-select/table-filter/card içi alanlar için override eklendi
+   - Son doğrulamada form element computed background: `rgb(223, 247, 223)`
+
+4. **Admin Menu IA Refactor (PanelLayout üzerinden)**
+   - Yeni grup sırası: CORE → STRATEGY → RISK & EXECUTION → OPERATIONS → SYSTEM → RESEARCH
+   - Varsayılan açılış: CORE/STRATEGY/RISK&EXECUTION/OPERATIONS açık; SYSTEM/RESEARCH kapalı
+   - User Approvals OPERATIONS altına taşındı
+   - Strategy lifecycle ekranları STRATEGY grubuna taşındı
+   - Legacy route redirect eklendi:
+     - `/admin/strategy-intelligence` → `/admin/strategy/intelligence`
+     - `/admin/strategy-allocation` → `/admin/strategy/allocation`
+     - `/admin/canonical-strategy-registry` → `/admin/strategy/canonical-registry`
+     - `/admin/execution-states` → `/admin/strategy/execution-state-machine`
+     - `/admin/strategy-observability` → `/admin/strategy/observability`
+
+### Güncellenen/Oluşturulan Dosyalar
+- Backend:
+  - `/app/backend/services/live_trading_dashboard_service.py` (yeni)
+  - `/app/backend/routers/admin_live_trading_dashboard.py` (yeni)
+  - `/app/backend/server.py` (router include)
+- Frontend:
+  - `/app/frontend/src/pages/AdminLiveTradingDashboardPage.jsx` (yeni)
+  - `/app/frontend/src/App.js` (route + redirect + yeni sayfa)
+  - `/app/frontend/src/components/PanelLayout.jsx` (menü IA refactor)
+  - `/app/frontend/src/App.css` (admin form global theme override)
+- Test:
+  - `/app/backend/tests/test_live_trading_dashboard_api.py` (yeni)
+  - `/app/backend/tests/test_live_trading_daily_report.py` (yeni)
+
+### Doğrulama Sonuçları
+- Lokal backend test: `pytest tests/test_live_trading_dashboard_api.py tests/test_live_trading_daily_report.py` → **9 PASSED**
+- Testing agent raporu: `/app/test_reports/iteration_108.json` → **Backend 100%, Frontend 100%**
+  - API endpointleri, dashboard ekranı, menü IA, redirectler ve admin form teması doğrulandı
+
+### Operasyon Notu (DEPLOY-3)
+- Mock stabilite izleme süreci loglanmaktadır.
+- Son aktif log: `/app/logs/deploy3_mock_stability_20260315_1952.log`
+- Exchange execution akışı kullanıcı tercihi gereği **MOCKED** durumdadır.
+
