@@ -4878,3 +4878,50 @@
 - **Yayın Öncesi Son Kapatma Paketi:** COMPLETE
 - **Kalanlar:** Çoklu borsa adapter gerçek entegrasyonu (Bybit/OKX) backlog/P1
 
+## 84) 2026-03-15 — Son Düzeltme Mini Paketi (R1/R2/R3/R4)
+
+### Uygulananlar
+1. **FAZ-R1 Frontend Build Determinism**
+   - `frontend/yarn.lock` doğrulandı ve `yarn install` ile zincir yenilendi.
+   - `yarn install --frozen-lockfile --non-interactive` PASS.
+   - `README.md` frontend deterministik kurulum/doğrulama komutlarıyla güncellendi.
+
+2. **FAZ-R2 Credential Cleanup Final**
+   - `admin@platform.dev` referansları repo genelinde temizlendi.
+   - Kök test scriptleri env tabanına çekildi (`TEST_ADMIN_EMAIL`, `TEST_ADMIN_PASSWORD`).
+   - `grep -R "admin@platform.dev" .` çıktısı boş.
+
+3. **FAZ-R3 Repo Hygiene Minor Fix**
+   - `.gitignore` içinde geniş `artifacts/` ignore kaldırıldı.
+   - Daraltılmış ignore: `artifacts/tmp/`, `artifacts/cache/`.
+   - `artifacts/reports` ve `artifacts/docs` korunabilir politikaya hizalandı.
+
+4. **FAZ-R4 Release Checklist Re-Validation**
+   - `ci_alembic_drift_gate`, `ci_stage_gate`, `ci_prod_gate` komutları PASS.
+   - Endpoint regresyonları PASS.
+   - Frontend smoke checklist PASS.
+
+### Test/Doğrulama
+- Build:
+  - `cd frontend && yarn install` ✅
+  - `cd frontend && yarn install --frozen-lockfile --non-interactive` ✅
+- CI:
+  - `bash scripts/ci_alembic_drift_gate.sh` ✅
+  - `bash scripts/ci_stage_gate.sh` ✅
+  - `bash scripts/ci_prod_gate.sh` ✅
+- Endpointler:
+  - `GET /api/health` ✅
+  - `POST /api/auth/login/admin` (`admin@platform.local`) ✅
+  - `GET /api/admin/universe-monitor` ✅
+  - `GET /api/user/scanner/symbol-selection` ✅
+- Credential taraması:
+  - `grep -R "admin@platform.dev" .` ✅ (eşleşme yok)
+- Frontend smoke:
+  - Landing açılıyor, blank değil, User/Admin giriş butonları görünür, kritik console error yok ✅
+
+### Not
+- `docker build -f frontend/Dockerfile .` bu pod ortamında doğrulanamadı (`docker: command not found`).
+
+### Durum
+- **R1/R2/R3/R4 Mini Paket:** COMPLETE (docker CLI ortam kısıtı notuyla)
+
