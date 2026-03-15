@@ -1,11 +1,5 @@
 {
-  "global": {
-    "max_leverage": 4
-  },
+  "global": {},
   "tenants": {},
-  "users": {
-    "user-123": {
-      "max_leverage": 2
-    }
-  }
+  "users": {}
 }

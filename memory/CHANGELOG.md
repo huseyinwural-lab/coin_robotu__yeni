@@ -1,6 +1,34 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-15
+### Iteration-107 — MASTER FINAL TASK ORDER (P0-first) Uygulaması
+- **FINAL-1 Exchange execution activation (credential-aware)**
+  - Admin exchange credential yönetimi eklendi:
+    - `GET/PATCH /api/venues/admin/execution-credentials`
+    - `POST /api/venues/admin/execution-validation`
+  - Frontend `AdminExchangesPage` içinde Bybit/OKX credential alanları + validation paneli eklendi.
+  - Execution submit/cancel keysiz modda **MOCKED** (kullanıcı seçimi 2B).
+- **FINAL-3/4/5 hardening**
+  - Risk governance maturity genişletildi:
+    - timeline endpoint: `GET /api/admin/risk/config/timeline`
+    - profiles: `GET /api/admin/risk/config/profiles`, `POST /api/admin/risk/config/profiles/{profile}/apply`
+    - overrides: `GET/PATCH /api/admin/risk/config/overrides`
+  - Policy profile setleri eklendi: conservative / balanced / aggressive.
+  - User override merge akışı eklendi (`resolve_effective_config_for_user`).
+- **FINAL-6 observability genişletmesi**
+  - `risk_overview` içine `pnl_trend` eklendi.
+  - Admin Universe Monitor sayfasına risk/observability trend kartları eklendi.
+- **FINAL-7 admin UI düzenleme**
+  - Admin menü sırası istenen 11 maddeye sadeleştirildi.
+  - Logout en alta taşındı (sticky bottom), sidebar scroll iyileştirildi.
+  - Primary action buton standardı `#4CAF50` olarak uygulandı.
+- **FINAL-8 operasyon scriptleri**
+  - `scripts/docker_validation_check.sh` eklendi (`runner_required` fallback).
+  - `scripts/live_rollout_metrics_snapshot.sh` eklendi (DEPLOY gözlem çıktısı).
+- **FINAL-9 exchange normalization hardening**
+  - `normalization_service.py` ile leverage rule + error taxonomy eklendi.
+  - market data adapter funding-rate fetch altyapısı eklendi.
+
 ### Iteration-106 — TRADING ENGINE MASTER CLOSURE PACKAGE (CLOSE-1..CLOSE-7)
 - **CLOSE-1 Execution Quality Calibration**
   - `execution_quality_service.py` metrik seti genişletildi (`partial_fill_rate`, `reject_rate` dahil).

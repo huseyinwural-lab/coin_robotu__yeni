@@ -12,7 +12,15 @@ class FakeCache:
         self.store[key] = value
 
 
-def test_patch_rejects_safe_bound_violation(monkeypatch):
+def _isolate_paths(monkeypatch, tmp_path):
+    config_path = tmp_path / "risk_engine_config.json"
+    backup_path = tmp_path / "risk_engine_config_backup.json"
+    monkeypatch.setattr(risk_engine_service, "_config_path", lambda: config_path)
+    monkeypatch.setattr(risk_engine_service, "_config_backup_path", lambda: backup_path)
+
+
+def test_patch_rejects_safe_bound_violation(monkeypatch, tmp_path):
+    _isolate_paths(monkeypatch, tmp_path)
     cache = FakeCache()
     monkeypatch.setattr(risk_engine_service, "load_risk_config", lambda _cache: {**risk_engine_service.DEFAULT_RISK_CONFIG, "config_version": 2})
 
@@ -24,7 +32,8 @@ def test_patch_rejects_safe_bound_violation(monkeypatch):
         raise AssertionError("expected safe bound rejection")
 
 
-def test_patch_updates_config_version_and_audit_fields(monkeypatch):
+def test_patch_updates_config_version_and_audit_fields(monkeypatch, tmp_path):
+    _isolate_paths(monkeypatch, tmp_path)
     cache = FakeCache()
     monkeypatch.setattr(risk_engine_service, "load_risk_config", lambda _cache: {**risk_engine_service.DEFAULT_RISK_CONFIG, "config_version": 2})
 
@@ -33,7 +42,8 @@ def test_patch_updates_config_version_and_audit_fields(monkeypatch):
     assert payload["changed_by"] == "admin-1"
 
 
-def test_rollback_returns_last_known_good():
+def test_rollback_returns_last_known_good(monkeypatch, tmp_path):
+    _isolate_paths(monkeypatch, tmp_path)
     cache = FakeCache()
     risk_engine_service.patch_risk_config(cache, {"max_risk_per_trade_pct": 2.8}, changed_by="admin-2")
     risk_engine_service.patch_risk_config(cache, {"max_risk_per_trade_pct": 2.1}, changed_by="admin-3")

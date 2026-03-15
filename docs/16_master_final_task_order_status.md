@@ -39,7 +39,12 @@ Tarih: 2026-03-15
 
 ## FINAL-5 Risk Governance Maturity
 - Safe bounds reject + config_version + rollback aktif.
-- Kalan ileri adım: profile timeline ve tenant policy genişletmesi.
+- Timeline + profiles + overrides endpointleri aktif:
+  - `GET /api/admin/risk/config/timeline`
+  - `GET /api/admin/risk/config/profiles`
+  - `POST /api/admin/risk/config/profiles/{profile}/apply`
+  - `GET/PATCH /api/admin/risk/config/overrides`
+- Tenant policy desteği config override katmanında hazır (opsiyonel rollout).
 
 ## FINAL-6 Admin Observability Hardening
 - Runtime summary içinde risk_overview + observability trend alanları aktif.

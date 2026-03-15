@@ -5142,3 +5142,84 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - MASTER CLOSURE package backend kapsamı tamamlandı.
 - Kalan production bağımlılığı: Bybit/OKX canlı execution credentials sağlandığında adapter execution path live modda açılacak.
 
+## 88) 2026-03-15 — MASTER FINAL TASK ORDER (P0-first) Uygulama Sonucu
+
+### Kullanıcı Seçimleri
+- 1A: frontend değişimi serbest
+- 2B: Bybit/OKX credential yok, execution MOCKED
+- 3A: deployment için runbook + dry-run + otomasyon script
+- 4A: safe bounds (`risk<=5`, `total_exposure<=50`, `leverage<=10`)
+- 5A: P0 önce
+
+### Uygulanan Fazlar
+1. **FINAL-1 Exchange Execution Activation**
+   - Admin Exchange Settings credential alanları eklendi (UI + API):
+     - `bybit_api_key`, `bybit_secret`, `okx_api_key`, `okx_secret`, `okx_passphrase`
+   - Endpointler:
+     - `GET /api/venues/admin/execution-credentials`
+     - `PATCH /api/venues/admin/execution-credentials`
+     - `POST /api/venues/admin/execution-validation`
+   - Validation çıktıları:
+     - adapter smoke / precision / lot size / submit / cancel / retry
+   - Kullanıcı tercihi nedeniyle execution submit/cancel **MOCKED**.
+
+2. **FINAL-3 Execution Quality Final Calibration (altyapı + endpoint)**
+   - Calibrate/latest endpointleri aktif.
+   - Data azlığında `policy_documented_warning` ile güvenli fallback davranışı korunuyor.
+
+3. **FINAL-4 Regime / Risk Tuning**
+   - normal/volatile/stress profil cap’leri aktif.
+   - Rejim girdileri ve fallback trigger seti genişletildi.
+
+4. **FINAL-5 Governance Maturity**
+   - Timeline endpoint: `GET /api/admin/risk/config/timeline`
+   - Profiles endpoint:
+     - `GET /api/admin/risk/config/profiles`
+     - `POST /api/admin/risk/config/profiles/{profile}/apply`
+   - Overrides endpoint:
+     - `GET/PATCH /api/admin/risk/config/overrides`
+   - Risk config effective resolve artık user override merge destekli.
+
+5. **FINAL-6 Admin Observability Hardening**
+   - `risk_overview` içine `pnl_trend` eklendi.
+   - Admin Universe Monitor UI’a trend/metrik kartları eklendi:
+     - execution latency trend
+     - risk veto rate trend
+     - scanner cycle latency trend
+     - fallback activation trend
+     - pnl trend
+
+6. **FINAL-7 Admin UI Düzenleme**
+   - Sol menü istenen 11 maddeye sadeleştirildi.
+   - Logout en alta taşındı (sticky bottom), scroll iyileştirildi.
+   - Primary action butonları açık yeşil (`#4CAF50`) standardına çekildi.
+
+7. **FINAL-8 CI / Docker Doğrulama**
+   - Stage/prod gate PASS.
+   - Docker helper script eklendi:
+     - `scripts/docker_validation_check.sh`
+   - Bu pod’da docker olmadığında `runner_required` döndürür (beklenen).
+
+8. **FINAL-9 Exchange Normalization Hardening**
+   - Symbol mapping / precision normalizer / leverage rules / error taxonomy / retry policy aktif.
+   - Funding rate fetch altyapısı eklendi.
+
+### Dokümantasyon
+- `/app/docs/16_master_final_task_order_status.md`
+- `/app/scripts/live_rollout_metrics_snapshot.sh`
+- `/app/scripts/docker_validation_check.sh`
+
+### Test ve Doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_107.json` ✅
+  - FINAL-1..FINAL-9 doğrulandı
+  - Frontend 100%, Backend 94% + beklenen LOW not
+- Lokal regresyon paketi:
+  - 33+ test PASS
+- CI:
+  - `ci_stage_gate.sh` PASS (38 passed)
+  - `ci_prod_gate.sh` PASS (38 passed)
+
+### Kalan Bağımlılık / Sonraki Operasyon
+- Bybit/OKX canlı credential gelmeden execution submit/cancel live doğrulama tamamlanamaz (**MOCKED** kalır).
+- FINAL-2 DEPLOY-3..7 zaman bazlı rollout adımları operasyon penceresinde uygulanacaktır.
+
