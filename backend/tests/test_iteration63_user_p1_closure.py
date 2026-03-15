@@ -23,7 +23,7 @@ def get_base_url():
             for line in f:
                 if line.startswith("REACT_APP_BACKEND_URL="):
                     return line.strip().split("=", 1)[1].strip('"').rstrip('/')
-    return "https://market-scanner-v3.preview.emergentagent.com"
+    return "https://trading-bot-ops.preview.emergentagent.com"
 
 BASE_URL = get_base_url()
 

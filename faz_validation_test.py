@@ -12,7 +12,7 @@ import time
 from typing import Dict, Any, List, Tuple
 
 # Configuration
-BACKEND_URL = "https://market-scanner-v3.preview.emergentagent.com/api"
+BACKEND_URL = "https://trading-bot-ops.preview.emergentagent.com/api"
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
 ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")
 
