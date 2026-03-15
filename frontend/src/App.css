@@ -121,6 +121,82 @@
   color: #ffffff !important;
 }
 
+.admin-ops-theme input,
+.admin-ops-theme select,
+.admin-ops-theme textarea,
+.admin-ops-theme [role="combobox"] {
+  background-color: #dff7df !important;
+  border: 1px solid #6bbf6b !important;
+  color: #1e3d1e !important;
+}
+
+.admin-ops-theme input[class*="bg-"],
+.admin-ops-theme select[class*="bg-"],
+.admin-ops-theme textarea[class*="bg-"],
+.admin-ops-theme [role="combobox"][class*="bg-"] {
+  background-color: #dff7df !important;
+}
+
+.admin-ops-theme input:focus,
+.admin-ops-theme select:focus,
+.admin-ops-theme textarea:focus,
+.admin-ops-theme [role="combobox"]:focus {
+  background-color: #eaffea !important;
+  border-color: #38a538 !important;
+  outline: none !important;
+}
+
+.admin-ops-theme input[class*="bg-"]:focus,
+.admin-ops-theme select[class*="bg-"]:focus,
+.admin-ops-theme textarea[class*="bg-"]:focus,
+.admin-ops-theme [role="combobox"][class*="bg-"]:focus {
+  background-color: #eaffea !important;
+}
+
+.admin-ops-theme input::placeholder,
+.admin-ops-theme textarea::placeholder {
+  color: #6a8f6a !important;
+}
+
+.admin-ops-theme input:disabled,
+.admin-ops-theme select:disabled,
+.admin-ops-theme textarea:disabled {
+  background-color: #edf5ed !important;
+  color: #8ca88c !important;
+}
+
+.admin-ops-theme .react-select__control {
+  background-color: #dff7df !important;
+  border-color: #6bbf6b !important;
+}
+
+.admin-ops-theme .react-select__menu {
+  background-color: #eaffea !important;
+}
+
+.admin-ops-theme .react-select__option {
+  color: #1e3d1e !important;
+}
+
+.admin-ops-theme .table-filter input {
+  background-color: #dff7df !important;
+}
+
+.admin-ops-theme .card input,
+.admin-ops-theme .card select,
+.admin-ops-theme .card textarea {
+  background-color: #dff7df !important;
+}
+
+.admin-ops-theme button.primary {
+  background-color: #4caf50 !important;
+  color: white !important;
+}
+
+.admin-ops-theme button.primary:hover {
+  background-color: #3f9f44 !important;
+}
+
 .user-theme :focus-visible,
 .admin-ops-theme :focus-visible {
   outline: 2px solid #065f46 !important;

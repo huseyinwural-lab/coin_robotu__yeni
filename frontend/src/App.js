@@ -68,6 +68,7 @@ import { AdminCrossDashboardConsistencyPage } from "@/pages/AdminCrossDashboardC
 import { AdminCanonicalStrategyRegistryPage } from "@/pages/AdminCanonicalStrategyRegistryPage";
 import { AdminLearningPanelPage } from "@/pages/AdminLearningPanelPage";
 import { AdminLearningImpactSimulatorPage } from "@/pages/AdminLearningImpactSimulatorPage";
+import { AdminLiveTradingDashboardPage } from "@/pages/AdminLiveTradingDashboardPage";
 import { AdminUniverseMonitorPage } from "@/pages/AdminUniverseMonitorPage";
 import { AdminFreshnessHeatmapPage } from "@/pages/AdminFreshnessHeatmapPage";
 
@@ -111,13 +112,14 @@ function App() {
             }
           >
             <Route path="dashboard" element={<AdminDashboardPage />} />
+            <Route path="live-trading-dashboard" element={<AdminLiveTradingDashboardPage />} />
             <Route path="cross-dashboard-consistency" element={<AdminCrossDashboardConsistencyPage />} />
             <Route path="users" element={<Navigate to="/admin/users/customers" replace />} />
             <Route path="users/admins" element={<AdminUsersPage scope="admin" />} />
             <Route path="users/customers" element={<AdminUsersPage scope="user" />} />
             <Route path="user-approvals" element={<AdminUserApprovalsPage />} />
             <Route path="system-alerts" element={<AdminSystemAlertsPage />} />
-            <Route path="strategy-observability" element={<AdminStrategyObservabilityPage />} />
+            <Route path="strategy/observability" element={<AdminStrategyObservabilityPage />} />
             <Route path="futures/risk-monitor" element={<AdminFuturesRiskMonitorPage />} />
             <Route path="futures/liquidation-protection" element={<AdminFuturesRiskMonitorPage />} />
             <Route path="futures/strategy-analytics" element={<AdminFuturesStrategyAnalyticsPage />} />
@@ -140,18 +142,18 @@ function App() {
             <Route path="market-universe" element={<MarketUniversePage />} />
             <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
             <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
-            <Route path="strategy-allocation" element={<AdminStrategyAllocationPage />} />
+            <Route path="strategy/allocation" element={<AdminStrategyAllocationPage />} />
             <Route path="portfolio-risk" element={<AdminPortfolioRiskPage />} />
             <Route path="positions-monitor" element={<AdminPositionsMonitorPage />} />
-            <Route path="strategy-intelligence" element={<AdminStrategyIntelligencePage />} />
-            <Route path="canonical-strategy-registry" element={<AdminCanonicalStrategyRegistryPage />} />
+            <Route path="strategy/intelligence" element={<AdminStrategyIntelligencePage />} />
+            <Route path="strategy/canonical-registry" element={<AdminCanonicalStrategyRegistryPage />} />
             <Route path="learning-panel" element={<AdminLearningPanelPage />} />
             <Route path="learning-impact-simulator" element={<AdminLearningImpactSimulatorPage />} />
             <Route path="universe-monitor" element={<AdminUniverseMonitorPage />} />
             <Route path="freshness-heatmap" element={<AdminFreshnessHeatmapPage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />
             <Route path="correlation-matrix" element={<CorrelationMatrixPage />} />
-            <Route path="execution-states" element={<ExecutionStatesPage />} />
+            <Route path="strategy/execution-state-machine" element={<ExecutionStatesPage />} />
             <Route path="hardening-checklist" element={<HardeningChecklistPage />} />
             <Route path="failed-events" element={<FailedEventsPage />} />
             <Route path="state-rebuild" element={<StateRebuildLogsPage />} />
@@ -159,6 +161,12 @@ function App() {
             <Route path="monitoring" element={<MonitoringPage />} />
             <Route path="phase4-live" element={<Phase4LiveControlPage />} />
             <Route path="audit-logs" element={<AuditLogsPage />} />
+
+            <Route path="strategy-allocation" element={<Navigate to="/admin/strategy/allocation" replace />} />
+            <Route path="strategy-intelligence" element={<Navigate to="/admin/strategy/intelligence" replace />} />
+            <Route path="canonical-strategy-registry" element={<Navigate to="/admin/strategy/canonical-registry" replace />} />
+            <Route path="execution-states" element={<Navigate to="/admin/strategy/execution-state-machine" replace />} />
+            <Route path="strategy-observability" element={<Navigate to="/admin/strategy/observability" replace />} />
           </Route>
 
           <Route
