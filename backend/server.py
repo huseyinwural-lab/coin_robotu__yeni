@@ -6,7 +6,6 @@ from starlette.middleware.cors import CORSMiddleware
 
 from core.config import settings
 from core.structured_logging import configure_structured_logging
-from db import Base, engine
 from routers import (
     admin_action_center,
     admin_emergency,
@@ -179,7 +178,6 @@ fastapi_app.add_middleware(
 @fastapi_app.on_event("startup")
 async def startup_event():
     run_alembic_upgrade()
-    Base.metadata.create_all(bind=engine)
     seed_default_admin()
     from db import SessionLocal
 

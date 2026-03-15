@@ -22,6 +22,11 @@ Not: Browser `http://backend:8001` hostname’ini çözmez; bu değer sadece Doc
 Package manager:
 
 - Frontend için deterministik kurulum: **Yarn** (`yarn.lock` + Dockerfile `--frozen-lockfile`).
+- Monorepo kökünde package manager kullanılmaz; frontend dizini dışındaki lock dosyaları runtime parçası değildir.
+
+Repo hijyeni notu:
+
+- Lokal artefact dosyaları (ör. `*.db`, `*.db-journal`, `.screenshots/`, geçici test görselleri) repoya commit edilmemelidir.
 
 ## 2) Compose doğrulama
 
@@ -53,7 +58,7 @@ docker compose ps
 
 Bootstrap davranışı deterministic'tir:
 
-- Sadece `users` tablosu boşken varsayılan admin oluşturulur.
+- Sadece `users` tablosu tamamen boşken varsayılan admin oluşturulur.
 - Tablo boş değilse tekrar oluşturulmaz.
 - Duplicate oluşmaz.
 - Yeni admin ekleyip varsayılan admin'i sildiğinizde (tablo boş olmadığı sürece) otomatik yeniden oluşmaz.
