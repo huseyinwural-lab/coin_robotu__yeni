@@ -13,10 +13,18 @@ from services.pipeline.kill_switch_service import kill_switch_state
 RISK_CONFIG_CACHE_KEY = "risk:config:active"
 RISK_CONFIG_RELOAD_KEY = "risk:config:last_reload"
 RISK_RUNTIME_STATE_KEY = "risk:runtime:latest:global"
+RISK_CONFIG_BACKUP_KEY = "risk:config:last_known_good"
+RISK_EXEC_QUALITY_TREND_KEY = "risk:metrics:execution_quality_trend"
+
+SAFE_BOUNDS_MAX = {
+    "max_risk_per_trade_pct": 5.0,
+    "max_total_exposure_pct": 50.0,
+    "max_leverage": 10,
+}
 
 DEFAULT_RISK_CONFIG = {
     "max_risk_per_trade_pct": 2.0,
-    "max_total_exposure_pct": 60.0,
+    "max_total_exposure_pct": 50.0,
     "max_symbol_exposure_pct": 25.0,
     "max_cluster_exposure_pct": 35.0,
     "max_leverage": 5,
@@ -32,11 +40,18 @@ DEFAULT_RISK_CONFIG = {
     "strategy_cooldown_minutes": 30,
     "global_cooldown_minutes": 60,
     "kill_switch_enabled": False,
+    "config_version": 1,
+    "changed_by": "system",
+    "changed_at": datetime.now(timezone.utc).isoformat(),
 }
 
 
 def _config_path() -> Path:
     return Path(__file__).resolve().parents[1] / "config" / "risk_engine_config.json"
+
+
+def _config_backup_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "config" / "risk_engine_config_backup.json"
 
 
 def _to_float(value, default: float) -> float:
@@ -56,7 +71,7 @@ def _to_int(value, default: int) -> int:
 def _normalized_config(raw: dict | None) -> dict:
     payload = {**DEFAULT_RISK_CONFIG, **(raw or {})}
     payload["max_risk_per_trade_pct"] = max(0.1, _to_float(payload.get("max_risk_per_trade_pct"), 2.0))
-    payload["max_total_exposure_pct"] = max(1.0, _to_float(payload.get("max_total_exposure_pct"), 60.0))
+    payload["max_total_exposure_pct"] = max(1.0, _to_float(payload.get("max_total_exposure_pct"), 50.0))
     payload["max_symbol_exposure_pct"] = max(1.0, _to_float(payload.get("max_symbol_exposure_pct"), 25.0))
     payload["max_cluster_exposure_pct"] = max(1.0, _to_float(payload.get("max_cluster_exposure_pct"), 35.0))
     payload["max_leverage"] = max(1, _to_int(payload.get("max_leverage"), 5))
@@ -72,8 +87,22 @@ def _normalized_config(raw: dict | None) -> dict:
     payload["strategy_cooldown_minutes"] = max(0, _to_int(payload.get("strategy_cooldown_minutes"), 30))
     payload["global_cooldown_minutes"] = max(0, _to_int(payload.get("global_cooldown_minutes"), 60))
     payload["kill_switch_enabled"] = bool(payload.get("kill_switch_enabled", False))
+    payload["config_version"] = max(1, _to_int(payload.get("config_version"), 1))
+    payload["changed_by"] = str(payload.get("changed_by") or "system")
+    payload["changed_at"] = str(payload.get("changed_at") or datetime.now(timezone.utc).isoformat())
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
     return payload
+
+
+def _validate_safe_bounds(patch: dict) -> list[str]:
+    violations: list[str] = []
+    if "max_risk_per_trade_pct" in patch and _to_float(patch.get("max_risk_per_trade_pct"), 0) > SAFE_BOUNDS_MAX["max_risk_per_trade_pct"]:
+        violations.append("max_risk_per_trade_pct_exceeds_safe_bound")
+    if "max_total_exposure_pct" in patch and _to_float(patch.get("max_total_exposure_pct"), 0) > SAFE_BOUNDS_MAX["max_total_exposure_pct"]:
+        violations.append("max_total_exposure_pct_exceeds_safe_bound")
+    if "max_leverage" in patch and _to_int(patch.get("max_leverage"), 0) > SAFE_BOUNDS_MAX["max_leverage"]:
+        violations.append("max_leverage_exceeds_safe_bound")
+    return violations
 
 
 def _read_file_config() -> dict:
@@ -82,15 +111,19 @@ def _read_file_config() -> dict:
     if not path.exists():
         normalized = _normalized_config(DEFAULT_RISK_CONFIG)
         path.write_text(json.dumps(normalized, indent=2, ensure_ascii=False))
+        _config_backup_path().write_text(json.dumps(normalized, indent=2, ensure_ascii=False))
         return normalized
     try:
         raw = json.loads(path.read_text())
         normalized = _normalized_config(raw)
         path.write_text(json.dumps(normalized, indent=2, ensure_ascii=False))
+        if not _config_backup_path().exists():
+            _config_backup_path().write_text(json.dumps(normalized, indent=2, ensure_ascii=False))
         return normalized
     except Exception:
         normalized = _normalized_config(DEFAULT_RISK_CONFIG)
         path.write_text(json.dumps(normalized, indent=2, ensure_ascii=False))
+        _config_backup_path().write_text(json.dumps(normalized, indent=2, ensure_ascii=False))
         return normalized
 
 
@@ -103,9 +136,23 @@ def load_risk_config(cache) -> dict:
     return payload
 
 
-def patch_risk_config(cache, patch: dict) -> dict:
+def patch_risk_config(cache, patch: dict, *, changed_by: str = "admin") -> dict:
+    violations = _validate_safe_bounds(patch or {})
+    if violations:
+        raise ValueError(
+            "safe_bounds_violation: " + ",".join(violations)
+        )
+
     current = load_risk_config(cache)
+    backup_payload = _normalized_config(current)
+    backup_payload["backup_at"] = datetime.now(timezone.utc).isoformat()
+    _config_backup_path().write_text(json.dumps(backup_payload, indent=2, ensure_ascii=False))
+    set_json(cache, RISK_CONFIG_BACKUP_KEY, backup_payload)
+
     merged = _normalized_config({**current, **(patch or {})})
+    merged["config_version"] = int(current.get("config_version") or 1) + 1
+    merged["changed_by"] = str(changed_by or "admin")
+    merged["changed_at"] = datetime.now(timezone.utc).isoformat()
     _config_path().write_text(json.dumps(merged, indent=2, ensure_ascii=False))
     set_json(cache, RISK_CONFIG_CACHE_KEY, merged)
     set_json(cache, RISK_CONFIG_RELOAD_KEY, {"reloaded_at": datetime.now(timezone.utc).isoformat()})
@@ -117,6 +164,21 @@ def reload_risk_config(cache) -> dict:
     set_json(cache, RISK_CONFIG_CACHE_KEY, payload)
     set_json(cache, RISK_CONFIG_RELOAD_KEY, {"reloaded_at": datetime.now(timezone.utc).isoformat()})
     return payload
+
+
+def rollback_risk_config(cache, *, changed_by: str = "admin") -> dict:
+    backup_path = _config_backup_path()
+    if not backup_path.exists():
+        raise ValueError("backup_config_missing")
+    raw = json.loads(backup_path.read_text())
+    restored = _normalized_config(raw)
+    restored["config_version"] = int(load_risk_config(cache).get("config_version") or 1) + 1
+    restored["changed_by"] = str(changed_by or "admin")
+    restored["changed_at"] = datetime.now(timezone.utc).isoformat()
+    _config_path().write_text(json.dumps(restored, indent=2, ensure_ascii=False))
+    set_json(cache, RISK_CONFIG_CACHE_KEY, restored)
+    set_json(cache, RISK_CONFIG_RELOAD_KEY, {"reloaded_at": datetime.now(timezone.utc).isoformat(), "rollback": True})
+    return restored
 
 
 def _position_notional(row: PaperPosition) -> float:
@@ -217,6 +279,52 @@ def is_risk_kill_switch_active(cache) -> bool:
     return bool(config.get("kill_switch_enabled", False) or pipeline_state.get("active", False))
 
 
+def _execution_quality_trend(cache) -> dict:
+    return get_json(cache, RISK_EXEC_QUALITY_TREND_KEY) or {
+        "ema_score": 100.0,
+        "sample_count": 0,
+        "warning_count": 0,
+        "partial_fill_count": 0,
+        "reject_count": 0,
+        "warning_rate": 0.0,
+        "partial_fill_rate": 0.0,
+        "reject_rate": 0.0,
+    }
+
+
+def _update_execution_quality_trend(cache, *, score: float, recommendation: str, status_hint: str = "") -> dict:
+    trend = _execution_quality_trend(cache)
+    alpha = 0.2
+    previous_ema = float(trend.get("ema_score") or 100.0)
+    sample_count = int(trend.get("sample_count") or 0) + 1
+    warning_count = int(trend.get("warning_count") or 0)
+    partial_fill_count = int(trend.get("partial_fill_count") or 0)
+    reject_count = int(trend.get("reject_count") or 0)
+
+    recommendation = str(recommendation or "ALLOW").upper()
+    if recommendation in {"REDUCE_SIZE", "PASS", "BLOCK"}:
+        warning_count += 1
+    if recommendation == "REDUCE_SIZE" or "PARTIAL" in str(status_hint).upper():
+        partial_fill_count += 1
+    if recommendation in {"PASS", "BLOCK"} or "REJECT" in str(status_hint).upper() or "FAIL" in str(status_hint).upper():
+        reject_count += 1
+
+    ema_score = (score * alpha) + (previous_ema * (1 - alpha))
+    trend_payload = {
+        "ema_score": round(ema_score, 4),
+        "sample_count": sample_count,
+        "warning_count": warning_count,
+        "partial_fill_count": partial_fill_count,
+        "reject_count": reject_count,
+        "warning_rate": round(warning_count / max(sample_count, 1), 6),
+        "partial_fill_rate": round(partial_fill_count / max(sample_count, 1), 6),
+        "reject_rate": round(reject_count / max(sample_count, 1), 6),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    set_json(cache, RISK_EXEC_QUALITY_TREND_KEY, trend_payload)
+    return trend_payload
+
+
 def evaluate_risk_decision(
     db,
     cache,
@@ -311,12 +419,15 @@ def evaluate_risk_decision(
             action = _merge_action(action, "BLOCK")
             reason_codes.append("liquidation_distance_too_low")
 
+    quality_trend = _execution_quality_trend(cache)
     quality = evaluate_execution_quality(
         snapshot_age_ms=float(snapshot_age_ms or 0),
         spread_bps=float(spread_bps or 0),
         slippage_pct=float(slippage_pct or 0),
         execution_latency_ms=float(execution_latency_ms or 0),
         orderbook_depth_score=float(orderbook_depth_score or 0),
+        partial_fill_rate=float(quality_trend.get("partial_fill_rate") or 0.0),
+        reject_rate=float(quality_trend.get("reject_rate") or 0.0),
         stale_threshold_ms=float(config.get("stale_data_threshold_ms")),
         spread_threshold_bps=float(config.get("spread_threshold_bps")),
         max_slippage_pct=float(config.get("max_slippage_pct")),
@@ -334,6 +445,13 @@ def evaluate_risk_decision(
     elif quality_action == "BLOCK":
         reason_codes.append("execution_quality_severe_veto")
         incr_counter(cache, "risk:metrics:execution_quality_warning_count", 1)
+
+    quality_trend = _update_execution_quality_trend(
+        cache,
+        score=float(quality.get("score") or 0.0),
+        recommendation=quality_action,
+        status_hint=quality_action,
+    )
 
     stale_threshold = float(config.get("stale_data_threshold_ms"))
     spread_threshold = float(config.get("spread_threshold_bps"))
@@ -411,6 +529,7 @@ def evaluate_risk_decision(
         "warnings": sorted(set(warnings)),
         "exposure_snapshot": exposure,
         "execution_quality": quality,
+        "execution_quality_trend": quality_trend,
         "cooldown_state": cooldown_snapshot,
         "kill_switch_active": bool(config.get("kill_switch_enabled") or pipeline_kill_switch.get("active", False)),
         "daily_loss": daily,
@@ -464,10 +583,15 @@ def build_admin_risk_status(db, cache) -> dict:
         cluster_exposure[matched_cluster] = cluster_exposure.get(matched_cluster, 0.0) + _position_notional(row)
 
     latest_runtime = get_json(cache, RISK_RUNTIME_STATE_KEY) or {}
+    scanner_runtime = get_json(cache, "scanner:runtime:latest:global") or {}
+    fallback_state = get_json(cache, "scanner:runtime:fallback_state") or {}
     risk_result = latest_runtime.get("risk_result") or {}
+    quality_payload = risk_result.get("execution_quality") or {}
+    quality_trend = get_json(cache, RISK_EXEC_QUALITY_TREND_KEY) or {}
     pipeline_switch = kill_switch_state(cache)
     return {
         "config": config,
+        "portfolio_exposure": round(total_exposure, 6),
         "total_exposure": round(total_exposure, 6),
         "symbol_exposure": [
             {"symbol": key, "exposure_usdt": round(value, 6)}
@@ -479,6 +603,10 @@ def build_admin_risk_status(db, cache) -> dict:
             if value > 0
         ],
         "daily_loss": (risk_result.get("daily_loss") or {}),
+        "execution_quality_score": float(quality_payload.get("score") or quality_trend.get("ema_score") or 0.0),
+        "execution_quality_trend": quality_trend,
+        "fallback_state": fallback_state,
+        "queue_depth": int((scanner_runtime.get("runtime_metrics") or {}).get("queue_depth") or 0),
         "stale_reject_count": int(get_counter(cache, "risk:metrics:stale_reject_count")),
         "spread_reject_count": int(get_counter(cache, "risk:metrics:spread_reject_count")),
         "execution_quality_warning": int(get_counter(cache, "risk:metrics:execution_quality_warning_count")),

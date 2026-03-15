@@ -8,6 +8,7 @@ from model_domains.runtime_scan_candidate import RuntimeScanCandidate
 from services.discovery_scan_service import run_discovery_scan
 from services.event_priority_service import build_event_priority_distribution
 from services.freshness_policy import evaluate_freshness, resolve_sla_bucket
+from services.observability_trend_service import record_runtime_observability_trends
 from services.pipeline.cache_store import get_json, set_json
 from services.qualification_scan_service import run_qualification_scan
 from services.risk_engine_service import build_admin_risk_status, evaluate_risk_decision
@@ -45,9 +46,9 @@ def _normalize_symbols(symbols: list[str]) -> list[str]:
 
 def _resolve_tier_caps(*, backpressure_policy: dict, fallback_state: dict, max_results: int) -> dict:
     fallback_active = bool(fallback_state.get("active", False))
-    discovery_cap = int(backpressure_policy.get("discovery_cap") or (120 if fallback_active else 200))
-    qualification_cap = int(backpressure_policy.get("qualification_cap") or (50 if fallback_active else 100))
-    decision_cap = int(backpressure_policy.get("decision_cap") or (20 if fallback_active else 30))
+    discovery_cap = int(backpressure_policy.get("discovery_cap") or (300 if fallback_active else 700))
+    qualification_cap = int(backpressure_policy.get("qualification_cap") or (40 if fallback_active else 120))
+    decision_cap = int(backpressure_policy.get("decision_cap") or (8 if fallback_active else 25))
     decision_cap = min(decision_cap, max(1, int(max_results or decision_cap)))
     qualification_cap = max(decision_cap, qualification_cap)
     discovery_cap = max(qualification_cap, discovery_cap)
@@ -148,6 +149,8 @@ def run_scanner_runtime(
     risk_reasons_counter: dict[str, int] = {}
     total_notional_before_risk = 0.0
     total_notional_after_risk = 0.0
+    total_execution_quality_score = 0.0
+    execution_quality_samples = 0
     scanner_perf = scan_payload.get("scanner_perf") or {}
     scanner_cycle_latency_ms = float(scanner_perf.get("cycle_duration_ms") or 0.0)
     runtime_snapshot_age_ms = float(scanner_perf.get("snapshot_age_avg_sec") or 0.0) * 1000.0
@@ -210,6 +213,10 @@ def run_scanner_runtime(
             risk_reduce_count += 1
         for code in risk_result.get("reason_codes") or []:
             risk_reasons_counter[code] = int(risk_reasons_counter.get(code, 0)) + 1
+        quality_score = float((risk_result.get("execution_quality") or {}).get("score") or 0.0)
+        if quality_score > 0:
+            total_execution_quality_score += quality_score
+            execution_quality_samples += 1
         total_notional_before_risk += proposed_notional
         total_notional_after_risk += float(risk_result.get("adjusted_notional_usdt") or 0.0)
         if freshness_check.is_stale:
@@ -303,6 +310,20 @@ def run_scanner_runtime(
     queue_depth_state = "high" if queue_depth > 50 else "normal"
     backpressure_active = bool(backpressure_policy.get("active", False))
     fallback_reason_code = str(fallback_state.get("last_trigger_metric") or "none")
+    avg_execution_quality_score = (
+        round(total_execution_quality_score / execution_quality_samples, 4)
+        if execution_quality_samples > 0
+        else 0.0
+    )
+
+    risk_veto_rate = (risk_veto_count / max(len(decisions), 1)) if decisions else 0.0
+    record_runtime_observability_trends(
+        cache,
+        execution_latency_ms=float(scanner_perf.get("cycle_duration_ms") or runtime_latency_ms),
+        scanner_cycle_latency_ms=float(runtime_latency_ms),
+        risk_veto_rate=float(risk_veto_rate),
+        fallback_active=bool(fallback_state.get("active", False)),
+    )
 
     payload = {
         "user_id": user_id,
@@ -352,6 +373,8 @@ def run_scanner_runtime(
             "queue_depth_state": queue_depth_state,
             "scan_interval_seconds": int(backpressure_policy.get("scan_interval_seconds") or 15),
             "adjusted_max_results": adjusted_max_results,
+            "regime": str(backpressure_policy.get("regime") or "normal"),
+            "regime_reasons": backpressure_policy.get("regime_reasons") or [],
         },
         "event_priority": event_priority,
         "risk_engine": {
@@ -361,6 +384,8 @@ def run_scanner_runtime(
             "reason_distribution": risk_reasons_counter,
             "notional_before_risk": round(total_notional_before_risk, 6),
             "notional_after_risk": round(total_notional_after_risk, 6),
+            "avg_execution_quality_score": avg_execution_quality_score,
+            "risk_veto_rate": round(float(risk_veto_rate), 6),
             "latest_status": build_admin_risk_status(db, cache) if hasattr(db, "query") else {},
         },
         "explainability_summary": {

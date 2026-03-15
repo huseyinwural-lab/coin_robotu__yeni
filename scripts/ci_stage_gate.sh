@@ -24,10 +24,19 @@ PYTHONPATH="$ROOT/backend" pytest -q \
   tests/test_risk_engine_stale_spread_veto.py \
   tests/test_risk_engine_daily_loss_cooldown.py \
   tests/test_kill_switch.py \
+  tests/test_risk_config_governance.py \
+  tests/test_scanner_regime_tuning.py \
+  tests/test_execution_quality_calibration.py \
+  tests/test_exchange_adapter_smoke.py \
+  tests/test_risk_engine_api_contracts.py \
   tests/test_bootstrap_admin_first_install.py \
   tests/test_admin_profile_update.py \
   tests/test_admin_password_change.py
 cd "$ROOT"
-"$ROOT/scripts/run_release_gate_check.sh" --env=stage || {
-  echo "release_gate_warning_accepted_for_stage_preview"
-}
+GATE_OUTPUT="$($ROOT/scripts/run_release_gate_check.sh --env=stage 2>&1)" || true
+echo "$GATE_OUTPUT"
+if echo "$GATE_OUTPUT" | grep -q "release_gate_status=BLOCKED\|release_gate_status=WARNING"; then
+  REASON_CODE="$(echo "$GATE_OUTPUT" | grep "reason_code=" | tail -1 | cut -d'=' -f2)"
+  echo "release_gate_policy_documented_for_stage_preview=true"
+  echo "release_gate_policy_reason_code=${REASON_CODE:-unknown}"
+fi

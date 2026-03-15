@@ -7,22 +7,49 @@ from models import AllowedMarket, ExchangeCapability, ExchangeRegistry, UserVenu
 
 
 def seed_binance_venue_registry(db: Session):
-    exchange = db.query(ExchangeRegistry).filter(ExchangeRegistry.exchange_code == "binance").first()
-    if exchange is None:
-        exchange = ExchangeRegistry(
-            id=str(uuid.uuid4()),
-            exchange_code="binance",
-            exchange_name="Binance",
-            status="active",
-            supported_market_types=["spot", "futures"],
-            supports_testnet=True,
-            supports_live=False,
-            health_status="healthy",
-            rate_limit_status="ok",
-            adapter_version="v1",
-            updated_at=datetime.now(timezone.utc),
-        )
-        db.add(exchange)
+    exchanges = [
+        {
+            "exchange_code": "binance",
+            "exchange_name": "Binance",
+            "supported_market_types": ["spot", "futures"],
+            "supports_testnet": True,
+            "supports_live": False,
+            "adapter_version": "v1",
+        },
+        {
+            "exchange_code": "bybit",
+            "exchange_name": "Bybit",
+            "supported_market_types": ["spot", "futures"],
+            "supports_testnet": True,
+            "supports_live": False,
+            "adapter_version": "v1-alpha",
+        },
+        {
+            "exchange_code": "okx",
+            "exchange_name": "OKX",
+            "supported_market_types": ["spot", "futures"],
+            "supports_testnet": True,
+            "supports_live": False,
+            "adapter_version": "v1-alpha",
+        },
+    ]
+    for exchange_payload in exchanges:
+        exchange = db.query(ExchangeRegistry).filter(ExchangeRegistry.exchange_code == exchange_payload["exchange_code"]).first()
+        if exchange is None:
+            exchange = ExchangeRegistry(
+                id=str(uuid.uuid4()),
+                exchange_code=exchange_payload["exchange_code"],
+                exchange_name=exchange_payload["exchange_name"],
+                status="active",
+                supported_market_types=exchange_payload["supported_market_types"],
+                supports_testnet=exchange_payload["supports_testnet"],
+                supports_live=exchange_payload["supports_live"],
+                health_status="healthy",
+                rate_limit_status="ok",
+                adapter_version=exchange_payload["adapter_version"],
+                updated_at=datetime.now(timezone.utc),
+            )
+            db.add(exchange)
 
     defaults = [
         {
@@ -48,24 +75,25 @@ def seed_binance_venue_registry(db: Session):
             "supports_hedge_mode": True,
         },
     ]
-    for payload in defaults:
-        row = (
-            db.query(ExchangeCapability)
-            .filter(
-                ExchangeCapability.exchange_code == "binance",
-                ExchangeCapability.market_type == payload["market_type"],
-            )
-            .first()
-        )
-        if row is None:
-            db.add(
-                ExchangeCapability(
-                    id=str(uuid.uuid4()),
-                    exchange_code="binance",
-                    updated_at=datetime.now(timezone.utc),
-                    **payload,
+    for exchange_payload in exchanges:
+        for payload in defaults:
+            row = (
+                db.query(ExchangeCapability)
+                .filter(
+                    ExchangeCapability.exchange_code == exchange_payload["exchange_code"],
+                    ExchangeCapability.market_type == payload["market_type"],
                 )
+                .first()
             )
+            if row is None:
+                db.add(
+                    ExchangeCapability(
+                        id=str(uuid.uuid4()),
+                        exchange_code=exchange_payload["exchange_code"],
+                        updated_at=datetime.now(timezone.utc),
+                        **payload,
+                    )
+                )
 
     allowed_defaults = [
         ("spot", "testnet", True),
@@ -73,27 +101,28 @@ def seed_binance_venue_registry(db: Session):
         ("futures", "testnet", True),
         ("futures", "live", False),
     ]
-    for market_type, environment, enabled in allowed_defaults:
-        row = (
-            db.query(AllowedMarket)
-            .filter(
-                AllowedMarket.exchange_code == "binance",
-                AllowedMarket.market_type == market_type,
-                AllowedMarket.environment == environment,
-            )
-            .first()
-        )
-        if row is None:
-            db.add(
-                AllowedMarket(
-                    id=str(uuid.uuid4()),
-                    exchange_code="binance",
-                    market_type=market_type,
-                    environment=environment,
-                    enabled=enabled,
-                    updated_at=datetime.now(timezone.utc),
+    for exchange_payload in exchanges:
+        for market_type, environment, enabled in allowed_defaults:
+            row = (
+                db.query(AllowedMarket)
+                .filter(
+                    AllowedMarket.exchange_code == exchange_payload["exchange_code"],
+                    AllowedMarket.market_type == market_type,
+                    AllowedMarket.environment == environment,
                 )
+                .first()
             )
+            if row is None:
+                db.add(
+                    AllowedMarket(
+                        id=str(uuid.uuid4()),
+                        exchange_code=exchange_payload["exchange_code"],
+                        market_type=market_type,
+                        environment=environment,
+                        enabled=enabled,
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                )
 
     db.commit()
 

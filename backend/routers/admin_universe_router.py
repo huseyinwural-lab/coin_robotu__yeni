@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from db import get_db, redis_client
 from deps import require_admin
 from models import User
+from services.observability_trend_service import get_admin_observability_trends
 from services.risk_engine_service import build_admin_risk_status
 from services.scanner_runtime import get_latest_global_runtime_snapshot
 from services.top_volume_fallback import evaluate_top_volume_fallback
@@ -32,6 +33,7 @@ def admin_runtime_universe_summary(
     explainability = latest_runtime.get("explainability_summary") or {}
     tiered_scan = latest_runtime.get("tiered_scan") or {}
     risk_overview = build_admin_risk_status(db, redis_client)
+    observability_trends = get_admin_observability_trends(redis_client)
     return {
         "scanner_mode_requested": scanner_mode,
         "scanner_mode_effective": effective_mode,
@@ -46,6 +48,7 @@ def admin_runtime_universe_summary(
         "fallback_reason_code": str(fallback_state.get("reason_code") or "none"),
         "tiered_scan": tiered_scan,
         "risk_overview": risk_overview,
+        "observability_trends": observability_trends,
         "explainability": explainability,
     }
 

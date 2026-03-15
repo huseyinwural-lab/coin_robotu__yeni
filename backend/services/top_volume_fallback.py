@@ -44,10 +44,12 @@ def evaluate_top_volume_fallback(cache) -> dict:
     stale_reject_count = get_counter(cache, "risk:metrics:stale_reject_count")
     spread_reject_count = get_counter(cache, "risk:metrics:spread_reject_count")
     quality_warning_count = get_counter(cache, "risk:metrics:execution_quality_warning_count")
+    quality_trend = get_json(cache, "risk:metrics:execution_quality_trend") or {}
+    quality_ema = _to_float(quality_trend.get("ema_score"), 100.0)
 
     enter_reasons = []
     if scan_latency_ms > 4000:
-        enter_reasons.append("scan_latency_ms")
+        enter_reasons.append("latency_spike")
     if decision_latency_ms > 3000:
         enter_reasons.append("decision_latency_ms")
     if snapshot_age_ms > 150000:
@@ -62,6 +64,8 @@ def evaluate_top_volume_fallback(cache) -> dict:
         enter_reasons.append("spread_reject_spike")
     if quality_warning_count >= 20:
         enter_reasons.append("execution_quality_warning_spike")
+    if quality_ema < 60:
+        enter_reasons.append("execution_quality_drop")
 
     active = bool(current_state.get("active", False))
     healthy_streak = int(current_state.get("healthy_streak", 0))
@@ -78,13 +82,15 @@ def evaluate_top_volume_fallback(cache) -> dict:
             active = False
             last_exit_reason = "recovery_cycles"
 
-    qualification_cap = 50 if active else 100
-    decision_cap = 20 if active else 30
+    discovery_cap = 300 if active else 700
+    qualification_cap = 40 if active else 120
+    decision_cap = 8 if active else 25
     scan_interval_seconds = 30 if active else 15
 
     payload = {
         "active": bool(active),
         "reason_code": str(last_trigger_metric or "none") if active else "none",
+        "discovery_cap": discovery_cap,
         "qualification_cap": qualification_cap,
         "decision_cap": decision_cap,
         "scan_interval_seconds": scan_interval_seconds,
@@ -101,6 +107,7 @@ def evaluate_top_volume_fallback(cache) -> dict:
             "stale_reject_count": int(stale_reject_count),
             "spread_reject_count": int(spread_reject_count),
             "execution_quality_warning_count": int(quality_warning_count),
+            "execution_quality_ema": round(quality_ema, 4),
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

@@ -33,4 +33,11 @@ def test_top_volume_fallback_activates_when_metrics_high():
     payload = evaluate_top_volume_fallback(cache)
 
     assert payload["active"] is True
-    assert payload["reason_code"] in {"scan_latency_ms", "decision_latency_ms", "snapshot_age_ms", "queue_depth", "pipeline_backpressure"}
+    assert payload["reason_code"] in {
+        "latency_spike",
+        "scan_latency_ms",
+        "decision_latency_ms",
+        "snapshot_age_ms",
+        "queue_depth",
+        "pipeline_backpressure",
+    }

@@ -23,6 +23,7 @@ from schemas import (
     VenueHealthSummaryResponse,
 )
 from services.audit_service import create_audit_log
+from services.exchange_adapter_smoke_service import run_exchange_adapter_smoke
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry, user_allowed_venue_options, venue_health_summary
 
 router = APIRouter(prefix="/venues", tags=["venues"])
@@ -480,6 +481,13 @@ def admin_delete_user_assignment(
 def admin_health_summary(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     seed_binance_venue_registry(db)
     return VenueHealthSummaryResponse(**venue_health_summary(db))
+
+
+@router.get("/admin/adapter-smoke")
+def admin_adapter_smoke(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    seed_binance_venue_registry(db)
+    _ = db
+    return run_exchange_adapter_smoke()
 
 
 @router.get("/options", response_model=list[UserVenueOptionResponse])
