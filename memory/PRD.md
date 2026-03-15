@@ -4604,3 +4604,62 @@
 1. `backend/models.py` monolit yapıyı domain dosyalarına bölmek (uyumluluk katmanı korunarak).
 2. Alembic zinciri ile model metadata tam hizasını doğrulamak (drift kontrolü).
 3. Redis fallback semantiğini production hizalı net davranış modeline çekmek.
+
+## 80) 2026-03-15 — FAZ-2 Derinleştirme (Model Domain Split + TTL Semantiği + Capability Matrix)
+
+### Uygulananlar
+1. **Model domain ayrıştırması tamamlandı (uyumluluk korunarak)**
+   - Yeni yapı: `backend/model_domains/`
+     - `auth_users.py`
+     - `scanner_universe.py`
+     - `strategy_decision.py`
+     - `risk_execution_positions.py`
+     - `learning_recommendations.py`
+     - `audit_reporting_system_config.py`
+     - `immutability.py`
+     - `shared.py`
+   - `backend/models.py` artık backward-compatible aggregate import surface olarak çalışıyor.
+   - İmmutability listener’ları ayrı modüle taşındı ve side-effect import ile korunuyor.
+
+2. **In-memory Redis fallback semantiği Redis’e yaklaştırıldı**
+   - `InMemoryRedis` içine gerçek TTL davranışı eklendi (`expire` + key eviction).
+   - `get/lpop/sismember/incr/rpush/brpoplpush/lrem/sadd` çağrıları expire-aware hale getirildi.
+   - Expired key’ler store/list/set katmanından düşürülüyor.
+
+3. **README hizası güncellendi (FAZ-1 Görev-2 kapsamı)**
+   - Kurulum komutları, startup akışı, test komutları, dev/prod farkları, fallback davranış özeti tek dokümanda netleştirildi.
+   - Frontend package manager standardı (Yarn) ve deterministik build notu açıklandı.
+
+4. **Capability matrix dokümantasyonu eklendi (FAZ-2 Görev-8)**
+   - Yeni doküman: `/app/docs/09_db_cache_capability_matrix.md`
+   - PostgreSQL/SQLite/Redis/In-memory modlarının garanti ve sınırları tanımlandı.
+
+5. **Sabit test credential izi azaltıldı (FAZ-1 Görev-4 başlangıcı)**
+   - Kök test scriptlerinde hardcoded admin/user credential kullanımı env tabanlı hale çekildi:
+     - `/app/backend_test.py`
+     - `/app/backend_regression_test.py`
+     - `/app/iteration52_phase9a_test.py`
+
+### Test/Doğrulama
+- Python lint:
+  - `backend/model_domains/*` ✅
+  - `backend/models.py` ✅
+  - `backend/db.py` ✅
+- Endpoint smoke:
+  - `GET /api/health` ✅
+  - `POST /api/auth/login/admin` ✅
+  - `GET /api/admin/universe-monitor` ✅
+- TTL davranış self-test:
+  - expire sonrası `get/lpop/sismember` beklenen şekilde key drop ediyor ✅
+- `deep_testing_backend_v2`: PASS ✅
+- `auto_frontend_testing_agent`: PASS ✅
+
+### Durum
+- **FAZ-1:** IN PROGRESS (repo artefact ayrıştırması ve credential izi temizliği tamamlanacak)
+- **FAZ-2:** IN PROGRESS (migration drift doğrulama ve semantik kapanış adımları devam)
+
+### Kalan P0 (devam)
+1. Repo içindeki generated artefact/report/debug dosyalarının dosya-silmeden temizlenmesi/ayrıştırılması ve git kapsamı politikasının tamamlanması.
+2. Varsayılan credential referanslarının example + fixture dışı alanlardan temizlenmesi.
+3. Alembic migration dry-run + drift kontrolünün script/CI adımıyla zorunlu hale getirilmesi.
+4. FAZ-3 runtime/universe/scanner hizalama görevlerine geçiş.

@@ -8,12 +8,12 @@ import uuid
 from datetime import datetime
 
 # Get backend URL from environment variable
-BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://market-scanner-prod.preview.emergentagent.com")
+BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "").rstrip("/")
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials
-ADMIN_EMAIL = "admin@platform.dev"
-ADMIN_PASSWORD = "Admin12345!"
+ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "")
 
 class BackendRegressionTest:
     def __init__(self):

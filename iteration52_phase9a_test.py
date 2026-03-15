@@ -8,16 +8,16 @@ from datetime import datetime
 from typing import Optional
 
 # Get backend URL from environment variable
-BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://market-scanner-prod.preview.emergentagent.com")
+BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "").rstrip("/")
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials
-ADMIN_EMAIL = "admin@platform.dev"
-ADMIN_PASSWORD = "Admin12345!"
+ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "")
 
 # Test user credentials (found from existing users)
-TEST_USER_EMAIL = "test_user_reg_1773349041@test.com"
-TEST_USER_PASSWORD = "TestPassword123!"
+TEST_USER_EMAIL = os.getenv("TEST_USER_EMAIL", "")
+TEST_USER_PASSWORD = os.getenv("TEST_USER_PASSWORD", "")
 
 class Iteration52Phase9ATest:
     def __init__(self):
@@ -123,8 +123,7 @@ class Iteration52Phase9ATest:
                         json=update_payload
                     )
                     if response.status_code == 200:
-                        updated_limits = response.json()
-                        self.log_result("Portfolio Risk Limits - PUT", True, f"Updated limits successfully")
+                        self.log_result("Portfolio Risk Limits - PUT", True, "Updated limits successfully")
                         
                         # Restore original limits
                         if "max_daily_loss_pct" in original_limits:
@@ -240,7 +239,6 @@ class Iteration52Phase9ATest:
                             json=update_payload
                         )
                         if response.status_code == 200:
-                            updated_allocation = response.json()
                             self.log_result("Strategy Allocation - PUT", True, f"Updated allocation for {strategy_id}")
                             
                             # Restore original allocation

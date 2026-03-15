@@ -7,12 +7,12 @@ import sys
 from datetime import datetime
 
 # Get backend URL from environment variable
-BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "https://market-scanner-prod.preview.emergentagent.com")
+BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "").rstrip("/")
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials
-ADMIN_EMAIL = "admin@platform.dev"
-ADMIN_PASSWORD = "Admin12345!"
+ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "")
 
 class SpotStrategyFaz1Test:
     def __init__(self):
@@ -127,8 +127,9 @@ class SpotStrategyFaz1Test:
             
         # Find a test user to modify (not the admin user)
         test_user_id = None
-        if users:
-            for user in users:
+        candidate_users = filtered_users if "filtered_users" in locals() else []
+        if candidate_users:
+            for user in candidate_users:
                 if user.get("email") != ADMIN_EMAIL:
                     test_user_id = user.get("id")
                     original_role = user.get("role") 
@@ -347,7 +348,6 @@ class SpotStrategyFaz1Test:
                     date = report.get("date")
                     strategy = report.get("strategy")
                     win_rate = report.get("win_rate")
-                    profit_factor = report.get("profit_factor")
                     daily_trades = report.get("daily_trades")
                     max_drawdown = report.get("max_drawdown")
                     
