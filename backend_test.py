@@ -312,16 +312,16 @@ class BackendValidator:
         
         try:
             # Search for old admin credential pattern in source files only
-            result = subprocess.run(['find', '/app', '-name', '*.py', '-exec', 'grep', '-l', 'admin@platform.dev', '{}', ';'], 
+            result = subprocess.run(['find', '/app', '-name', '*.py', '-exec', 'grep', '-l', 'admin@platform.local', '{}', ';'], 
                                   capture_output=True, text=True)
             
             # Filter out this test file itself
             matches = [line for line in result.stdout.strip().split('\n') if line and 'backend_test.py' not in line]
             
             if not matches or (len(matches) == 1 and not matches[0]):
-                self.log_result("Credential Cleanup", "PASS", "No admin@platform.dev references found in source code")
+                self.log_result("Credential Cleanup", "PASS", "No admin@platform.local references found in source code")
             else:
-                self.log_result("Credential Cleanup", "FAIL", f"Found admin@platform.dev references in source files:\n{chr(10).join(matches)}")
+                self.log_result("Credential Cleanup", "FAIL", f"Found admin@platform.local references in source files:\n{chr(10).join(matches)}")
                 
         except Exception as e:
             self.log_result("Credential Cleanup", "FAIL", f"Exception: {str(e)}")

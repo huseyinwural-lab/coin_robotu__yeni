@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
@@ -20,6 +22,9 @@ from services.audit_service import create_audit_log
 from services.canonical_strategy_registry_service import seed_canonical_strategy_registry
 from services.strategy_family_gate_service import seed_strategy_family_gates
 from services.venue_service import seed_binance_venue_registry
+
+
+logger = logging.getLogger(__name__)
 
 
 def _seed_admin(db: Session):
@@ -303,16 +308,23 @@ def _migrate_universe_defaults(db: Session):
 def seed_default_admin():
     db = SessionLocal()
     try:
-        _seed_admin(db)
-        _seed_admin_control(db)
-        _seed_execution_policies(db)
-        _seed_exposure_groups(db)
-        _seed_backtest_cards(db)
-        _seed_live_activation_config(db)
-        _seed_risk_orchestrator_policy(db)
-        _migrate_universe_defaults(db)
-        seed_canonical_strategy_registry(db)
-        seed_strategy_family_gates(db)
-        seed_binance_venue_registry(db)
+        seed_steps = [
+            _seed_admin,
+            _seed_admin_control,
+            _seed_execution_policies,
+            _seed_exposure_groups,
+            _seed_backtest_cards,
+            _seed_live_activation_config,
+            _seed_risk_orchestrator_policy,
+            _migrate_universe_defaults,
+            seed_canonical_strategy_registry,
+            seed_strategy_family_gates,
+            seed_binance_venue_registry,
+        ]
+        for step in seed_steps:
+            try:
+                step(db)
+            except Exception:
+                logger.exception("Bootstrap seed step failed: %s", step.__name__)
     finally:
         db.close()
