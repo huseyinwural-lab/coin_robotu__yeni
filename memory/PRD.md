@@ -4663,3 +4663,70 @@
 2. Varsayılan credential referanslarının example + fixture dışı alanlardan temizlenmesi.
 3. Alembic migration dry-run + drift kontrolünün script/CI adımıyla zorunlu hale getirilmesi.
 4. FAZ-3 runtime/universe/scanner hizalama görevlerine geçiş.
+
+## 81) 2026-03-15 — FAZ-3A/3B/3C Operasyonel Kapanış (Candidate Persistence + Decision Contract + Futures Alignment)
+
+### Uygulananlar
+1. **Candidate persistence (FAZ-3A)**
+   - Yeni model: `backend/model_domains/runtime_scan_candidate.py`
+   - Yeni migration: `backend/migrations/versions/20260315_0045_runtime_scan_candidate_table.py`
+   - Yeni tablo: `runtime_scan_candidates`
+   - Alanlar: `id,symbol,market_type,scan_timestamp,strategy_signal,risk_score,decision,confidence`
+   - `scanner_runtime` karar çıktıları DB’ye kalıcı yazılır hale getirildi.
+
+2. **Decision contract normalization (FAZ-3A)**
+   - Runtime decision çıktısı normalize edildi: `LONG | SHORT | PASS`
+   - `NO_TRADE/BLOCKED/NONE` türevleri `PASS`’e normalize edilir.
+   - API decision öğesi formatı sabitlendi: `{symbol, decision, confidence, reason}`
+
+3. **Futures execution alignment (FAZ-3B)**
+   - `execution_intent_service` içinde sembol bazlı market type çözümü eklendi (`resolve_symbol_market_type`).
+   - Futures için bot varsayılan leverage `3`, spot için `1` olacak şekilde hizalandı.
+   - Position açılışında market_type/leverage futures-uyumlu varsayılanlarla belirleniyor.
+
+4. **Scanner stability hardening (FAZ-3C)**
+   - `top_volume_fallback` metrik seti genişletildi:
+     - `scan_latency_ms`, `decision_latency_ms`, `snapshot_age_ms`, `queue_depth`, `candidate_count`
+   - Fallback tetikleme kriterleri bu metriklerle runtime snapshot’tan okunur hale getirildi.
+
+5. **Yeni runtime servis/route katmanı**
+   - Yeni servisler:
+     - `backend/services/universe_service.py`
+     - `backend/services/scanner_runtime.py`
+     - `backend/services/scan_scheduler.py`
+     - `backend/services/top_volume_fallback.py`
+   - Yeni router’lar:
+     - `backend/routers/user_scanner_router.py`
+     - `backend/routers/admin_universe_router.py`
+   - Yeni endpointler:
+     - `POST /api/user/scanner/runtime/run`
+     - `GET /api/user/scanner/runtime/snapshot`
+     - `GET /api/admin/universe/runtime-summary`
+     - `GET /api/admin/universe/runtime-latest-scan`
+
+6. **FAZ-2C strict drift disiplini korundu**
+   - `ci_alembic_drift_gate.sh` strict modda PASS.
+   - `alembic check`: `No new upgrade operations detected`.
+
+### Test/Doğrulama
+- Zorunlu regresyon endpointleri:
+  - `GET /api/health` ✅
+  - `POST /api/auth/login/admin` ✅
+  - `GET /api/admin/universe-monitor` ✅
+  - `GET /api/user/scanner/symbol-selection` (register+approve+login) ✅
+- Yeni runtime endpointleri:
+  - `GET /api/admin/universe/runtime-summary` ✅
+  - `GET /api/admin/universe/runtime-latest-scan` ✅
+  - `POST /api/user/scanner/runtime/run` ✅
+  - `GET /api/user/scanner/runtime/snapshot` ✅
+- Drift/migration:
+  - `bash /app/scripts/ci_alembic_drift_gate.sh` ✅
+  - `PYTHONPATH=/app/backend alembic check` ✅
+- Testing agent doğrulaması:
+  - `deep_testing_backend_v2` sonucu: **15/15 PASS** ✅
+
+### Durum
+- **FAZ-3A:** COMPLETE
+- **FAZ-3B:** COMPLETE
+- **FAZ-3C:** COMPLETE
+- **FAZ-4:** NEXT (Freshness + Backpressure + Event Priority)
