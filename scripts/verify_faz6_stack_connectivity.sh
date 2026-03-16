@@ -27,7 +27,11 @@ python - <<'PY'
 from pathlib import Path
 import yaml
 
-cfg = yaml.safe_load(Path('/app/docker-compose.yml').read_text())
+compose_path = Path('docker-compose.yml')
+if not compose_path.exists():
+    raise SystemExit(f"[ERROR] Missing compose file: {compose_path.resolve()}")
+
+cfg = yaml.safe_load(compose_path.read_text())
 services = cfg.get('services', {})
 required = ['postgres', 'redis', 'backend', 'frontend']
 missing = [s for s in required if 'healthcheck' not in (services.get(s) or {})]
