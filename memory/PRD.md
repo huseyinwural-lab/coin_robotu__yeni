@@ -64,6 +64,26 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (Gate-5 formal PASS + FAZ-6 Test Paketi tamamlandı)
+- **Gate-5 durumu:** Kullanıcı onayıyla formal olarak **PASS** kapatıldı.
+- **FAZ-6 negatif senaryo seti eklendi:**
+  - Yeni test dosyası: `backend/tests/test_gate6_negative_policy_scenarios.py`
+  - Kapsanan negatif senaryolar:
+    - `symbol = null` reject
+    - `symbol = ""` reject
+    - unsupported quote reject
+    - BTC pair reject
+    - watchlist policy dışı pair filtreleme
+    - BTC bağımlılığı olmadan universe/scanner üretimi
+    - scanner symbol / order symbol mismatch reject
+    - execution preview unsupported quote reject
+- **Doğrulama sonuçları:**
+  - Lokal: `pytest test_gate6_negative_policy_scenarios.py` → **8/8 PASS**
+  - Regresyon: Gate setleri ile birlikte **39 PASS, 5 skipped**
+  - Testing agent raporu: `/app/test_reports/iteration_124.json` → Gate testlerinde **112/112 PASS**
+- **Bilinen düşük öncelikli not:** indicator_screener test util tarafında hardcoded credential kaynaklı ayrı collection issue raporlandı (Gate policy kapsamı dışında).
+- **Mock durumu:** Bybit/OKX execution adapterları **MOCKED**.
+
 ### 2026-03-16 (FAZ-5 ek revizyonlar — kullanıcı geri bildirimi uygulandı)
 - **Execute ekranı UX güçlendirildi (Türkçe ağırlıklı):**
   - Policy bandı geçersiz paritede kırmızı uyarı tonuna geçecek şekilde dinamik hale getirildi.
