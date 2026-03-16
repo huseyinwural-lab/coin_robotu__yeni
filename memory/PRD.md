@@ -64,6 +64,17 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (FAZ-1 / GATE-0 — DB Binding & Migration Ortamı PASS)
+- `backend/migrations/env.py` URL önceliği güvenli hale getirildi:
+  - `ALEMBIC_DATABASE_URL` > `DATABASE_URL` > `alembic.ini`
+  - implicit SQLite fallback kaldırıldı; yalnızca `ALEMBIC_ALLOW_SQLITE_FALLBACK=1` ile explicit local fallback izinli.
+- `backend/alembic.ini` SQLite dayatmasından çıkarıldı; nötr PostgreSQL placeholder kullanılıyor.
+- Migration ortamı için path bootstrap sağlamlaştırıldı (`env.py` içinde kök path ekleme).
+- Doğrulama:
+  - Offline migration logunda `Context impl PostgresqlImpl` doğrulandı (`/tmp/alembic_offline_gate0.log`).
+  - Testing agent raporu: `/app/test_reports/iteration_126.json` → **13/13 PASS + 3 functional verification**.
+  - Ek not: Bu podda `localhost:5432` erişimi yoksa bağlantı hatası beklenir; önemli olan SQLite’a sessiz düşüşün olmamasıdır.
+
 ### 2026-03-16 (Backend Policy Core Refactor — Gate-7 öncesi blokaj kapatma)
 - **Merkezi quote policy modülü eklendi:**
   - Yeni çekirdek dosya: `backend/core/policy/quote_policy.py`
