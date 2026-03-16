@@ -64,6 +64,39 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (FAZ-2..FAZ-7 — Scanner Operations + Live Readiness paketi tamamlandı)
+- **Scanner UI operasyon revizesi (mevcut user yapısı korunarak):**
+  - `UserScannerPage.jsx` üzerinde yeni operasyon akışı uygulandı: **Scanner Control → Symbol Selection → Scanner Results → Strategy Presets → Statistics**.
+  - Yeni bileşenler eklendi: `TradeSymbolSelection.jsx`, `ScannerResultsTable.jsx`.
+  - `SymbolSelectorPanel.jsx` toplu seçim desteği aldı: **Select All / Clear All**, header checkbox, `Selected Symbols: N` sayaç.
+  - Scanner run guard eklendi: seçili sembol yoksa UI/Backend blok + mesaj: **“En az bir sembol seçmelisiniz”**.
+- **Scanner UX enhancement tamamlandı:**
+  - Score renk sistemi (>=80 yeşil, 60–79 sarı, <60 gri).
+  - Quick actions: **Open Trade**, **View Card**, **Add Watchlist**.
+  - Filter bar: Strategy / Confidence / Score / Signal Type.
+  - Live scan timer: Last Scan / Next Scan.
+  - Explainability satır paneli: volume spike, RSI, spread regime, market volatility.
+  - Watchlist mode toggle.
+  - Auto scan interval: **30 / 60 / 120** (frontend + backend schema/clamp uyumlu).
+  - Scanner performance panel metrikleri.
+- **Scanner → Execution bütünlük doğrulaması (symbol drift guard):**
+  - `execution_intent_service.py` içinde scanner source için `scanner_signal_snapshot.symbol` ile intent `symbol` eşleşme zorunlu hale getirildi.
+  - Mismatch durumunda reject: `scanner_execution_symbol_mismatch`.
+  - BTC fallback tamamen kaldırıldı; symbol zorunlu (`symbol_required_for_execution_intent` / `symbol_required_for_execution_order`).
+  - Scanner bridge payload’u artık `source_type=scanner` + signal/score/strategy/confidence/timestamp sözleşmesi taşıyor.
+  - Audit log aksiyonları eklendi/doğrulandı: **SCAN_RESULT, RISK_RESULT, EXECUTION_INTENT, EXCHANGE_ORDER**.
+- **Live readiness + günlük raporlama eklendi:**
+  - Yeni service: `backend/services/user_scanner_operations_service.py`
+  - Yeni endpointler (`/api/user/scanner/runtime/*`):
+    - `GET /live-readiness`
+    - `GET /daily-report`
+    - `GET /daily-report/export?format=json|csv`
+  - Checklist metrikleri: symbol integrity, max risk guard (max_positions=3, daily_loss_limit=1%), execution quality, scanner activity, strategy diversity, emergency stop.
+
+**Test sonuçları (bu paket):**
+- `pytest`: `test_scanner_operations_package.py` + `test_scanner_ui_operations_comprehensive.py` + ilgili regression testler PASS.
+- Testing agent raporu: `/app/test_reports/iteration_116.json` → backend/frontend **100% PASS**.
+
 ### 2026-03-15 (User Live Trading Dashboard Package — ayrık user mimarisi)
 - **Ayrı user-scope backend katmanı eklendi (admin’dan türetilmedi):**
   - Yeni service: `backend/services/user_live_dashboard_service.py`
