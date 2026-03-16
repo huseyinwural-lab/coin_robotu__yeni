@@ -30,6 +30,24 @@ def _table_exists(bind, table_name: str) -> bool:
     return table_name in inspector.get_table_names()
 
 
+def _column_exists(bind, table_name: str, column_name: str) -> bool:
+    inspector = sa.inspect(bind)
+    if table_name not in inspector.get_table_names():
+        return False
+    return any(column.get("name") == column_name for column in inspector.get_columns(table_name))
+
+
+def _fk_exists(bind, table_name: str, constrained_column: str, referred_table: str, referred_column: str = "id") -> bool:
+    inspector = sa.inspect(bind)
+    for fk in inspector.get_foreign_keys(table_name):
+        cols = fk.get("constrained_columns") or []
+        ref_table = fk.get("referred_table")
+        ref_cols = fk.get("referred_columns") or []
+        if cols == [constrained_column] and ref_table == referred_table and ref_cols == [referred_column]:
+            return True
+    return False
+
+
 def upgrade() -> None:
     from pathlib import Path
     import sys
@@ -57,6 +75,21 @@ def upgrade() -> None:
         if _table_exists(bind, table_name):
             continue
         table.create(bind=bind, checkfirst=True)
+
+    # Ensure critical FK exists even when referenced table was introduced by this repair migration.
+    if (
+        _table_exists(bind, "pending_signals")
+        and _table_exists(bind, "risk_policies")
+        and _column_exists(bind, "pending_signals", "risk_policy_id")
+        and not _fk_exists(bind, "pending_signals", "risk_policy_id", "risk_policies", "id")
+    ):
+        op.create_foreign_key(
+            "fk_ps_risk_policy",
+            "pending_signals",
+            "risk_policies",
+            ["risk_policy_id"],
+            ["id"],
+        )
 
 
 def downgrade() -> None:

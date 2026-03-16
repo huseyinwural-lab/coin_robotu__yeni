@@ -152,6 +152,15 @@ def test_manifest_and_clean_install_script_exist():
     assert "verify_clean_install.sh" in manifest
 
 
+def test_0046_repair_contains_risk_policy_fk_repair_logic():
+    path = MIGRATIONS_DIR / "20260316_0046_baseline_critical_tables_repair.py"
+    content = path.read_text(encoding="utf-8")
+    assert "op.create_foreign_key(" in content
+    assert '"pending_signals"' in content
+    assert '"risk_policies"' in content
+    assert '"risk_policy_id"' in content
+
+
 def test_0043_role_enum_alignment_handles_default_cast_safely():
     path = MIGRATIONS_DIR / "20260315_0043_users_role_enum_alignment.py"
     content = path.read_text(encoding="utf-8")
