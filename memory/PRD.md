@@ -64,6 +64,22 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (FAZ-2 / ENV-CONFIG Bütünlüğü PASS)
+- **Backend fail-fast güçlendirildi:**
+  - `backend/core/config.py` içinde `required_env` boş/whitespace değerleri de geçersiz sayacak şekilde sertleştirildi.
+  - `DEFAULT_ADMIN_EMAIL` ve `DEFAULT_ADMIN_PASSWORD` zorunlu env olarak yükseltildi.
+- **Frontend fail-fast eklendi:**
+  - `frontend/src/lib/api.js` artık `REACT_APP_BACKEND_URL` boşsa açık hata fırlatıyor.
+  - URL formatı (`http/https`) doğrulanıyor, `undefined/api` riski kapatıldı.
+- **Compose hizalaması:**
+  - `docker-compose.yml` backend environment bölümüne runtime zorunlu env seti eklendi:
+    `DATABASE_URL, REDIS_URL, JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRE_MINUTES, CORS_ORIGINS, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD`
+  - Frontend için `REACT_APP_BACKEND_URL` boşsa start etmeyen fail-fast command eklendi.
+- **Doğrulama:**
+  - Testing agent raporu: `/app/test_reports/iteration_127.json`
+  - Sonuç: **41/41 backend PASS + frontend verification PASS**.
+  - Testing agent tarafından ek doğrulama testi: `backend/tests/test_faz2_config_guards.py`.
+
 ### 2026-03-16 (FAZ-1 / GATE-0 — DB Binding & Migration Ortamı PASS)
 - `backend/migrations/env.py` URL önceliği güvenli hale getirildi:
   - `ALEMBIC_DATABASE_URL` > `DATABASE_URL` > `alembic.ini`
