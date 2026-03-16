@@ -54,7 +54,23 @@ def upgrade() -> None:
                 """
             )
         )
-        op.execute(sa.text("ALTER TABLE users ALTER COLUMN role TYPE userrole USING UPPER(role)::userrole"))
+        op.execute(sa.text("ALTER TABLE users ALTER COLUMN role DROP DEFAULT"))
+        op.execute(
+            sa.text(
+                """
+                ALTER TABLE users
+                ALTER COLUMN role TYPE userrole
+                USING (
+                    CASE
+                        WHEN UPPER(role) IN ('SUPER_ADMIN', 'ADMIN', 'OPS', 'USER')
+                        THEN UPPER(role)::userrole
+                        ELSE 'USER'::userrole
+                    END
+                )
+                """
+            )
+        )
+        op.execute(sa.text("ALTER TABLE users ALTER COLUMN role SET DEFAULT 'USER'::userrole"))
         op.execute(sa.text("ALTER TABLE users ALTER COLUMN role SET NOT NULL"))
     else:
         op.alter_column("users", "role", existing_type=sa.String(length=20), existing_nullable=True, nullable=False)
@@ -68,5 +84,7 @@ def downgrade() -> None:
         return
 
     if dialect == "postgresql":
+        op.execute(sa.text("ALTER TABLE users ALTER COLUMN role DROP DEFAULT"))
         op.execute(sa.text("ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(20) USING role::text"))
+        op.execute(sa.text("ALTER TABLE users ALTER COLUMN role SET DEFAULT 'USER'"))
     op.alter_column("users", "role", existing_type=sa.String(length=20), nullable=True)

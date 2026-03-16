@@ -150,3 +150,11 @@ def test_manifest_and_clean_install_script_exist():
     assert "CRITICAL" in manifest
     assert "OPTIONAL" in manifest
     assert "verify_clean_install.sh" in manifest
+
+
+def test_0043_role_enum_alignment_handles_default_cast_safely():
+    path = MIGRATIONS_DIR / "20260315_0043_users_role_enum_alignment.py"
+    content = path.read_text(encoding="utf-8")
+    assert "ALTER TABLE users ALTER COLUMN role DROP DEFAULT" in content
+    assert "ELSE 'USER'::userrole" in content
+    assert "SET DEFAULT 'USER'::userrole" in content
