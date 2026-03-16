@@ -47,11 +47,20 @@ def test_fk_names_in_0041_are_short_and_deterministic():
 
 
 def test_batch_alter_removed_from_target_migrations():
-    path_0041 = MIGRATIONS_DIR / "20260315_0041_non_destructive_drift_alignment.py"
-    path_0044 = MIGRATIONS_DIR / "20260315_0044_nullable_alignment.py"
-
-    assert "recreate=\"always\"" not in path_0041.read_text(encoding="utf-8")
-    assert "with op.batch_alter_table(" not in path_0044.read_text(encoding="utf-8")
+    target_files = [
+        "20260311_0005_user_approval_flow.py",
+        "20260311_0007_execution_metrics_and_permission_drift.py",
+        "20260311_0008_release_gate_override_and_validation_snapshot.py",
+        "20260311_0009_execution_evidence_fields.py",
+        "20260311_0012_execution_context_and_replay.py",
+        "20260315_0041_non_destructive_drift_alignment.py",
+        "20260315_0043_users_role_enum_alignment.py",
+        "20260315_0044_nullable_alignment.py",
+    ]
+    for file_name in target_files:
+        content = (MIGRATIONS_DIR / file_name).read_text(encoding="utf-8")
+        assert "with op.batch_alter_table(" not in content
+        assert "recreate=\"always\"" not in content
 
 
 def test_migration_graph_single_head_and_no_orphans():
@@ -120,3 +129,17 @@ def test_baseline_critical_tables_have_migration_creation_path():
 
     missing = sorted(critical - covered)
     assert missing == []
+
+
+def test_manifest_and_clean_install_script_exist():
+    manifest_path = BACKEND_ROOT / "docs" / "migration_safety_manifest.md"
+    script_path = BACKEND_ROOT / "scripts" / "verify_clean_install.sh"
+
+    assert manifest_path.exists()
+    assert script_path.exists()
+
+    manifest = manifest_path.read_text(encoding="utf-8")
+    assert "Current head" in manifest
+    assert "CRITICAL" in manifest
+    assert "OPTIONAL" in manifest
+    assert "verify_clean_install.sh" in manifest

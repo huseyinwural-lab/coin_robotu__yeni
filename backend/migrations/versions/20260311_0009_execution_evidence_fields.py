@@ -50,10 +50,9 @@ def upgrade() -> None:
         op.execute(sa.text("UPDATE execution_metrics SET final_status = status WHERE final_status IS NULL"))
         op.execute(sa.text("UPDATE execution_metrics SET raw_exchange_status = '{}' WHERE raw_exchange_status IS NULL"))
 
-        with op.batch_alter_table("execution_metrics") as batch_op:
-            batch_op.alter_column("client_order_id", existing_type=sa.String(length=120), nullable=False, server_default="")
-            batch_op.alter_column("final_status", existing_type=sa.String(length=30), nullable=False, server_default="NEW")
-            batch_op.alter_column("raw_exchange_status", existing_type=sa.JSON(), nullable=False)
+        op.alter_column("execution_metrics", "client_order_id", existing_type=sa.String(length=120), nullable=False, server_default="")
+        op.alter_column("execution_metrics", "final_status", existing_type=sa.String(length=30), nullable=False, server_default="NEW")
+        op.alter_column("execution_metrics", "raw_exchange_status", existing_type=sa.JSON(), nullable=False)
 
     if not _table_exists(bind, "execution_lifecycle_events"):
         op.create_table(
@@ -81,24 +80,22 @@ def downgrade() -> None:
         op.drop_table("execution_lifecycle_events")
 
     if _table_exists(bind, "execution_metrics"):
-        with op.batch_alter_table("execution_metrics") as batch_op:
-            if _column_exists(bind, "execution_metrics", "raw_exchange_status"):
-                batch_op.drop_column("raw_exchange_status")
-            if _column_exists(bind, "execution_metrics", "validation_snapshot_id"):
-                batch_op.drop_column("validation_snapshot_id")
-            if _column_exists(bind, "execution_metrics", "final_at"):
-                batch_op.drop_column("final_at")
-            if _column_exists(bind, "execution_metrics", "ack_at"):
-                batch_op.drop_column("ack_at")
-            if _column_exists(bind, "execution_metrics", "submitted_at"):
-                batch_op.drop_column("submitted_at")
-            if _column_exists(bind, "execution_metrics", "failure_code"):
-                batch_op.drop_column("failure_code")
-            if _column_exists(bind, "execution_metrics", "final_status"):
-                batch_op.drop_column("final_status")
-            if _column_exists(bind, "execution_metrics", "client_order_id"):
-                batch_op.drop_column("client_order_id")
+        if _column_exists(bind, "execution_metrics", "raw_exchange_status"):
+            op.drop_column("execution_metrics", "raw_exchange_status")
+        if _column_exists(bind, "execution_metrics", "validation_snapshot_id"):
+            op.drop_column("execution_metrics", "validation_snapshot_id")
+        if _column_exists(bind, "execution_metrics", "final_at"):
+            op.drop_column("execution_metrics", "final_at")
+        if _column_exists(bind, "execution_metrics", "ack_at"):
+            op.drop_column("execution_metrics", "ack_at")
+        if _column_exists(bind, "execution_metrics", "submitted_at"):
+            op.drop_column("execution_metrics", "submitted_at")
+        if _column_exists(bind, "execution_metrics", "failure_code"):
+            op.drop_column("execution_metrics", "failure_code")
+        if _column_exists(bind, "execution_metrics", "final_status"):
+            op.drop_column("execution_metrics", "final_status")
+        if _column_exists(bind, "execution_metrics", "client_order_id"):
+            op.drop_column("execution_metrics", "client_order_id")
 
     if _table_exists(bind, "user_exchange_settings") and _column_exists(bind, "user_exchange_settings", "validation_snapshot_id"):
-        with op.batch_alter_table("user_exchange_settings") as batch_op:
-            batch_op.drop_column("validation_snapshot_id")
+        op.drop_column("user_exchange_settings", "validation_snapshot_id")

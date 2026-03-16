@@ -57,14 +57,7 @@ def upgrade() -> None:
         op.execute(sa.text("ALTER TABLE users ALTER COLUMN role TYPE userrole USING UPPER(role)::userrole"))
         op.execute(sa.text("ALTER TABLE users ALTER COLUMN role SET NOT NULL"))
     else:
-        with op.batch_alter_table("users") as batch_op:
-            batch_op.alter_column(
-                "role",
-                existing_type=sa.String(length=20),
-                type_=sa.Enum("SUPER_ADMIN", "ADMIN", "OPS", "USER", name="userrole", native_enum=False),
-                existing_nullable=True,
-                nullable=False,
-            )
+        op.alter_column("users", "role", existing_type=sa.String(length=20), existing_nullable=True, nullable=False)
 
 
 def downgrade() -> None:
@@ -76,5 +69,4 @@ def downgrade() -> None:
 
     if dialect == "postgresql":
         op.execute(sa.text("ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(20) USING role::text"))
-    with op.batch_alter_table("users") as batch_op:
-        batch_op.alter_column("role", existing_type=sa.String(length=20), nullable=True)
+    op.alter_column("users", "role", existing_type=sa.String(length=20), nullable=True)

@@ -34,8 +34,7 @@ def upgrade() -> None:
         if not _column_exists(bind, "user_exchange_settings", "last_reason_codes"):
             op.add_column("user_exchange_settings", sa.Column("last_reason_codes", sa.JSON(), nullable=True))
             op.execute(sa.text("UPDATE user_exchange_settings SET last_reason_codes = '[]' WHERE last_reason_codes IS NULL"))
-            with op.batch_alter_table("user_exchange_settings") as batch_op:
-                batch_op.alter_column("last_reason_codes", existing_type=sa.JSON(), nullable=False)
+            op.alter_column("user_exchange_settings", "last_reason_codes", existing_type=sa.JSON(), nullable=False)
 
     if not _table_exists(bind, "release_gate_overrides"):
         op.create_table(
@@ -65,8 +64,7 @@ def downgrade() -> None:
         op.drop_table("release_gate_overrides")
 
     if _table_exists(bind, "user_exchange_settings"):
-        with op.batch_alter_table("user_exchange_settings") as batch_op:
-            if _column_exists(bind, "user_exchange_settings", "last_reason_codes"):
-                batch_op.drop_column("last_reason_codes")
-            if _column_exists(bind, "user_exchange_settings", "last_validation_success"):
-                batch_op.drop_column("last_validation_success")
+        if _column_exists(bind, "user_exchange_settings", "last_reason_codes"):
+            op.drop_column("user_exchange_settings", "last_reason_codes")
+        if _column_exists(bind, "user_exchange_settings", "last_validation_success"):
+            op.drop_column("user_exchange_settings", "last_validation_success")

@@ -42,10 +42,9 @@ def upgrade() -> None:
         op.execute(sa.text("UPDATE execution_metrics SET market_type = 'futures' WHERE market_type IS NULL"))
         op.execute(sa.text("UPDATE execution_metrics SET environment = 'testnet' WHERE environment IS NULL"))
 
-        with op.batch_alter_table("execution_metrics") as batch_op:
-            batch_op.alter_column("exchange", existing_type=sa.String(length=30), nullable=False, server_default="binance")
-            batch_op.alter_column("market_type", existing_type=sa.String(length=20), nullable=False, server_default="futures")
-            batch_op.alter_column("environment", existing_type=sa.String(length=20), nullable=False, server_default="testnet")
+        op.alter_column("execution_metrics", "exchange", existing_type=sa.String(length=30), nullable=False, server_default="binance")
+        op.alter_column("execution_metrics", "market_type", existing_type=sa.String(length=20), nullable=False, server_default="futures")
+        op.alter_column("execution_metrics", "environment", existing_type=sa.String(length=20), nullable=False, server_default="testnet")
 
     if not _table_exists(bind, "replay_runs"):
         op.create_table(
@@ -113,10 +112,9 @@ def downgrade() -> None:
         op.drop_table("replay_runs")
 
     if _table_exists(bind, "execution_metrics"):
-        with op.batch_alter_table("execution_metrics") as batch_op:
-            if _column_exists(bind, "execution_metrics", "environment"):
-                batch_op.drop_column("environment")
-            if _column_exists(bind, "execution_metrics", "market_type"):
-                batch_op.drop_column("market_type")
-            if _column_exists(bind, "execution_metrics", "exchange"):
-                batch_op.drop_column("exchange")
+        if _column_exists(bind, "execution_metrics", "environment"):
+            op.drop_column("execution_metrics", "environment")
+        if _column_exists(bind, "execution_metrics", "market_type"):
+            op.drop_column("execution_metrics", "market_type")
+        if _column_exists(bind, "execution_metrics", "exchange"):
+            op.drop_column("execution_metrics", "exchange")

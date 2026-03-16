@@ -42,9 +42,14 @@ def upgrade() -> None:
     op.execute(sa.text("UPDATE users SET approval_requested_at = CURRENT_TIMESTAMP WHERE approval_requested_at IS NULL"))
     op.execute(sa.text("UPDATE users SET approved_at = CURRENT_TIMESTAMP WHERE approved_at IS NULL AND approval_status = 'approved'"))
 
-    with op.batch_alter_table("users") as batch_op:
-        batch_op.alter_column("approval_status", existing_type=sa.String(length=20), nullable=False, server_default="approved")
-        batch_op.alter_column("approval_requested_at", existing_type=sa.DateTime(timezone=True), nullable=False, server_default=now_expr)
+    op.alter_column("users", "approval_status", existing_type=sa.String(length=20), nullable=False, server_default="approved")
+    op.alter_column(
+        "users",
+        "approval_requested_at",
+        existing_type=sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=now_expr,
+    )
 
 
 def downgrade() -> None:
@@ -52,10 +57,9 @@ def downgrade() -> None:
     if not _table_exists(bind, "users"):
         return
 
-    with op.batch_alter_table("users") as batch_op:
-        if _column_exists(bind, "users", "approved_at"):
-            batch_op.drop_column("approved_at")
-        if _column_exists(bind, "users", "approval_requested_at"):
-            batch_op.drop_column("approval_requested_at")
-        if _column_exists(bind, "users", "approval_status"):
-            batch_op.drop_column("approval_status")
+    if _column_exists(bind, "users", "approved_at"):
+        op.drop_column("users", "approved_at")
+    if _column_exists(bind, "users", "approval_requested_at"):
+        op.drop_column("users", "approval_requested_at")
+    if _column_exists(bind, "users", "approval_status"):
+        op.drop_column("users", "approval_status")
