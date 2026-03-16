@@ -35,6 +35,15 @@ const defaultForm = {
 
 const USER_EXECUTE_SYMBOL_STORAGE_KEY = "user-execute-selected-symbol-v1";
 
+const extractQuoteAsset = (symbol) => {
+  const normalized = String(symbol || "").trim().toUpperCase();
+  if (normalized.endsWith("USDT")) return "USDT";
+  if (normalized.endsWith("USDC")) return "USDC";
+  return null;
+};
+
+const isAllowedQuoteSymbol = (symbol) => Boolean(extractQuoteAsset(symbol));
+
 export const UserExecutePage = () => {
   const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(true);
@@ -267,6 +276,7 @@ export const UserExecutePage = () => {
         ...(flowContext?.intent_payload || {}),
         ...form,
         source_type: flowContext?.source || form.source_type || "manual",
+        quote_asset: extractQuoteAsset(form.symbol),
         exchange_connection_id: selectedConnection?.id || form.exchange_connection_id || null,
         account_label: selectedConnection?.account_label || form.account_label || "default",
         exchange: selectedConnection?.exchange || form.exchange || "binance",
@@ -323,6 +333,19 @@ export const UserExecutePage = () => {
       return;
     }
 
+    if (!isAllowedQuoteSymbol(form.symbol)) {
+      const message = "Bu sistem yalnızca USDT ve USDC bazlı marketlerde işlem açar.";
+      setAutoPreviewStatus({
+        state: "blocked",
+        message,
+        updatedAt: new Date().toISOString(),
+      });
+      if (!silent) {
+        toast.error(message);
+      }
+      return;
+    }
+
     if (silent) {
       setAutoPreviewStatus({
         state: "running",
@@ -368,13 +391,13 @@ export const UserExecutePage = () => {
         updatedAt: new Date().toISOString(),
       });
     }
-  }, [buildPreviewPayload, loadDecisionTrace, symbolSelectorSource, venueAccess]);
+  }, [buildPreviewPayload, loadDecisionTrace, symbolSelectorSource, venueAccess, form.symbol]);
 
   useEffect(() => {
     if (!autoPreviewEnabled || isLoading || !selectedConnection) {
       return;
     }
-    if (!form.symbol || form.symbol.trim().length < 5) {
+    if (!form.symbol || form.symbol.trim().length < 5 || !isAllowedQuoteSymbol(form.symbol)) {
       return;
     }
 
@@ -436,6 +459,11 @@ export const UserExecutePage = () => {
       </header>
 
       <div className="col-span-12 lg:col-span-7 grid grid-cols-12 gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-execute-form-grid">
+        <div className="col-span-12 rounded border border-cyan-800/60 bg-cyan-950/20 p-3" data-testid="user-execute-quote-policy-notice">
+          <p className="text-xs text-cyan-200" data-testid="user-execute-quote-policy-notice-text">
+            Bu sistem yalnızca USDT ve USDC bazlı marketlerde işlem açar.
+          </p>
+        </div>
         <div className="col-span-12 md:col-span-6">
           <label className="text-xs text-slate-500" htmlFor="execute-connection-select">Exchange Connection</label>
           <select

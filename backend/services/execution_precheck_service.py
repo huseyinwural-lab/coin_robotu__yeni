@@ -2,6 +2,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from services.quote_asset_policy import extract_quote_asset, normalize_quote_symbol
+
 POLICY_PATH = Path("/app/config/execution_policy_registry.json")
 ALLOWED_EXECUTION_MODES = {"manual", "bot_assisted", "signal_follow"}
 
@@ -28,13 +30,37 @@ def _preview_hash(payload: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _resolve_symbol_numeric(config: dict, symbol: str, fallback: float) -> float:
+    if not isinstance(config, dict):
+        return fallback
+    if symbol in config:
+        return _safe_float(config.get(symbol), fallback)
+    if "__default__" in config:
+        return _safe_float(config.get("__default__"), fallback)
+    return fallback
+
+
 def validate_execution_payload(payload: dict) -> dict:
     registry = load_execution_policy_registry()
     market_policies = registry.get("market_type") or {}
     symbols_allowlist = set(registry.get("symbols_allowlist") or [])
+    enforce_symbols_allowlist = bool(registry.get("enforce_symbols_allowlist", False))
     tp_sl_rules = registry.get("tp_sl_rules") or {}
 
-    symbol = str(payload.get("symbol") or "").upper().strip()
+    symbol = ""
+    quote_asset = None
+    symbol_error = None
+    try:
+        symbol = normalize_quote_symbol(
+            payload.get("symbol"),
+            field_name="symbol",
+            missing_error_code="symbol_required_for_execution_intent",
+            invalid_error_code="invalid_quote_asset",
+        )
+        quote_asset = extract_quote_asset(symbol)
+    except ValueError as exc:
+        symbol_error = str(exc)
+
     market_type = str(payload.get("market_type") or "spot").lower()
     side = str(payload.get("side") or "buy").lower()
     order_type = str(payload.get("order_type") or "market").lower()
@@ -52,11 +78,20 @@ def validate_execution_payload(payload: dict) -> dict:
     reject_reason_codes: list[str] = []
     risk_flags: list[str] = []
 
+    if symbol_error:
+        reject_reason_codes.append(symbol_error)
+    if quote_asset is None and not symbol_error:
+        reject_reason_codes.append("invalid_quote_asset")
+
+    requested_quote_asset = str(payload.get("quote_asset") or "").strip().upper()
+    if requested_quote_asset and quote_asset and requested_quote_asset != quote_asset:
+        reject_reason_codes.append("quote_asset_mismatch")
+
     market_policy = market_policies.get(market_type)
     if market_policy is None:
         reject_reason_codes.append("invalid_market_type")
 
-    if symbol not in symbols_allowlist:
+    if enforce_symbols_allowlist and symbol not in symbols_allowlist:
         reject_reason_codes.append("symbol_not_allowed")
 
     if market_policy:
@@ -64,7 +99,8 @@ def validate_execution_payload(payload: dict) -> dict:
         if order_type not in allowed_order_types:
             reject_reason_codes.append("order_type_not_allowed")
 
-        min_notional = _safe_float((market_policy.get("min_notional_by_symbol") or {}).get(symbol), 0)
+        min_notional_map = market_policy.get("min_notional_by_symbol") or {}
+        min_notional = _resolve_symbol_numeric(min_notional_map, symbol, 0.0)
         if position_size_mode == "risk_percent":
             notional = round(max(position_size_value, 0) * 100, 4)
         else:
@@ -77,7 +113,8 @@ def validate_execution_payload(payload: dict) -> dict:
             if margin_mode not in allowed_margin_modes:
                 reject_reason_codes.append("margin_mode_not_allowed")
 
-            leverage_cap = int((market_policy.get("max_leverage_by_symbol") or {}).get(symbol, 1))
+            leverage_cap_map = market_policy.get("max_leverage_by_symbol") or {}
+            leverage_cap = int(_resolve_symbol_numeric(leverage_cap_map, symbol, 1.0))
             if leverage > leverage_cap:
                 reject_reason_codes.append("leverage_cap_exceeded")
 
@@ -104,6 +141,7 @@ def validate_execution_payload(payload: dict) -> dict:
 
     normalized_order_payload = {
         "symbol": symbol,
+        "quote_asset": quote_asset,
         "market_type": market_type,
         "side": side,
         "order_type": order_type,
