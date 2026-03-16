@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
 from models import (
     AlertPolicy,
@@ -646,24 +647,106 @@ def _critical_alerts(*, system_health: dict, scanner_health: dict, execution_qua
 
 def build_live_trading_summary(db: Session, cache, *, window: str = "1h") -> dict:
     normalized_window, _since, now = _window_bounds(window)
-    scanner_health = build_scanner_health(db, cache, window=normalized_window)
-    execution_quality = build_execution_quality_summary(db, window=normalized_window)
-    risk_summary = build_risk_summary(db, cache, window=normalized_window)
-    trading_performance = build_trading_performance_today(db)
-    learning_summary = build_learning_summary(db, window=normalized_window)
+    component_errors: list[dict] = []
 
-    config = _live_config(db)
+    def _safe_component(name: str, builder, fallback: dict):
+        try:
+            return builder()
+        except (SQLAlchemyError, ValueError, RuntimeError) as exc:
+            component_errors.append({"component": name, "error": str(exc)})
+            return fallback
+
+    scanner_health = _safe_component(
+        "scanner_health",
+        lambda: build_scanner_health(db, cache, window=normalized_window),
+        {
+            "window": normalized_window,
+            "generated_at": now,
+            "sample_count": 0,
+            "symbols_scanned": 0,
+            "fallback_active": False,
+            "fallback_rate": 0.0,
+            "queue_depth": 0,
+            "scan_latency_avg_ms": 0.0,
+            "decision_latency_avg_ms": 0.0,
+            "snapshot_age_avg_ms": 0.0,
+        },
+    )
+    execution_quality = _safe_component(
+        "execution_quality",
+        lambda: build_execution_quality_summary(db, window=normalized_window),
+        {
+            "window": normalized_window,
+            "generated_at": now,
+            "sample_count": 0,
+            "execution_latency_avg_ms": 0.0,
+            "slippage_avg_pct": 0.0,
+            "reject_rate": 0.0,
+            "partial_fill_rate": 0.0,
+            "precision_error_count": 0,
+            "retry_count": 0,
+            "execution_quality_score": 0.0,
+            "strategy_stats": [],
+            "symbol_stats": [],
+            "recent_items": [],
+        },
+    )
+    risk_summary = _safe_component(
+        "risk_summary",
+        lambda: build_risk_summary(db, cache, window=normalized_window),
+        {
+            "window": normalized_window,
+            "generated_at": now,
+            "kill_switch_active": False,
+            "risk_reject_rate": 0.0,
+            "allow_count": 0,
+            "reduce_size_count": 0,
+            "pass_count": 0,
+            "block_count": 0,
+            "cluster_exposure": [],
+            "symbol_exposure": [],
+        },
+    )
+    trading_performance = _safe_component(
+        "trading_performance",
+        lambda: build_trading_performance_today(db),
+        {
+            "date": now.date().isoformat(),
+            "generated_at": now,
+            "trades_count_today": 0,
+            "win_rate_today": 0.0,
+            "pnl_today_usdt": 0.0,
+            "max_drawdown_today_pct": 0.0,
+            "open_positions_count": 0,
+            "top_3_symbol_stats": [],
+        },
+    )
+    learning_summary = _safe_component(
+        "learning_summary",
+        lambda: build_learning_summary(db, window=normalized_window),
+        {
+            "window": normalized_window,
+            "generated_at": now,
+            "memory_sample_count": 0,
+            "realized_avg": 0.0,
+            "suggestions_sample_count": 0,
+            "suggestion_mix": {},
+        },
+    )
+
+    config = _safe_component("live_config", lambda: _live_config(db), {})
+    config_obj = None if isinstance(config, dict) else config
     execution_mode = "MOCK"
-    if config:
-        market_type = str(config.market_type or "").lower()
-        if bool(config.live_mode_enabled) and "testnet" not in market_type:
-            execution_mode = "LIVE" if not bool(config.safe_mode_enabled) else "GUARDED_LIVE"
-        elif bool(config.live_mode_enabled):
+    if config_obj:
+        market_type = str(config_obj.market_type or "").lower()
+        if bool(config_obj.live_mode_enabled) and "testnet" not in market_type:
+            execution_mode = "LIVE" if not bool(config_obj.safe_mode_enabled) else "GUARDED_LIVE"
+        elif bool(config_obj.live_mode_enabled):
             execution_mode = "PAPER_LIVE"
 
     system_health = {
         "execution_mode": execution_mode,
-        "kill_switch_active": bool(risk_summary.get("kill_switch_active", False) or (config.kill_switch_enabled if config else False)),
+        "kill_switch_active": bool(risk_summary.get("kill_switch_active", False) or (config_obj.kill_switch_enabled if config_obj else False)),
         "fallback_active": bool(scanner_health.get("fallback_active", False)),
         "queue_depth": _safe_int(scanner_health.get("queue_depth")),
         "scan_latency_avg_ms": round(_safe_float(scanner_health.get("scan_latency_avg_ms")), 4),
@@ -672,13 +755,32 @@ def build_live_trading_summary(db: Session, cache, *, window: str = "1h") -> dic
         "execution_quality_score": round(_safe_float(execution_quality.get("execution_quality_score")), 4),
     }
 
-    thresholds = _derive_thresholds(db, risk_summary=risk_summary)
-    critical_alerts = _critical_alerts(
-        system_health=system_health,
-        scanner_health=scanner_health,
-        execution_quality=execution_quality,
-        risk_summary=risk_summary,
-        thresholds=thresholds,
+    thresholds = _safe_component(
+        "thresholds",
+        lambda: _derive_thresholds(db, risk_summary=risk_summary),
+        {
+            "execution_quality_warning": 0.0,
+            "execution_quality_critical": 0.0,
+            "risk_reject_rate_warning": 0.0,
+            "risk_reject_rate_critical": 0.0,
+            "fallback_rate_warning": 0.0,
+            "fallback_rate_critical": 0.0,
+            "queue_depth_threshold": 0.0,
+            "scan_latency_threshold_ms": 0.0,
+            "decision_latency_threshold_ms": 0.0,
+            "snapshot_age_threshold_ms": 0.0,
+        },
+    )
+    critical_alerts = _safe_component(
+        "critical_alerts",
+        lambda: _critical_alerts(
+            system_health=system_health,
+            scanner_health=scanner_health,
+            execution_quality=execution_quality,
+            risk_summary=risk_summary,
+            thresholds=thresholds,
+        ),
+        {"status": "normal", "items": []},
     )
 
     return {
@@ -692,6 +794,7 @@ def build_live_trading_summary(db: Session, cache, *, window: str = "1h") -> dic
         "learning_snapshot": learning_summary,
         "critical_alerts": critical_alerts,
         "thresholds": thresholds,
+        "component_errors": component_errors,
     }
 
 
