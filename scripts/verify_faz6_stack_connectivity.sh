@@ -7,8 +7,35 @@ cd "$ROOT_DIR"
 LOG_DIR="/tmp/faz6"
 mkdir -p "$LOG_DIR"
 
+FRONTEND_BACKEND_URL="${REACT_APP_BACKEND_URL:-http://localhost:8001}"
+export REACT_APP_BACKEND_URL="$FRONTEND_BACKEND_URL"
+
 echo "[1/7] Starting docker stack"
 docker compose up -d
+
+echo "[1.1/7] Waiting services to be healthy"
+for svc in postgres redis backend frontend; do
+  ready=0
+  for _ in $(seq 1 60); do
+    cid="$(docker compose ps -q "$svc")"
+    if [[ -z "$cid" ]]; then
+      sleep 2
+      continue
+    fi
+    status="$(docker inspect "$cid" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || true)"
+    if [[ "$status" == "healthy" || "$status" == "running" ]]; then
+      ready=1
+      break
+    fi
+    sleep 2
+  done
+  if [[ "$ready" != "1" ]]; then
+    echo "[ERROR] Service not ready: $svc"
+    docker compose ps || true
+    docker compose logs "$svc" --tail=200 || true
+    exit 1
+  fi
+done
 
 echo "[2/7] Stack status"
 docker compose ps | tee "$LOG_DIR/compose_ps.txt"
