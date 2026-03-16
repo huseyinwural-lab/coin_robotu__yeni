@@ -64,6 +64,29 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (Gate-1 başlatıldı — BTC fallback temizliği + USDT/USDC policy çekirdeği)
+- **Merkezi quote policy modülü eklendi:**
+  - `backend/services/quote_asset_policy.py`
+  - `ALLOWED_QUOTE_ASSETS={USDT,USDC}`, `extract_quote_asset`, `is_allowed_quote_symbol`, `normalize_quote_symbol`, `filter_allowed_quote_symbols`
+- **Policy backend çekirdeğine bağlandı (kritik katmanlar):**
+  - `futures_execution_contract.py` (contract validator)
+  - `scanner_runtime.py`, `universe_service.py`, `pipeline/universe_engine.py`, `discovery_scan_service.py`, `pipeline/market_data_engine.py`, `pipeline/legacy/spot_strategy_service.py` (universe/scanner/runtime filtreleri)
+  - `execution_intent_service.py`, `trading_preview_service.py`, `routers/user_trading.py`, `routers/user_scanner_signals.py` (intent/preview/run guard)
+  - `symbol_selector_service.py` (universe + watchlist creation/update filtreleri)
+  - `routers/market.py`, `routers/admin_strategy_intelligence.py`, `routers/exchange.py` (fallback kaldırma + validation)
+- **BTC default/fallback temizliği (hedef dosyalarda):**
+  - `symbol or BTCUSDT`, `default="BTCUSDT"` kalıpları kaldırıldı.
+  - `schemas.py` (`ReplayRunRequest.symbol`) artık zorunlu.
+  - `model_domains/risk_execution_positions.py` ve `model_domains/learning_recommendations.py` symbol default BTC kaldırıldı.
+- **Legacy alias etkisi azaltma:**
+  - `user_scanner_operations_service.py` market bias hesabında `btc_regime` fallback’i kaldırıldı; `market_bias_regime` kullanılıyor.
+
+**Gate-1 doğrulama sonuçları:**
+- `pytest /app/backend/tests/test_gate1_quote_asset_policy_comprehensive.py` → **60 PASS**
+- `pytest /app/backend/tests/test_quote_asset_policy_enforcement.py` → PASS
+- Ek regresyon seti (`scanner_operations`, `futures_execution_contract`, `symbol_driven_scanner_no_btc_gate`) → PASS
+- Testing agent raporu: `/app/test_reports/iteration_118.json` → backend **100% PASS**
+
 ### 2026-03-16 (FAZ-1 pagination + FAZ-6 controlled live test kapatıldı)
 - **User Live Dashboard pagination eklendi (risk kapatıldı):**
   - `GET /api/user/live/positions` artık `limit, offset` alıyor; response: `positions_count`, `total_positions_count`, `limit`, `offset`.
