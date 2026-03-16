@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
@@ -24,7 +26,16 @@ def admin_live_trading_summary(
     db: Session = Depends(get_db),
 ):
     _ = current_admin
-    return build_live_trading_summary(db, redis_client, window=window)
+    try:
+        return build_live_trading_summary(db, redis_client, window=window)
+    except Exception as exc:
+        return {
+            "window": window,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "system_health": {"status": "degraded", "execution_mode": "MOCK", "kill_switch_active": False, "fallback_active": True},
+            "critical_alerts": {"status": "critical", "items": [{"code": "summary_generation_failed", "message": str(exc)}]},
+            "component_errors": [{"component": "summary", "error": str(exc)}],
+        }
 
 
 @router.get("/scanner-health")

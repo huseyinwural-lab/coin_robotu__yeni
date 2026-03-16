@@ -5,7 +5,6 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
 
 from models import (
     AlertPolicy,
@@ -651,8 +650,11 @@ def build_live_trading_summary(db: Session, cache, *, window: str = "1h") -> dic
 
     def _safe_component(name: str, builder, fallback: dict):
         try:
-            return builder()
-        except (SQLAlchemyError, ValueError, RuntimeError) as exc:
+            payload = builder()
+            if not isinstance(payload, dict):
+                raise TypeError(f"{name} returned non-dict payload")
+            return payload
+        except (Exception,) as exc:
             component_errors.append({"component": name, "error": str(exc)})
             return fallback
 

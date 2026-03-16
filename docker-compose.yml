@@ -36,7 +36,8 @@ services:
     container_name: trading_backend
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
     environment:
       DATABASE_URL: postgresql+psycopg2://trader:trader@postgres:5432/trading_platform
       REDIS_URL: redis://redis:6379/0
@@ -66,11 +67,12 @@ services:
     container_name: trading_frontend
     restart: unless-stopped
     env_file:
-      - ./frontend/.env
+      - path: ./frontend/.env
+        required: false
     environment:
       REACT_APP_BACKEND_URL: http://localhost:8001
     command: >
-      sh -c 'test -n "$REACT_APP_BACKEND_URL" || (echo "Missing REACT_APP_BACKEND_URL" >&2; exit 1);
+      sh -c 'test -n "$${REACT_APP_BACKEND_URL}" || (echo "Missing REACT_APP_BACKEND_URL" >&2; exit 1);
       yarn start'
     depends_on:
       backend:
