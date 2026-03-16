@@ -1458,6 +1458,7 @@ class UserScannerResultResponse(BaseModel):
     run_id: str
     user_id: str
     symbol: str
+    quote_asset: str
     strategy_code: str
     signal: str
     confidence: float
@@ -1474,6 +1475,7 @@ class UserSignalResponse(BaseModel):
     signal_id: str
     user_id: str
     symbol: str
+    quote_asset: str | None = None
     strategy_code: str
     confidence: float
     mode: str

@@ -30,6 +30,7 @@ from services.canonical_strategy_registry_service import GLOBAL_RISK_POLICY
 from services.pipeline.cache_store import get_json, incr_counter, set_json
 from services.pipeline.canonical_signal_engine import scan_canonical_universe_for_signals
 from services.pipeline.universe_engine import apply_scanner_mode, build_effective_universe, normalize_scanner_mode
+from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
 from services.scanner_observability_service import (
     get_rollout_state,
@@ -243,7 +244,7 @@ def _release_symbol_lock(lock_key: str) -> None:
 
 def _normalize_selected_symbols(symbols: list[str] | None) -> list[str]:
     normalized = [str(item or "").strip().upper() for item in (symbols or []) if str(item or "").strip()]
-    return list(dict.fromkeys(normalized))
+    return filter_allowed_quote_symbols(normalized)
 
 
 def _clamp_scanner_max_results(max_results: int | None) -> int:
@@ -1137,7 +1138,9 @@ def run_user_scanner(
     engine_version = "canonical-engine.v3"
     schema_version = "decision-card.v1"
     scoped_symbols = _user_symbols_scope(db, user_id)
-    normalized_selected_symbols = [str(item).strip().upper() for item in (selected_symbols or []) if str(item).strip()]
+    normalized_selected_symbols = filter_allowed_quote_symbols(
+        [str(item).strip().upper() for item in (selected_symbols or []) if str(item).strip()]
+    )
     open_symbols = {
         str(item.symbol or "").upper()
         for item in db.query(PaperPosition).filter(PaperPosition.user_id == user_id, PaperPosition.status == "open").all()
@@ -1307,6 +1310,10 @@ def run_user_scanner(
         if not symbol:
             warning_set.add("symbol_missing_rejected")
             continue
+        quote_asset = extract_quote_asset(symbol)
+        if quote_asset is None:
+            warning_set.add("invalid_quote_asset")
+            continue
         strategy_code = str(item.get("strategy_code") or "canonical_unknown")
         snapshot_age_sec = item.get("indicator_snapshot_age_sec")
         if snapshot_age_sec is None:
@@ -1349,6 +1356,7 @@ def run_user_scanner(
 
         row_payload = {
             **item,
+            "quote_asset": quote_asset,
             "final_decision": final_decision,
             "schema_version": schema_version,
             "engine_version": engine_version,

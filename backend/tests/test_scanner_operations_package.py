@@ -171,3 +171,49 @@ def test_scanner_execution_requires_symbol(scanner_user_headers):
     )
     assert response.status_code == 400, response.text
     assert "symbol_required_for_execution_intent" in response.text
+
+
+def test_scanner_run_blocks_policy_invalid_symbols(scanner_user_headers):
+    response = requests.post(
+        f"{BASE_URL}/api/user/scanner/run",
+        headers=scanner_user_headers,
+        json={
+            "mode": "ASSISTED",
+            "max_results": 20,
+            "symbol_source": "crypto",
+            "symbol_selection_mode": "manual_selection",
+            "selected_symbols": ["ETHBTC", "BNBBUSD"],
+        },
+        timeout=30,
+    )
+    assert response.status_code == 400, response.text
+    assert "USDT/USDC" in response.text
+
+
+def test_scanner_results_contract_includes_quote_asset(scanner_user_headers):
+    run_response = requests.post(
+        f"{BASE_URL}/api/user/scanner/run",
+        headers=scanner_user_headers,
+        json={
+            "mode": "ASSISTED",
+            "max_results": 20,
+            "symbol_source": "crypto",
+            "symbol_selection_mode": "manual_selection",
+            "selected_symbols": ["ETHUSDT", "SOLUSDT", "XRPUSDT"],
+        },
+        timeout=60,
+    )
+    assert run_response.status_code == 200, run_response.text
+
+    results_response = requests.get(
+        f"{BASE_URL}/api/user/scanner/results",
+        headers=scanner_user_headers,
+        params={"limit": 30},
+        timeout=30,
+    )
+    assert results_response.status_code == 200, results_response.text
+    rows = results_response.json()
+    if rows:
+        first = rows[0]
+        assert "quote_asset" in first
+        assert first["quote_asset"] in ["USDT", "USDC"]

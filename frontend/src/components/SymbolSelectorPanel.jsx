@@ -208,7 +208,13 @@ export const SymbolSelectorPanel = ({
     if (!selected) {
       return;
     }
-    const symbols = normalizeSymbols(selected.symbols || []);
+    const symbols = normalizeSymbols(selected.symbols || []).filter(
+      (symbol) => symbol.endsWith("USDT") || symbol.endsWith("USDC"),
+    );
+    if (symbols.length === 0) {
+      toast.error("Seçili listede geçerli USDT/USDC market bulunamadı");
+      return;
+    }
     onSelectedSymbolsChange(multi ? symbols : symbols.slice(0, 1));
     if (typeof onWatchlistApplied === "function") {
       onWatchlistApplied(symbols);
