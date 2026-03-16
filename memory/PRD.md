@@ -81,6 +81,7 @@
   - Testing agent raporu: `/app/test_reports/iteration_127.json`
   - Sonuç: **41/41 backend PASS + frontend verification PASS**.
   - Testing agent tarafından ek doğrulama testi: `backend/tests/test_faz2_config_guards.py`.
+  - Kapanış blokajı yeniden doğrulama: `/app/test_reports/iteration_129.json` → **frontend runtime env injection PASS**.
 
 ### 2026-03-16 (FAZ-1 / GATE-0 — DB Binding & Migration Ortamı PASS)
 - `backend/migrations/env.py` URL önceliği güvenli hale getirildi:
