@@ -1,10 +1,16 @@
 from __future__ import with_statement
 
 import os
+from pathlib import Path
+import sys
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from db import Base
 import models  # noqa: F401
@@ -17,20 +23,59 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _is_sqlite_url(url: str) -> bool:
+    return str(url or "").strip().lower().startswith("sqlite")
+
+
+def _is_neutral_placeholder(url: str) -> bool:
+    candidate = str(url or "").strip().lower()
+    if not candidate:
+        return True
+    return candidate in {
+        "driver://user:pass@localhost/dbname",
+        "postgresql+psycopg2://<set-via-env>",
+        "postgresql+psycopg2://set-via-env",
+    }
+
+
 def get_url() -> str:
     explicit = os.getenv("ALEMBIC_DATABASE_URL")
     if explicit:
         return explicit
 
-    configured = config.get_main_option("sqlalchemy.url")
-    if configured:
-        return configured
-
     env_url = os.getenv("DATABASE_URL")
     if env_url:
         return env_url
 
-    return "sqlite:///./trading_platform_local.db"
+    configured = config.get_main_option("sqlalchemy.url")
+    if configured and not _is_neutral_placeholder(configured):
+        if _is_sqlite_url(configured):
+            allow_sqlite = str(os.getenv("ALEMBIC_ALLOW_SQLITE_FALLBACK", "0")).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            if not allow_sqlite:
+                raise RuntimeError(
+                    "SQLite fallback disabled. Provide ALEMBIC_DATABASE_URL or DATABASE_URL "
+                    "(or set ALEMBIC_ALLOW_SQLITE_FALLBACK=1 for explicit local use)."
+                )
+        return configured
+
+    allow_sqlite = str(os.getenv("ALEMBIC_ALLOW_SQLITE_FALLBACK", "0")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if allow_sqlite:
+        return "sqlite:///./trading_platform_local.db"
+
+    raise RuntimeError(
+        "No database URL found for Alembic. Set ALEMBIC_DATABASE_URL or DATABASE_URL. "
+        "SQLite fallback is disabled by default."
+    )
 
 
 def run_migrations_offline() -> None:
