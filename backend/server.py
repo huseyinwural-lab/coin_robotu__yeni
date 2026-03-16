@@ -24,6 +24,7 @@ from routers import (
     admin_futures_testnet_control,
     admin_futures_risk_status,
     admin_futures_strategy_status,
+    admin_system_readiness,
     admin_phase3,
     admin_strategy_risk_capital,
     admin_strategy_observability,
@@ -149,6 +150,7 @@ api_router.include_router(admin_futures_decision_diagnostics.router)
 api_router.include_router(admin_futures_leverage_status.router)
 api_router.include_router(admin_futures_testnet_control.router)
 api_router.include_router(admin_futures_strategy_status.router)
+api_router.include_router(admin_system_readiness.router)
 api_router.include_router(admin_futures_strategy_analytics.router)
 api_router.include_router(admin_futures_correlation.router)
 api_router.include_router(admin_futures_capital.router)

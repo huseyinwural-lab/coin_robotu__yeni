@@ -1,8 +1,9 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from services.pipeline.cache_store import get_json
 from core.live.balance_integrity_guard import validate_balance_integrity
 from core.live.exchange_latency_guard import evaluate_exchange_latency
 from core.live.live_readiness_guard import evaluate_live_readiness_guard
@@ -10,7 +11,9 @@ from core.live.order_reconciliation_engine import reconcile_order_state
 from core.live.position_sync_engine import reconcile_position_state
 from core.live.readiness_score_engine import compute_readiness_score
 from core.observability.live_readiness_audit import build_live_readiness_audit_events
-from models import ExecutionMetric, PaperPosition
+from models import ExecutionMetric, PaperPosition, UserExecutionIntent
+from services.risk_engine_service import build_admin_risk_status
+from services.universe_service import get_full_market_universe
 from services.pipeline.position_sizing_engine import compute_position_sizing
 
 
@@ -29,6 +32,83 @@ def _safe_json(raw, default):
     except Exception:
         return default
     return default
+
+
+def _window_since(hours: int = 24) -> datetime:
+    return datetime.now(timezone.utc) - timedelta(hours=max(int(hours or 24), 1))
+
+
+def _to_pct(part: int, total: int) -> float:
+    if total <= 0:
+        return 0.0
+    return round((float(part) / float(total)) * 100.0, 4)
+
+
+def _compute_symbol_integrity_metrics(intents: list[UserExecutionIntent]) -> dict:
+    scanner_match_total = 0
+    scanner_matches = 0
+    failure_intent_ids: set[str] = set()
+    symbol_reject_codes = {
+        "scanner_execution_symbol_mismatch",
+        "invalid_quote_asset",
+        "quote_asset_mismatch",
+        "symbol_required_for_execution_intent",
+        "symbol_required_for_execution_order",
+    }
+
+    for row in intents:
+        row_id = str(row.id or "")
+        payload = row.normalized_order_payload or {}
+        scanner_snapshot = payload.get("scanner_signal_snapshot") or {}
+        order_symbol = str(row.symbol or payload.get("symbol") or "").upper().strip()
+        scanner_symbol = str(scanner_snapshot.get("symbol") or "").upper().strip()
+
+        reject_reason_codes = {str(code) for code in (row.reject_reason_codes or [])}
+        if reject_reason_codes.intersection(symbol_reject_codes):
+            failure_intent_ids.add(row_id)
+
+        is_scanner_source = str(row.source_type or "").lower() == "scanner"
+        if not is_scanner_source:
+            continue
+
+        if scanner_symbol and order_symbol:
+            scanner_match_total += 1
+            if scanner_symbol == order_symbol:
+                scanner_matches += 1
+            else:
+                failure_intent_ids.add(row_id)
+
+    scanner_match_pct = _to_pct(scanner_matches, scanner_match_total)
+    return {
+        "symbol_integrity_failures": len(failure_intent_ids),
+        "scanner_to_execution_match_rate_pct": scanner_match_pct,
+        "scanner_to_execution_matches": int(scanner_matches),
+        "scanner_to_execution_total": int(scanner_match_total),
+        "scanner_to_execution_match_rate": f"{scanner_match_pct:.1f}% ({scanner_matches}/{scanner_match_total})",
+    }
+
+
+def _cluster_bias_distribution(db: Session, cache) -> dict[str, float]:
+    risk_status = build_admin_risk_status(db, cache)
+    rows = risk_status.get("cluster_exposure") or []
+    total = sum(float(item.get("exposure_usdt") or 0.0) for item in rows)
+    if total <= 0:
+        return {}
+    return {
+        str(item.get("cluster") or "UNCLUSTERED"): round((float(item.get("exposure_usdt") or 0.0) / total) * 100.0, 4)
+        for item in rows
+    }
+
+
+def _market_bias_regime(cache) -> str:
+    selection = get_json(cache, "spot_strategy:latest_selection") or {}
+    value = str(selection.get("market_bias_regime") or selection.get("market_regime") or "UNKNOWN").strip()
+    return value or "UNKNOWN"
+
+
+def _active_universe_count(db: Session, cache) -> int:
+    universe = get_full_market_universe(db, cache, scanner_mode="all_market_symbols", selected_symbols=[], top_n=50)
+    return int(universe.get("combined_universe_size") or 0)
 
 
 def _engine_positions(db: Session, user_id: str) -> list[dict]:
@@ -155,6 +235,18 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
         readiness_block_event=readiness_guard.get("event"),
     )
 
+    recent_intents = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.created_at >= _window_since(24))
+        .order_by(UserExecutionIntent.created_at.desc())
+        .limit(2000)
+        .all()
+    )
+    integrity_metrics = _compute_symbol_integrity_metrics(recent_intents)
+    cluster_bias_distribution = _cluster_bias_distribution(db, cache)
+    market_bias_regime = _market_bias_regime(cache)
+    active_universe_count = _active_universe_count(db, cache)
+
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "readiness_score": score_payload.get("readiness_confidence_score", 0.0),
@@ -172,6 +264,14 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
         "readiness_weights": score_payload.get("weights") or {},
         "readiness_guard": readiness_guard,
         "audit_events": audit_events,
+        "symbol_integrity_failures": integrity_metrics["symbol_integrity_failures"],
+        "scanner_to_execution_match_rate": integrity_metrics["scanner_to_execution_match_rate"],
+        "scanner_to_execution_match_rate_pct": integrity_metrics["scanner_to_execution_match_rate_pct"],
+        "scanner_to_execution_matches": integrity_metrics["scanner_to_execution_matches"],
+        "scanner_to_execution_total": integrity_metrics["scanner_to_execution_total"],
+        "active_universe_count": active_universe_count,
+        "cluster_bias_distribution": cluster_bias_distribution,
+        "market_bias_regime": market_bias_regime,
     }
 
     if cache:

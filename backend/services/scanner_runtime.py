@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
 from time import perf_counter
 
+from core.audit.audit_events import AuditEvent
 from core.users.user_scanner_signal_service import run_user_scanner
 from model_domains.decision_feedback_event import build_decision_feedback_event
 from model_domains.runtime_scan_candidate import RuntimeScanCandidate
+from services.audit_service import create_audit_log
 from services.discovery_scan_service import run_discovery_scan
 from services.event_priority_service import build_event_priority_distribution
 from services.freshness_policy import evaluate_freshness, resolve_sla_bucket
@@ -401,6 +403,45 @@ def run_scanner_runtime(
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+    create_audit_log(
+        db,
+        action=AuditEvent.UNIVERSE_RESOLUTION,
+        entity_type="scanner_runtime",
+        entity_id=str(payload.get("run_id") or user_id),
+        actor_user_id=user_id,
+        actor_role="user",
+        details={
+            "symbol_selection_mode": payload.get("symbol_selection_mode"),
+            "effective_mode": payload.get("effective_mode"),
+            "active_universe_count": int(payload.get("universe_size") or 0),
+        },
+    )
+    create_audit_log(
+        db,
+        action=AuditEvent.SCAN_RESULT,
+        entity_type="scanner_runtime",
+        entity_id=str(payload.get("run_id") or user_id),
+        actor_user_id=user_id,
+        actor_role="user",
+        details={
+            "decision_count": int(payload.get("decision_count") or 0),
+            "candidate_count": int(payload.get("candidate_count") or 0),
+            "risk_veto_count": int((payload.get("risk_engine") or {}).get("veto_count") or 0),
+        },
+    )
+    if int(payload.get("candidate_count") or 0) > 0:
+        create_audit_log(
+            db,
+            action=AuditEvent.SCANNER_SIGNAL_GENERATED,
+            entity_type="scanner_runtime",
+            entity_id=str(payload.get("run_id") or user_id),
+            actor_user_id=user_id,
+            actor_role="user",
+            details={
+                "candidate_symbols": list(payload.get("candidate_symbols") or [])[:25],
+                "candidate_count": int(payload.get("candidate_count") or 0),
+            },
+        )
     set_json(cache, f"scanner:runtime:snapshot:user:{user_id}", payload)
     set_json(cache, "scanner:runtime:latest:global", payload)
     return payload

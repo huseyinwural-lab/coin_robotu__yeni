@@ -15,8 +15,8 @@ export const AdminFuturesLiveReadinessPage = () => {
     setErrorMessage("");
     try {
       const [readinessResponse, scoreResponse] = await Promise.all([
-        apiClient.get("/admin/futures/live-readiness"),
-        apiClient.get("/admin/futures/readiness-score"),
+        apiClient.get("/admin/system/live-readiness"),
+        apiClient.get("/admin/system/readiness-score"),
       ]);
       setReadinessPayload(readinessResponse.data || null);
       setScorePayload(scoreResponse.data || null);
@@ -34,6 +34,24 @@ export const AdminFuturesLiveReadinessPage = () => {
   }, [loadData]);
 
   const alerts = useMemo(() => readinessPayload?.alerts || [], [readinessPayload]);
+  const matchRateText = useMemo(() => {
+    const explicit = readinessPayload?.scanner_to_execution_match_rate;
+    if (explicit) {
+      return explicit;
+    }
+    const pct = Number(readinessPayload?.scanner_to_execution_match_rate_pct || 0).toFixed(1);
+    const matches = Number(readinessPayload?.scanner_to_execution_matches || 0);
+    const total = Number(readinessPayload?.scanner_to_execution_total || 0);
+    return `${pct}% (${matches}/${total})`;
+  }, [readinessPayload]);
+  const clusterBiasText = useMemo(() => {
+    const distribution = readinessPayload?.cluster_bias_distribution || {};
+    const rows = Object.entries(distribution)
+      .sort((a, b) => Number(b[1]) - Number(a[1]))
+      .slice(0, 4)
+      .map(([cluster, value]) => `${cluster}: ${Number(value).toFixed(1)}%`);
+    return rows.length > 0 ? rows.join(" • ") : "-";
+  }, [readinessPayload]);
 
   return (
     <section className="space-y-4" data-testid="admin-futures-live-readiness-page">
@@ -65,7 +83,7 @@ export const AdminFuturesLiveReadinessPage = () => {
 
       {!loading && !errorMessage && (
         <>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4" data-testid="live-readiness-summary-grid">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" data-testid="live-readiness-summary-grid">
             <div className="border border-black/25 bg-orange-100 p-3" data-testid="live-readiness-score-card">
               <p className="text-xs uppercase">Readiness Confidence Score</p>
               <p className="text-xl font-bold" data-testid="live-readiness-score-value">{scorePayload?.readiness_score ?? 0}</p>
@@ -81,6 +99,26 @@ export const AdminFuturesLiveReadinessPage = () => {
             <div className="border border-black/25 bg-orange-100 p-3" data-testid="live-readiness-guard-card">
               <p className="text-xs uppercase">Guard Action</p>
               <p className="text-xl font-bold" data-testid="live-readiness-guard-value">{readinessPayload?.readiness_guard?.action || "ALLOW"}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="system-readiness-symbol-integrity-failures-card">
+              <p className="text-xs uppercase" data-testid="system-readiness-symbol-integrity-failures-label">Symbol Integrity Failures</p>
+              <p className="text-xl font-bold" data-testid="system-readiness-symbol-integrity-failures-value">{readinessPayload?.symbol_integrity_failures ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="system-readiness-scanner-execution-match-rate-card">
+              <p className="text-xs uppercase" data-testid="system-readiness-scanner-execution-match-rate-label">Scanner → Execution Match Rate</p>
+              <p className="text-xl font-bold" data-testid="system-readiness-scanner-execution-match-rate-value">{matchRateText}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="system-readiness-active-universe-count-card">
+              <p className="text-xs uppercase" data-testid="system-readiness-active-universe-count-label">Active Universe Count</p>
+              <p className="text-xl font-bold" data-testid="system-readiness-active-universe-count-value">{readinessPayload?.active_universe_count ?? 0}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3 lg:col-span-2" data-testid="system-readiness-cluster-bias-distribution-card">
+              <p className="text-xs uppercase" data-testid="system-readiness-cluster-bias-distribution-label">Cluster Bias Distribution</p>
+              <p className="text-sm font-bold" data-testid="system-readiness-cluster-bias-distribution-value">{clusterBiasText}</p>
+            </div>
+            <div className="border border-black/25 bg-orange-100 p-3" data-testid="system-readiness-market-bias-regime-card">
+              <p className="text-xs uppercase" data-testid="system-readiness-market-bias-regime-label">Market Bias Regime</p>
+              <p className="text-xl font-bold" data-testid="system-readiness-market-bias-regime-value">{readinessPayload?.market_bias_regime || "UNKNOWN"}</p>
             </div>
           </div>
 

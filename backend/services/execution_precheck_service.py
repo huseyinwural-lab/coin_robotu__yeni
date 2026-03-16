@@ -2,6 +2,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from core.audit.audit_events import AuditEvent
 from services.quote_asset_policy import extract_quote_asset, normalize_quote_symbol
 
 POLICY_PATH = Path("/app/config/execution_policy_registry.json")
@@ -167,4 +168,15 @@ def validate_execution_payload(payload: dict) -> dict:
         "risk_flags": risk_flags,
         "preview_hash": _preview_hash(normalized_order_payload),
         "queue_mode": registry.get("default_execution_mode", "ASSISTED"),
+        "preflight_event_code": AuditEvent.ORDER_PREFLIGHT.value,
+        "symbol_integrity_ok": not any(
+            code
+            in {
+                "invalid_quote_asset",
+                "quote_asset_mismatch",
+                "symbol_required_for_execution_intent",
+                "symbol_required_for_execution_order",
+            }
+            for code in reject_reason_codes
+        ),
     }

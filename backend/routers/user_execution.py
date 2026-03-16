@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from core.audit.audit_events import AuditEvent
 from db import get_db
 from deps import require_user
 from models import User
@@ -60,11 +61,45 @@ def preview_intent(
     try:
         intent, validation = preview_execution_intent(db, current_user.id, payload_data)
     except ValueError as exc:
+        error_code = str(exc)
+        if error_code in {
+            "scanner_execution_symbol_mismatch",
+            "invalid_quote_asset",
+            "symbol_required_for_execution_intent",
+            "symbol_required_for_execution_order",
+            "quote_asset_mismatch",
+        }:
+            create_audit_log(
+                db,
+                action=AuditEvent.SYMBOL_INTEGRITY_REJECT,
+                entity_type="execution_intent_preview",
+                entity_id=current_user.id,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                severity="warning",
+                details={"error_code": error_code, "symbol": payload_data.get("symbol")},
+            )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     create_audit_log(
         db,
-        action="RISK_RESULT",
+        action=validation.get("preflight_event_code") or AuditEvent.ORDER_PREFLIGHT,
+        entity_type="execution_intent",
+        entity_id=intent.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning" if validation.get("validation_status") != "valid" else "info",
+        details={
+            "stage": "ORDER PREFLIGHT",
+            "validation_status": validation.get("validation_status"),
+            "symbol_integrity_ok": bool(validation.get("symbol_integrity_ok", False)),
+            "reject_reason_codes": validation.get("reject_reason_codes") or [],
+        },
+    )
+
+    create_audit_log(
+        db,
+        action=AuditEvent.RISK_RESULT,
         entity_type="execution_intent",
         entity_id=intent.id,
         actor_user_id=current_user.id,
@@ -79,7 +114,7 @@ def preview_intent(
     )
     create_audit_log(
         db,
-        action="EXECUTION_INTENT",
+        action=AuditEvent.EXECUTION_INTENT,
         entity_type="execution_intent",
         entity_id=intent.id,
         actor_user_id=current_user.id,
@@ -165,7 +200,40 @@ def preview_position_action(
     try:
         intent, validation = preview_execution_intent(db, current_user.id, mapped_payload)
     except ValueError as exc:
+        error_code = str(exc)
+        if error_code in {
+            "scanner_execution_symbol_mismatch",
+            "invalid_quote_asset",
+            "symbol_required_for_execution_intent",
+            "symbol_required_for_execution_order",
+            "quote_asset_mismatch",
+        }:
+            create_audit_log(
+                db,
+                action=AuditEvent.SYMBOL_INTEGRITY_REJECT,
+                entity_type="execution_intent_preview",
+                entity_id=current_user.id,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                severity="warning",
+                details={"error_code": error_code, "symbol": mapped_payload.get("symbol")},
+            )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    create_audit_log(
+        db,
+        action=validation.get("preflight_event_code") or AuditEvent.ORDER_PREFLIGHT,
+        entity_type="execution_intent",
+        entity_id=intent.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning" if validation.get("validation_status") != "valid" else "info",
+        details={
+            "stage": "ORDER PREFLIGHT",
+            "validation_status": validation.get("validation_status"),
+            "symbol_integrity_ok": bool(validation.get("symbol_integrity_ok", False)),
+            "reject_reason_codes": validation.get("reject_reason_codes") or [],
+        },
+    )
     create_audit_log(
         db,
         action="POSITION_ACTION_PREVIEWED",
@@ -224,7 +292,7 @@ def submit_position_action(
 
     create_audit_log(
         db,
-        action="EXCHANGE_ORDER",
+        action=AuditEvent.EXCHANGE_ORDER,
         entity_type="execution_intent",
         entity_id=intent.id,
         actor_user_id=current_user.id,
@@ -269,7 +337,7 @@ def submit_intent(
 
     create_audit_log(
         db,
-        action="EXCHANGE_ORDER",
+        action=AuditEvent.EXCHANGE_ORDER,
         entity_type="execution_intent",
         entity_id=intent.id,
         actor_user_id=current_user.id,

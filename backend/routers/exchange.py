@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from core.audit.audit_events import AuditEvent
 from db import get_db, redis_client
 from deps import get_current_user, is_admin_role
 from exchange.binance_mock import BinanceMockAdapter
@@ -617,12 +618,12 @@ def execute_mock_order(
     db.refresh(event)
     create_audit_log(
         db,
-        action="mock_execution_sent",
+        action=AuditEvent.EXECUTION_SUBMIT_SUCCESS,
         entity_type="execution_event",
         entity_id=event.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
         severity="warning",
-        details={"exchange": bot_profile.exchange, "symbol": event.symbol, "side": event.side},
+        details={"exchange": bot_profile.exchange, "symbol": event.symbol, "side": event.side, "MOCKED": True},
     )
     return event

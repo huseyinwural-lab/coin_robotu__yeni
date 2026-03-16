@@ -129,6 +129,7 @@ function App() {
             <Route path="futures/capital-governance" element={<AdminFuturesCapitalGovernancePage />} />
             <Route path="futures/tail-risk" element={<AdminFuturesTailRiskPage />} />
             <Route path="futures/live-readiness" element={<AdminFuturesLiveReadinessPage />} />
+            <Route path="system-readiness" element={<AdminFuturesLiveReadinessPage />} />
             <Route path="futures/scaling-validation" element={<AdminFuturesScalingValidationPage />} />
             <Route path="futures/microstructure-guard" element={<AdminFuturesMicrostructureGuardPage />} />
             <Route path="futures/testnet-control" element={<AdminFuturesTestnetControlPage />} />

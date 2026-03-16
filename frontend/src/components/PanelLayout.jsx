@@ -98,6 +98,7 @@ const adminOnlyItems = [
     defaultOpen: false,
     items: [
       { to: "/admin/execution-policies", label: "System Config", icon: Settings2, testId: "nav-admin-system-config-link" },
+      { to: "/admin/system-readiness", label: "System Readiness", icon: Gauge, testId: "nav-admin-system-readiness-link" },
       { to: "/admin/audit-logs", label: "Logs", icon: FileText, testId: "nav-admin-logs-link" },
     ],
   },
