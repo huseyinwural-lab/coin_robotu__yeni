@@ -50,31 +50,14 @@ def get_url() -> str:
     configured = config.get_main_option("sqlalchemy.url")
     if configured and not _is_neutral_placeholder(configured):
         if _is_sqlite_url(configured):
-            allow_sqlite = str(os.getenv("ALEMBIC_ALLOW_SQLITE_FALLBACK", "0")).strip().lower() in {
-                "1",
-                "true",
-                "yes",
-                "on",
-            }
-            if not allow_sqlite:
-                raise RuntimeError(
-                    "SQLite fallback disabled. Provide ALEMBIC_DATABASE_URL or DATABASE_URL "
-                    "(or set ALEMBIC_ALLOW_SQLITE_FALLBACK=1 for explicit local use)."
-                )
+            raise RuntimeError(
+                "SQLite URL is not allowed for Alembic migrations. "
+                "Provide ALEMBIC_DATABASE_URL or DATABASE_URL with PostgreSQL."
+            )
         return configured
 
-    allow_sqlite = str(os.getenv("ALEMBIC_ALLOW_SQLITE_FALLBACK", "0")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-    if allow_sqlite:
-        return "sqlite:///./trading_platform_local.db"
-
     raise RuntimeError(
-        "No database URL found for Alembic. Set ALEMBIC_DATABASE_URL or DATABASE_URL. "
-        "SQLite fallback is disabled by default."
+        "No database URL found for Alembic. Set ALEMBIC_DATABASE_URL or DATABASE_URL."
     )
 
 

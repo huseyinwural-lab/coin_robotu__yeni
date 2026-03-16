@@ -11,10 +11,13 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_migration_url() -> str:
+    explicit_url = os.getenv("ALEMBIC_DATABASE_URL")
+    if explicit_url:
+        return explicit_url
+
     env_url = os.getenv("DATABASE_URL")
-    fallback_url = "sqlite:///./trading_platform_local.db"
     if not env_url:
-        return fallback_url
+        raise RuntimeError("Missing DATABASE_URL for Alembic migration")
 
     try:
         engine = create_engine(env_url, pool_pre_ping=True, connect_args={}, future=True)
@@ -22,8 +25,7 @@ def _resolve_migration_url() -> str:
             connection.execute(text("SELECT 1"))
         return env_url
     except SQLAlchemyError:
-        logger.warning("Alembic DB URL unreachable, using SQLite fallback for migrations")
-        return fallback_url
+        raise RuntimeError("Alembic DB URL unreachable; SQLite fallback is disabled")
 
 
 def run_alembic_upgrade():

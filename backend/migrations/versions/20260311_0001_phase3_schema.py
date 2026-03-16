@@ -31,7 +31,7 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     if _table_exists(bind, "bot_profiles") and not _column_exists(bind, "bot_profiles", "is_running"):
-        op.add_column("bot_profiles", sa.Column("is_running", sa.Boolean(), nullable=False, server_default=sa.text("0")))
+        op.add_column("bot_profiles", sa.Column("is_running", sa.Boolean(), nullable=False, server_default=sa.false()))
 
     if not _table_exists(bind, "execution_policies"):
         op.create_table(
