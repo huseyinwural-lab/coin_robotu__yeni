@@ -30,10 +30,12 @@ def user_live_summary(
 
 @router.get("/positions")
 def user_live_positions(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    return build_user_live_positions(db, current_user.id)
+    return build_user_live_positions(db, current_user.id, limit=limit, offset=offset)
 
 
 @router.get("/performance")
@@ -66,19 +68,23 @@ def user_live_execution_quality(
 @router.get("/strategies")
 def user_live_strategies(
     window: str = Query(default="24h", pattern="^(1h|6h|24h)$"),
+    limit: int = Query(default=20, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    return build_user_live_strategies(db, current_user.id, window=window)
+    return build_user_live_strategies(db, current_user.id, window=window, limit=limit, offset=offset)
 
 
 @router.get("/trades")
 def user_live_trades(
     window: str = Query(default="24h", pattern="^(1h|6h|24h)$"),
+    limit: int = Query(default=120, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    return build_user_live_trades(db, current_user.id, window=window)
+    return build_user_live_trades(db, current_user.id, window=window, limit=limit, offset=offset)
 
 
 @router.get("/daily-report")

@@ -53,6 +53,14 @@ def _avg(values: list[float]) -> float:
     return sum(values) / len(values)
 
 
+def _pagination(limit: int | None, offset: int | None, *, default_limit: int = 50, max_limit: int = 500) -> tuple[int, int]:
+    safe_limit = _safe_int(limit, default_limit)
+    safe_offset = _safe_int(offset, 0)
+    safe_limit = max(1, min(max_limit, safe_limit))
+    safe_offset = max(0, safe_offset)
+    return safe_limit, safe_offset
+
+
 def _window_bounds(window: str) -> tuple[str, datetime, datetime]:
     normalized = str(window or "1h").strip().lower()
     if normalized not in WINDOW_MAP:
@@ -98,7 +106,8 @@ def _bot_summary(db: Session, user_id: str) -> dict:
     }
 
 
-def build_user_live_positions(db: Session, user_id: str) -> dict:
+def build_user_live_positions(db: Session, user_id: str, *, limit: int = 50, offset: int = 0) -> dict:
+    safe_limit, safe_offset = _pagination(limit, offset, default_limit=50, max_limit=500)
     rows = (
         db.query(PaperPosition)
         .filter(PaperPosition.user_id == user_id, PaperPosition.status == "open")
@@ -131,12 +140,17 @@ def build_user_live_positions(db: Session, user_id: str) -> dict:
         total_unrealized += unrealized
         total_notional += abs(entry_price * quantity)
 
+    paged_items = items[safe_offset: safe_offset + safe_limit]
+
     return {
         "generated_at": datetime.now(timezone.utc),
-        "positions_count": len(items),
+        "positions_count": len(paged_items),
+        "total_positions_count": len(items),
+        "limit": safe_limit,
+        "offset": safe_offset,
         "total_unrealized_pnl": round(total_unrealized, 6),
         "total_position_notional": round(total_notional, 6),
-        "positions": items,
+        "positions": paged_items,
     }
 
 
@@ -313,7 +327,15 @@ def _position_strategy_map(db: Session, user_id: str, positions: list[PaperPosit
     return strategy_map
 
 
-def build_user_live_strategies(db: Session, user_id: str, *, window: str = "24h") -> dict:
+def build_user_live_strategies(
+    db: Session,
+    user_id: str,
+    *,
+    window: str = "24h",
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    safe_limit, safe_offset = _pagination(limit, offset, default_limit=20, max_limit=500)
     normalized_window, since, now = _window_bounds(window)
     closed_rows = _closed_positions_for_window(db, user_id, since)
     strategy_map = _position_strategy_map(db, user_id, closed_rows)
@@ -347,15 +369,27 @@ def build_user_live_strategies(db: Session, user_id: str, *, window: str = "24h"
         )
 
     items.sort(key=lambda item: (item["trades"], item["quality_score"]), reverse=True)
+    paged_items = items[safe_offset: safe_offset + safe_limit]
     return {
         "window": normalized_window,
         "generated_at": now,
-        "strategy_count": len(items),
-        "items": items[:20],
+        "strategy_count": len(paged_items),
+        "total_strategy_count": len(items),
+        "limit": safe_limit,
+        "offset": safe_offset,
+        "items": paged_items,
     }
 
 
-def build_user_live_trades(db: Session, user_id: str, *, window: str = "24h") -> dict:
+def build_user_live_trades(
+    db: Session,
+    user_id: str,
+    *,
+    window: str = "24h",
+    limit: int = 120,
+    offset: int = 0,
+) -> dict:
+    safe_limit, safe_offset = _pagination(limit, offset, default_limit=120, max_limit=1000)
     normalized_window, since, now = _window_bounds(window)
     rows = _closed_positions_for_window(db, user_id, since)
 
@@ -373,11 +407,16 @@ def build_user_live_trades(db: Session, user_id: str, *, window: str = "24h") ->
         for row in rows[:120]
     ]
 
+    paged_items = items[safe_offset: safe_offset + safe_limit]
+
     return {
         "window": normalized_window,
         "generated_at": now,
-        "trades_count": len(items),
-        "items": items,
+        "trades_count": len(paged_items),
+        "total_trades_count": len(items),
+        "limit": safe_limit,
+        "offset": safe_offset,
+        "items": paged_items,
     }
 
 
