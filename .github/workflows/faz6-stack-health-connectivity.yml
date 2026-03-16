@@ -1,0 +1,37 @@
+name: FAZ-6 Stack Health Connectivity
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-stack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify FAZ-6 stack/connectivity
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./scripts/verify_faz6_stack_connectivity.sh
+          ./scripts/verify_faz6_stack_connectivity.sh 2>&1 | tee /tmp/faz6_stack.log
+
+      - name: Upload FAZ-6 logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: faz6-stack-health-connectivity
+          path: |
+            /tmp/faz6_stack.log
+            /tmp/faz6/compose_ps.txt
+            /tmp/faz6/postgres_state.json
+            /tmp/faz6/redis_state.json
+            /tmp/faz6/backend_state.json
+            /tmp/faz6/frontend_state.json
+            /tmp/faz6/backend.log
+            /tmp/faz6/redis.log
+            /tmp/faz6/frontend_env.txt
+            /tmp/faz6/frontend_backend_health.txt
+            /tmp/faz6/frontend_auth_smoke.txt
