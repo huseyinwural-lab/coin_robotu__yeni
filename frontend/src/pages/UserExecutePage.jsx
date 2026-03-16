@@ -494,7 +494,7 @@ export const UserExecutePage = () => {
             quoteAssetFilter="USDT"
             selectedSymbols={symbolSelectorSelection}
             onSelectedSymbolsChange={setSymbolSelectorSelection}
-            multi={false}
+            multi
           />
         </div>
 
