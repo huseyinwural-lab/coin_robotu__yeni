@@ -90,6 +90,11 @@ export const UserExecutePage = () => {
   );
 
   const isFutures = form.market_type === "futures";
+  const selectedQuoteAsset = useMemo(() => extractQuoteAsset(form.symbol), [form.symbol]);
+  const isUnsupportedSelectedSymbol = useMemo(
+    () => Boolean(form.symbol && !isAllowedQuoteSymbol(form.symbol)),
+    [form.symbol],
+  );
 
   useEffect(() => {
     const load = async () => {
@@ -183,7 +188,7 @@ export const UserExecutePage = () => {
             mode: "all_market_symbols",
             selected_symbols: "",
             query: "",
-            quote_asset_filter: "USDT",
+            quote_asset_filter: "ALL",
           },
         });
         const symbols = (data?.selected_symbols || []).map((item) => String(item || "").trim().toUpperCase()).filter(Boolean);
@@ -460,9 +465,17 @@ export const UserExecutePage = () => {
 
       <div className="col-span-12 lg:col-span-7 grid grid-cols-12 gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-execute-form-grid">
         <div className="col-span-12 rounded border border-cyan-800/60 bg-cyan-950/20 p-3" data-testid="user-execute-quote-policy-notice">
-          <p className="text-xs text-cyan-200" data-testid="user-execute-quote-policy-notice-text">
-            Bu sistem yalnızca USDT ve USDC bazlı marketlerde işlem açar.
-          </p>
+          <div className="flex flex-wrap items-center gap-2" data-testid="user-execute-quote-policy-notice-content">
+            <span className="rounded-full border border-cyan-400/60 bg-cyan-400/15 px-2 py-0.5 text-[11px] font-semibold text-cyan-100" data-testid="user-execute-quote-policy-badge">
+              EXECUTION POLICY: USDT/USDC ONLY
+            </span>
+            <p className="text-xs text-cyan-200" data-testid="user-execute-quote-policy-notice-text">
+              Sadece USDT veya USDC quote asset içeren semboller queue’ya alınır.
+            </p>
+            <p className="text-xs text-cyan-300" data-testid="user-execute-current-quote-asset-text">
+              Current Quote Asset: {selectedQuoteAsset || "UNSUPPORTED"}
+            </p>
+          </div>
         </div>
         <div className="col-span-12 md:col-span-6">
           <label className="text-xs text-slate-500" htmlFor="execute-connection-select">Exchange Connection</label>
@@ -510,6 +523,14 @@ export const UserExecutePage = () => {
         <div className="col-span-12 md:col-span-3"><label className="text-xs text-slate-500">Order Type</label><select className="mt-1 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={form.order_type} onChange={(e) => setForm((p) => ({ ...p, order_type: e.target.value }))} data-testid="execute-order-type-select"><option value="market">market</option><option value="limit">limit</option><option value="stop_limit">stop_limit</option></select></div>
         <div className="col-span-12 md:col-span-3"><label className="text-xs text-slate-500">Symbol</label><Input value={form.symbol} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value.toUpperCase() }))} data-testid="execute-symbol-input" /></div>
 
+        {isUnsupportedSelectedSymbol && (
+          <div className="col-span-12 rounded border border-amber-500/40 bg-amber-500/10 p-2" data-testid="user-execute-unsupported-symbol-warning">
+            <p className="text-xs text-amber-200" data-testid="user-execute-unsupported-symbol-warning-text">
+              Invalid pair warning: {form.symbol || "-"} only supports USDT/USDC quotes for execution.
+            </p>
+          </div>
+        )}
+
         <div className="col-span-12" data-testid="user-execute-symbol-selector-wrapper">
           <SymbolSelectorPanel
             testIdPrefix="user-execute-symbol-selector"
@@ -519,7 +540,7 @@ export const UserExecutePage = () => {
             onSourceChange={(next) => setSymbolSelectorSource(next === "stock" ? "crypto" : next)}
             mode={symbolSelectorMode}
             onModeChange={setSymbolSelectorMode}
-            quoteAssetFilter="USDT"
+            quoteAssetFilter="ALL"
             selectedSymbols={symbolSelectorSelection}
             onSelectedSymbolsChange={setSymbolSelectorSelection}
             multi

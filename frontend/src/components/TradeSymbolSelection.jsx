@@ -16,6 +16,14 @@ export const TradeSymbolSelection = ({
         <div data-testid="trade-symbol-selection-title-wrap">
           <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="trade-symbol-selection-kicker">Symbol Selection</p>
           <h3 className="text-base font-semibold text-slate-100" data-testid="trade-symbol-selection-title">Scanner Scope</h3>
+          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="trade-symbol-selection-policy-row">
+            <span className="rounded-full border border-emerald-500/50 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-200" data-testid="trade-symbol-selection-policy-badge">
+              USDT/USDC-ONLY
+            </span>
+            <p className="text-xs text-slate-400" data-testid="trade-symbol-selection-policy-text">
+              Unsupported quote assets stay visible but disabled.
+            </p>
+          </div>
         </div>
         <label className="flex items-center gap-2 text-xs text-slate-300" data-testid="trade-symbol-selection-watchlist-mode-toggle-wrap">
           <input

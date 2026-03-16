@@ -2,6 +2,15 @@ import { Fragment, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
+const ALLOWED_QUOTE_ASSETS = new Set(["USDT", "USDC"]);
+
+const detectQuoteAsset = (symbol) => {
+  const normalized = String(symbol || "").trim().toUpperCase();
+  if (normalized.endsWith("USDT")) return "USDT";
+  if (normalized.endsWith("USDC")) return "USDC";
+  return "UNKNOWN";
+};
+
 const scoreClassName = (score) => {
   const value = Number(score || 0);
   if (value >= 80) {
@@ -147,15 +156,29 @@ export const ScannerResultsTable = ({
       <div className="grid gap-3 md:hidden" data-testid="scanner-results-mobile-cards">
         {filtered.map((item) => (
           <article key={item.id} className="rounded border border-slate-800 bg-slate-950 p-3" data-testid={`scanner-results-mobile-card-${item.id}`}>
+            {(() => {
+              const quoteAsset = String(item?.quote_asset || item?.payload?.quote_asset || detectQuoteAsset(item.symbol)).toUpperCase();
+              const unsupported = !ALLOWED_QUOTE_ASSETS.has(quoteAsset);
+              return (
+                <>
             <p className="text-sm font-semibold" data-testid={`scanner-results-mobile-symbol-${item.id}`}>{item.symbol}</p>
+            <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-quote-asset-${item.id}`}>Quote Asset: {quoteAsset}</p>
             <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-signal-${item.id}`}>Signal: {item.signal}</p>
             <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-confidence-${item.id}`}>Confidence: {item.confidence}</p>
             <p className={`text-xs ${scoreClassName(item.signal_score)}`} data-testid={`scanner-results-mobile-score-${item.id}`}>Score: {item.signal_score}</p>
+            {unsupported && (
+              <p className="text-xs text-amber-300" data-testid={`scanner-results-mobile-policy-warning-${item.id}`}>
+                Unsupported pair: only USDT/USDC symbols can be executed.
+              </p>
+            )}
             <div className="mt-2 flex flex-wrap gap-2" data-testid={`scanner-results-mobile-actions-${item.id}`}>
-              <Button variant="outline" onClick={() => onOpenTrade(item)} data-testid={`scanner-results-mobile-open-trade-${item.id}`}>Open Trade</Button>
-              <Button variant="outline" onClick={() => onViewCard(item)} data-testid={`scanner-results-mobile-view-card-${item.id}`}>View Card</Button>
-              <Button variant="outline" onClick={() => onAddWatchlist(item)} data-testid={`scanner-results-mobile-add-watchlist-${item.id}`}>Add Watchlist</Button>
+              <Button variant="outline" disabled={unsupported} onClick={() => onOpenTrade(item)} data-testid={`scanner-results-mobile-open-trade-${item.id}`}>Open Trade</Button>
+              <Button variant="outline" disabled={unsupported} onClick={() => onViewCard(item)} data-testid={`scanner-results-mobile-view-card-${item.id}`}>View Card</Button>
+              <Button variant="outline" disabled={unsupported} onClick={() => onAddWatchlist(item)} data-testid={`scanner-results-mobile-add-watchlist-${item.id}`}>Add Watchlist</Button>
             </div>
+                </>
+              );
+            })()}
           </article>
         ))}
       </div>
@@ -165,10 +188,12 @@ export const ScannerResultsTable = ({
           <thead className="bg-slate-800 text-left" data-testid="scanner-results-table-head">
             <tr>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-symbol">Symbol</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-quote-asset">Quote Asset</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-signal">Signal</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-confidence">Confidence</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-score">Score</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-strategy">Strategy</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-policy">Policy</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-actions">Actions</th>
             </tr>
           </thead>
@@ -176,31 +201,37 @@ export const ScannerResultsTable = ({
             {filtered.map((item) => {
               const expanded = expandedRowId === item.id;
               const snapshot = item.payload || {};
+              const quoteAsset = String(item?.quote_asset || snapshot?.quote_asset || detectQuoteAsset(item.symbol)).toUpperCase();
+              const unsupported = !ALLOWED_QUOTE_ASSETS.has(quoteAsset);
               return (
                 <Fragment key={item.id}>
                   <tr
-                    className="border-t border-slate-800 hover:bg-slate-950/70"
+                    className={`border-t border-slate-800 hover:bg-slate-950/70 ${unsupported ? "opacity-50" : ""}`}
                     data-testid={`scanner-results-row-${item.id}`}
                     onClick={() => setExpandedRowId(expanded ? "" : item.id)}
                   >
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-symbol-${item.id}`}>{item.symbol}</td>
+                    <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-quote-asset-${item.id}`}>{quoteAsset}</td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-signal-${item.id}`}>{item.signal}</td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-confidence-${item.id}`}>{item.confidence}</td>
                     <td className={`${compactMode ? "px-2 py-1" : "px-3 py-2"} ${scoreClassName(item.signal_score)}`} data-testid={`scanner-results-row-score-${item.id}`}>
                       {item.signal_score}
                     </td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-strategy-${item.id}`}>{item.strategy_code}</td>
+                    <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-policy-${item.id}`}>
+                      {unsupported ? "UNSUPPORTED" : "SUPPORTED"}
+                    </td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-actions-${item.id}`}>
                       <div className="flex flex-wrap gap-2" data-testid={`scanner-results-row-actions-wrap-${item.id}`}>
-                        <Button variant="outline" onClick={(event) => { event.stopPropagation(); onOpenTrade(item); }} data-testid={`scanner-results-open-trade-${item.id}`}>Open Trade</Button>
-                        <Button variant="outline" onClick={(event) => { event.stopPropagation(); onViewCard(item); }} data-testid={`scanner-results-view-card-${item.id}`}>View Card</Button>
-                        <Button variant="outline" onClick={(event) => { event.stopPropagation(); onAddWatchlist(item); }} data-testid={`scanner-results-add-watchlist-${item.id}`}>Add Watchlist</Button>
+                        <Button variant="outline" disabled={unsupported} onClick={(event) => { event.stopPropagation(); onOpenTrade(item); }} data-testid={`scanner-results-open-trade-${item.id}`}>Open Trade</Button>
+                        <Button variant="outline" disabled={unsupported} onClick={(event) => { event.stopPropagation(); onViewCard(item); }} data-testid={`scanner-results-view-card-${item.id}`}>View Card</Button>
+                        <Button variant="outline" disabled={unsupported} onClick={(event) => { event.stopPropagation(); onAddWatchlist(item); }} data-testid={`scanner-results-add-watchlist-${item.id}`}>Add Watchlist</Button>
                       </div>
                     </td>
                   </tr>
                   {expanded && (
                     <tr className="border-t border-slate-800 bg-slate-950/60" data-testid={`scanner-results-explainability-row-${item.id}`}>
-                      <td colSpan={6} className="px-3 py-2" data-testid={`scanner-results-explainability-cell-${item.id}`}>
+                      <td colSpan={8} className="px-3 py-2" data-testid={`scanner-results-explainability-cell-${item.id}`}>
                         <div className="grid gap-2 md:grid-cols-4" data-testid={`scanner-results-explainability-grid-${item.id}`}>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-volume-spike-${item.id}`}>volume spike: {snapshot?.volume_spike ?? snapshot?.relative_volume ?? "-"}</p>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-rsi-${item.id}`}>RSI: {snapshot?.rsi ?? snapshot?.rsi14 ?? snapshot?.indicator_snapshot?.rsi14 ?? "-"}</p>

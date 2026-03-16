@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 
+const ALLOWED_QUOTE_ASSETS = new Set(["USDT", "USDC"]);
+
 const MODE_OPTIONS = [
   { value: "all_market_symbols", label: "Tüm market sembolleri" },
   { value: "top_volume", label: "Hacme göre üst semboller" },
@@ -41,6 +43,13 @@ const normalizeSymbols = (symbols) => {
   return Array.from(new Set(normalized));
 };
 
+const detectQuoteAsset = (symbol) => {
+  const normalized = String(symbol || "").trim().toUpperCase();
+  if (normalized.endsWith("USDT")) return "USDT";
+  if (normalized.endsWith("USDC")) return "USDC";
+  return "UNKNOWN";
+};
+
 export const SymbolSelectorPanel = ({
   testIdPrefix,
   exchange = "binance",
@@ -66,6 +75,20 @@ export const SymbolSelectorPanel = ({
 
   const normalizedSelectedSymbols = useMemo(() => normalizeSymbols(selectedSymbols), [selectedSymbols]);
   const normalizedMode = useMemo(() => normalizeModeValue(mode), [mode]);
+  const normalizedRows = useMemo(
+    () => rows.slice(0, 300).map((row) => {
+      const symbol = String(row?.symbol || "").trim().toUpperCase();
+      const quoteAsset = String(row?.quote_asset || detectQuoteAsset(symbol)).trim().toUpperCase() || "UNKNOWN";
+      const unsupported = String(source || "crypto").toLowerCase() !== "crypto" || !ALLOWED_QUOTE_ASSETS.has(quoteAsset);
+      return {
+        ...row,
+        symbol,
+        quote_asset: quoteAsset,
+        unsupported,
+      };
+    }).filter((row) => Boolean(row.symbol)),
+    [rows, source],
+  );
 
   const loadProviderConfig = async () => {
     try {
@@ -107,7 +130,16 @@ export const SymbolSelectorPanel = ({
       }
 
       if (activeMode !== "manual_selection") {
-        const next = normalizeSymbols(data?.selected_symbols || []);
+        const selectable = new Set(
+          (data?.rows || [])
+            .map((row) => ({
+              symbol: String(row?.symbol || "").trim().toUpperCase(),
+              quote_asset: String(row?.quote_asset || detectQuoteAsset(row?.symbol)).trim().toUpperCase(),
+            }))
+            .filter((row) => row.symbol && ALLOWED_QUOTE_ASSETS.has(row.quote_asset))
+            .map((row) => row.symbol),
+        );
+        const next = normalizeSymbols(data?.selected_symbols || []).filter((symbol) => selectable.has(symbol));
         if (multi) {
           onSelectedSymbolsChange(next);
         } else {
@@ -131,7 +163,11 @@ export const SymbolSelectorPanel = ({
     loadUniverse();
   }, [normalizedMode, source, exchange, marketType, quoteAssetFilter]);
 
-  const toggleSymbol = (symbol) => {
+  const toggleSymbol = (row) => {
+    const symbol = String(row?.symbol || "").trim().toUpperCase();
+    if (!symbol || row?.unsupported) {
+      return;
+    }
     const nextSet = new Set(normalizedSelectedSymbols);
     if (nextSet.has(symbol)) {
       nextSet.delete(symbol);
@@ -146,8 +182,8 @@ export const SymbolSelectorPanel = ({
   };
 
   const visibleSymbols = useMemo(
-    () => rows.slice(0, 300).map((row) => String(row.symbol || "").trim().toUpperCase()).filter(Boolean),
-    [rows],
+    () => normalizedRows.filter((row) => !row.unsupported).map((row) => row.symbol),
+    [normalizedRows],
   );
 
   const allVisibleSelected = useMemo(
@@ -270,7 +306,12 @@ export const SymbolSelectorPanel = ({
 
         <label className="space-y-1" data-testid={`${testIdPrefix}-search-field`}>
           <span className="text-xs text-slate-400">Sembol Ara</span>
-          <Input value={search} onChange={(event) => setSearch(event.target.value.toUpperCase())} placeholder="BTC / AAPL" data-testid={`${testIdPrefix}-search-input`} />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value.toUpperCase())}
+            placeholder="ETHUSDT / SOLUSDC"
+            data-testid={`${testIdPrefix}-search-input`}
+          />
         </label>
 
         <div className="flex items-end gap-2" data-testid={`${testIdPrefix}-actions-row`}>
@@ -341,27 +382,43 @@ export const SymbolSelectorPanel = ({
                 />
               </th>
               <th className="px-2 py-1 text-left">Symbol</th>
+              <th className="px-2 py-1 text-left" data-testid={`${testIdPrefix}-header-quote-asset`}>Quote Asset</th>
               <th className="px-2 py-1 text-left">Exchange</th>
               <th className="px-2 py-1 text-left">Vol 24h</th>
+              <th className="px-2 py-1 text-left" data-testid={`${testIdPrefix}-header-policy`}>Policy</th>
             </tr>
           </thead>
           <tbody data-testid={`${testIdPrefix}-rows-body`}>
-            {rows.slice(0, 300).map((row, index) => {
+            {normalizedRows.map((row, index) => {
               const checked = normalizedSelectedSymbols.includes(row.symbol);
               return (
-                <tr key={`${row.symbol}-${index}`} className="border-t border-slate-800" data-testid={`${testIdPrefix}-row-${index}`}>
+                <tr
+                  key={`${row.symbol}-${index}`}
+                  className={`border-t border-slate-800 ${row.unsupported ? "cursor-not-allowed opacity-50" : ""}`}
+                  data-testid={`${testIdPrefix}-row-${index}`}
+                >
                   <td className="px-2 py-1" data-testid={`${testIdPrefix}-row-check-${index}`}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleSymbol(row.symbol)} data-testid={`${testIdPrefix}-row-checkbox-${index}`} />
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={row.unsupported}
+                      onChange={() => toggleSymbol(row)}
+                      data-testid={`${testIdPrefix}-row-checkbox-${index}`}
+                    />
                   </td>
                   <td className="px-2 py-1" data-testid={`${testIdPrefix}-row-symbol-${index}`}>{row.symbol}</td>
+                  <td className="px-2 py-1" data-testid={`${testIdPrefix}-row-quote-asset-${index}`}>{row.quote_asset}</td>
                   <td className="px-2 py-1" data-testid={`${testIdPrefix}-row-exchange-${index}`}>{row.exchange}</td>
                   <td className="px-2 py-1" data-testid={`${testIdPrefix}-row-volume-${index}`}>{row.volume_24h ?? "-"}</td>
+                  <td className="px-2 py-1" data-testid={`${testIdPrefix}-row-policy-${index}`}>
+                    {row.unsupported ? "UNSUPPORTED_PAIR" : "SUPPORTED"}
+                  </td>
                 </tr>
               );
             })}
-            {rows.length === 0 && (
+            {normalizedRows.length === 0 && (
               <tr data-testid={`${testIdPrefix}-rows-empty`}>
-                <td colSpan={4} className="px-2 py-3 text-center text-slate-500" data-testid={`${testIdPrefix}-rows-empty-text`}>
+                <td colSpan={6} className="px-2 py-3 text-center text-slate-500" data-testid={`${testIdPrefix}-rows-empty-text`}>
                   Gösterilecek sembol yok.
                 </td>
               </tr>
