@@ -64,6 +64,19 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (FAZ-1 pagination + FAZ-6 controlled live test kapatıldı)
+- **User Live Dashboard pagination eklendi (risk kapatıldı):**
+  - `GET /api/user/live/positions` artık `limit, offset` alıyor; response: `positions_count`, `total_positions_count`, `limit`, `offset`.
+  - `GET /api/user/live/trades` artık `limit, offset` alıyor; response: `trades_count`, `total_trades_count`, `limit`, `offset`.
+  - `GET /api/user/live/strategies` artık `limit, offset` alıyor; response: `strategy_count`, `total_strategy_count`, `limit`, `offset`.
+  - Güncellenen dosyalar: `backend/services/user_live_dashboard_service.py`, `backend/routers/user_live_dashboard_router.py`.
+  - Yeni test: `backend/tests/test_user_live_dashboard_pagination.py`.
+- **Controlled Live Test başlatıldı ve doğrulandı (assisted mode):**
+  - 10 sembollük kullanıcı-scope koşu çalıştırıldı (`mode=ASSISTED`, `manual_selection`).
+  - Run sonucu: actionable sinyal üretimi doğrulandı.
+  - Live readiness doğrulandı: `max_positions=3`, `daily_loss_limit_pct=1.0`, `symbol_integrity.ok` alanı mevcut.
+  - Daily report endpointleri (json/csv) doğrulandı.
+
 ### 2026-03-16 (FAZ-2..FAZ-7 — Scanner Operations + Live Readiness paketi tamamlandı)
 - **Scanner UI operasyon revizesi (mevcut user yapısı korunarak):**
   - `UserScannerPage.jsx` üzerinde yeni operasyon akışı uygulandı: **Scanner Control → Symbol Selection → Scanner Results → Strategy Presets → Statistics**.
