@@ -64,6 +64,38 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (Backend Policy Core Refactor — Gate-7 öncesi blokaj kapatma)
+- **Merkezi quote policy modülü eklendi:**
+  - Yeni çekirdek dosya: `backend/core/policy/quote_policy.py`
+  - Kural seti: `ALLOWED_QUOTES={USDT,USDC}`
+  - Fonksiyonlar: `extract_quote`, `is_allowed_quote`, `validate_symbol/normalize_symbol`, `filter_allowed_symbols`
+  - Hata standardı: primary `unsupported_quote_asset` (legacy alias destekli)
+- **Geçiş katmanı kuruldu:**
+  - `backend/services/quote_asset_policy.py` artık merkezi policy modülüne delegasyon yapıyor (geri uyumluluk korunarak).
+- **Kritik servis entegrasyonları tamamlandı (tek policy kaynağı):**
+  - `services/pipeline/universe_engine.py`
+  - `services/scanner_runtime.py`
+  - `services/execution_precheck_service.py`
+  - `services/execution_intent_service.py`
+  - `services/trading_preview_service.py`
+  - Ayrıca: `services/universe_service.py`, `services/discovery_scan_service.py`, `routers/admin_strategy_intelligence.py`
+- **Scanner policy bağlantısı güçlendirildi:**
+  - Universe üretiminde active+tradable+quote(USDT/USDC)+volume/spread eşikleri uygulanır hale getirildi.
+  - Debug/effective universe çıktılarında policy-enforced durumları güncellendi.
+- **Execution policy bağlantısı güçlendirildi:**
+  - Precheck katmanında unsupported quote için primary+legacy hata kodları birlikte üretiliyor (`unsupported_quote_asset` + `invalid_quote_asset`).
+  - Execution/trading router reject audit yakalama setleri `unsupported_quote_asset` ile genişletildi.
+- **FAZ-6 test paketi genişletildi:**
+  - `test_gate6_negative_policy_scenarios.py` içine pozitif quote matrisi eklendi: `BTCUSDT, ETHUSDT, SOLUSDT, ETHUSDC, SOLUSDC`.
+  - Yeni dosya: `test_policy_core_refactor.py` (core policy + fallback pattern kontrolleri).
+- **Exchange risk izolasyonu (ADIM-7) iskeleti eklendi:**
+  - Yeni dosya: `backend/tests/exchange_execution_real_test.py`
+  - Varsayılan skip; `RUN_REAL_EXCHANGE_TESTS=1` ile Binance testnet akış iskeleti aktif olur.
+- **Doğrulama sonuçları:**
+  - Lokal: ilgili setlerde **42 passed, 2 skipped**.
+  - Testing agent: `/app/test_reports/iteration_125.json` → **36/36 passed, 1 skipped**, kritik/minor issue yok.
+  - Not: Bybit/OKX execution adapterları **MOCKED**.
+
 ### 2026-03-16 (Gate-5 formal PASS + FAZ-6 Test Paketi tamamlandı)
 - **Gate-5 durumu:** Kullanıcı onayıyla formal olarak **PASS** kapatıldı.
 - **FAZ-6 negatif senaryo seti eklendi:**
