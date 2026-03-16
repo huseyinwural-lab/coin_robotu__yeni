@@ -34,6 +34,13 @@ def test_boolean_update_sql_has_no_numeric_assignment():
     assert offenders == []
 
 
+def test_0010_alert_policy_seed_uses_boolean_literals():
+    path = MIGRATIONS_DIR / "20260311_0010_user_risk_and_alert_policy.py"
+    content = path.read_text(encoding="utf-8")
+    assert "'global', TRUE, '', TRUE" in content
+    assert "'global', 1, '', 1" not in content
+
+
 def test_fk_names_in_0041_are_short_and_deterministic():
     path = MIGRATIONS_DIR / "20260315_0041_non_destructive_drift_alignment.py"
     content = path.read_text(encoding="utf-8")

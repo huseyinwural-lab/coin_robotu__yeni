@@ -65,7 +65,7 @@ def upgrade() -> None:
                     permission_drift_warning_per_day, permission_drift_critical_per_day,
                     gate_override_warning_per_day, gate_override_critical_per_day, updated_at
                 ) VALUES (
-                    'global', 1, '', 1,
+                    'global', TRUE, '', TRUE,
                     60, 40,
                     2, 5,
                     2, 5, CURRENT_TIMESTAMP
