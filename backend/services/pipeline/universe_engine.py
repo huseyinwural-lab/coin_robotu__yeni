@@ -2,15 +2,15 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from core.policy.quote_policy import ALLOWED_QUOTES, filter_allowed_symbols
 from models import AdminControl
 from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
 from services.pipeline.cache_store import get_json, set_json
 from services.pipeline.spot_strategy_service import get_spot_tradable_universe
-from services.quote_asset_policy import ALLOWED_QUOTE_ASSETS, filter_allowed_quote_symbols
 
 
 def _normalize_symbols(symbols: list[str]) -> list[str]:
-    return filter_allowed_quote_symbols([str(symbol or "").strip().upper() for symbol in symbols])
+    return filter_allowed_symbols([str(symbol or "").strip().upper() for symbol in symbols])
 
 
 def _within_filters(symbol: str, cache, min_volume: float, max_spread_bps: int) -> bool:
@@ -20,7 +20,9 @@ def _within_filters(symbol: str, cache, min_volume: float, max_spread_bps: int) 
     spread = get_json(cache, spread_key) or {}
     quote_volume = float(ticker.get("quote_volume", 0))
     spread_bps = float(spread.get("spread_bps", 9999))
-    return quote_volume >= min_volume and spread_bps <= max_spread_bps
+    volume_ok = quote_volume >= min_volume if min_volume > 0 else True
+    spread_ok = spread_bps <= max_spread_bps if max_spread_bps > 0 else True
+    return volume_ok and spread_ok
 
 
 def _safe_float(value, fallback: float = 0.0) -> float:
@@ -38,13 +40,21 @@ def _market_rows(market_type: str) -> list[dict]:
         return []
     rows: list[dict] = []
     for row in payload.get("rows", []):
-        if not bool(row.get("is_tradable", False)):
+        status = str(
+            row.get("status")
+            or row.get("state")
+            or row.get("trading_status")
+            or row.get("symbol_status")
+            or ""
+        ).strip().upper()
+        status_active = True if not status else status in {"TRADING", "ACTIVE", "ENABLED", "ON"}
+        if not bool(row.get("is_tradable", False)) or not status_active:
             continue
         symbol = str(row.get("symbol") or "").upper().strip()
         if not symbol:
             continue
         quote_asset = str(row.get("quote_asset") or "").upper()
-        if quote_asset not in ALLOWED_QUOTE_ASSETS:
+        if quote_asset not in ALLOWED_QUOTES:
             continue
         rows.append(
             {
@@ -169,19 +179,32 @@ def build_effective_universe(db: Session, cache):
     dynamic_spot_symbols = _normalize_symbols(dynamic_universe.get("symbols", []))
     market_spot_rows = _market_rows("spot")
     market_futures_rows = _market_rows("futures")
-    market_spot_symbols = _normalize_symbols([row["symbol"] for row in market_spot_rows if row.get("quote_asset") in ALLOWED_QUOTE_ASSETS])
-    market_futures_symbols = _normalize_symbols([row["symbol"] for row in market_futures_rows if row.get("quote_asset") in ALLOWED_QUOTE_ASSETS])
+    market_spot_symbols = _normalize_symbols([row["symbol"] for row in market_spot_rows if row.get("quote_asset") in ALLOWED_QUOTES])
+    market_futures_symbols = _normalize_symbols([row["symbol"] for row in market_futures_rows if row.get("quote_asset") in ALLOWED_QUOTES])
     control = db.query(AdminControl).filter(AdminControl.id == "global").first()
     if control is None:
-        advisory_map = {symbol: _liquidity_advisory(symbol, cache=cache, minimum_volume_usd=0, max_spread_bps=0) for symbol in dynamic_spot_symbols}
+        min_volume = float((dynamic_universe.get("filters") or {}).get("min_24h_volume_usdt") or 0)
+        max_spread_pct = float((dynamic_universe.get("filters") or {}).get("max_spread_pct") or 0)
+        max_spread_bps = int(max_spread_pct * 100) if max_spread_pct > 0 else 0
+        filtered_spot_symbols = [
+            symbol for symbol in dynamic_spot_symbols if _within_filters(symbol, cache, min_volume, max_spread_bps)
+        ]
+        filtered_futures_symbols = [
+            symbol for symbol in market_futures_symbols if _within_filters(symbol, cache, min_volume, max_spread_bps)
+        ]
+        advisory_map = {
+            symbol: _liquidity_advisory(symbol, cache=cache, minimum_volume_usd=min_volume, max_spread_bps=max_spread_bps)
+            for symbol in filtered_spot_symbols
+        }
         return {
-            "spot_symbols": dynamic_spot_symbols,
-            "futures_symbols": market_futures_symbols,
+            "spot_symbols": filtered_spot_symbols,
+            "futures_symbols": filtered_futures_symbols,
             "filters": {
                 "minimum_volume_usd": dynamic_universe.get("filters", {}).get("min_24h_volume_usdt"),
                 "max_spread_pct": dynamic_universe.get("filters", {}).get("max_spread_pct"),
-                "quote_assets": sorted(ALLOWED_QUOTE_ASSETS),
-                "advisory_only": True,
+                "quote_assets": sorted(ALLOWED_QUOTES),
+                "advisory_only": False,
+                "policy_enforced": True,
             },
             "liquidity_advisory": {"spot": advisory_map, "futures": {}},
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -201,6 +224,11 @@ def build_effective_universe(db: Session, cache):
 
     spot_symbols = [symbol for symbol in spot_symbols if symbol not in blacklist]
     futures_symbols = [symbol for symbol in futures_symbols if symbol not in blacklist]
+
+    min_volume = float(control.minimum_volume_usd or 0)
+    max_spread_bps = int(control.max_spread_bps or 0)
+    spot_symbols = [symbol for symbol in spot_symbols if _within_filters(symbol, cache, min_volume, max_spread_bps)]
+    futures_symbols = [symbol for symbol in futures_symbols if _within_filters(symbol, cache, min_volume, max_spread_bps)]
 
     spot_advisory = {
         symbol: _liquidity_advisory(
@@ -236,6 +264,7 @@ def build_effective_universe(db: Session, cache):
             "spot_override_active": len(configured_spot_override) > 0,
             "futures_override_active": len(configured_futures_override) > 0,
             "liquidity_filter_mode": "advisory_only",
+            "policy_enforced": True,
             "disable_futures": control.disable_futures,
             "emergency_mode": control.emergency_mode,
         },
@@ -266,7 +295,7 @@ def debug_effective_universe(
         normalized_market = "spot"
 
     market_rows = _market_rows(normalized_market)
-    market_symbols = _normalize_symbols([row.get("symbol") for row in market_rows if row.get("quote_asset") in ALLOWED_QUOTE_ASSETS])
+    market_symbols = _normalize_symbols([row.get("symbol") for row in market_rows if row.get("quote_asset") in ALLOWED_QUOTES])
     blacklist = set(_normalize_symbols((control.blacklist if control else []) or []))
     whitelist = _normalize_symbols((control.whitelist if control else []) or [])
 
@@ -285,6 +314,14 @@ def debug_effective_universe(
         volume_map=volume_map,
     )
 
+    min_volume = float(control.minimum_volume_usd if control else 0)
+    max_spread_bps = int(control.max_spread_bps if control else 0)
+    after_liquidity_symbols = [
+        symbol
+        for symbol in after_scanner_mode_symbols
+        if _within_filters(symbol, cache, min_volume, max_spread_bps)
+    ]
+
     liquidity_advisory = {
         symbol: _liquidity_advisory(
             symbol,
@@ -292,7 +329,7 @@ def debug_effective_universe(
             minimum_volume_usd=float(control.minimum_volume_usd if control else 0),
             max_spread_bps=int(control.max_spread_bps if control else 0),
         )
-        for symbol in after_scanner_mode_symbols
+        for symbol in after_liquidity_symbols
     }
 
     return {
@@ -301,9 +338,9 @@ def debug_effective_universe(
         "market_symbols_count": len(market_symbols),
         "after_blacklist": len(after_blacklist_symbols),
         "after_scanner_mode": len(after_scanner_mode_symbols),
-        "after_liquidity": len(after_scanner_mode_symbols),
-        "after_liquidity_filter": len(after_scanner_mode_symbols),
-        "final_symbols": after_scanner_mode_symbols,
+        "after_liquidity": len(after_liquidity_symbols),
+        "after_liquidity_filter": len(after_liquidity_symbols),
+        "final_symbols": after_liquidity_symbols,
         "after_permission_rules": len(permission_symbols),
         "liquidity_advisory_summary": {
             "advisory_count": sum(1 for item in liquidity_advisory.values() if item.get("advisory_state") == "advisory"),

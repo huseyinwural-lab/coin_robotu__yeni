@@ -76,6 +76,7 @@ def preview_trading(
         if error_code in {
             "scanner_execution_symbol_mismatch",
             "invalid_quote_asset",
+            "unsupported_quote_asset",
             "symbol_required_for_execution_intent",
             "symbol_required_for_execution_order",
             "quote_asset_mismatch",

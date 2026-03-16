@@ -175,7 +175,7 @@ def test_negative_unsupported_quote_rejected(user_headers):
         timeout=30,
     )
     assert response.status_code == 400, response.text
-    assert "invalid_quote_asset" in response.text
+    assert ("invalid_quote_asset" in response.text) or ("unsupported_quote_asset" in response.text)
 
 
 def test_negative_btc_pair_rejected(user_headers):
@@ -187,7 +187,7 @@ def test_negative_btc_pair_rejected(user_headers):
         timeout=30,
     )
     assert response.status_code == 400, response.text
-    assert "invalid_quote_asset" in response.text
+    assert ("invalid_quote_asset" in response.text) or ("unsupported_quote_asset" in response.text)
 
 
 def test_negative_watchlist_filters_policy_outside_pairs(user_headers):
@@ -251,4 +251,19 @@ def test_negative_execution_preview_unsupported_quote_rejected(user_headers):
         timeout=30,
     )
     assert response.status_code == 400, response.text
-    assert "invalid_quote_asset" in response.text
+    assert ("invalid_quote_asset" in response.text) or ("unsupported_quote_asset" in response.text)
+
+
+@pytest.mark.parametrize("symbol", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "ETHUSDC", "SOLUSDC"])
+def test_positive_allowed_quotes_accepted(user_headers, symbol):
+    payload = _preview_payload(symbol)
+    payload["scanner_signal_snapshot"]["symbol"] = symbol
+
+    response = requests.post(
+        f"{BASE_URL}/api/v1/user/trading/preview",
+        headers=user_headers,
+        json=payload,
+        timeout=30,
+    )
+    assert response.status_code == 200, response.text
+

@@ -51,6 +51,7 @@ def _compute_symbol_integrity_metrics(intents: list[UserExecutionIntent]) -> dic
     symbol_reject_codes = {
         "scanner_execution_symbol_mismatch",
         "invalid_quote_asset",
+        "unsupported_quote_asset",
         "quote_asset_mismatch",
         "symbol_required_for_execution_intent",
         "symbol_required_for_execution_order",

@@ -2,17 +2,17 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from core.policy.quote_policy import ALLOWED_QUOTES, filter_allowed_symbols
 from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
 from services.pipeline.cache_store import get_counter, get_json
 from services.pipeline.universe_engine import apply_scanner_mode, debug_effective_universe
-from services.quote_asset_policy import ALLOWED_QUOTE_ASSETS, filter_allowed_quote_symbols
 
 
 SUPPORTED_EXCHANGES = ["binance", "bybit", "okx"]
 
 
 def _normalize_symbols(symbols: list[str]) -> list[str]:
-    return filter_allowed_quote_symbols(symbols)
+    return filter_allowed_symbols(symbols)
 
 
 def _exchange_symbols(exchange: str, market_type: str) -> list[str]:
@@ -31,7 +31,7 @@ def _exchange_symbols(exchange: str, market_type: str) -> list[str]:
     symbols = [
         str(row.get("symbol") or "").upper()
         for row in rows
-        if bool(row.get("is_tradable", False)) and str(row.get("quote_asset") or "").upper() in ALLOWED_QUOTE_ASSETS
+        if bool(row.get("is_tradable", False)) and str(row.get("quote_asset") or "").upper() in ALLOWED_QUOTES
     ]
     return _normalize_symbols(symbols)
 

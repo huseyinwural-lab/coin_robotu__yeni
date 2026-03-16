@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
+from core.policy.quote_policy import filter_allowed_symbols
 from services.pipeline.cache_store import get_json
-from services.quote_asset_policy import filter_allowed_quote_symbols
 
 
 def _symbol_score(cache, symbol: str) -> tuple[float, list[str]]:
@@ -38,7 +38,7 @@ def _symbol_score(cache, symbol: str) -> tuple[float, list[str]]:
 
 
 def run_discovery_scan(cache, universe_symbols: list[str], *, max_candidates: int) -> dict:
-    normalized = filter_allowed_quote_symbols(
+    normalized = filter_allowed_symbols(
         [str(symbol or "").upper().strip() for symbol in universe_symbols]
     )
     rows = []

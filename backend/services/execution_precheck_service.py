@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from core.audit.audit_events import AuditEvent
-from services.quote_asset_policy import extract_quote_asset, normalize_quote_symbol
+from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 
 POLICY_PATH = Path("/app/config/execution_policy_registry.json")
 ALLOWED_EXECUTION_MODES = {"manual", "bot_assisted", "signal_follow"}
@@ -52,14 +52,13 @@ def validate_execution_payload(payload: dict) -> dict:
     quote_asset = None
     symbol_error = None
     try:
-        symbol = normalize_quote_symbol(
+        symbol = normalize_symbol(
             payload.get("symbol"),
-            field_name="symbol",
             missing_error_code="symbol_required_for_execution_intent",
-            invalid_error_code="invalid_quote_asset",
+            invalid_error_code="unsupported_quote_asset",
         )
-        quote_asset = extract_quote_asset(symbol)
-    except ValueError as exc:
+        quote_asset = extract_quote(symbol)
+    except InvalidSymbol as exc:
         symbol_error = str(exc)
 
     market_type = str(payload.get("market_type") or "spot").lower()
@@ -80,9 +79,12 @@ def validate_execution_payload(payload: dict) -> dict:
     risk_flags: list[str] = []
 
     if symbol_error:
-        reject_reason_codes.append(symbol_error)
+        if symbol_error == "unsupported_quote_asset":
+            reject_reason_codes.extend(["invalid_quote_asset", "unsupported_quote_asset"])
+        else:
+            reject_reason_codes.append(symbol_error)
     if quote_asset is None and not symbol_error:
-        reject_reason_codes.append("invalid_quote_asset")
+        reject_reason_codes.extend(["invalid_quote_asset", "unsupported_quote_asset"])
 
     requested_quote_asset = str(payload.get("quote_asset") or "").strip().upper()
     if requested_quote_asset and quote_asset and requested_quote_asset != quote_asset:
@@ -173,6 +175,7 @@ def validate_execution_payload(payload: dict) -> dict:
             code
             in {
                 "invalid_quote_asset",
+                "unsupported_quote_asset",
                 "quote_asset_mismatch",
                 "symbol_required_for_execution_intent",
                 "symbol_required_for_execution_order",
