@@ -1359,7 +1359,7 @@ class UserScannerRunResponse(BaseModel):
 
 class UserScannerAutomationConfigUpdateRequest(BaseModel):
     auto_enabled: bool = True
-    interval_seconds: int = Field(default=180, ge=180, le=180)
+    interval_seconds: int = Field(default=60, ge=30, le=120)
     max_results: int = Field(default=25, ge=5, le=100)
     symbol_source: str = "crypto"
     symbol_selection_mode: str = "all_market_symbols"
@@ -1391,7 +1391,7 @@ class UserScannerAutomationProfileCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     auto_enabled: bool = True
     is_active: bool = False
-    interval_seconds: int = Field(default=180, ge=180, le=3600)
+    interval_seconds: int = Field(default=60, ge=30, le=120)
     max_results: int = Field(default=25, ge=5, le=100)
     symbol_source: str = "crypto"
     symbol_selection_mode: str = "all_market_symbols"
@@ -1402,7 +1402,7 @@ class UserScannerAutomationProfileUpdateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     auto_enabled: bool = True
     is_active: bool = False
-    interval_seconds: int = Field(default=180, ge=180, le=3600)
+    interval_seconds: int = Field(default=60, ge=30, le=120)
     max_results: int = Field(default=25, ge=5, le=100)
     symbol_source: str = "crypto"
     symbol_selection_mode: str = "all_market_symbols"
@@ -1879,6 +1879,12 @@ class ExecutionIntentPreviewRequest(BaseModel):
     exchange: str | None = None
     environment: str | None = None
     account_label: str | None = None
+    signal: str | None = None
+    score: float | None = None
+    strategy: str | None = None
+    confidence: float | None = None
+    timestamp: str | None = None
+    scanner_signal_snapshot: dict = Field(default_factory=dict)
 
 
 class ExecutionIntentPreviewResponse(BaseModel):

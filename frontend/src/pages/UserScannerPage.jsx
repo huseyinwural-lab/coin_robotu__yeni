@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
+import { ScannerResultsTable } from "@/components/ScannerResultsTable";
+import { TradeSymbolSelection } from "@/components/TradeSymbolSelection";
 import { Button } from "@/components/ui/button";
-import { SymbolSelectorPanel } from "@/components/SymbolSelectorPanel";
 import { apiClient } from "@/lib/api";
 import { saveExecutionContext } from "@/lib/userFlowContext";
 import { DecisionCard } from "@/pages/user/components/DecisionCard";
@@ -34,11 +35,11 @@ const scannerQuickPresets = [
   },
 ];
 
-const AUTO_SCAN_INTERVAL_SECONDS = 180;
+const AUTO_SCAN_INTERVAL_SECONDS = 60;
 const PROFILE_INTERVAL_OPTIONS = [
-  { value: 180, label: "3 dakika" },
-  { value: 900, label: "15 dakika" },
-  { value: 1800, label: "30 dakika" },
+  { value: 30, label: "30 saniye" },
+  { value: 60, label: "60 saniye" },
+  { value: 120, label: "120 saniye" },
 ];
 
 export const UserScannerPage = () => {
@@ -52,12 +53,17 @@ export const UserScannerPage = () => {
   const [symbolSource, setSymbolSource] = useState("crypto");
   const [symbolMode, setSymbolMode] = useState("all_market_symbols");
   const [selectedSymbols, setSelectedSymbols] = useState([]);
+  const [watchlistOnly, setWatchlistOnly] = useState(false);
   const [automationConfig, setAutomationConfig] = useState(null);
   const [automationProfiles, setAutomationProfiles] = useState([]);
   const [activeProfileId, setActiveProfileId] = useState("");
   const [profileNameInput, setProfileNameInput] = useState("");
   const [profileIntervalInput, setProfileIntervalInput] = useState(AUTO_SCAN_INTERVAL_SECONDS);
+  const [autoScanInterval, setAutoScanInterval] = useState(AUTO_SCAN_INTERVAL_SECONDS);
   const [autoRunAlerts, setAutoRunAlerts] = useState([]);
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
+  const [liveReadiness, setLiveReadiness] = useState(null);
+  const [scannerDailyReport, setScannerDailyReport] = useState(null);
   const [decisionCards, setDecisionCards] = useState([]);
   const [selectedDecisionSymbol, setSelectedDecisionSymbol] = useState("");
   const [isExplainabilityDrawerOpen, setIsExplainabilityDrawerOpen] = useState(false);
@@ -124,10 +130,10 @@ export const UserScannerPage = () => {
     try {
       const { data } = await apiClient.put("/user/scanner/automation", {
         auto_enabled: nextEnabled,
-        interval_seconds: AUTO_SCAN_INTERVAL_SECONDS,
+        interval_seconds: Number(autoScanInterval || AUTO_SCAN_INTERVAL_SECONDS),
         max_results: 25,
         symbol_source: symbolSource,
-        symbol_selection_mode: symbolMode,
+        symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
         selected_symbols: selectedSymbols,
       });
       setAutomationConfig(data || null);
@@ -188,7 +194,7 @@ export const UserScannerPage = () => {
         interval_seconds: Number(activeProfile.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS),
         max_results: 25,
         symbol_source: symbolSource,
-        symbol_selection_mode: symbolMode,
+        symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
         selected_symbols: selectedSymbols,
       });
       setAutomationProfiles((prev) => prev.map((item) => (item.id === data.id ? data : { ...item, is_active: false })));
@@ -220,7 +226,7 @@ export const UserScannerPage = () => {
         interval_seconds: Number(profileIntervalInput || AUTO_SCAN_INTERVAL_SECONDS),
         max_results: 25,
         symbol_source: symbolSource,
-        symbol_selection_mode: symbolMode,
+        symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
         selected_symbols: selectedSymbols,
       });
       setProfileNameInput("");
@@ -264,7 +270,7 @@ export const UserScannerPage = () => {
       setIsLoading(true);
     }
     try {
-      const [modeRes, overviewRes, resultsRes, automationRes, profilesRes, cardsRes, persistedSelectionRes] = await Promise.all([
+      const [modeRes, overviewRes, resultsRes, automationRes, profilesRes, cardsRes, persistedSelectionRes, runtimeRes, readinessRes, dailyRes] = await Promise.all([
         apiClient.get("/user/signal-mode"),
         apiClient.get("/user/scanner"),
         apiClient.get("/user/scanner/results", { params: { limit: 80 } }),
@@ -272,6 +278,9 @@ export const UserScannerPage = () => {
         apiClient.get("/user/scanner/automation-profiles"),
         apiClient.get("/user/decision-cards", { params: { limit: 60 } }),
         apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" } }),
+        apiClient.get("/user/scanner/runtime/snapshot"),
+        apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" } }),
+        apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" } }),
       ]);
       setMode(modeRes.data.mode || "ASSISTED");
       setOverview(overviewRes.data);
@@ -282,6 +291,9 @@ export const UserScannerPage = () => {
       setAutomationProfiles(profiles);
       const cards = cardsRes?.data?.items || [];
       const persistedSelection = persistedSelectionRes?.data || null;
+      setRuntimeSnapshot(runtimeRes?.data || null);
+      setLiveReadiness(readinessRes?.data || null);
+      setScannerDailyReport(dailyRes?.data || null);
       setDecisionCards(cards);
       if (cards.length > 0) {
         const selectedSymbol = selectedDecisionSymbol || cards[0].symbol;
@@ -298,11 +310,13 @@ export const UserScannerPage = () => {
         if (selectedProfile) {
           setActiveProfileId(selectedProfile.id);
           setProfileIntervalInput(Number(selectedProfile.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS));
+            setAutoScanInterval(Number(selectedProfile.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS));
           setSymbolSource(selectedProfile.symbol_source || "crypto");
           setSymbolMode(selectedProfile.symbol_selection_mode || "all_market_symbols");
           setSelectedSymbols(Array.isArray(selectedProfile.selected_symbols) ? selectedProfile.selected_symbols : []);
         } else if (automation) {
           setActiveProfileId("");
+            setAutoScanInterval(Number(automation.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS));
           setSymbolSource(automation.symbol_source || "crypto");
           setSymbolMode(automation.symbol_selection_mode || "all_market_symbols");
           setSelectedSymbols(Array.isArray(automation.selected_symbols) ? automation.selected_symbols : []);
@@ -313,6 +327,8 @@ export const UserScannerPage = () => {
           setSelectedSymbols(Array.isArray(persistedSelection.selected_symbols) ? persistedSelection.selected_symbols : []);
           setSelectionSavedAt(persistedSelection.saved_at || null);
         }
+          const normalizedMode = String((persistedSelection?.symbol_selection_mode || selectedProfile?.symbol_selection_mode || automation?.symbol_selection_mode || "all_market_symbols")).toLowerCase();
+          setWatchlistOnly(normalizedMode === "manual_selection" && Array.isArray(persistedSelection?.selected_symbols || selectedProfile?.selected_symbols || automation?.selected_symbols) && (persistedSelection?.selected_symbols || selectedProfile?.selected_symbols || automation?.selected_symbols || []).length > 0);
         setSelectionHydrated(true);
       }
     } finally {
@@ -334,6 +350,15 @@ export const UserScannerPage = () => {
   }, []);
 
   useEffect(() => {
+    if (!watchlistOnly) {
+      return;
+    }
+    if (symbolMode !== "manual_selection") {
+      setSymbolMode("manual_selection");
+    }
+  }, [watchlistOnly, symbolMode]);
+
+  useEffect(() => {
     if (!selectionHydrated) {
       return;
     }
@@ -345,7 +370,7 @@ export const UserScannerPage = () => {
         const { data } = await apiClient.put("/user/scanner/symbol-selection", {
           scanner_id: "default",
           symbol_source: symbolSource,
-          symbol_selection_mode: symbolMode,
+          symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
           selected_symbols: selectedSymbols,
         });
         setSelectionSavedAt(data?.saved_at || null);
@@ -358,9 +383,86 @@ export const UserScannerPage = () => {
         clearTimeout(symbolPersistTimerRef.current);
       }
     };
-  }, [selectionHydrated, symbolMode, symbolSource, selectedSymbols]);
+  }, [selectionHydrated, symbolMode, symbolSource, selectedSymbols, watchlistOnly]);
+
+  const ensureScannerRunReady = () => {
+    if ((selectedSymbols || []).length === 0) {
+      toast.error("En az bir sembol seçmelisiniz");
+      return false;
+    }
+    return true;
+  };
+
+  const addWatchlistFromResult = async (item) => {
+    const symbol = String(item?.symbol || "").trim().toUpperCase();
+    if (!symbol) {
+      toast.error("Watchlist için sembol bulunamadı");
+      return;
+    }
+    try {
+      const { data: lists } = await apiClient.get("/symbol-selector/watchlists", { params: { source: symbolSource } });
+      const defaultName = "scanner-watchlist";
+      const existing = (lists || []).find((row) => String(row?.name || "").toLowerCase() === defaultName);
+
+      if (existing) {
+        const mergedSymbols = Array.from(
+          new Set([...(existing.symbols || []).map((value) => String(value || "").toUpperCase()), symbol]),
+        );
+        await apiClient.put(`/symbol-selector/watchlists/${existing.id}`, {
+          name: existing.name,
+          symbols: mergedSymbols,
+        });
+      } else {
+        await apiClient.post("/symbol-selector/watchlists", {
+          name: defaultName,
+          source: symbolSource,
+          exchange: "binance",
+          market_type: "spot",
+          symbols: [symbol],
+        });
+      }
+
+      setSelectedSymbols((prev) => Array.from(new Set([...(prev || []).map((value) => String(value || "").toUpperCase()), symbol])));
+      toast.success(`${symbol} watchlist'e eklendi`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Watchlist güncellenemedi");
+    }
+  };
+
+  const exportScannerDailyReport = async (format) => {
+    try {
+      const isCsv = format === "csv";
+      const response = await apiClient.get("/user/scanner/runtime/daily-report/export", {
+        params: { format, window: "24h" },
+        responseType: isCsv ? "blob" : "json",
+      });
+
+      const blob = isCsv
+        ? new Blob([response.data], { type: "text/csv" })
+        : new Blob([JSON.stringify(response.data, null, 2)], { type: "application/json" });
+
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = isCsv
+        ? `scanner_daily_report_${scannerDailyReport?.date || "latest"}.csv`
+        : `scanner_daily_report_${scannerDailyReport?.date || "latest"}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+      toast.success(`Scanner günlük rapor ${format.toUpperCase()} hazır`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Scanner rapor export başarısız");
+    }
+  };
 
   const runScanner = async () => {
+    if (!ensureScannerRunReady()) {
+      return;
+    }
+
+    const effectiveMode = watchlistOnly ? "manual_selection" : symbolMode;
     setIsRunning(true);
     try {
       if (activeAutomation?.auto_enabled) {
@@ -371,7 +473,7 @@ export const UserScannerPage = () => {
         mode,
         max_results: 25,
         symbol_source: symbolSource,
-        symbol_selection_mode: symbolMode,
+        symbol_selection_mode: effectiveMode,
         selected_symbols: selectedSymbols,
       });
       await load();
@@ -387,6 +489,11 @@ export const UserScannerPage = () => {
   };
 
   const runPreset = async (preset) => {
+    if (!ensureScannerRunReady()) {
+      return;
+    }
+
+    const effectiveMode = watchlistOnly ? "manual_selection" : symbolMode;
     setIsRunning(true);
     try {
       await apiClient.put("/user/signal-mode", { mode: preset.mode });
@@ -395,7 +502,7 @@ export const UserScannerPage = () => {
         mode: preset.mode,
         max_results: preset.maxResults,
         symbol_source: symbolSource,
-        symbol_selection_mode: symbolMode,
+        symbol_selection_mode: effectiveMode,
         selected_symbols: selectedSymbols,
       });
       await load();
@@ -427,6 +534,10 @@ export const UserScannerPage = () => {
       side,
       strategy_code: item.strategy_code,
       confidence: item.confidence,
+      signal: item.signal,
+      score: item.signal_score,
+      timestamp: new Date().toISOString(),
+      intent_payload: buildIntentPayload(item),
     });
     navigate(`/user/execute?source=scanner&symbol=${encodeURIComponent(item.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(marketType)}&preset=spot_basic`);
   };
@@ -445,33 +556,20 @@ export const UserScannerPage = () => {
     stop_loss_mode: "percent",
     stop_loss_value: 1,
     execution_mode: "signal_follow",
+    signal: item.signal,
+    score: item.signal_score,
+    strategy: item.strategy_code,
+    confidence: item.confidence,
+    timestamp: new Date().toISOString(),
+    scanner_signal_snapshot: {
+      symbol: item.symbol,
+      signal: item.signal,
+      score: item.signal_score,
+      strategy: item.strategy_code,
+      confidence: item.confidence,
+      timestamp: new Date().toISOString(),
+    },
   });
-
-  const previewIntentFromScanner = async (item) => {
-    try {
-      const { data } = await apiClient.post("/user/execution/intent/preview", buildIntentPayload(item));
-      toast.success(`Preview: ${data.validation_status}`);
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Preview başarısız");
-    }
-  };
-
-  const queueIntentFromScanner = async (item) => {
-    try {
-      const { data } = await apiClient.post("/user/execution/intent/preview", buildIntentPayload(item));
-      if (data.validation_status !== "valid") {
-        toast.error("Policy preview reddetti");
-        return;
-      }
-      await apiClient.post("/user/execution/intent/submit", {
-        intent_token: data.intent_token,
-        preview_hash: data.preview_hash,
-      });
-      toast.success("Queue Assisted Order gönderildi");
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Queue başarısız");
-    }
-  };
 
   const onSelectDecisionCard = async (symbol) => {
     setSelectedDecisionSymbol(symbol);
@@ -506,7 +604,7 @@ export const UserScannerPage = () => {
         </p>
         <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="user-scanner-automation-grid">
           <p className="text-sm" data-testid="user-scanner-automation-status">Durum: {activeAutomation?.auto_enabled ? "AKTİF" : "PASİF"}</p>
-          <p className="text-sm" data-testid="user-scanner-automation-interval">Periyot: {Math.round(Number(activeAutomation?.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS) / 60)} dakika</p>
+          <p className="text-sm" data-testid="user-scanner-automation-interval">Periyot: {Number(activeAutomation?.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS)} saniye</p>
           <p className="text-sm" data-testid="user-scanner-automation-last-run">Son Çalışma: {formatDateLabel(activeAutomation?.last_run_at)}</p>
           <p className="text-sm" data-testid="user-scanner-automation-next-run">Sonraki Çalışma: {formatDateLabel(activeAutomation?.next_run_at)}</p>
         </div>
@@ -651,45 +749,86 @@ export const UserScannerPage = () => {
         formatDateLabel={formatDateLabel}
       />
 
-      <div className="col-span-12 flex flex-wrap items-center gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-controls">
-        <label className="text-xs uppercase tracking-widest text-slate-500" htmlFor="user-scanner-mode-select" data-testid="user-scanner-mode-label">Signal Mode</label>
-        <select
-          id="user-scanner-mode-select"
-          className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-          value={mode}
-          onChange={(event) => setMode(event.target.value)}
-          data-testid="user-scanner-mode-select"
-          aria-label="Signal modu"
-        >
-          <option value="ASSISTED">ASSISTED</option>
-          <option value="AUTO">AUTO</option>
-          <option value="MANUAL">MANUAL</option>
-        </select>
-        <Button onClick={runScanner} disabled={isRunning} data-testid="user-scanner-run-button" aria-label="Scanner çalıştır">
-          {isRunning ? "Çalışıyor..." : "Scanner Run"}
-        </Button>
-        <Button variant="outline" onClick={load} data-testid="user-scanner-refresh-button" aria-label="Scanner verisini yenile">Yenile</Button>
-        <Button variant="outline" onClick={() => setCompactMode((previous) => !previous)} data-testid="user-scanner-compact-mode-toggle" aria-label="Compact mode aç/kapat">
-          {compactMode ? "Compact: ON" : "Compact: OFF"}
-        </Button>
-      </div>
+      <section className="col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-control-section">
+        <div data-testid="user-scanner-control-header">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-control-kicker">Scanner Control</p>
+          <h3 className="text-base font-semibold" data-testid="user-scanner-control-title">Run & Automation</h3>
+        </div>
+        <div className="flex flex-wrap items-end gap-3" data-testid="user-scanner-controls">
+          <label className="space-y-1" htmlFor="user-scanner-mode-select" data-testid="user-scanner-mode-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-mode-label">Signal Mode</span>
+            <select
+              id="user-scanner-mode-select"
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              value={mode}
+              onChange={(event) => setMode(event.target.value)}
+              data-testid="user-scanner-mode-select"
+              aria-label="Signal modu"
+            >
+              <option value="ASSISTED">ASSISTED</option>
+              <option value="AUTO">AUTO</option>
+              <option value="MANUAL">MANUAL</option>
+            </select>
+          </label>
 
-      <div className="col-span-12" data-testid="user-scanner-symbol-selector-wrapper">
-        <SymbolSelectorPanel
-          testIdPrefix="user-scanner-symbol-selector"
-          exchange="binance"
-          marketType="spot"
+          <label className="space-y-1" data-testid="user-scanner-auto-scan-interval-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-auto-scan-interval-label">Auto Scan Interval</span>
+            <select
+              value={autoScanInterval}
+              onChange={(event) => setAutoScanInterval(Number(event.target.value))}
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-auto-scan-interval-select"
+            >
+              {PROFILE_INTERVAL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value} data-testid={`user-scanner-auto-scan-interval-option-${option.value}`}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <Button onClick={runScanner} disabled={isRunning} data-testid="user-scanner-run-button" aria-label="Scanner çalıştır">
+            {isRunning ? "Çalışıyor..." : "Scanner Run"}
+          </Button>
+          <Button variant="outline" onClick={load} data-testid="user-scanner-refresh-button" aria-label="Scanner verisini yenile">Yenile</Button>
+          <Button
+            variant="outline"
+            onClick={() => saveActiveProfile({ autoEnabled: !(activeAutomation?.auto_enabled ?? false) })}
+            disabled={isSavingAutomation}
+            data-testid="user-scanner-auto-scan-toggle-button"
+          >
+            Auto Scan {activeAutomation?.auto_enabled ? "ON" : "OFF"}
+          </Button>
+          <Button variant="outline" onClick={() => setCompactMode((previous) => !previous)} data-testid="user-scanner-compact-mode-toggle" aria-label="Compact mode aç/kapat">
+            {compactMode ? "Compact: ON" : "Compact: OFF"}
+          </Button>
+        </div>
+
+        <div className="grid gap-2 rounded border border-slate-800 bg-slate-950 p-3 md:grid-cols-2" data-testid="user-scanner-live-scan-timer-section">
+          <p className="text-sm" data-testid="user-scanner-last-scan-value">Last Scan: {formatDateLabel(activeAutomation?.last_run_at || overview?.latest_generated_at)}</p>
+          <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan: {formatDateLabel(activeAutomation?.next_run_at)}</p>
+        </div>
+      </section>
+
+      <section className="col-span-12" data-testid="user-scanner-symbol-selection-section">
+        <TradeSymbolSelection
           source={symbolSource}
           onSourceChange={setSymbolSource}
           mode={symbolMode}
           onModeChange={setSymbolMode}
           selectedSymbols={selectedSymbols}
           onSelectedSymbolsChange={setSelectedSymbols}
-          multi
+          watchlistOnly={watchlistOnly}
+          onWatchlistOnlyChange={setWatchlistOnly}
         />
-      </div>
+      </section>
 
-      <section className="col-span-12 grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-scanner-quick-preset-section">
+      <section className="col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-strategy-presets-section">
+        <div data-testid="user-scanner-strategy-presets-header">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-strategy-presets-kicker">Strategy Presets</p>
+          <h3 className="text-base font-semibold" data-testid="user-scanner-strategy-presets-title">Preset Runner</h3>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3" data-testid="user-scanner-quick-preset-section">
         {scannerQuickPresets.map((preset) => (
           <article key={preset.id} className="rounded border border-slate-700 bg-slate-950 p-3" data-testid={`user-scanner-quick-preset-card-${preset.id}`}>
             <p className="text-sm font-semibold text-slate-100" data-testid={`user-scanner-quick-preset-title-${preset.id}`}>{preset.label}</p>
@@ -699,63 +838,74 @@ export const UserScannerPage = () => {
             </Button>
           </article>
         ))}
+        </div>
       </section>
 
-      <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-scanner-run-summary-grid">
+      <section className="col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-statistics-section">
+        <div data-testid="user-scanner-statistics-header">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-statistics-kicker">Statistics</p>
+          <h3 className="text-base font-semibold" data-testid="user-scanner-statistics-title">Scanner Activity & Runtime Metrics</h3>
+        </div>
+
+        <div className="grid grid-cols-12 gap-3" data-testid="user-scanner-run-summary-grid">
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-mode-card"><p className="text-xs text-slate-500">Aktif Mode</p><p className="text-lg font-semibold text-orange-400" data-testid="user-scanner-summary-mode-value">{overview?.mode ?? mode}</p></div>
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-result-count-card"><p className="text-xs text-slate-500">Toplam Sonuç</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-result-count-value">{overview?.total_results ?? scannerResults.length}</p></div>
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-actionable-count-card"><p className="text-xs text-slate-500">Son Run ID</p><p className="text-sm font-semibold" data-testid="user-scanner-summary-actionable-count-value">{overview?.latest_run_id ?? "-"}</p></div>
         <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-pending-count-card"><p className="text-xs text-slate-500">Pending Queue</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-pending-count-value">{overview?.pending_signals ?? "-"}</p></div>
-        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-selected-symbol-count-card"><p className="text-xs text-slate-500">Seçili Sembol</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-selected-symbol-count-value">{selectedSymbols.length}</p></div>
-      </div>
+        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-selected-symbol-count-card"><p className="text-xs text-slate-500">Selected Symbols</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-selected-symbol-count-value">{selectedSymbols.length}</p></div>
+        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-runtime-symbols-card"><p className="text-xs text-slate-500">Symbols Scanned</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-runtime-symbols-value">{runtimeSnapshot?.scanner_perf?.symbols_evaluated ?? 0}</p></div>
+        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-runtime-candidates-card"><p className="text-xs text-slate-500">Candidates</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-runtime-candidates-value">{runtimeSnapshot?.scanner_perf?.decision_scope_symbols ?? 0}</p></div>
+        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-runtime-qualified-card"><p className="text-xs text-slate-500">Qualified</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-runtime-qualified-value">{runtimeSnapshot?.tiered_scan?.qualification?.qualified_count ?? 0}</p></div>
+        </div>
+      </section>
 
-      <div className="col-span-12 grid gap-3 md:hidden" data-testid="user-scanner-mobile-cards">
-        {scannerResults.map((item) => (
-          <article key={item.id} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-mobile-card">
-            <p className="text-sm font-semibold" data-testid="user-scanner-mobile-symbol">{item.symbol}</p>
-            <p className="text-xs text-slate-500" data-testid="user-scanner-mobile-signal">Signal: {item.signal}</p>
-            <p className="text-xs text-slate-500" data-testid="user-scanner-mobile-confidence">Confidence: {item.confidence}</p>
-            <div className="mt-2 flex gap-2" data-testid="user-scanner-mobile-actions">
-              <Button variant="outline" onClick={() => openExecuteFromScanner(item)} data-testid="user-scanner-open-execute-button">Open in Execute</Button>
-              <Button variant="outline" onClick={() => previewIntentFromScanner(item)} data-testid="user-scanner-preview-intent-button">Preview Intent</Button>
-              <Button variant="outline" onClick={() => queueIntentFromScanner(item)} data-testid="user-scanner-queue-intent-button">Queue Order</Button>
-            </div>
+      <section className="col-span-12 space-y-3 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-live-readiness-section">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-scanner-live-readiness-header">
+          <div data-testid="user-scanner-live-readiness-title-wrap">
+            <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-scanner-live-readiness-kicker">Live Readiness</p>
+            <h3 className="text-base font-semibold" data-testid="user-scanner-live-readiness-title">Scanner → Execution Güvenlik Kontrolleri</h3>
+          </div>
+          <div className="flex flex-wrap gap-2" data-testid="user-scanner-live-readiness-export-actions">
+            <Button variant="outline" onClick={() => exportScannerDailyReport("json")} data-testid="user-scanner-live-readiness-export-json-button">Export JSON</Button>
+            <Button variant="outline" onClick={() => exportScannerDailyReport("csv")} data-testid="user-scanner-live-readiness-export-csv-button">Export CSV</Button>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-3" data-testid="user-scanner-live-readiness-grid">
+          <article className="rounded border border-cyan-900 bg-slate-950 p-3" data-testid="user-scanner-live-readiness-symbol-integrity-card">
+            <p className="text-xs text-cyan-200" data-testid="user-scanner-live-readiness-symbol-integrity-label">Symbol Integrity</p>
+            <p className="text-sm font-semibold" data-testid="user-scanner-live-readiness-symbol-integrity-value">
+              {liveReadiness?.symbol_integrity?.ok ? "OK" : "MISMATCH"} ({liveReadiness?.symbol_integrity?.matched ?? 0}/{liveReadiness?.symbol_integrity?.checked ?? 0})
+            </p>
           </article>
-        ))}
-      </div>
+          <article className="rounded border border-cyan-900 bg-slate-950 p-3" data-testid="user-scanner-live-readiness-risk-guard-card">
+            <p className="text-xs text-cyan-200" data-testid="user-scanner-live-readiness-risk-guard-label">Max Risk Guard</p>
+            <p className="text-sm font-semibold" data-testid="user-scanner-live-readiness-risk-guard-value">
+              max_positions=3 | daily_loss_limit=1% | daily_loss={liveReadiness?.max_risk_guard?.daily_loss_pct ?? 0}%
+            </p>
+          </article>
+          <article className="rounded border border-cyan-900 bg-slate-950 p-3" data-testid="user-scanner-live-readiness-execution-quality-card">
+            <p className="text-xs text-cyan-200" data-testid="user-scanner-live-readiness-execution-quality-label">Execution Quality</p>
+            <p className="text-sm font-semibold" data-testid="user-scanner-live-readiness-execution-quality-value">
+              latency={liveReadiness?.execution_quality?.avg_latency ?? 0}ms | reject={liveReadiness?.execution_quality?.reject_rate ?? 0}
+            </p>
+          </article>
+        </div>
 
-      <div className="col-span-12 hidden overflow-x-auto border border-slate-800 bg-slate-900 md:block" data-testid="user-scanner-results-table-wrapper">
-        <table className="min-w-full text-sm" data-testid="user-scanner-results-table" aria-label="Scanner sonuç tablosu">
-          <thead className="bg-slate-800 text-left" data-testid="user-scanner-results-table-head">
-            <tr>
-              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Symbol</th>
-              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Signal</th>
-              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Confidence</th>
-              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Score</th>
-              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Strategy</th>
-              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Actions</th>
-            </tr>
-          </thead>
-          <tbody data-testid="user-scanner-results-table-body">
-            {scannerResults.map((item) => (
-              <tr key={item.id} className="border-t border-slate-800" data-testid="user-scanner-results-table-row">
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{item.symbol}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{item.signal}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{item.confidence}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{item.signal_score}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>{item.strategy_code}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>
-                  <div className="flex gap-2" data-testid="user-scanner-table-actions">
-                    <Button variant="outline" onClick={() => openExecuteFromScanner(item)} data-testid="user-scanner-table-open-execute-button">Open in Execute</Button>
-                    <Button variant="outline" onClick={() => previewIntentFromScanner(item)} data-testid="user-scanner-table-preview-intent-button">Preview Intent</Button>
-                    <Button variant="outline" onClick={() => queueIntentFromScanner(item)} data-testid="user-scanner-table-queue-intent-button">Queue Order</Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        <pre className="overflow-x-auto rounded border border-cyan-900 bg-slate-950 p-3 text-xs text-cyan-100" data-testid="user-scanner-daily-report-json">
+          {JSON.stringify(scannerDailyReport || {}, null, 2)}
+        </pre>
+      </section>
+
+      <section className="col-span-12" data-testid="user-scanner-results-main-section">
+        <ScannerResultsTable
+          results={scannerResults}
+          compactMode={compactMode}
+          onOpenTrade={openExecuteFromScanner}
+          onViewCard={(item) => onSelectDecisionCard(item.symbol)}
+          onAddWatchlist={addWatchlistFromResult}
+        />
+      </section>
     </section>
   );
 };

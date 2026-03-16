@@ -67,9 +67,46 @@ def preview_trading(
             },
         )
 
-    intent, validation = preview_execution_intent(db, current_user.id, payload.model_dump())
+    payload_data = payload.model_dump()
+    try:
+        intent, validation = preview_execution_intent(db, current_user.id, payload_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="RISK_RESULT",
+        entity_type="execution_intent",
+        entity_id=intent.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "stage": "RISK RESULT",
+            "risk_flags": validation.get("risk_flags") or [],
+            "gate_decision": validation.get("gate_decision"),
+            "meta_engine_decision": validation.get("meta_engine_decision"),
+            "portfolio_risk_impact": validation.get("portfolio_risk_impact") or {},
+        },
+    )
+    create_audit_log(
+        db,
+        action="EXECUTION_INTENT",
+        entity_type="execution_intent",
+        entity_id=intent.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "stage": "EXECUTION INTENT",
+            "symbol": (validation.get("normalized_order_payload") or {}).get("symbol"),
+            "side": (validation.get("normalized_order_payload") or {}).get("side"),
+            "strategy": (validation.get("normalized_order_payload") or {}).get("strategy_binding"),
+            "confidence": payload_data.get("confidence") or payload_data.get("signal_confidence"),
+            "score": payload_data.get("score"),
+            "timestamp": payload_data.get("timestamp"),
+        },
+    )
     preview_response = _build_preview_response(intent, validation)
-    metrics = build_execution_preview_metrics(db, current_user.id, payload.model_dump(), validation)
+    metrics = build_execution_preview_metrics(db, current_user.id, payload_data, validation)
 
     create_audit_log(
         db,
@@ -118,6 +155,21 @@ def execute_trading(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    create_audit_log(
+        db,
+        action="EXCHANGE_ORDER",
+        entity_type="execution_intent",
+        entity_id=intent.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "stage": "EXCHANGE ORDER",
+            "symbol": intent.symbol,
+            "side": intent.side,
+            "intent_type": intent.intent_type,
+            "status": intent.status,
+        },
+    )
     create_audit_log(
         db,
         action="TRADING_EXECUTE_V1",

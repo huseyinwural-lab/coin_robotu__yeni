@@ -253,14 +253,33 @@ export const UserExecutePage = () => {
   );
 
   const buildPreviewPayload = useCallback(
-    () => ({
-      ...form,
-      exchange_connection_id: selectedConnection?.id || form.exchange_connection_id || null,
-      account_label: selectedConnection?.account_label || form.account_label || "default",
-      exchange: selectedConnection?.exchange || form.exchange || "binance",
-      environment: selectedConnection?.environment || form.environment || "testnet",
-    }),
-    [form, selectedConnection],
+    () => {
+      const scannerSnapshot = flowContext?.intent_payload?.scanner_signal_snapshot || {
+        symbol: form.symbol,
+        signal: flowContext?.signal || "long",
+        score: flowContext?.score || null,
+        strategy: flowContext?.strategy_code || form.strategy_binding || null,
+        confidence: flowContext?.confidence || null,
+        timestamp: flowContext?.timestamp || new Date().toISOString(),
+      };
+
+      return {
+        ...(flowContext?.intent_payload || {}),
+        ...form,
+        source_type: flowContext?.source || form.source_type || "manual",
+        exchange_connection_id: selectedConnection?.id || form.exchange_connection_id || null,
+        account_label: selectedConnection?.account_label || form.account_label || "default",
+        exchange: selectedConnection?.exchange || form.exchange || "binance",
+        environment: selectedConnection?.environment || form.environment || "testnet",
+        signal: flowContext?.signal || flowContext?.intent_payload?.signal || null,
+        score: flowContext?.score || flowContext?.intent_payload?.score || null,
+        strategy: flowContext?.strategy_code || flowContext?.intent_payload?.strategy || form.strategy_binding || null,
+        confidence: flowContext?.confidence || flowContext?.intent_payload?.confidence || null,
+        timestamp: flowContext?.timestamp || flowContext?.intent_payload?.timestamp || new Date().toISOString(),
+        scanner_signal_snapshot: scannerSnapshot,
+      };
+    },
+    [form, selectedConnection, flowContext],
   );
 
   const loadDecisionTrace = useCallback(async (intentId) => {

@@ -53,6 +53,7 @@ export const SymbolSelectorPanel = ({
   onSourceChange,
   mode,
   onModeChange,
+  onWatchlistApplied,
 }) => {
   const [search, setSearch] = useState("");
   const [rows, setRows] = useState([]);
@@ -143,6 +144,38 @@ export const SymbolSelectorPanel = ({
     onSelectedSymbolsChange(next);
   };
 
+  const visibleSymbols = useMemo(
+    () => rows.slice(0, 300).map((row) => String(row.symbol || "").trim().toUpperCase()).filter(Boolean),
+    [rows],
+  );
+
+  const allVisibleSelected = useMemo(
+    () => visibleSymbols.length > 0 && visibleSymbols.every((symbol) => normalizedSelectedSymbols.includes(symbol)),
+    [visibleSymbols, normalizedSelectedSymbols],
+  );
+
+  const selectAllVisible = () => {
+    if (!multi) {
+      onSelectedSymbolsChange(visibleSymbols.slice(0, 1));
+      return;
+    }
+    const merged = Array.from(new Set([...(normalizedSelectedSymbols || []), ...visibleSymbols]));
+    onSelectedSymbolsChange(merged);
+  };
+
+  const clearAllSelected = () => {
+    onSelectedSymbolsChange([]);
+  };
+
+  const toggleAllVisible = () => {
+    if (allVisibleSelected) {
+      const next = normalizedSelectedSymbols.filter((symbol) => !visibleSymbols.includes(symbol));
+      onSelectedSymbolsChange(next);
+      return;
+    }
+    selectAllVisible();
+  };
+
   const saveWatchlist = async () => {
     const trimmed = watchlistName.trim();
     if (!trimmed) {
@@ -176,6 +209,9 @@ export const SymbolSelectorPanel = ({
     }
     const symbols = normalizeSymbols(selected.symbols || []);
     onSelectedSymbolsChange(multi ? symbols : symbols.slice(0, 1));
+    if (typeof onWatchlistApplied === "function") {
+      onWatchlistApplied(symbols);
+    }
     toast.success(`${selected.name} uygulandı`);
   };
 
@@ -240,13 +276,30 @@ export const SymbolSelectorPanel = ({
         </p>
       )}
 
-      <p className="text-xs text-slate-400" data-testid={`${testIdPrefix}-selected-count`}>Seçilen sembol: {normalizedSelectedSymbols.length}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2" data-testid={`${testIdPrefix}-bulk-actions-row`}>
+        <p className="text-xs text-slate-400" data-testid={`${testIdPrefix}-selected-count`}>Selected Symbols: {normalizedSelectedSymbols.length}</p>
+        <div className="flex flex-wrap gap-2" data-testid={`${testIdPrefix}-bulk-actions-buttons`}>
+          <Button type="button" variant="outline" onClick={selectAllVisible} data-testid={`${testIdPrefix}-select-all-button`}>
+            Select All
+          </Button>
+          <Button type="button" variant="outline" onClick={clearAllSelected} data-testid={`${testIdPrefix}-clear-all-button`}>
+            Clear All
+          </Button>
+        </div>
+      </div>
 
       <div className="max-h-52 overflow-auto rounded border border-slate-800" data-testid={`${testIdPrefix}-rows-wrapper`}>
         <table className="min-w-full text-xs" data-testid={`${testIdPrefix}-rows-table`}>
           <thead className="sticky top-0 bg-slate-900" data-testid={`${testIdPrefix}-rows-head`}>
             <tr>
-              <th className="px-2 py-1 text-left">Seç</th>
+              <th className="px-2 py-1 text-left" data-testid={`${testIdPrefix}-header-select-all`}>
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleAllVisible}
+                  data-testid={`${testIdPrefix}-header-select-all-checkbox`}
+                />
+              </th>
               <th className="px-2 py-1 text-left">Symbol</th>
               <th className="px-2 py-1 text-left">Exchange</th>
               <th className="px-2 py-1 text-left">Vol 24h</th>

@@ -256,6 +256,9 @@ def scanner_run(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    if len(payload.selected_symbols or []) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="En az bir sembol seçmelisiniz")
+
     try:
         result = run_user_scanner(
             db,
@@ -266,8 +269,27 @@ def scanner_run(
             selected_symbols=payload.selected_symbols,
             symbol_selection_mode=payload.symbol_selection_mode,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="scanner_run_failed") from exc
+    create_audit_log(
+        db,
+        action="SCAN_RESULT",
+        entity_type="user_scanner",
+        entity_id=result["run_id"],
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "stage": "SCAN RESULT",
+            "mode": result["mode"],
+            "selected_symbols": result.get("selected_symbols") or [],
+            "result_count": result["result_count"],
+            "actionable_count": result["actionable_count"],
+            "queued_count": result["queued_count"],
+            "scanner_perf": result.get("scanner_perf") or {},
+        },
+    )
     create_audit_log(
         db,
         action="user_scanner_run",

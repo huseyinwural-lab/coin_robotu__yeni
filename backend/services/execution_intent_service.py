@@ -57,7 +57,7 @@ def _safe_spread_bps(symbol: str) -> float:
         return 0.0
 
 
-def _default_bot(db: Session, user_id: str, market_type: str) -> BotProfile:
+def _default_bot(db: Session, user_id: str, market_type: str, symbol: str | None = None) -> BotProfile:
     row = db.query(BotProfile).filter(BotProfile.user_id == user_id).order_by(BotProfile.created_at.asc()).first()
     if row:
         return row
@@ -68,7 +68,7 @@ def _default_bot(db: Session, user_id: str, market_type: str) -> BotProfile:
         name="Execution Intent Bot",
         exchange="binance",
         market_type=market_type,
-        symbols=["BTCUSDT"],
+        symbols=[str(symbol or "").upper()] if str(symbol or "").strip() else [],
         strategy_type="manual_execution",
         timeframe="15m",
         trend_timeframe="1h",
@@ -245,7 +245,21 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         normalized.setdefault("strategy_binding", strategy_binding_from_action)
 
     strategy_binding = str(normalized.get("strategy_binding") or "manual_execution")
-    symbol = str(normalized.get("symbol") or "BTCUSDT")
+    source_type = str(normalized.get("source_type") or payload.get("source_type") or "manual").strip().lower()
+    symbol = str(normalized.get("symbol") or payload.get("symbol") or "").strip().upper()
+    if not symbol:
+        raise ValueError("symbol_required_for_execution_intent")
+    normalized["symbol"] = symbol
+
+    scanner_snapshot = normalized.get("scanner_signal_snapshot") or payload.get("scanner_signal_snapshot") or {}
+    if scanner_snapshot:
+        normalized["scanner_signal_snapshot"] = scanner_snapshot
+    if source_type == "scanner" or bool(payload.get("signal_bridge_context")):
+        scan_symbol = str((scanner_snapshot or {}).get("symbol") or "").strip().upper()
+        if not scan_symbol:
+            raise ValueError("scanner_signal_snapshot_missing_symbol")
+        if scan_symbol != symbol:
+            raise ValueError("scanner_execution_symbol_mismatch")
     signal_confidence = float(payload.get("signal_confidence") or normalized.get("signal_confidence") or 0.65)
 
     requested_exchange = str(payload.get("exchange") or normalized.get("exchange") or "binance").strip().lower()
@@ -517,7 +531,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     intent = UserExecutionIntent(
         id=str(uuid.uuid4()),
         user_id=user_id,
-        source_type=str(normalized.get("source_type") or payload.get("source_type") or "manual"),
+        source_type=source_type,
         source_ref_id=str(normalized.get("source_ref_id") or payload.get("source_ref_id") or "") or None,
         intent_type=intent_type,
         position_id=str(normalized.get("position_id") or payload.get("position_id") or "") or None,
@@ -738,10 +752,12 @@ def _calc_realized_pnl(position: PaperPosition, exit_price: float, quantity: flo
 
 
 def _open_position_from_intent(db: Session, intent: UserExecutionIntent, normalized: dict) -> PaperPosition:
-    symbol = str(normalized.get("symbol") or intent.symbol or "BTCUSDT")
+    symbol = str(normalized.get("symbol") or intent.symbol or "").strip().upper()
+    if not symbol:
+        raise ValueError("symbol_required_for_execution_order")
     requested_market_type = str(normalized.get("market_type") or "").strip().lower()
     market_type = requested_market_type if requested_market_type in {"spot", "futures"} else resolve_symbol_market_type(db, redis_client, symbol)
-    bot = _default_bot(db, intent.user_id, market_type)
+    bot = _default_bot(db, intent.user_id, market_type, symbol=symbol)
     entry_price = _safe_price(symbol)
     quantity = round(max(float(intent.notional or 0) / max(entry_price, 1), 0.001), 6)
     side = str(normalized.get("side") or "buy").lower()
@@ -850,7 +866,7 @@ def _apply_position_action_intent(db: Session, intent: UserExecutionIntent) -> t
             )
         )
 
-        bot = _default_bot(db, intent.user_id, position.market_type)
+        bot = _default_bot(db, intent.user_id, position.market_type, symbol=position.symbol)
         new_side = "short" if position.side == "long" else "long"
         open_qty = float(intent.size or close_qty)
         open_price = _safe_price(position.symbol)
@@ -929,7 +945,9 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
     db.refresh(intent)
 
     normalized = intent.normalized_order_payload or {}
-    symbol = str(normalized.get("symbol") or intent.symbol or "BTCUSDT")
+    symbol = str(normalized.get("symbol") or intent.symbol or "").strip().upper()
+    if not symbol:
+        raise ValueError("symbol_required_for_execution_order")
     strategy_code = str(normalized.get("strategy_binding") or "") or None
 
     if intent.intent_type == "OPEN_POSITION":

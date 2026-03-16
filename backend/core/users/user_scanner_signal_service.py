@@ -256,18 +256,18 @@ def _clamp_scanner_max_results(max_results: int | None) -> int:
 
 def _clamp_interval_seconds(interval_seconds: int | None) -> int:
     try:
-        value = int(interval_seconds or 180)
+        value = int(interval_seconds or 60)
     except (TypeError, ValueError):
-        value = 180
-    return 180 if value != 180 else value
+        value = 60
+    return max(30, min(120, value))
 
 
 def _clamp_profile_interval_seconds(interval_seconds: int | None) -> int:
     try:
-        value = int(interval_seconds or 180)
+        value = int(interval_seconds or 60)
     except (TypeError, ValueError):
-        value = 180
-    return max(180, min(3600, value))
+        value = 60
+    return max(30, min(120, value))
 
 
 def _next_scanner_run_at(config: UserScannerAutomationConfig) -> datetime | None:
@@ -278,7 +278,7 @@ def _next_scanner_run_at(config: UserScannerAutomationConfig) -> datetime | None
     base = config.last_run_at
     if base.tzinfo is None:
         base = base.replace(tzinfo=timezone.utc)
-    return base + timedelta(seconds=int(config.interval_seconds or 180))
+    return base + timedelta(seconds=int(config.interval_seconds or 60))
 
 
 def _next_profile_run_at(profile: UserScannerAutomationProfile) -> datetime | None:
@@ -289,7 +289,7 @@ def _next_profile_run_at(profile: UserScannerAutomationProfile) -> datetime | No
     base = profile.last_run_at
     if base.tzinfo is None:
         base = base.replace(tzinfo=timezone.utc)
-    return base + timedelta(seconds=int(profile.interval_seconds or 180))
+    return base + timedelta(seconds=int(profile.interval_seconds or 60))
 
 
 def get_or_create_scanner_automation_config(db: Session, user_id: str) -> UserScannerAutomationConfig:
@@ -301,7 +301,7 @@ def get_or_create_scanner_automation_config(db: Session, user_id: str) -> UserSc
         id=str(uuid.uuid4()),
         user_id=user_id,
         auto_enabled=True,
-        interval_seconds=180,
+        interval_seconds=60,
         max_results=25,
         symbol_source="crypto",
         symbol_selection_mode="all_market_symbols",
@@ -344,7 +344,7 @@ def scanner_automation_config_response_payload(config: UserScannerAutomationConf
         "id": config.id,
         "user_id": config.user_id,
         "auto_enabled": bool(config.auto_enabled),
-        "interval_seconds": int(config.interval_seconds or 180),
+        "interval_seconds": int(config.interval_seconds or 60),
         "max_results": _clamp_scanner_max_results(config.max_results),
         "symbol_source": _normalize_symbol_source(config.symbol_source),
         "symbol_selection_mode": _normalize_symbol_selection_mode(config.symbol_selection_mode),
@@ -567,8 +567,6 @@ def _has_active_bot(db: Session, user_id: str) -> bool:
 
 def _default_bot_for_user(db: Session, user_id: str, symbols: list[str]) -> BotProfile:
     normalized_symbols = [symbol.upper() for symbol in symbols if symbol]
-    if not normalized_symbols:
-        normalized_symbols = ["BTCUSDT", "ETHUSDT"]
 
     running_row = (
         db.query(BotProfile)
@@ -881,8 +879,18 @@ def _build_signal_intent_payload(
     side = "buy" if signal.direction == "long" else "sell"
     market_type = (signal.market_type or "spot").lower()
     strategy_binding = str(signal.strategy_id or "trend_following")
+    scanner_timestamp = datetime.now(timezone.utc).isoformat()
+    score_value = round(float(row.confidence or 0.5) * 100.0, 4)
+    scanner_signal_snapshot = {
+        "symbol": row.symbol,
+        "signal": signal.direction,
+        "score": score_value,
+        "strategy": strategy_binding,
+        "confidence": float(row.confidence or 0.5),
+        "timestamp": scanner_timestamp,
+    }
     payload = {
-        "source_type": "manual",
+        "source_type": "scanner",
         "source_ref_id": row.signal_id,
         "market_type": market_type,
         "symbol": row.symbol,
@@ -898,6 +906,12 @@ def _build_signal_intent_payload(
         "strategy_binding": strategy_binding,
         "signal_confidence": float(row.confidence or 0.5),
         "signal_bridge_context": True,
+        "signal": signal.direction,
+        "score": score_value,
+        "strategy": strategy_binding,
+        "confidence": float(row.confidence or 0.5),
+        "timestamp": scanner_timestamp,
+        "scanner_signal_snapshot": scanner_signal_snapshot,
     }
 
     if market_type == "futures":
@@ -1226,7 +1240,7 @@ def run_user_scanner(
         scan_performance = {}
 
     selected = ranked[:max_results]
-    selected_symbols = [str(item.get("symbol", "BTCUSDT")).upper() for item in selected]
+    selected_symbols = [str(item.get("symbol") or "").upper() for item in selected if str(item.get("symbol") or "").strip()]
 
     db.query(UserScannerResult).filter(UserScannerResult.user_id == user_id).delete()
 
@@ -1249,8 +1263,26 @@ def run_user_scanner(
     reference_equity = float(risk_policy_row.reference_equity_usd) if risk_policy_row else 10000.0
     risk_per_trade_pct = float(GLOBAL_RISK_POLICY.get("risk_per_trade_pct", 1.5))
     per_trade_notional_cap = max(10.0, round(reference_equity * (risk_per_trade_pct / 100), 4))
-    max_positions = int(GLOBAL_RISK_POLICY.get("max_positions", 5))
+    max_positions = min(3, int(GLOBAL_RISK_POLICY.get("max_positions", 5)))
     cooldown_seconds = int(GLOBAL_RISK_POLICY.get("cooldown_symbol_seconds", 21600))
+
+    day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    closed_today_rows = (
+        db.query(PaperPosition)
+        .filter(
+            PaperPosition.user_id == user_id,
+            PaperPosition.status == "closed",
+            PaperPosition.closed_at.isnot(None),
+            PaperPosition.closed_at >= day_start,
+        )
+        .all()
+    )
+    realized_today = sum(float(row.realized_pnl or 0) for row in closed_today_rows)
+    daily_loss_pct = max(0.0, (-realized_today / max(reference_equity, 1.0)) * 100)
+    daily_loss_limit_pct = 1.0
+    daily_loss_guard_blocked = daily_loss_pct >= daily_loss_limit_pct
+    if daily_loss_guard_blocked:
+        warning_set.add("daily_loss_limit_reached")
 
     open_positions_count = len(open_symbols)
     cooldown_since = datetime.now(timezone.utc) - timedelta(seconds=cooldown_seconds)
@@ -1271,7 +1303,10 @@ def run_user_scanner(
         reason_codes = item.get("reason_codes") or []
         confidence = float(item.get("signal_strength") or 0)
         score = float(item.get("signal_score") or 0)
-        symbol = str(item.get("symbol", "BTCUSDT")).upper()
+        symbol = str(item.get("symbol") or "").upper()
+        if not symbol:
+            warning_set.add("symbol_missing_rejected")
+            continue
         strategy_code = str(item.get("strategy_code") or "canonical_unknown")
         snapshot_age_sec = item.get("indicator_snapshot_age_sec")
         if snapshot_age_sec is None:
@@ -1296,6 +1331,11 @@ def run_user_scanner(
                 "risk_state": {"state": "blocked", "reason": "stale_data_block"},
                 "cooldown_state": {"state": "clear"},
             }
+
+        if daily_loss_guard_blocked:
+            signal_value = "none"
+            final_decision = "BLOCKED"
+            reason_codes = list(dict.fromkeys([*(reason_codes or []), "daily_loss_limit_reached"]))
 
         candidate_class = "ignore_for_now"
         if symbol in candidate_high_set:
@@ -1617,6 +1657,10 @@ def run_user_scanner(
         "same_symbol_duplicate_suppression": int(duplicate_suppressed_count),
         "stale_evaluation_count": int(stale_evaluation_count),
         "stale_block_count": int(stale_block_count),
+        "max_positions_guard": int(max_positions),
+        "daily_loss_limit_pct": float(daily_loss_limit_pct),
+        "daily_loss_pct": round(float(daily_loss_pct), 6),
+        "daily_loss_guard_blocked": bool(daily_loss_guard_blocked),
         "freshness_sla_seconds": FRESHNESS_SLA_SECONDS,
         "backpressure_mode": "low_priority_defer + stale_drop + explainability_degrade",
         "requested_selection_mode": normalized_selection_mode,
