@@ -16,7 +16,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Base URL from frontend/.env
-BASE_URL = "https://quote-policy-admin.preview.emergentagent.com/api"
+BASE_URL = "https://trading-infra.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@platform.local"

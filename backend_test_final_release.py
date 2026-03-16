@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any, Tuple
 
 # Backend URL from frontend/.env
-BASE_URL = "https://quote-policy-admin.preview.emergentagent.com"
+BASE_URL = "https://trading-infra.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 class FinalReleaseValidator:

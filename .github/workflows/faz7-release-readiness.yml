@@ -1,0 +1,41 @@
+name: FAZ-7 Release Readiness
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release-readiness:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify FAZ-7 release readiness
+        shell: bash
+        env:
+          REACT_APP_BACKEND_URL: http://localhost:8001
+        run: |
+          set -euo pipefail
+          chmod +x ./scripts/verify_faz7_release_readiness.sh
+          ./scripts/verify_faz7_release_readiness.sh 2>&1 | tee /tmp/faz7_release.log
+
+      - name: Upload FAZ-7 artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: faz7-release-readiness
+          path: |
+            /tmp/faz7_release.log
+            /tmp/faz7/build_baseline.log
+            /tmp/faz7/build_nocache.log
+            /tmp/faz7/backend_parity.txt
+            /tmp/faz7/frontend_parity.txt
+            /tmp/faz7/backend_parity_nocache.txt
+            /tmp/faz7/frontend_parity_nocache.txt
+            /tmp/faz7/compose_ps.txt
+            /tmp/faz7/compose_images.txt
+            /tmp/faz7/login_body.json
+            /tmp/faz7/admin_summary.json
+            /tmp/faz7/rollback_plan.txt
+            /tmp/faz7/release_manifest.json

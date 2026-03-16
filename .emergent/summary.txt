@@ -1,0 +1,140 @@
+<analysis>**original_problem_statement:**
+The user, a technical product owner, is overseeing the final development stages of a professional-grade trading bot. The initial objective was to refactor the system to be symbol-agnostic, operating only on markets with USDT or USDC as the quote asset, removing all hard dependencies on Bitcoin (BTC).
+
+However, the project encountered severe, recurring foundational issues with the database migration chain, environment configuration, and Docker setup. The focus shifted to a deep, multi-phase infrastructure hardening and stabilization effort, meticulously defined by the user. The project is structured into Phases (FAZ) and Gates, which must be passed before proceeding. The agent's current job is to execute this stabilization plan phase by phase to ensure the system is robust, deployable, and maintainable before resuming feature development.
+
+**User's preferred language**: Turkish
+
+**what currently exists?**
+The application is a full-stack trading bot (FastAPI backend, React frontend, PostgreSQL DB, Redis cache). The development process has been a highly structured, collaborative effort between the user and the agent to fix deep-seated infrastructure problems. This involved creating a new, sequential plan (FAZ-1 to FAZ-7) focused on stabilization.
+
+-   **FAZ-1 to FAZ-4:** Addressed and fixed critical issues in DB binding (Alembic configuration), environment variable management, and the entire migration chain, which was repeatedly failing on clean installs due to datatype mismatches, missing table dependencies, and incorrect SQL.
+-   **FAZ-5:** Verified the backend runtime and authentication smoke tests, ensuring the service could start and the admin login worked.
+-   **FAZ-6:** Verified the health and connectivity of the entire Docker stack (Postgres, Redis, Backend, Frontend), fixing issues in  and build scripts.
+
+The system is now believed to be in a stable state where migrations run successfully on a clean database, and all services start and connect correctly within the Docker environment.
+
+**Last working item**:
+-   **Last item agent was working:** The user confirmed that FAZ-6 (Docker Stack Health + Redis + Frontend Connectivity) was complete. The agent then prepared for FAZ-7 (Image Parity + Deploy Proof + Release Readiness) by creating a new verification script () and a corresponding GitHub Actions workflow ().
+-   **Status:** NOT STARTED
+-   **Agent Testing Done:** N
+-   **Which testing method agent to use?** The agent should propose running the newly created GitHub workflow () to the user. This workflow will serve as the test for FAZ-7.
+-   **User Testing Done:** N
+
+**All Pending/In progress Issue list**:
+The project is currently focused on the infrastructure stabilization plan. There are no pending bugs; the work is task-based.
+
+**In progress Task List**:
+-   **Task 1: FAZ-7 — Image Parity + Deploy Proof + Release Readiness (P0 - HIGHEST PRIORITY)**
+    -   **Where to resume:** The scripts and workflow for FAZ-7 have been created. The next step is to ask the user for confirmation to run the  workflow on GitHub.
+    -   **What will be achieved with this?** This phase will verify that the Docker images built are consistent with the source code (image parity), that the built artifacts can be deployed and started successfully (deploy proof), and that a final release readiness checklist is passed. This is the final gate before the system can be considered operationally stable.
+    -   **Status:** NOT STARTED
+    -   **Should Test frontend/backend/both after fix?** both (via the custom GitHub workflow)
+    -   **Blocked on something:** User confirmation to run the workflow.
+
+**Upcoming and Future Tasks**
+-   **Upcoming Tasks (P1):**
+    -   **Un-mock Exchange Adapters:** Once the system is declared stable, the mocked Bybit/OKX adapters must be connected to live exchange APIs to enable real trading. This is the main blocker for the original project goal.
+    -   **Original FAZ-7: Controlled Live Rollout:** After the adapters are un-mocked, begin a controlled live trading session.
+
+-   **Future Tasks (P2):**
+    -   **User Live Dashboard Pagination:** Add  pagination to the user's live trading dashboard to handle large amounts of data.
+    -   **Resume Original Birleşik Master Plan:** Continue with any remaining feature work from the user's initial master plan once the system is fully stable and live.
+
+**Completed work in this session**
+-   **FAZ-1 (DB Binding):** Fixed Alembic configuration to prevent fallback to SQLite, ensuring migrations always target PostgreSQL.
+-   **FAZ-2 (ENV Bütünlüğü):** Corrected  and startup scripts to ensure all required backend and frontend environment variables are correctly injected and validated.
+-   **FAZ-3 (Migration Statik Güvenlik):** Scanned and patched all migration files for PostgreSQL-incompatible SQL (boolean types, long FK names).
+-   **FAZ-4 (Temiz Kurulum Kanıtı):** Systematically debugged and fixed the entire Alembic migration chain through multiple iterations, resolving dependency cycles ( table), datatype mismatches, and FK creation errors until FAILED: No 'script_location' key found in configuration. completed successfully on a clean DB.
+-   **FAZ-5 (Runtime & Auth Smoke):** Verified that the backend starts, admin login works, and a protected endpoint is accessible. Made the dashboard summary service more resilient to prevent 500 errors.
+-   **FAZ-6 (Docker Stack Health):** Fixed  and build scripts () to ensure the entire stack builds and starts reliably in the CI/CD environment. Added healthchecks for all services.
+
+**Earlier issues found/mentioned but not fixed**
+-   **Issue 1: User Live Dashboard Pagination**
+    -   The user dashboard lacks pagination. This is a known future improvement.
+    -   **Why to solve this issue and what will be achieved with this?** To improve frontend performance and usability as data grows.
+    -   **Should Test frontend/backend/both after fix:** both
+
+**Known issue recurrence from previous fork**
+-   The entire session was dedicated to fixing a cascade of recurring infrastructure failures related to DB migrations and Docker environment setup. A series of verification scripts () and GitHub workflows have been created to prevent these issues from recurring silently.
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+-   **Gated Infrastructure Hardening:** A systematic, phase-by-phase approach (FAZ-1 to FAZ-7) to identify, isolate, and fix fundamental issues in the application's environment, migrations, and deployment process.
+-   **CI/CD Verification:** Heavy reliance on GitHub Actions workflows and shell scripts () to create reproducible proofs for each phase (clean install, runtime smoke, stack connectivity).
+-   **Idempotent & Resilient Migrations:** Refactoring Alembic migrations to be robust against pre-existing conditions (e.g., checking if a table exists before adding a Foreign Key) to ensure the migration chain can run reliably on both new and existing databases.
+-   **Docker Healthchecks & Dependencies:** Configuring  with  and  to ensure a stable and ordered startup of services.
+
+**key DB schema**
+-   No new features were added, but the existing schema defined across dozens of migration files was heavily debugged and patched to allow for a successful, clean database build. Key tables involved in the fixes were , , , and .
+
+**changes in tech stack**
+-   None.
+
+**All files of reference**
+-   **Verification Scripts (New/Updated):**
+    -   [ERROR] Missing ALEMBIC_DATABASE_URL or DATABASE_URL
+    -   [ERROR] Missing DATABASE_URL
+    -   
+    -    (new)
+-   **CI Workflows (New/Updated):**
+    -   
+    -   
+    -   
+    -    (new)
+-   **Core Config:**
+    -   
+
+**key api endpoints**
+-   The smoke tests revolved around , , and . The last one was made more resilient.
+
+**Critical Info for New Agent**
+-   **MUST communicate in Turkish.**
+-   The project has just completed a massive infrastructure stabilization effort (new FAZ-1 to FAZ-6). The user is highly technical and expects a methodical, evidence-based approach. Do not deviate from the phased plan.
+-   FAZ-6 (Stack Connectivity) just passed. The next step is to execute **FAZ-7 (Release Readiness)**.
+-   You should propose running the newly created workflow () to the user to get the final proof of system stability.
+-   The original project goal (symbol-agnostic trading) has been on hold. The main blocker remains the **mocked exchange adapters**.
+
+**documents and test reports created in this job**
+-   
+-   The most important reports were the log outputs and artifacts from the GitHub Actions runs for FAZ-4, FAZ-5, and FAZ-6.
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **#795:** User provides artifact from GitHub, which the agent analyzes.
+2.  **#787:** User confirms FAZ-6 is complete and says to proceed with FAZ-7.
+3.  **#783:** User defines the plan for FAZ-7 (Image Parity, Deploy Proof, Release Readiness).
+4.  **#775:** User provides logs showing a  for  during the FAZ-6 run.
+5.  **#759:** User provides logs showing the frontend build failing due to a missing  file.
+6.  **#717:** User defines the plan for FAZ-6 (Docker Stack Health, Redis, Frontend Connectivity).
+7.  **#703:** User provides logs showing the protected admin endpoint returning a 500 error during the FAZ-5 run.
+8.  **#687:** User defines the plan for FAZ-5 (Runtime & Auth Smoke Tests).
+9.  **#677:** User provides logs showing the migration chain failing due to a missing Foreign Key on .
+10. **#665:** User provides logs showing the migration chain failing on a data type mismatch for the  enum.
+
+**Project Health Check:**
+-   **Broken:** None. The foundational issues seem to be resolved.
+-   **Mocked:** Core exchange execution adapters (Bybit/OKX). This is the primary blocker for real-world functionality.
+
+**3rd Party Integrations**
+-   PostgreSQL
+-   Redis
+-   Bybit/OKX (Adapters are mocked)
+
+**Testing status**
+-   **Testing agent used after significant changes:** YES, for static analysis of the created scripts and workflows.
+-   **Troubleshoot agent used after agent stuck in loop:** NO
+-   **Test files created:**
+    -   [ERROR] Missing ALEMBIC_DATABASE_URL or DATABASE_URL
+    -   [ERROR] Missing DATABASE_URL
+    -   
+    -   
+    -   Multiple GitHub Actions workflows in .
+-   **Known regressions:** None. The entire session was about fixing existing deep-seated issues.
+
+**Credentials to test flow:**
+-   **Admin Login:**  /  (as defined in workflow envs)
+
+**What agent forgot to execute**
+-   The agent has been extremely thorough and has followed the user's detailed, phased stabilization plan meticulously. No tasks appear to have been forgotten.</analysis>
