@@ -30,6 +30,12 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://trader:trader@postgres:5432/trading_platform
       REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: change-this
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: "720"
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      DEFAULT_ADMIN_EMAIL: admin@platform.local
+      DEFAULT_ADMIN_PASSWORD: Admin12345!
     depends_on:
       - postgres
       - redis
@@ -44,6 +50,9 @@ services:
     restart: unless-stopped
     env_file:
       - ./frontend/.env
+    command: >
+      sh -c 'test -n "$REACT_APP_BACKEND_URL" || (echo "Missing REACT_APP_BACKEND_URL" >&2; exit 1);
+      yarn start'
     depends_on:
       - backend
     ports:

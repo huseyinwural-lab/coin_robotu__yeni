@@ -9,9 +9,12 @@ load_dotenv(ROOT_DIR / ".env")
 
 def required_env(key: str) -> str:
     value = os.environ.get(key)
-    if not value:
+    if value is None:
         raise RuntimeError(f"Missing required environment variable: {key}")
-    return value
+    normalized = str(value).strip()
+    if not normalized:
+        raise RuntimeError(f"Missing required environment variable: {key}")
+    return normalized
 
 
 class Settings:
@@ -23,8 +26,8 @@ class Settings:
     cors_origins: list[str] = [
         origin.strip() for origin in required_env("CORS_ORIGINS").split(",") if origin.strip()
     ]
-    default_admin_email: str | None = os.environ.get("DEFAULT_ADMIN_EMAIL")
-    default_admin_password: str | None = os.environ.get("DEFAULT_ADMIN_PASSWORD")
+    default_admin_email: str = required_env("DEFAULT_ADMIN_EMAIL")
+    default_admin_password: str = required_env("DEFAULT_ADMIN_PASSWORD")
     scaling_weight_pnl_stability: float = float(os.environ.get("SCALING_WEIGHT_PNL_STABILITY", "0.25"))
     scaling_weight_slippage_impact: float = float(os.environ.get("SCALING_WEIGHT_SLIPPAGE_IMPACT", "0.25"))
     scaling_weight_execution_quality: float = float(os.environ.get("SCALING_WEIGHT_EXECUTION_QUALITY", "0.25"))

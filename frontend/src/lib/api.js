@@ -1,9 +1,22 @@
 import axios from "axios";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = String(process.env.REACT_APP_BACKEND_URL || "").trim();
+
+if (!BACKEND_URL) {
+  throw new Error(
+    "Missing required frontend env: REACT_APP_BACKEND_URL. " +
+      "API baseURL cannot be constructed.",
+  );
+}
+
+if (!/^https?:\/\//i.test(BACKEND_URL)) {
+  throw new Error(
+    "Invalid REACT_APP_BACKEND_URL. Expected absolute http(s) URL.",
+  );
+}
 
 export const apiClient = axios.create({
-  baseURL: `${BACKEND_URL}/api`,
+  baseURL: `${BACKEND_URL.replace(/\/$/, "")}/api`,
   timeout: 15000,
 });
 
