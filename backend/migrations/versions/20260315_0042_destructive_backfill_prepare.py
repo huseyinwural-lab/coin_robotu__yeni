@@ -31,7 +31,7 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     if _table_exists(bind, "bot_profiles") and _column_exists(bind, "bot_profiles", "is_running"):
-        op.execute(sa.text("UPDATE bot_profiles SET is_running = 0 WHERE is_running IS NULL"))
+        op.execute(sa.text("UPDATE bot_profiles SET is_running = FALSE WHERE is_running IS NULL"))
 
     if _table_exists(bind, "strategy_observability_events") and _column_exists(bind, "strategy_observability_events", "created_at"):
         op.execute(sa.text("UPDATE strategy_observability_events SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))

@@ -30,30 +30,25 @@ def _column_exists(bind, table_name: str, column_name: str) -> bool:
 def upgrade() -> None:
     bind = op.get_bind()
 
+    # PostgreSQL hedefli migration akışında batch_alter_table gerekli değil.
     if _table_exists(bind, "bot_profiles") and _column_exists(bind, "bot_profiles", "is_running"):
-        with op.batch_alter_table("bot_profiles") as batch_op:
-            batch_op.alter_column("is_running", existing_type=sa.Boolean(), nullable=False)
+        op.alter_column("bot_profiles", "is_running", existing_type=sa.Boolean(), nullable=False)
 
     if _table_exists(bind, "strategy_observability_events") and _column_exists(bind, "strategy_observability_events", "created_at"):
-        with op.batch_alter_table("strategy_observability_events") as batch_op:
-            batch_op.alter_column("created_at", existing_type=sa.DateTime(timezone=True), nullable=False)
+        op.alter_column("strategy_observability_events", "created_at", existing_type=sa.DateTime(timezone=True), nullable=False)
 
     if _table_exists(bind, "users") and _column_exists(bind, "users", "updated_at"):
-        with op.batch_alter_table("users") as batch_op:
-            batch_op.alter_column("updated_at", existing_type=sa.DateTime(timezone=True), nullable=False)
+        op.alter_column("users", "updated_at", existing_type=sa.DateTime(timezone=True), nullable=False)
 
 
 def downgrade() -> None:
     bind = op.get_bind()
 
     if _table_exists(bind, "users") and _column_exists(bind, "users", "updated_at"):
-        with op.batch_alter_table("users") as batch_op:
-            batch_op.alter_column("updated_at", existing_type=sa.DateTime(timezone=True), nullable=True)
+        op.alter_column("users", "updated_at", existing_type=sa.DateTime(timezone=True), nullable=True)
 
     if _table_exists(bind, "strategy_observability_events") and _column_exists(bind, "strategy_observability_events", "created_at"):
-        with op.batch_alter_table("strategy_observability_events") as batch_op:
-            batch_op.alter_column("created_at", existing_type=sa.DateTime(timezone=True), nullable=True)
+        op.alter_column("strategy_observability_events", "created_at", existing_type=sa.DateTime(timezone=True), nullable=True)
 
     if _table_exists(bind, "bot_profiles") and _column_exists(bind, "bot_profiles", "is_running"):
-        with op.batch_alter_table("bot_profiles") as batch_op:
-            batch_op.alter_column("is_running", existing_type=sa.Boolean(), nullable=True)
+        op.alter_column("bot_profiles", "is_running", existing_type=sa.Boolean(), nullable=True)

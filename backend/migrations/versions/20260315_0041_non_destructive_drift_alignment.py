@@ -62,18 +62,10 @@ def upgrade() -> None:
 
     if _table_exists(bind, "pending_signals"):
         fk_specs = [
-            ("fk_pending_signals_bot_profile_id_bot_profiles", "bot_profile_id", "bot_profiles"),
-            (
-                "fk_pending_signals_exchange_connection_id_user_exchange_connections",
-                "exchange_connection_id",
-                "user_exchange_connections",
-            ),
-            (
-                "fk_pending_signals_created_order_intent_id_user_execution_intents",
-                "created_order_intent_id",
-                "user_execution_intents",
-            ),
-            ("fk_pending_signals_risk_policy_id_risk_policies", "risk_policy_id", "risk_policies"),
+            ("fk_ps_bot_profile", "bot_profile_id", "bot_profiles"),
+            ("fk_ps_exc_conn", "exchange_connection_id", "user_exchange_connections"),
+            ("fk_ps_order_intent", "created_order_intent_id", "user_execution_intents"),
+            ("fk_ps_risk_policy", "risk_policy_id", "risk_policies"),
         ]
 
         missing_fk_specs: list[tuple[str, str, str]] = []
@@ -86,10 +78,8 @@ def upgrade() -> None:
                 continue
             missing_fk_specs.append((fk_name, column_name, referred_table))
 
-        if missing_fk_specs:
-            with op.batch_alter_table("pending_signals", recreate="always") as batch_op:
-                for fk_name, column_name, referred_table in missing_fk_specs:
-                    batch_op.create_foreign_key(fk_name, referred_table, [column_name], ["id"])
+        for fk_name, column_name, referred_table in missing_fk_specs:
+            op.create_foreign_key(fk_name, "pending_signals", referred_table, [column_name], ["id"])
 
 
 def downgrade() -> None:
@@ -105,13 +95,15 @@ def downgrade() -> None:
         inspector = sa.inspect(bind)
         existing_fk_names = {fk.get("name") for fk in inspector.get_foreign_keys("pending_signals") if fk.get("name")}
         removable = [
+            "fk_ps_bot_profile",
+            "fk_ps_exc_conn",
+            "fk_ps_order_intent",
+            "fk_ps_risk_policy",
             "fk_pending_signals_bot_profile_id_bot_profiles",
             "fk_pending_signals_exchange_connection_id_user_exchange_connections",
             "fk_pending_signals_created_order_intent_id_user_execution_intents",
             "fk_pending_signals_risk_policy_id_risk_policies",
         ]
         to_drop = [name for name in removable if name in existing_fk_names]
-        if to_drop:
-            with op.batch_alter_table("pending_signals", recreate="always") as batch_op:
-                for fk_name in to_drop:
-                    batch_op.drop_constraint(fk_name, type_="foreignkey")
+        for fk_name in to_drop:
+            op.drop_constraint(fk_name, "pending_signals", type_="foreignkey")
