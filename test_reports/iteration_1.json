@@ -1,55 +1,42 @@
 {
-  "summary": "Executed backend pytest regression (public endpoint) and frontend Playwright flow checks for auth, role-protected routes, CRUD shells, audit logs, and exchange mock execution.",
+  "summary": "FAZ-5 Runtime & Auth Smoke static/contract level verification completed successfully. Both shell script and GitHub workflow meet all requirements.",
   "backend_issues": {
     "critical": [],
     "minor": []
   },
   "frontend_issues": {
     "ui_bugs": [],
-    "integration_issues": [
-      {
-        "flow": "Exchange mock execute -> events table refresh",
-        "issue": "In one run, execute returned success but table row count stayed 0 immediately after submit; subsequent diagnostic run showed rows present.",
-        "affected_selectors": [
-          "[data-testid=exchange-form-submit-button]",
-          "[data-testid^=exchange-table-row-]"
-        ]
-      },
-      {
-        "flow": "Audit log table initial load",
-        "issue": "In one run, admin audit table rendered with 0 rows immediately after strategy actions; later run returned rows normally.",
-        "affected_selectors": [
-          "[data-testid=nav-audit-logs-link]",
-          "[data-testid^=audit-table-row-]"
-        ]
-      }
-    ],
+    "integration_issues": [],
     "design_issues": []
   },
-  "test_report_links": [
-    "/app/backend/tests/test_phase1_platform.py",
-    "/app/test_reports/pytest/pytest_results.xml"
-  ],
-  "action_items": [
-    "Investigate potential race condition/stale state in ExchangeMockPage fetch/refresh sequence after execute.",
-    "Add deterministic loading/empty-state handling on AuditLogsPage and ExchangeMockPage so users can distinguish empty data vs delayed fetch.",
-    "Optional: resolve passlib bcrypt backend warning seen in backend logs."
-  ],
+  "test_report_links": ["/app/backend/scripts/verify_runtime_auth_smoke.sh", "/app/.github/workflows/faz5-runtime-auth-smoke.yml"],
+  "action_items": [],
   "critical_code_review_comments": [
-    "ExchangeMockPage useEffect has missing dependency warning (fetchAll), increasing stale closure/race risk during refresh-heavy flows.",
-    "Backend router-level tests are missing in repository by default; keep the added pytest file as regression baseline."
+    "Shell script verify_runtime_auth_smoke.sh: All requirements met - fail-fast enabled, correct step order, failure diagnostics included",
+    "Workflow faz5-runtime-auth-smoke.yml: All requirements met - postgres+redis services, env vars complete, always-upload logs artifact"
   ],
-  "updated_files": [
-    "/app/backend/tests/test_phase1_platform.py",
-    "/app/test_reports/iteration_1.json"
-  ],
-  "success_rate": {
-    "backend": "100%",
-    "frontend": "88%"
-  },
-  "seed_data_creation": "Created dynamic test users and multiple TEST_/UI entities through API/UI during validation.",
-  "retest_needed": true,
-  "should_main_agent_self_test": true,
-  "context_for_next_testing_agent": "Backend APIs passed 8/8 pytest cases via public URL. Frontend critical paths passed, but exchange/audit table population showed one-time timing inconsistency before stabilizing. Verify with a focused UI re-run after any state-management changes.",
-  "rca of the issue": "Likely frontend timing/state sync behavior: page reads rows immediately after async mutation and refresh call, while data arrival/render may lag. Mitigation: explicit loading state + awaited refresh completion + robust post-submit polling in UI tests."
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A - skipped"},
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Static verification completed. Shell script and workflow are correctly configured for FAZ-5 runtime auth smoke testing. Actual execution will occur in GitHub Actions runner.",
+  "verification_details": {
+    "shell_script_checks": {
+      "fail_fast_enabled": "Line 2: set -euo pipefail",
+      "step_order_correct": "1/4 runtime -> 2/4 bootstrap -> 3/4 login -> 4/4 protected endpoint",
+      "failure_diagnostics": {
+        "runtime_failure": "tail -n 200 backend log (line 46)",
+        "login_failure": "cat login body + tail backend log (lines 77-78)",
+        "token_missing": "cat login body (line 93)",
+        "protected_endpoint_failure": "cat admin body + tail backend log (lines 104-105)"
+      }
+    },
+    "workflow_checks": {
+      "postgres_service": "PostgreSQL 15 with health check (lines 11-24)",
+      "redis_service": "Redis 7 (lines 26-29)",
+      "env_vars_complete": "DATABASE_URL, REDIS_URL, JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRE_MINUTES, CORS_ORIGINS, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD, BACKEND_URL",
+      "logs_artifact_always_upload": "if: ${{ always() }} on upload-artifact step (line 68)"
+    }
+  }
 }
