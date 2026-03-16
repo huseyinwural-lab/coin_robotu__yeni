@@ -64,6 +64,24 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (FAZ-5 ek revizyonlar — kullanıcı geri bildirimi uygulandı)
+- **Execute ekranı UX güçlendirildi (Türkçe ağırlıklı):**
+  - Policy bandı geçersiz paritede kırmızı uyarı tonuna geçecek şekilde dinamik hale getirildi.
+  - Symbol input geçerli/uygunsuz sembolde görsel border geri bildirimi (yeşil/kırmızı) eklendi.
+  - Preview butonundan önce sağ panelde "Preview öncesi işlem özeti" kartı eklendi (örn. `25 USDT değerinde ...`).
+  - Venue State altında unsupported pair uyarı metni eklendi.
+- **Scanner düzeni kullanıcı isteğine göre yeniden sıralandı (sadece yerleşim):**
+  - `Statistics` en başa alındı.
+  - `Çoklu Otomasyon Profilleri` hemen altına `Scanner Control` taşındı.
+  - `Symbol Selection` Scanner Control altına, `Strategy Presets` de onun altına taşındı.
+  - Ek olarak tarama tipi görünürlüğü artırıldı: `OTOMATİK TARAMA / MANUEL TARAMA` kartı ve detay metni eklendi.
+- **Policy görünürlüğü terminoloji güncellemesi:**
+  - Symbol selector ve scanner results tablolarında policy başlığı `Strategy Policy` olarak netleştirildi.
+- **Doğrulama:**
+  - Testing agent raporu: `/app/test_reports/iteration_123.json` → frontend **100% PASS**
+  - Kritik düzeltme: testing agent, `UserScannerPage.jsx` içinde `activeAutomation` değişkeninin kullanım sırasını düzeltti; lint PASS.
+  - Not: Bybit/OKX execution adapterları **MOCKED** durumda.
+
 ### 2026-03-16 (FAZ-5 — User UI Policy Visibility tamamlandı)
 - **Scanner ve Execute UI’da policy görünürlüğü güçlendirildi:**
   - `frontend/src/components/SymbolSelectorPanel.jsx`
