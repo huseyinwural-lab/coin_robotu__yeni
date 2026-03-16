@@ -784,7 +784,7 @@ class UserRiskPreviewResponse(BaseModel):
 
 
 class ReplayRunRequest(BaseModel):
-    symbol: str = "BTCUSDT"
+    symbol: str
     timeframe: str = "15m"
     exchange: str = "binance"
     market_type: str = "futures"

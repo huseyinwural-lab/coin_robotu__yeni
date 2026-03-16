@@ -28,8 +28,10 @@ from services.live_mode_service import (
     user_readiness_checklist,
     validate_exchange_credentials_for_user,
 )
+from services.quote_asset_policy import normalize_quote_symbol
 from services.replay_service import get_replay_run_detail, run_replay_pipeline
 from services.artifact_service import write_signed_artifact
+from services.symbol_selector_service import resolve_symbol_universe
 
 router = APIRouter(prefix="/exchange", tags=["exchange"])
 adapter = BinanceMockAdapter(redis_client)
@@ -469,13 +471,33 @@ def run_lifecycle_proof_pipeline(
     )
 
     try:
+        replay_universe = resolve_symbol_universe(
+            db,
+            source="crypto",
+            exchange=exchange,
+            market_type=market_type,
+            mode="top_volume",
+            selected_symbols=[],
+            query="",
+            quote_asset_filter="ALL",
+        )
+        replay_candidates = replay_universe.get("selected_symbols") or replay_universe.get("rows") or []
+        replay_symbol_raw = replay_candidates[0] if replay_candidates else None
+        if isinstance(replay_symbol_raw, dict):
+            replay_symbol_raw = replay_symbol_raw.get("symbol")
+        replay_symbol = normalize_quote_symbol(
+            replay_symbol_raw,
+            missing_error_code="no_allowed_quote_symbol_for_replay",
+            invalid_error_code="invalid_quote_asset",
+        )
+
         replay_run = run_replay_pipeline(
             db,
             current_user.id,
             exchange=exchange,
             market_type=market_type,
             environment=environment,
-            symbol="BTCUSDT",
+            symbol=replay_symbol,
             timeframe="15m",
             strategy_type="trend_following",
             limit=180,

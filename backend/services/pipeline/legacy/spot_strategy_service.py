@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from models import PaperPosition, PositionLedgerEvent
 from services.pipeline.cache_store import get_json, set_json, utc_now_iso
+from services.quote_asset_policy import ALLOWED_QUOTE_ASSETS, filter_allowed_quote_symbols
 
 BINANCE_TICKER_24H_URL = "https://api.binance.com/api/v3/ticker/24hr"
 BINANCE_BOOK_TICKER_URL = "https://api.binance.com/api/v3/ticker/bookTicker"
@@ -283,7 +284,7 @@ def refresh_spot_tradable_universe(cache) -> dict:
     rows: list[dict] = []
     for ticker in tickers:
         symbol = str(ticker.get("symbol", "")).upper()
-        if not symbol.endswith("USDT"):
+        if not any(symbol.endswith(quote_asset) for quote_asset in ALLOWED_QUOTE_ASSETS):
             continue
         quote_volume = _safe_float(ticker.get("quoteVolume"))
         book = book_map.get(symbol, {})
@@ -304,14 +305,9 @@ def refresh_spot_tradable_universe(cache) -> dict:
     tradable.sort(key=lambda item: item["24h_volume"], reverse=True)
 
     if len(tradable) < UNIVERSE_MIN_SYMBOLS:
-        fallbacks = [
-            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "TRXUSDT",
-            "AVAXUSDT", "DOTUSDT", "LINKUSDT", "LTCUSDT", "BCHUSDT", "UNIUSDT", "MATICUSDT", "ATOMUSDT",
-            "AAVEUSDT", "NEARUSDT", "APTUSDT", "ARBUSDT", "OPUSDT", "SUIUSDT", "INJUSDT", "ETCUSDT",
-            "FILUSDT", "RUNEUSDT", "ICPUSDT", "SEIUSDT", "XLMUSDT", "HBARUSDT",
-        ]
         present = {item["symbol"] for item in tradable}
-        for fallback_symbol in fallbacks:
+        dynamic_fallbacks = filter_allowed_quote_symbols([row.get("symbol") for row in rows])
+        for fallback_symbol in dynamic_fallbacks:
             if fallback_symbol in present:
                 continue
             tradable.append(
@@ -319,7 +315,7 @@ def refresh_spot_tradable_universe(cache) -> dict:
                     "symbol": fallback_symbol,
                     "24h_volume": 0.0,
                     "spread": 0.0,
-                    "status": "fallback",
+                    "status": "fallback_dynamic",
                 }
             )
             if len(tradable) >= UNIVERSE_MIN_SYMBOLS:
@@ -331,7 +327,7 @@ def refresh_spot_tradable_universe(cache) -> dict:
         "filters": {
             "min_24h_volume_usdt": UNIVERSE_MIN_VOLUME_USDT,
             "max_spread_pct": UNIVERSE_MAX_SPREAD_PCT,
-            "quote_asset": "USDT",
+            "quote_assets": sorted(ALLOWED_QUOTE_ASSETS),
         },
         "symbols": [item["symbol"] for item in universe_rows],
         "rows": universe_rows,

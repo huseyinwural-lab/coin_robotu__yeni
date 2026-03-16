@@ -6,10 +6,11 @@ from models import AdminControl
 from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
 from services.pipeline.cache_store import get_json, set_json
 from services.pipeline.spot_strategy_service import get_spot_tradable_universe
+from services.quote_asset_policy import ALLOWED_QUOTE_ASSETS, filter_allowed_quote_symbols
 
 
 def _normalize_symbols(symbols: list[str]) -> list[str]:
-    return sorted({symbol.strip().upper() for symbol in symbols if symbol and symbol.strip()})
+    return filter_allowed_quote_symbols([str(symbol or "").strip().upper() for symbol in symbols])
 
 
 def _within_filters(symbol: str, cache, min_volume: float, max_spread_bps: int) -> bool:
@@ -42,10 +43,13 @@ def _market_rows(market_type: str) -> list[dict]:
         symbol = str(row.get("symbol") or "").upper().strip()
         if not symbol:
             continue
+        quote_asset = str(row.get("quote_asset") or "").upper()
+        if quote_asset not in ALLOWED_QUOTE_ASSETS:
+            continue
         rows.append(
             {
                 "symbol": symbol,
-                "quote_asset": str(row.get("quote_asset") or "").upper(),
+                "quote_asset": quote_asset,
                 "volume_24h": _safe_float(row.get("volume_24h"), 0.0),
             }
         )
@@ -165,8 +169,8 @@ def build_effective_universe(db: Session, cache):
     dynamic_spot_symbols = _normalize_symbols(dynamic_universe.get("symbols", []))
     market_spot_rows = _market_rows("spot")
     market_futures_rows = _market_rows("futures")
-    market_spot_symbols = _normalize_symbols([row["symbol"] for row in market_spot_rows if row.get("quote_asset") == "USDT"])
-    market_futures_symbols = _normalize_symbols([row["symbol"] for row in market_futures_rows if row.get("quote_asset") == "USDT"])
+    market_spot_symbols = _normalize_symbols([row["symbol"] for row in market_spot_rows if row.get("quote_asset") in ALLOWED_QUOTE_ASSETS])
+    market_futures_symbols = _normalize_symbols([row["symbol"] for row in market_futures_rows if row.get("quote_asset") in ALLOWED_QUOTE_ASSETS])
     control = db.query(AdminControl).filter(AdminControl.id == "global").first()
     if control is None:
         advisory_map = {symbol: _liquidity_advisory(symbol, cache=cache, minimum_volume_usd=0, max_spread_bps=0) for symbol in dynamic_spot_symbols}
@@ -176,7 +180,7 @@ def build_effective_universe(db: Session, cache):
             "filters": {
                 "minimum_volume_usd": dynamic_universe.get("filters", {}).get("min_24h_volume_usdt"),
                 "max_spread_pct": dynamic_universe.get("filters", {}).get("max_spread_pct"),
-                "quote_asset": "USDT",
+                "quote_assets": sorted(ALLOWED_QUOTE_ASSETS),
                 "advisory_only": True,
             },
             "liquidity_advisory": {"spot": advisory_map, "futures": {}},
@@ -262,7 +266,7 @@ def debug_effective_universe(
         normalized_market = "spot"
 
     market_rows = _market_rows(normalized_market)
-    market_symbols = _normalize_symbols([row.get("symbol") for row in market_rows if row.get("quote_asset") == "USDT"])
+    market_symbols = _normalize_symbols([row.get("symbol") for row in market_rows if row.get("quote_asset") in ALLOWED_QUOTE_ASSETS])
     blacklist = set(_normalize_symbols((control.blacklist if control else []) or []))
     whitelist = _normalize_symbols((control.whitelist if control else []) or [])
 

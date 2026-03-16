@@ -173,7 +173,7 @@ class TestnetExecutionLog(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
-    symbol: Mapped[str] = mapped_column(String(20), default="BTCUSDT")
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
     strategy_direction: Mapped[str] = mapped_column(String(10), default="long")
     expected_price: Mapped[float] = mapped_column(Float)
     fill_price: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -193,7 +193,7 @@ class ExecutionMetric(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
-    symbol: Mapped[str] = mapped_column(String(20), default="BTCUSDT")
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
     order_id: Mapped[str] = mapped_column(String(80), index=True)
     exchange_order_id: Mapped[str] = mapped_column(String(80), index=True)
     client_order_id: Mapped[str] = mapped_column(String(120), default="")
@@ -348,7 +348,7 @@ class ExecutionIntent(Base):
     strategy_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_definitions.strategy_id"), index=True)
     strategy_version_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_versions.version_id"), index=True)
     account_id: Mapped[str | None] = mapped_column(String(120), index=True, nullable=True)
-    symbol: Mapped[str] = mapped_column(String(20), default="BTCUSDT")
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
     side: Mapped[str] = mapped_column(String(20), default="BUY")
     order_type: Mapped[str] = mapped_column(String(20), default="MARKET")
     quantity: Mapped[float] = mapped_column(Float, default=0)

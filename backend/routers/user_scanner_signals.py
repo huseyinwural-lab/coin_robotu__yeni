@@ -43,6 +43,7 @@ from schemas import (
     UserSignalResponse,
 )
 from services.audit_service import create_audit_log
+from services.quote_asset_policy import filter_allowed_quote_symbols
 
 router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
 
@@ -256,8 +257,13 @@ def scanner_run(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    if len(payload.selected_symbols or []) == 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="En az bir sembol seçmelisiniz")
+    selected_symbols = payload.selected_symbols or []
+    if len(selected_symbols) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="İşlem için en az bir geçerli USDT/USDC market seçmelisiniz.")
+
+    valid_symbols = filter_allowed_quote_symbols(selected_symbols)
+    if len(valid_symbols) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="İşlem için en az bir geçerli USDT/USDC market seçmelisiniz.")
 
     try:
         result = run_user_scanner(
@@ -266,7 +272,7 @@ def scanner_run(
             requested_mode=payload.mode,
             max_results=payload.max_results,
             symbol_source=payload.symbol_source,
-            selected_symbols=payload.selected_symbols,
+                selected_symbols=valid_symbols,
             symbol_selection_mode=payload.symbol_selection_mode,
         )
     except ValueError as exc:

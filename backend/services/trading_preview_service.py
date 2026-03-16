@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from db import redis_client
 from models import AdminControl
 from services.pipeline.position_sizing_engine import compute_position_sizing
+from services.quote_asset_policy import extract_quote_asset, normalize_quote_symbol
 
 
 def _safe_float(value, fallback: float = 0.0) -> float:
@@ -82,7 +83,7 @@ def _distance_pct(entry: float, target: float | None) -> float | None:
 
 
 def build_execution_preview_metrics(db: Session, user_id: str, payload: dict, validation: dict) -> dict:
-    symbol = str((payload.get("symbol") or "BTCUSDT")).upper()
+    symbol = normalize_quote_symbol(payload.get("symbol"))
     direction = _direction(str(payload.get("side") or "buy"))
 
     entry_price = _entry_price(symbol, payload)
@@ -116,6 +117,8 @@ def build_execution_preview_metrics(db: Session, user_id: str, payload: dict, va
     liquidity_ok = volume_ok and spread_ok
 
     return {
+        "symbol": symbol,
+        "quote_asset": extract_quote_asset(symbol),
         "entry_price": round(entry_price, 8),
         "stop_price": round(stop_price, 8) if stop_price is not None else None,
         "take_profit_price": round(take_profit_price, 8) if take_profit_price is not None else None,

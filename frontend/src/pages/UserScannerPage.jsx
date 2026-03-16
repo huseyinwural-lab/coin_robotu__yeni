@@ -387,7 +387,7 @@ export const UserScannerPage = () => {
 
   const ensureScannerRunReady = () => {
     if ((selectedSymbols || []).length === 0) {
-      toast.error("En az bir sembol seçmelisiniz");
+      toast.error("İşlem için en az bir geçerli USDT/USDC market seçmelisiniz.");
       return false;
     }
     return true;

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -26,6 +26,7 @@ from services.strategy_intelligence_service import (
     record_manual_override,
     simulate_risk_impact,
 )
+from services.quote_asset_policy import normalize_quote_symbol
 
 router = APIRouter(prefix="/admin", tags=["admin_strategy_intelligence"])
 
@@ -119,7 +120,14 @@ def risk_simulation(
     db: Session = Depends(get_db),
 ):
     intent_payload = payload.intent_payload or {}
-    symbol = str(intent_payload.get("symbol") or "BTCUSDT")
+    try:
+        symbol = normalize_quote_symbol(
+            intent_payload.get("symbol"),
+            missing_error_code="symbol_required",
+            invalid_error_code="invalid_quote_asset",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     side = str(intent_payload.get("side") or "buy")
     strategy_id = str(intent_payload.get("strategy_binding") or intent_payload.get("strategy_id") or "manual_execution")
     notional = float(intent_payload.get("notional") or intent_payload.get("position_size_value") or 0)

@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 
+from services.quote_asset_policy import normalize_quote_symbol
+
 
 class FuturesExecutionRequest(BaseModel):
     symbol: str = Field(min_length=5, max_length=20)
@@ -16,10 +18,7 @@ class FuturesExecutionRequest(BaseModel):
     @field_validator("symbol")
     @classmethod
     def normalize_symbol(cls, value: str) -> str:
-        symbol = value.strip().upper()
-        if not symbol.endswith("USDT"):
-            raise ValueError("symbol_must_be_usdt_pair")
-        return symbol
+        return normalize_quote_symbol(value)
 
 
 class FuturesExecutionResponse(BaseModel):

@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import re
 from time import perf_counter
 
 from core.users.user_scanner_signal_service import run_user_scanner
@@ -11,12 +10,10 @@ from services.freshness_policy import evaluate_freshness, resolve_sla_bucket
 from services.observability_trend_service import record_runtime_observability_trends
 from services.pipeline.cache_store import get_json, set_json
 from services.qualification_scan_service import run_qualification_scan
+from services.quote_asset_policy import filter_allowed_quote_symbols
 from services.risk_engine_service import build_admin_risk_status, evaluate_risk_decision
 from services.top_volume_fallback import evaluate_top_volume_fallback
 from services.universe_service import get_full_market_universe
-
-
-SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{2,20}USDT$")
 
 
 def _decision_label(value: str) -> str:
@@ -35,12 +32,8 @@ def _market_type_for_symbol(symbol: str, *, spot_symbols: set[str], futures_symb
 
 
 def _normalize_symbols(symbols: list[str]) -> list[str]:
-    return sorted(
-        {
-            str(symbol or "").upper().strip()
-            for symbol in (symbols or [])
-            if SYMBOL_PATTERN.match(str(symbol or "").upper().strip())
-        }
+    return filter_allowed_quote_symbols(
+        [str(symbol or "").upper().strip() for symbol in (symbols or [])]
     )
 
 

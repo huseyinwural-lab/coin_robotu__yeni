@@ -106,7 +106,10 @@ def preview_trading(
         },
     )
     preview_response = _build_preview_response(intent, validation)
-    metrics = build_execution_preview_metrics(db, current_user.id, payload_data, validation)
+    try:
+        metrics = build_execution_preview_metrics(db, current_user.id, payload_data, validation)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     create_audit_log(
         db,

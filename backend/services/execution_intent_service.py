@@ -17,6 +17,7 @@ from services.strategy_intelligence_service import (
     evaluate_conflict_warning,
     evaluate_hedge_suggestion,
 )
+from services.quote_asset_policy import extract_quote_asset, normalize_quote_symbol
 from services.universe_service import resolve_symbol_market_type
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
@@ -246,10 +247,14 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
 
     strategy_binding = str(normalized.get("strategy_binding") or "manual_execution")
     source_type = str(normalized.get("source_type") or payload.get("source_type") or "manual").strip().lower()
-    symbol = str(normalized.get("symbol") or payload.get("symbol") or "").strip().upper()
-    if not symbol:
-        raise ValueError("symbol_required_for_execution_intent")
+    symbol = normalize_quote_symbol(
+        normalized.get("symbol") or payload.get("symbol"),
+        field_name="symbol",
+        missing_error_code="symbol_required_for_execution_intent",
+        invalid_error_code="invalid_quote_asset",
+    )
     normalized["symbol"] = symbol
+    normalized["quote_asset"] = extract_quote_asset(symbol)
 
     scanner_snapshot = normalized.get("scanner_signal_snapshot") or payload.get("scanner_signal_snapshot") or {}
     if scanner_snapshot:
@@ -752,9 +757,12 @@ def _calc_realized_pnl(position: PaperPosition, exit_price: float, quantity: flo
 
 
 def _open_position_from_intent(db: Session, intent: UserExecutionIntent, normalized: dict) -> PaperPosition:
-    symbol = str(normalized.get("symbol") or intent.symbol or "").strip().upper()
-    if not symbol:
-        raise ValueError("symbol_required_for_execution_order")
+    symbol = normalize_quote_symbol(
+        normalized.get("symbol") or intent.symbol,
+        field_name="symbol",
+        missing_error_code="symbol_required_for_execution_order",
+        invalid_error_code="invalid_quote_asset",
+    )
     requested_market_type = str(normalized.get("market_type") or "").strip().lower()
     market_type = requested_market_type if requested_market_type in {"spot", "futures"} else resolve_symbol_market_type(db, redis_client, symbol)
     bot = _default_bot(db, intent.user_id, market_type, symbol=symbol)
@@ -945,9 +953,12 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
     db.refresh(intent)
 
     normalized = intent.normalized_order_payload or {}
-    symbol = str(normalized.get("symbol") or intent.symbol or "").strip().upper()
-    if not symbol:
-        raise ValueError("symbol_required_for_execution_order")
+    symbol = normalize_quote_symbol(
+        normalized.get("symbol") or intent.symbol,
+        field_name="symbol",
+        missing_error_code="symbol_required_for_execution_order",
+        invalid_error_code="invalid_quote_asset",
+    )
     strategy_code = str(normalized.get("strategy_binding") or "") or None
 
     if intent.intent_type == "OPEN_POSITION":

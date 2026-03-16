@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import websockets
 
+from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
 from services.pipeline.cache_store import append_candle, incr_counter, set_json, utc_now_iso
 from services.pipeline.events import CandleClosedEvent
 from services.pipeline.spot_strategy_service import (
@@ -13,6 +14,7 @@ from services.pipeline.spot_strategy_service import (
     bootstrap_market_data_store,
     get_spot_tradable_universe,
 )
+from services.quote_asset_policy import ALLOWED_QUOTE_ASSETS, filter_allowed_quote_symbols
 
 logger = logging.getLogger(__name__)
 
@@ -84,20 +86,33 @@ class MarketDataEngine:
         dynamic_universe = get_spot_tradable_universe(self.cache)
         dynamic_symbols = [symbol.upper() for symbol in dynamic_universe.get("symbols", []) if symbol]
         if dynamic_symbols:
-            merged_dynamic = sorted({*dynamic_symbols, "BTCUSDT"})
-            return merged_dynamic[:55]
+            return filter_allowed_quote_symbols(dynamic_symbols)[:55]
+
+        provider = BinanceMarketDataProvider()
+        try:
+            payload = provider.get_tradable_symbols(exchange="binance", market_type="spot")
+            provider_symbols = [
+                str(row.get("symbol") or "").upper().strip()
+                for row in (payload.get("rows") or [])
+                if bool(row.get("is_tradable", False)) and str(row.get("quote_asset") or "").upper() in ALLOWED_QUOTE_ASSETS
+            ]
+            provider_symbols = filter_allowed_quote_symbols(provider_symbols)
+            if provider_symbols:
+                return provider_symbols[:55]
+        except MarketDataProviderError:
+            pass
 
         effective_universe_raw = self.cache.get("universe:effective")
         if not effective_universe_raw:
-            return ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+            return []
         try:
             payload = json.loads(effective_universe_raw)
         except json.JSONDecodeError:
-            return ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+            return []
 
         merged = payload.get("spot_symbols", []) + payload.get("futures_symbols", [])
-        symbols = sorted({symbol.upper() for symbol in merged if symbol})
-        return symbols[:55] if symbols else ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+        symbols = filter_allowed_quote_symbols([symbol.upper() for symbol in merged if symbol])
+        return symbols[:55]
 
     def _build_stream_url(self, symbols: list[str]) -> str:
         streams: list[str] = []

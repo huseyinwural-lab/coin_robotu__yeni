@@ -1,25 +1,18 @@
 from datetime import datetime, timezone
-import re
 
 from sqlalchemy.orm import Session
 
 from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
 from services.pipeline.cache_store import get_counter, get_json
 from services.pipeline.universe_engine import apply_scanner_mode, debug_effective_universe
+from services.quote_asset_policy import ALLOWED_QUOTE_ASSETS, filter_allowed_quote_symbols
 
 
 SUPPORTED_EXCHANGES = ["binance", "bybit", "okx"]
-SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{2,20}USDT$")
 
 
 def _normalize_symbols(symbols: list[str]) -> list[str]:
-    return sorted(
-        {
-            str(symbol or "").strip().upper()
-            for symbol in symbols
-            if SYMBOL_PATTERN.match(str(symbol or "").strip().upper())
-        }
-    )
+    return filter_allowed_quote_symbols(symbols)
 
 
 def _exchange_symbols(exchange: str, market_type: str) -> list[str]:
@@ -38,7 +31,7 @@ def _exchange_symbols(exchange: str, market_type: str) -> list[str]:
     symbols = [
         str(row.get("symbol") or "").upper()
         for row in rows
-        if bool(row.get("is_tradable", False)) and str(row.get("quote_asset") or "").upper() == "USDT"
+        if bool(row.get("is_tradable", False)) and str(row.get("quote_asset") or "").upper() in ALLOWED_QUOTE_ASSETS
     ]
     return _normalize_symbols(symbols)
 

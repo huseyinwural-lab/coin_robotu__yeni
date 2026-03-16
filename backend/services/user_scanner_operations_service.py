@@ -181,7 +181,7 @@ def build_user_scanner_live_readiness(db: Session, user_id: str, cache, *, windo
         "scanner_activity": scanner_activity,
         "market_regime": {
             "market_regime": market_payload.get("market_regime"),
-            "market_bias_regime": market_payload.get("market_bias_regime") or market_payload.get("btc_regime"),
+            "market_bias_regime": market_payload.get("market_bias_regime"),
             "stress_action": "size küçült" if str(market_payload.get("market_bias_regime") or "").lower() == "hostile" else "normal",
             "spread_action": "skip" if execution["reject_rate"] >= 0.02 else "normal",
         },

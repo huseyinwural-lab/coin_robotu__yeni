@@ -11,6 +11,7 @@ from core.users.user_exchange_connector import decrypt_exchange_secret, encrypt_
 from db import redis_client
 from models import ExternalProviderCredential, SymbolSelectionWatchlist
 from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
+from services.quote_asset_policy import ALLOWED_QUOTE_ASSETS, filter_allowed_quote_symbols
 
 
 ALLOWED_SOURCES = {"crypto", "stock"}
@@ -113,6 +114,8 @@ def _crypto_universe_rows(exchange: str, market_type: str, quote_asset_filter: s
         if not bool(row.get("is_tradable", False)):
             continue
         quote_asset = str(row.get("quote_asset") or "").upper()
+        if quote_asset not in ALLOWED_QUOTE_ASSETS:
+            continue
         if quote_asset_filter not in {"ALL", ""} and quote_asset != quote_asset_filter:
             continue
         rows.append(
@@ -271,6 +274,8 @@ def resolve_symbol_universe(
         selected = [row["symbol"] for row in rows]
 
     selected = list(dict.fromkeys(selected))
+    if normalized_source == "crypto":
+        selected = filter_allowed_quote_symbols(selected)
     return {
         "source": normalized_source,
         "mode": normalized_mode,
@@ -302,13 +307,18 @@ def create_symbol_watchlist(
     market_type: str,
     symbols: list[str],
 ) -> SymbolSelectionWatchlist:
+    normalized_source = _normalize_source(source)
+    normalized_symbols = _normalize_symbol_list(symbols)
+    if normalized_source == "crypto":
+        normalized_symbols = filter_allowed_quote_symbols(normalized_symbols)
+
     row = SymbolSelectionWatchlist(
         user_id=user_id,
         name=name.strip(),
-        source=_normalize_source(source),
+        source=normalized_source,
         exchange=(exchange or "binance").strip().lower(),
         market_type=(market_type or "spot").strip().lower(),
-        symbols=_normalize_symbol_list(symbols),
+        symbols=normalized_symbols,
     )
     db.add(row)
     db.commit()
@@ -333,7 +343,10 @@ def update_symbol_watchlist(
         raise ValueError("watchlist_not_found")
 
     row.name = name.strip()
-    row.symbols = _normalize_symbol_list(symbols)
+    normalized_symbols = _normalize_symbol_list(symbols)
+    if row.source == "crypto":
+        normalized_symbols = filter_allowed_quote_symbols(normalized_symbols)
+    row.symbols = normalized_symbols
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
