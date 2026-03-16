@@ -75,17 +75,30 @@
   - Yeni kısa isimler: `fk_ps_bot_profile`, `fk_ps_exc_conn`, `fk_ps_order_intent`, `fk_ps_risk_policy`
   - `recreate="always"` kaldırıldı; doğrudan `op.create_foreign_key` / `op.drop_constraint` kullanılıyor.
 - **3.4 batch_alter_table denetimi/sadeleştirme:**
-  - `20260315_0044_nullable_alignment.py` PostgreSQL hedefi için `op.alter_column` ile sadeleştirildi.
+  - Kullanıcı talimatına göre envanter + temizlik tamamlandı:
+    - `20260311_0005`, `0007`, `0008`, `0009`, `0012`, `20260315_0043`, `0044` dosyalarındaki batch kullanım blokları PostgreSQL odaklı doğrudan Alembic operasyonlarına refactor edildi.
+  - Repo migration setinde aktif `batch_alter_table` kullanımı kalmadı.
 - **3.5 Migration graph doğrulama:**
   - Tek head: `20260316_0046`
   - Broken/orphan revision yok (static graph testleri PASS).
 - **3.6 Baseline kritik tablo gap kapatma:**
   - Yeni migration: `20260316_0046_baseline_critical_tables_repair.py`
   - Kritik tablolar için oluşma yolu eklendi/doğrulandı: `users`, `bot_profiles`, `risk_policies`, `pending_signals`, `admin_control`, `signal_events`, `paper_positions`, `audit_logs`
+- **FAZ-3 kapanış artefactları (GÖREV-5/6):**
+  - Manifest: `backend/docs/migration_safety_manifest.md`
+    - batch inventory karar tablosu
+    - baseline CRITICAL/OPTIONAL/LEGACY sınıflandırması
+    - PostgreSQL dışı destek durumu
+    - clean install beklentisi
+  - Temiz kurulum hazırlık scripti: `backend/scripts/verify_clean_install.sh`
+    - `alembic upgrade head`
+    - `alembic_version` doğrulama
+    - kritik tablo/FK kontrolleri
 - **Test/kanıt:**
   - Yeni statik güvenlik testi: `backend/tests/test_faz3_migration_static_safety.py`
   - Lokal: 66 PASS (faz1+faz2+faz3 guard set)
-  - Testing agent: `/app/test_reports/iteration_130.json` → **FAZ-3 tüm maddeler PASS**
+  - Testing agent: `/app/test_reports/iteration_130.json` + `/app/test_reports/iteration_131.json` → **FAZ-3 kapanış kriterleri PASS**
+  - Ek test seti: `backend/tests/test_faz3_closure_extended.py` (25 test PASS)
 
 ### 2026-03-16 (FAZ-2 / ENV-CONFIG Bütünlüğü PASS)
 - **Backend fail-fast güçlendirildi:**
