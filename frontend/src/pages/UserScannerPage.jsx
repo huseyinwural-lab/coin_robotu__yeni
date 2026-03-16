@@ -75,14 +75,6 @@ export const UserScannerPage = () => {
   const profileRunTrackerRef = useRef({});
   const symbolPersistTimerRef = useRef(null);
 
-  const activeModeLabel = String(overview?.mode || mode || "ASSISTED").toUpperCase();
-  const executionPathLabel =
-    activeModeLabel === "AUTO"
-      ? "BOT_AUTO_ACTIVE"
-      : activeModeLabel === "ASSISTED"
-        ? "SEMI_AUTO_ACTIVE"
-        : "MANUAL_REVIEW_FLOW";
-
   const activeProfile = useMemo(() => {
     if (!automationProfiles.length) {
       return null;
@@ -95,6 +87,18 @@ export const UserScannerPage = () => {
   }, [activeProfileId, automationProfiles]);
 
   const activeAutomation = activeProfile || automationConfig;
+
+  const activeModeLabel = String(overview?.mode || mode || "ASSISTED").toUpperCase();
+  const scannerRunType = activeAutomation?.auto_enabled ? "OTOMATİK TARAMA" : "MANUEL TARAMA";
+  const scannerRunTypeDetail = activeAutomation?.auto_enabled
+    ? `Zamanlayıcı aktif · ${Number(activeAutomation?.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS)} sn aralık`
+    : "Run butonuyla manuel tetikleme";
+  const executionPathLabel =
+    activeModeLabel === "AUTO"
+      ? "BOT_AUTO_ACTIVE"
+      : activeModeLabel === "ASSISTED"
+        ? "SEMI_AUTO_ACTIVE"
+        : "MANUAL_REVIEW_FLOW";
 
   const formatDateLabel = (value) => {
     if (!value) {
@@ -588,17 +592,19 @@ export const UserScannerPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-description">Responsive scanner + compact table + mobile card yapısı.</p>
       </header>
 
-      <section className="col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-active-mode-indicator-card">
+      <section className="order-2 col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-active-mode-indicator-card">
         <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-scanner-active-mode-indicator-title">Scanner Active Mode Indicator</p>
         <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="user-scanner-active-mode-indicator-grid">
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-mode">Active Mode: {activeModeLabel}</p>
+          <p className="text-sm font-semibold" data-testid="user-scanner-active-mode-indicator-run-type">Tarama Tipi: {scannerRunType}</p>
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-path">Execution Path: {executionPathLabel}</p>
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-source">Source: {symbolSource.toUpperCase()}</p>
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-symbol-mode">Symbol Mode: {symbolMode}</p>
         </div>
+        <p className="mt-2 text-xs text-cyan-100" data-testid="user-scanner-active-mode-indicator-run-type-detail">{scannerRunTypeDetail}</p>
       </section>
 
-      <section className="col-span-12 rounded border border-emerald-800/50 bg-emerald-950/20 p-4" data-testid="user-scanner-automation-card">
+      <section className="order-3 col-span-12 rounded border border-emerald-800/50 bg-emerald-950/20 p-4" data-testid="user-scanner-automation-card">
         <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="user-scanner-automation-title">
           {activeProfile ? `Scanner Otomasyon Profili: ${activeProfile.name}` : "Scanner Otomasyon (Legacy)"}
         </p>
@@ -635,7 +641,7 @@ export const UserScannerPage = () => {
         </p>
       </section>
 
-      <section className="col-span-12 rounded border border-violet-800/50 bg-violet-950/20 p-4" data-testid="user-scanner-automation-profiles-card">
+      <section className="order-4 col-span-12 rounded border border-violet-800/50 bg-violet-950/20 p-4" data-testid="user-scanner-automation-profiles-card">
         <p className="text-xs uppercase tracking-widest text-violet-300" data-testid="user-scanner-automation-profiles-title">Çoklu Otomasyon Profilleri</p>
         <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="user-scanner-automation-profiles-create-grid">
           <input
@@ -689,7 +695,7 @@ export const UserScannerPage = () => {
         </div>
       </section>
 
-      <section className="col-span-12 rounded border border-amber-800/50 bg-amber-950/20 p-4" data-testid="user-scanner-auto-alerts-card">
+      <section className="order-8 col-span-12 rounded border border-amber-800/50 bg-amber-950/20 p-4" data-testid="user-scanner-auto-alerts-card">
         <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="user-scanner-auto-alerts-title">Otomatik Run Uyarıları</p>
         <div className="mt-2 space-y-1" data-testid="user-scanner-auto-alerts-list">
           {autoRunAlerts.length === 0 && <p className="text-xs text-amber-100" data-testid="user-scanner-auto-alerts-empty">Henüz yeni otomatik sinyal bildirimi yok.</p>}
@@ -701,7 +707,7 @@ export const UserScannerPage = () => {
         </div>
       </section>
 
-      <section className="col-span-12 rounded border border-blue-800/50 bg-blue-950/20 p-4" data-testid="user-decision-card-section">
+      <section className="order-9 col-span-12 rounded border border-blue-800/50 bg-blue-950/20 p-4" data-testid="user-decision-card-section">
         <div className="flex items-center justify-between" data-testid="user-decision-card-header">
           <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="user-decision-card-title">Symbol-level Decision Cards</p>
           <div className="flex items-center gap-2" data-testid="user-decision-card-toolbar-actions">
@@ -723,7 +729,7 @@ export const UserScannerPage = () => {
         </div>
       </section>
 
-      <section className="col-span-12 rounded border border-fuchsia-800/50 bg-fuchsia-950/20 p-4" data-testid="user-explainability-panel">
+      <section className="order-10 col-span-12 rounded border border-fuchsia-800/50 bg-fuchsia-950/20 p-4" data-testid="user-explainability-panel">
         <p className="text-xs uppercase tracking-widest text-fuchsia-300" data-testid="user-explainability-title">User Explainability Panel</p>
         {!selectedDecisionSymbol && <p className="mt-2 text-xs" data-testid="user-explainability-empty">Önce bir symbol decision card seçin.</p>}
         {selectedDecisionSymbol && (
@@ -749,10 +755,15 @@ export const UserScannerPage = () => {
         formatDateLabel={formatDateLabel}
       />
 
-      <section className="col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-control-section">
+      <section className="order-5 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-control-section">
         <div data-testid="user-scanner-control-header">
           <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-control-kicker">Scanner Control</p>
           <h3 className="text-base font-semibold" data-testid="user-scanner-control-title">Run & Automation</h3>
+        </div>
+        <div className="rounded border border-slate-700 bg-slate-950 px-3 py-2" data-testid="user-scanner-scan-type-indicator-card">
+          <p className="text-xs text-slate-400" data-testid="user-scanner-scan-type-indicator-label">Tarama Durumu</p>
+          <p className="text-sm font-semibold text-emerald-300" data-testid="user-scanner-scan-type-indicator-value">{scannerRunType}</p>
+          <p className="text-xs text-slate-400" data-testid="user-scanner-scan-type-indicator-detail">{scannerRunTypeDetail}</p>
         </div>
         <div className="flex flex-wrap items-end gap-3" data-testid="user-scanner-controls">
           <label className="space-y-1" htmlFor="user-scanner-mode-select" data-testid="user-scanner-mode-field">
@@ -810,7 +821,7 @@ export const UserScannerPage = () => {
         </div>
       </section>
 
-      <section className="col-span-12" data-testid="user-scanner-symbol-selection-section">
+      <section className="order-6 col-span-12" data-testid="user-scanner-symbol-selection-section">
         <TradeSymbolSelection
           source={symbolSource}
           onSourceChange={setSymbolSource}
@@ -823,7 +834,7 @@ export const UserScannerPage = () => {
         />
       </section>
 
-      <section className="col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-strategy-presets-section">
+      <section className="order-7 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-strategy-presets-section">
         <div data-testid="user-scanner-strategy-presets-header">
           <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-strategy-presets-kicker">Strategy Presets</p>
           <h3 className="text-base font-semibold" data-testid="user-scanner-strategy-presets-title">Preset Runner</h3>
@@ -841,7 +852,7 @@ export const UserScannerPage = () => {
         </div>
       </section>
 
-      <section className="col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-statistics-section">
+      <section className="order-1 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-statistics-section">
         <div data-testid="user-scanner-statistics-header">
           <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-statistics-kicker">Statistics</p>
           <h3 className="text-base font-semibold" data-testid="user-scanner-statistics-title">Scanner Activity & Runtime Metrics</h3>
@@ -859,7 +870,7 @@ export const UserScannerPage = () => {
         </div>
       </section>
 
-      <section className="col-span-12 space-y-3 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-live-readiness-section">
+      <section className="order-11 col-span-12 space-y-3 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-live-readiness-section">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-scanner-live-readiness-header">
           <div data-testid="user-scanner-live-readiness-title-wrap">
             <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-scanner-live-readiness-kicker">Live Readiness</p>
@@ -897,7 +908,7 @@ export const UserScannerPage = () => {
         </pre>
       </section>
 
-      <section className="col-span-12" data-testid="user-scanner-results-main-section">
+      <section className="order-12 col-span-12" data-testid="user-scanner-results-main-section">
         <ScannerResultsTable
           results={scannerResults}
           compactMode={compactMode}

@@ -95,6 +95,24 @@ export const UserExecutePage = () => {
     () => Boolean(form.symbol && !isAllowedQuoteSymbol(form.symbol)),
     [form.symbol],
   );
+  const estimatedExecutionSummary = useMemo(() => {
+    const normalizedSymbol = String(form.symbol || "").trim().toUpperCase();
+    const symbolLabel = normalizedSymbol || "sembol seçilmedi";
+    const sizeValue = Number(form.position_size_value || 0);
+    if (String(form.position_size_mode || "") === "fixed_notional") {
+      const quote = selectedQuoteAsset || "USDT/USDC";
+      return `${sizeValue} ${quote} değerinde ${symbolLabel} işlemi açılacak.`;
+    }
+    return `%${sizeValue} risk hedefi ile ${symbolLabel} işlemi açılacak.`;
+  }, [form.position_size_mode, form.position_size_value, form.symbol, selectedQuoteAsset]);
+  const policyNoticeClass = isUnsupportedSelectedSymbol
+    ? "col-span-12 rounded border border-red-700/70 bg-red-950/30 p-3"
+    : "col-span-12 rounded border border-cyan-800/60 bg-cyan-950/20 p-3";
+  const symbolInputClass = isUnsupportedSelectedSymbol
+    ? "border-red-500/70 focus-visible:ring-red-500"
+    : form.symbol
+      ? "border-emerald-500/60 focus-visible:ring-emerald-500"
+      : "";
 
   useEffect(() => {
     const load = async () => {
@@ -464,16 +482,23 @@ export const UserExecutePage = () => {
       </header>
 
       <div className="col-span-12 lg:col-span-7 grid grid-cols-12 gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-execute-form-grid">
-        <div className="col-span-12 rounded border border-cyan-800/60 bg-cyan-950/20 p-3" data-testid="user-execute-quote-policy-notice">
+        <div className={policyNoticeClass} data-testid="user-execute-quote-policy-notice">
           <div className="flex flex-wrap items-center gap-2" data-testid="user-execute-quote-policy-notice-content">
-            <span className="rounded-full border border-cyan-400/60 bg-cyan-400/15 px-2 py-0.5 text-[11px] font-semibold text-cyan-100" data-testid="user-execute-quote-policy-badge">
-              EXECUTION POLICY: USDT/USDC ONLY
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                isUnsupportedSelectedSymbol
+                  ? "border border-red-400/60 bg-red-500/15 text-red-100"
+                  : "border border-cyan-400/60 bg-cyan-400/15 text-cyan-100"
+              }`}
+              data-testid="user-execute-quote-policy-badge"
+            >
+              İŞLEM POLİTİKASI: SADECE USDT/USDC
             </span>
             <p className="text-xs text-cyan-200" data-testid="user-execute-quote-policy-notice-text">
               Sadece USDT veya USDC quote asset içeren semboller queue’ya alınır.
             </p>
-            <p className="text-xs text-cyan-300" data-testid="user-execute-current-quote-asset-text">
-              Current Quote Asset: {selectedQuoteAsset || "UNSUPPORTED"}
+            <p className={`text-xs ${isUnsupportedSelectedSymbol ? "text-red-200" : "text-cyan-300"}`} data-testid="user-execute-current-quote-asset-text">
+              Mevcut Quote Asset: {selectedQuoteAsset || "DESTEKLENMİYOR"}
             </p>
           </div>
         </div>
@@ -502,6 +527,11 @@ export const UserExecutePage = () => {
           <p className="text-xs text-slate-400" data-testid="execute-venue-state-reasons">
             {(venueAccess?.reason_codes || []).join(",") || "-"}
           </p>
+          {isUnsupportedSelectedSymbol && (
+            <p className="text-xs text-red-300" data-testid="execute-venue-unsupported-symbol-warning-text">
+              Unsupported Pair: {form.symbol || "-"} USDT/USDC evreninde değil.
+            </p>
+          )}
         </div>
 
         <div className="col-span-12 md:col-span-6">
@@ -521,12 +551,20 @@ export const UserExecutePage = () => {
         <div className="col-span-6 md:col-span-3"><label className="text-xs text-slate-500">Market</label><select className="mt-1 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={form.market_type} onChange={(e) => setForm((p) => ({ ...p, market_type: e.target.value }))} data-testid="execute-market-type-select"><option value="spot">spot</option><option value="futures">futures</option></select></div>
         <div className="col-span-6 md:col-span-3"><label className="text-xs text-slate-500">Side</label><select className="mt-1 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={form.side} onChange={(e) => setForm((p) => ({ ...p, side: e.target.value }))} data-testid="execute-side-select"><option value="buy">buy</option><option value="sell">sell</option><option value="long">long</option><option value="short">short</option></select></div>
         <div className="col-span-12 md:col-span-3"><label className="text-xs text-slate-500">Order Type</label><select className="mt-1 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={form.order_type} onChange={(e) => setForm((p) => ({ ...p, order_type: e.target.value }))} data-testid="execute-order-type-select"><option value="market">market</option><option value="limit">limit</option><option value="stop_limit">stop_limit</option></select></div>
-        <div className="col-span-12 md:col-span-3"><label className="text-xs text-slate-500">Symbol</label><Input value={form.symbol} onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value.toUpperCase() }))} data-testid="execute-symbol-input" /></div>
+        <div className="col-span-12 md:col-span-3">
+          <label className="text-xs text-slate-500">Symbol</label>
+          <Input
+            value={form.symbol}
+            onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value.toUpperCase() }))}
+            className={symbolInputClass}
+            data-testid="execute-symbol-input"
+          />
+        </div>
 
         {isUnsupportedSelectedSymbol && (
           <div className="col-span-12 rounded border border-amber-500/40 bg-amber-500/10 p-2" data-testid="user-execute-unsupported-symbol-warning">
             <p className="text-xs text-amber-200" data-testid="user-execute-unsupported-symbol-warning-text">
-              Invalid pair warning: {form.symbol || "-"} only supports USDT/USDC quotes for execution.
+              Geçersiz parite uyarısı: {form.symbol || "-"} için yalnızca USDT/USDC quote desteklenir.
             </p>
           </div>
         )}
@@ -569,6 +607,10 @@ export const UserExecutePage = () => {
 
       <div className="col-span-12 lg:col-span-5 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-execute-preview-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-preview-title">Preview Summary</p>
+        <div className="mt-3 rounded border border-emerald-700/40 bg-emerald-950/20 px-3 py-2" data-testid="user-execute-estimated-order-summary-card">
+          <p className="text-xs text-emerald-200" data-testid="user-execute-estimated-order-summary-title">Preview öncesi işlem özeti</p>
+          <p className="text-sm text-emerald-100" data-testid="user-execute-estimated-order-summary-text">{estimatedExecutionSummary}</p>
+        </div>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="user-execute-actions">
           <Button onClick={() => runPreview({ silent: false })} data-testid="user-execute-preview-button">Preview</Button>
           <Button onClick={submitQueue} disabled={!submitEnabled} data-testid="user-execute-submit-button">Submit to Queue</Button>

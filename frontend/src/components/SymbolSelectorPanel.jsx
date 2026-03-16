@@ -385,7 +385,7 @@ export const SymbolSelectorPanel = ({
               <th className="px-2 py-1 text-left" data-testid={`${testIdPrefix}-header-quote-asset`}>Quote Asset</th>
               <th className="px-2 py-1 text-left">Exchange</th>
               <th className="px-2 py-1 text-left">Vol 24h</th>
-              <th className="px-2 py-1 text-left" data-testid={`${testIdPrefix}-header-policy`}>Policy</th>
+              <th className="px-2 py-1 text-left" data-testid={`${testIdPrefix}-header-policy`}>Strategy Policy</th>
             </tr>
           </thead>
           <tbody data-testid={`${testIdPrefix}-rows-body`}>

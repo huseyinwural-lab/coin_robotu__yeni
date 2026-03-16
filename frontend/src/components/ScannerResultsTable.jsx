@@ -168,7 +168,7 @@ export const ScannerResultsTable = ({
             <p className={`text-xs ${scoreClassName(item.signal_score)}`} data-testid={`scanner-results-mobile-score-${item.id}`}>Score: {item.signal_score}</p>
             {unsupported && (
               <p className="text-xs text-amber-300" data-testid={`scanner-results-mobile-policy-warning-${item.id}`}>
-                Unsupported pair: only USDT/USDC symbols can be executed.
+                Desteklenmeyen parite: yalnızca USDT/USDC sembolleri işleme alınır.
               </p>
             )}
             <div className="mt-2 flex flex-wrap gap-2" data-testid={`scanner-results-mobile-actions-${item.id}`}>
@@ -193,7 +193,7 @@ export const ScannerResultsTable = ({
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-confidence">Confidence</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-score">Score</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-strategy">Strategy</th>
-              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-policy">Policy</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-policy">Strategy Policy</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-actions">Actions</th>
             </tr>
           </thead>
