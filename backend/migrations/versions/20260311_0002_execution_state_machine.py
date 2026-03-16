@@ -23,6 +23,11 @@ def _table_exists(bind, table_name: str) -> bool:
 def upgrade() -> None:
     bind = op.get_bind()
     if not _table_exists(bind, "execution_state_transitions"):
+        execution_events_exists = _table_exists(bind, "execution_events")
+        fk_constraints = []
+        if execution_events_exists:
+            fk_constraints.append(sa.ForeignKeyConstraint(["execution_event_id"], ["execution_events.id"]))
+
         op.create_table(
             "execution_state_transitions",
             sa.Column("id", sa.String(), nullable=False),
@@ -31,7 +36,7 @@ def upgrade() -> None:
             sa.Column("sequence", sa.Integer(), nullable=False),
             sa.Column("details", sa.JSON(), nullable=False),
             sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
-            sa.ForeignKeyConstraint(["execution_event_id"], ["execution_events.id"]),
+            *fk_constraints,
             sa.PrimaryKeyConstraint("id"),
         )
         op.create_index("ix_execution_state_transitions_execution_event_id", "execution_state_transitions", ["execution_event_id"])
