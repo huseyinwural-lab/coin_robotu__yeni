@@ -85,11 +85,15 @@
   - `ALEMBIC_DATABASE_URL` > `DATABASE_URL` > `alembic.ini`
   - implicit SQLite fallback kaldırıldı; yalnızca `ALEMBIC_ALLOW_SQLITE_FALLBACK=1` ile explicit local fallback izinli.
 - `backend/alembic.ini` SQLite dayatmasından çıkarıldı; nötr PostgreSQL placeholder kullanılıyor.
+- **Sıkı kapanış güncellemesi (kullanıcı talebiyle):**
+  - `env.py` içindeki tüm SQLite fallback yolları tamamen kaldırıldı (dev dahil explicit env zorunlu).
+  - `services/migration_service.py` içindeki SQLite fallback kaldırıldı; DB URL yok/erişilemezse açık RuntimeError üretiyor.
 - Migration ortamı için path bootstrap sağlamlaştırıldı (`env.py` içinde kök path ekleme).
 - Doğrulama:
   - Offline migration logunda `Context impl PostgresqlImpl` doğrulandı (`/tmp/alembic_offline_gate0.log`).
   - Testing agent raporu: `/app/test_reports/iteration_126.json` → **13/13 PASS + 3 functional verification**.
   - Ek not: Bu podda `localhost:5432` erişimi yoksa bağlantı hatası beklenir; önemli olan SQLite’a sessiz düşüşün olmamasıdır.
+  - Final kapanış doğrulaması: `/app/test_reports/iteration_128.json` → **19/19 PASS**.
 
 ### 2026-03-16 (Backend Policy Core Refactor — Gate-7 öncesi blokaj kapatma)
 - **Merkezi quote policy modülü eklendi:**

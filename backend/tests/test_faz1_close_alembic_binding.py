@@ -189,7 +189,7 @@ class TestMigrationServiceNoSqliteFallback:
     def test_migration_service_exists(self):
         """migration_service.py must exist"""
         service_path = BACKEND_ROOT / "services" / "migration_service.py"
-        assert service_path.exists(), f"migration_service.py not found"
+        assert service_path.exists(), "migration_service.py not found"
     
     def test_migration_service_no_sqlite_fallback(self):
         """migration_service.py must not fallback to sqlite"""
