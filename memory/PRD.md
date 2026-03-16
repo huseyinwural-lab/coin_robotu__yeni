@@ -64,6 +64,29 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (FAZ-3 / Migration Statik Güvenlik PASS)
+- **3.1 Boolean default düzeltmeleri tamamlandı:**
+  - `20260311_0001_phase3_schema.py`: `server_default=sa.text("0")` → `sa.false()`
+  - `20260311_0024_strategy_observability_events.py`: boolean defaultlar `sa.false()` olarak güncellendi.
+- **3.2 Boolean update SQL düzeltmesi tamamlandı:**
+  - `20260315_0042_destructive_backfill_prepare.py`: `SET is_running = 0` → `SET is_running = FALSE`
+- **3.3 FK isim kısaltma ve deterministik create/drop:**
+  - `20260315_0041_non_destructive_drift_alignment.py`
+  - Yeni kısa isimler: `fk_ps_bot_profile`, `fk_ps_exc_conn`, `fk_ps_order_intent`, `fk_ps_risk_policy`
+  - `recreate="always"` kaldırıldı; doğrudan `op.create_foreign_key` / `op.drop_constraint` kullanılıyor.
+- **3.4 batch_alter_table denetimi/sadeleştirme:**
+  - `20260315_0044_nullable_alignment.py` PostgreSQL hedefi için `op.alter_column` ile sadeleştirildi.
+- **3.5 Migration graph doğrulama:**
+  - Tek head: `20260316_0046`
+  - Broken/orphan revision yok (static graph testleri PASS).
+- **3.6 Baseline kritik tablo gap kapatma:**
+  - Yeni migration: `20260316_0046_baseline_critical_tables_repair.py`
+  - Kritik tablolar için oluşma yolu eklendi/doğrulandı: `users`, `bot_profiles`, `risk_policies`, `pending_signals`, `admin_control`, `signal_events`, `paper_positions`, `audit_logs`
+- **Test/kanıt:**
+  - Yeni statik güvenlik testi: `backend/tests/test_faz3_migration_static_safety.py`
+  - Lokal: 66 PASS (faz1+faz2+faz3 guard set)
+  - Testing agent: `/app/test_reports/iteration_130.json` → **FAZ-3 tüm maddeler PASS**
+
 ### 2026-03-16 (FAZ-2 / ENV-CONFIG Bütünlüğü PASS)
 - **Backend fail-fast güçlendirildi:**
   - `backend/core/config.py` içinde `required_env` boş/whitespace değerleri de geçersiz sayacak şekilde sertleştirildi.
