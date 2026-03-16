@@ -61,6 +61,7 @@ export const SymbolSelectorPanel = ({
   const [watchlists, setWatchlists] = useState([]);
   const [selectedWatchlistId, setSelectedWatchlistId] = useState("");
   const [watchlistName, setWatchlistName] = useState("");
+  const [isDeletingWatchlist, setIsDeletingWatchlist] = useState(false);
   const [providerConfig, setProviderConfig] = useState(null);
 
   const normalizedSelectedSymbols = useMemo(() => normalizeSymbols(selectedSymbols), [selectedSymbols]);
@@ -215,6 +216,31 @@ export const SymbolSelectorPanel = ({
     toast.success(`${selected.name} uygulandı`);
   };
 
+  const deleteWatchlist = async () => {
+    if (!selectedWatchlistId) {
+      return;
+    }
+
+    const selected = watchlists.find((item) => item.id === selectedWatchlistId);
+    const name = selected?.name || "watchlist";
+    const approved = typeof window === "undefined" ? true : window.confirm(`${name} listesini silmek istiyor musunuz?`);
+    if (!approved) {
+      return;
+    }
+
+    setIsDeletingWatchlist(true);
+    try {
+      await apiClient.delete(`/symbol-selector/watchlists/${selectedWatchlistId}`);
+      toast.success("Watchlist silindi");
+      setSelectedWatchlistId("");
+      await loadWatchlists();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Watchlist silinemedi");
+    } finally {
+      setIsDeletingWatchlist(false);
+    }
+  };
+
   return (
     <div className="space-y-3 rounded border border-slate-700 bg-slate-950 p-3" data-testid={`${testIdPrefix}-panel`}>
       <div className="grid gap-2 md:grid-cols-4" data-testid={`${testIdPrefix}-controls-grid`}>
@@ -258,8 +284,16 @@ export const SymbolSelectorPanel = ({
             ))}
           </select>
         </label>
-        <div className="flex items-end" data-testid={`${testIdPrefix}-watchlist-apply-wrapper`}>
+        <div className="flex items-end gap-2" data-testid={`${testIdPrefix}-watchlist-apply-wrapper`}>
           <Button variant="outline" onClick={applyWatchlist} disabled={!selectedWatchlistId} data-testid={`${testIdPrefix}-watchlist-apply-button`}>Listeyi Uygula</Button>
+          <Button
+            variant="outline"
+            onClick={deleteWatchlist}
+            disabled={!selectedWatchlistId || isDeletingWatchlist}
+            data-testid={`${testIdPrefix}-watchlist-delete-button`}
+          >
+            {isDeletingWatchlist ? "Siliniyor..." : "Sil"}
+          </Button>
         </div>
         <label className="space-y-1" data-testid={`${testIdPrefix}-watchlist-name-field`}>
           <span className="text-xs text-slate-400">Yeni Liste Adı</span>
