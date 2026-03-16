@@ -999,10 +999,12 @@ export const UserExchangeSettingsPage = () => {
             quoteAssetFilter="USDT"
             selectedSymbols={symbolSelectorSelection}
             onSelectedSymbolsChange={setSymbolSelectorSelection}
-            multi={false}
+            multi
           />
         </div>
-        <p className="mt-2 text-sm text-emerald-300" data-testid="user-test-selected-symbol-summary">Seçili sembol: {selectedSymbol || "-"}</p>
+        <p className="mt-2 text-sm text-emerald-300" data-testid="user-test-selected-symbol-summary">
+          Selected Symbols: {symbolSelectorSelection.length} · Active Symbol: {selectedSymbol || "-"}
+        </p>
       </div>
 
       {selectedVenue.market_type === "futures" && (
