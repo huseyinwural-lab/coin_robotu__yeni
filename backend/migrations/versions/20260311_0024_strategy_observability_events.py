@@ -22,6 +22,13 @@ def _table_exists(bind, table_name: str) -> bool:
 def upgrade() -> None:
     bind = op.get_bind()
     if not _table_exists(bind, "strategy_observability_events"):
+        fk_constraints = []
+        if _table_exists(bind, "audit_logs"):
+            fk_constraints.append(sa.ForeignKeyConstraint(["audit_log_id"], ["audit_logs.id"]))
+        if _table_exists(bind, "bot_profiles"):
+            fk_constraints.append(sa.ForeignKeyConstraint(["bot_profile_id"], ["bot_profiles.id"]))
+        if _table_exists(bind, "users"):
+            fk_constraints.append(sa.ForeignKeyConstraint(["user_id"], ["users.id"]))
         op.create_table(
             "strategy_observability_events",
             sa.Column("id", sa.String(), nullable=False),
@@ -47,9 +54,7 @@ def upgrade() -> None:
             sa.Column("rejection_reason", sa.String(length=120), nullable=True),
             sa.Column("metadata", sa.JSON(), nullable=False),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-            sa.ForeignKeyConstraint(["audit_log_id"], ["audit_logs.id"]),
-            sa.ForeignKeyConstraint(["bot_profile_id"], ["bot_profiles.id"]),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            *fk_constraints,
             sa.PrimaryKeyConstraint("id"),
         )
         op.create_index("ix_strategy_observability_events_selection_cycle_id", "strategy_observability_events", ["selection_cycle_id"])

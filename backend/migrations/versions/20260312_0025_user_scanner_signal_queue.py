@@ -21,21 +21,30 @@ def _table_exists(bind, table_name: str) -> bool:
 
 def upgrade() -> None:
     bind = op.get_bind()
+    users_exists = _table_exists(bind, "users")
+    signal_events_exists = _table_exists(bind, "signal_events")
+    paper_positions_exists = _table_exists(bind, "paper_positions")
 
     if not _table_exists(bind, "user_signal_modes"):
+        fk_constraints = []
+        if users_exists:
+            fk_constraints.append(sa.ForeignKeyConstraint(["user_id"], ["users.id"]))
         op.create_table(
             "user_signal_modes",
             sa.Column("id", sa.String(), nullable=False),
             sa.Column("user_id", sa.String(), nullable=False),
             sa.Column("mode", sa.String(length=20), nullable=False, server_default="ASSISTED"),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            *fk_constraints,
             sa.PrimaryKeyConstraint("id"),
             sa.UniqueConstraint("user_id"),
         )
         op.create_index("ix_user_signal_modes_user_id", "user_signal_modes", ["user_id"])
 
     if not _table_exists(bind, "user_scanner_results"):
+        fk_constraints = []
+        if users_exists:
+            fk_constraints.append(sa.ForeignKeyConstraint(["user_id"], ["users.id"]))
         op.create_table(
             "user_scanner_results",
             sa.Column("id", sa.String(), nullable=False),
@@ -49,7 +58,7 @@ def upgrade() -> None:
             sa.Column("reason_codes", sa.JSON(), nullable=False),
             sa.Column("payload", sa.JSON(), nullable=False),
             sa.Column("generated_at", sa.DateTime(timezone=True), nullable=True),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            *fk_constraints,
             sa.PrimaryKeyConstraint("id"),
         )
         op.create_index("ix_user_scanner_results_run_id", "user_scanner_results", ["run_id"])
@@ -58,6 +67,13 @@ def upgrade() -> None:
         op.create_index("ix_user_scanner_results_generated_at", "user_scanner_results", ["generated_at"])
 
     if not _table_exists(bind, "pending_signals"):
+        fk_constraints = []
+        if paper_positions_exists:
+            fk_constraints.append(sa.ForeignKeyConstraint(["order_position_id"], ["paper_positions.id"]))
+        if signal_events_exists:
+            fk_constraints.append(sa.ForeignKeyConstraint(["signal_id"], ["signal_events.id"]))
+        if users_exists:
+            fk_constraints.append(sa.ForeignKeyConstraint(["user_id"], ["users.id"]))
         op.create_table(
             "pending_signals",
             sa.Column("id", sa.String(), nullable=False),
@@ -72,9 +88,7 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
             sa.Column("decided_at", sa.DateTime(timezone=True), nullable=True),
             sa.Column("decision_note", sa.Text(), nullable=False, server_default=""),
-            sa.ForeignKeyConstraint(["order_position_id"], ["paper_positions.id"]),
-            sa.ForeignKeyConstraint(["signal_id"], ["signal_events.id"]),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            *fk_constraints,
             sa.PrimaryKeyConstraint("id"),
         )
         op.create_index("ix_pending_signals_signal_id", "pending_signals", ["signal_id"])

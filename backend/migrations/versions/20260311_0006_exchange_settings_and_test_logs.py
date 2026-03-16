@@ -22,8 +22,12 @@ def _table_exists(bind, table_name: str) -> bool:
 
 def upgrade() -> None:
     bind = op.get_bind()
+    users_exists = _table_exists(bind, "users")
 
     if not _table_exists(bind, "user_exchange_settings"):
+        user_fk = []
+        if users_exists:
+            user_fk.append(sa.ForeignKeyConstraint(["user_id"], ["users.id"]))
         op.create_table(
             "user_exchange_settings",
             sa.Column("id", sa.String(), nullable=False),
@@ -33,13 +37,16 @@ def upgrade() -> None:
             sa.Column("api_key_encrypted", sa.Text(), nullable=False),
             sa.Column("api_secret_encrypted", sa.Text(), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            *user_fk,
             sa.PrimaryKeyConstraint("id"),
             sa.UniqueConstraint("user_id"),
         )
         op.create_index("ix_user_exchange_settings_user_id", "user_exchange_settings", ["user_id"], unique=True)
 
     if not _table_exists(bind, "testnet_execution_logs"):
+        user_fk = []
+        if users_exists:
+            user_fk.append(sa.ForeignKeyConstraint(["user_id"], ["users.id"]))
         op.create_table(
             "testnet_execution_logs",
             sa.Column("id", sa.String(), nullable=False),
@@ -58,7 +65,7 @@ def upgrade() -> None:
             sa.Column("details", sa.JSON(), nullable=False),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            *user_fk,
             sa.PrimaryKeyConstraint("id"),
         )
         op.create_index("ix_testnet_execution_logs_user_id", "testnet_execution_logs", ["user_id"], unique=False)

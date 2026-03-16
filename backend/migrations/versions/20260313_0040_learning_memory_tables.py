@@ -23,6 +23,15 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     if not _table_exists(bind, "learning_decision_events"):
+        fk_constraints = []
+        if _table_exists(bind, "users"):
+            fk_constraints.append(sa.ForeignKeyConstraint(["user_id"], ["users.id"]))
+        if _table_exists(bind, "user_scanner_results"):
+            fk_constraints.append(sa.ForeignKeyConstraint(["scanner_result_id"], ["user_scanner_results.id"]))
+        if _table_exists(bind, "pending_signals"):
+            fk_constraints.append(sa.ForeignKeyConstraint(["pending_signal_id"], ["pending_signals.id"]))
+        if _table_exists(bind, "paper_positions"):
+            fk_constraints.append(sa.ForeignKeyConstraint(["position_id"], ["paper_positions.id"]))
         op.create_table(
             "learning_decision_events",
             sa.Column("id", sa.String(), nullable=False),
@@ -51,10 +60,7 @@ def upgrade() -> None:
             sa.Column("position_id", sa.String(), nullable=True),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
             sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
-            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-            sa.ForeignKeyConstraint(["scanner_result_id"], ["user_scanner_results.id"]),
-            sa.ForeignKeyConstraint(["pending_signal_id"], ["pending_signals.id"]),
-            sa.ForeignKeyConstraint(["position_id"], ["paper_positions.id"]),
+            *fk_constraints,
             sa.PrimaryKeyConstraint("id"),
             sa.UniqueConstraint("scanner_result_id"),
             sa.UniqueConstraint("pending_signal_id"),

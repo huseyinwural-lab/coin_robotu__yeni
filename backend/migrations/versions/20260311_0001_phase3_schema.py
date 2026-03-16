@@ -30,6 +30,21 @@ def _column_exists(bind, table_name: str, column_name: str) -> bool:
 def upgrade() -> None:
     bind = op.get_bind()
 
+    if not _table_exists(bind, "users"):
+        op.create_table(
+            "users",
+            sa.Column("id", sa.String(), nullable=False),
+            sa.Column("email", sa.String(), nullable=False),
+            sa.Column("password_hash", sa.String(), nullable=False),
+            sa.Column("role", sa.String(length=20), nullable=False, server_default="USER"),
+            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint("email"),
+        )
+        op.create_index("ix_users_email", "users", ["email"], unique=True)
+
     if _table_exists(bind, "bot_profiles") and not _column_exists(bind, "bot_profiles", "is_running"):
         op.add_column("bot_profiles", sa.Column("is_running", sa.Boolean(), nullable=False, server_default=sa.false()))
 
@@ -134,3 +149,9 @@ def downgrade() -> None:
         op.drop_table("risk_exposure_groups")
     if _table_exists(bind, "execution_policies"):
         op.drop_table("execution_policies")
+    if _table_exists(bind, "users"):
+        inspector = sa.inspect(bind)
+        index_names = {index.get("name") for index in inspector.get_indexes("users")}
+        if "ix_users_email" in index_names:
+            op.drop_index("ix_users_email", table_name="users")
+        op.drop_table("users")
