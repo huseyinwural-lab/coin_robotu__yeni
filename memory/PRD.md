@@ -64,6 +64,28 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (FAZ-5 — User UI Policy Visibility tamamlandı)
+- **Scanner ve Execute UI’da policy görünürlüğü güçlendirildi:**
+  - `frontend/src/components/SymbolSelectorPanel.jsx`
+    - Quote Asset kolonu eklendi
+    - Policy kolonu eklendi (`SUPPORTED` / `UNSUPPORTED_PAIR`)
+    - Unsupported satırlar disabled + görsel olarak pasif
+    - Arama placeholder’ı BTC referansından temizlendi (`ETHUSDT / SOLUSDC`)
+  - `frontend/src/components/ScannerResultsTable.jsx`
+    - Quote Asset + Policy kolonları eklendi
+    - Unsupported pair durumunda aksiyon butonları disable
+  - `frontend/src/components/TradeSymbolSelection.jsx`
+    - `USDT/USDC-ONLY` policy badge eklendi
+  - `frontend/src/pages/UserExecutePage.jsx`
+    - Policy info bandı güçlendirildi (`EXECUTION POLICY: USDT/USDC ONLY`)
+    - Current quote asset göstergesi eklendi
+    - Invalid pair warning eklendi (örn. `ETHBTC`)
+    - Selector quote filter `USDT` yerine `ALL` yapılarak USDT+USDC kapsandı
+- **Gate-5 doğrulama:**
+  - Testing agent: `/app/test_reports/iteration_122.json`
+  - Frontend doğrulama: **100% PASS** (istenen tüm FAZ-5 maddeleri geçti)
+  - Not: Bybit/OKX execution adapterları **MOCKED** kalmaya devam ediyor.
+
 ### 2026-03-16 (FAZ-4 — Admin Observability & Audit tamamlandı)
 - **Merkezi audit event enum eklendi:**
   - `backend/core/audit/audit_events.py` (SCREAMING_SNAKE_CASE standardı)
