@@ -64,6 +64,29 @@
 - Doğrulama hesabı: `admin@platform.local`.
 
 ## 5) What Has Been Implemented
+### 2026-03-16 (FAZ-4 — Admin Observability & Audit tamamlandı)
+- **Merkezi audit event enum eklendi:**
+  - `backend/core/audit/audit_events.py` (SCREAMING_SNAKE_CASE standardı)
+  - Zincir eventleri: `SCAN_RESULT -> RISK_RESULT -> EXECUTION_INTENT -> ORDER_PREFLIGHT -> EXCHANGE_ORDER`
+  - Integrity eventi: `SYMBOL_INTEGRITY_REJECT`
+- **Kritik path entegrasyonu tamamlandı:**
+  - Scanner runtime audit emisyonu (`UNIVERSE_RESOLUTION`, `SCAN_RESULT`, `SCANNER_SIGNAL_GENERATED`)
+  - Execution precheck çıktısına `preflight_event_code=ORDER_PREFLIGHT` ve `symbol_integrity_ok` alanları eklendi
+  - User preview/execute router’larında enum tabanlı audit emisyonu + symbol integrity reject loglama
+  - Exchange mock submit audit aksiyonu standard event ile hizalandı
+- **Admin observability endpointleri güncellendi/eklendi:**
+  - Yeni endpointler: `/api/admin/system/live-readiness`, `/api/admin/system/readiness-score`
+  - Geriye uyumluluk korundu: `/api/admin/futures/live-readiness`
+  - Yeni metrikler: `symbol_integrity_failures`, `scanner_to_execution_match_rate_pct`, `scanner_to_execution_matches`, `scanner_to_execution_total`, `scanner_to_execution_match_rate`, `active_universe_count`, `cluster_bias_distribution`, `market_bias_regime`
+- **Frontend admin metrik kartları FAZ-4 kararlarına göre tamamlandı:**
+  - Route: `/admin/system-readiness`
+  - Kartlar (English): Symbol Integrity Failures, Scanner → Execution Match Rate, Active Universe Count, Cluster Bias Distribution, Market Bias Regime
+  - Navigation: SYSTEM altında `System Readiness` bağlantısı eklendi
+- **Testler:**
+  - Lokal: `test_audit_event_emission.py`, `test_symbol_integrity_metrics.py`, `test_scanner_execution_match_rate.py` → PASS
+  - Testing agent: `/app/test_reports/iteration_121.json` → backend 20/20 PASS, frontend doğrulama PASS
+  - Not: Bybit/OKX execution adapterları **MOCKED** kalmaya devam ediyor.
+
 ### 2026-03-16 (Gate-1 başlatıldı — BTC fallback temizliği + USDT/USDC policy çekirdeği)
 - **Merkezi quote policy modülü eklendi:**
   - `backend/services/quote_asset_policy.py`
