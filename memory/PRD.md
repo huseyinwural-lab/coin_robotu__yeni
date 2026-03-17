@@ -17,6 +17,20 @@
   - `iteration_139`: Futures leverage hybrid model + regression PASS
 - Not: Bybit/OKX adapterları halen **MOCKED** durumda.
 
+## 2026-03-17 — Iteration Update (Bybit Testnet+Live Manual Credential Readiness)
+
+- Admin Exchanges ekranı execution credential formu genişletildi:
+  - `bybit_testnet_api_key`, `bybit_testnet_secret`
+  - `bybit_live_api_key`, `bybit_live_secret`
+- Backend credential servisi ve API sözleşmesi genişletildi:
+  - `has_bybit_testnet_credentials`, `has_bybit_live_credentials`
+  - masked görünümde testnet/live Bybit alanları
+- Execution adapter tarafında Bybit için environment-aware credential çözümleme eklendi (`testnet/live`).
+- Execution smoke senaryoları artık Bybit için hem `testnet` hem `live` kontrolü içeriyor.
+- `execution-validation` çıktısına `bybit_testnet_live_ready` alanı eklendi.
+- Durum: geçerli Bybit anahtarları girilmediğinde sonuç güvenli şekilde `MOCKED/DEGRADED` kalır; yanlış anahtarla gerçek order atılmaz.
+- Test doğrulaması: `iteration_140` PASS (backend/frontend %100).
+
 # PRD — Algorithmic Trading Platform (Phase 1 Başlangıç)
 
 ## 1) Original Problem Statement (Özet)
