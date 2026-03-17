@@ -9,6 +9,7 @@ from models import User, UserRole
 from schemas import UserResponse
 from services.audit_service import create_audit_log
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
+from services.venue_service import ensure_user_venue_assignment
 
 router = APIRouter(prefix="/admin/user-approvals", tags=["user_approvals"])
 
@@ -74,6 +75,14 @@ def bulk_approve(
         user.is_active = True
         user.approved_at = now
         ensure_user_safe_default_risk_policy(db, user.id, commit=False)
+        ensure_user_venue_assignment(
+            db,
+            user_id=user.id,
+            exchange_code="binance",
+            market_type="futures",
+            environment="testnet",
+            commit=False,
+        )
     db.commit()
 
     create_audit_log(

@@ -127,6 +127,76 @@ def seed_binance_venue_registry(db: Session):
     db.commit()
 
 
+def ensure_user_venue_assignment(
+    db: Session,
+    *,
+    user_id: str,
+    exchange_code: str = "binance",
+    market_type: str | None = None,
+    environment: str | None = None,
+    commit: bool = False,
+) -> tuple[UserVenueAssignment, bool]:
+    seed_binance_venue_registry(db)
+    now = datetime.now(timezone.utc)
+    normalized_exchange = (exchange_code or "binance").strip().lower()
+    normalized_market = (market_type or "").strip().lower()
+    normalized_environment = (environment or "").strip().lower()
+
+    row = (
+        db.query(UserVenueAssignment)
+        .filter(UserVenueAssignment.user_id == user_id, UserVenueAssignment.exchange_code == normalized_exchange)
+        .first()
+    )
+
+    changed = False
+    if row is None:
+        row = UserVenueAssignment(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            exchange_code=normalized_exchange,
+            spot_allowed=True,
+            futures_allowed=True,
+            testnet_allowed=True,
+            live_allowed=False,
+            updated_at=now,
+        )
+        db.add(row)
+        changed = True
+    else:
+        if not row.spot_allowed:
+            row.spot_allowed = True
+            changed = True
+        if not row.futures_allowed:
+            row.futures_allowed = True
+            changed = True
+        if not row.testnet_allowed:
+            row.testnet_allowed = True
+            changed = True
+
+    if normalized_market == "spot" and not row.spot_allowed:
+        row.spot_allowed = True
+        changed = True
+    if normalized_market == "futures" and not row.futures_allowed:
+        row.futures_allowed = True
+        changed = True
+
+    if normalized_environment == "testnet" and not row.testnet_allowed:
+        row.testnet_allowed = True
+        changed = True
+    if normalized_environment == "live" and not row.live_allowed:
+        row.live_allowed = True
+        changed = True
+
+    if changed:
+        row.updated_at = now
+
+    if commit:
+        db.commit()
+        db.refresh(row)
+
+    return row, changed
+
+
 def user_allowed_venue_options(db: Session, user_id: str) -> list[dict]:
     assignments = db.query(UserVenueAssignment).filter(UserVenueAssignment.user_id == user_id).all()
     if not assignments:

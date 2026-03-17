@@ -664,6 +664,9 @@ export const UserExchangeSettingsPage = () => {
       });
       setValidateResult(data);
       setTestOrderBanner("");
+      if (data?.assignment_autofixed) {
+        toast.success("Venue assignment otomatik onarıldı");
+      }
       toast.success("Exchange doğrulaması tamamlandı");
       await loadAll();
     } catch (error) {

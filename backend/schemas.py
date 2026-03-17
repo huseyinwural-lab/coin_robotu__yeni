@@ -637,6 +637,7 @@ class ExchangeValidateResponse(BaseModel):
     can_withdraw: bool
     reason_codes: list[str]
     capability_match: bool
+    assignment_autofixed: bool = False
 
 
 class MarketTickerResponse(BaseModel):

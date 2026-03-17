@@ -10,6 +10,7 @@ from deps import require_admin
 from models import User, UserRole
 from schemas import UserResponse, UserRoleUpdateRequest, UserStatusUpdateRequest
 from services.audit_service import create_audit_log
+from services.venue_service import ensure_user_venue_assignment
 
 router = APIRouter(prefix="/admin/users", tags=["admin_users"])
 ADMIN_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}
@@ -19,6 +20,16 @@ class LocalAdminUserCreateRequest(BaseModel):
     email: str
     password: str
     role: str = "admin"
+
+
+class UserVenueRepairResponse(BaseModel):
+    user_id: str
+    exchange_code: str
+    assignment_changed: bool
+    spot_allowed: bool
+    futures_allowed: bool
+    testnet_allowed: bool
+    live_allowed: bool
 
 
 def _ensure_can_modify(current_admin: User, target: User):
@@ -234,3 +245,44 @@ def update_user_status(
         details={"from": previous_status, "to": new_status, "user_id": target.id},
     )
     return target
+
+
+@router.post("/{user_id}/repair-venue-assignment", response_model=UserVenueRepairResponse)
+def repair_user_venue_assignment(
+    user_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    target = db.query(User).filter(User.id == user_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+    if target.role != UserRole.USER:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="only_user_role_supported")
+
+    row, changed = ensure_user_venue_assignment(
+        db,
+        user_id=target.id,
+        exchange_code="binance",
+        market_type="futures",
+        environment="testnet",
+        commit=True,
+    )
+    create_audit_log(
+        db,
+        action="USER_VENUE_ASSIGNMENT_REPAIRED",
+        entity_type="user_venue_assignment",
+        entity_id=row.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={"user_id": target.id, "exchange_code": row.exchange_code, "assignment_changed": changed},
+    )
+    return UserVenueRepairResponse(
+        user_id=target.id,
+        exchange_code=row.exchange_code,
+        assignment_changed=changed,
+        spot_allowed=bool(row.spot_allowed),
+        futures_allowed=bool(row.futures_allowed),
+        testnet_allowed=bool(row.testnet_allowed),
+        live_allowed=bool(row.live_allowed),
+    )

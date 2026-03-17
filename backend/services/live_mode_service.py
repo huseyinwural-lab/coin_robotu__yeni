@@ -47,7 +47,7 @@ from services.risk_engine_service import resolve_effective_config_for_user
 from services.risk_orchestrator_service import get_or_create_policy
 from services.system_alert_service import create_system_alert
 from services.pipeline.cache_store import read_candles
-from services.venue_service import check_user_venue_access, seed_binance_venue_registry
+from services.venue_service import check_user_venue_access, ensure_user_venue_assignment, seed_binance_venue_registry
 
 BINANCE_FUTURES_TESTNET_REST = "https://testnet.binancefuture.com"
 BINANCE_FUTURES_TESTNET_WS = "wss://stream.binancefuture.com/ws"
@@ -652,6 +652,7 @@ def validate_exchange_credentials_for_user(
             return "Seçilen venue ile aktif exchange ayarı uyuşmuyor. Exchange Settings ekranında aynı venue'yu seçin."
         return None
 
+    assignment_autofixed = False
     requested_connection = None
 
     transient_reconnect_reasons = {
@@ -827,6 +828,7 @@ def validate_exchange_credentials_for_user(
             "reason_codes": reason_codes,
             "capability_match": capability,
             "hint": hint,
+            "assignment_autofixed": assignment_autofixed,
         }, code
 
     requested_connection = None
@@ -865,17 +867,29 @@ def validate_exchange_credentials_for_user(
             .first()
         )
 
-    bypass_assignment_check = (
-        not allowed
-        and requested_connection is not None
-        and "assignment_required" in (venue_reason_codes or [])
-    )
+    if not allowed and requested_connection is not None and "assignment_required" in (venue_reason_codes or []):
+        _, assignment_changed = ensure_user_venue_assignment(
+            db,
+            user_id=user_id,
+            exchange_code=requested_exchange,
+            market_type=requested_market_type,
+            environment=requested_environment,
+            commit=False,
+        )
+        if assignment_changed:
+            db.commit()
+            assignment_autofixed = True
 
-    if not allowed and not bypass_assignment_check:
+        allowed, venue_state, capability_match, venue_reason_codes = check_user_venue_access(
+            db,
+            user_id,
+            requested_exchange,
+            requested_market_type,
+            requested_environment,
+        )
+
+    if not allowed:
         return _validation_failure(venue_reason_codes or [venue_state], 403)
-
-    if bypass_assignment_check:
-        capability_match = True
 
     if requested_connection is not None:
         connection_api_key = decrypt_exchange_secret(requested_connection.api_key_encrypted)
@@ -959,6 +973,7 @@ def validate_exchange_credentials_for_user(
             "can_withdraw": can_withdraw,
             "reason_codes": ["missing_trade_permission"],
             "capability_match": capability_match,
+            "assignment_autofixed": assignment_autofixed,
         }, 403
 
     _record_permission_snapshot_and_drift(
@@ -988,6 +1003,7 @@ def validate_exchange_credentials_for_user(
         "can_withdraw": can_withdraw,
         "reason_codes": [],
         "capability_match": capability_match,
+        "assignment_autofixed": assignment_autofixed,
     }, 200
 
 

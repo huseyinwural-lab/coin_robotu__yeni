@@ -9,6 +9,7 @@ from core.security import create_access_token, hash_password, verify_password
 from models import User, UserOnboardingProfile, UserRole
 from schemas import LoginRequest, RegisterRequest
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
+from services.venue_service import ensure_user_venue_assignment
 
 
 @dataclass
@@ -187,6 +188,14 @@ def approve_user_account(db: Session, user_id: str) -> User:
     user.approved_at = datetime.now(timezone.utc)
     user.disabled_at = None
     ensure_user_safe_default_risk_policy(db, user.id, commit=False)
+    ensure_user_venue_assignment(
+        db,
+        user_id=user.id,
+        exchange_code="binance",
+        market_type="futures",
+        environment="testnet",
+        commit=False,
+    )
     db.commit()
     db.refresh(user)
     return user

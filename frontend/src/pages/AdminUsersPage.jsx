@@ -29,6 +29,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     password: "",
     role: "admin",
   });
+  const [repairingUserId, setRepairingUserId] = useState(null);
 
   useEffect(() => {
     setFilters((prev) => ({ ...prev, role: "all" }));
@@ -103,6 +104,22 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       await loadUsers();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Durum güncellenemedi");
+    }
+  };
+
+  const repairVenueAssignment = async (userId) => {
+    setRepairingUserId(userId);
+    try {
+      const { data } = await apiClient.post(`/admin/users/${userId}/repair-venue-assignment`);
+      if (data?.assignment_changed) {
+        toast.success("Venue assignment onarıldı");
+      } else {
+        toast.success("Venue assignment zaten hazırdı");
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Venue assignment onarılamadı");
+    } finally {
+      setRepairingUserId(null);
     }
   };
 
@@ -283,14 +300,27 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                 </TableCell>
                 <TableCell className="text-xs" data-testid={`admin-users-created-at-${user.id}`}>{new Date(user.created_at).toLocaleString()}</TableCell>
                 <TableCell data-testid={`admin-users-actions-${user.id}`}>
-                  <Button
-                    size="sm"
-                    className={user.status === "active" ? "border border-red-700 bg-red-600 text-white hover:bg-red-700" : "border border-emerald-700 bg-emerald-600 text-black hover:bg-emerald-700"}
-                    onClick={() => toggleStatus(user)}
-                    data-testid={`admin-users-toggle-status-button-${user.id}`}
-                  >
-                    {user.status === "active" ? "Disable" : "Enable"}
-                  </Button>
+                  <div className="flex flex-wrap gap-2" data-testid={`admin-users-actions-wrap-${user.id}`}>
+                    <Button
+                      size="sm"
+                      className={user.status === "active" ? "border border-red-700 bg-red-600 text-white hover:bg-red-700" : "border border-emerald-700 bg-emerald-600 text-black hover:bg-emerald-700"}
+                      onClick={() => toggleStatus(user)}
+                      data-testid={`admin-users-toggle-status-button-${user.id}`}
+                    >
+                      {user.status === "active" ? "Disable" : "Enable"}
+                    </Button>
+                    {!isAdminScope && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => repairVenueAssignment(user.id)}
+                        disabled={repairingUserId === user.id}
+                        data-testid={`admin-users-repair-venue-assignment-button-${user.id}`}
+                      >
+                        {repairingUserId === user.id ? "Onarılıyor..." : "Fix Venue"}
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
