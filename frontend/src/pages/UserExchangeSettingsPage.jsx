@@ -162,6 +162,28 @@ export const UserExchangeSettingsPage = () => {
     return `${number.toFixed(1)}%`;
   };
 
+  const formatMs = (value) => {
+    if (value === null || value === undefined) return "-";
+    const num = Number(value);
+    if (Number.isNaN(num)) return "-";
+    return `${num.toFixed(2)} ms`;
+  };
+
+  const systemHealthBuckets = useMemo(() => {
+    const raw = selectedConnectionProfile?.health_bucket_metrics || {};
+    return ["1m", "5m", "15m"].map((key) => ({
+      key,
+      ...(raw[key] || {
+        success: 0,
+        fail: 0,
+        success_rate: null,
+        latency_samples: 0,
+        jitter_p95_p50_ms: null,
+        jitter_stddev_ms: null,
+      }),
+    }));
+  }, [selectedConnectionProfile]);
+
   const profileHealthClass = (health) => {
     const normalized = String(health || "unknown").toLowerCase();
     if (normalized === "online") return "border-emerald-700/70 text-emerald-300 bg-emerald-900/20";
@@ -778,6 +800,55 @@ export const UserExchangeSettingsPage = () => {
             <MetricCard label="Compounding" value={String(portfolioOverview?.compounding_enabled ?? false)} tone="orange" testId="user-overview-compounding" />
             <MetricCard label="Sonraki Baz" value={portfolioOverview?.next_base_capital ?? "-"} tone="blue" testId="user-overview-next-base" />
           </div>
+
+          <section className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-overview-system-health-dashboard">
+            <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-overview-system-health-header">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-overview-system-health-title">System Health Dashboard</p>
+                <p className="text-xs text-slate-400" data-testid="user-overview-system-health-description">Bağlantı ritmi, son başarı/başarısızlık ve jitter takibi (1m / 5m / 15m kova).</p>
+              </div>
+              <p className="text-xs text-slate-400" data-testid="user-overview-system-health-profile-ref">
+                Profile: {selectedConnectionProfile?.account_label || "-"}
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="user-overview-system-health-metrics-grid">
+              <MetricCard label="Health" value={selectedConnectionProfile?.connection_health || "unknown"} tone={selectedConnectionProfile?.connection_health === "online" ? "orange" : "red"} testId="user-overview-system-health-current" />
+              <MetricCard label="Last Success" value={formatConnectionTime(selectedConnectionProfile?.last_success_at)} tone="blue" testId="user-overview-system-health-last-success" />
+              <MetricCard label="Last Fail" value={formatConnectionTime(selectedConnectionProfile?.last_failure_at)} tone="red" testId="user-overview-system-health-last-fail" />
+              <MetricCard label="Anlık Jitter (p95-p50)" value={formatMs(selectedConnectionProfile?.current_jitter_p95_p50_ms)} tone="orange" testId="user-overview-system-health-current-jitter" />
+              <MetricCard label="Anlık Jitter (stddev)" value={formatMs(selectedConnectionProfile?.current_jitter_stddev_ms)} tone="blue" testId="user-overview-system-health-current-jitter-stddev" />
+            </div>
+
+            <div className="overflow-x-auto" data-testid="user-overview-system-health-bucket-table-wrap">
+              <table className="min-w-full border border-slate-800 text-left text-xs" data-testid="user-overview-system-health-bucket-table">
+                <thead className="bg-slate-950/70 text-slate-300" data-testid="user-overview-system-health-bucket-head">
+                  <tr>
+                    <th className="px-3 py-2" data-testid="user-overview-system-health-col-window">Bucket</th>
+                    <th className="px-3 py-2" data-testid="user-overview-system-health-col-success">Success</th>
+                    <th className="px-3 py-2" data-testid="user-overview-system-health-col-fail">Fail</th>
+                    <th className="px-3 py-2" data-testid="user-overview-system-health-col-rate">Success Rate</th>
+                    <th className="px-3 py-2" data-testid="user-overview-system-health-col-jitter-spread">Jitter p95-p50</th>
+                    <th className="px-3 py-2" data-testid="user-overview-system-health-col-jitter-stddev">Jitter StdDev</th>
+                    <th className="px-3 py-2" data-testid="user-overview-system-health-col-samples">Latency Samples</th>
+                  </tr>
+                </thead>
+                <tbody data-testid="user-overview-system-health-bucket-body">
+                  {systemHealthBuckets.map((bucket) => (
+                    <tr key={bucket.key} className="border-t border-slate-800 text-slate-200" data-testid={`user-overview-system-health-bucket-row-${bucket.key}`}>
+                      <td className="px-3 py-2" data-testid={`user-overview-system-health-bucket-window-${bucket.key}`}>{bucket.key}</td>
+                      <td className="px-3 py-2" data-testid={`user-overview-system-health-bucket-success-${bucket.key}`}>{bucket.success ?? 0}</td>
+                      <td className="px-3 py-2" data-testid={`user-overview-system-health-bucket-fail-${bucket.key}`}>{bucket.fail ?? 0}</td>
+                      <td className="px-3 py-2" data-testid={`user-overview-system-health-bucket-rate-${bucket.key}`}>{formatRate(bucket.success_rate)}</td>
+                      <td className="px-3 py-2" data-testid={`user-overview-system-health-bucket-jitter-spread-${bucket.key}`}>{formatMs(bucket.jitter_p95_p50_ms)}</td>
+                      <td className="px-3 py-2" data-testid={`user-overview-system-health-bucket-jitter-stddev-${bucket.key}`}>{formatMs(bucket.jitter_stddev_ms)}</td>
+                      <td className="px-3 py-2" data-testid={`user-overview-system-health-bucket-samples-${bucket.key}`}>{bucket.latency_samples ?? 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
           <section className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-connection-profiles-panel">
             <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-connection-profiles-header">

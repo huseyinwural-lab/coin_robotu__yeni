@@ -1,4 +1,5 @@
 import uuid
+from statistics import pstdev
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -172,6 +173,100 @@ def _validation_24h_metrics(history: list[dict]) -> tuple[int, int, float | None
     return success, failure, rate
 
 
+def _latency_history_snapshot(snapshot: dict) -> list[dict]:
+    raw_history = snapshot.get("liveness_latency_history")
+    if not isinstance(raw_history, list):
+        return []
+    sanitized: list[dict] = []
+    for item in raw_history[-300:]:
+        if not isinstance(item, dict):
+            continue
+        latency = item.get("latency_ms")
+        try:
+            normalized_latency = round(float(latency), 2)
+        except (TypeError, ValueError):
+            continue
+        sanitized.append(
+            {
+                "at": item.get("at"),
+                "latency_ms": normalized_latency,
+                "source": item.get("source"),
+            }
+        )
+    return sanitized
+
+
+def _percentile(values: list[float], q: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    idx = (len(ordered) - 1) * q
+    low = int(idx)
+    high = min(low + 1, len(ordered) - 1)
+    weight = idx - low
+    return ordered[low] * (1 - weight) + ordered[high] * weight
+
+
+def _bucket_metrics_from_history(
+    *,
+    history: list[dict],
+    latency_history: list[dict],
+    minutes: int,
+) -> dict:
+    now = _now()
+    cutoff = now - timedelta(minutes=minutes)
+
+    success = 0
+    fail = 0
+    for item in history:
+        ts = _parse_snapshot_time(item.get("at"))
+        if ts is None or ts < cutoff:
+            continue
+        if bool(item.get("validation_success")):
+            success += 1
+        else:
+            fail += 1
+
+    latencies: list[float] = []
+    for item in latency_history:
+        ts = _parse_snapshot_time(item.get("at"))
+        if ts is None or ts < cutoff:
+            continue
+        try:
+            latencies.append(float(item.get("latency_ms")))
+        except (TypeError, ValueError):
+            continue
+
+    p95 = _percentile(latencies, 0.95)
+    p50 = _percentile(latencies, 0.50)
+    jitter_p95_p50 = round(p95 - p50, 2) if p95 is not None and p50 is not None else None
+    jitter_stddev = round(pstdev(latencies), 2) if len(latencies) >= 2 else 0.0 if len(latencies) == 1 else None
+
+    total = success + fail
+    success_rate = round((success / total) * 100, 1) if total > 0 else None
+    return {
+        "window": f"{minutes}m",
+        "success": success,
+        "fail": fail,
+        "success_rate": success_rate,
+        "latency_samples": len(latencies),
+        "jitter_p95_p50_ms": jitter_p95_p50,
+        "jitter_stddev_ms": jitter_stddev,
+    }
+
+
+def _last_failure_at(history: list[dict]) -> datetime | None:
+    for item in reversed(history):
+        if bool(item.get("validation_success")):
+            continue
+        ts = _parse_snapshot_time(item.get("at"))
+        if ts is not None:
+            return ts
+    return None
+
+
 def _serialize_connection(row: UserExchangeConnection) -> dict:
     api_key = decrypt_exchange_secret(row.api_key_encrypted)
     api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
@@ -192,8 +287,18 @@ def _serialize_connection(row: UserExchangeConnection) -> dict:
         has_api_secret=has_api_secret,
     )
     history = _health_history_snapshot(readiness_snapshot)
+    latency_history = _latency_history_snapshot(readiness_snapshot)
     validation_success_24h, validation_fail_24h, validation_success_rate_24h = _validation_24h_metrics(history)
     health_last_transition_at = _parse_snapshot_time(readiness_snapshot.get("health_last_transition_at"))
+    last_success_at = _parse_snapshot_time(readiness_snapshot.get("last_success_at"))
+    last_failure_at = _last_failure_at(history)
+
+    bucket_metrics = {
+        "1m": _bucket_metrics_from_history(history=history, latency_history=latency_history, minutes=1),
+        "5m": _bucket_metrics_from_history(history=history, latency_history=latency_history, minutes=5),
+        "15m": _bucket_metrics_from_history(history=history, latency_history=latency_history, minutes=15),
+    }
+    current_bucket = bucket_metrics.get("1m") or {}
     action_required = connection_health != "online"
     action_required_message = _health_action_message(connection_health_reason, connection_health)
     return {
@@ -218,8 +323,14 @@ def _serialize_connection(row: UserExchangeConnection) -> dict:
         "validation_success_24h": validation_success_24h,
         "validation_fail_24h": validation_fail_24h,
         "validation_success_rate_24h": validation_success_rate_24h,
+        "last_success_at": last_success_at,
+        "last_failure_at": last_failure_at,
+        "health_bucket_metrics": bucket_metrics,
+        "current_jitter_p95_p50_ms": current_bucket.get("jitter_p95_p50_ms"),
+        "current_jitter_stddev_ms": current_bucket.get("jitter_stddev_ms"),
         "health_last_transition_at": health_last_transition_at,
         "health_history": history,
+        "liveness_latency_history": latency_history,
         "has_api_key": has_api_key,
         "has_api_secret": has_api_secret,
         "masked_api_key": mask_secret(api_key),

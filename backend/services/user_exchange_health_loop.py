@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func
@@ -85,11 +86,25 @@ def _run_fast_liveness_probe(row: UserExchangeConnection, snapshot: dict) -> tup
         probe_snapshot["liveness_message"] = "No fast liveness probe adapter for this exchange yet."
         return probe_snapshot, False
 
+    started = time.perf_counter()
     ping = adapter.ping()
+    latency_ms = round((time.perf_counter() - started) * 1000, 2)
     reachable = str(ping.get("status") or "").lower() == "reachable"
     probe_snapshot["liveness_status"] = "reachable" if reachable else "unreachable"
     probe_snapshot["liveness_message"] = ping.get("message") or ""
     probe_snapshot["liveness_server_time"] = ping.get("server_time")
+    probe_snapshot["liveness_latency_ms"] = latency_ms
+
+    raw_latency_history = probe_snapshot.get("liveness_latency_history")
+    latency_history = raw_latency_history if isinstance(raw_latency_history, list) else []
+    latency_history.append(
+        {
+            "at": now.isoformat(),
+            "latency_ms": latency_ms,
+            "source": "health_loop_liveness",
+        }
+    )
+    probe_snapshot["liveness_latency_history"] = latency_history[-300:]
 
     reason_codes = [str(code).strip().lower() for code in (probe_snapshot.get("reason_codes") or []) if str(code).strip()]
     primary_reason = reason_codes[0] if reason_codes else None

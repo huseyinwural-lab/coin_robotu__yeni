@@ -1258,8 +1258,14 @@ class UserExchangeConnectionResponse(BaseModel):
     validation_success_24h: int = 0
     validation_fail_24h: int = 0
     validation_success_rate_24h: float | None = None
+    last_success_at: datetime | None = None
+    last_failure_at: datetime | None = None
+    health_bucket_metrics: dict = Field(default_factory=dict)
+    current_jitter_p95_p50_ms: float | None = None
+    current_jitter_stddev_ms: float | None = None
     health_last_transition_at: datetime | None = None
     health_history: list[dict] = Field(default_factory=list)
+    liveness_latency_history: list[dict] = Field(default_factory=list)
     has_api_key: bool
     has_api_secret: bool
     masked_api_key: str

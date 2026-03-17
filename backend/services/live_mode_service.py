@@ -725,6 +725,7 @@ def validate_exchange_credentials_for_user(
         status_code: int,
         permissions: list[str] | None = None,
         hint: str | None = None,
+        latency_ms: float | None = None,
     ) -> None:
         if requested_connection is None:
             return
@@ -759,6 +760,23 @@ def validate_exchange_credentials_for_user(
                 "is_reconnecting": is_reconnecting,
             }
         )
+        if latency_ms is not None:
+            try:
+                normalized_latency = round(float(latency_ms), 2)
+            except (TypeError, ValueError):
+                normalized_latency = None
+            if normalized_latency is not None:
+                snapshot["last_validation_latency_ms"] = normalized_latency
+                raw_latency_history = snapshot.get("liveness_latency_history")
+                latency_history = raw_latency_history if isinstance(raw_latency_history, list) else []
+                latency_history.append(
+                    {
+                        "at": datetime.now(timezone.utc).isoformat(),
+                        "latency_ms": normalized_latency,
+                        "source": "signed_validation",
+                    }
+                )
+                snapshot["liveness_latency_history"] = latency_history[-300:]
         _append_health_history(
             snapshot,
             health=status_label,
@@ -774,7 +792,13 @@ def validate_exchange_credentials_for_user(
             requested_connection.permission_snapshot = permissions
         requested_connection.updated_at = datetime.now(timezone.utc)
 
-    def _validation_failure(reason_codes: list[str], code: int, *, capability: bool = capability_match) -> tuple[dict, int]:
+    def _validation_failure(
+        reason_codes: list[str],
+        code: int,
+        *,
+        capability: bool = capability_match,
+        latency_ms: float | None = None,
+    ) -> tuple[dict, int]:
         hint = _validation_hint(reason_codes)
         _sync_requested_connection(
             validation_success=False,
@@ -784,6 +808,7 @@ def validate_exchange_credentials_for_user(
             permissions=[],
             status_code=code,
             hint=hint,
+            latency_ms=latency_ms,
         )
         settings_row.last_validation_success = False
         settings_row.last_reason_codes = reason_codes
@@ -877,18 +902,21 @@ def validate_exchange_credentials_for_user(
     if not api_key or not api_secret:
         return _validation_failure(["missing_credentials"], 400)
 
+    probe_started = time.perf_counter()
     try:
         if requested_market_type == "spot":
             payload, status_code, _ = adapter.account_probe_spot(api_key, api_secret)
         else:
             payload, status_code, _ = adapter.account_probe(api_key, api_secret)
     except httpx.HTTPError:
-        return _validation_failure(["exchange_unreachable"], 503)
+        elapsed_ms = round((time.perf_counter() - probe_started) * 1000, 2)
+        return _validation_failure(["exchange_unreachable"], 503, latency_ms=elapsed_ms)
+    elapsed_ms = round((time.perf_counter() - probe_started) * 1000, 2)
 
     reason_codes = _extract_reason_codes(payload if isinstance(payload, dict) else {}, status_code)
     if status_code >= 400:
         http_status = 403 if "ip_restriction" in reason_codes or "missing_trade_permission" in reason_codes else 400
-        return _validation_failure(reason_codes, http_status)
+        return _validation_failure(reason_codes, http_status, latency_ms=elapsed_ms)
 
     permissions = _normalize_permissions(payload, requested_market_type, requested_environment)
     if requested_market_type == "spot":
@@ -910,6 +938,7 @@ def validate_exchange_credentials_for_user(
             permissions=permissions,
             status_code=403,
             hint=_validation_hint(["missing_trade_permission"]),
+            latency_ms=elapsed_ms,
         )
         _record_permission_snapshot_and_drift(
             db,
@@ -946,6 +975,7 @@ def validate_exchange_credentials_for_user(
         reason_codes=[],
         permissions=permissions,
         status_code=200,
+        latency_ms=elapsed_ms,
     )
     return {
         "exchange": requested_exchange,
