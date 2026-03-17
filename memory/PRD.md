@@ -1,3 +1,18 @@
+## 2026-03-17 — Iteration Update (Health Reason Visibility in User Exchange Settings)
+
+- `UserExchangeSettingsPage` içindeki **System Health Dashboard** alanına yeni görünür teşhis kutusu eklendi:
+  - `Health Reason` paneli artık doğrudan reason + action + next_retry bilgisi gösteriyor.
+- Offline/degraded durumlarında kök neden daha okunur hale getirildi (örn. `API key/secret eksik`).
+- Yeni frontend test-id alanları eklendi:
+  - `user-overview-system-health-diagnostics-panel`
+  - `user-overview-system-health-diagnostics-title`
+  - `user-overview-system-health-diagnostics-reason`
+  - `user-overview-system-health-diagnostics-action-message`
+  - `user-overview-system-health-diagnostics-next-retry`
+- Doğrulama:
+  - frontend testing agent ile senaryo PASS (login → `/user/exchange-settings` → diagnostics panel görünürlüğü).
+  - Smoke ekranında offline reason metni net şekilde görüntülendi.
+
 ## 2026-03-17 — Iteration Update (Admin Commercial Ops: User Status + Usage Logs + Monthly P&L Export)
 
 - Admin ticari altyapı paketi eklendi (`/admin/commercial-ops`):
