@@ -110,6 +110,68 @@ def _derive_connection_health(
     return "unknown", first_reason, can_trade and is_valid, False, validated_at, next_retry_seconds, retry_backoff_seconds
 
 
+def _health_action_message(reason: str | None, health: str) -> str | None:
+    normalized_reason = (reason or "").strip().lower()
+    normalized_health = (health or "").strip().lower()
+    if normalized_health == "online":
+        return None
+    if normalized_reason == "missing_credentials":
+        return "API key/secret eksik. Profilde anahtarları güncelleyin."
+    if normalized_reason == "invalid_key":
+        return "API kimlik bilgileri geçersiz. Yeni key/secret oluşturup kaydedin."
+    if normalized_reason == "ip_restriction":
+        return "IP whitelist ayarını güncelleyin veya sunucu IP'sini ekleyin."
+    if normalized_reason == "missing_trade_permission":
+        return "Trade izni kapalı. Borsa API permission ayarlarını açın."
+    if normalized_reason in {"network_error", "timeout", "exchange_unreachable"}:
+        return "Geçici bağlantı sorunu. Sistem otomatik yeniden doğruluyor."
+    if normalized_reason == "rate_limit":
+        return "Rate limit tetiklendi. Kısa süre içinde otomatik retry yapılacak."
+    if normalized_reason == "exchange_error_451":
+        return "Regülasyon/erişim kısıtı (451). Venue veya bölge ayarını kontrol edin."
+    return "Profil durumu trade için uygun değil. Revalidate ve permission kontrolü yapın."
+
+
+def _health_history_snapshot(snapshot: dict) -> list[dict]:
+    raw_history = snapshot.get("health_history")
+    if not isinstance(raw_history, list):
+        return []
+    sanitized: list[dict] = []
+    for item in raw_history[-30:]:
+        if not isinstance(item, dict):
+            continue
+        sanitized.append(
+            {
+                "at": item.get("at"),
+                "health": item.get("health"),
+                "reason": item.get("reason"),
+                "source": item.get("source"),
+                "validation_success": bool(item.get("validation_success")),
+                "can_trade": bool(item.get("can_trade")),
+            }
+        )
+    return sanitized
+
+
+def _validation_24h_metrics(history: list[dict]) -> tuple[int, int, float | None]:
+    now = _now()
+    success = 0
+    failure = 0
+    for item in history:
+        ts = _parse_snapshot_time(item.get("at"))
+        if ts is None:
+            continue
+        if (now - ts).total_seconds() > 86400:
+            continue
+        if bool(item.get("validation_success")):
+            success += 1
+        else:
+            failure += 1
+    total = success + failure
+    rate = round((success / total) * 100, 1) if total > 0 else None
+    return success, failure, rate
+
+
 def _serialize_connection(row: UserExchangeConnection) -> dict:
     api_key = decrypt_exchange_secret(row.api_key_encrypted)
     api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
@@ -129,6 +191,11 @@ def _serialize_connection(row: UserExchangeConnection) -> dict:
         has_api_key=has_api_key,
         has_api_secret=has_api_secret,
     )
+    history = _health_history_snapshot(readiness_snapshot)
+    validation_success_24h, validation_fail_24h, validation_success_rate_24h = _validation_24h_metrics(history)
+    health_last_transition_at = _parse_snapshot_time(readiness_snapshot.get("health_last_transition_at"))
+    action_required = connection_health != "online"
+    action_required_message = _health_action_message(connection_health_reason, connection_health)
     return {
         "id": row.id,
         "user_id": row.user_id,
@@ -146,6 +213,13 @@ def _serialize_connection(row: UserExchangeConnection) -> dict:
         "is_reconnecting": is_reconnecting,
         "next_retry_in_seconds": next_retry_in_seconds,
         "retry_backoff_seconds": retry_backoff_seconds,
+        "action_required": action_required,
+        "action_required_message": action_required_message,
+        "validation_success_24h": validation_success_24h,
+        "validation_fail_24h": validation_fail_24h,
+        "validation_success_rate_24h": validation_success_rate_24h,
+        "health_last_transition_at": health_last_transition_at,
+        "health_history": history,
         "has_api_key": has_api_key,
         "has_api_secret": has_api_secret,
         "masked_api_key": mask_secret(api_key),

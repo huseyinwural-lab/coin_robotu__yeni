@@ -117,6 +117,43 @@ def _run_fast_liveness_probe(row: UserExchangeConnection, snapshot: dict) -> tup
     return probe_snapshot, True
 
 
+def _append_health_history(
+    snapshot: dict,
+    *,
+    health: str,
+    reason: str,
+    source: str,
+    validation_success: bool,
+    can_trade: bool,
+) -> None:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    raw_history = snapshot.get("health_history")
+    history = raw_history if isinstance(raw_history, list) else []
+    last_entry = history[-1] if history else None
+    normalized_reason = (reason or "").strip().lower() or "none"
+
+    changed = (
+        not isinstance(last_entry, dict)
+        or str(last_entry.get("health") or "").lower() != str(health or "").lower()
+        or str(last_entry.get("reason") or "").lower() != normalized_reason
+    )
+    if changed:
+        history.append(
+            {
+                "at": now_iso,
+                "health": str(health or "unknown").lower(),
+                "reason": normalized_reason,
+                "source": source,
+                "validation_success": bool(validation_success),
+                "can_trade": bool(can_trade),
+            }
+        )
+        snapshot["health_last_transition_at"] = now_iso
+
+    snapshot["health_last_seen_at"] = now_iso
+    snapshot["health_history"] = history[-30:]
+
+
 def _run_signed_validation_if_due(db: Session, row: UserExchangeConnection, snapshot: dict, *, has_open_position: bool) -> dict:
     now = datetime.now(timezone.utc)
     signed_interval = _signed_check_interval_seconds(environment=row.environment, has_open_position=has_open_position)
@@ -169,6 +206,14 @@ def _sync_connection(db: Session, row: UserExchangeConnection, open_positions_in
                     "liveness_checked_at": now.isoformat(),
                 }
             )
+            _append_health_history(
+                snapshot,
+                health="offline",
+                reason="missing_credentials",
+                source="health_loop_credentials",
+                validation_success=False,
+                can_trade=False,
+            )
             row.readiness_snapshot = snapshot
             row.updated_at = now
         return
@@ -178,6 +223,14 @@ def _sync_connection(db: Session, row: UserExchangeConnection, open_positions_in
 
     if liveness_due:
         snapshot, _ = _run_fast_liveness_probe(row, snapshot)
+        _append_health_history(
+            snapshot,
+            health=str(snapshot.get("connection_health") or "unknown"),
+            reason=str(snapshot.get("last_error_reason") or "none"),
+            source="health_loop_liveness",
+            validation_success=bool(snapshot.get("validation_success")),
+            can_trade=bool(snapshot.get("can_trade")),
+        )
         row.readiness_snapshot = snapshot
         row.updated_at = now
 

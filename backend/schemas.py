@@ -1253,6 +1253,13 @@ class UserExchangeConnectionResponse(BaseModel):
     is_reconnecting: bool = False
     next_retry_in_seconds: int | None = None
     retry_backoff_seconds: int = 0
+    action_required: bool = False
+    action_required_message: str | None = None
+    validation_success_24h: int = 0
+    validation_fail_24h: int = 0
+    validation_success_rate_24h: float | None = None
+    health_last_transition_at: datetime | None = None
+    health_history: list[dict] = Field(default_factory=list)
     has_api_key: bool
     has_api_secret: bool
     masked_api_key: str

@@ -138,11 +138,28 @@ export const UserExchangeSettingsPage = () => {
     return connectionProfiles.find((item) => item.is_default) || connectionProfiles[0] || null;
   }, [connectionProfiles, selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type]);
 
+  const actionRequiredProfiles = useMemo(
+    () => (connectionProfiles || []).filter((item) => Boolean(item?.action_required)),
+    [connectionProfiles],
+  );
+
+  const selectedHealthTimeline = useMemo(
+    () => (selectedConnectionProfile?.health_history || []).slice().reverse().slice(0, 8),
+    [selectedConnectionProfile],
+  );
+
   const formatConnectionTime = (value) => {
     if (!value) return "-";
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return "-";
     return parsed.toLocaleString("tr-TR");
+  };
+
+  const formatRate = (value) => {
+    if (value === null || value === undefined) return "-";
+    const number = Number(value);
+    if (Number.isNaN(number)) return "-";
+    return `${number.toFixed(1)}%`;
   };
 
   const profileHealthClass = (health) => {
@@ -897,6 +914,7 @@ export const UserExchangeSettingsPage = () => {
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-last-reason-${connection.id}`}>last_reason: {connection.connection_health_reason || "-"}</p>
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-reconnect-${connection.id}`}>reconnecting: {String(Boolean(connection.is_reconnecting))}</p>
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-next-retry-${connection.id}`}>next_retry_in: {typeof connection.next_retry_in_seconds === "number" ? `${connection.next_retry_in_seconds}s` : "-"}</p>
+                    <p className="text-xs text-slate-500" data-testid={`user-connection-profile-action-required-${connection.id}`}>action_required: {String(Boolean(connection.action_required))}</p>
                   </div>
                   <div className="flex flex-wrap gap-2" data-testid={`user-connection-profile-actions-${connection.id}`}>
                     <Button size="sm" variant="outline" onClick={() => startEditConnection(connection)} data-testid={`user-connection-profile-edit-button-${connection.id}`}>Düzenle</Button>
@@ -1217,7 +1235,7 @@ export const UserExchangeSettingsPage = () => {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-8" data-testid="user-exchange-settings-metrics-grid">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-10" data-testid="user-exchange-settings-metrics-grid">
         <MetricCard label="Exchange" value={settings?.exchange || "-"} tone="orange" testId="user-exchange-metric-exchange" />
         <MetricCard label="Mode" value={settings?.mode || "-"} tone="orange" testId="user-exchange-metric-mode" />
         <MetricCard label="Permission" value={permission?.overall_status || "-"} tone={permission?.overall_status === "pass" ? "orange" : "red"} testId="user-exchange-metric-permission" />
@@ -1226,6 +1244,8 @@ export const UserExchangeSettingsPage = () => {
         <MetricCard label="Profiles Online" value={String(connectionHealthOverview.online)} tone="orange" testId="user-exchange-metric-profiles-online" />
         <MetricCard label="Profiles Degraded" value={String(connectionHealthOverview.degraded)} tone={connectionHealthOverview.degraded > 0 ? "red" : "blue"} testId="user-exchange-metric-profiles-degraded" />
         <MetricCard label="Profiles Offline" value={String(connectionHealthOverview.offline)} tone={connectionHealthOverview.offline > 0 ? "red" : "blue"} testId="user-exchange-metric-profiles-offline" />
+        <MetricCard label="Action Required" value={String(actionRequiredProfiles.length)} tone={actionRequiredProfiles.length > 0 ? "red" : "orange"} testId="user-exchange-metric-action-required" />
+        <MetricCard label="24h Validation Success" value={formatRate(selectedConnectionProfile?.validation_success_rate_24h)} tone="blue" testId="user-exchange-metric-validation-success-rate" />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-6" data-testid="user-exchange-action-state-grid">
@@ -1240,6 +1260,42 @@ export const UserExchangeSettingsPage = () => {
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-effective-state-reason-card">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-exchange-effective-state-reason-title">Execution State Resolver</p>
         <p className="mt-2 text-sm text-slate-200" data-testid="user-exchange-effective-state-reason-text">{effectiveTradeState.reason}</p>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2" data-testid="user-exchange-action-required-grid">
+        <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-action-required-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-exchange-action-required-title">Action Required</p>
+          {actionRequiredProfiles.length === 0 ? (
+            <p className="mt-2 text-sm text-emerald-300" data-testid="user-exchange-action-required-empty">Tüm connection profilleri trade-ready.</p>
+          ) : (
+            <div className="mt-2 space-y-2" data-testid="user-exchange-action-required-list">
+              {actionRequiredProfiles.map((profile) => (
+                <div key={profile.id} className="rounded border border-slate-700 bg-slate-950 p-2" data-testid={`user-exchange-action-required-item-${profile.id}`}>
+                  <p className="text-sm font-semibold text-slate-100" data-testid={`user-exchange-action-required-item-label-${profile.id}`}>{profile.account_label} · {profile.connection_health}</p>
+                  <p className="text-xs text-slate-400" data-testid={`user-exchange-action-required-item-reason-${profile.id}`}>{profile.action_required_message || profile.connection_health_reason || "-"}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-health-timeline-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-exchange-health-timeline-title">Selected Profile Health Timeline</p>
+          <p className="mt-1 text-xs text-slate-400" data-testid="user-exchange-health-timeline-summary">
+            success_24h={selectedConnectionProfile?.validation_success_24h ?? 0} · fail_24h={selectedConnectionProfile?.validation_fail_24h ?? 0} · last_transition={formatConnectionTime(selectedConnectionProfile?.health_last_transition_at)}
+          </p>
+          {selectedHealthTimeline.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-400" data-testid="user-exchange-health-timeline-empty">Henüz health transition geçmişi yok.</p>
+          ) : (
+            <div className="mt-2 space-y-1" data-testid="user-exchange-health-timeline-list">
+              {selectedHealthTimeline.map((item, index) => (
+                <p key={`${item.at || "no-at"}-${index}`} className="text-xs text-slate-300" data-testid={`user-exchange-health-timeline-item-${index}`}>
+                  {formatConnectionTime(item.at)} · {item.health || "-"} · {item.reason || "none"} · source={item.source || "-"}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-venue-access-panel">

@@ -661,6 +661,42 @@ def validate_exchange_credentials_for_user(
         "exchange_error_503",
     }
 
+    def _append_health_history(
+        snapshot: dict,
+        *,
+        health: str,
+        reason: str,
+        source: str,
+        validation_success: bool,
+        can_trade: bool,
+    ) -> None:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        raw_history = snapshot.get("health_history")
+        history = raw_history if isinstance(raw_history, list) else []
+        last_entry = history[-1] if history else None
+        normalized_reason = (reason or "").strip().lower() or "none"
+
+        changed = (
+            not isinstance(last_entry, dict)
+            or str(last_entry.get("health") or "").lower() != str(health or "").lower()
+            or str(last_entry.get("reason") or "").lower() != normalized_reason
+        )
+        if changed:
+            history.append(
+                {
+                    "at": now_iso,
+                    "health": str(health or "unknown").lower(),
+                    "reason": normalized_reason,
+                    "source": source,
+                    "validation_success": bool(validation_success),
+                    "can_trade": bool(can_trade),
+                }
+            )
+            snapshot["health_last_transition_at"] = now_iso
+
+        snapshot["health_last_seen_at"] = now_iso
+        snapshot["health_history"] = history[-30:]
+
     def _retry_metadata(previous_snapshot: dict, reason_codes: list[str], validation_success: bool) -> tuple[int, int, str | None, bool]:
         if validation_success:
             return 0, 0, None, False
@@ -722,6 +758,14 @@ def validate_exchange_credentials_for_user(
                 "next_retry_at": next_retry_at,
                 "is_reconnecting": is_reconnecting,
             }
+        )
+        _append_health_history(
+            snapshot,
+            health=status_label,
+            reason=reason_codes[0] if reason_codes else "none",
+            source="signed_validation",
+            validation_success=validation_success,
+            can_trade=can_trade,
         )
         if validation_success:
             snapshot["last_success_at"] = datetime.now(timezone.utc).isoformat()
