@@ -1,3 +1,71 @@
+## 2026-03-17 — Iteration Update (P1 Faz-1 Tamamlandı: Reliability Tuning + Audit Regression + Rollback)
+
+### Faz-1.1 — Config Bağlama (A)
+
+- Yeni merkezi policy dosyası eklendi:
+  - `/app/config/connection_reliability_policy.json`
+- Runtime profilleri:
+  - `local`, `staging`, `production`
+- Kapsam:
+  - `retry/backoff` parametreleri
+  - `health cadence/jitter` parametreleri
+  - `http timeout` parametreleri
+- Loader + validation katmanı eklendi:
+  - `/app/backend/services/connection_reliability_service.py`
+  - deep-merge + startup validation + deterministic jitter helper
+- Startup’ta fast-fail validation aktif:
+  - `server.py` içinde `load_connection_reliability_policy(force_refresh=True)`
+
+### Faz-1.2 — Health Stabilization (B)
+
+- `user_exchange_health_loop.py` artık policy-temelli çalışıyor:
+  - retry schedule policy’den
+  - signed interval policy + deterministic jitter
+  - liveness interval policy’den
+  - transient failure threshold (`transient_failures_before_reconnect`)
+  - success reset window (`success_resets_failure_count`)
+- Amaç: kısa ağ dalgalanması nedeniyle yanlış negatif/offline flap oranını düşürmek.
+
+### Faz-1.3 — Audit Regression (C)
+
+- Yeni unit regression test dosyası:
+  - `/app/backend/tests/test_p1_phase1_reliability_and_audit_regression.py`
+- Kapsam:
+  - policy load/validation
+  - deterministic jitter stabilitesi
+  - retry schedule policy limitleri
+  - health transition duplicate dedup doğrulaması
+- Testing agent ek API regression dosyası:
+  - `/app/backend/tests/test_p1_phase1_api_regression.py`
+
+### Faz-1.4 — Rollback Runbook (C)
+
+- Yeni tek sayfa runbook:
+  - `/app/memory/ROLLBACK_RUNBOOK_P1_PHASE1.md`
+- İçerik:
+  - rollback tetik koşulları
+  - config geri alma adımları
+  - post-rollback doğrulama checklist
+
+### Ek Tuning
+
+- Loki alert threshold’ları false-positive azaltımı için sıkılaştırıldı:
+  - `InvalidKeySurge`
+  - `ExchangeHealthFlap`
+  - `ValidationFailureRateHigh`
+
+### Doğrulama Sonuçları
+
+- Lokal test:
+  - `pytest test_p1_phase1_reliability_and_audit_regression.py test_observability_mvp.py test_faz2_observability_regression.py` → **37 PASS**
+  - `pytest test_p1_phase1_reliability_and_audit_regression.py test_p1_phase1_api_regression.py` → **22 PASS**
+- Testing agent raporu:
+  - `/app/test_reports/iteration_147.json` ✅ (backend/frontend regresyon yok)
+
+### Not
+
+- Bybit/OKX execution adapterları kullanıcı tercihiyle bu fazda da **MOCKED** bırakılmıştır.
+
 ## 2026-03-17 — Iteration Update (Faz-3 Incident Export: 1/7/30/90 Gün Seçenekleri)
 
 - `/admin/audit-logs` incident export akışına zaman penceresi seçici eklendi:
