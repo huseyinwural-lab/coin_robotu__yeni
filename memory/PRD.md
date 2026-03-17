@@ -1,3 +1,66 @@
+## 2026-03-17 — Iteration Update (P1 Faz-2 Tamamlandı: Live-Path E2E + Alert Burn-in + Final Smoke Suite)
+
+### P1 Faz-2.1 — Venue Assignment + Futures Live-Path E2E
+
+- Yeni admin endpointler:
+  - `GET /api/admin/users/futures-live-path-check`
+  - `GET /api/admin/users/{user_id}/futures-live-path-check`
+- Kontrol kriterleri:
+  - assignment var/yok
+  - futures izinleri
+  - env izinleri (testnet/live)
+  - futures connection var/yok
+  - trade-ready connection sayısı
+- Frontend (`AdminUsersPage`) eklentileri:
+  - `Futures Live-Path Check` butonu
+  - canlı summary paneli (total/pass/fail/generated_at)
+
+### P1 Faz-2.2 — Alert Notification Kanalı + Burn-in Takibi
+
+- Yeni endpointler:
+  - `GET /api/admin/system-alerts/burn-in?days=7`
+  - `POST /api/admin/system-alerts/test-delivery`
+- Test delivery kanalları:
+  - `email`, `slack`, `both`
+  - geçersiz channel/severity için doğrulama (`400`)
+- Burn-in metrikleri:
+  - total alerts, severity/status breakdown
+  - email/slack delivery success/fail sayacı
+  - recommendation (`threshold_tuning_required` / `thresholds_stable`)
+- Frontend (`AdminSystemAlertsPage`) eklentileri:
+  - Burn-in summary paneli
+  - Test Email / Test Slack / Test Both butonları
+
+### P1 Faz-2.3 — Final Release Smoke Suite (tek komut)
+
+- Yeni CLI script:
+  - `/app/backend/cli/final_release_smoke_suite.py`
+- Kontrol edilen akışlar:
+  - health
+  - admin login
+  - futures live-path summary
+  - alert burn-in
+  - audit timeline
+  - incident export
+- Çıktı:
+  - JSON rapor + `overall: PASS/FAIL`
+
+### Doğrulama
+
+- Lokal testler:
+  - `pytest test_p1_phase2_livepath_and_alert_burnin.py test_p1_phase1_reliability_and_audit_regression.py test_observability_mvp.py` → **17 PASS**
+  - `pytest test_p1_phase2_livepath_and_alert_burnin.py test_p1_phase2_additional_delivery.py` → **14 PASS**
+- Smoke suite çalıştırma:
+  - `python /app/backend/cli/final_release_smoke_suite.py` → **overall PASS**
+- Testing agent raporu:
+  - `/app/test_reports/iteration_148.json` ✅
+- Auto frontend testing agent:
+  - `/admin/system-alerts` ve `/admin/users/customers` akışları PASS ✅
+
+### Not
+
+- Bybit/OKX execution adapterları kullanıcı kararıyla halen **MOCKED**.
+
 ## 2026-03-17 — Iteration Update (P1 Faz-1 Tamamlandı: Reliability Tuning + Audit Regression + Rollback)
 
 ### Faz-1.1 — Config Bağlama (A)
