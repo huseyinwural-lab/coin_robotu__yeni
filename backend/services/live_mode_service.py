@@ -650,7 +650,56 @@ def validate_exchange_credentials_for_user(
             return "Seçilen venue ile aktif exchange ayarı uyuşmuyor. Exchange Settings ekranında aynı venue'yu seçin."
         return None
 
+    requested_connection = None
+
+    def _sync_requested_connection(
+        *,
+        validation_success: bool,
+        is_valid: bool,
+        can_trade: bool,
+        reason_codes: list[str],
+        status_code: int,
+        permissions: list[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        if requested_connection is None:
+            return
+        snapshot = dict(requested_connection.readiness_snapshot or {})
+        snapshot.update(
+            {
+                "allowed": True,
+                "venue_state": "ready" if validation_success and can_trade else "blocked",
+                "capability_match": capability_match,
+                "reason_codes": reason_codes,
+                "snapshot_at": datetime.now(timezone.utc).isoformat(),
+                "validation_success": validation_success,
+                "is_valid": is_valid,
+                "can_trade": can_trade,
+                "status_code": status_code,
+                "last_error_reason": reason_codes[0] if reason_codes else "",
+                "validated_at": datetime.now(timezone.utc).isoformat(),
+                "exchange": requested_exchange,
+                "market_type": requested_market_type,
+                "environment": requested_environment,
+                "hint": hint,
+            }
+        )
+        requested_connection.readiness_snapshot = snapshot
+        if permissions is not None:
+            requested_connection.permission_snapshot = permissions
+        requested_connection.updated_at = datetime.now(timezone.utc)
+
     def _validation_failure(reason_codes: list[str], code: int, *, capability: bool = capability_match) -> tuple[dict, int]:
+        hint = _validation_hint(reason_codes)
+        _sync_requested_connection(
+            validation_success=False,
+            is_valid=False,
+            can_trade=False,
+            reason_codes=reason_codes,
+            permissions=[],
+            status_code=code,
+            hint=hint,
+        )
         settings_row.last_validation_success = False
         settings_row.last_reason_codes = reason_codes
         settings_row.validation_snapshot_id = str(uuid.uuid4())
@@ -666,7 +715,7 @@ def validate_exchange_credentials_for_user(
             "can_withdraw": False,
             "reason_codes": reason_codes,
             "capability_match": capability,
-            "hint": _validation_hint(reason_codes),
+            "hint": hint,
         }, code
 
     requested_connection = (
@@ -756,6 +805,15 @@ def validate_exchange_credentials_for_user(
     market_capable = market_tag in {item.upper() for item in permissions}
 
     if not can_trade or not trade_capable or not market_capable:
+        _sync_requested_connection(
+            validation_success=False,
+            is_valid=True,
+            can_trade=False,
+            reason_codes=["missing_trade_permission"],
+            permissions=permissions,
+            status_code=403,
+            hint=_validation_hint(["missing_trade_permission"]),
+        )
         _record_permission_snapshot_and_drift(
             db,
             settings_row=settings_row,
@@ -783,6 +841,14 @@ def validate_exchange_credentials_for_user(
         permissions=permissions,
         validation_success=True,
         reason_codes=[],
+    )
+    _sync_requested_connection(
+        validation_success=True,
+        is_valid=True,
+        can_trade=True,
+        reason_codes=[],
+        permissions=permissions,
+        status_code=200,
     )
     return {
         "exchange": requested_exchange,
@@ -1174,7 +1240,7 @@ def _resolve_strategy_context(db: Session, user_id: str) -> tuple[str, str]:
     trend_direction = _trend_direction_from_candles()
     bot = (
         db.query(BotProfile)
-        .filter(BotProfile.user_id == user_id, BotProfile.is_enabled.is_(True))
+        .filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False), BotProfile.is_enabled.is_(True))
         .order_by(BotProfile.updated_at.desc())
         .first()
     )
@@ -2545,7 +2611,7 @@ def build_readiness_report(config: LiveActivationConfig, api_key: str | None = N
 
 
 def trigger_stop_all_bots(db: Session):
-    db.query(BotProfile).update({BotProfile.is_running: False})
+    db.query(BotProfile).filter(BotProfile.is_deleted.is_(False)).update({BotProfile.is_running: False})
     db.commit()
 
 

@@ -203,7 +203,7 @@ def liquidate_open_positions_for_kill_switch(db: Session) -> list[str]:
 
 
 def pause_all_bots_for_kill_switch(db: Session) -> int:
-    running = db.query(BotProfile).filter(BotProfile.is_running.is_(True)).all()
+    running = db.query(BotProfile).filter(BotProfile.is_deleted.is_(False), BotProfile.is_running.is_(True)).all()
     for bot in running:
         bot.is_running = False
     db.commit()

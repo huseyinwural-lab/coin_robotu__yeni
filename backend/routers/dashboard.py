@@ -17,8 +17,8 @@ def dashboard_summary(current_user: User = Depends(get_current_user), db: Sessio
     if is_admin_role(current_user.role):
         data = {
             "users": db.query(User).count(),
-            "active_bots": db.query(BotProfile).filter(BotProfile.is_enabled.is_(True)).count(),
-            "running_bots": db.query(BotProfile).filter(BotProfile.is_running.is_(True)).count(),
+            "active_bots": db.query(BotProfile).filter(BotProfile.is_deleted.is_(False), BotProfile.is_enabled.is_(True)).count(),
+            "running_bots": db.query(BotProfile).filter(BotProfile.is_deleted.is_(False), BotProfile.is_running.is_(True)).count(),
             "risk_policies": db.query(RiskPolicy).count(),
             "strategy_templates": db.query(StrategyTemplate).count(),
             "critical_audits": db.query(AuditLog).filter(AuditLog.severity == "critical").count(),
@@ -49,12 +49,12 @@ def dashboard_summary(current_user: User = Depends(get_current_user), db: Sessio
         ]
     else:
         data = {
-            "bots": db.query(BotProfile).filter(BotProfile.user_id == current_user.id).count(),
+            "bots": db.query(BotProfile).filter(BotProfile.user_id == current_user.id, BotProfile.is_deleted.is_(False)).count(),
             "active_bots": db.query(BotProfile)
-            .filter(BotProfile.user_id == current_user.id, BotProfile.is_enabled.is_(True))
+            .filter(BotProfile.user_id == current_user.id, BotProfile.is_deleted.is_(False), BotProfile.is_enabled.is_(True))
             .count(),
             "running_bots": db.query(BotProfile)
-            .filter(BotProfile.user_id == current_user.id, BotProfile.is_running.is_(True))
+            .filter(BotProfile.user_id == current_user.id, BotProfile.is_deleted.is_(False), BotProfile.is_running.is_(True))
             .count(),
             "risk_policies": db.query(RiskPolicy).filter(RiskPolicy.user_id == current_user.id).count(),
             "strategy_templates": db.query(StrategyTemplate).filter(StrategyTemplate.is_active.is_(True)).count(),

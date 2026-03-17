@@ -17,7 +17,7 @@ def run_state_rebuild(db: Session, trigger_source: str = "startup") -> StateRebu
     db.refresh(rebuild_log)
 
     open_positions = db.query(PaperPosition).filter(PaperPosition.status == "open").count()
-    running_bots = db.query(BotProfile).filter(BotProfile.is_running.is_(True)).count()
+    running_bots = db.query(BotProfile).filter(BotProfile.is_deleted.is_(False), BotProfile.is_running.is_(True)).count()
     pending_positions = db.query(PaperPosition).filter(PaperPosition.status == "open").limit(20).all()
 
     rebuild_log.status = "completed"

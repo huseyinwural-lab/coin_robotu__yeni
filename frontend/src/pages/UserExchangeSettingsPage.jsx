@@ -67,6 +67,7 @@ export const UserExchangeSettingsPage = () => {
   const [connectionForm, setConnectionForm] = useState(initialConnectionForm);
   const [editingConnectionId, setEditingConnectionId] = useState("");
   const [isConnectionSaving, setIsConnectionSaving] = useState(false);
+  const [validatingConnectionId, setValidatingConnectionId] = useState("");
   const [connectionErrors, setConnectionErrors] = useState({});
   const [riskFormErrors, setRiskFormErrors] = useState({});
   const [symbolSelectorSource, setSymbolSelectorSource] = useState("crypto");
@@ -100,6 +101,34 @@ export const UserExchangeSettingsPage = () => {
     ];
     return list.length ? list : [fallbackVenue.environment];
   }, [selectedVenue.exchange, selectedVenue.market_type, venueOptions]);
+
+  const connectionHealthOverview = useMemo(() => {
+    const summary = { total: 0, online: 0, degraded: 0, offline: 0, unknown: 0 };
+    for (const profile of connectionProfiles || []) {
+      summary.total += 1;
+      const health = String(profile?.connection_health || "unknown").toLowerCase();
+      if (health === "online") summary.online += 1;
+      else if (health === "degraded") summary.degraded += 1;
+      else if (health === "offline") summary.offline += 1;
+      else summary.unknown += 1;
+    }
+    return summary;
+  }, [connectionProfiles]);
+
+  const formatConnectionTime = (value) => {
+    if (!value) return "-";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "-";
+    return parsed.toLocaleString("tr-TR");
+  };
+
+  const profileHealthClass = (health) => {
+    const normalized = String(health || "unknown").toLowerCase();
+    if (normalized === "online") return "border-emerald-700/70 text-emerald-300 bg-emerald-900/20";
+    if (normalized === "degraded") return "border-amber-700/70 text-amber-300 bg-amber-900/20";
+    if (normalized === "offline") return "border-rose-700/70 text-rose-300 bg-rose-900/20";
+    return "border-slate-700 text-slate-300 bg-slate-900/40";
+  };
 
   const loadAll = useCallback(async () => {
     try {
@@ -395,6 +424,19 @@ export const UserExchangeSettingsPage = () => {
       await loadAll();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Connection profili silinemedi");
+    }
+  };
+
+  const revalidateConnectionProfile = async (connection) => {
+    setValidatingConnectionId(connection.id);
+    try {
+      await apiClient.post(`/user/exchange-connections/${connection.id}/revalidate`);
+      toast.success(`${connection.account_label} doğrulandı`);
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Profil doğrulaması başarısız");
+    } finally {
+      setValidatingConnectionId("");
     }
   };
 
@@ -718,11 +760,22 @@ export const UserExchangeSettingsPage = () => {
                   <div data-testid={`user-connection-profile-info-${connection.id}`}>
                     <p className="text-sm font-semibold text-slate-100" data-testid={`user-connection-profile-label-${connection.id}`}>{connection.account_label}{connection.is_default ? " (default)" : ""}</p>
                     <p className="text-xs text-slate-400" data-testid={`user-connection-profile-meta-${connection.id}`}>{connection.exchange} / {connection.market_type} / {connection.environment}</p>
+                    <p className="mt-1" data-testid={`user-connection-profile-health-badge-wrap-${connection.id}`}>
+                      <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs uppercase tracking-wide ${profileHealthClass(connection.connection_health)}`} data-testid={`user-connection-profile-health-badge-${connection.id}`}>
+                        {connection.connection_health || "unknown"}
+                      </span>
+                    </p>
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-permissions-${connection.id}`}>permissions: {(connection.permission_snapshot || []).join(",") || "-"}</p>
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-readiness-${connection.id}`}>readiness: {connection.readiness_snapshot?.venue_state || "-"}</p>
+                    <p className="text-xs text-slate-500" data-testid={`user-connection-profile-can-trade-${connection.id}`}>can_trade_effective: {String(Boolean(connection.can_trade_effective))}</p>
+                    <p className="text-xs text-slate-500" data-testid={`user-connection-profile-last-validated-${connection.id}`}>last_validated_at: {formatConnectionTime(connection.last_validated_at)}</p>
+                    <p className="text-xs text-slate-500" data-testid={`user-connection-profile-last-reason-${connection.id}`}>last_reason: {connection.connection_health_reason || "-"}</p>
                   </div>
                   <div className="flex flex-wrap gap-2" data-testid={`user-connection-profile-actions-${connection.id}`}>
                     <Button size="sm" variant="outline" onClick={() => startEditConnection(connection)} data-testid={`user-connection-profile-edit-button-${connection.id}`}>Düzenle</Button>
+                    <Button size="sm" variant="outline" onClick={() => revalidateConnectionProfile(connection)} disabled={validatingConnectionId === connection.id} data-testid={`user-connection-profile-revalidate-button-${connection.id}`}>
+                      {validatingConnectionId === connection.id ? "Doğrulanıyor..." : "Revalidate"}
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => setProfileAsDefault(connection.id)} data-testid={`user-connection-profile-set-default-button-${connection.id}`}>Default Yap</Button>
                     <Button size="sm" className="bg-rose-600 text-white hover:bg-rose-500" onClick={() => deleteConnectionProfile(connection.id)} data-testid={`user-connection-profile-delete-button-${connection.id}`}>Sil</Button>
                   </div>
@@ -1037,12 +1090,15 @@ export const UserExchangeSettingsPage = () => {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="user-exchange-settings-metrics-grid">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-8" data-testid="user-exchange-settings-metrics-grid">
         <MetricCard label="Exchange" value={settings?.exchange || "-"} tone="orange" testId="user-exchange-metric-exchange" />
         <MetricCard label="Mode" value={settings?.mode || "-"} tone="orange" testId="user-exchange-metric-mode" />
         <MetricCard label="Permission" value={permission?.overall_status || "-"} tone={permission?.overall_status === "pass" ? "orange" : "red"} testId="user-exchange-metric-permission" />
         <MetricCard label="Live Activation" value={permission?.live_activation || "blocked"} tone={permission?.live_activation === "ready" ? "orange" : "red"} testId="user-exchange-metric-live-activation" />
         <MetricCard label="Execution Quality" value={latestQuality?.execution_quality_score ?? "-"} tone="orange" testId="user-exchange-metric-quality" />
+        <MetricCard label="Profiles Online" value={String(connectionHealthOverview.online)} tone="orange" testId="user-exchange-metric-profiles-online" />
+        <MetricCard label="Profiles Degraded" value={String(connectionHealthOverview.degraded)} tone={connectionHealthOverview.degraded > 0 ? "red" : "blue"} testId="user-exchange-metric-profiles-degraded" />
+        <MetricCard label="Profiles Offline" value={String(connectionHealthOverview.offline)} tone={connectionHealthOverview.offline > 0 ? "red" : "blue"} testId="user-exchange-metric-profiles-offline" />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4" data-testid="user-exchange-action-state-grid">

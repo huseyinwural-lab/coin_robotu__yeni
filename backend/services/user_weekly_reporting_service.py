@@ -118,7 +118,7 @@ def generate_weekly_user_report(db: Session, user_id: str, week: str | None = No
 
     strategy_contribution: dict[str, float] = {}
     symbol_contribution: dict[str, float] = {}
-    bot_profiles = {row.id: row for row in db.query(BotProfile).filter(BotProfile.user_id == user_id).all()}
+    bot_profiles = {row.id: row for row in db.query(BotProfile).filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False)).all()}
     for row in closed_positions:
         strategy_name = bot_profiles.get(row.bot_profile_id).strategy_type if row.bot_profile_id in bot_profiles else "unknown"
         strategy_contribution[strategy_name] = round(strategy_contribution.get(strategy_name, 0.0) + float(row.realized_pnl or 0), 4)

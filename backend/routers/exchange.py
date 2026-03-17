@@ -592,7 +592,7 @@ def execute_mock_order(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    bot_query = db.query(BotProfile).filter(BotProfile.id == payload.bot_profile_id)
+    bot_query = db.query(BotProfile).filter(BotProfile.id == payload.bot_profile_id, BotProfile.is_deleted.is_(False))
     if not is_admin_role(current_user.role):
         bot_query = bot_query.filter(BotProfile.user_id == current_user.id)
 

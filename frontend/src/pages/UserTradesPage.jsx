@@ -36,6 +36,13 @@ export const UserTradesPage = () => {
     }
   };
 
+  const formatTradeTime = (value) => {
+    if (!value) return "-";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "-";
+    return parsed.toLocaleString("tr-TR");
+  };
+
   if (isLoading) {
     return <LoadingSkeleton rows={6} testId="user-trades-loading-skeleton" />;
   }
@@ -92,6 +99,8 @@ export const UserTradesPage = () => {
             <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-weight-${row.trade_id}`}>weight: {row.strategy_weight ?? "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-allocation-${row.trade_id}`}>allocation: {row.allocation_source ?? "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-meta-${row.trade_id}`}>meta: {row.meta_engine_decision ?? "-"}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-opened-at-${row.trade_id}`}>Opened: {formatTradeTime(row.opened_at)}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-closed-at-${row.trade_id}`}>Closed: {formatTradeTime(row.closed_at)}</p>
             <Button className="mt-2" variant="outline" onClick={() => openTradeTrace(row)} data-testid={`user-trades-mobile-trace-button-${row.trade_id}`}>Decision Trace</Button>
           </article>
         ))}
@@ -111,6 +120,8 @@ export const UserTradesPage = () => {
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-weight">Weight</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-allocation">Allocation</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-meta">Meta</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-opened-at">Opened At</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-closed-at">Closed At</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-trace">Trace</th>
             </tr>
           </thead>
@@ -127,6 +138,8 @@ export const UserTradesPage = () => {
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-weight-${row.trade_id}`}>{row.strategy_weight ?? "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-allocation-${row.trade_id}`}>{row.allocation_source ?? "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-meta-${row.trade_id}`}>{row.meta_engine_decision ?? "-"}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-opened-at-${row.trade_id}`}>{formatTradeTime(row.opened_at)}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-closed-at-${row.trade_id}`}>{formatTradeTime(row.closed_at)}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"}>
                   <Button variant="outline" onClick={() => openTradeTrace(row)} data-testid={`user-trades-trace-button-${row.trade_id}`}>Decision Trace</Button>
                 </td>

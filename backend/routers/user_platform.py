@@ -9,6 +9,7 @@ from core.users.user_exchange_connector import (
 from core.users.user_exchange_connections import (
     create_user_exchange_connection,
     delete_user_exchange_connection,
+    get_user_exchange_connection,
     list_user_exchange_connections,
     set_default_user_exchange_connection,
     update_user_exchange_connection,
@@ -27,6 +28,7 @@ from core.users.user_risk_settings import (
 from db import get_db, redis_client
 from deps import require_user
 from models import BotProfile, PendingSignal, RiskPolicy, User
+from services.live_mode_service import validate_exchange_credentials_for_user
 from schemas import (
     UserDashboardResponse,
     UserExchangeConnectionPatchRequest,
@@ -208,6 +210,48 @@ def set_exchange_connection_default(
     return UserExchangeConnectionResponse(**row)
 
 
+@router.post("/exchange-connections/{connection_id}/revalidate", response_model=UserExchangeConnectionResponse)
+def revalidate_exchange_connection(
+    connection_id: str,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        connection = get_user_exchange_connection(db, user_id=current_user.id, connection_id=connection_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    payload, status_code = validate_exchange_credentials_for_user(
+        db,
+        current_user.id,
+        exchange=connection["exchange"],
+        market_type=connection["market_type"],
+        environment=connection["environment"],
+    )
+    refreshed = get_user_exchange_connection(db, user_id=current_user.id, connection_id=connection_id)
+
+    create_audit_log(
+        db,
+        action="user_exchange_connection_revalidated",
+        entity_type="user_exchange_connection",
+        entity_id=connection_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning" if status_code >= 400 else "info",
+        details={
+            "exchange": connection["exchange"],
+            "market_type": connection["market_type"],
+            "environment": connection["environment"],
+            "status_code": status_code,
+            "reason_codes": payload.get("reason_codes", []),
+            "is_valid": payload.get("is_valid"),
+            "can_trade": payload.get("can_trade"),
+        },
+    )
+
+    return UserExchangeConnectionResponse(**refreshed)
+
+
 @router.delete("/exchange-connections/{connection_id}")
 def remove_exchange_connection(
     connection_id: str,
@@ -313,10 +357,10 @@ def get_trades(
 @router.get("/dashboard", response_model=UserDashboardResponse)
 def get_user_dashboard(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
     portfolio = build_user_portfolio_snapshot(db, current_user.id)
-    bot_count = db.query(BotProfile).filter(BotProfile.user_id == current_user.id).count()
+    bot_count = db.query(BotProfile).filter(BotProfile.user_id == current_user.id, BotProfile.is_deleted.is_(False)).count()
     running_bot_count = (
         db.query(BotProfile)
-        .filter(BotProfile.user_id == current_user.id, BotProfile.is_enabled.is_(True), BotProfile.is_running.is_(True))
+        .filter(BotProfile.user_id == current_user.id, BotProfile.is_deleted.is_(False), BotProfile.is_enabled.is_(True), BotProfile.is_running.is_(True))
         .count()
     )
     risk_policy_count = db.query(RiskPolicy).filter(RiskPolicy.user_id == current_user.id).count()

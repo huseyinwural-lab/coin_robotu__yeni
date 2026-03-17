@@ -59,7 +59,12 @@ def _safe_spread_bps(symbol: str) -> float:
 
 
 def _default_bot(db: Session, user_id: str, market_type: str, symbol: str | None = None) -> BotProfile:
-    row = db.query(BotProfile).filter(BotProfile.user_id == user_id).order_by(BotProfile.created_at.asc()).first()
+    row = (
+        db.query(BotProfile)
+        .filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False))
+        .order_by(BotProfile.created_at.asc())
+        .first()
+    )
     if row:
         return row
 

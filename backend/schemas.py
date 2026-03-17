@@ -122,6 +122,8 @@ class BotProfileResponse(BotProfileBase):
     id: str
     user_id: str
     is_running: bool
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -1244,6 +1246,11 @@ class UserExchangeConnectionResponse(BaseModel):
     is_default: bool
     readiness_snapshot: dict
     permission_snapshot: list[str]
+    connection_health: str = "unknown"
+    connection_health_reason: str | None = None
+    can_trade_effective: bool = False
+    last_validated_at: datetime | None = None
+    is_reconnecting: bool = False
     has_api_key: bool
     has_api_secret: bool
     masked_api_key: str

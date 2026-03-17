@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -11,7 +13,7 @@ router = APIRouter(prefix="/bot-profiles", tags=["bot_profiles"])
 
 
 def _authorized_bot_query(db: Session, bot_id: str, current_user: User):
-    query = db.query(BotProfile).filter(BotProfile.id == bot_id)
+    query = db.query(BotProfile).filter(BotProfile.id == bot_id, BotProfile.is_deleted.is_(False))
     if not is_admin_role(current_user.role):
         query = query.filter(BotProfile.user_id == current_user.id)
     return query
@@ -19,7 +21,7 @@ def _authorized_bot_query(db: Session, bot_id: str, current_user: User):
 
 @router.get("", response_model=list[BotProfileResponse])
 def list_bot_profiles(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    query = db.query(BotProfile)
+    query = db.query(BotProfile).filter(BotProfile.is_deleted.is_(False))
     if not is_admin_role(current_user.role):
         query = query.filter(BotProfile.user_id == current_user.id)
     return query.order_by(BotProfile.created_at.desc()).all()
@@ -74,3 +76,31 @@ def update_bot_profile(
         details={"name": bot_profile.name},
     )
     return bot_profile
+
+
+@router.delete("/{bot_id}")
+def delete_bot_profile(
+    bot_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bot_profile = _authorized_bot_query(db, bot_id, current_user).first()
+    if bot_profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot profile not found")
+
+    bot_profile.is_running = False
+    bot_profile.is_enabled = False
+    bot_profile.is_deleted = True
+    bot_profile.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+
+    create_audit_log(
+        db,
+        action="bot_profile_deleted",
+        entity_type="bot_profile",
+        entity_id=bot_profile.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"name": bot_profile.name, "market_type": bot_profile.market_type},
+    )
+    return {"id": bot_profile.id, "deleted": True}

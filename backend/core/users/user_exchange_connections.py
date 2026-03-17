@@ -47,9 +47,64 @@ def _default_readiness_snapshot(db: Session, user_id: str, exchange: str, market
     }
 
 
+def _parse_snapshot_time(value) -> datetime | None:
+    if not value:
+        return None
+    try:
+        candidate = str(value).replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(candidate)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except (TypeError, ValueError):
+        return None
+
+
+def _derive_connection_health(snapshot: dict, *, has_api_key: bool, has_api_secret: bool) -> tuple[str, str | None, bool, bool, datetime | None]:
+    if not has_api_key or not has_api_secret:
+        return "offline", "missing_credentials", False, False, None
+
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    validation_success = snapshot.get("validation_success")
+    can_trade = bool(snapshot.get("can_trade"))
+    is_valid = bool(snapshot.get("is_valid", validation_success is True))
+    reason_codes = snapshot.get("reason_codes") or []
+    first_reason = str(reason_codes[0]).strip().lower() if reason_codes else None
+    validated_at = _parse_snapshot_time(
+        snapshot.get("validated_at") or snapshot.get("validation_checked_at") or snapshot.get("snapshot_at")
+    )
+
+    reconnect_reasons = {"exchange_unreachable", "network_error", "timeout", "rate_limit", "exchange_error_503"}
+    hard_offline_reasons = {
+        "missing_credentials",
+        "invalid_key",
+        "ip_restriction",
+        "missing_trade_permission",
+        "exchange_error_451",
+    }
+
+    if validation_success is True and is_valid and can_trade:
+        return "online", None, True, False, validated_at
+    if first_reason in hard_offline_reasons:
+        return "offline", first_reason, False, False, validated_at
+    if first_reason in reconnect_reasons:
+        return "degraded", first_reason, False, True, validated_at
+    if validation_success is False:
+        return "degraded", first_reason or "validation_failed", False, True, validated_at
+    return "unknown", first_reason, can_trade and is_valid, False, validated_at
+
+
 def _serialize_connection(row: UserExchangeConnection) -> dict:
     api_key = decrypt_exchange_secret(row.api_key_encrypted)
     api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
+    has_api_key = bool(row.api_key_encrypted)
+    has_api_secret = bool(row.api_secret_encrypted)
+    readiness_snapshot = row.readiness_snapshot or {}
+    connection_health, connection_health_reason, can_trade_effective, is_reconnecting, last_validated_at = _derive_connection_health(
+        readiness_snapshot,
+        has_api_key=has_api_key,
+        has_api_secret=has_api_secret,
+    )
     return {
         "id": row.id,
         "user_id": row.user_id,
@@ -58,10 +113,15 @@ def _serialize_connection(row: UserExchangeConnection) -> dict:
         "market_type": row.market_type,
         "environment": row.environment,
         "is_default": bool(row.is_default),
-        "readiness_snapshot": row.readiness_snapshot or {},
+        "readiness_snapshot": readiness_snapshot,
         "permission_snapshot": row.permission_snapshot or [],
-        "has_api_key": bool(row.api_key_encrypted),
-        "has_api_secret": bool(row.api_secret_encrypted),
+        "connection_health": connection_health,
+        "connection_health_reason": connection_health_reason,
+        "can_trade_effective": can_trade_effective,
+        "last_validated_at": last_validated_at,
+        "is_reconnecting": is_reconnecting,
+        "has_api_key": has_api_key,
+        "has_api_secret": has_api_secret,
         "masked_api_key": mask_secret(api_key),
         "credential_fingerprint": credential_fingerprint(api_key, api_secret),
         "created_at": row.created_at,
@@ -116,6 +176,18 @@ def list_user_exchange_connections(db: Session, user_id: str) -> list[dict]:
         .all()
     )
     return [_serialize_connection(row) for row in rows]
+
+
+def get_user_exchange_connection(db: Session, *, user_id: str, connection_id: str) -> dict:
+    _bootstrap_from_legacy(db, user_id)
+    row = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == user_id, UserExchangeConnection.id == connection_id)
+        .first()
+    )
+    if row is None:
+        raise ValueError("connection_not_found")
+    return _serialize_connection(row)
 
 
 def create_user_exchange_connection(

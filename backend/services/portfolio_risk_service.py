@@ -129,7 +129,7 @@ def _resolve_cluster_id(symbol: str, clusters: list[RiskCluster]) -> str:
 def build_current_positions(db: Session, user_id: str) -> list[dict]:
     bot_map = {
         row.id: row.strategy_type
-        for row in db.query(BotProfile).filter(BotProfile.user_id == user_id).all()
+        for row in db.query(BotProfile).filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False)).all()
     }
     rows = (
         db.query(PaperPosition)

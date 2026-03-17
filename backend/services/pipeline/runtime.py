@@ -948,7 +948,7 @@ class PipelineRuntime:
                         update_indicator_cache(self.cache, event.symbol, symbol_candles)
                 bots = (
                     db.query(BotProfile)
-                    .filter(BotProfile.is_enabled.is_(True), BotProfile.is_running.is_(True), BotProfile.timeframe == event.timeframe)
+                    .filter(BotProfile.is_deleted.is_(False), BotProfile.is_enabled.is_(True), BotProfile.is_running.is_(True), BotProfile.timeframe == event.timeframe)
                     .all()
                 )
                 for bot in bots:
@@ -1387,7 +1387,7 @@ class PipelineRuntime:
             "open_positions": db.query(PaperPosition).filter(PaperPosition.status == "open").count(),
             "latency_ms": orchestrator.get("latency_ms", self.market_data_engine.latency_ms),
             "queue_depth": self.candle_queue.qsize(),
-            "active_bots_running": db.query(BotProfile).filter(BotProfile.is_running.is_(True)).count(),
+            "active_bots_running": db.query(BotProfile).filter(BotProfile.is_deleted.is_(False), BotProfile.is_running.is_(True)).count(),
             "websocket_reconnects_5m": get_counter(self.cache, "metrics:websocket_reconnects:5m"),
             "idempotency_keys_5m": get_counter(self.cache, "metrics:idempotency_keys:5m"),
             "duplicate_signals_blocked_5m": get_counter(self.cache, "metrics:duplicates_blocked:5m"),

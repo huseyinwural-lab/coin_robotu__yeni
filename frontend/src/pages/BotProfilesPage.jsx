@@ -22,6 +22,7 @@ const initialForm = {
 export const BotProfilesPage = () => {
   const [items, setItems] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  const [deletingBotId, setDeletingBotId] = useState("");
   const [form, setForm] = useState(initialForm);
   const [formErrors, setFormErrors] = useState({});
   const [symbolSource, setSymbolSource] = useState("crypto");
@@ -116,6 +117,30 @@ export const BotProfilesPage = () => {
       fetchItems();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Bot durumu değiştirilemedi");
+    }
+  };
+
+  const deleteBot = async (item) => {
+    if (!window.confirm(`"${item.name}" bot profilini silmek istediğinize emin misiniz?`)) {
+      return;
+    }
+
+    setDeletingBotId(item.id);
+    try {
+      await apiClient.delete(`/bot-profiles/${item.id}`);
+      if (editingId === item.id) {
+        setEditingId(null);
+        setForm(initialForm);
+        setSelectedSymbols(["BTCUSDT", "ETHUSDT"]);
+        setSymbolMode("all_market_symbols");
+        setFormErrors({});
+      }
+      toast.success("Bot profili silindi");
+      await fetchItems();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bot profili silinemedi");
+    } finally {
+      setDeletingBotId("");
     }
   };
 
@@ -290,6 +315,16 @@ export const BotProfilesPage = () => {
                       data-testid={`bot-table-toggle-running-${item.id}`}
                     >
                       {item.is_running ? "Stop" : "Start"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-rose-500 bg-transparent text-rose-300"
+                      onClick={() => deleteBot(item)}
+                      data-testid={`bot-table-delete-${item.id}`}
+                      disabled={deletingBotId === item.id}
+                    >
+                      {deletingBotId === item.id ? "Siliniyor..." : "Sil"}
                     </Button>
                   </div>
                 </TableCell>

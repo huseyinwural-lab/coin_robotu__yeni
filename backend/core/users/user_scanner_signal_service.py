@@ -549,7 +549,7 @@ def delete_scanner_automation_profile(db: Session, user_id: str, profile_id: str
 
 
 def _user_symbols_scope(db: Session, user_id: str) -> set[str]:
-    rows = db.query(BotProfile).filter(BotProfile.user_id == user_id).all()
+    rows = db.query(BotProfile).filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False)).all()
     symbols: set[str] = set()
     for row in rows:
         symbols.update((row.symbols or []))
@@ -559,7 +559,7 @@ def _user_symbols_scope(db: Session, user_id: str) -> set[str]:
 def _has_active_bot(db: Session, user_id: str) -> bool:
     row = (
         db.query(BotProfile)
-        .filter(BotProfile.user_id == user_id, BotProfile.is_running.is_(True), BotProfile.is_enabled.is_(True))
+        .filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False), BotProfile.is_running.is_(True), BotProfile.is_enabled.is_(True))
         .order_by(BotProfile.updated_at.desc())
         .first()
     )
@@ -571,7 +571,7 @@ def _default_bot_for_user(db: Session, user_id: str, symbols: list[str]) -> BotP
 
     running_row = (
         db.query(BotProfile)
-        .filter(BotProfile.user_id == user_id, BotProfile.is_running.is_(True))
+        .filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False), BotProfile.is_running.is_(True))
         .order_by(BotProfile.created_at.desc())
         .first()
     )
@@ -583,7 +583,7 @@ def _default_bot_for_user(db: Session, user_id: str, symbols: list[str]) -> BotP
             db.flush()
         return running_row
 
-    row = db.query(BotProfile).filter(BotProfile.user_id == user_id).order_by(BotProfile.created_at.desc()).first()
+    row = db.query(BotProfile).filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False)).order_by(BotProfile.created_at.desc()).first()
     if row:
         row.is_running = True
         merged_symbols = list(dict.fromkeys([*(row.symbols or []), *normalized_symbols]))[:40]
@@ -830,7 +830,7 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
         row.last_eligibility_check_at = datetime.now(timezone.utc)
         return row
 
-    bot = db.query(BotProfile).filter(BotProfile.id == signal.bot_profile_id).first()
+    bot = db.query(BotProfile).filter(BotProfile.id == signal.bot_profile_id, BotProfile.is_deleted.is_(False)).first()
     risk_policy = _resolve_default_risk_policy(db, row.user_id)
     exchange_connection = _resolve_default_exchange_connection(db, row.user_id)
     reason_codes, requires_manual, execution_eligible = _evaluate_signal_blockers(
@@ -1879,14 +1879,14 @@ def diagnose_pending_signal(
     _refresh_pending_signal_snapshot(db, row)
 
     if auto_fix and row.blocked_reason_code == "BOT_NOT_RUNNING" and row.bot_profile_id:
-        bot = db.query(BotProfile).filter(BotProfile.id == row.bot_profile_id).first()
+        bot = db.query(BotProfile).filter(BotProfile.id == row.bot_profile_id, BotProfile.is_deleted.is_(False)).first()
         if bot is not None and not bool(bot.is_running):
             bot.is_running = True
             bot.updated_at = datetime.now(timezone.utc)
             actions_applied.append("bot_runtime_started")
 
     if auto_fix and row.blocked_reason_code == "SYMBOL_NOT_ALLOWED" and row.bot_profile_id:
-        bot = db.query(BotProfile).filter(BotProfile.id == row.bot_profile_id).first()
+        bot = db.query(BotProfile).filter(BotProfile.id == row.bot_profile_id, BotProfile.is_deleted.is_(False)).first()
         if bot is not None:
             existing = [item.upper() for item in (bot.symbols or []) if item]
             symbol = str(row.symbol or "").upper()

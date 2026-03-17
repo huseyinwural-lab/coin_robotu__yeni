@@ -12,7 +12,7 @@ router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 
 def _authorized_bot(db: Session, bot_id: str, current_user: User):
-    query = db.query(BotProfile).filter(BotProfile.id == bot_id)
+    query = db.query(BotProfile).filter(BotProfile.id == bot_id, BotProfile.is_deleted.is_(False))
     if not is_admin_role(current_user.role):
         query = query.filter(BotProfile.user_id == current_user.id)
     bot = query.first()

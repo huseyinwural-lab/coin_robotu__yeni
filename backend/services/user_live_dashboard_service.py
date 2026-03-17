@@ -90,7 +90,7 @@ def _latest_risk_policy(db: Session, user_id: str) -> RiskPolicy | None:
 
 
 def _bot_summary(db: Session, user_id: str) -> dict:
-    bots = db.query(BotProfile).filter(BotProfile.user_id == user_id).all()
+    bots = db.query(BotProfile).filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False)).all()
     running = sum(1 for bot in bots if bool(bot.is_running) and bool(bot.is_enabled))
     paused = sum(1 for bot in bots if not bool(bot.is_running) and bool(bot.is_enabled))
     failed = sum(1 for bot in bots if not bool(bot.is_enabled))
@@ -297,7 +297,7 @@ def _position_strategy_map(db: Session, user_id: str, positions: list[PaperPosit
     bot_ids = {row.bot_profile_id for row in positions if row.bot_profile_id}
     bot_map = {
         row.id: row
-        for row in db.query(BotProfile).filter(BotProfile.user_id == user_id, BotProfile.id.in_(bot_ids)).all()
+        for row in db.query(BotProfile).filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False), BotProfile.id.in_(bot_ids)).all()
     }
 
     strategy_map: dict[str, str] = {}
