@@ -1,3 +1,22 @@
+## 2026-03-17 — Iteration Update (Leverage Hybrid + System Health)
+
+- Overview sekmesine **System Health Dashboard** eklendi: 1m/5m/15m bucket success/fail, success rate, jitter (p95-p50 + stddev), last success/fail.
+- Exchange connection telemetry genişletildi: `health_bucket_metrics`, `current_jitter_p95_p50_ms`, `current_jitter_stddev_ms`, `liveness_latency_history`, `action_required` alanları.
+- Futures leverage akışı **hibrit modele** geçirildi:
+  - `requested_leverage` (kullanıcı seçimi)
+  - `recommended_leverage` (sistem önerisi)
+  - `applied_leverage` (risk/venue clamp sonrası)
+  - `leverage_policy_mode`, `leverage_clamp_reasons`
+- `/api/v1/user/trading/preview` ve `/api/exchange/test-order` sözleşmelerine leverage policy alanları eklendi.
+- `normalized_order_payload` içinde `leverage` artık `applied_leverage` ile senkron (execution tarafında tutarlılık artırıldı).
+- Frontend güncellemeleri:
+  - `UserExecutePage`: preview panelinde leverage policy alanları gösteriliyor.
+  - `UserExchangeSettingsPage`: test-order sonuç panelinde leverage policy alanları gösteriliyor.
+- Test doğrulamaları:
+  - `iteration_138`: System Health Dashboard + bucket/jitter sözleşmesi PASS
+  - `iteration_139`: Futures leverage hybrid model + regression PASS
+- Not: Bybit/OKX adapterları halen **MOCKED** durumda.
+
 # PRD — Algorithmic Trading Platform (Phase 1 Başlangıç)
 
 ## 1) Original Problem Statement (Özet)
