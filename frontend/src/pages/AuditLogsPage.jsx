@@ -13,6 +13,7 @@ export const AuditLogsPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isPruning, setIsPruning] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportWindowDays, setExportWindowDays] = useState("30");
   const [filters, setFilters] = useState({
     q: "",
     action: "",
@@ -68,6 +69,7 @@ export const AuditLogsPage = () => {
         params: {
           ...buildFilterParams(),
           limit: 500,
+          window_days: Number(exportWindowDays),
         },
         responseType: "blob",
       });
@@ -94,7 +96,7 @@ export const AuditLogsPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="audit-logs-description">Request ID, Session ID ve domain event akışları tek tabloda.</p>
       </header>
 
-      <div className="grid gap-2 border border-slate-800 bg-slate-900 p-3 md:grid-cols-8" data-testid="audit-logs-filters-grid">
+      <div className="grid gap-2 border border-slate-800 bg-slate-900 p-3 md:grid-cols-9" data-testid="audit-logs-filters-grid">
         <Input
           placeholder="search"
           value={filters.q}
@@ -135,9 +137,22 @@ export const AuditLogsPage = () => {
           {isPruning ? "Prune..." : "90 Gün Prune"}
         </Button>
         {user?.role === "super_admin" && (
-          <Button onClick={exportIncidentPackage} disabled={isExporting} variant="outline" data-testid="audit-logs-incident-export-button">
-            {isExporting ? "ZIP hazırlanıyor..." : "Incident ZIP İndir"}
-          </Button>
+          <>
+            <select
+              className="border border-slate-700 bg-slate-950 px-2 text-sm"
+              value={exportWindowDays}
+              onChange={(event) => setExportWindowDays(event.target.value)}
+              data-testid="audit-logs-incident-window-days-select"
+            >
+              <option value="1">1 gün</option>
+              <option value="7">7 gün</option>
+              <option value="30">30 gün</option>
+              <option value="90">90 gün</option>
+            </select>
+            <Button onClick={exportIncidentPackage} disabled={isExporting} variant="outline" data-testid="audit-logs-incident-export-button">
+              {isExporting ? "ZIP hazırlanıyor..." : "Incident ZIP İndir"}
+            </Button>
+          </>
         )}
       </div>
 

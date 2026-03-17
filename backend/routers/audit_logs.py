@@ -92,6 +92,20 @@ def _serialize_timeline_item(row: AuditLog) -> dict:
     }
 
 
+def _resolve_export_window(
+    *,
+    window_days: int | None,
+    date_from: str | None,
+    date_to: str | None,
+) -> tuple[str | None, str | None]:
+    if window_days is None:
+        return date_from, date_to
+    if window_days not in {1, 7, 30, 90}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_window_days")
+    now = datetime.now(timezone.utc)
+    return (now - timedelta(days=window_days)).isoformat(), now.isoformat()
+
+
 @router.get("", response_model=list[AuditLogResponse])
 def list_audit_logs(
     _: User = Depends(require_admin),
@@ -194,9 +208,16 @@ def export_incident_package(
     request_id: str | None = Query(default=None),
     session_id: str | None = Query(default=None),
     q: str | None = Query(default=None),
+    window_days: int | None = Query(default=None),
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
 ):
+    effective_date_from, effective_date_to = _resolve_export_window(
+        window_days=window_days,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
     query = _build_timeline_query(
         db,
         action=action,
@@ -206,8 +227,8 @@ def export_incident_package(
         request_id=request_id,
         session_id=session_id,
         q=q,
-        date_from=date_from,
-        date_to=date_to,
+        date_from=effective_date_from,
+        date_to=effective_date_to,
     )
     timeline_rows = query.order_by(AuditLog.created_at.desc()).limit(limit).all()
     timeline_items = [_serialize_timeline_item(row) for row in timeline_rows]
@@ -252,8 +273,9 @@ def export_incident_package(
             "request_id": request_id,
             "session_id": session_id,
             "q": q,
-            "date_from": date_from,
-            "date_to": date_to,
+            "window_days": window_days,
+            "date_from": effective_date_from,
+            "date_to": effective_date_to,
         },
         "timeline": timeline_items,
         "related_domain_events": domain_items,
@@ -296,6 +318,7 @@ def export_incident_package(
             "limit": limit,
             "severity": severity,
             "action": action,
+            "window_days": window_days,
         },
     )
 

@@ -1,4 +1,5 @@
 import os
+import json
 import uuid
 import zipfile
 from io import BytesIO
@@ -97,7 +98,7 @@ def test_audit_retention_prune_endpoint(admin_headers: dict):
 def test_incident_export_zip_contains_incident_and_summary(admin_headers: dict):
     response = requests.get(
         f"{BASE_URL}/api/audit-logs/admin/incident-export",
-        params={"limit": 120},
+        params={"limit": 120, "window_days": 7},
         headers=admin_headers,
         timeout=40,
     )
@@ -108,6 +109,8 @@ def test_incident_export_zip_contains_incident_and_summary(admin_headers: dict):
     names = set(archive.namelist())
     assert "incident.json" in names
     assert "summary.json" in names
+    incident_payload = json.loads(archive.read("incident.json").decode("utf-8"))
+    assert int((incident_payload.get("filters") or {}).get("window_days") or 0) == 7
 
 
 def test_incident_export_requires_auth():
@@ -116,3 +119,13 @@ def test_incident_export_requires_auth():
         timeout=20,
     )
     assert response.status_code == 401, response.text
+
+
+def test_incident_export_rejects_invalid_window_days(admin_headers: dict):
+    response = requests.get(
+        f"{BASE_URL}/api/audit-logs/admin/incident-export",
+        params={"window_days": 5},
+        headers=admin_headers,
+        timeout=20,
+    )
+    assert response.status_code == 400, response.text
