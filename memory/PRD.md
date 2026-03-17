@@ -1,3 +1,26 @@
+## 2026-03-17 — Iteration Update (Phase-9B Hardening: Rebalance Cadence Governance)
+
+- Strategy intelligence rebalance motoruna governance katmanı eklendi:
+  - `cadence_window_minutes`
+  - `max_weight_shift_per_cycle`
+  - `max_capital_shift_pct`
+  - `drift_threshold`
+- Yeni config dosyası: `/app/config/rebalance_governance_rules.json`.
+- `run_dynamic_capital_rebalance` artık cadence hold + weight shift cap + capital shift cap uygular ve `governance_summary` döner.
+- `capital_rebalance_events` genişletildi:
+  - `target_strategy_weight`, `cadence_window_blocked`, `minutes_since_last_rebalance`,
+  - `max_weight_shift_applied`, `max_capital_shift_applied`.
+- `evaluate_capital_rebalance` apply aşamasında cadence window içindeki stratejilerde update atlanır.
+- Admin API/Schema güncellendi:
+  - `GET /api/admin/strategy-intelligence` artık `governance_summary` içerir.
+- Frontend (`AdminStrategyIntelligencePage`) güncellendi:
+  - Governance paneli + capped/blocked metrik kartları + event governance listesi eklendi.
+- Testler:
+  - `backend/tests/test_dynamic_capital_rebalance.py` genişletildi (cap + cadence senaryoları)
+  - Testing agent raporu: `/app/test_reports/iteration_141.json` ✅
+  - Lokal doğrulama: `pytest backend/tests/test_dynamic_capital_rebalance.py backend/tests/test_governance_rebalance_api.py` → **18 PASS**
+- Not: Bybit/OKX execution adapterları halen **MOCKED**.
+
 ## 2026-03-17 — Iteration Update (Leverage Hybrid + System Health)
 
 - Overview sekmesine **System Health Dashboard** eklendi: 1m/5m/15m bucket success/fail, success rate, jitter (p95-p50 + stddev), last success/fail.

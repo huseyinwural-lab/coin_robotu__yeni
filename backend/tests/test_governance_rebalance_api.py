@@ -5,8 +5,22 @@ Tests rebalance cadence governance (time-window + max-shift caps) under strategy
 import os
 import pytest
 import requests
+from pathlib import Path
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+
+def _resolve_base_url() -> str:
+    direct = os.environ.get("REACT_APP_BACKEND_URL", "").strip().rstrip("/")
+    if direct:
+        return direct
+    env_file = Path(__file__).resolve().parents[2] / "frontend" / ".env"
+    if env_file.exists():
+        for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+            if raw_line.startswith("REACT_APP_BACKEND_URL="):
+                return raw_line.split("=", 1)[1].strip().rstrip("/")
+    raise RuntimeError("REACT_APP_BACKEND_URL missing")
+
+
+BASE_URL = _resolve_base_url()
 
 # Admin credentials for auth
 ADMIN_EMAIL = "admin@platform.local"
@@ -17,7 +31,7 @@ ADMIN_PASSWORD = "Admin12345!"
 def admin_token():
     """Get admin auth token for authenticated requests"""
     response = requests.post(
-        f"{BASE_URL}/api/auth/login",
+        f"{BASE_URL}/api/auth/login/admin",
         json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
         timeout=15,
     )
