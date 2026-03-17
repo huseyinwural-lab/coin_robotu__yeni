@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -271,7 +271,7 @@ export const UserScannerPage = () => {
     }
   };
 
-  const load = async ({ hydrateSelection = false, silent = false, notifyAutoRuns = false } = {}) => {
+  const load = useCallback(async ({ hydrateSelection = false, silent = false, notifyAutoRuns = false } = {}) => {
     if (!silent) {
       setIsLoading(true);
     }
@@ -324,18 +324,18 @@ export const UserScannerPage = () => {
       const readinessRes = responses[8].status === "fulfilled" ? responses[8].value : null;
       const dailyRes = responses[9].status === "fulfilled" ? responses[9].value : null;
 
-      setMode(modeRes?.data?.mode || mode || "ASSISTED");
-      setOverview(overviewRes?.data || overview || null);
-      setScannerResults(resultsRes?.data || scannerResults || []);
-      const automation = automationRes?.data || automationConfig || null;
-      const profiles = profilesRes?.data || automationProfiles || [];
+      setMode((prev) => modeRes?.data?.mode || prev || "ASSISTED");
+      setOverview((prev) => overviewRes?.data || prev || null);
+      setScannerResults((prev) => resultsRes?.data || prev || []);
+      const automation = automationRes?.data || null;
+      const profiles = profilesRes?.data || [];
       setAutomationConfig(automation);
       setAutomationProfiles(profiles);
-      const cards = cardsRes?.data?.items || decisionCards || [];
+      const cards = cardsRes?.data?.items || [];
       const persistedSelection = persistedSelectionRes?.data || null;
-      setRuntimeSnapshot(runtimeRes?.data || runtimeSnapshot || null);
-      setLiveReadiness(readinessRes?.data || liveReadiness || null);
-      setScannerDailyReport(dailyRes?.data || scannerDailyReport || null);
+      setRuntimeSnapshot((prev) => runtimeRes?.data || prev || null);
+      setLiveReadiness((prev) => readinessRes?.data || prev || null);
+      setScannerDailyReport((prev) => dailyRes?.data || prev || null);
       setDecisionCards(cards);
       if (cards.length > 0) {
         const selectedSymbol = selectedDecisionSymbol || cards[0].symbol;
@@ -378,18 +378,18 @@ export const UserScannerPage = () => {
         setIsLoading(false);
       }
     }
-  };
+  }, []);
 
   useEffect(() => {
     load({ hydrateSelection: true });
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       load({ silent: true, notifyAutoRuns: true });
     }, 10000);
     return () => clearInterval(timer);
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (!watchlistOnly) {

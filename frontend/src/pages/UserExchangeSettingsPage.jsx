@@ -450,7 +450,7 @@ export const UserExchangeSettingsPage = () => {
     }
   };
 
-  const revalidateConnectionProfile = async (connection, { silent = false } = {}) => {
+  const revalidateConnectionProfile = useCallback(async (connection, { silent = false } = {}) => {
     setValidatingConnectionId(connection.id);
     try {
       await apiClient.post(`/user/exchange-connections/${connection.id}/revalidate`);
@@ -465,7 +465,7 @@ export const UserExchangeSettingsPage = () => {
     } finally {
       setValidatingConnectionId("");
     }
-  };
+  }, [loadAll]);
 
   useEffect(() => {
     if (!selectedConnectionProfile) {
@@ -485,6 +485,7 @@ export const UserExchangeSettingsPage = () => {
 
     revalidateConnectionProfile(selectedConnectionProfile, { silent: true });
   }, [
+    revalidateConnectionProfile,
     selectedConnectionProfile?.id,
     selectedConnectionProfile?.connection_health,
     selectedConnectionProfile?.is_reconnecting,
