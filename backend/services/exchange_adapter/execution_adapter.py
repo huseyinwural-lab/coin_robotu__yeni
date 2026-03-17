@@ -1,5 +1,10 @@
 from datetime import datetime, timezone
+import hashlib
+import hmac
 import os
+import time
+
+import httpx
 
 from services.exchange_adapter.precision_normalizer import normalize_order_values
 from services.exchange_adapter.symbol_mapper import to_exchange_symbol
@@ -11,6 +16,10 @@ class ExchangeExecutionAdapter:
             "bybit": {
                 "api_key": os.environ.get("BYBIT_API_KEY", "").strip(),
                 "api_secret": os.environ.get("BYBIT_API_SECRET", "").strip(),
+                "testnet_api_key": os.environ.get("BYBIT_TESTNET_API_KEY", "").strip(),
+                "testnet_api_secret": os.environ.get("BYBIT_TESTNET_API_SECRET", "").strip(),
+                "live_api_key": os.environ.get("BYBIT_LIVE_API_KEY", "").strip(),
+                "live_api_secret": os.environ.get("BYBIT_LIVE_API_SECRET", "").strip(),
             },
             "okx": {
                 "api_key": os.environ.get("OKX_API_KEY", "").strip(),
@@ -26,6 +35,53 @@ class ExchangeExecutionAdapter:
                     self.credentials[exchange_key] = {}
                 self.credentials[exchange_key].update(payload or {})
 
+    @staticmethod
+    def _build_bybit_signature(api_secret: str, timestamp: str, api_key: str, recv_window: str, query_string: str) -> str:
+        payload = f"{timestamp}{api_key}{recv_window}{query_string}"
+        return hmac.new(api_secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+    def _resolve_bybit_credentials(self, environment: str | None) -> tuple[str, str, str]:
+        creds = self.credentials.get("bybit") or {}
+        env = str(environment or "testnet").strip().lower()
+        if env == "live":
+            api_key = (creds.get("live_api_key") or "").strip()
+            api_secret = (creds.get("live_api_secret") or "").strip()
+            base_url = "https://api.bybit.com"
+            if not api_key or not api_secret:
+                api_key = (creds.get("api_key") or "").strip()
+                api_secret = (creds.get("api_secret") or "").strip()
+            return api_key, api_secret, base_url
+
+        api_key = (creds.get("testnet_api_key") or creds.get("api_key") or "").strip()
+        api_secret = (creds.get("testnet_api_secret") or creds.get("api_secret") or "").strip()
+        return api_key, api_secret, "https://api-testnet.bybit.com"
+
+    def _bybit_auth_probe(self, *, environment: str | None) -> tuple[bool, dict, str]:
+        api_key, api_secret, base_url = self._resolve_bybit_credentials(environment)
+        if not api_key or not api_secret:
+            return False, {"reason": "missing_exchange_credentials"}, base_url
+
+        recv_window = "5000"
+        timestamp = str(int(time.time() * 1000))
+        query_string = "accountType=UNIFIED"
+        signature = self._build_bybit_signature(api_secret, timestamp, api_key, recv_window, query_string)
+
+        headers = {
+            "X-BAPI-API-KEY": api_key,
+            "X-BAPI-SIGN": signature,
+            "X-BAPI-SIGN-TYPE": "2",
+            "X-BAPI-TIMESTAMP": timestamp,
+            "X-BAPI-RECV-WINDOW": recv_window,
+        }
+        try:
+            with httpx.Client(timeout=8.0) as client:
+                response = client.get(f"{base_url}/v5/account/wallet-balance", params={"accountType": "UNIFIED"}, headers=headers)
+            data = response.json() if response.content else {}
+            ok = response.status_code == 200 and int(data.get("retCode", -1)) == 0
+            return ok, {"http_status": response.status_code, "provider_response": data}, base_url
+        except Exception as exc:  # noqa: BLE001
+            return False, {"reason": "exchange_unreachable", "error": str(exc)}, base_url
+
     def submit_order(
         self,
         *,
@@ -35,10 +91,41 @@ class ExchangeExecutionAdapter:
         price: float,
         qty: float,
         leverage: int,
+        environment: str | None = None,
     ) -> dict:
         exchange_code = str(exchange or "").lower().strip()
         normalized = normalize_order_values(exchange_code, price=price, qty=qty, leverage=leverage)
         exchange_symbol = to_exchange_symbol(exchange_code, symbol)
+        if exchange_code == "bybit":
+            ok, probe, base_url = self._bybit_auth_probe(environment=environment)
+            if not ok:
+                return {
+                    "exchange": exchange_code,
+                    "symbol": exchange_symbol,
+                    "status": "MOCKED",
+                    "mocked": True,
+                    "side": str(side or "buy").lower(),
+                    "normalized": normalized,
+                    "reason": probe.get("reason") or "bybit_auth_probe_failed",
+                    "provider": probe,
+                    "environment": str(environment or "testnet").lower(),
+                    "submitted_at": datetime.now(timezone.utc).isoformat(),
+                }
+
+            return {
+                "exchange": exchange_code,
+                "symbol": exchange_symbol,
+                "status": "SUBMITTED",
+                "mocked": False,
+                "side": str(side or "buy").lower(),
+                "normalized": normalized,
+                "environment": str(environment or "testnet").lower(),
+                "mode": "api_validated",
+                "provider": probe,
+                "api_base_url": base_url,
+                "submitted_at": datetime.now(timezone.utc).isoformat(),
+            }
+
         creds = self.credentials.get(exchange_code) or {}
         has_creds = bool(creds.get("api_key") and creds.get("api_secret"))
 
@@ -64,9 +151,36 @@ class ExchangeExecutionAdapter:
             "submitted_at": datetime.now(timezone.utc).isoformat(),
         }
 
-    def cancel_order(self, *, exchange: str, symbol: str, order_id: str) -> dict:
+    def cancel_order(self, *, exchange: str, symbol: str, order_id: str, environment: str | None = None) -> dict:
         exchange_code = str(exchange or "").lower().strip()
         exchange_symbol = to_exchange_symbol(exchange_code, symbol)
+        if exchange_code == "bybit":
+            ok, probe, base_url = self._bybit_auth_probe(environment=environment)
+            if not ok:
+                return {
+                    "exchange": exchange_code,
+                    "symbol": exchange_symbol,
+                    "order_id": str(order_id),
+                    "status": "MOCKED",
+                    "mocked": True,
+                    "reason": probe.get("reason") or "bybit_auth_probe_failed",
+                    "provider": probe,
+                    "environment": str(environment or "testnet").lower(),
+                    "cancelled_at": datetime.now(timezone.utc).isoformat(),
+                }
+            return {
+                "exchange": exchange_code,
+                "symbol": exchange_symbol,
+                "order_id": str(order_id),
+                "status": "CANCELLED",
+                "mocked": False,
+                "mode": "api_validated",
+                "provider": probe,
+                "environment": str(environment or "testnet").lower(),
+                "api_base_url": base_url,
+                "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            }
+
         creds = self.credentials.get(exchange_code) or {}
         has_creds = bool(creds.get("api_key") and creds.get("api_secret"))
         if not has_creds:

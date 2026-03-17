@@ -50,6 +50,10 @@ const assignmentSeedForm = {
 const executionCredentialSeedForm = {
   bybit_api_key: "",
   bybit_secret: "",
+  bybit_testnet_api_key: "",
+  bybit_testnet_secret: "",
+  bybit_live_api_key: "",
+  bybit_live_secret: "",
   okx_api_key: "",
   okx_secret: "",
   okx_passphrase: "",
@@ -378,6 +382,30 @@ export const AdminExchangesPage = () => {
               data-testid="admin-execution-bybit-secret-input"
             />
             <Input
+              value={executionCredentialForm.bybit_testnet_api_key}
+              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_testnet_api_key: event.target.value }))}
+              placeholder="bybit_testnet_api_key"
+              data-testid="admin-execution-bybit-testnet-api-key-input"
+            />
+            <Input
+              value={executionCredentialForm.bybit_testnet_secret}
+              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_testnet_secret: event.target.value }))}
+              placeholder="bybit_testnet_secret"
+              data-testid="admin-execution-bybit-testnet-secret-input"
+            />
+            <Input
+              value={executionCredentialForm.bybit_live_api_key}
+              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_live_api_key: event.target.value }))}
+              placeholder="bybit_live_api_key"
+              data-testid="admin-execution-bybit-live-api-key-input"
+            />
+            <Input
+              value={executionCredentialForm.bybit_live_secret}
+              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_live_secret: event.target.value }))}
+              placeholder="bybit_live_secret"
+              data-testid="admin-execution-bybit-live-secret-input"
+            />
+            <Input
               value={executionCredentialForm.okx_api_key}
               onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, okx_api_key: event.target.value }))}
               placeholder="okx_api_key"
@@ -410,9 +438,15 @@ export const AdminExchangesPage = () => {
 
           <div className="rounded border border-slate-700 p-3 text-sm" data-testid="admin-execution-credential-summary">
             <p data-testid="admin-execution-has-bybit-credentials">has_bybit_credentials: {boolLabel(Boolean(executionCredentials?.has_bybit_credentials))}</p>
+            <p data-testid="admin-execution-has-bybit-testnet-credentials">has_bybit_testnet_credentials: {boolLabel(Boolean(executionCredentials?.has_bybit_testnet_credentials))}</p>
+            <p data-testid="admin-execution-has-bybit-live-credentials">has_bybit_live_credentials: {boolLabel(Boolean(executionCredentials?.has_bybit_live_credentials))}</p>
             <p data-testid="admin-execution-has-okx-credentials">has_okx_credentials: {boolLabel(Boolean(executionCredentials?.has_okx_credentials))}</p>
             <p data-testid="admin-execution-masked-bybit-key">bybit_api_key: {executionCredentials?.masked?.bybit_api_key || "missing"}</p>
             <p data-testid="admin-execution-masked-bybit-secret">bybit_secret: {executionCredentials?.masked?.bybit_secret || "missing"}</p>
+            <p data-testid="admin-execution-masked-bybit-testnet-key">bybit_testnet_api_key: {executionCredentials?.masked?.bybit_testnet_api_key || "missing"}</p>
+            <p data-testid="admin-execution-masked-bybit-testnet-secret">bybit_testnet_secret: {executionCredentials?.masked?.bybit_testnet_secret || "missing"}</p>
+            <p data-testid="admin-execution-masked-bybit-live-key">bybit_live_api_key: {executionCredentials?.masked?.bybit_live_api_key || "missing"}</p>
+            <p data-testid="admin-execution-masked-bybit-live-secret">bybit_live_secret: {executionCredentials?.masked?.bybit_live_secret || "missing"}</p>
             <p data-testid="admin-execution-masked-okx-key">okx_api_key: {executionCredentials?.masked?.okx_api_key || "missing"}</p>
             <p data-testid="admin-execution-masked-okx-secret">okx_secret: {executionCredentials?.masked?.okx_secret || "missing"}</p>
             <p data-testid="admin-execution-masked-okx-passphrase">okx_passphrase: {executionCredentials?.masked?.okx_passphrase || "missing"}</p>
@@ -424,6 +458,7 @@ export const AdminExchangesPage = () => {
           <Button type="button" onClick={runExecutionValidation} data-testid="admin-execution-validation-apply-button">Validation Çalıştır</Button>
           <div className="space-y-2 rounded border border-slate-700 p-3 text-sm" data-testid="admin-execution-validation-results">
             <p data-testid="admin-execution-validation-adapter-smoke">adapter_smoke_test: {executionValidation?.validation?.adapter_smoke_test || "n/a"}</p>
+            <p data-testid="admin-execution-validation-bybit-ready">bybit_testnet_live_ready: {executionValidation?.validation?.bybit_testnet_live_ready || "n/a"}</p>
             <p data-testid="admin-execution-validation-precision">precision_validation: {executionValidation?.validation?.precision_validation || "n/a"}</p>
             <p data-testid="admin-execution-validation-lot-size">lot_size_validation: {executionValidation?.validation?.lot_size_validation || "n/a"}</p>
             <p data-testid="admin-execution-validation-submit">order_submit_test: {executionValidation?.validation?.order_submit_test || "n/a"}</p>

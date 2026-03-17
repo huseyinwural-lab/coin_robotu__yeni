@@ -37,7 +37,14 @@ def run_exchange_adapter_smoke(*, symbols: list[str] | None = None, credentials_
                 )
 
     execution_results = []
-    for exchange in ["bybit", "okx"]:
+    execution_scenarios = [
+        {"exchange": "bybit", "environment": "testnet"},
+        {"exchange": "bybit", "environment": "live"},
+        {"exchange": "okx", "environment": "live"},
+    ]
+    for scenario in execution_scenarios:
+        exchange = scenario["exchange"]
+        environment = scenario["environment"]
         precision_payload = execution_adapter.validate_precision_and_lot_size(
             exchange=exchange,
             symbol="BTCUSDT",
@@ -52,15 +59,18 @@ def run_exchange_adapter_smoke(*, symbols: list[str] | None = None, credentials_
             price=100.0,
             qty=0.01,
             leverage=3,
+            environment=environment,
         )
         cancel_payload = execution_adapter.cancel_order(
             exchange=exchange,
             symbol="BTCUSDT",
             order_id="smoke-order-1",
+            environment=environment,
         )
         execution_results.append(
             {
                 "exchange": exchange,
+                "environment": environment,
                 "status": payload.get("status"),
                 "mocked": bool(payload.get("mocked")),
                 "payload": payload,
@@ -79,6 +89,14 @@ def run_exchange_adapter_smoke(*, symbols: list[str] | None = None, credentials_
             "market_fail_count": sum(1 for row in market_results if row.get("status") == "FAIL"),
             "market_mocked_count": sum(1 for row in market_results if row.get("status") == "PASS_MOCKED"),
             "execution_mocked_count": sum(1 for row in execution_results if row.get("mocked")),
+            "execution_bybit_pass_count": sum(
+                1
+                for row in execution_results
+                if row.get("exchange") == "bybit" and not row.get("mocked") and row.get("status") in {"SUBMITTED", "CANCELLED"}
+            ),
+            "execution_bybit_mocked_count": sum(
+                1 for row in execution_results if row.get("exchange") == "bybit" and row.get("mocked")
+            ),
             "precision_pass_count": sum(1 for row in execution_results if (row.get("precision_validation") or {}).get("status") == "PASS"),
         },
     }

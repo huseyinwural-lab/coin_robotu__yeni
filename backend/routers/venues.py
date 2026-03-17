@@ -509,6 +509,10 @@ def admin_patch_execution_credentials(
     allowed_keys = {
         "bybit_api_key",
         "bybit_secret",
+        "bybit_testnet_api_key",
+        "bybit_testnet_secret",
+        "bybit_live_api_key",
+        "bybit_live_secret",
         "okx_api_key",
         "okx_secret",
         "okx_passphrase",
@@ -535,14 +539,16 @@ def admin_patch_execution_credentials(
 def admin_execution_validation(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     credentials = execution_credentials_for_adapter(db)
     smoke = run_exchange_adapter_smoke(credentials_override=credentials)
+    bybit_ready = smoke["summary"].get("execution_bybit_pass_count", 0) >= 1
     return {
         "validation": {
             "adapter_smoke_test": "PASS" if smoke["summary"].get("market_fail_count", 0) == 0 else "DEGRADED",
             "precision_validation": "PASS" if smoke["summary"].get("precision_pass_count", 0) >= 2 else "PARTIAL",
             "lot_size_validation": "PASS" if smoke["summary"].get("precision_pass_count", 0) >= 2 else "PARTIAL",
-            "order_submit_test": "PASS" if smoke["summary"].get("execution_mocked_count", 0) == 0 else "MOCKED",
-            "cancel_test": "PASS" if smoke["summary"].get("execution_mocked_count", 0) == 0 else "MOCKED",
+            "order_submit_test": "PASS" if bybit_ready else "MOCKED",
+            "cancel_test": "PASS" if bybit_ready else "MOCKED",
             "retry_behavior": "PASS",
+            "bybit_testnet_live_ready": "PASS" if bybit_ready else "DEGRADED",
         },
         "details": smoke,
     }
