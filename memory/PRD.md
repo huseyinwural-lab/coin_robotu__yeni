@@ -1,3 +1,51 @@
+## 2026-03-17 — Iteration Update (Observability Program: Faz-2 Tamamlandı — Loki/Grafana + Alert Kuralları)
+
+### Faz-2 (Prod-Ready Self-Host Stack)
+
+- Self-host observability altyapısı dosya bazında tamamlandı:
+  - `/app/observability/docker-compose.loki.yml`
+  - `/app/observability/loki/config.yaml`
+  - `/app/observability/promtail/config.yaml`
+  - `/app/observability/loki/rules/trading-alerts.yaml`
+  - `/app/observability/grafana/provisioning/datasources/loki.yaml`
+  - `/app/observability/grafana/provisioning/dashboards/dashboards.yaml`
+  - `/app/observability/grafana/dashboards/trading-observability.json`
+  - `/app/observability/alertmanager/config.yml`
+  - `/app/observability/README.md`
+
+### Faz-2 Alert Kapsamı
+
+- Loki rule set aktif tanım:
+  - `InvalidKeySurge`
+  - `ExchangeHealthFlap`
+  - `ValidationFailureRateHigh`
+
+### Alertability için Backend Event Emission
+
+- `live_mode_service.py`
+  - `exchange_validation_failure`
+  - `exchange_validation_success`
+- `user_exchange_health_loop.py`
+  - `exchange_health_transition`
+- `core/structured_logging.py` yeni event alanlarını JSON çıktıya dahil eder (`reason_code`, `new_health`, `old_health`, `connection_id`, vb.)
+
+### Faz-2 Regression Durumu
+
+- Testing agent raporu: `/app/test_reports/iteration_145.json` ✅
+  - Backend: 100% PASS
+  - Frontend: 100% PASS
+- Lokal test: `pytest backend/tests/test_faz2_observability_regression.py backend/tests/test_observability_mvp.py` → **28 PASS**
+
+### Program Durumu
+
+- **Faz-1**: Tamamlandı ✅
+- **Faz-2**: Tamamlandı ✅
+- **Faz-3**: Sıradaki (incident replay + SLO/SLA + runbook automation)
+
+### Not
+
+- Bybit/OKX execution adapterları halen **MOCKED**.
+
 ## 2026-03-17 — Iteration Update (Observability Program: Faz Bazlı İş Planı + Faz-1 Tamamlandı)
 
 ### İş Planı (A’dan Z’ye log altyapısı)
