@@ -30,6 +30,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     role: "admin",
   });
   const [repairingUserId, setRepairingUserId] = useState(null);
+  const [repairingAll, setRepairingAll] = useState(false);
 
   useEffect(() => {
     setFilters((prev) => ({ ...prev, role: "all" }));
@@ -123,6 +124,19 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     }
   };
 
+  const repairAllVenueAssignments = async () => {
+    setRepairingAll(true);
+    try {
+      const { data } = await apiClient.post("/admin/users/repair-venue-assignments");
+      toast.success(`Toplu onarım tamamlandı. changed=${data?.changed_assignments ?? 0}`);
+      await loadUsers();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Toplu venue onarımı başarısız");
+    } finally {
+      setRepairingAll(false);
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="admin-users-page">
       <header className="border border-black/40 bg-orange-300 p-4" data-testid="admin-users-header">
@@ -208,6 +222,16 @@ export const AdminUsersPage = ({ scope = "user" }) => {
           <Button className="border border-black bg-black text-orange-400 hover:bg-zinc-800" onClick={loadUsers} data-testid="admin-users-refresh-button">
             Yenile
           </Button>
+          {!isAdminScope && (
+            <Button
+              className="border border-black bg-lime-200 text-black hover:bg-lime-300"
+              onClick={repairAllVenueAssignments}
+              disabled={repairingAll}
+              data-testid="admin-users-bulk-repair-venue-assignments-button"
+            >
+              {repairingAll ? "Toplu Onarım Çalışıyor..." : "Toplu Venue Onar"}
+            </Button>
+          )}
           <p className="text-sm text-black" data-testid="admin-users-count-text">
             Toplam {isAdminScope ? "admin" : "user"} kullanıcı: {users.length}
           </p>

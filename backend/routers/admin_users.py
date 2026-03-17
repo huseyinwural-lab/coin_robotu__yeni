@@ -32,6 +32,11 @@ class UserVenueRepairResponse(BaseModel):
     live_allowed: bool
 
 
+class UserVenueBulkRepairResponse(BaseModel):
+    processed_users: int
+    changed_assignments: int
+
+
 def _ensure_can_modify(current_admin: User, target: User):
     if current_admin.role == UserRole.OPS:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops_readonly")
@@ -286,3 +291,39 @@ def repair_user_venue_assignment(
         testnet_allowed=bool(row.testnet_allowed),
         live_allowed=bool(row.live_allowed),
     )
+
+
+@router.post("/repair-venue-assignments", response_model=UserVenueBulkRepairResponse)
+def repair_all_user_venue_assignments(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if current_admin.role == UserRole.OPS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops_readonly")
+
+    users = db.query(User).filter(User.role == UserRole.USER, User.approval_status == "approved").all()
+    changed_count = 0
+    for target in users:
+        _, changed = ensure_user_venue_assignment(
+            db,
+            user_id=target.id,
+            exchange_code="binance",
+            market_type="futures",
+            environment="testnet",
+            commit=False,
+        )
+        if changed:
+            changed_count += 1
+
+    db.commit()
+    create_audit_log(
+        db,
+        action="USER_VENUE_ASSIGNMENT_BULK_REPAIRED",
+        entity_type="user_venue_assignment",
+        entity_id=current_admin.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={"processed_users": len(users), "changed_assignments": changed_count},
+    )
+    return UserVenueBulkRepairResponse(processed_users=len(users), changed_assignments=changed_count)

@@ -156,6 +156,20 @@ class TestRepairVenueAssignment:
         )
         assert response.status_code == 401, response.text
 
+    def test_bulk_repair_endpoint_returns_summary(self, admin_headers: dict):
+        """Bulk repair endpoint should return processed/changed counts."""
+        response = requests.post(
+            f"{BASE_URL}/api/admin/users/repair-venue-assignments",
+            headers=admin_headers,
+            timeout=30,
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert "processed_users" in data
+        assert "changed_assignments" in data
+        assert int(data["processed_users"]) >= 0
+        assert int(data["changed_assignments"]) >= 0
+
 
 class TestExchangeValidateAutofix:
     """Tests for exchange/validate assignment_required auto-fix behavior."""
