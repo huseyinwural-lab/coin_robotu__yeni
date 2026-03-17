@@ -29,7 +29,7 @@ def user_token() -> str:
     test_password = "TestPass12345!"
     
     # Try to register
-    register_response = requests.post(
+    _ = requests.post(
         f"{BASE_URL}/api/auth/register",
         json={"email": test_email, "password": test_password},
         timeout=20,

@@ -1,3 +1,28 @@
+## 2026-03-17 — Iteration Update (Admin Commercial Ops: User Status + Usage Logs + Monthly P&L Export)
+
+- Admin ticari altyapı paketi eklendi (`/admin/commercial-ops`):
+  1) **User List & Status** (aktif/pasif + rol user/admin)
+  2) **Usage Logs** (user, zaman, sembol, order_id, işlem durumu, sembol bazlı PnL)
+  3) **Total P&L** (son 30 gün + takvim ayı birlikte)
+  4) **Excel Export** (özet sheet + kullanıcı bazlı ayrı sheet’ler)
+- Güvenlik: Bu yeni ticari endpoint ve ekranlar sadece **super_admin** erişimine açıldı.
+  - Yeni dependency: `require_super_admin`
+  - Yeni backend router: `/api/admin/commercial/*`
+- Yeni backend endpointler:
+  - `GET /api/admin/commercial/usage-logs`
+  - `GET /api/admin/commercial/total-pnl`
+  - `GET /api/admin/commercial/monthly-pnl/export?month=YYYY-MM`
+- Excel çıktısı `.xlsx` formatında ve attachment header ile indiriliyor.
+- Frontend:
+  - Yeni sayfa: `AdminCommercialOpsPage`
+  - Admin menüde super_admin’a özel `Commercial Ops` bağlantısı eklendi.
+- Testler:
+  - `backend/tests/test_admin_commercial_ops.py`
+  - `backend/tests/test_admin_commercial_ops_access.py`
+  - Testing agent raporu: `/app/test_reports/iteration_142.json` ✅
+  - Lokal: `pytest backend/tests/test_admin_commercial_ops.py backend/tests/test_admin_commercial_ops_access.py` → **9 PASS**
+- Not: Bybit/OKX execution adapterları halen **MOCKED**.
+
 ## 2026-03-17 — Iteration Update (Phase-9B Hardening: Rebalance Cadence Governance)
 
 - Strategy intelligence rebalance motoruna governance katmanı eklendi:
