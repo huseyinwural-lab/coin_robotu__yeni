@@ -56,6 +56,11 @@ def test_incident_replay_for_request_id(admin_headers: dict):
     payload = replay.json()
     assert payload.get("summary", {}).get("step_count", 0) >= 1
     assert isinstance(payload.get("steps"), list)
+    first = payload.get("steps", [])[0]
+    assert "root_cause_type" in first
+    assert "failure_stage" in first
+    assert "primary_error_code" in first
+    assert "root_cause_breakdown" in payload.get("summary", {})
 
 
 def test_slo_sla_endpoint(admin_headers: dict):
@@ -71,6 +76,20 @@ def test_slo_sla_endpoint(admin_headers: dict):
     metrics = payload.get("metrics") or {}
     assert "availability_pct" in metrics
     assert "mttr_minutes" in metrics
+
+
+def test_slo_sla_trend_endpoint(admin_headers: dict):
+    response = requests.get(
+        f"{BASE_URL}/api/admin/system-alerts/slo-sla-trend",
+        headers=admin_headers,
+        timeout=20,
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    points = payload.get("points") or []
+    assert len(points) == 3
+    window_set = {point.get("window_days") for point in points}
+    assert window_set == {7, 30, 90}
 
 
 def test_ops_alert_simulate_endpoint(admin_headers: dict):

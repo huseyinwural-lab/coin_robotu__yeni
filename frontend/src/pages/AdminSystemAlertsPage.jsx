@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,6 +21,7 @@ export const AdminSystemAlertsPage = () => {
   const [config, setConfig] = useState(null);
   const [burnIn, setBurnIn] = useState(null);
   const [sloSla, setSloSla] = useState(null);
+  const [sloTrend, setSloTrend] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [filters, setFilters] = useState({
@@ -35,7 +37,7 @@ export const AdminSystemAlertsPage = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: alertData }, { data: timelineData }, { data: configData }, { data: burnInData }, { data: sloData }] = await Promise.all([
+      const [{ data: alertData }, { data: timelineData }, { data: configData }, { data: burnInData }, { data: sloData }, { data: trendData }] = await Promise.all([
         apiClient.get("/admin/system-alerts", {
           params: {
             status: filters.status,
@@ -55,6 +57,7 @@ export const AdminSystemAlertsPage = () => {
         apiClient.get("/admin/system-alerts/slo-sla", {
           params: { days: Number(filters.days) || 14 },
         }),
+        apiClient.get("/admin/system-alerts/slo-sla-trend"),
       ]);
 
       setAlerts(alertData || []);
@@ -62,6 +65,7 @@ export const AdminSystemAlertsPage = () => {
       setConfig(configData || null);
       setBurnIn(burnInData || null);
       setSloSla(sloData || null);
+      setSloTrend(trendData?.points || []);
       setSelectedIds((prev) => prev.filter((id) => (alertData || []).some((item) => item.id === id)));
     } catch (error) {
       toast.error(error?.response?.data?.detail || "System alerts verisi alınamadı");
@@ -282,6 +286,25 @@ export const AdminSystemAlertsPage = () => {
           <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-mttr">mttr_minutes={sloSla?.metrics?.mttr_minutes ?? 0}</p>
           <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-critical">critical_alerts={sloSla?.metrics?.critical_alerts ?? 0}</p>
           <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-status">slo_status={sloSla?.slo_status || "-"}</p>
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-black/30 bg-orange-100 p-4" data-testid="admin-system-alerts-slo-trend-panel">
+        <p className="text-sm font-semibold text-black" data-testid="admin-system-alerts-slo-trend-title">SLO Trend (7/30/90)</p>
+        <div className="h-64 w-full" data-testid="admin-system-alerts-slo-trend-chart-wrap">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={sloTrend}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="window_days" tickFormatter={(value) => `${value}d`} />
+              <YAxis yAxisId="left" />
+              <YAxis yAxisId="right" orientation="right" />
+              <Tooltip formatter={(value) => Number(value).toFixed(2)} labelFormatter={(value) => `${value} days`} />
+              <Legend />
+              <Line yAxisId="left" type="monotone" dataKey="availability_pct" stroke="#16a34a" strokeWidth={2} name="availability %" dot={{ r: 4 }} />
+              <Line yAxisId="left" type="monotone" dataKey="error_rate" stroke="#dc2626" strokeWidth={2} name="error_rate" dot={{ r: 4 }} />
+              <Line yAxisId="right" type="monotone" dataKey="mttr_minutes" stroke="#1d4ed8" strokeWidth={2} name="mttr (min)" dot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 

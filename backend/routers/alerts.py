@@ -32,6 +32,38 @@ class AlertTestDeliveryRequest(BaseModel):
     severity: str = "WARNING"
 
 
+def _compute_slo_metrics(rows: list[SystemAlert]) -> dict:
+    total = len(rows)
+    critical_count = sum(1 for row in rows if (row.severity or "").upper() == "CRITICAL")
+    warning_count = sum(1 for row in rows if (row.severity or "").upper() == "WARNING")
+    error_rate = round(((critical_count + warning_count) / total), 4) if total else 0.0
+
+    resolved_rows = [row for row in rows if (row.status or "").lower() == "resolved"]
+    mttr_minutes = 0.0
+    if resolved_rows:
+        mttr_minutes = round(
+            sum(max((row.updated_at - row.created_at).total_seconds() / 60, 0) for row in resolved_rows)
+            / len(resolved_rows),
+            2,
+        )
+
+    availability_pct = round(max(0.0, 100.0 - (error_rate * 100.0)), 2)
+    sla_target_pct = 99.5
+    sla_breached = availability_pct < sla_target_pct
+
+    return {
+        "total_alerts": total,
+        "critical_alerts": critical_count,
+        "warning_alerts": warning_count,
+        "resolved_alerts": len(resolved_rows),
+        "error_rate": error_rate,
+        "mttr_minutes": mttr_minutes,
+        "availability_pct": availability_pct,
+        "sla_target_pct": sla_target_pct,
+        "sla_breached": sla_breached,
+    }
+
+
 @router.get("", response_model=list[SystemAlertResponse])
 def get_system_alerts(
     current_admin: User = Depends(require_admin),
@@ -262,39 +294,49 @@ def slo_sla_summary(
         .all()
     )
 
-    total = len(rows)
-    critical_count = sum(1 for row in rows if (row.severity or "").upper() == "CRITICAL")
-    warning_count = sum(1 for row in rows if (row.severity or "").upper() == "WARNING")
-    error_rate = round(((critical_count + warning_count) / total), 4) if total else 0.0
-
-    resolved_rows = [row for row in rows if (row.status or "").lower() == "resolved"]
-    mttr_minutes = 0.0
-    if resolved_rows:
-        mttr_minutes = round(
-            sum(max((row.updated_at - row.created_at).total_seconds() / 60, 0) for row in resolved_rows)
-            / len(resolved_rows),
-            2,
-        )
-
-    availability_pct = round(max(0.0, 100.0 - (error_rate * 100.0)), 2)
-    sla_target_pct = 99.5
-    sla_breached = availability_pct < sla_target_pct
+    metrics = _compute_slo_metrics(rows)
 
     return {
         "window_days": days,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "metrics": {
-            "total_alerts": total,
-            "critical_alerts": critical_count,
-            "warning_alerts": warning_count,
-            "resolved_alerts": len(resolved_rows),
-            "error_rate": error_rate,
-            "mttr_minutes": mttr_minutes,
-            "availability_pct": availability_pct,
-            "sla_target_pct": sla_target_pct,
-            "sla_breached": sla_breached,
-        },
-        "slo_status": "AT_RISK" if sla_breached else "HEALTHY",
+        "metrics": metrics,
+        "slo_status": "AT_RISK" if metrics["sla_breached"] else "HEALTHY",
+    }
+
+
+@router.get("/slo-sla-trend")
+def slo_sla_trend(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    now = datetime.now(timezone.utc)
+    windows = [7, 30, 90]
+    trend_points: list[dict] = []
+    for window in windows:
+        since = now - timedelta(days=window)
+        rows = (
+            db.query(SystemAlert)
+            .filter(SystemAlert.created_at >= since)
+            .order_by(SystemAlert.created_at.desc())
+            .limit(10000)
+            .all()
+        )
+        metrics = _compute_slo_metrics(rows)
+        trend_points.append(
+            {
+                "window_days": window,
+                "availability_pct": metrics["availability_pct"],
+                "error_rate": metrics["error_rate"],
+                "mttr_minutes": metrics["mttr_minutes"],
+                "total_alerts": metrics["total_alerts"],
+            }
+        )
+
+    return {
+        "generated_at": now.isoformat(),
+        "points": trend_points,
+        "window_labels": ["7d", "30d", "90d"],
     }
 
 

@@ -92,6 +92,45 @@ def _serialize_timeline_item(row: AuditLog) -> dict:
     }
 
 
+def _root_cause_labels(*, action: str, details: dict, route: str | None) -> dict:
+    reason_codes = details.get("reason_codes") or []
+    if not isinstance(reason_codes, list):
+        reason_codes = [str(reason_codes)]
+    reason_candidates = [str(item).lower() for item in reason_codes if item is not None]
+
+    explicit_error = str(details.get("error") or details.get("error_code") or "").strip().lower()
+    primary_error_code = reason_candidates[0] if reason_candidates else (explicit_error or "unknown")
+
+    if any(code in {"invalid_key", "missing_trade_permission", "permission_restricted", "auth_failed"} for code in reason_candidates):
+        root_cause_type = "AUTH"
+    elif any(code in {"timeout", "network_error", "exchange_unreachable"} for code in reason_candidates):
+        root_cause_type = "TIMEOUT_NETWORK"
+    elif any(code in {"assignment_required", "environment_not_allowed", "futures_not_allowed", "validation_failed"} for code in reason_candidates):
+        root_cause_type = "VALIDATION"
+    elif "exchange" in (action or "").lower() or any("exchange" in code for code in reason_candidates):
+        root_cause_type = "EXCHANGE"
+    else:
+        root_cause_type = "UNKNOWN"
+
+    normalized_route = str(route or "").lower()
+    if "/v1/user/trading/preview" in normalized_route:
+        failure_stage = "trade_preview"
+    elif "/exchange-connections" in normalized_route:
+        failure_stage = "connectivity_validation"
+    elif "/admin/users" in normalized_route:
+        failure_stage = "admin_user_ops"
+    elif "domain_" in (action or "").lower():
+        failure_stage = "domain_event"
+    else:
+        failure_stage = "unknown_stage"
+
+    return {
+        "root_cause_type": root_cause_type,
+        "failure_stage": failure_stage,
+        "primary_error_code": primary_error_code,
+    }
+
+
 def _resolve_export_window(
     *,
     window_days: int | None,
@@ -359,6 +398,7 @@ def incident_replay(
         }
 
     steps = []
+    root_cause_counter: Counter = Counter()
     prev_ts = None
     for index, row in enumerate(rows, start=1):
         details = row.details or {}
@@ -368,6 +408,8 @@ def incident_replay(
             delta_ms = round((current_ts - prev_ts).total_seconds() * 1000, 2)
         prev_ts = current_ts
 
+        labels = _root_cause_labels(action=row.action, details=details, route=details.get("route"))
+        root_cause_counter[labels["root_cause_type"]] += 1
         steps.append(
             {
                 "step_index": index,
@@ -381,6 +423,9 @@ def incident_replay(
                 "method": details.get("method"),
                 "request_id": details.get("request_id"),
                 "session_id": details.get("session_id"),
+                "root_cause_type": labels["root_cause_type"],
+                "failure_stage": labels["failure_stage"],
+                "primary_error_code": labels["primary_error_code"],
                 "details": details,
             }
         )
@@ -414,6 +459,7 @@ def incident_replay(
             "window_start": window_start.isoformat(),
             "window_end": window_end.isoformat(),
             "top_actions": action_counter.most_common(10),
+            "root_cause_breakdown": dict(root_cause_counter),
         },
         "steps": steps,
         "related_domain_events": [_serialize_timeline_item(row) for row in domain_rows],

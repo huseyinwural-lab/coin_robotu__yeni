@@ -206,12 +206,16 @@ export const AuditLogsPage = () => {
           <p className="text-xs text-slate-300" data-testid="audit-logs-incident-replay-error-steps">error_steps={replayData?.summary?.error_steps ?? 0}</p>
           <p className="text-xs text-slate-300" data-testid="audit-logs-incident-replay-window-start">window_start={replayData?.summary?.window_start || "-"}</p>
           <p className="text-xs text-slate-300" data-testid="audit-logs-incident-replay-window-end">window_end={replayData?.summary?.window_end || "-"}</p>
+          <p className="text-xs text-slate-300 md:col-span-4" data-testid="audit-logs-incident-replay-root-cause-breakdown">
+            root_cause_breakdown={JSON.stringify(replayData?.summary?.root_cause_breakdown || {})}
+          </p>
         </div>
         <div className="max-h-56 overflow-auto border border-slate-700" data-testid="audit-logs-incident-replay-steps-wrap">
           {(replayData?.steps || []).slice(0, 20).map((step) => (
             <article key={`${step.step_index}-${step.timestamp}`} className="border-b border-slate-800 p-2 text-xs" data-testid={`audit-logs-incident-replay-step-${step.step_index}`}>
               <p data-testid={`audit-logs-incident-replay-step-action-${step.step_index}`}>{step.step_index}. {step.action}</p>
               <p className="text-slate-400" data-testid={`audit-logs-incident-replay-step-meta-${step.step_index}`}>{step.timestamp} · {step.method || "-"} {step.route || "-"} · Δ{step.delta_ms_from_prev ?? 0}ms</p>
+              <p className="text-slate-400" data-testid={`audit-logs-incident-replay-step-root-cause-${step.step_index}`}>root={step.root_cause_type} · stage={step.failure_stage} · code={step.primary_error_code}</p>
             </article>
           ))}
           {(replayData?.steps || []).length === 0 && <p className="p-2 text-xs text-slate-500" data-testid="audit-logs-incident-replay-empty">Replay step bulunamadı.</p>}
