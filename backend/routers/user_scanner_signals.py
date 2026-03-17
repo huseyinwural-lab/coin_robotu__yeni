@@ -370,6 +370,13 @@ def signals(
     db: Session = Depends(get_db),
 ):
     rows = list_user_signals(db, current_user.id, limit=limit)
+
+    def _safe_float(value, fallback: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return fallback
+
     return [
         UserSignalResponse(
             id=row.id,
@@ -378,13 +385,13 @@ def signals(
             symbol=row.symbol,
             quote_asset=extract_quote_asset(row.symbol),
             strategy_code=row.strategy_code,
-            confidence=float(row.confidence),
+            confidence=_safe_float(row.confidence),
             mode=row.mode,
             status=row.status,
             order_position_id=row.order_position_id,
             created_at=row.created_at,
             decided_at=row.decided_at,
-            decision_note=row.decision_note,
+            decision_note=row.decision_note or "",
             strategy_weight=row.strategy_weight,
             allocation_source=row.allocation_source,
             meta_engine_decision=row.meta_engine_decision,
@@ -396,24 +403,12 @@ def signals(
             requires_manual_approval=row.requires_manual_approval,
             execution_eligible=row.execution_eligible,
             bot_profile_id=row.bot_profile_id,
+            risk_policy_id=row.risk_policy_id,
             exchange_connection_id=row.exchange_connection_id,
-            source_snapshot=row.source_snapshot,
-            context_payload=row.context_payload,
-            order_preview_snapshot=row.order_preview_snapshot,
             created_order_intent_id=row.created_order_intent_id,
-            latest_preview_hash=row.latest_preview_hash,
-            latest_intent_token=row.latest_intent_token,
-            latest_validation_status=row.latest_validation_status,
-            latest_risk_state=row.latest_risk_state,
-            latest_gate_decision=row.latest_gate_decision,
-            latest_order_preview=row.latest_order_preview,
-            latest_order_payload=row.latest_order_payload,
-            requires_user_action=row.requires_user_action,
-            blocked_reason=row.blocked_reason,
-            actionable=row.actionable,
-            exchange_ready=row.exchange_ready,
-            risk_ready=row.risk_ready,
-            diagnostics=row.diagnostics,
+            runtime_owner=row.runtime_owner,
+            last_eligibility_check_at=row.last_eligibility_check_at,
+            execution_mode_label=getattr(row, "execution_mode_label", None),
         )
         for row in rows
     ]
