@@ -4,8 +4,8 @@ groups:
     rules:
       - alert: InvalidKeySurge
         expr: |
-          sum(count_over_time({job="backend-supervisor", event_type="exchange_validation_failure", reason_code="invalid_key"}[5m])) > 5
-        for: 2m
+          sum(count_over_time({job="backend-supervisor", event_type="exchange_validation_failure", reason_code="invalid_key"}[5m])) > 12
+        for: 3m
         labels:
           severity: critical
           category: security
@@ -16,8 +16,8 @@ groups:
 
       - alert: ExchangeHealthFlap
         expr: |
-          sum by (user_id) (count_over_time({job="backend-supervisor", event_type="exchange_health_transition", reason_code!="missing_credentials"}[10m])) > 6
-        for: 3m
+          sum by (user_id) (count_over_time({job="backend-supervisor", event_type="exchange_health_transition", reason_code!="missing_credentials"}[10m])) > 10
+        for: 5m
         labels:
           severity: warning
           category: stability
@@ -28,8 +28,8 @@ groups:
 
       - alert: ValidationFailureRateHigh
         expr: |
-          sum(count_over_time({job="backend-supervisor", event_type="exchange_validation_failure"}[10m])) > 25
-        for: 5m
+          sum(count_over_time({job="backend-supervisor", event_type="exchange_validation_failure"}[10m])) > 40
+        for: 8m
         labels:
           severity: warning
           category: reliability

@@ -80,6 +80,7 @@ from routers import (
     audit,
 )
 from services.bootstrap import seed_default_admin
+from services.connection_reliability_service import load_connection_reliability_policy
 from services.migration_service import run_alembic_upgrade
 from services.pipeline.runtime import pipeline_runtime
 from services.realtime.socket_gateway import create_socket_app
@@ -197,6 +198,7 @@ fastapi_app.add_middleware(RequestObservabilityMiddleware)
 async def startup_event():
     run_alembic_upgrade()
     seed_default_admin()
+    reliability_policy = load_connection_reliability_policy(force_refresh=True)
     from db import SessionLocal
 
     db_session = SessionLocal()
@@ -208,7 +210,14 @@ async def startup_event():
     global weekly_report_task, exchange_health_task
     weekly_report_task = asyncio.create_task(run_weekly_report_loop(SessionLocal))
     exchange_health_task = asyncio.create_task(run_exchange_connection_health_loop(SessionLocal))
-    logger.info("Platform startup complete with Phase-3 hardening runtime")
+    logger.info(
+        "Platform startup complete with Phase-3 hardening runtime",
+        extra={
+            "event_type": "platform_startup",
+            "policy_version": reliability_policy.get("policy_version"),
+            "runtime_env": reliability_policy.get("runtime_env"),
+        },
+    )
 
 
 @fastapi_app.on_event("shutdown")

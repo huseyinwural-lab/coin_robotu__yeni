@@ -7,6 +7,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models import PaperPosition, UserExchangeConnection
+from services.connection_reliability_service import (
+    deterministic_jitter_seconds,
+    get_connection_reliability_policy,
+)
 from services.live_mode_service import adapter, validate_exchange_credentials_for_user
 
 
@@ -47,22 +51,37 @@ def _seconds_since(value, *, now: datetime) -> float:
     return max(0.0, (now - parsed).total_seconds())
 
 
-def _retry_schedule(snapshot: dict) -> tuple[int, int, str]:
+def _retry_schedule(snapshot: dict, *, policy: dict) -> tuple[int, int, str]:
+    retry_policy = policy.get("retry") or {}
+    max_retry_attempts = int(retry_policy.get("max_retry_attempts") or 8)
+    initial_backoff = int(retry_policy.get("initial_backoff_seconds") or 1)
+    max_backoff = int(retry_policy.get("max_backoff_seconds") or 20)
+    multiplier = float(retry_policy.get("backoff_multiplier") or 2.0)
+
     try:
         prev_attempt = int(snapshot.get("retry_attempt") or 0)
     except (TypeError, ValueError):
         prev_attempt = 0
-    next_attempt = min(prev_attempt + 1, 8)
-    backoff_seconds = min(15, 2 ** max(0, next_attempt - 1))
+
+    next_attempt = min(prev_attempt + 1, max_retry_attempts)
+    backoff_seconds = int(round(initial_backoff * (multiplier ** max(0, next_attempt - 1))))
+    backoff_seconds = min(max(backoff_seconds, initial_backoff), max_backoff)
     next_retry_at = (datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)).isoformat()
     return next_attempt, backoff_seconds, next_retry_at
 
 
-def _signed_check_interval_seconds(*, environment: str, has_open_position: bool) -> int:
+def _signed_check_interval_seconds(*, environment: str, has_open_position: bool, connection_id: str) -> int:
+    policy = get_connection_reliability_policy()
+    health_policy = policy.get("health") or {}
+    signed_policy = health_policy.get("signed_interval_seconds") or {}
+
     env = (environment or "").strip().lower()
-    if env == "testnet":
-        return 5 if has_open_position else 20
-    return 10 if has_open_position else 30
+    env_key = "testnet" if env == "testnet" else "live"
+    env_policy = signed_policy.get(env_key) or {}
+    base_interval = int(env_policy.get("open_position") or 8) if has_open_position else int(env_policy.get("idle") or 28)
+    jitter_max = int(health_policy.get("signed_interval_jitter_seconds") or 0)
+    jitter = deterministic_jitter_seconds(seed=connection_id or f"{env_key}-fallback", max_abs=jitter_max)
+    return max(1, base_interval + jitter)
 
 
 def _build_open_position_index(db: Session) -> dict[tuple[str, str], int]:
@@ -77,9 +96,16 @@ def _build_open_position_index(db: Session) -> dict[tuple[str, str], int]:
 
 def _run_fast_liveness_probe(row: UserExchangeConnection, snapshot: dict) -> tuple[dict, bool]:
     now = datetime.now(timezone.utc)
+    policy = get_connection_reliability_policy()
+    health_policy = policy.get("health") or {}
+    liveness_policy = health_policy.get("liveness_interval_seconds") or {}
+    transient_threshold = int(health_policy.get("transient_failures_before_reconnect") or 2)
+    success_reset_threshold = int(health_policy.get("success_resets_failure_count") or 2)
+
     probe_snapshot = dict(snapshot)
     probe_snapshot["liveness_checked_at"] = now.isoformat()
-    probe_snapshot["liveness_interval_seconds"] = 2 if row.environment == "testnet" else 5
+    env_key = "testnet" if str(row.environment or "").lower() == "testnet" else "live"
+    probe_snapshot["liveness_interval_seconds"] = int(liveness_policy.get(env_key) or (4 if env_key == "testnet" else 8))
 
     if str(row.exchange or "").strip().lower() != "binance":
         probe_snapshot["liveness_status"] = "unsupported_exchange"
@@ -110,7 +136,23 @@ def _run_fast_liveness_probe(row: UserExchangeConnection, snapshot: dict) -> tup
     primary_reason = reason_codes[0] if reason_codes else None
 
     if not reachable and primary_reason not in HARD_OFFLINE_REASONS:
-        retry_attempt, retry_backoff_seconds, next_retry_at = _retry_schedule(probe_snapshot)
+        transient_failure_count = int(probe_snapshot.get("transient_failure_count") or 0) + 1
+        probe_snapshot["transient_failure_count"] = transient_failure_count
+        probe_snapshot["transient_success_count"] = 0
+
+        if transient_failure_count < transient_threshold:
+            probe_snapshot.update(
+                {
+                    "reason_codes": ["network_error"],
+                    "last_error_reason": "network_error",
+                    "is_reconnecting": False,
+                    "action_required": "monitoring_transient_network",
+                    "action_required_message": f"Transient liveness failure {transient_failure_count}/{transient_threshold}; reconnect bekleniyor.",
+                }
+            )
+            return probe_snapshot, True
+
+        retry_attempt, retry_backoff_seconds, next_retry_at = _retry_schedule(probe_snapshot, policy=policy)
         probe_snapshot.update(
             {
                 "validation_success": False,
@@ -123,11 +165,23 @@ def _run_fast_liveness_probe(row: UserExchangeConnection, snapshot: dict) -> tup
                 "retry_attempt": retry_attempt,
                 "retry_backoff_seconds": retry_backoff_seconds,
                 "next_retry_at": next_retry_at,
+                "transient_failure_count": transient_failure_count,
             }
         )
-    elif reachable and primary_reason in TRANSIENT_REASONS:
-        probe_snapshot["connection_health"] = "degraded"
-        probe_snapshot["is_reconnecting"] = True
+    elif reachable:
+        transient_success_count = int(probe_snapshot.get("transient_success_count") or 0) + 1
+        probe_snapshot["transient_success_count"] = transient_success_count
+
+        if transient_success_count >= success_reset_threshold:
+            probe_snapshot["transient_failure_count"] = 0
+            probe_snapshot["is_reconnecting"] = False
+            probe_snapshot["retry_attempt"] = 0
+            probe_snapshot["retry_backoff_seconds"] = 0
+            probe_snapshot["next_retry_at"] = None
+
+        if primary_reason in TRANSIENT_REASONS and int(probe_snapshot.get("transient_failure_count") or 0) > 0:
+            probe_snapshot["connection_health"] = "degraded"
+            probe_snapshot["is_reconnecting"] = True
 
     return probe_snapshot, True
 
@@ -185,7 +239,11 @@ def _append_health_history(
 
 def _run_signed_validation_if_due(db: Session, row: UserExchangeConnection, snapshot: dict, *, has_open_position: bool) -> dict:
     now = datetime.now(timezone.utc)
-    signed_interval = _signed_check_interval_seconds(environment=row.environment, has_open_position=has_open_position)
+    signed_interval = _signed_check_interval_seconds(
+        environment=row.environment,
+        has_open_position=has_open_position,
+        connection_id=row.id,
+    )
     validated_at = snapshot.get("validated_at") or snapshot.get("validation_checked_at")
     signed_due = _seconds_since(validated_at, now=now) >= signed_interval
 
@@ -215,6 +273,8 @@ def _run_signed_validation_if_due(db: Session, row: UserExchangeConnection, snap
 def _sync_connection(db: Session, row: UserExchangeConnection, open_positions_index: dict[tuple[str, str], int]) -> None:
     now = datetime.now(timezone.utc)
     snapshot = dict(row.readiness_snapshot or {})
+    policy = get_connection_reliability_policy()
+    health_policy = policy.get("health") or {}
 
     has_api_key = bool(row.api_key_encrypted)
     has_api_secret = bool(row.api_secret_encrypted)
@@ -233,6 +293,8 @@ def _sync_connection(db: Session, row: UserExchangeConnection, open_positions_in
                     "retry_backoff_seconds": 0,
                     "next_retry_at": None,
                     "liveness_checked_at": now.isoformat(),
+                    "transient_failure_count": 0,
+                    "transient_success_count": 0,
                 }
             )
             _append_health_history(
@@ -249,7 +311,9 @@ def _sync_connection(db: Session, row: UserExchangeConnection, open_positions_in
             row.updated_at = now
         return
 
-    liveness_interval = 2 if str(row.environment or "").lower() == "testnet" else 5
+    env_key = "testnet" if str(row.environment or "").lower() == "testnet" else "live"
+    liveness_policy = health_policy.get("liveness_interval_seconds") or {}
+    liveness_interval = int(liveness_policy.get(env_key) or (4 if env_key == "testnet" else 8))
     liveness_due = _seconds_since(snapshot.get("liveness_checked_at"), now=now) >= liveness_interval
 
     if liveness_due:

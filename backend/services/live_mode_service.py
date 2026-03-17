@@ -44,6 +44,7 @@ from models import (
     UserRiskSetting,
 )
 from services.artifact_service import verify_manifest_chain
+from services.connection_reliability_service import get_connection_reliability_policy
 from services.risk_engine_service import resolve_effective_config_for_user
 from services.risk_orchestrator_service import get_or_create_policy
 from services.system_alert_service import create_system_alert
@@ -83,9 +84,23 @@ class BinanceFuturesTestnetAdapter:
     def _signature(secret: str, query: str) -> str:
         return hmac.new(secret.encode(), query.encode(), hashlib.sha256).hexdigest()
 
+    @staticmethod
+    def _timeout(name: str, fallback: float) -> float:
+        policy = get_connection_reliability_policy()
+        timeout_policy = policy.get("http_timeouts") or {}
+        value = timeout_policy.get(name)
+        try:
+            parsed = float(value)
+            return parsed if parsed > 0 else fallback
+        except (TypeError, ValueError):
+            return fallback
+
     def ping(self) -> dict:
         try:
-            response = httpx.get(f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/time", timeout=6)
+            response = httpx.get(
+                f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/time",
+                timeout=self._timeout("ping", 6),
+            )
             response.raise_for_status()
             payload = response.json()
             return {
@@ -109,7 +124,7 @@ class BinanceFuturesTestnetAdapter:
             response = httpx.get(
                 f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/exchangeInfo",
                 params={"symbol": symbol},
-                timeout=6,
+                timeout=self._timeout("exchange_info", 7),
             )
             response.raise_for_status()
             return response.json()
@@ -121,7 +136,7 @@ class BinanceFuturesTestnetAdapter:
         query = urlencode(params)
         signature = self._signature(api_secret, query)
         url = f"{BINANCE_FUTURES_TESTNET_REST}{endpoint}?{query}&signature={signature}"
-        response = httpx.get(url, headers={"X-MBX-APIKEY": api_key}, timeout=8)
+        response = httpx.get(url, headers={"X-MBX-APIKEY": api_key}, timeout=self._timeout("signed_get", 8))
         payload = response.json() if response.content else {}
         return payload, response.status_code, dict(response.headers)
 
@@ -130,7 +145,7 @@ class BinanceFuturesTestnetAdapter:
         query = urlencode(params)
         signature = self._signature(api_secret, query)
         url = f"{BINANCE_SPOT_TESTNET_REST}{endpoint}?{query}&signature={signature}"
-        response = httpx.get(url, headers={"X-MBX-APIKEY": api_key}, timeout=8)
+        response = httpx.get(url, headers={"X-MBX-APIKEY": api_key}, timeout=self._timeout("signed_get", 8))
         payload = response.json() if response.content else {}
         return payload, response.status_code, dict(response.headers)
 
@@ -139,7 +154,7 @@ class BinanceFuturesTestnetAdapter:
         query = urlencode(params)
         signature = self._signature(api_secret, query)
         url = f"{BINANCE_FUTURES_TESTNET_REST}{endpoint}?{query}&signature={signature}"
-        response = httpx.post(url, headers={"X-MBX-APIKEY": api_key}, timeout=10)
+        response = httpx.post(url, headers={"X-MBX-APIKEY": api_key}, timeout=self._timeout("signed_post", 10))
         payload = response.json() if response.content else {}
         return payload, response.status_code
 
@@ -148,7 +163,7 @@ class BinanceFuturesTestnetAdapter:
         query = urlencode(params)
         signature = self._signature(api_secret, query)
         url = f"{BINANCE_SPOT_TESTNET_REST}{endpoint}?{query}&signature={signature}"
-        response = httpx.post(url, headers={"X-MBX-APIKEY": api_key}, timeout=10)
+        response = httpx.post(url, headers={"X-MBX-APIKEY": api_key}, timeout=self._timeout("signed_post", 10))
         payload = response.json() if response.content else {}
         return payload, response.status_code
 
@@ -158,7 +173,7 @@ class BinanceFuturesTestnetAdapter:
         signature = self._signature(api_secret, query)
         base_url = BINANCE_SPOT_TESTNET_REST if spot else BINANCE_FUTURES_TESTNET_REST
         url = f"{base_url}{endpoint}?{query}&signature={signature}"
-        response = httpx.delete(url, headers={"X-MBX-APIKEY": api_key}, timeout=8)
+        response = httpx.delete(url, headers={"X-MBX-APIKEY": api_key}, timeout=self._timeout("signed_delete", 8))
         payload = response.json() if response.content else {}
         return payload, response.status_code
 
@@ -172,7 +187,7 @@ class BinanceFuturesTestnetAdapter:
         response = httpx.get(
             f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/ticker/price",
             params={"symbol": symbol},
-            timeout=8,
+            timeout=self._timeout("market_data", 8),
         )
         response.raise_for_status()
         payload = response.json()
@@ -182,7 +197,7 @@ class BinanceFuturesTestnetAdapter:
         response = httpx.get(
             f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/ticker/bookTicker",
             params={"symbol": symbol},
-            timeout=8,
+            timeout=self._timeout("market_data", 8),
         )
         response.raise_for_status()
         payload = response.json()

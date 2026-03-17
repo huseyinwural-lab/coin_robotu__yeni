@@ -1,0 +1,127 @@
+{
+  "version": "connection_reliability_policy_v1",
+  "runtime_env_selector": {
+    "env_keys": [
+      "APP_ENV",
+      "ENVIRONMENT"
+    ],
+    "default": "local"
+  },
+  "defaults": {
+    "retry": {
+      "max_retry_attempts": 8,
+      "initial_backoff_seconds": 1,
+      "max_backoff_seconds": 20,
+      "backoff_multiplier": 2.0
+    },
+    "health": {
+      "liveness_interval_seconds": {
+        "testnet": 4,
+        "live": 8
+      },
+      "signed_interval_seconds": {
+        "testnet": {
+          "open_position": 8,
+          "idle": 28
+        },
+        "live": {
+          "open_position": 14,
+          "idle": 38
+        }
+      },
+      "signed_interval_jitter_seconds": 2,
+      "transient_failures_before_reconnect": 2,
+      "success_resets_failure_count": 2
+    },
+    "http_timeouts": {
+      "ping": 6,
+      "exchange_info": 7,
+      "signed_get": 8,
+      "signed_post": 10,
+      "signed_delete": 8,
+      "market_data": 8
+    }
+  },
+  "profiles": {
+    "local": {
+      "retry": {
+        "max_retry_attempts": 6,
+        "max_backoff_seconds": 15
+      },
+      "health": {
+        "signed_interval_jitter_seconds": 1,
+        "transient_failures_before_reconnect": 2
+      },
+      "http_timeouts": {
+        "ping": 5,
+        "signed_get": 7,
+        "signed_post": 8,
+        "signed_delete": 7
+      }
+    },
+    "staging": {
+      "retry": {
+        "max_retry_attempts": 8,
+        "max_backoff_seconds": 24
+      },
+      "health": {
+        "signed_interval_seconds": {
+          "testnet": {
+            "open_position": 10,
+            "idle": 32
+          },
+          "live": {
+            "open_position": 16,
+            "idle": 42
+          }
+        },
+        "signed_interval_jitter_seconds": 2,
+        "transient_failures_before_reconnect": 3,
+        "success_resets_failure_count": 2
+      },
+      "http_timeouts": {
+        "ping": 7,
+        "exchange_info": 8,
+        "signed_get": 10,
+        "signed_post": 12,
+        "signed_delete": 10,
+        "market_data": 9
+      }
+    },
+    "production": {
+      "retry": {
+        "max_retry_attempts": 10,
+        "initial_backoff_seconds": 2,
+        "max_backoff_seconds": 30,
+        "backoff_multiplier": 2.0
+      },
+      "health": {
+        "liveness_interval_seconds": {
+          "testnet": 5,
+          "live": 10
+        },
+        "signed_interval_seconds": {
+          "testnet": {
+            "open_position": 12,
+            "idle": 36
+          },
+          "live": {
+            "open_position": 18,
+            "idle": 48
+          }
+        },
+        "signed_interval_jitter_seconds": 3,
+        "transient_failures_before_reconnect": 3,
+        "success_resets_failure_count": 3
+      },
+      "http_timeouts": {
+        "ping": 8,
+        "exchange_info": 10,
+        "signed_get": 12,
+        "signed_post": 15,
+        "signed_delete": 12,
+        "market_data": 10
+      }
+    }
+  }
+}
