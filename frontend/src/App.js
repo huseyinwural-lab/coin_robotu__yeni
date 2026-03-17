@@ -72,6 +72,7 @@ import { AdminLearningImpactSimulatorPage } from "@/pages/AdminLearningImpactSim
 import { AdminLiveTradingDashboardPage } from "@/pages/AdminLiveTradingDashboardPage";
 import { AdminUniverseMonitorPage } from "@/pages/AdminUniverseMonitorPage";
 import { AdminFreshnessHeatmapPage } from "@/pages/AdminFreshnessHeatmapPage";
+import { AdminCommercialOpsPage } from "@/pages/AdminCommercialOpsPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -116,6 +117,7 @@ function App() {
             <Route path="live-trading-dashboard" element={<AdminLiveTradingDashboardPage />} />
             <Route path="cross-dashboard-consistency" element={<AdminCrossDashboardConsistencyPage />} />
             <Route path="users" element={<Navigate to="/admin/users/customers" replace />} />
+            <Route path="commercial-ops" element={<AdminCommercialOpsPage />} />
             <Route path="users/admins" element={<AdminUsersPage scope="admin" />} />
             <Route path="users/customers" element={<AdminUsersPage scope="user" />} />
             <Route path="user-approvals" element={<AdminUserApprovalsPage />} />

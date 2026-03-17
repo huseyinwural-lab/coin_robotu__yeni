@@ -88,6 +88,7 @@ const adminOnlyItems = [
     items: [
       { to: "/admin/strategies", label: "Bots", icon: ClipboardList, testId: "nav-admin-bots-link" },
       { to: "/admin/users/customers", label: "Users", icon: UserCog, testId: "nav-admin-users-link" },
+      { to: "/admin/commercial-ops", label: "Commercial Ops", icon: BarChartBig, testId: "nav-admin-commercial-ops-link", superAdminOnly: true },
       { to: "/admin/user-approvals", label: "User Approvals", icon: UserCog, testId: "nav-admin-user-approvals-link" },
       { to: "/admin/exchanges", label: "Exchange Settings", icon: Globe, testId: "nav-admin-exchange-settings-link" },
     ],
@@ -192,6 +193,9 @@ export const PanelLayout = () => {
   }, [gateBadge, nowTick]);
 
   const renderNavLink = (item) => {
+    if (item.superAdminOnly && user?.role !== "super_admin") {
+      return null;
+    }
     const Icon = item.icon;
 
     return (

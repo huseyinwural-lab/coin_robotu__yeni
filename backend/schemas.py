@@ -2162,6 +2162,58 @@ class RiskSimulationResponse(BaseModel):
     projected_gate_decision: str
 
 
+class CommercialUsageLogItemResponse(BaseModel):
+    log_id: str
+    user_id: str
+    user_email: str
+    symbol: str
+    side: str
+    order_id: str
+    execution_status: str
+    order_type: str
+    exchange: str
+    pnl: float
+    opened_at: datetime
+
+
+class CommercialUsageLogsResponse(BaseModel):
+    generated_at: datetime
+    total: int
+    items: list[CommercialUsageLogItemResponse]
+
+
+class CommercialPnlUserResponse(BaseModel):
+    user_id: str
+    user_email: str
+    realized_pnl: float
+    unrealized_pnl: float
+    total_pnl: float
+
+
+class CommercialPnlSummaryResponse(BaseModel):
+    user_count: int
+    total_realized_pnl: float
+    total_unrealized_pnl: float
+    total_pnl: float
+
+
+class CommercialPnlWindowResponse(BaseModel):
+    range_start: datetime
+    range_end: datetime
+    summary: CommercialPnlSummaryResponse
+    users: list[CommercialPnlUserResponse]
+
+
+class CommercialCalendarMonthPnlResponse(CommercialPnlWindowResponse):
+    month: str
+
+
+class AdminCommercialTotalPnlResponse(BaseModel):
+    generated_at: datetime
+    last_30_days: CommercialPnlWindowResponse
+    calendar_month: CommercialCalendarMonthPnlResponse
+
+
 class LearningImpactSimulationRequest(BaseModel):
     strategy_id: str | None = None
     family: str | None = None
