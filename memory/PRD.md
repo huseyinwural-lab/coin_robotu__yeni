@@ -1,3 +1,71 @@
+## 2026-03-17 — Iteration Update (Faz-3 Başlatma: Incident Replay + SLO/SLA + Gate Output Persist)
+
+### Alert Kanalı — Resend/Slack Wrapper Güçlendirme
+
+- `alert_channel_service.py` güncellendi:
+  - email/slack delivery için retry/backoff desteği
+  - başarısız denemelerde `failed_events` tablosuna fallback kayıt
+  - `attempt` ve `attempts` bilgisi response’a eklendi
+- Not:
+  - gerçek credential girilmediğinde `CONFIG_MISSING` beklenen davranış olarak korunur.
+
+### Faz-3.1 — Incident Replay Engine
+
+- Yeni endpoint:
+  - `GET /api/audit-logs/incident-replay`
+- Özellikler:
+  - `request_id` veya `session_id` ile chain reconstruction
+  - timestamp sıralama + step index + delta(ms)
+  - summary (`step_count`, `error_steps`, `window_start/end`, `top_actions`)
+  - related domain events dahil
+
+### Faz-3.2 — SLO / SLA Paneli
+
+- Yeni endpoint:
+  - `GET /api/admin/system-alerts/slo-sla?days=30`
+- Hesaplanan metrikler:
+  - `availability_pct`
+  - `error_rate`
+  - `mttr_minutes`
+  - `sla_target_pct`
+  - `sla_breached`
+- Frontend (`AdminSystemAlertsPage`) yeni SLO/SLA paneli ile bağlandı.
+
+### Faz-3 UI
+
+- `AuditLogsPage` içine Incident Replay paneli eklendi:
+  - request/session input + replay load aksiyonu + step listesi
+- `AdminSystemAlertsPage`:
+  - SLO/SLA summary paneli
+  - mevcut test delivery butonlarıyla birlikte çalışır durumda
+
+### P0 Gate Output Persist (CI/Cron Friendly)
+
+- `p0_closure_gate.py` yeni parametre:
+  - `--output-file`
+- Yeni script:
+  - `/app/scripts/run_release_gate_and_store.sh`
+  - çıktıyı `/app/test_reports/release_gate_latest.json` dosyasına yazar
+- Checklist güncellendi:
+  - `/app/memory/release_readiness_final_checklist.md`
+
+### Doğrulama
+
+- Lokal test:
+  - `pytest test_phase3_incident_replay_slo.py test_observability_mvp.py test_p1_phase2_livepath_and_alert_burnin.py` → **14 PASS**
+  - `pytest test_p0_closure_gate_script.py test_phase3_incident_replay_slo.py test_p0_closure_gate_comprehensive.py` → **17 PASS**
+- Script:
+  - `/app/scripts/run_release_gate_and_store.sh preview` → `release_gate_latest.json` üretildi, overall PASS
+- Testing agent:
+  - `/app/test_reports/iteration_150.json` ✅
+- Auto frontend testing agent:
+  - incident replay panel + SLO/SLA panel + test delivery butonları PASS ✅
+
+### Not
+
+- Bybit/OKX execution adapterları kullanıcı tercihiyle **MOCKED**.
+- Resend gerçek canlı gönderim için `RESEND_API_KEY`, `ALERT_FROM`, `ALERT_TO` henüz kullanıcıdan bekleniyor.
+
 ## 2026-03-17 — Iteration Update (P0 Closure Gate Pack Tamamlandı)
 
 ### Teslimatlar
