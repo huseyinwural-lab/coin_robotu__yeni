@@ -60,9 +60,14 @@ def _parse_snapshot_time(value) -> datetime | None:
         return None
 
 
-def _derive_connection_health(snapshot: dict, *, has_api_key: bool, has_api_secret: bool) -> tuple[str, str | None, bool, bool, datetime | None]:
+def _derive_connection_health(
+    snapshot: dict,
+    *,
+    has_api_key: bool,
+    has_api_secret: bool,
+) -> tuple[str, str | None, bool, bool, datetime | None, int | None, int]:
     if not has_api_key or not has_api_secret:
-        return "offline", "missing_credentials", False, False, None
+        return "offline", "missing_credentials", False, False, None, None, 0
 
     snapshot = snapshot if isinstance(snapshot, dict) else {}
     validation_success = snapshot.get("validation_success")
@@ -73,6 +78,16 @@ def _derive_connection_health(snapshot: dict, *, has_api_key: bool, has_api_secr
     validated_at = _parse_snapshot_time(
         snapshot.get("validated_at") or snapshot.get("validation_checked_at") or snapshot.get("snapshot_at")
     )
+    retry_at = _parse_snapshot_time(snapshot.get("next_retry_at"))
+    now = _now()
+    next_retry_seconds = None
+    if retry_at is not None:
+        delta = int((retry_at - now).total_seconds())
+        next_retry_seconds = max(delta, 0)
+    try:
+        retry_backoff_seconds = int(snapshot.get("retry_backoff_seconds") or 0)
+    except (TypeError, ValueError):
+        retry_backoff_seconds = 0
 
     reconnect_reasons = {"exchange_unreachable", "network_error", "timeout", "rate_limit", "exchange_error_503"}
     hard_offline_reasons = {
@@ -84,14 +99,15 @@ def _derive_connection_health(snapshot: dict, *, has_api_key: bool, has_api_secr
     }
 
     if validation_success is True and is_valid and can_trade:
-        return "online", None, True, False, validated_at
+        return "online", None, True, False, validated_at, next_retry_seconds, retry_backoff_seconds
     if first_reason in hard_offline_reasons:
-        return "offline", first_reason, False, False, validated_at
+        return "offline", first_reason, False, False, validated_at, next_retry_seconds, retry_backoff_seconds
     if first_reason in reconnect_reasons:
-        return "degraded", first_reason, False, True, validated_at
+        return "degraded", first_reason, False, True, validated_at, next_retry_seconds, retry_backoff_seconds
     if validation_success is False:
-        return "degraded", first_reason or "validation_failed", False, True, validated_at
-    return "unknown", first_reason, can_trade and is_valid, False, validated_at
+        reconnecting = bool(snapshot.get("is_reconnecting")) or bool(next_retry_seconds and next_retry_seconds > 0)
+        return "degraded", first_reason or "validation_failed", False, reconnecting, validated_at, next_retry_seconds, retry_backoff_seconds
+    return "unknown", first_reason, can_trade and is_valid, False, validated_at, next_retry_seconds, retry_backoff_seconds
 
 
 def _serialize_connection(row: UserExchangeConnection) -> dict:
@@ -100,7 +116,15 @@ def _serialize_connection(row: UserExchangeConnection) -> dict:
     has_api_key = bool(row.api_key_encrypted)
     has_api_secret = bool(row.api_secret_encrypted)
     readiness_snapshot = row.readiness_snapshot or {}
-    connection_health, connection_health_reason, can_trade_effective, is_reconnecting, last_validated_at = _derive_connection_health(
+    (
+        connection_health,
+        connection_health_reason,
+        can_trade_effective,
+        is_reconnecting,
+        last_validated_at,
+        next_retry_in_seconds,
+        retry_backoff_seconds,
+    ) = _derive_connection_health(
         readiness_snapshot,
         has_api_key=has_api_key,
         has_api_secret=has_api_secret,
@@ -120,6 +144,8 @@ def _serialize_connection(row: UserExchangeConnection) -> dict:
         "can_trade_effective": can_trade_effective,
         "last_validated_at": last_validated_at,
         "is_reconnecting": is_reconnecting,
+        "next_retry_in_seconds": next_retry_in_seconds,
+        "retry_backoff_seconds": retry_backoff_seconds,
         "has_api_key": has_api_key,
         "has_api_secret": has_api_secret,
         "masked_api_key": mask_secret(api_key),

@@ -1251,6 +1251,8 @@ class UserExchangeConnectionResponse(BaseModel):
     can_trade_effective: bool = False
     last_validated_at: datetime | None = None
     is_reconnecting: bool = False
+    next_retry_in_seconds: int | None = None
+    retry_backoff_seconds: int = 0
     has_api_key: bool
     has_api_secret: bool
     masked_api_key: str

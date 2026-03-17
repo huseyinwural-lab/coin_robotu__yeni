@@ -115,6 +115,29 @@ export const UserExchangeSettingsPage = () => {
     return summary;
   }, [connectionProfiles]);
 
+  const selectedConnectionProfile = useMemo(() => {
+    if (!connectionProfiles.length) {
+      return null;
+    }
+
+    const exactDefault = connectionProfiles.find(
+      (item) => item.is_default
+        && item.exchange === selectedVenue.exchange
+        && item.market_type === selectedVenue.market_type
+        && item.environment === selectedVenue.environment,
+    );
+    if (exactDefault) return exactDefault;
+
+    const exactAny = connectionProfiles.find(
+      (item) => item.exchange === selectedVenue.exchange
+        && item.market_type === selectedVenue.market_type
+        && item.environment === selectedVenue.environment,
+    );
+    if (exactAny) return exactAny;
+
+    return connectionProfiles.find((item) => item.is_default) || connectionProfiles[0] || null;
+  }, [connectionProfiles, selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type]);
+
   const formatConnectionTime = (value) => {
     if (!value) return "-";
     const parsed = new Date(value);
@@ -427,18 +450,46 @@ export const UserExchangeSettingsPage = () => {
     }
   };
 
-  const revalidateConnectionProfile = async (connection) => {
+  const revalidateConnectionProfile = async (connection, { silent = false } = {}) => {
     setValidatingConnectionId(connection.id);
     try {
       await apiClient.post(`/user/exchange-connections/${connection.id}/revalidate`);
-      toast.success(`${connection.account_label} doğrulandı`);
+      if (!silent) {
+        toast.success(`${connection.account_label} doğrulandı`);
+      }
       await loadAll();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Profil doğrulaması başarısız");
+      if (!silent) {
+        toast.error(error?.response?.data?.detail || "Profil doğrulaması başarısız");
+      }
     } finally {
       setValidatingConnectionId("");
     }
   };
+
+  useEffect(() => {
+    if (!selectedConnectionProfile) {
+      return;
+    }
+    if (selectedConnectionProfile.connection_health !== "degraded" || !selectedConnectionProfile.is_reconnecting) {
+      return;
+    }
+
+    const retryIn = Number(selectedConnectionProfile.next_retry_in_seconds ?? 0);
+    if (retryIn > 0) {
+      const timer = setTimeout(() => {
+        revalidateConnectionProfile(selectedConnectionProfile, { silent: true });
+      }, Math.max(1, retryIn) * 1000);
+      return () => clearTimeout(timer);
+    }
+
+    revalidateConnectionProfile(selectedConnectionProfile, { silent: true });
+  }, [
+    selectedConnectionProfile?.id,
+    selectedConnectionProfile?.connection_health,
+    selectedConnectionProfile?.is_reconnecting,
+    selectedConnectionProfile?.next_retry_in_seconds,
+  ]);
 
   const saveSettings = async (event) => {
     event.preventDefault();
@@ -599,15 +650,68 @@ export const UserExchangeSettingsPage = () => {
       ? "blue"
       : "red";
 
-  const actionState = isTesting
-    ? "executing"
-    : isValidating
-      ? "validating"
-      : testOrderResult?.final_status
-        ? "completed"
-      : readiness?.readiness_status === "ready_for_test_order"
-        ? "ready"
-        : readiness?.readiness_status || "blocked";
+  const validationState = isValidating
+    ? "validating"
+    : validateResult
+      ? (validateResult.is_valid ? (validateResult.can_trade ? "valid_trade_enabled" : "valid_but_trade_blocked") : "invalid")
+      : "not_run";
+
+  const effectiveTradeState = useMemo(() => {
+    if (isTesting) {
+      return { state: "executing", tone: "orange", reason: "Test order gönderimi devam ediyor." };
+    }
+    if (isValidating) {
+      return { state: "validating", tone: "blue", reason: "Exchange doğrulaması sürüyor." };
+    }
+    if (testOrderResult?.final_status) {
+      return { state: `completed:${String(testOrderResult.final_status).toLowerCase()}`, tone: "orange", reason: "Son test-order akışı tamamlandı." };
+    }
+
+    const health = String(selectedConnectionProfile?.connection_health || "unknown").toLowerCase();
+    if (health === "offline") {
+      return {
+        state: "blocked_connection_offline",
+        tone: "red",
+        reason: selectedConnectionProfile?.connection_health_reason || "connection_offline",
+      };
+    }
+    if (health === "degraded") {
+      const retrySec = selectedConnectionProfile?.next_retry_in_seconds;
+      const retryText = typeof retrySec === "number" ? ` · next_retry_in=${retrySec}s` : "";
+      return {
+        state: "degraded_reconnecting",
+        tone: "red",
+        reason: `${selectedConnectionProfile?.connection_health_reason || "reconnect_in_progress"}${retryText}`,
+      };
+    }
+
+    if (readiness?.is_validation_stale) {
+      return { state: "blocked_stale_validation", tone: "red", reason: "Validation snapshot stale." };
+    }
+    if (readiness?.readiness_status && readiness.readiness_status !== "ready_for_test_order") {
+      return {
+        state: `blocked_gate_${String(readiness.readiness_status).toLowerCase()}`,
+        tone: "red",
+        reason: readiness?.last_error_reason || readiness.readiness_status,
+      };
+    }
+
+    if (validateResult && (!validateResult.is_valid || !validateResult.can_trade)) {
+      return {
+        state: "blocked_validation_result",
+        tone: "red",
+        reason: Array.isArray(validateResult?.reason_codes)
+          ? (validateResult.reason_codes.join(",") || "validation_blocked")
+          : "validation_blocked",
+      };
+    }
+
+    if (readiness?.readiness_status === "ready_for_test_order") {
+      return { state: "ready_for_execution", tone: "orange", reason: "Gate + validation koşulları karşılanıyor." };
+    }
+
+    return { state: "pending", tone: "blue", reason: "Profil ve validation durumu bekleniyor." };
+  }, [isTesting, isValidating, testOrderResult?.final_status, selectedConnectionProfile, readiness, validateResult]);
 
   const testOrderEligible = selectedVenue.exchange === "binance" && selectedVenue.environment === "testnet";
 
@@ -770,6 +874,8 @@ export const UserExchangeSettingsPage = () => {
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-can-trade-${connection.id}`}>can_trade_effective: {String(Boolean(connection.can_trade_effective))}</p>
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-last-validated-${connection.id}`}>last_validated_at: {formatConnectionTime(connection.last_validated_at)}</p>
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-last-reason-${connection.id}`}>last_reason: {connection.connection_health_reason || "-"}</p>
+                    <p className="text-xs text-slate-500" data-testid={`user-connection-profile-reconnect-${connection.id}`}>reconnecting: {String(Boolean(connection.is_reconnecting))}</p>
+                    <p className="text-xs text-slate-500" data-testid={`user-connection-profile-next-retry-${connection.id}`}>next_retry_in: {typeof connection.next_retry_in_seconds === "number" ? `${connection.next_retry_in_seconds}s` : "-"}</p>
                   </div>
                   <div className="flex flex-wrap gap-2" data-testid={`user-connection-profile-actions-${connection.id}`}>
                     <Button size="sm" variant="outline" onClick={() => startEditConnection(connection)} data-testid={`user-connection-profile-edit-button-${connection.id}`}>Düzenle</Button>
@@ -1101,11 +1207,18 @@ export const UserExchangeSettingsPage = () => {
         <MetricCard label="Profiles Offline" value={String(connectionHealthOverview.offline)} tone={connectionHealthOverview.offline > 0 ? "red" : "blue"} testId="user-exchange-metric-profiles-offline" />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4" data-testid="user-exchange-action-state-grid">
+      <div className="grid gap-3 sm:grid-cols-6" data-testid="user-exchange-action-state-grid">
         <MetricCard label="Readiness" value={readiness?.readiness_status || "-"} tone={readinessTone} testId="user-exchange-readiness-status" />
-        <MetricCard label="Action State" value={actionState} tone={readinessTone} testId="user-exchange-action-state" />
+        <MetricCard label="Validation Result" value={validationState} tone={validationState === "valid_trade_enabled" ? "orange" : validationState === "not_run" ? "blue" : "red"} testId="user-exchange-validation-state" />
+        <MetricCard label="Effective Trade State" value={effectiveTradeState.state} tone={effectiveTradeState.tone} testId="user-exchange-effective-trade-state" />
+        <MetricCard label="Connection Health" value={selectedConnectionProfile?.connection_health || "unknown"} tone={selectedConnectionProfile?.connection_health === "online" ? "orange" : selectedConnectionProfile?.connection_health === "unknown" ? "blue" : "red"} testId="user-exchange-selected-connection-health" />
         <MetricCard label="Last Validation" value={readiness?.validation_timestamp || "-"} tone="blue" testId="user-exchange-last-validation-at" />
         <MetricCard label="Last Error" value={readiness?.last_error_reason || "-"} tone="red" testId="user-exchange-last-error-reason" />
+      </div>
+
+      <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-effective-state-reason-card">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-exchange-effective-state-reason-title">Execution State Resolver</p>
+        <p className="mt-2 text-sm text-slate-200" data-testid="user-exchange-effective-state-reason-text">{effectiveTradeState.reason}</p>
       </div>
 
       <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-venue-access-panel">

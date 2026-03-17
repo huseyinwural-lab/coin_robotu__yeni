@@ -652,6 +652,33 @@ def validate_exchange_credentials_for_user(
 
     requested_connection = None
 
+    transient_reconnect_reasons = {
+        "exchange_unreachable",
+        "network_error",
+        "timeout",
+        "rate_limit",
+        "exchange_error_503",
+    }
+
+    def _retry_metadata(previous_snapshot: dict, reason_codes: list[str], validation_success: bool) -> tuple[int, int, str | None, bool]:
+        if validation_success:
+            return 0, 0, None, False
+
+        normalized = {str(code).strip().lower() for code in (reason_codes or []) if str(code).strip()}
+        is_transient = bool(normalized.intersection(transient_reconnect_reasons))
+        if not is_transient:
+            return 0, 0, None, False
+
+        try:
+            prev_attempt = int(previous_snapshot.get("retry_attempt") or 0)
+        except (TypeError, ValueError):
+            prev_attempt = 0
+
+        next_attempt = min(prev_attempt + 1, 8)
+        backoff_seconds = min(15, 2 ** max(0, next_attempt - 1))
+        next_retry_at = (datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)).isoformat()
+        return next_attempt, backoff_seconds, next_retry_at, True
+
     def _sync_requested_connection(
         *,
         validation_success: bool,
@@ -665,6 +692,12 @@ def validate_exchange_credentials_for_user(
         if requested_connection is None:
             return
         snapshot = dict(requested_connection.readiness_snapshot or {})
+        retry_attempt, retry_backoff_seconds, next_retry_at, is_reconnecting = _retry_metadata(
+            snapshot,
+            reason_codes,
+            validation_success,
+        )
+        status_label = "online" if validation_success and is_valid and can_trade else ("degraded" if is_reconnecting else "offline")
         snapshot.update(
             {
                 "allowed": True,
@@ -682,8 +715,15 @@ def validate_exchange_credentials_for_user(
                 "market_type": requested_market_type,
                 "environment": requested_environment,
                 "hint": hint,
+                "connection_health": status_label,
+                "retry_attempt": retry_attempt,
+                "retry_backoff_seconds": retry_backoff_seconds,
+                "next_retry_at": next_retry_at,
+                "is_reconnecting": is_reconnecting,
             }
         )
+        if validation_success:
+            snapshot["last_success_at"] = datetime.now(timezone.utc).isoformat()
         requested_connection.readiness_snapshot = snapshot
         if permissions is not None:
             requested_connection.permission_snapshot = permissions

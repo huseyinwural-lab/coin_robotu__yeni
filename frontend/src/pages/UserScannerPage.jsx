@@ -64,6 +64,8 @@ export const UserScannerPage = () => {
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
   const [liveReadiness, setLiveReadiness] = useState(null);
   const [scannerDailyReport, setScannerDailyReport] = useState(null);
+  const [scannerLoadDegraded, setScannerLoadDegraded] = useState(false);
+  const [scannerLoadFailures, setScannerLoadFailures] = useState([]);
   const [decisionCards, setDecisionCards] = useState([]);
   const [selectedDecisionSymbol, setSelectedDecisionSymbol] = useState("");
   const [isExplainabilityDrawerOpen, setIsExplainabilityDrawerOpen] = useState(false);
@@ -274,7 +276,7 @@ export const UserScannerPage = () => {
       setIsLoading(true);
     }
     try {
-      const [modeRes, overviewRes, resultsRes, automationRes, profilesRes, cardsRes, persistedSelectionRes, runtimeRes, readinessRes, dailyRes] = await Promise.all([
+      const responses = await Promise.allSettled([
         apiClient.get("/user/signal-mode"),
         apiClient.get("/user/scanner"),
         apiClient.get("/user/scanner/results", { params: { limit: 80 } }),
@@ -286,18 +288,54 @@ export const UserScannerPage = () => {
         apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" } }),
         apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" } }),
       ]);
-      setMode(modeRes.data.mode || "ASSISTED");
-      setOverview(overviewRes.data);
-      setScannerResults(resultsRes.data || []);
-      const automation = automationRes?.data || null;
-      const profiles = profilesRes?.data || [];
+
+      const failedIndexes = responses
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => item.status === "rejected")
+        .map(({ index }) => index);
+
+      const endpointByIndex = {
+        0: "signal_mode",
+        1: "scanner_overview",
+        2: "scanner_results",
+        3: "scanner_automation",
+        4: "scanner_profiles",
+        5: "decision_cards",
+        6: "symbol_selection",
+        7: "runtime_snapshot",
+        8: "live_readiness",
+        9: "daily_report",
+      };
+      const failedKeys = failedIndexes.map((index) => endpointByIndex[index]).filter(Boolean);
+      setScannerLoadFailures(failedKeys);
+      setScannerLoadDegraded(failedKeys.length > 0);
+      if (failedKeys.length > 0 && !silent) {
+        toast.error(`Scanner kısmi yüklendi: ${failedKeys.join(", ")}`);
+      }
+
+      const modeRes = responses[0].status === "fulfilled" ? responses[0].value : null;
+      const overviewRes = responses[1].status === "fulfilled" ? responses[1].value : null;
+      const resultsRes = responses[2].status === "fulfilled" ? responses[2].value : null;
+      const automationRes = responses[3].status === "fulfilled" ? responses[3].value : null;
+      const profilesRes = responses[4].status === "fulfilled" ? responses[4].value : null;
+      const cardsRes = responses[5].status === "fulfilled" ? responses[5].value : null;
+      const persistedSelectionRes = responses[6].status === "fulfilled" ? responses[6].value : null;
+      const runtimeRes = responses[7].status === "fulfilled" ? responses[7].value : null;
+      const readinessRes = responses[8].status === "fulfilled" ? responses[8].value : null;
+      const dailyRes = responses[9].status === "fulfilled" ? responses[9].value : null;
+
+      setMode(modeRes?.data?.mode || mode || "ASSISTED");
+      setOverview(overviewRes?.data || overview || null);
+      setScannerResults(resultsRes?.data || scannerResults || []);
+      const automation = automationRes?.data || automationConfig || null;
+      const profiles = profilesRes?.data || automationProfiles || [];
       setAutomationConfig(automation);
       setAutomationProfiles(profiles);
-      const cards = cardsRes?.data?.items || [];
+      const cards = cardsRes?.data?.items || decisionCards || [];
       const persistedSelection = persistedSelectionRes?.data || null;
-      setRuntimeSnapshot(runtimeRes?.data || null);
-      setLiveReadiness(readinessRes?.data || null);
-      setScannerDailyReport(dailyRes?.data || null);
+      setRuntimeSnapshot(runtimeRes?.data || runtimeSnapshot || null);
+      setLiveReadiness(readinessRes?.data || liveReadiness || null);
+      setScannerDailyReport(dailyRes?.data || scannerDailyReport || null);
       setDecisionCards(cards);
       if (cards.length > 0) {
         const selectedSymbol = selectedDecisionSymbol || cards[0].symbol;
@@ -591,6 +629,12 @@ export const UserScannerPage = () => {
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-scanner-title">Scanner</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-description">Responsive scanner + compact table + mobile card yapısı.</p>
       </header>
+
+      {scannerLoadDegraded && (
+        <div className="order-1 col-span-12 rounded border border-amber-700 bg-amber-950/20 p-3 text-sm text-amber-200" data-testid="user-scanner-degraded-load-banner">
+          Kısmi veri yüklendi. Etkilenen endpointler: {scannerLoadFailures.join(", ") || "-"}
+        </div>
+      )}
 
       <section className="order-2 col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-active-mode-indicator-card">
         <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-scanner-active-mode-indicator-title">Scanner Active Mode Indicator</p>
