@@ -227,6 +227,7 @@ def revalidate_exchange_connection(
         exchange=connection["exchange"],
         market_type=connection["market_type"],
         environment=connection["environment"],
+        connection_id=connection_id,
     )
     refreshed = get_user_exchange_connection(db, user_id=current_user.id, connection_id=connection_id)
 

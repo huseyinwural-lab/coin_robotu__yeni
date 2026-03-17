@@ -200,9 +200,29 @@ export const UserExchangeSettingsPage = () => {
     setLifecycleEvidence((prev) => prev || null);
   }, [selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type]);
 
+  const refreshConnectionProfiles = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/user/exchange-connections");
+      setConnectionProfiles(Array.isArray(data) ? data : []);
+    } catch {
+      // Sessiz degrade: tam ekran yüklemesini bozma
+    }
+  }, []);
+
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+      refreshConnectionProfiles();
+    }, 2000);
+
+    return () => clearInterval(timer);
+  }, [refreshConnectionProfiles]);
 
   useEffect(() => {
     const loadDefaultSymbolForVenue = async () => {

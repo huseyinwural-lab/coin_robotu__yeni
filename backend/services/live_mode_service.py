@@ -615,6 +615,7 @@ def validate_exchange_credentials_for_user(
     exchange: str,
     market_type: str,
     environment: str,
+    connection_id: str | None = None,
 ) -> tuple[dict, int]:
     requested_exchange = exchange.strip().lower()
     requested_market_type = market_type.strip().lower()
@@ -758,17 +759,29 @@ def validate_exchange_credentials_for_user(
             "hint": hint,
         }, code
 
-    requested_connection = (
-        db.query(UserExchangeConnection)
-        .filter(
-            UserExchangeConnection.user_id == user_id,
-            UserExchangeConnection.exchange == requested_exchange,
-            UserExchangeConnection.market_type == requested_market_type,
-            UserExchangeConnection.environment == requested_environment,
+    requested_connection = None
+    if connection_id:
+        requested_connection = (
+            db.query(UserExchangeConnection)
+            .filter(
+                UserExchangeConnection.user_id == user_id,
+                UserExchangeConnection.id == connection_id,
+            )
+            .first()
         )
-        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
-        .first()
-    )
+
+    if requested_connection is None:
+        requested_connection = (
+            db.query(UserExchangeConnection)
+            .filter(
+                UserExchangeConnection.user_id == user_id,
+                UserExchangeConnection.exchange == requested_exchange,
+                UserExchangeConnection.market_type == requested_market_type,
+                UserExchangeConnection.environment == requested_environment,
+            )
+            .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+            .first()
+        )
 
     if requested_connection is None:
         requested_connection = (
