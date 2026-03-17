@@ -196,6 +196,27 @@ class AuditLogResponse(BaseModel):
     created_at: datetime
 
 
+class AuditTimelineItemResponse(BaseModel):
+    id: str
+    actor_user_id: str | None
+    actor_role: str
+    action: str
+    entity_type: str
+    entity_id: str
+    severity: str
+    details: dict
+    request_id: str | None = None
+    session_id: str | None = None
+    route: str | None = None
+    method: str | None = None
+    created_at: datetime
+
+
+class AuditTimelineResponse(BaseModel):
+    total: int
+    items: list[AuditTimelineItemResponse]
+
+
 class MockOrderRequest(BaseModel):
     bot_profile_id: str
     symbol: str

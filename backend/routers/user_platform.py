@@ -44,7 +44,7 @@ from schemas import (
     UserRiskSettingsUpdate,
     UserTradeResponse,
 )
-from services.audit_service import create_audit_log
+from services.audit_service import create_audit_log, create_domain_event
 
 router = APIRouter(prefix="/user", tags=["user_platform"])
 
@@ -240,6 +240,24 @@ def revalidate_exchange_connection(
         actor_role=current_user.role.value,
         severity="warning" if status_code >= 400 else "info",
         details={
+            "exchange": connection["exchange"],
+            "market_type": connection["market_type"],
+            "environment": connection["environment"],
+            "status_code": status_code,
+            "reason_codes": payload.get("reason_codes", []),
+            "is_valid": payload.get("is_valid"),
+            "can_trade": payload.get("can_trade"),
+        },
+    )
+    create_domain_event(
+        db,
+        event_name="exchange_connection_revalidate",
+        entity_type="user_exchange_connection",
+        entity_id=connection_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning" if status_code >= 400 else "info",
+        payload={
             "exchange": connection["exchange"],
             "market_type": connection["market_type"],
             "environment": connection["environment"],

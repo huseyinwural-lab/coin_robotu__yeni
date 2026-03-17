@@ -5,6 +5,7 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from core.config import settings
+from core.observability.http_logging_middleware import RequestObservabilityMiddleware
 from core.structured_logging import configure_structured_logging
 from routers import (
     admin_action_center,
@@ -189,6 +190,7 @@ fastapi_app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+fastapi_app.add_middleware(RequestObservabilityMiddleware)
 
 
 @fastapi_app.on_event("startup")

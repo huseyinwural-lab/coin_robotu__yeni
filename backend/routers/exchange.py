@@ -21,7 +21,7 @@ from schemas import (
     MockOrderRequest,
     UserReadinessChecklistResponse,
 )
-from services.audit_service import create_audit_log
+from services.audit_service import create_audit_log, create_domain_event
 from services.live_mode_service import (
     lifecycle_evidence_for_metric,
     latest_execution_metric,
@@ -62,6 +62,24 @@ def validate_exchange(
         actor_role=current_user.role.value,
         severity="warning" if response_code >= 400 else "info",
         details={**payload, "requested_exchange": exchange, "requested_market_type": market_type, "requested_environment": environment},
+    )
+    create_domain_event(
+        db,
+        event_name="exchange_validate",
+        entity_type="exchange_validate",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning" if response_code >= 400 else "info",
+        payload={
+            "exchange": exchange,
+            "market_type": market_type,
+            "environment": environment,
+            "status_code": response_code,
+            "reason_codes": payload.get("reason_codes", []),
+            "is_valid": payload.get("is_valid"),
+            "can_trade": payload.get("can_trade"),
+        },
     )
     if response_code >= 400:
         raise HTTPException(status_code=response_code, detail=payload)

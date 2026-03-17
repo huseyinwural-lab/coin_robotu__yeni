@@ -12,6 +12,7 @@ class StructuredJsonFormatter(logging.Formatter):
             "message": record.getMessage(),
             "module": record.module,
             "line": record.lineno,
+            "service": "backend-api",
         }
 
         for key in [
@@ -23,6 +24,11 @@ class StructuredJsonFormatter(logging.Formatter):
             "actor_user_id",
             "actor_role",
             "event_type",
+            "session_id",
+            "path",
+            "method",
+            "status_code",
+            "duration_ms",
         ]:
             value = getattr(record, key, None)
             if value is not None:
