@@ -1460,3 +1460,34 @@ backend:
         agent: "testing"
         comment: "FAZ-4 BACKEND SMOKE + CONTRACT VALIDATION ALL PASSED (5/5 - 100% SUCCESS RATE). Complete backend validation performed per review request. TEST RESULTS: 1) ✅ Admin Login: Successfully authenticated with admin@platform.local / Admin12345! credentials. Access token obtained correctly. 2) ✅ GET /api/admin/system/live-readiness: Returns 200 status with new metric keys validated. Found required keys readiness_score, readiness_state plus additional metrics: generated_at, position_sync_state, order_reconciliation_state, balance_integrity_state, exchange_latency_state. 3) ✅ GET /api/admin/system/readiness-score: Returns 200 status with readiness_score: 88.75, readiness_state: READY. Contract validation successful. 4) ✅ GET /api/admin/futures/live-readiness: Returns 200 status with backward compatibility + new metrics. Total 24 metric keys including required readiness_score, readiness_state. Geriye uyumluluk maintained. 5) ✅ Symbol Integrity Rejection Test: Created test user, approved via admin flow, tested trading preview with invalid symbol ETHBTC (non-USDT quote asset). Policy correctly rejected with error 'invalid_quote_asset' and SYMBOL_INTEGRITY_REJECT audit event emitted as expected. Event emission validated through audit logs endpoint. TECHNICAL NOTES: Exchange adapters are MOCKED as noted. Backend running with SQLite/in-memory fallbacks (PostgreSQL/Redis unavailable). All endpoints responding correctly with expected status codes and data structures. System readiness score 88.75% indicates healthy operational state. All contract validations successful without errors."
 
+
+frontend:
+  - task: "Health-Reason Visibility on User Exchange Settings Page"
+    implemented: true
+    working: true
+    file: "frontend/src/pages/UserExchangeSettingsPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "Health-Reason Visibility Test PASSED (2026-03-17). Comprehensive validation of new health diagnostics panel on User Exchange Settings page completed successfully: 1) ✅ User Login: Successfully logged in with test credentials (health_ui_efa33f1a@example.com / TestPass123!) and redirected to /user/dashboard. 2) ✅ Navigation: Successfully navigated to /user/exchange-settings page. Page loaded correctly with 'Exchange Settings' title. 3) ✅ System Health Dashboard Rendering: System Health Dashboard section (data-testid='user-overview-system-health-dashboard') is VISIBLE and rendering correctly. Dashboard title 'System Health Dashboard' and description displayed properly. 4) ✅ Diagnostics Panel Test IDs - ALL 5 REQUIRED TEST IDs PRESENT AND VISIBLE: (a) user-overview-system-health-diagnostics-panel - Panel container VISIBLE with rose-colored styling (border-rose-700/60 bg-rose-900/20 text-rose-200), (b) user-overview-system-health-diagnostics-title - Title 'Health Reason' displayed correctly, (c) user-overview-system-health-diagnostics-reason - Reason text displayed: 'reason: API key/secret eksik' (missing credentials), (d) user-overview-system-health-diagnostics-action-message - Action guidance displayed: 'action: API key/secret eksik. Profilde anahtarları güncelleyin.' (63 chars), (e) user-overview-system-health-diagnostics-next-retry - Next retry displayed: 'next_retry_in: -'. 5) ✅ Offline State Verification: Panel correctly shows offline state with connection_health='offline'. Reason text correctly indicates missing credentials ('API key/secret eksik'). Action message provides clear guidance for user to update API keys in profile. Panel styling uses appropriate rose tone class for offline/error state. 6) ✅ Page Interactivity: NO UI crash detected. Page remains fully interactive. Tab switching functional (Overview → Risk Settings → Test & Validation → back to Overview). All tabs enable/disable correctly. Risk Settings tab content loads on click. Overview tab content displays correctly when switching back. 7) ✅ Health Metrics: Current health status displays 'offline' correctly. Last fail timestamp visible: '17.03.2026 20:36:54'. Health bucket metrics table renders correctly with 1m/5m/15m data rows. System health metrics grid displays all 5 metric cards (Health, Last Success, Last Fail, Anlık Jitter p95-p50, Anlık Jitter stddev). 8) ✅ No Console Errors: ZERO error elements detected on page. No critical runtime errors. Clean console logs. 9) ✅ Screenshot Verification: Screenshot captured showing diagnostics panel with rose-colored background, clear reason text, action message, and next retry information. Visual confirmation of proper rendering. OVERALL RESULT: ✅✅✅ ALL PASS - All 6 scope requirements validated successfully. Health-reason visibility feature is production-ready. New diagnostics panel provides clear visibility into connection health status with user-friendly reason labels and actionable guidance."
+
+metadata:
+  created_by: "testing_agent"
+  version: "1.0"
+  test_sequence: 215
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "Health-Reason Visibility on User Exchange Settings Page"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "testing"
+    message: "Health-reason visibility testing completed for User Exchange Settings page. All 5 required diagnostics panel test IDs validated and working correctly. Panel displays offline state with missing credentials reason and provides actionable guidance. Page remains fully interactive with no UI crashes. Feature is production-ready and meets all specified requirements."
+

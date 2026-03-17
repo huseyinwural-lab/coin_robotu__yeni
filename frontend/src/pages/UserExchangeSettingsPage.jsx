@@ -184,6 +184,50 @@ export const UserExchangeSettingsPage = () => {
     }));
   }, [selectedConnectionProfile]);
 
+  const selectedHealthDiagnostics = useMemo(() => {
+    const health = String(selectedConnectionProfile?.connection_health || "unknown").toLowerCase();
+    const reason = String(selectedConnectionProfile?.connection_health_reason || "").toLowerCase();
+    const actionMessage = selectedConnectionProfile?.action_required_message || "";
+    const nextRetry = selectedConnectionProfile?.next_retry_in_seconds;
+
+    const reasonLabels = {
+      missing_credentials: "API key/secret eksik",
+      invalid_key: "API key geçersiz",
+      ip_restriction: "IP whitelist kısıtı",
+      missing_trade_permission: "Trade izni kapalı",
+      rate_limit: "Rate limit nedeniyle beklemede",
+      validation_failed: "Doğrulama başarısız",
+      network_error: "Ağ bağlantı hatası",
+      timeout: "Zaman aşımı",
+      exchange_unreachable: "Borsa erişilemez",
+    };
+
+    const reasonLabel = reasonLabels[reason] || (reason || "belirsiz");
+    const retryLabel = typeof nextRetry === "number" ? `${nextRetry}s` : "-";
+
+    const toneClass =
+      health === "online"
+        ? "border-emerald-700/60 bg-emerald-900/20 text-emerald-200"
+        : health === "degraded"
+          ? "border-amber-700/60 bg-amber-900/20 text-amber-200"
+          : "border-rose-700/60 bg-rose-900/20 text-rose-200";
+
+    const recommendation =
+      health === "online"
+        ? "Bağlantı sağlıklı görünüyor."
+        : actionMessage || "API bilgilerini ve Test & Validation adımlarını kontrol edin.";
+
+    return {
+      health,
+      reason,
+      reasonLabel,
+      actionMessage,
+      recommendation,
+      retryLabel,
+      toneClass,
+    };
+  }, [selectedConnectionProfile]);
+
   const profileHealthClass = (health) => {
     const normalized = String(health || "unknown").toLowerCase();
     if (normalized === "online") return "border-emerald-700/70 text-emerald-300 bg-emerald-900/20";
@@ -818,6 +862,22 @@ export const UserExchangeSettingsPage = () => {
               <MetricCard label="Last Fail" value={formatConnectionTime(selectedConnectionProfile?.last_failure_at)} tone="red" testId="user-overview-system-health-last-fail" />
               <MetricCard label="Anlık Jitter (p95-p50)" value={formatMs(selectedConnectionProfile?.current_jitter_p95_p50_ms)} tone="orange" testId="user-overview-system-health-current-jitter" />
               <MetricCard label="Anlık Jitter (stddev)" value={formatMs(selectedConnectionProfile?.current_jitter_stddev_ms)} tone="blue" testId="user-overview-system-health-current-jitter-stddev" />
+            </div>
+
+            <div
+              className={`rounded border p-3 ${selectedHealthDiagnostics.toneClass}`}
+              data-testid="user-overview-system-health-diagnostics-panel"
+            >
+              <p className="text-xs uppercase tracking-widest" data-testid="user-overview-system-health-diagnostics-title">Health Reason</p>
+              <p className="mt-1 text-sm font-semibold" data-testid="user-overview-system-health-diagnostics-reason">
+                reason: {selectedHealthDiagnostics.reasonLabel}
+              </p>
+              <p className="mt-1 text-xs" data-testid="user-overview-system-health-diagnostics-action-message">
+                action: {selectedHealthDiagnostics.recommendation}
+              </p>
+              <p className="mt-1 text-xs" data-testid="user-overview-system-health-diagnostics-next-retry">
+                next_retry_in: {selectedHealthDiagnostics.retryLabel}
+              </p>
             </div>
 
             <div className="overflow-x-auto" data-testid="user-overview-system-health-bucket-table-wrap">
