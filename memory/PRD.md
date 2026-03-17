@@ -1,3 +1,24 @@
+## 2026-03-17 — Iteration Update (Stability Fix: Assignment Flap Prevention)
+
+- Kalıcı kesinti azaltma için venue-assignment otomasyonu güçlendirildi:
+  - `approve_user_account` sırasında otomatik default assignment (binance/futures/testnet)
+  - `bulk-approve` sırasında tüm kullanıcılar için otomatik assignment
+- `validate_exchange_credentials_for_user` içinde `assignment_required` için auto-heal eklendi:
+  - Connection profile varsa assignment otomatik üretilip yeniden venue access kontrolü yapılıyor.
+- Admin kullanıcı ekranına operasyonel onarım eklendi:
+  - satır bazlı: `Fix Venue`
+  - toplu: `Toplu Venue Onar`
+  - backend endpointler:
+    - `POST /api/admin/users/{user_id}/repair-venue-assignment`
+    - `POST /api/admin/users/repair-venue-assignments`
+- Sistem üzerinde toplu onarım endpoint’i çalıştırıldı:
+  - `processed_users: 252`, `changed_assignments: 0`
+- Testler:
+  - `pytest backend/tests/test_venue_assignment_autoprovision.py backend/tests/test_venue_assignment_repair_and_validate.py` → **11 PASS**
+  - testing agent raporu: `/app/test_reports/iteration_143.json` ✅
+  - auto frontend test: bulk + row-level Fix Venue aksiyonları PASS ✅
+- Not: Gerçek `invalid_key`/`ip_restriction` durumları güvenlik gereği bloklayıcı olmaya devam eder (kesinti değil, koruma davranışı).
+
 ## 2026-03-17 — Iteration Update (Health Reason Visibility in User Exchange Settings)
 
 - `UserExchangeSettingsPage` içindeki **System Health Dashboard** alanına yeni görünür teşhis kutusu eklendi:
