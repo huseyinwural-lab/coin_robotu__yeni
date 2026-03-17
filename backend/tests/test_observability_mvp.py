@@ -1,5 +1,7 @@
 import os
 import uuid
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -90,3 +92,27 @@ def test_audit_retention_prune_endpoint(admin_headers: dict):
     payload = response.json()
     assert payload.get("days") == 90
     assert int(payload.get("deleted_count", 0)) >= 0
+
+
+def test_incident_export_zip_contains_incident_and_summary(admin_headers: dict):
+    response = requests.get(
+        f"{BASE_URL}/api/audit-logs/admin/incident-export",
+        params={"limit": 120},
+        headers=admin_headers,
+        timeout=40,
+    )
+    assert response.status_code == 200, response.text
+    assert "application/zip" in response.headers.get("content-type", "")
+
+    archive = zipfile.ZipFile(BytesIO(response.content))
+    names = set(archive.namelist())
+    assert "incident.json" in names
+    assert "summary.json" in names
+
+
+def test_incident_export_requires_auth():
+    response = requests.get(
+        f"{BASE_URL}/api/audit-logs/admin/incident-export",
+        timeout=20,
+    )
+    assert response.status_code == 401, response.text

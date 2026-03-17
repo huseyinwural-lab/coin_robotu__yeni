@@ -4,12 +4,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 
 export const AuditLogsPage = () => {
+  const { user } = useAuth();
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPruning, setIsPruning] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [filters, setFilters] = useState({
     q: "",
     action: "",
@@ -18,18 +21,20 @@ export const AuditLogsPage = () => {
     session_id: "",
   });
 
+  const buildFilterParams = useCallback(() => ({
+    limit: 300,
+    q: filters.q || undefined,
+    action: filters.action || undefined,
+    severity: filters.severity !== "all" ? filters.severity : undefined,
+    request_id: filters.request_id || undefined,
+    session_id: filters.session_id || undefined,
+  }), [filters]);
+
   const fetchLogs = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data } = await apiClient.get("/audit-logs/timeline", {
-        params: {
-          limit: 300,
-          q: filters.q || undefined,
-          action: filters.action || undefined,
-          severity: filters.severity !== "all" ? filters.severity : undefined,
-          request_id: filters.request_id || undefined,
-          session_id: filters.session_id || undefined,
-        },
+        params: buildFilterParams(),
       });
       setLogs(data?.items || []);
     } catch (error) {
@@ -37,7 +42,7 @@ export const AuditLogsPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [filters]);
+  }, [buildFilterParams]);
 
   useEffect(() => {
     fetchLogs();
@@ -56,6 +61,32 @@ export const AuditLogsPage = () => {
     }
   };
 
+  const exportIncidentPackage = async () => {
+    setIsExporting(true);
+    try {
+      const response = await apiClient.get("/audit-logs/admin/incident-export", {
+        params: {
+          ...buildFilterParams(),
+          limit: 500,
+        },
+        responseType: "blob",
+      });
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = `incident_package_${new Date().toISOString().replace(/[:.]/g, "-")}.zip`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(blobUrl);
+      toast.success("Incident ZIP indirildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Incident ZIP indirilemedi");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="audit-logs-page">
       <header className="border border-blue-900 bg-slate-900 p-4" data-testid="audit-logs-header">
@@ -63,7 +94,7 @@ export const AuditLogsPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="audit-logs-description">Request ID, Session ID ve domain event akışları tek tabloda.</p>
       </header>
 
-      <div className="grid gap-2 border border-slate-800 bg-slate-900 p-3 md:grid-cols-7" data-testid="audit-logs-filters-grid">
+      <div className="grid gap-2 border border-slate-800 bg-slate-900 p-3 md:grid-cols-8" data-testid="audit-logs-filters-grid">
         <Input
           placeholder="search"
           value={filters.q}
@@ -103,6 +134,11 @@ export const AuditLogsPage = () => {
         <Button onClick={runRetentionPrune} disabled={isPruning} variant="outline" data-testid="audit-logs-retention-prune-button">
           {isPruning ? "Prune..." : "90 Gün Prune"}
         </Button>
+        {user?.role === "super_admin" && (
+          <Button onClick={exportIncidentPackage} disabled={isExporting} variant="outline" data-testid="audit-logs-incident-export-button">
+            {isExporting ? "ZIP hazırlanıyor..." : "Incident ZIP İndir"}
+          </Button>
+        )}
       </div>
 
       <div className="border border-slate-800 bg-slate-900" data-testid="audit-logs-table-wrapper">
