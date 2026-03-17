@@ -648,13 +648,14 @@ def build_live_trading_summary(db: Session, cache, *, window: str = "1h") -> dic
     normalized_window, _since, now = _window_bounds(window)
     component_errors: list[dict] = []
 
-    def _safe_component(name: str, builder, fallback: dict):
+    def _safe_component(name: str, builder, fallback, *, require_dict: bool = True):
         try:
             payload = builder()
-            if not isinstance(payload, dict):
+            if require_dict and not isinstance(payload, dict):
                 raise TypeError(f"{name} returned non-dict payload")
             return payload
         except (Exception,) as exc:
+            db.rollback()
             component_errors.append({"component": name, "error": str(exc)})
             return fallback
 
@@ -736,7 +737,7 @@ def build_live_trading_summary(db: Session, cache, *, window: str = "1h") -> dic
         },
     )
 
-    config = _safe_component("live_config", lambda: _live_config(db), {})
+    config = _safe_component("live_config", lambda: _live_config(db), {}, require_dict=False)
     config_obj = None if isinstance(config, dict) else config
     execution_mode = "MOCK"
     if config_obj:
