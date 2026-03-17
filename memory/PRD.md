@@ -1,3 +1,47 @@
+## 2026-03-17 — Iteration Update (P0 Closure Gate Pack Tamamlandı)
+
+### Teslimatlar
+
+- Yeni tek sayfa kapanış dokümanı:
+  - `/app/memory/release_readiness_final_checklist.md`
+- Yeni otomasyon scripti:
+  - `/app/backend/cli/p0_closure_gate.py`
+- Mevcut smoke suite ile birlikte gate komut seti:
+  - `python /app/backend/cli/final_release_smoke_suite.py`
+  - `python /app/backend/cli/p0_closure_gate.py --target-env preview`
+  - `python /app/backend/cli/p0_closure_gate.py --target-env prod`
+
+### P0 Gate İçeriği (otomatik)
+
+- sqlite fallback policy kontrolü (`preview/prod` davranışı ayrık)
+- alembic heads kontrolü
+- alembic revision eşleşme kontrolü
+- kritik tablo varlık kontrolü
+- final release smoke suite entegrasyonu
+- admin login + user contract checkleri:
+  - trading preview leverage alanları
+  - exchange connection list/revalidate
+  - bot soft-delete sonrası listeden düşme
+
+### Preview Runtime Notu
+
+- Preview ortam SQLite fallback modunda olduğunda migration/table checkleri `WARN` olarak raporlanır.
+- Prod modda aynı durum `FAIL` (strict) olarak ele alınır.
+
+### Doğrulama
+
+- Lokal:
+  - `pytest test_p0_closure_gate_script.py test_p1_phase2_livepath_and_alert_burnin.py test_p1_phase2_additional_delivery.py` → **15 PASS**
+  - `pytest test_p0_closure_gate_comprehensive.py test_p0_closure_gate_script.py` → **13 PASS**
+- Testing agent raporu:
+  - `/app/test_reports/iteration_149.json` ✅ (12/12 PASS)
+- Script çalıştırma:
+  - `python /app/backend/cli/p0_closure_gate.py --target-env preview` → **overall PASS** (warn_count=2 preview fallback nedeniyle)
+
+### Not
+
+- Bybit/OKX execution adapterları kullanıcı tercihiyle **MOCKED** kalır.
+
 ## 2026-03-17 — Iteration Update (P1 Faz-2 Tamamlandı: Live-Path E2E + Alert Burn-in + Final Smoke Suite)
 
 ### P1 Faz-2.1 — Venue Assignment + Futures Live-Path E2E
