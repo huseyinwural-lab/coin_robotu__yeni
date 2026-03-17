@@ -25,6 +25,11 @@ def _resolve_migration_url() -> str:
             connection.execute(text("SELECT 1"))
         return env_url
     except SQLAlchemyError:
+        sqlite_fallback_enabled = str(os.getenv("ALEMBIC_ALLOW_SQLITE_FALLBACK", "0")).strip() == "1"
+        if sqlite_fallback_enabled:
+            sqlite_url = "sqlite:///./trading_platform_local.db"
+            logger.warning("Alembic DB URL unreachable; using SQLite fallback because ALEMBIC_ALLOW_SQLITE_FALLBACK=1")
+            return sqlite_url
         raise RuntimeError("Alembic DB URL unreachable; SQLite fallback is disabled")
 
 
