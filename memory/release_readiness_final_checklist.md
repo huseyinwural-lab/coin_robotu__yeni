@@ -66,6 +66,14 @@ python /app/backend/cli/p0_closure_gate.py --target-env prod
 
 Beklenen: JSON içinde `"overall": "PASS"`
 
+### C) Raporu dosyaya otomatik yaz
+
+```bash
+/app/scripts/run_release_gate_and_store.sh preview
+```
+
+Üretir: `/app/test_reports/release_gate_latest.json`
+
 ## Risk Notu
 
 - Bybit/OKX execution adapterları bu sürümde **MOCKED** (kullanıcı kararı).

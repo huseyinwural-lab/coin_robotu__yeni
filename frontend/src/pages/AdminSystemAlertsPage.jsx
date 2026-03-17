@@ -19,6 +19,7 @@ export const AdminSystemAlertsPage = () => {
   const [timeline, setTimeline] = useState([]);
   const [config, setConfig] = useState(null);
   const [burnIn, setBurnIn] = useState(null);
+  const [sloSla, setSloSla] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [filters, setFilters] = useState({
@@ -34,7 +35,7 @@ export const AdminSystemAlertsPage = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: alertData }, { data: timelineData }, { data: configData }, { data: burnInData }] = await Promise.all([
+      const [{ data: alertData }, { data: timelineData }, { data: configData }, { data: burnInData }, { data: sloData }] = await Promise.all([
         apiClient.get("/admin/system-alerts", {
           params: {
             status: filters.status,
@@ -51,12 +52,16 @@ export const AdminSystemAlertsPage = () => {
         apiClient.get("/admin/system-alerts/burn-in", {
           params: { days: Number(filters.days) || 14 },
         }),
+        apiClient.get("/admin/system-alerts/slo-sla", {
+          params: { days: Number(filters.days) || 14 },
+        }),
       ]);
 
       setAlerts(alertData || []);
       setTimeline(timelineData?.points || []);
       setConfig(configData || null);
       setBurnIn(burnInData || null);
+      setSloSla(sloData || null);
       setSelectedIds((prev) => prev.filter((id) => (alertData || []).some((item) => item.id === id)));
     } catch (error) {
       toast.error(error?.response?.data?.detail || "System alerts verisi alınamadı");
@@ -265,6 +270,18 @@ export const AdminSystemAlertsPage = () => {
           <Button className="border border-black bg-zinc-900 text-orange-300 hover:bg-black" onClick={() => sendTestDelivery("both")} data-testid="admin-system-alerts-test-both-button">
             Test Both
           </Button>
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-black/30 bg-orange-100 p-4" data-testid="admin-system-alerts-slo-panel">
+        <p className="text-sm font-semibold text-black" data-testid="admin-system-alerts-slo-title">SLO / SLA Summary</p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6" data-testid="admin-system-alerts-slo-metrics-grid">
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-availability">availability_pct={sloSla?.metrics?.availability_pct ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-target">sla_target_pct={sloSla?.metrics?.sla_target_pct ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-error-rate">error_rate={sloSla?.metrics?.error_rate ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-mttr">mttr_minutes={sloSla?.metrics?.mttr_minutes ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-critical">critical_alerts={sloSla?.metrics?.critical_alerts ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-status">slo_status={sloSla?.slo_status || "-"}</p>
         </div>
       </div>
 

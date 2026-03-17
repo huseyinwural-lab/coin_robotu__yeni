@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import os
 import hashlib
+import time
 from base64 import urlsafe_b64encode
 from datetime import datetime, timezone
 from typing import Any
@@ -11,13 +12,44 @@ from cryptography.fernet import Fernet
 
 from core.config import settings
 from db import redis_client
-from models import AlertChannelConfig
+from models import AlertChannelConfig, FailedEvent
 
 from sqlalchemy.orm import Session
 
 RATE_LIMIT_PER_MIN = 5
 CRITICAL_LIMIT_30M = 3
 DEDUP_WINDOW_SECONDS = 600
+
+
+def _retry_config() -> dict:
+    max_attempts = max(int(os.environ.get("ALERT_DELIVERY_MAX_RETRY", "2")), 1)
+    backoff_seconds = max(float(os.environ.get("ALERT_DELIVERY_BACKOFF_SECONDS", "0.8")), 0.1)
+    return {"max_attempts": max_attempts, "backoff_seconds": backoff_seconds}
+
+
+def _record_failed_delivery(
+    *,
+    db: Session | None,
+    channel: str,
+    reason: str,
+    payload: dict,
+    max_retry: int,
+) -> None:
+    if db is None:
+        return
+    failed_event = FailedEvent(
+        event_type=f"alert_delivery_{channel}",
+        entity_type="system_alert_delivery",
+        entity_id=payload.get("alert_type") or "manual_delivery",
+        payload=payload,
+        error_message=str(reason)[:1000],
+        status="pending",
+        retry_count=0,
+        max_retry=max_retry,
+        next_retry_at=datetime.now(timezone.utc),
+    )
+    db.add(failed_event)
+    db.commit()
 
 
 def _parse_recipients(raw: str | None) -> list[str]:
@@ -216,18 +248,35 @@ def send_email_alert(subject: str, html_content: str, severity: str, db: Session
     except ModuleNotFoundError:
         return {"status": "LIB_MISSING", "reason": "resend_not_installed"}
 
-    try:
-        resend.api_key = resend_cfg["api_key"]
-        params = {
-            "from": resend_cfg["sender"],
-            "to": resend_cfg["recipients"],
-            "subject": subject,
-            "html": html_content,
-        }
-        response = resend.Emails.send(params)
-        return {"status": "SENT", "provider_id": response.get("id")}
-    except Exception as exc:
-        return {"status": "FAILED", "reason": str(exc)}
+    retry_cfg = _retry_config()
+    max_attempts = retry_cfg["max_attempts"]
+    backoff_seconds = retry_cfg["backoff_seconds"]
+    params = {
+        "from": resend_cfg["sender"],
+        "to": resend_cfg["recipients"],
+        "subject": subject,
+        "html": html_content,
+    }
+    resend.api_key = resend_cfg["api_key"]
+
+    last_error = "unknown"
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = resend.Emails.send(params)
+            return {"status": "SENT", "provider_id": response.get("id"), "attempt": attempt}
+        except Exception as exc:  # pragma: no cover - runtime retry branch
+            last_error = str(exc)
+            if attempt < max_attempts:
+                time.sleep(backoff_seconds * attempt)
+
+    _record_failed_delivery(
+        db=db,
+        channel="email",
+        reason=last_error,
+        payload={"subject": subject, "severity": severity, "recipients": resend_cfg["recipients"]},
+        max_retry=max_attempts,
+    )
+    return {"status": "FAILED", "reason": last_error, "attempts": max_attempts}
 
 
 def send_slack_alert(message: str, severity: str, db: Session | None = None) -> dict:
@@ -244,13 +293,41 @@ def send_slack_alert(message: str, severity: str, db: Session | None = None) -> 
     except ModuleNotFoundError:
         return {"status": "LIB_MISSING", "reason": "requests_not_installed"}
 
-    try:
-        response = requests.post(slack_cfg["webhook_url"], json={"text": message}, timeout=10)
-        if response.status_code >= 400:
-            return {"status": "FAILED", "reason": f"slack_http_{response.status_code}"}
-        return {"status": "SENT"}
-    except Exception as exc:
-        return {"status": "FAILED", "reason": str(exc)}
+    retry_cfg = _retry_config()
+    max_attempts = retry_cfg["max_attempts"]
+    backoff_seconds = retry_cfg["backoff_seconds"]
+
+    last_error = "unknown"
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.post(slack_cfg["webhook_url"], json={"text": message}, timeout=10)
+            if response.status_code >= 400:
+                last_error = f"slack_http_{response.status_code}"
+                if attempt < max_attempts:
+                    time.sleep(backoff_seconds * attempt)
+                    continue
+                _record_failed_delivery(
+                    db=db,
+                    channel="slack",
+                    reason=last_error,
+                    payload={"severity": severity, "message": message[:400]},
+                    max_retry=max_attempts,
+                )
+                return {"status": "FAILED", "reason": last_error, "attempts": max_attempts}
+            return {"status": "SENT", "attempt": attempt}
+        except Exception as exc:  # pragma: no cover - runtime retry branch
+            last_error = str(exc)
+            if attempt < max_attempts:
+                time.sleep(backoff_seconds * attempt)
+
+    _record_failed_delivery(
+        db=db,
+        channel="slack",
+        reason=last_error,
+        payload={"severity": severity, "message": message[:400]},
+        max_retry=max_attempts,
+    )
+    return {"status": "FAILED", "reason": last_error, "attempts": max_attempts}
 
 
 def build_alert_message(alert_payload: dict) -> dict:

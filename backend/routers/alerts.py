@@ -246,6 +246,58 @@ def burn_in_summary(
     }
 
 
+@router.get("/slo-sla")
+def slo_sla_summary(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    days: int = Query(default=30, ge=1, le=90),
+):
+    _ = current_admin
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        db.query(SystemAlert)
+        .filter(SystemAlert.created_at >= since)
+        .order_by(SystemAlert.created_at.desc())
+        .limit(10000)
+        .all()
+    )
+
+    total = len(rows)
+    critical_count = sum(1 for row in rows if (row.severity or "").upper() == "CRITICAL")
+    warning_count = sum(1 for row in rows if (row.severity or "").upper() == "WARNING")
+    error_rate = round(((critical_count + warning_count) / total), 4) if total else 0.0
+
+    resolved_rows = [row for row in rows if (row.status or "").lower() == "resolved"]
+    mttr_minutes = 0.0
+    if resolved_rows:
+        mttr_minutes = round(
+            sum(max((row.updated_at - row.created_at).total_seconds() / 60, 0) for row in resolved_rows)
+            / len(resolved_rows),
+            2,
+        )
+
+    availability_pct = round(max(0.0, 100.0 - (error_rate * 100.0)), 2)
+    sla_target_pct = 99.5
+    sla_breached = availability_pct < sla_target_pct
+
+    return {
+        "window_days": days,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "metrics": {
+            "total_alerts": total,
+            "critical_alerts": critical_count,
+            "warning_alerts": warning_count,
+            "resolved_alerts": len(resolved_rows),
+            "error_rate": error_rate,
+            "mttr_minutes": mttr_minutes,
+            "availability_pct": availability_pct,
+            "sla_target_pct": sla_target_pct,
+            "sla_breached": sla_breached,
+        },
+        "slo_status": "AT_RISK" if sla_breached else "HEALTHY",
+    }
+
+
 @router.post("/config")
 def refresh_alert_config(
     payload: AlertChannelConfigUpdateRequest | None = None,

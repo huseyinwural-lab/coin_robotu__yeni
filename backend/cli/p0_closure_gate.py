@@ -302,6 +302,7 @@ def main() -> int:
     parser.add_argument("--target-env", choices=["preview", "prod"], default="preview")
     parser.add_argument("--base-url", default=None)
     parser.add_argument("--skip-user-contracts", action="store_true")
+    parser.add_argument("--output-file", default=None)
     args = parser.parse_args()
 
     report = run(
@@ -309,7 +310,12 @@ def main() -> int:
         base_url=_resolve_base_url(args.base_url),
         skip_user_contracts=bool(args.skip_user_contracts),
     )
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    rendered = json.dumps(report, ensure_ascii=False, indent=2)
+    if args.output_file:
+        output_path = Path(args.output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(rendered + "\n", encoding="utf-8")
+    print(rendered)
     return 0 if report["overall"] == "PASS" else 2
 
 

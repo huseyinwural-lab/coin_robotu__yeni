@@ -325,3 +325,96 @@ def export_incident_package(
     filename = f"incident_package_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.zip"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(iter([buffer.getvalue()]), media_type="application/zip", headers=headers)
+
+
+@router.get("/incident-replay")
+def incident_replay(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    request_id: str | None = Query(default=None),
+    session_id: str | None = Query(default=None),
+    limit: int = Query(default=800, ge=20, le=3000),
+):
+    if not request_id and not session_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request_id_or_session_id_required")
+
+    details_text = cast(AuditLog.details, String)
+    query = db.query(AuditLog)
+    if request_id and session_id:
+        from sqlalchemy import or_
+
+        query = query.filter(or_(details_text.ilike(f"%{request_id}%"), details_text.ilike(f"%{session_id}%")))
+    elif request_id:
+        query = query.filter(details_text.ilike(f"%{request_id}%"))
+    else:
+        query = query.filter(details_text.ilike(f"%{session_id}%"))
+
+    rows = query.order_by(AuditLog.created_at.asc()).limit(limit).all()
+    if not rows:
+        return {
+            "filters": {"request_id": request_id, "session_id": session_id, "limit": limit},
+            "summary": {"step_count": 0, "error_steps": 0},
+            "steps": [],
+            "related_domain_events": [],
+        }
+
+    steps = []
+    prev_ts = None
+    for index, row in enumerate(rows, start=1):
+        details = row.details or {}
+        current_ts = row.created_at
+        delta_ms = None
+        if prev_ts is not None:
+            delta_ms = round((current_ts - prev_ts).total_seconds() * 1000, 2)
+        prev_ts = current_ts
+
+        steps.append(
+            {
+                "step_index": index,
+                "timestamp": current_ts.isoformat(),
+                "delta_ms_from_prev": delta_ms,
+                "action": row.action,
+                "severity": row.severity,
+                "entity_type": row.entity_type,
+                "entity_id": row.entity_id,
+                "route": details.get("route"),
+                "method": details.get("method"),
+                "request_id": details.get("request_id"),
+                "session_id": details.get("session_id"),
+                "details": details,
+            }
+        )
+
+    window_start = rows[0].created_at
+    window_end = rows[-1].created_at
+    details_text = cast(AuditLog.details, String)
+    domain_query = db.query(AuditLog).filter(AuditLog.action.ilike("DOMAIN_%"))
+    domain_query = domain_query.filter(
+        AuditLog.created_at >= (window_start - timedelta(minutes=30)),
+        AuditLog.created_at <= (window_end + timedelta(minutes=30)),
+    )
+    if request_id and session_id:
+        from sqlalchemy import or_
+
+        domain_query = domain_query.filter(or_(details_text.ilike(f"%{request_id}%"), details_text.ilike(f"%{session_id}%")))
+    elif request_id:
+        domain_query = domain_query.filter(details_text.ilike(f"%{request_id}%"))
+    elif session_id:
+        domain_query = domain_query.filter(details_text.ilike(f"%{session_id}%"))
+
+    domain_rows = domain_query.order_by(AuditLog.created_at.asc()).limit(400).all()
+    action_counter = Counter(step["action"] for step in steps)
+    error_steps = sum(1 for step in steps if str(step.get("severity") or "").lower() in {"warning", "critical"})
+
+    return {
+        "filters": {"request_id": request_id, "session_id": session_id, "limit": limit},
+        "summary": {
+            "step_count": len(steps),
+            "error_steps": error_steps,
+            "window_start": window_start.isoformat(),
+            "window_end": window_end.isoformat(),
+            "top_actions": action_counter.most_common(10),
+        },
+        "steps": steps,
+        "related_domain_events": [_serialize_timeline_item(row) for row in domain_rows],
+    }

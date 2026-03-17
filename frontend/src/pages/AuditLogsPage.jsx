@@ -14,6 +14,9 @@ export const AuditLogsPage = () => {
   const [isPruning, setIsPruning] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportWindowDays, setExportWindowDays] = useState("30");
+  const [replayFilters, setReplayFilters] = useState({ request_id: "", session_id: "" });
+  const [replayData, setReplayData] = useState(null);
+  const [isReplayLoading, setIsReplayLoading] = useState(false);
   const [filters, setFilters] = useState({
     q: "",
     action: "",
@@ -89,6 +92,29 @@ export const AuditLogsPage = () => {
     }
   };
 
+  const loadIncidentReplay = async () => {
+    if (!replayFilters.request_id && !replayFilters.session_id) {
+      toast.error("Replay için request_id veya session_id girin");
+      return;
+    }
+    setIsReplayLoading(true);
+    try {
+      const { data } = await apiClient.get("/audit-logs/incident-replay", {
+        params: {
+          request_id: replayFilters.request_id || undefined,
+          session_id: replayFilters.session_id || undefined,
+          limit: 1200,
+        },
+      });
+      setReplayData(data || null);
+      toast.success("Incident replay yüklendi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Incident replay yüklenemedi");
+    } finally {
+      setIsReplayLoading(false);
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="audit-logs-page">
       <header className="border border-blue-900 bg-slate-900 p-4" data-testid="audit-logs-header">
@@ -154,6 +180,42 @@ export const AuditLogsPage = () => {
             </Button>
           </>
         )}
+      </div>
+
+      <div className="space-y-3 border border-slate-800 bg-slate-900 p-3" data-testid="audit-logs-incident-replay-panel">
+        <p className="text-sm font-semibold text-white" data-testid="audit-logs-incident-replay-title">Incident Replay</p>
+        <div className="grid gap-2 md:grid-cols-4" data-testid="audit-logs-incident-replay-filters-grid">
+          <Input
+            placeholder="request_id"
+            value={replayFilters.request_id}
+            onChange={(event) => setReplayFilters((prev) => ({ ...prev, request_id: event.target.value }))}
+            data-testid="audit-logs-incident-replay-request-id-input"
+          />
+          <Input
+            placeholder="session_id"
+            value={replayFilters.session_id}
+            onChange={(event) => setReplayFilters((prev) => ({ ...prev, session_id: event.target.value }))}
+            data-testid="audit-logs-incident-replay-session-id-input"
+          />
+          <Button onClick={loadIncidentReplay} disabled={isReplayLoading} data-testid="audit-logs-incident-replay-load-button">
+            {isReplayLoading ? "Yükleniyor..." : "Replay Yükle"}
+          </Button>
+        </div>
+        <div className="grid gap-2 md:grid-cols-4" data-testid="audit-logs-incident-replay-summary-grid">
+          <p className="text-xs text-slate-300" data-testid="audit-logs-incident-replay-step-count">step_count={replayData?.summary?.step_count ?? 0}</p>
+          <p className="text-xs text-slate-300" data-testid="audit-logs-incident-replay-error-steps">error_steps={replayData?.summary?.error_steps ?? 0}</p>
+          <p className="text-xs text-slate-300" data-testid="audit-logs-incident-replay-window-start">window_start={replayData?.summary?.window_start || "-"}</p>
+          <p className="text-xs text-slate-300" data-testid="audit-logs-incident-replay-window-end">window_end={replayData?.summary?.window_end || "-"}</p>
+        </div>
+        <div className="max-h-56 overflow-auto border border-slate-700" data-testid="audit-logs-incident-replay-steps-wrap">
+          {(replayData?.steps || []).slice(0, 20).map((step) => (
+            <article key={`${step.step_index}-${step.timestamp}`} className="border-b border-slate-800 p-2 text-xs" data-testid={`audit-logs-incident-replay-step-${step.step_index}`}>
+              <p data-testid={`audit-logs-incident-replay-step-action-${step.step_index}`}>{step.step_index}. {step.action}</p>
+              <p className="text-slate-400" data-testid={`audit-logs-incident-replay-step-meta-${step.step_index}`}>{step.timestamp} · {step.method || "-"} {step.route || "-"} · Δ{step.delta_ms_from_prev ?? 0}ms</p>
+            </article>
+          ))}
+          {(replayData?.steps || []).length === 0 && <p className="p-2 text-xs text-slate-500" data-testid="audit-logs-incident-replay-empty">Replay step bulunamadı.</p>}
+        </div>
       </div>
 
       <div className="border border-slate-800 bg-slate-900" data-testid="audit-logs-table-wrapper">
