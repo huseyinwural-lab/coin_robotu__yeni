@@ -1,3 +1,46 @@
+## 2026-03-17 — Iteration Update (Observability Program: Faz Bazlı İş Planı + Faz-1 Tamamlandı)
+
+### İş Planı (A’dan Z’ye log altyapısı)
+
+- **Faz-1 (Tamamlandı)**: Uygulama içi MVP observability
+  - Correlation ID (`X-Request-ID`) + Session ID (`X-Session-ID`) uçtan uca izleme
+  - Structured request/error log middleware
+  - Domain event logging (`DOMAIN_*`)
+  - Admin timeline ekranı + filtreler + request/session/route kolonları
+  - 90 gün retention başlangıcı için prune endpoint + UI aksiyonu
+- **Faz-2 (Planlandı)**: Merkezi log platformu (Grafana Loki) entegrasyonu
+  - log shipping, dashboard panel setleri, alert kuralları
+- **Faz-3 (Planlandı)**: Incident replay + SLO/SLA + otomatize runbook
+  - flap tespiti, root-cause grup analizi, operasyonel playbook
+
+### Faz-1 Teknik Teslimatlar
+
+- Backend:
+  - `core/observability/request_context.py`
+  - `core/observability/http_logging_middleware.py`
+  - `services/audit_service.py` context merge + `create_domain_event`
+  - `GET /api/audit-logs/timeline` (action/severity/request_id/session_id/entity_type/q/date aralığı)
+  - `POST /api/audit-logs/admin/retention/prune?days=90`
+- Frontend:
+  - `AuditLogsPage` → System Timeline formatı
+  - filtre paneli + Request/Session/Route kolonları
+  - `90 Gün Prune` aksiyonu
+  - `apiClient` request interceptor ile `X-Session-ID` + `X-Request-ID`
+
+### Doğrulama
+
+- Pytest:
+  - `test_observability_mvp.py`
+  - `test_observability_comprehensive.py`
+  - Sonuç: **18 PASS**
+- Testing agent raporu: `/app/test_reports/iteration_144.json` ✅
+- Frontend testing agent: `/admin/audit-logs` filtre + prune + kolonlar PASS ✅
+
+### Notlar
+
+- Retention politikası başlangıcı: **90 gün**.
+- Bybit/OKX execution adapterları halen **MOCKED**.
+
 ## 2026-03-17 — Iteration Update (Stability Fix: Assignment Flap Prevention)
 
 - Kalıcı kesinti azaltma için venue-assignment otomasyonu güçlendirildi:
