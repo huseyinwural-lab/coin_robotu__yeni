@@ -162,7 +162,7 @@ class TestExchangeValidateAutofix:
 
     def test_validate_endpoint_exists(self, admin_headers: dict):
         """Exchange validate endpoint should exist and be accessible."""
-        user_id = _register_and_approve_user(admin_headers)
+        _ = _register_and_approve_user(admin_headers)
         
         # Get user token to test validate endpoint
         email = f"validate_test_{uuid.uuid4().hex[:8]}@example.com"
