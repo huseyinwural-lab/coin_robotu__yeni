@@ -648,6 +648,11 @@ export const UserExecutePage = () => {
             <p data-testid="user-execute-approval-required">approval_required: {String(preview.approval_required)}</p>
             <p data-testid="user-execute-gate-decision">gate_decision: {preview.gate_decision}</p>
             <p data-testid="user-execute-meta-engine-decision">meta_engine_decision: {preview.meta_engine_decision}</p>
+            <p data-testid="user-execute-requested-leverage">requested_leverage: {preview.requested_leverage ?? "-"}</p>
+            <p data-testid="user-execute-recommended-leverage">recommended_leverage: {preview.recommended_leverage ?? "-"}</p>
+            <p data-testid="user-execute-applied-leverage">applied_leverage: {preview.applied_leverage ?? "-"}</p>
+            <p data-testid="user-execute-leverage-policy-mode">leverage_policy_mode: {preview.leverage_policy_mode || "-"}</p>
+            <p data-testid="user-execute-leverage-clamp-reasons">leverage_clamp_reasons: {(preview.leverage_clamp_reasons || []).join(",") || "none"}</p>
             <div className="border border-slate-800 p-3" data-testid="user-execute-venue-context-panel">
               <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-execute-venue-context-title">Venue Context</p>
               <div className="mt-2 grid gap-1 text-xs" data-testid="user-execute-venue-context-content">

@@ -673,6 +673,11 @@ class ExchangeTestOrderResponse(BaseModel):
     strategy_type: str
     volatility_regime: str
     volatility_pct: float
+    requested_leverage: int | None = None
+    recommended_leverage: int | None = None
+    applied_leverage: int | None = None
+    leverage_policy_mode: str | None = None
+    leverage_clamp_reasons: list[str] = Field(default_factory=list)
 
 
 class ExecutionLifecycleEventResponse(BaseModel):
@@ -1938,6 +1943,11 @@ class ExecutionIntentPreviewResponse(BaseModel):
     hedge_suggestion: dict = Field(default_factory=dict)
     risk_reduction_score: float | None = None
     venue_context: dict = Field(default_factory=dict)
+    requested_leverage: int | None = None
+    recommended_leverage: int | None = None
+    applied_leverage: int | None = None
+    leverage_policy_mode: str | None = None
+    leverage_clamp_reasons: list[str] = Field(default_factory=list)
 
 
 class TradingPreviewRateLimitResponse(BaseModel):

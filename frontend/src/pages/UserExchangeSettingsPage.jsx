@@ -1506,6 +1506,10 @@ export const UserExchangeSettingsPage = () => {
           <p data-testid="user-test-order-execution-time-ms">execution time ms: {testOrderResult?.execution_time_ms ?? "-"}</p>
           <p data-testid="user-test-order-volatility-regime">volatility regime: {testOrderResult?.volatility_regime || "-"}</p>
           <p data-testid="user-test-order-strategy-type">strategy type: {testOrderResult?.strategy_type || "-"}</p>
+          <p data-testid="user-test-order-requested-leverage">requested leverage: {testOrderResult?.requested_leverage ?? "-"}</p>
+          <p data-testid="user-test-order-recommended-leverage">recommended leverage: {testOrderResult?.recommended_leverage ?? "-"}</p>
+          <p data-testid="user-test-order-applied-leverage">applied leverage: {testOrderResult?.applied_leverage ?? "-"}</p>
+          <p className="sm:col-span-2" data-testid="user-test-order-leverage-clamp-reasons">leverage clamp reasons: {(testOrderResult?.leverage_clamp_reasons || []).join(",") || "none"}</p>
           <p data-testid="user-test-order-failure-code">failure code: {testOrderResult?.failure_code || "-"}</p>
           <p data-testid="user-test-order-submitted-at">submitted_at: {testOrderResult?.submitted_at || "-"}</p>
           <p data-testid="user-test-order-ack-at">ack_at: {testOrderResult?.ack_at || "-"}</p>

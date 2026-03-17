@@ -197,8 +197,10 @@ def exchange_test_order(
             "slippage_pct": metric.slippage_pct,
             "execution_time_ms": metric.execution_time_ms,
             "state_machine_path": metric.state_machine_path,
+            "leverage_policy": (metric.raw_exchange_status or {}).get("leverage_policy", {}),
         },
     )
+    leverage_policy = (metric.raw_exchange_status or {}).get("leverage_policy") or {}
     return ExchangeTestOrderResponse(
         order_id=metric.order_id,
         exchange_order_id=metric.exchange_order_id,
@@ -223,6 +225,11 @@ def exchange_test_order(
         strategy_type=metric.strategy_type,
         volatility_regime=metric.volatility_regime,
         volatility_pct=metric.volatility_pct,
+        requested_leverage=leverage_policy.get("requested_leverage"),
+        recommended_leverage=leverage_policy.get("recommended_leverage"),
+        applied_leverage=leverage_policy.get("applied_leverage"),
+        leverage_policy_mode=leverage_policy.get("leverage_policy_mode"),
+        leverage_clamp_reasons=leverage_policy.get("leverage_clamp_reasons") or [],
     )
 
 

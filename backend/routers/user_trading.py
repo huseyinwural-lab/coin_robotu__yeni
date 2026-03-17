@@ -49,6 +49,11 @@ def _build_preview_response(intent, validation: dict) -> ExecutionIntentPreviewR
         hedge_suggestion=validation.get("hedge_suggestion") or {},
         risk_reduction_score=validation.get("risk_reduction_score"),
         venue_context=validation.get("venue_context") or {},
+        requested_leverage=validation.get("requested_leverage"),
+        recommended_leverage=validation.get("recommended_leverage"),
+        applied_leverage=validation.get("applied_leverage"),
+        leverage_policy_mode=validation.get("leverage_policy_mode"),
+        leverage_clamp_reasons=validation.get("leverage_clamp_reasons") or [],
     )
 
 

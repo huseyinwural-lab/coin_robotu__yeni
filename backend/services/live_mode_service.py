@@ -43,6 +43,7 @@ from models import (
     UserRiskSetting,
 )
 from services.artifact_service import verify_manifest_chain
+from services.risk_engine_service import resolve_effective_config_for_user
 from services.risk_orchestrator_service import get_or_create_policy
 from services.system_alert_service import create_system_alert
 from services.pipeline.cache_store import read_candles
@@ -1634,6 +1635,39 @@ def _normalize_test_quantity(
     return qty, None
 
 
+def _resolve_futures_leverage_plan(*, user_id: str, requested_leverage: int, volatility_pct: float) -> dict:
+    requested = max(int(requested_leverage or 1), 1)
+    exchange_cap = 20
+
+    config = resolve_effective_config_for_user(redis_client, user_id=user_id)
+    risk_cap = max(1, min(int(config.get("max_leverage") or 5), exchange_cap))
+
+    if volatility_pct >= 0.035:
+        recommended = min(2, risk_cap)
+    elif volatility_pct >= 0.02:
+        recommended = min(3, risk_cap)
+    else:
+        recommended = min(5, risk_cap)
+
+    clamp_reasons: list[str] = []
+    if requested > exchange_cap:
+        clamp_reasons.append("exchange_leverage_cap")
+    if requested > risk_cap:
+        clamp_reasons.append("risk_policy_leverage_cap")
+
+    applied = min(max(requested, 1), exchange_cap, risk_cap)
+    if applied < 1:
+        applied = 1
+
+    return {
+        "requested_leverage": requested,
+        "recommended_leverage": max(1, int(recommended or 1)),
+        "applied_leverage": int(applied),
+        "leverage_policy_mode": "hybrid_user_override",
+        "leverage_clamp_reasons": clamp_reasons,
+    }
+
+
 def run_exchange_test_order_market(
     db: Session,
     user: User,
@@ -1681,9 +1715,6 @@ def run_exchange_test_order_market(
         normalized_reason = normalize_map.get(first_reason, "unknown_exchange_error")
         raise ValueError(f"{normalized_reason}: Exchange doğrulaması başarısız")
 
-    if normalized_market_type == "futures" and (leverage < 1 or leverage > 20):
-        raise ValueError("Futures için leverage 1-20 aralığında olmalı")
-
     api_key = decrypt_secret(settings_row.api_key_encrypted)
     api_secret = decrypt_secret(settings_row.api_secret_encrypted)
 
@@ -1714,6 +1745,17 @@ def run_exchange_test_order_market(
     strategy_type, _ = _resolve_strategy_context(db, user.id)
     volatility_pct = _market_volatility_pct()
     volatility_regime = "high" if volatility_pct >= 0.03 else ("medium" if volatility_pct >= 0.018 else "low")
+    leverage_plan = (
+        _resolve_futures_leverage_plan(user_id=user.id, requested_leverage=leverage, volatility_pct=volatility_pct)
+        if normalized_market_type == "futures"
+        else {
+            "requested_leverage": None,
+            "recommended_leverage": None,
+            "applied_leverage": None,
+            "leverage_policy_mode": None,
+            "leverage_clamp_reasons": [],
+        }
+    )
 
     order_id = str(uuid.uuid4())
     client_order_id = f"cli-{uuid.uuid4().hex[:20]}"
@@ -1730,7 +1772,11 @@ def run_exchange_test_order_market(
                 "exchange": normalized_exchange,
                 "market_type": normalized_market_type,
                 "environment": normalized_environment,
-                "leverage": leverage if normalized_market_type == "futures" else None,
+                "leverage": leverage_plan["applied_leverage"] if normalized_market_type == "futures" else None,
+                "requested_leverage": leverage_plan["requested_leverage"],
+                "recommended_leverage": leverage_plan["recommended_leverage"],
+                "leverage_policy_mode": leverage_plan["leverage_policy_mode"],
+                "leverage_clamp_reasons": leverage_plan["leverage_clamp_reasons"],
                 "margin_mode": margin_mode if normalized_market_type == "futures" else None,
                 "position_side": position_side if normalized_market_type == "futures" else None,
             },
@@ -1749,7 +1795,12 @@ def run_exchange_test_order_market(
 
     try:
         if normalized_market_type == "futures":
-            leverage_payload, leverage_status = adapter.set_leverage(api_key, api_secret, symbol, leverage)
+            leverage_payload, leverage_status = adapter.set_leverage(
+                api_key,
+                api_secret,
+                symbol,
+                int(leverage_plan["applied_leverage"] or 1),
+            )
             if leverage_status >= 400:
                 raise ValueError(f"{normalize_failure_code(leverage_payload, leverage_status)}: leverage_context_invalid")
             order_payload, order_status = adapter.create_market_order(
@@ -1854,6 +1905,15 @@ def run_exchange_test_order_market(
         volatility_pct=volatility_pct,
     )
 
+    enriched_raw_status = dict(final_payload or {})
+    enriched_raw_status["leverage_policy"] = {
+        "requested_leverage": leverage_plan["requested_leverage"],
+        "recommended_leverage": leverage_plan["recommended_leverage"],
+        "applied_leverage": leverage_plan["applied_leverage"],
+        "leverage_policy_mode": leverage_plan["leverage_policy_mode"],
+        "leverage_clamp_reasons": leverage_plan["leverage_clamp_reasons"],
+    }
+
     metric = ExecutionMetric(
         id=str(uuid.uuid4()),
         user_id=user.id,
@@ -1884,7 +1944,7 @@ def run_exchange_test_order_market(
         ack_at=ack_at,
         final_at=final_at,
         validation_snapshot_id=settings_row.validation_snapshot_id,
-        raw_exchange_status=final_payload,
+        raw_exchange_status=enriched_raw_status,
         state_machine_path=state_path,
     )
     db.add(metric)

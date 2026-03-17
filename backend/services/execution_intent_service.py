@@ -12,7 +12,7 @@ from services.execution_precheck_service import list_execution_presets, validate
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.portfolio_risk_service import portfolio_risk_check
 from services.position_management_service import sync_position_state
-from services.risk_engine_service import evaluate_risk_decision
+from services.risk_engine_service import evaluate_risk_decision, resolve_effective_config_for_user
 from services.strategy_intelligence_service import (
     evaluate_capital_rebalance,
     evaluate_conflict_warning,
@@ -30,6 +30,16 @@ POSITION_ACTION_TYPES = {
     "MOVE_TAKE_PROFIT",
 }
 RISK_REDUCTION_ACTIONS = {"CLOSE_POSITION", "PARTIAL_CLOSE", "MOVE_STOP", "MOVE_TAKE_PROFIT"}
+
+
+def _recommended_futures_leverage(*, user_id: str, volatility_pct: float) -> int:
+    config = resolve_effective_config_for_user(redis_client, user_id=user_id)
+    max_leverage = max(1, min(int(config.get("max_leverage") or 5), 20))
+    if volatility_pct >= 0.035:
+        return min(2, max_leverage)
+    if volatility_pct >= 0.02:
+        return min(3, max_leverage)
+    return min(5, max_leverage)
 
 
 def _safe_price(symbol: str) -> float:
@@ -360,13 +370,21 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     }
 
     risk_adjustment_reason = None
+    leverage_requested = int(normalized.get("leverage") or payload.get("leverage") or 1)
+    leverage_requested = max(1, min(leverage_requested, 20))
+    leverage_recommended = _recommended_futures_leverage(
+        user_id=user_id,
+        volatility_pct=float(payload.get("volatility_pct") or 0),
+    )
+    leverage_applied = leverage_requested
+    leverage_clamp_reasons: list[str] = []
     risk_engine_result = {
         "risk_decision": "ALLOW",
         "reason_codes": [],
         "warnings": [],
         "size_multiplier": 1.0,
         "adjusted_notional_usdt": float(adjusted_notional),
-        "adjusted_leverage": int(normalized.get("leverage") or payload.get("leverage") or 1),
+        "adjusted_leverage": leverage_requested,
         "metrics": {},
     }
     if validation.get("validation_status") == "valid" and adjusted_notional >= 0:
@@ -444,6 +462,25 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
             precheck_flags.append("risk_engine_reduce_size")
 
         precheck_flags.extend(risk_engine_result.get("warnings") or [])
+
+    if str(normalized.get("market_type") or payload.get("market_type") or "spot").lower() == "futures":
+        leverage_applied = int(risk_engine_result.get("adjusted_leverage") or leverage_requested)
+        leverage_applied = max(1, min(leverage_applied, 20))
+        if leverage_applied < leverage_requested:
+            leverage_clamp_reasons.append("risk_policy_leverage_cap")
+        if "leverage_capped" in (risk_engine_result.get("warnings") or []):
+            leverage_clamp_reasons.append("risk_engine_leverage_capped")
+        normalized["leverage"] = leverage_applied
+    else:
+        leverage_requested = None
+        leverage_recommended = None
+        leverage_applied = None
+
+    normalized["leverage_requested"] = leverage_requested
+    normalized["leverage_recommended"] = leverage_recommended
+    normalized["leverage_applied"] = leverage_applied
+    normalized["leverage_policy_mode"] = "hybrid_user_override" if leverage_requested is not None else None
+    normalized["leverage_clamp_reasons"] = sorted(set(leverage_clamp_reasons))
 
     if intent_type == "OPEN_POSITION" and requested_environment == "live" and not venue_allowed:
         validation["validation_status"] = "rejected"
@@ -644,6 +681,11 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     validation["hedge_suggestion"] = hedge_suggestion
     validation["risk_reduction_score"] = float(hedge_suggestion.get("risk_reduction_score") or 0)
     validation["venue_context"] = venue_context
+    validation["requested_leverage"] = normalized.get("leverage_requested")
+    validation["recommended_leverage"] = normalized.get("leverage_recommended")
+    validation["applied_leverage"] = normalized.get("leverage_applied")
+    validation["leverage_policy_mode"] = normalized.get("leverage_policy_mode")
+    validation["leverage_clamp_reasons"] = normalized.get("leverage_clamp_reasons") or []
 
     db.commit()
     db.refresh(intent)
