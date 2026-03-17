@@ -1,3 +1,59 @@
+## 2026-03-17 — Iteration Update (Prod Strict Gate Run + Faz-3 Genişletme Tamamlandı)
+
+### 1) Prod Strict Gate Koşumu (istenen adım)
+
+- Komut çalıştırıldı:
+  - `python /app/backend/cli/p0_closure_gate.py --target-env prod --output-file /app/test_reports/release_gate_latest.json`
+- Sonuç:
+  - `overall: FAIL` (preview runtime’da SQLite fallback aktif olduğu için beklenen)
+  - `fail_count: 3`
+  - PASS olanlar: smoke suite, admin login, user contract checkleri
+- Fail sebepleri:
+  - `sqlite_fallback_policy` (prod için 0 beklenirken değer 1)
+  - `alembic_db_revision_match` (preview sqlite fallback’ta `alembic_version` tablosu yok)
+  - `critical_tables_presence` (sqlite fallback’ta prod tablo seti yok)
+
+### 2) Faz-3 Devamı — Root Cause Labeling
+
+- `GET /api/audit-logs/incident-replay` genişletildi:
+  - adım başına:
+    - `root_cause_type`
+    - `failure_stage`
+    - `primary_error_code`
+  - summary:
+    - `root_cause_breakdown`
+- Sınıflandırma fallback: `UNKNOWN`
+
+### 3) Faz-3 Devamı — SLO Trend (7/30/90)
+
+- Yeni endpoint:
+  - `GET /api/admin/system-alerts/slo-sla-trend`
+- Dönüş:
+  - 7/30/90 pencere noktaları
+  - `availability_pct`, `error_rate`, `mttr_minutes`, `total_alerts`
+- UI:
+  - `AdminSystemAlertsPage` içine Recharts tabanlı trend grafiği eklendi.
+
+### 4) Alert Delivery Wrapper İyileştirme
+
+- `alert_channel_service.py`:
+  - retry/backoff
+  - failed delivery durumunda `failed_events` fallback kaydı
+
+### Doğrulama
+
+- Lokal test:
+  - `pytest test_phase3_incident_replay_slo.py test_p0_closure_gate_script.py test_p0_closure_gate_comprehensive.py` → **18 PASS**
+- Testing agent:
+  - `/app/test_reports/iteration_151.json` ✅ (backend/frontend 100%)
+- Auto frontend testing:
+  - incident replay panel + SLO trend chart PASS ✅
+
+### Not
+
+- Resend config halen `CONFIG_MISSING` (panelde gerçek değerler girilmediği için beklenen).
+- Bybit/OKX adapterları kullanıcı tercihiyle **MOCKED**.
+
 ## 2026-03-17 — Iteration Update (Faz-3 Başlatma: Incident Replay + SLO/SLA + Gate Output Persist)
 
 ### Alert Kanalı — Resend/Slack Wrapper Güçlendirme
