@@ -1,3 +1,42 @@
+## 2026-03-17 — Iteration Update (Observability Program: Faz-3 Başlangıç Teslimi — Incident ZIP Export)
+
+### Faz-3 Kapsamı (Bu iterasyonda tamamlanan)
+
+- `/admin/audit-logs` içine **Incident ZIP İndir** aksiyonu eklendi.
+- Erişim politikası: yalnızca **super_admin**.
+- Yeni backend endpoint:
+  - `GET /api/audit-logs/admin/incident-export`
+- Çıktı formatı (ZIP):
+  - `incident.json` → timeline + related_domain_events + filtre kriterleri
+  - `summary.json` → özet metrikler + notlar
+
+### Teknik Detay
+
+- `audit_logs.py` içinde timeline query builder yeniden kullanılabilir hale getirildi.
+- Incident export, seçili filtrelerle paket üretir ve `INCIDENT_PACKAGE_EXPORTED` audit kaydı bırakır.
+- Frontend `AuditLogsPage`:
+  - super_admin rolünde `audit-logs-incident-export-button` görünür.
+  - Blob download ile ZIP indirilir.
+
+### Doğrulama
+
+- Testing agent raporu: `/app/test_reports/iteration_146.json` ✅
+  - ZIP içeriği doğrulandı (`incident.json`, `summary.json`)
+  - auth kontrolü doğrulandı
+  - timeline/prune regression PASS
+- Auto frontend test: Incident ZIP butonu görünürlük + tıklama + download + sonrası etkileşim PASS ✅
+- Lokal: `pytest backend/tests/test_observability_mvp.py backend/tests/test_faz2_observability_regression.py` → **30 PASS**
+
+### Program Durumu
+
+- **Faz-1**: Tamamlandı ✅
+- **Faz-2**: Tamamlandı ✅
+- **Faz-3**: Incident export alt dilimi tamamlandı ✅ (SLO/SLA ve incident replay genişletmesi sırada)
+
+### Not
+
+- Bybit/OKX execution adapterları halen **MOCKED**.
+
 ## 2026-03-17 — Iteration Update (Observability Program: Faz-2 Tamamlandı — Loki/Grafana + Alert Kuralları)
 
 ### Faz-2 (Prod-Ready Self-Host Stack)
