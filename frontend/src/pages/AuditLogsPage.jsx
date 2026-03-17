@@ -9,6 +9,7 @@ import { apiClient } from "@/lib/api";
 export const AuditLogsPage = () => {
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPruning, setIsPruning] = useState(false);
   const [filters, setFilters] = useState({
     q: "",
     action: "",
@@ -42,6 +43,19 @@ export const AuditLogsPage = () => {
     fetchLogs();
   }, [fetchLogs]);
 
+  const runRetentionPrune = async () => {
+    setIsPruning(true);
+    try {
+      const { data } = await apiClient.post("/audit-logs/admin/retention/prune", null, { params: { days: 90 } });
+      toast.success(`90 gün retention prune tamamlandı. silinen=${data?.deleted_count ?? 0}`);
+      await fetchLogs();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Retention prune başarısız");
+    } finally {
+      setIsPruning(false);
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="audit-logs-page">
       <header className="border border-blue-900 bg-slate-900 p-4" data-testid="audit-logs-header">
@@ -49,7 +63,7 @@ export const AuditLogsPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="audit-logs-description">Request ID, Session ID ve domain event akışları tek tabloda.</p>
       </header>
 
-      <div className="grid gap-2 border border-slate-800 bg-slate-900 p-3 md:grid-cols-6" data-testid="audit-logs-filters-grid">
+      <div className="grid gap-2 border border-slate-800 bg-slate-900 p-3 md:grid-cols-7" data-testid="audit-logs-filters-grid">
         <Input
           placeholder="search"
           value={filters.q}
@@ -86,6 +100,9 @@ export const AuditLogsPage = () => {
           data-testid="audit-logs-filter-session-id-input"
         />
         <Button onClick={fetchLogs} data-testid="audit-logs-filter-apply-button">Filtrele</Button>
+        <Button onClick={runRetentionPrune} disabled={isPruning} variant="outline" data-testid="audit-logs-retention-prune-button">
+          {isPruning ? "Prune..." : "90 Gün Prune"}
+        </Button>
       </div>
 
       <div className="border border-slate-800 bg-slate-900" data-testid="audit-logs-table-wrapper">

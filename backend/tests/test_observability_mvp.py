@@ -77,3 +77,16 @@ def test_audit_timeline_carries_request_and_session_context(admin_headers: dict)
     assert match.get("session_id") == session_id
     assert match.get("route") == "/api/admin/users/repair-venue-assignments"
     assert match.get("method") == "POST"
+
+
+def test_audit_retention_prune_endpoint(admin_headers: dict):
+    response = requests.post(
+        f"{BASE_URL}/api/audit-logs/admin/retention/prune",
+        params={"days": 90},
+        headers=admin_headers,
+        timeout=30,
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload.get("days") == 90
+    assert int(payload.get("deleted_count", 0)) >= 0

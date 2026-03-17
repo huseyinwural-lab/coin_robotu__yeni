@@ -1,13 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import String, cast
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import require_admin
+from deps import require_admin, require_super_admin
 from models import AuditLog, User
 from schemas import AuditLogResponse, AuditTimelineItemResponse, AuditTimelineResponse
+from services.audit_service import create_audit_log
 
 router = APIRouter(prefix="/audit-logs", tags=["audit_logs"])
 
@@ -96,3 +97,33 @@ def audit_logs_timeline(
         for row in rows
     ]
     return AuditTimelineResponse(total=len(items), items=items)
+
+
+@router.post("/admin/retention/prune")
+def prune_old_audit_logs(
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+    days: int = Query(default=90, ge=30, le=365),
+):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    to_delete_ids = [row.id for row in db.query(AuditLog.id).filter(AuditLog.created_at < cutoff).all()]
+    deleted_count = 0
+    if to_delete_ids:
+        deleted_count = (
+            db.query(AuditLog)
+            .filter(AuditLog.id.in_(to_delete_ids))
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+
+    create_audit_log(
+        db,
+        action="AUDIT_RETENTION_PRUNE",
+        entity_type="audit_logs",
+        entity_id="retention",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={"days": days, "deleted_count": int(deleted_count)},
+    )
+    return {"days": days, "deleted_count": int(deleted_count)}
