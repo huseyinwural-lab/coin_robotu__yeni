@@ -1,3 +1,26 @@
+## 2026-03-17 — Iteration Update (Faz-3 Incident Export: 1/7/30/90 Gün Seçenekleri)
+
+- `/admin/audit-logs` incident export akışına zaman penceresi seçici eklendi:
+  - `1 gün`, `7 gün`, `30 gün`, `90 gün`
+  - UI test id: `audit-logs-incident-window-days-select`
+- Export çağrısı artık `window_days` parametresi gönderir.
+- Backend `GET /api/audit-logs/admin/incident-export` artık `window_days` destekler:
+  - Geçerli değerler: `1`, `7`, `30`, `90`
+  - Geçersiz değer: `400 invalid_window_days`
+  - Seçilen pencereye göre otomatik `date_from/date_to` hesaplanır.
+- `incident.json` içindeki `filters` bölümüne `window_days` yazılır.
+
+### Doğrulama
+
+- Lokal: `pytest backend/tests/test_observability_mvp.py backend/tests/test_faz2_observability_regression.py` → **31 PASS**
+- Ek API kontrolü: `window_days=1` ile ZIP içeriğinde `filters.window_days = 1` doğrulandı ✅
+- Frontend testing agent: dropdown seçenekleri + 7 gün seçimi + ZIP indirme + sonrası etkileşim PASS ✅
+
+### Not
+
+- Incident export erişimi yalnızca **super_admin** olarak korunur.
+- Bybit/OKX execution adapterları halen **MOCKED**.
+
 ## 2026-03-17 — Iteration Update (Observability Program: Faz-3 Başlangıç Teslimi — Incident ZIP Export)
 
 ### Faz-3 Kapsamı (Bu iterasyonda tamamlanan)
