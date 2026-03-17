@@ -29,6 +29,14 @@ class StructuredJsonFormatter(logging.Formatter):
             "method",
             "status_code",
             "duration_ms",
+            "user_id",
+            "exchange",
+            "market_type",
+            "environment",
+            "reason_code",
+            "connection_id",
+            "new_health",
+            "old_health",
         ]:
             value = getattr(record, key, None)
             if value is not None:

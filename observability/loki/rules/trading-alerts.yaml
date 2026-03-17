@@ -1,0 +1,39 @@
+groups:
+  - name: trading-observability-alerts
+    interval: 1m
+    rules:
+      - alert: InvalidKeySurge
+        expr: |
+          sum(count_over_time({job="backend-supervisor", event_type="exchange_validation_failure", reason_code="invalid_key"}[5m])) > 5
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+          component: exchange_validation
+        annotations:
+          summary: "Invalid key artışı tespit edildi"
+          description: "Son 5 dakikada invalid_key kaynaklı doğrulama hataları artıyor."
+
+      - alert: ExchangeHealthFlap
+        expr: |
+          sum by (user_id) (count_over_time({job="backend-supervisor", event_type="exchange_health_transition", reason_code!="missing_credentials"}[10m])) > 6
+        for: 3m
+        labels:
+          severity: warning
+          category: stability
+          component: health_loop
+        annotations:
+          summary: "Health flap tespit edildi"
+          description: "Aynı kullanıcıda kısa sürede çok sayıda health transition oluşuyor."
+
+      - alert: ValidationFailureRateHigh
+        expr: |
+          sum(count_over_time({job="backend-supervisor", event_type="exchange_validation_failure"}[10m])) > 25
+        for: 5m
+        labels:
+          severity: warning
+          category: reliability
+          component: exchange_validation
+        annotations:
+          summary: "Validation failure oranı yükseldi"
+          description: "10 dakikadaki validation failure hacmi eşik üstünde."

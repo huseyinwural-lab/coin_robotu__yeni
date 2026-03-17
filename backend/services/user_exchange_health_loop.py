@@ -140,6 +140,8 @@ def _append_health_history(
     source: str,
     validation_success: bool,
     can_trade: bool,
+    user_id: str | None = None,
+    connection_id: str | None = None,
 ) -> None:
     now_iso = datetime.now(timezone.utc).isoformat()
     raw_history = snapshot.get("health_history")
@@ -153,6 +155,7 @@ def _append_health_history(
         or str(last_entry.get("reason") or "").lower() != normalized_reason
     )
     if changed:
+        previous_health = str(last_entry.get("health") or "unknown").lower() if isinstance(last_entry, dict) else "unknown"
         history.append(
             {
                 "at": now_iso,
@@ -164,6 +167,17 @@ def _append_health_history(
             }
         )
         snapshot["health_last_transition_at"] = now_iso
+        logger.warning(
+            "exchange_health_transition",
+            extra={
+                "event_type": "exchange_health_transition",
+                "user_id": user_id,
+                "connection_id": connection_id,
+                "old_health": previous_health,
+                "new_health": str(health or "unknown").lower(),
+                "reason_code": normalized_reason,
+            },
+        )
 
     snapshot["health_last_seen_at"] = now_iso
     snapshot["health_history"] = history[-30:]
@@ -228,6 +242,8 @@ def _sync_connection(db: Session, row: UserExchangeConnection, open_positions_in
                 source="health_loop_credentials",
                 validation_success=False,
                 can_trade=False,
+                user_id=row.user_id,
+                connection_id=row.id,
             )
             row.readiness_snapshot = snapshot
             row.updated_at = now
@@ -245,6 +261,8 @@ def _sync_connection(db: Session, row: UserExchangeConnection, open_positions_in
             source="health_loop_liveness",
             validation_success=bool(snapshot.get("validation_success")),
             can_trade=bool(snapshot.get("can_trade")),
+            user_id=row.user_id,
+            connection_id=row.id,
         )
         row.readiness_snapshot = snapshot
         row.updated_at = now

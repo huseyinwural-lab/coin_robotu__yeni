@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import logging
 import os
 import statistics
 import time
@@ -58,6 +59,7 @@ MAX_SAFE_LEVERAGE = 1
 MAX_SAFE_NOTIONAL_EXPOSURE = 150
 VALIDATION_STALE_MINUTES = 10
 OVERRIDE_REASON_CODES = {"false_positive", "exchange_incident", "ops_emergency", "manual_review"}
+logger = logging.getLogger(__name__)
 
 
 class BinanceFuturesTestnetAdapter:
@@ -817,6 +819,20 @@ def validate_exchange_credentials_for_user(
         settings_row.validation_snapshot_id = str(uuid.uuid4())
         settings_row.validation_checked_at = datetime.now(timezone.utc)
         db.commit()
+        primary_reason = reason_codes[0] if reason_codes else "validation_failed"
+        logger.warning(
+            "exchange_validation_failure",
+            extra={
+                "event_type": "exchange_validation_failure",
+                "request_id": None,
+                "user_id": user_id,
+                "exchange": requested_exchange,
+                "market_type": requested_market_type,
+                "environment": requested_environment,
+                "reason_code": primary_reason,
+                "status_code": code,
+            },
+        )
         return {
             "exchange": requested_exchange,
             "market_type": requested_market_type,
@@ -992,6 +1008,19 @@ def validate_exchange_credentials_for_user(
         permissions=permissions,
         status_code=200,
         latency_ms=elapsed_ms,
+    )
+    logger.info(
+        "exchange_validation_success",
+        extra={
+            "event_type": "exchange_validation_success",
+            "request_id": None,
+            "user_id": user_id,
+            "exchange": requested_exchange,
+            "market_type": requested_market_type,
+            "environment": requested_environment,
+            "reason_code": "none",
+            "status_code": 200,
+        },
     )
     return {
         "exchange": requested_exchange,
