@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -288,6 +288,106 @@ def get_user_exchange_connection(db: Session, *, user_id: str, connection_id: st
     if row is None:
         raise ValueError("connection_not_found")
     return _serialize_connection(row)
+
+
+def note_connection_runtime_event(
+    db: Session,
+    *,
+    user_id: str,
+    outcome: str,
+    reason_code: str,
+    source: str = "runtime_event",
+) -> None:
+    row = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == user_id)
+        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+        .first()
+    )
+    if row is None:
+        return
+
+    snapshot = dict(row.readiness_snapshot or {})
+    now = _now().isoformat()
+
+    hard_reasons = {"invalid_key", "ip_restriction", "missing_trade_permission", "missing_credentials"}
+    mapped_reason = (reason_code or "runtime_execution_error").strip().lower()
+    if mapped_reason == "exchange_adapter_failure":
+        mapped_reason = "network_error"
+
+    raw_history = snapshot.get("health_history")
+    history = raw_history if isinstance(raw_history, list) else []
+
+    def _append_history(health: str, reason: str, success: bool, can_trade: bool):
+        last = history[-1] if history else None
+        if (
+            not isinstance(last, dict)
+            or str(last.get("health") or "").lower() != health
+            or str(last.get("reason") or "").lower() != reason
+        ):
+            history.append(
+                {
+                    "at": now,
+                    "health": health,
+                    "reason": reason,
+                    "source": source,
+                    "validation_success": success,
+                    "can_trade": can_trade,
+                }
+            )
+            snapshot["health_last_transition_at"] = now
+
+    if outcome == "success":
+        snapshot.update(
+            {
+                "connection_health": "online",
+                "is_reconnecting": False,
+                "retry_attempt": 0,
+                "retry_backoff_seconds": 0,
+                "next_retry_at": None,
+                "last_error_reason": "",
+                "last_success_at": now,
+            }
+        )
+        _append_history("online", "runtime_ok", True, True)
+    else:
+        if mapped_reason in hard_reasons:
+            health = "offline"
+            reconnecting = False
+            retry_attempt = 0
+            retry_backoff_seconds = 0
+            next_retry_at = None
+        else:
+            health = "degraded"
+            reconnecting = True
+            try:
+                prev_attempt = int(snapshot.get("retry_attempt") or 0)
+            except (TypeError, ValueError):
+                prev_attempt = 0
+            retry_attempt = min(prev_attempt + 1, 8)
+            retry_backoff_seconds = min(15, 2 ** max(0, retry_attempt - 1))
+            next_retry_at = (_now() + timedelta(seconds=retry_backoff_seconds)).isoformat()
+
+        snapshot.update(
+            {
+                "connection_health": health,
+                "is_reconnecting": reconnecting,
+                "retry_attempt": retry_attempt,
+                "retry_backoff_seconds": retry_backoff_seconds,
+                "next_retry_at": next_retry_at,
+                "last_error_reason": mapped_reason,
+                "reason_codes": [mapped_reason],
+                "validation_success": False,
+                "can_trade": False,
+                "is_valid": False,
+            }
+        )
+        _append_history(health, mapped_reason, False, False)
+
+    snapshot["health_last_seen_at"] = now
+    snapshot["health_history"] = history[-30:]
+    row.readiness_snapshot = snapshot
+    row.updated_at = _now()
 
 
 def create_user_exchange_connection(

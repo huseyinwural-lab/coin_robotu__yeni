@@ -18,6 +18,7 @@ from services.runtime_event_bus_service import (
 )
 from services.paper_exchange_adapter_service import paper_exchange_adapter
 from services.failed_event_service import upsert_failed_event
+from core.users.user_exchange_connections import note_connection_runtime_event
 
 
 def _canonical(payload: dict) -> str:
@@ -320,12 +321,31 @@ def process_submission_event_once(db: Session, worker_name: str = "execution-wor
             )
         )
 
+        if intent.account_id:
+            note_connection_runtime_event(
+                db,
+                user_id=intent.account_id,
+                outcome="success",
+                reason_code="runtime_submission_ok",
+                source="runtime_execution_success",
+            )
+
         db.commit()
         mark_event_processed(event_id)
         ack_runtime_event(processing_queue, raw)
         return {"status": "processed", "event_id": event_id, "intent_id": intent.intent_id, "terminal_state": terminal}
     except Exception as exc:
         reason_code = _classify_failure(envelope, intent, exc)
+
+        if intent is not None and intent.account_id:
+            note_connection_runtime_event(
+                db,
+                user_id=intent.account_id,
+                outcome="failure",
+                reason_code=reason_code,
+                source="runtime_execution_failure",
+            )
+
         max_retry = 3
         retry_count = int(envelope.get("metadata", {}).get("retry_count", 0)) + 1
         backoff_seconds = 2 ** (retry_count - 1)
