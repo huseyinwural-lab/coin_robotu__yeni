@@ -31,6 +31,8 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   });
   const [repairingUserId, setRepairingUserId] = useState(null);
   const [repairingAll, setRepairingAll] = useState(false);
+  const [livePathSummary, setLivePathSummary] = useState(null);
+  const [checkingLivePath, setCheckingLivePath] = useState(false);
 
   useEffect(() => {
     setFilters((prev) => ({ ...prev, role: "all" }));
@@ -137,6 +139,19 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     }
   };
 
+  const checkFuturesLivePath = async () => {
+    setCheckingLivePath(true);
+    try {
+      const { data } = await apiClient.get("/admin/users/futures-live-path-check", { params: { limit: 300 } });
+      setLivePathSummary(data || null);
+      toast.success(`Futures live-path check tamamlandı. fail=${data?.fail_count ?? 0}`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Futures live-path check başarısız");
+    } finally {
+      setCheckingLivePath(false);
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="admin-users-page">
       <header className="border border-black/40 bg-orange-300 p-4" data-testid="admin-users-header">
@@ -232,6 +247,16 @@ export const AdminUsersPage = ({ scope = "user" }) => {
               {repairingAll ? "Toplu Onarım Çalışıyor..." : "Toplu Venue Onar"}
             </Button>
           )}
+          {!isAdminScope && (
+            <Button
+              className="border border-black bg-sky-200 text-black hover:bg-sky-300"
+              onClick={checkFuturesLivePath}
+              disabled={checkingLivePath}
+              data-testid="admin-users-futures-live-path-check-button"
+            >
+              {checkingLivePath ? "Check Çalışıyor..." : "Futures Live-Path Check"}
+            </Button>
+          )}
           <p className="text-sm text-black" data-testid="admin-users-count-text">
             Toplam {isAdminScope ? "admin" : "user"} kullanıcı: {users.length}
           </p>
@@ -245,6 +270,15 @@ export const AdminUsersPage = ({ scope = "user" }) => {
             </p>
           )}
         </div>
+
+        {!isAdminScope && (
+          <div className="grid gap-2 border border-black/30 bg-orange-50 p-3 md:grid-cols-4" data-testid="admin-users-live-path-summary-panel">
+            <p className="text-xs text-black/80" data-testid="admin-users-live-path-summary-total">total={livePathSummary?.total_users ?? 0}</p>
+            <p className="text-xs text-black/80" data-testid="admin-users-live-path-summary-pass">pass={livePathSummary?.pass_count ?? 0}</p>
+            <p className="text-xs text-black/80" data-testid="admin-users-live-path-summary-fail">fail={livePathSummary?.fail_count ?? 0}</p>
+            <p className="text-xs text-black/80" data-testid="admin-users-live-path-summary-generated-at">generated_at={livePathSummary?.generated_at || "-"}</p>
+          </div>
+        )}
 
         {isAdminScope && (
           <div className="grid gap-2 border border-black/30 bg-orange-50 p-3 md:grid-cols-4" data-testid="admin-users-create-admin-form">

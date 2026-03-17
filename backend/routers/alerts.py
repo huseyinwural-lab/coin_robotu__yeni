@@ -1,6 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import csv
 import io
+from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
@@ -11,12 +12,24 @@ from db import get_db
 from deps import require_admin
 from models import SystemAlert, User
 from schemas import AlertChannelConfigUpdateRequest, SystemAlertResponse
-from services.alert_channel_service import channel_status, get_alert_config_public, upsert_alert_channel_config
+from services.alert_channel_service import (
+    channel_status,
+    get_alert_config_public,
+    send_email_alert,
+    send_slack_alert,
+    upsert_alert_channel_config,
+)
 from services.audit_service import create_audit_log
 from services.system_alert_service import build_alert_timeline, list_system_alerts, update_system_alert_status
 from services.weekly_report_service import compute_next_run, generate_weekly_report, get_latest_report
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/admin/system-alerts", tags=["system_alerts"])
+
+
+class AlertTestDeliveryRequest(BaseModel):
+    channel: str = "slack"
+    severity: str = "WARNING"
 
 
 @router.get("", response_model=list[SystemAlertResponse])
@@ -169,6 +182,70 @@ def get_alert_config(current_admin: User = Depends(require_admin), db: Session =
     }
 
 
+@router.get("/burn-in")
+def burn_in_summary(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    days: int = Query(default=7, ge=1, le=30),
+):
+    _ = current_admin
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        db.query(SystemAlert)
+        .filter(SystemAlert.created_at >= since)
+        .order_by(SystemAlert.created_at.desc())
+        .limit(5000)
+        .all()
+    )
+
+    severity_counter = Counter((row.severity or "INFO").upper() for row in rows)
+    status_counter = Counter((row.status or "open").lower() for row in rows)
+    type_counter = Counter((row.alert_type or "unknown") for row in rows)
+
+    delivery_email_sent = 0
+    delivery_email_failed = 0
+    delivery_slack_sent = 0
+    delivery_slack_failed = 0
+    for row in rows:
+        delivery = row.delivery_status or {}
+        email_status = ((delivery.get("email") or {}).get("status") or "").upper()
+        slack_status = ((delivery.get("slack") or {}).get("status") or "").upper()
+        if email_status == "SENT":
+            delivery_email_sent += 1
+        if email_status in {"FAILED", "RATE_LIMITED", "CONFIG_MISSING", "LIB_MISSING"}:
+            delivery_email_failed += 1
+        if slack_status == "SENT":
+            delivery_slack_sent += 1
+        if slack_status in {"FAILED", "RATE_LIMITED", "CONFIG_MISSING", "LIB_MISSING"}:
+            delivery_slack_failed += 1
+
+    total = len(rows)
+    warning_plus = severity_counter.get("WARNING", 0) + severity_counter.get("CRITICAL", 0)
+    critical_ratio = round((severity_counter.get("CRITICAL", 0) / total), 4) if total else 0.0
+    ack_rate = round(((status_counter.get("ack", 0) + status_counter.get("resolved", 0)) / total), 4) if total else 0.0
+
+    return {
+        "window_days": days,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "total_alerts": total,
+        "severity_breakdown": dict(severity_counter),
+        "status_breakdown": dict(status_counter),
+        "top_alert_types": type_counter.most_common(10),
+        "warning_plus_count": warning_plus,
+        "critical_ratio": critical_ratio,
+        "ack_rate": ack_rate,
+        "delivery": {
+            "email_sent": delivery_email_sent,
+            "email_failed": delivery_email_failed,
+            "slack_sent": delivery_slack_sent,
+            "slack_failed": delivery_slack_failed,
+        },
+        "recommendation": (
+            "threshold_tuning_required" if critical_ratio > 0.2 else "thresholds_stable"
+        ),
+    }
+
+
 @router.post("/config")
 def refresh_alert_config(
     payload: AlertChannelConfigUpdateRequest | None = None,
@@ -202,6 +279,51 @@ def refresh_alert_config(
         "config": get_alert_config_public(db),
         "weekly_report_next_run": next_run,
         "timezone": "Europe/Berlin",
+    }
+
+
+@router.post("/test-delivery")
+def test_delivery(
+    payload: AlertTestDeliveryRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    channel = payload.channel.strip().lower()
+    severity = payload.severity.strip().upper()
+    if channel not in {"email", "slack", "both"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_channel")
+    if severity not in {"INFO", "WARNING", "CRITICAL"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_severity")
+
+    subject = f"[TEST] {severity} delivery"
+    html = "<p>Test delivery from admin system alerts panel.</p>"
+    slack_text = f"*{subject}*\nTest delivery from admin system alerts panel."
+
+    result = {
+        "email": {"status": "CHANNEL_DISABLED"},
+        "slack": {"status": "CHANNEL_DISABLED"},
+    }
+    if channel in {"email", "both"}:
+        result["email"] = send_email_alert(subject=subject, html_content=html, severity=severity, db=db)
+    if channel in {"slack", "both"}:
+        result["slack"] = send_slack_alert(message=slack_text, severity=severity, db=db)
+
+    create_audit_log(
+        db,
+        action="SYSTEM_ALERT_DELIVERY_TEST",
+        entity_type="system_alert_delivery",
+        entity_id="manual_test",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="info",
+        details={"channel": channel, "severity": severity, "result": result},
+    )
+
+    return {
+        "channel": channel,
+        "severity": severity,
+        "result": result,
+        "channel_status": channel_status(db),
     }
 
 

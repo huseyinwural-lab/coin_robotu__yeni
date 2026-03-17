@@ -18,6 +18,7 @@ export const AdminSystemAlertsPage = () => {
   const [alerts, setAlerts] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [config, setConfig] = useState(null);
+  const [burnIn, setBurnIn] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [filters, setFilters] = useState({
@@ -33,7 +34,7 @@ export const AdminSystemAlertsPage = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: alertData }, { data: timelineData }, { data: configData }] = await Promise.all([
+      const [{ data: alertData }, { data: timelineData }, { data: configData }, { data: burnInData }] = await Promise.all([
         apiClient.get("/admin/system-alerts", {
           params: {
             status: filters.status,
@@ -47,11 +48,15 @@ export const AdminSystemAlertsPage = () => {
           params: { days: Number(filters.days) || 14 },
         }),
         apiClient.get("/admin/system-alerts/config"),
+        apiClient.get("/admin/system-alerts/burn-in", {
+          params: { days: Number(filters.days) || 14 },
+        }),
       ]);
 
       setAlerts(alertData || []);
       setTimeline(timelineData?.points || []);
       setConfig(configData || null);
+      setBurnIn(burnInData || null);
       setSelectedIds((prev) => prev.filter((id) => (alertData || []).some((item) => item.id === id)));
     } catch (error) {
       toast.error(error?.response?.data?.detail || "System alerts verisi alınamadı");
@@ -138,6 +143,21 @@ export const AdminSystemAlertsPage = () => {
 
   const deliveryStatusLabel = (row, channel) => row?.delivery_status?.[channel]?.status || "-";
 
+  const sendTestDelivery = async (channel) => {
+    try {
+      const { data } = await apiClient.post("/admin/system-alerts/test-delivery", {
+        channel,
+        severity: "WARNING",
+      });
+      const emailStatus = data?.result?.email?.status || "-";
+      const slackStatus = data?.result?.slack?.status || "-";
+      toast.success(`Test delivery: email=${emailStatus} slack=${slackStatus}`);
+      await loadData();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Test delivery başarısız");
+    }
+  };
+
   const exportCsv = async () => {
     try {
       const { data } = await apiClient.get("/admin/system-alerts/export.csv", {
@@ -221,6 +241,29 @@ export const AdminSystemAlertsPage = () => {
           </Button>
           <Button className="border border-black bg-emerald-700 text-white hover:bg-emerald-800" onClick={exportCsv} data-testid="admin-system-alerts-export-csv-button">
             CSV Export
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-black/30 bg-orange-100 p-4" data-testid="admin-system-alerts-burnin-panel">
+        <p className="text-sm font-semibold text-black" data-testid="admin-system-alerts-burnin-title">Alert Burn-in Summary</p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6" data-testid="admin-system-alerts-burnin-metrics-grid">
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-burnin-total">total_alerts={burnIn?.total_alerts ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-burnin-critical-ratio">critical_ratio={burnIn?.critical_ratio ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-burnin-ack-rate">ack_rate={burnIn?.ack_rate ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-burnin-email-delivery">email_sent={burnIn?.delivery?.email_sent ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-burnin-slack-delivery">slack_sent={burnIn?.delivery?.slack_sent ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-burnin-recommendation">recommendation={burnIn?.recommendation || "-"}</p>
+        </div>
+        <div className="flex flex-wrap gap-2" data-testid="admin-system-alerts-burnin-actions-row">
+          <Button className="border border-black bg-zinc-900 text-orange-300 hover:bg-black" onClick={() => sendTestDelivery("email")} data-testid="admin-system-alerts-test-email-button">
+            Test Email
+          </Button>
+          <Button className="border border-black bg-zinc-900 text-orange-300 hover:bg-black" onClick={() => sendTestDelivery("slack")} data-testid="admin-system-alerts-test-slack-button">
+            Test Slack
+          </Button>
+          <Button className="border border-black bg-zinc-900 text-orange-300 hover:bg-black" onClick={() => sendTestDelivery("both")} data-testid="admin-system-alerts-test-both-button">
+            Test Both
           </Button>
         </div>
       </div>

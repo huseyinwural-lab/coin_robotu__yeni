@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from core.security import hash_password
 from db import get_db
 from deps import require_admin
-from models import User, UserRole
+from models import User, UserExchangeConnection, UserRole, UserVenueAssignment
 from schemas import UserResponse, UserRoleUpdateRequest, UserStatusUpdateRequest
 from services.audit_service import create_audit_log
 from services.venue_service import ensure_user_venue_assignment
@@ -35,6 +35,26 @@ class UserVenueRepairResponse(BaseModel):
 class UserVenueBulkRepairResponse(BaseModel):
     processed_users: int
     changed_assignments: int
+
+
+class FuturesLivePathCheckItemResponse(BaseModel):
+    user_id: str
+    user_email: str
+    status: str
+    issues: list[str]
+    assignment_present: bool
+    futures_assignment_ok: bool
+    environment_assignment_ok: bool
+    futures_connection_count: int
+    trade_ready_connection_count: int
+
+
+class FuturesLivePathCheckSummaryResponse(BaseModel):
+    generated_at: datetime
+    total_users: int
+    pass_count: int
+    fail_count: int
+    items: list[FuturesLivePathCheckItemResponse]
 
 
 def _ensure_can_modify(current_admin: User, target: User):
@@ -327,3 +347,94 @@ def repair_all_user_venue_assignments(
         details={"processed_users": len(users), "changed_assignments": changed_count},
     )
     return UserVenueBulkRepairResponse(processed_users=len(users), changed_assignments=changed_count)
+
+
+def _evaluate_futures_live_path(db: Session, user: User) -> FuturesLivePathCheckItemResponse:
+    assignment = (
+        db.query(UserVenueAssignment)
+        .filter(UserVenueAssignment.user_id == user.id, UserVenueAssignment.exchange_code == "binance")
+        .first()
+    )
+    futures_connections = (
+        db.query(UserExchangeConnection)
+        .filter(
+            UserExchangeConnection.user_id == user.id,
+            UserExchangeConnection.exchange == "binance",
+            UserExchangeConnection.market_type == "futures",
+        )
+        .all()
+    )
+
+    assignment_present = assignment is not None
+    futures_assignment_ok = bool(assignment and assignment.futures_allowed)
+    environment_assignment_ok = bool(assignment and (assignment.testnet_allowed or assignment.live_allowed))
+    trade_ready_connection_count = 0
+    for row in futures_connections:
+        snapshot = row.readiness_snapshot or {}
+        if bool(snapshot.get("validation_success")) and bool(snapshot.get("can_trade")):
+            trade_ready_connection_count += 1
+
+    issues: list[str] = []
+    if not assignment_present:
+        issues.append("assignment_missing")
+    if assignment_present and not futures_assignment_ok:
+        issues.append("futures_not_allowed")
+    if assignment_present and not environment_assignment_ok:
+        issues.append("environment_not_allowed")
+    if len(futures_connections) == 0:
+        issues.append("futures_connection_missing")
+    if len(futures_connections) > 0 and trade_ready_connection_count == 0:
+        issues.append("trade_ready_connection_missing")
+
+    return FuturesLivePathCheckItemResponse(
+        user_id=user.id,
+        user_email=user.email,
+        status="PASS" if len(issues) == 0 else "FAIL",
+        issues=issues,
+        assignment_present=assignment_present,
+        futures_assignment_ok=futures_assignment_ok,
+        environment_assignment_ok=environment_assignment_ok,
+        futures_connection_count=len(futures_connections),
+        trade_ready_connection_count=trade_ready_connection_count,
+    )
+
+
+@router.get("/futures-live-path-check", response_model=FuturesLivePathCheckSummaryResponse)
+def futures_live_path_check(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=300, ge=1, le=1000),
+):
+    _ = current_admin
+    users = (
+        db.query(User)
+        .filter(User.role == UserRole.USER, User.approval_status == "approved")
+        .order_by(User.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    items = [_evaluate_futures_live_path(db, user) for user in users]
+    pass_count = sum(1 for row in items if row.status == "PASS")
+    fail_count = len(items) - pass_count
+    return FuturesLivePathCheckSummaryResponse(
+        generated_at=datetime.now(timezone.utc),
+        total_users=len(items),
+        pass_count=pass_count,
+        fail_count=fail_count,
+        items=items,
+    )
+
+
+@router.get("/{user_id}/futures-live-path-check", response_model=FuturesLivePathCheckItemResponse)
+def futures_live_path_check_for_user(
+    user_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+    if user.role != UserRole.USER:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="only_user_role_supported")
+    return _evaluate_futures_live_path(db, user)
