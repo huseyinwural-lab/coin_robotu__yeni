@@ -145,6 +145,7 @@ def evaluate_capital_rebalance(db: Session, *, user_id: str, apply_changes: bool
             "capital_weight": _safe_float(row.capital_weight),
             "max_capital": _safe_float(row.max_capital),
             "current_capital": _safe_float(row.current_capital),
+            "last_rebalanced_at": row.updated_at,
             "performance_score": _safe_float(row.performance_score),
             "confidence_score": _safe_float(row.confidence_score),
             "signal_decay": _safe_float(row.signal_decay),
@@ -162,6 +163,8 @@ def evaluate_capital_rebalance(db: Session, *, user_id: str, apply_changes: bool
             event = event_map.get(row.strategy_id)
             if not event:
                 continue
+            if bool(event.get("cadence_window_blocked")):
+                continue
             row.capital_weight = float(event.get("new_strategy_weight") or row.capital_weight)
             if bool(event.get("throttle_signal")) and row.state == "ACTIVE":
                 row.state = "THROTTLED"
@@ -169,8 +172,13 @@ def evaluate_capital_rebalance(db: Session, *, user_id: str, apply_changes: bool
         db.flush()
 
     adjustment_notice = None
+    governance_summary = result.get("governance_summary") or {}
+    cadence_blocked = int(governance_summary.get("cadence_blocked_strategies") or 0)
+    if cadence_blocked > 0:
+        adjustment_notice = f"rebalance_cadence_hold aktif: {cadence_blocked} strategy pencere içinde"
+
     high_drift = [event for event in result.get("events", []) if event.get("allocation_drift", 0) > 0.08]
-    if high_drift:
+    if high_drift and not adjustment_notice:
         first = high_drift[0]
         adjustment_notice = (
             f"allocation_drift yüksek: {first.get('strategy_id')} -> new_weight={first.get('new_strategy_weight')}"
@@ -254,6 +262,7 @@ def build_strategy_intelligence_snapshot(db: Session, *, user_id: str) -> dict:
         "generated_at": _now(),
         "strategy_conflicts": conflicts,
         "capital_rebalance_events": rebalance.get("events", []),
+        "governance_summary": rebalance.get("governance_summary", {}),
         "allocation_drift": rebalance.get("allocation_drift", 0.0),
         "strategy_performance_delta": rebalance.get("strategy_performance_delta", 0.0),
         "risk_adjusted_return": rebalance.get("risk_adjusted_return", 0.0),

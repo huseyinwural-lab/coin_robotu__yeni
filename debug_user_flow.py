@@ -7,7 +7,7 @@ import requests
 import json
 import time
 
-BASE_URL = "https://trading-infra.preview.emergentagent.com"
+BASE_URL = "https://sleepy-hertz-7.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 def test_user_registration_debug():

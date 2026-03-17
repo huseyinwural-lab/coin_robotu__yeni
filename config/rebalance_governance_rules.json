@@ -1,0 +1,7 @@
+{
+  "version": "rebalance_governance_v1",
+  "cadence_window_minutes": 30,
+  "max_weight_shift_per_cycle": 0.12,
+  "max_capital_shift_pct": 0.2,
+  "drift_threshold": 0.08
+}

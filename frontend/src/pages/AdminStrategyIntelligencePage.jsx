@@ -62,6 +62,7 @@ export const AdminStrategyIntelligencePage = () => {
 
   const conflicts = useMemo(() => dashboard?.strategy_conflicts || [], [dashboard]);
   const hedgeSuggestions = useMemo(() => dashboard?.hedge_suggestions || [], [dashboard]);
+  const governance = useMemo(() => dashboard?.governance_summary || null, [dashboard]);
 
   const submitSimulation = async () => {
     if (!simulationForm.user_id.trim()) {
@@ -148,7 +149,7 @@ export const AdminStrategyIntelligencePage = () => {
         </div>
       )}
 
-      <div className="col-span-12 grid gap-3 md:grid-cols-4" data-testid="admin-strategy-intelligence-summary-grid">
+      <div className="col-span-12 grid gap-3 md:grid-cols-5" data-testid="admin-strategy-intelligence-summary-grid">
         <article className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-intelligence-conflict-count-card">
           <p className="text-xs text-slate-500">Strategy Conflicts</p>
           <p className="text-xl font-semibold" data-testid="admin-strategy-intelligence-conflict-count-value">{(dashboard.strategy_conflicts || []).length}</p>
@@ -165,7 +166,47 @@ export const AdminStrategyIntelligencePage = () => {
           <p className="text-xs text-slate-500">Risk Adjusted Return</p>
           <p className="text-xl font-semibold" data-testid="admin-strategy-intelligence-rar-value">{dashboard.risk_adjusted_return}</p>
         </article>
+        <article className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-intelligence-cadence-block-card">
+          <p className="text-xs text-slate-500">Cadence Blocked</p>
+          <p className="text-xl font-semibold" data-testid="admin-strategy-intelligence-cadence-block-value">{governance?.cadence_blocked_strategies ?? 0}</p>
+        </article>
       </div>
+
+      <section className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-intelligence-governance-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-intelligence-governance-title">Rebalance Governance</p>
+        <div className="mt-2 grid gap-3 md:grid-cols-4" data-testid="admin-strategy-intelligence-governance-grid">
+          <article className="border border-slate-800 p-2" data-testid="admin-strategy-intelligence-governance-cadence-card">
+            <p className="text-xs text-slate-500">cadence_window_minutes</p>
+            <p className="text-sm font-semibold" data-testid="admin-strategy-intelligence-governance-cadence-value">{governance?.cadence_window_minutes ?? 30}</p>
+          </article>
+          <article className="border border-slate-800 p-2" data-testid="admin-strategy-intelligence-governance-weight-shift-card">
+            <p className="text-xs text-slate-500">max_weight_shift_per_cycle</p>
+            <p className="text-sm font-semibold" data-testid="admin-strategy-intelligence-governance-weight-shift-value">{governance?.max_weight_shift_per_cycle ?? 0.12}</p>
+          </article>
+          <article className="border border-slate-800 p-2" data-testid="admin-strategy-intelligence-governance-capital-shift-card">
+            <p className="text-xs text-slate-500">max_capital_shift_pct</p>
+            <p className="text-sm font-semibold" data-testid="admin-strategy-intelligence-governance-capital-shift-value">{governance?.max_capital_shift_pct ?? 0.2}</p>
+          </article>
+          <article className="border border-slate-800 p-2" data-testid="admin-strategy-intelligence-governance-drift-threshold-card">
+            <p className="text-xs text-slate-500">drift_threshold</p>
+            <p className="text-sm font-semibold" data-testid="admin-strategy-intelligence-governance-drift-threshold-value">{governance?.drift_threshold ?? 0.08}</p>
+          </article>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3" data-testid="admin-strategy-intelligence-governance-cap-grid">
+          <article className="border border-slate-800 p-2" data-testid="admin-strategy-intelligence-governance-weight-capped-card">
+            <p className="text-xs text-slate-500">weight_shift_capped_strategies</p>
+            <p className="text-sm font-semibold" data-testid="admin-strategy-intelligence-governance-weight-capped-value">{governance?.weight_shift_capped_strategies ?? 0}</p>
+          </article>
+          <article className="border border-slate-800 p-2" data-testid="admin-strategy-intelligence-governance-capital-capped-card">
+            <p className="text-xs text-slate-500">capital_shift_capped_strategies</p>
+            <p className="text-sm font-semibold" data-testid="admin-strategy-intelligence-governance-capital-capped-value">{governance?.capital_shift_capped_strategies ?? 0}</p>
+          </article>
+          <article className="border border-slate-800 p-2" data-testid="admin-strategy-intelligence-governance-cadence-blocked-card">
+            <p className="text-xs text-slate-500">cadence_blocked_strategies</p>
+            <p className="text-sm font-semibold" data-testid="admin-strategy-intelligence-governance-cadence-blocked-value">{governance?.cadence_blocked_strategies ?? 0}</p>
+          </article>
+        </div>
+      </section>
 
       <section className="col-span-12 lg:col-span-6 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-intelligence-conflicts-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-intelligence-conflicts-title">Strategy Conflicts</p>
@@ -240,6 +281,19 @@ export const AdminStrategyIntelligencePage = () => {
             <p className="text-xs text-slate-400" data-testid="admin-strategy-intelligence-simulation-hedge">hedge: {simulationResult.hedge_suggestion?.hedge_symbol || "none"}</p>
           </div>
         )}
+
+        <div className="mt-3 space-y-2" data-testid="admin-strategy-intelligence-rebalance-events-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-intelligence-rebalance-events-title">Rebalance Event Governance</p>
+          {(dashboard.capital_rebalance_events || []).slice(0, 5).map((event, index) => (
+            <article className="border border-slate-800 p-2" key={`${event.strategy_id}-${index}`} data-testid={`admin-strategy-intelligence-rebalance-event-${index}`}>
+              <p className="text-sm" data-testid={`admin-strategy-intelligence-rebalance-event-strategy-${index}`}>{event.strategy_id}</p>
+              <p className="text-xs text-slate-400" data-testid={`admin-strategy-intelligence-rebalance-event-target-${index}`}>target_weight: {event.target_strategy_weight ?? event.new_strategy_weight}</p>
+              <p className="text-xs text-slate-400" data-testid={`admin-strategy-intelligence-rebalance-event-applied-${index}`}>applied_weight: {event.new_strategy_weight}</p>
+              <p className="text-xs text-slate-400" data-testid={`admin-strategy-intelligence-rebalance-event-cadence-${index}`}>cadence_window_blocked: {String(Boolean(event.cadence_window_blocked))}</p>
+            </article>
+          ))}
+          {(dashboard.capital_rebalance_events || []).length === 0 && <p className="text-sm text-slate-400" data-testid="admin-strategy-intelligence-rebalance-events-empty">Rebalance event bulunmuyor.</p>}
+        </div>
       </section>
 
       <section className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-intelligence-manual-overrides-panel">

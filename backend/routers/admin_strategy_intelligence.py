@@ -12,6 +12,7 @@ from schemas import (
     HedgeSuggestionResponse,
     ManualOverrideRequest,
     ManualOverrideResponse,
+    RebalanceGovernanceSummaryResponse,
     RiskSimulationRequest,
     RiskSimulationResponse,
     StrategyConflictResponse,
@@ -43,6 +44,7 @@ def strategy_intelligence_dashboard(
     allocation_drift_values: list[float] = []
     perf_delta_values: list[float] = []
     rar_values: list[float] = []
+    governance_snapshots: list[dict] = []
 
     for user in users:
         snapshot = build_strategy_intelligence_snapshot(db, user_id=user.id)
@@ -52,16 +54,28 @@ def strategy_intelligence_dashboard(
         allocation_drift_values.append(float(snapshot.get("allocation_drift") or 0))
         perf_delta_values.append(float(snapshot.get("strategy_performance_delta") or 0))
         rar_values.append(float(snapshot.get("risk_adjusted_return") or 0))
+        governance_snapshots.append(snapshot.get("governance_summary") or {})
 
     allocation_drift = sum(allocation_drift_values) / max(len(allocation_drift_values), 1)
     strategy_performance_delta = sum(perf_delta_values) / max(len(perf_delta_values), 1)
     risk_adjusted_return = sum(rar_values) / max(len(rar_values), 1)
+    first_governance = next((item for item in governance_snapshots if item), {})
+    governance_summary = RebalanceGovernanceSummaryResponse(
+        cadence_window_minutes=int(first_governance.get("cadence_window_minutes") or 30),
+        max_weight_shift_per_cycle=float(first_governance.get("max_weight_shift_per_cycle") or 0.12),
+        max_capital_shift_pct=float(first_governance.get("max_capital_shift_pct") or 0.2),
+        drift_threshold=float(first_governance.get("drift_threshold") or 0.08),
+        cadence_blocked_strategies=sum(int(item.get("cadence_blocked_strategies") or 0) for item in governance_snapshots),
+        weight_shift_capped_strategies=sum(int(item.get("weight_shift_capped_strategies") or 0) for item in governance_snapshots),
+        capital_shift_capped_strategies=sum(int(item.get("capital_shift_capped_strategies") or 0) for item in governance_snapshots),
+    )
 
     return AdminStrategyIntelligenceResponse(
         generated_at=datetime.now(timezone.utc),
         strategy_conflicts=[StrategyConflictResponse(**item) for item in conflict_items[:100]],
         capital_rebalance_events=[CapitalRebalanceEventResponse(**item) for item in rebalance_items[:100]],
         hedge_suggestions=[HedgeSuggestionResponse(**item) for item in hedge_items[:50]],
+        governance_summary=governance_summary,
         allocation_drift=round(allocation_drift, 6),
         strategy_performance_delta=round(strategy_performance_delta, 6),
         risk_adjusted_return=round(risk_adjusted_return, 6),

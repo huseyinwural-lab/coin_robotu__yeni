@@ -2083,15 +2083,30 @@ class StrategyConflictResponse(BaseModel):
     conflict_count: int = 0
 
 
+class RebalanceGovernanceSummaryResponse(BaseModel):
+    cadence_window_minutes: int = 30
+    max_weight_shift_per_cycle: float = 0.12
+    max_capital_shift_pct: float = 0.2
+    drift_threshold: float = 0.08
+    cadence_blocked_strategies: int = 0
+    weight_shift_capped_strategies: int = 0
+    capital_shift_capped_strategies: int = 0
+
+
 class CapitalRebalanceEventResponse(BaseModel):
     strategy_id: str
     old_strategy_weight: float
     new_strategy_weight: float
+    target_strategy_weight: float | None = None
     capital_shift: float
     throttle_signal: bool
     allocation_drift: float
     strategy_performance_delta: float
     risk_adjusted_return: float
+    cadence_window_blocked: bool = False
+    minutes_since_last_rebalance: float | None = None
+    max_weight_shift_applied: bool = False
+    max_capital_shift_applied: bool = False
 
 
 class HedgeSuggestionResponse(BaseModel):
@@ -2108,6 +2123,7 @@ class AdminStrategyIntelligenceResponse(BaseModel):
     strategy_conflicts: list[StrategyConflictResponse]
     capital_rebalance_events: list[CapitalRebalanceEventResponse]
     hedge_suggestions: list[HedgeSuggestionResponse]
+    governance_summary: RebalanceGovernanceSummaryResponse | None = None
     allocation_drift: float
     strategy_performance_delta: float
     risk_adjusted_return: float
