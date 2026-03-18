@@ -27,6 +27,17 @@ from services.live_mode_service import create_release_gate_override, enforce_rel
 router = APIRouter(prefix="/admin", tags=["admin_execution"])
 
 
+def _resolve_execution_mode_from_intent(row) -> str:
+    provider_payload = getattr(row, "execution_provider_payload", None)
+    if isinstance(provider_payload, dict) and bool(provider_payload.get("mocked")):
+        return "mocked"
+    normalized_payload = row.normalized_order_payload if isinstance(row.normalized_order_payload, dict) else {}
+    hinted = str(normalized_payload.get("execution_mode") or "").strip().lower()
+    if hinted in {"mocked", "live"}:
+        return hinted
+    return "live"
+
+
 class ApproveTradeRequest(BaseModel):
     intent_id: str
     note: str = ""
@@ -116,7 +127,7 @@ def approve_intent(
         actor_role=current_user.role.value,
         details={"released_at": row.released_at.isoformat() if row.released_at else None},
     )
-    execution_mode = "mocked" if bool((row.execution_provider_payload or {}).get("mocked")) else "live"
+    execution_mode = _resolve_execution_mode_from_intent(row)
     return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note, execution_mode=execution_mode)
 
 
@@ -159,7 +170,7 @@ def reject_intent(
         actor_role=current_user.role.value,
         details={"note": payload.note, "reason_codes": row.reject_reason_codes or []},
     )
-    execution_mode = "mocked" if bool((row.execution_provider_payload or {}).get("mocked")) else "live"
+    execution_mode = _resolve_execution_mode_from_intent(row)
     return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note, execution_mode=execution_mode)
 
 
@@ -184,7 +195,7 @@ def retry_intent(
         actor_role=current_user.role.value,
         details={"note": payload.note},
     )
-    execution_mode = "mocked" if bool((row.execution_provider_payload or {}).get("mocked")) else "live"
+    execution_mode = _resolve_execution_mode_from_intent(row)
     return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note, execution_mode=execution_mode)
 
 
