@@ -1,6 +1,13 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-18
+### Iteration-163 — Login Logo Integration (User + Admin)
+- Kullanıcı referansına göre login sayfalarına logo sol üst konumda entegre edildi.
+- `frontend/public/xilo-logo.png` eklendi.
+- `/user/login` ve `/admin/login` ekranlarında sağ üst panel toggle (Kullanıcı/Admin Girişi) düzeni eklendi.
+- Frontend doğrulama: logo görünürlüğü + sayfalar arası toggle geçişi PASS.
+
+## 2026-03-18
 ### Iteration-162 — Telemetry + Explainability Mini Fast Close
 - Guard event standardizasyonu eklendi (`EXECUTION_BLOCKED`, `EXECUTION_ALLOWED`, `EXECUTION_OVERRIDE_ENABLED`) ve boş reason engeli getirildi.
 - Yeni guard aggregation servisi eklendi (`guard_metrics_service.py`) + endpoint: `GET /api/admin/guard-telemetry`.

@@ -1,3 +1,25 @@
+## 2026-03-18 — Login Logo Integration (Final UI Close)
+
+### Kullanıcı talebi
+- Verilen referans görsele yakın şekilde login sayfasına logo entegrasyonu.
+- Seçim: **Her iki giriş ekranı** (User + Admin), yerleşim **sol üst**.
+
+### Uygulanan değişiklikler
+- Asset eklendi: `frontend/public/xilo-logo.png` (kullanıcının paylaştığı logo)
+- `UserLoginPage.jsx`
+  - Sol üst brand block + logo eklendi
+  - Sağ üst `Kullanıcı Girişi / Admin Girişi` toggle butonları eklendi
+- `AdminLoginPage.jsx`
+  - Sol üst brand block + logo eklendi
+  - Sağ üst `Kullanıcı Girişi / Admin Girişi` toggle butonları eklendi
+  - Forma üst boşluk (`mt-24`) verilerek üst bar ile çakışma engellendi
+
+### Test
+- Smoke screenshot doğrulaması: user ve admin login sayfalarında logo görünüyor.
+- Frontend test agent sonucu: **PASS**
+  - `/user/login` logo + toggle görünür
+  - toggle ile `/admin/login` geçişi ve logo görünürlüğü doğrulandı
+
 ## 2026-03-18 — TELEMETRY + EXPLAINABILITY (Mini Fast Close)
 
 ### Hedef
