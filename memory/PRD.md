@@ -1,3 +1,64 @@
+## 2026-03-18 — Iteration Update (P0 Login 500 Kapanışı + Storage Guard + Release-Gate 500 Fix)
+
+### 1) P0 Blokaj Kapanışı — `/api/auth/login` 500
+
+- Runtime’da `/app` disk kullanımı kritik seviyeye çıktığında login sırasında 500 gözlendi.
+- Kısa vadeli operasyonel düzeltme uygulandı:
+  - büyük cache/test artefact dosyaları temizlendi
+  - auth login akışı tekrar **200** dönecek şekilde doğrulandı.
+
+### 2) Storage Guard (Ops Otomasyonuna Kalıcı Koruma)
+
+- `daily_ops_automation.py` genişletildi:
+  - `storage.before/after` snapshot üretimi
+  - prune aksiyonları:
+    - `strategy_observability_prune`
+    - `audit_logs_prune`
+    - `decision_trace_prune`
+  - disk basıncı moduna göre retention/cap parametreleri
+  - eksik tablo veya runtime DB hatalarında `SKIPPED` fallback (script fail etmez)
+  - script başlangıcında `os.chdir(BACKEND_ROOT)` ile SQLite path stabilizasyonu
+- Yeni/ güncel testler:
+  - `/app/backend/tests/test_ops_automation_daily.py`
+  - `/app/backend/tests/test_strategy_observability_storage_guard.py`
+
+### 3) Strategy Observability Write-Volume Koruması
+
+- `log_strategy_observability_events` içine cycle başına kayıt üst sınırı eklendi:
+  - `STRATEGY_OBSERVABILITY_MAX_EVENTS_PER_CYCLE` (clamp: 50..2000)
+  - seçim dışında kalanlar truncate edilir; selected semboller korunur
+  - event metadata’ya sampling bilgisi eklenir.
+- `prune_strategy_observability_events(...)` yardımcı fonksiyonu eklendi.
+
+### 4) Admin Navbar 500 Fix — Release Gate Endpoint
+
+- Kaynak sorun: `/api/phase4/admin/release-gate?environment=prod` bazı runtime koşullarında 500 döndürüyordu (sidebar polling).
+- `phase4_live.py -> admin_release_gate` hardening:
+  - environment validation (`stage|prod`)
+  - runtime exception durumunda rollback + log + deterministic fallback payload
+  - endpoint artık 500 yerine `200/BLOCKED + reason_code=release_gate_runtime_error` döner.
+
+### 5) Frontend Durum
+
+- `/admin/system-alerts` sayfasında SLO trend chart container ayarı iyileştirildi (aspect/min boyut + loading placeholder).
+- 500 network hatası temizlendi ✅
+- Recharts initialization dimension warning’ı halen **non-blocking** olarak gözleniyor (chart fonksiyonel, veri render ediyor).
+
+### Doğrulama
+
+- Lokal/entegrasyon:
+  - `pytest /app/backend/tests/test_ops_automation_daily.py /app/backend/tests/test_strategy_observability_storage_guard.py /app/backend/tests/test_iteration141_auth_admin_flows.py` → **12 PASS**
+  - `python /app/backend/cli/final_release_smoke_suite.py` → **overall PASS**
+  - `python /app/backend/cli/p0_closure_gate.py --target-env preview --output-file /app/test_reports/release_gate_latest.json` → **overall PASS**
+- Testing agent: `/app/test_reports/iteration_153.json` ✅
+- Frontend test agent:
+  - admin login + `/admin/system-alerts` + `/admin/audit-logs` smoke PASS
+  - console 500 hatası giderildi ✅
+
+### Not
+
+- Bybit/OKX execution adapterları kullanıcı kararıyla **MOCKED**.
+
 ## 2026-03-18 — Iteration Update (Faz-3 Derinleştirme: Root-Cause Intelligence + CSV Export + SLO Advanced + Ops Automation)
 
 ### 1) Root-Cause Intelligence (Gelişmiş)
