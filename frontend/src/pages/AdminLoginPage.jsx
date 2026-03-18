@@ -52,6 +52,15 @@ export const AdminLoginPage = () => {
             data-testid="admin-login-password-input"
             required
           />
+
+          <button
+            type="button"
+            className="text-sm text-orange-300 underline underline-offset-2"
+            onClick={() => navigate(`/forgot-password?panel=admin&email=${encodeURIComponent(form.email || "")}`)}
+            data-testid="admin-login-forgot-password-link"
+          >
+            Şifremi unuttum
+          </button>
         </div>
 
         <Button className="mt-5 w-full bg-orange-500 text-black hover:bg-orange-600" data-testid="admin-login-submit-button" disabled={submitting}>

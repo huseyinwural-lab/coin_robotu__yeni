@@ -59,6 +59,8 @@ import { UserSymbolDecisionDetailPage } from "@/pages/UserSymbolDecisionDetailPa
 import { UserReportsPage } from "@/pages/UserReportsPage";
 import { UserExecutePage } from "@/pages/UserExecutePage";
 import { UserPositionsPage } from "@/pages/UserPositionsPage";
+import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "@/pages/ResetPasswordPage";
 import UserLiveTradingDashboardPage from "@/pages/user/UserLiveTradingDashboardPage";
 import { AdminExecutionQueuePage } from "@/pages/AdminExecutionQueuePage";
 import { AdminStrategyAllocationPage } from "@/pages/AdminStrategyAllocationPage";
@@ -96,6 +98,8 @@ function App() {
           <Route path="/login" element={<Navigate to="/user/login" replace />} />
           <Route path="/user/login" element={<UserLoginPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           <Route path="/dashboard" element={<Navigate to="/user/dashboard" replace />} />
           <Route path="/portfolio" element={<Navigate to="/user/portfolio" replace />} />

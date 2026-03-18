@@ -103,7 +103,12 @@ export const UserLoginPage = () => {
               />
               Oturumum açık kalsın
             </label>
-            <button type="button" className="text-base text-blue-700 underline" data-testid="user-login-forgot-password-link">
+            <button
+              type="button"
+              className="text-base text-blue-700 underline"
+              onClick={() => navigate(`/forgot-password?panel=user&email=${encodeURIComponent(form.email || "")}`)}
+              data-testid="user-login-forgot-password-link"
+            >
               Şifremi unuttum
             </button>
           </div>

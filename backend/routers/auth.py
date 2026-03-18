@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+import logging
 
 from core.users.user_registry import (
     approve_user_account,
@@ -23,11 +24,22 @@ from schemas import (
     EmailVerificationVerifyRequest,
     RegisterRequest,
     UserResponse,
+    PasswordResetRequestPayload,
+    PasswordResetRequestResponse,
+    PasswordResetConfirmPayload,
+    PasswordResetConfirmResponse,
 )
 from services.audit_service import create_audit_log
 from services.admin_profile_service import change_admin_password, update_admin_profile
+from services.password_reset_service import (
+    build_password_reset_link,
+    consume_password_reset_token,
+    issue_password_reset_token,
+    send_password_reset_email,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 class AdminProfileUpdateRequest(BaseModel):
@@ -43,6 +55,11 @@ class AdminPasswordChangeRequest(BaseModel):
 class LocalLoginRequest(BaseModel):
     email: str
     password: str
+
+
+GENERIC_PASSWORD_RESET_MESSAGE = (
+    "Eğer e-posta kayıtlıysa şifre sıfırlama bağlantısı gönderildi. Lütfen gelen kutunuzu kontrol edin."
+)
 
 
 @router.post("/register", response_model=UserResponse)
@@ -125,6 +142,58 @@ def admin_login(payload: LocalLoginRequest, db: Session = Depends(get_db)):
 @router.post("/login/user", response_model=AuthResponse)
 def user_login(payload: LocalLoginRequest, db: Session = Depends(get_db)):
     return _login_with_policy(payload, db, target_role=UserRole.USER)
+
+
+@router.post("/password-reset/request", response_model=PasswordResetRequestResponse)
+async def request_password_reset(payload: PasswordResetRequestPayload, db: Session = Depends(get_db)):
+    issued = issue_password_reset_token(db, str(payload.email))
+    user = issued.get("user")
+    token = issued.get("token")
+
+    if user is not None and token:
+        delivery_status = "SENT"
+        delivery_id = None
+        try:
+            reset_link = build_password_reset_link(token)
+            delivery = await send_password_reset_email(user.email, reset_link)
+            delivery_id = delivery.get("id")
+        except Exception as exc:  # pragma: no cover - runtime network branch
+            delivery_status = "FAILED"
+            logger.warning("password_reset_email_failed", extra={"email": user.email, "error": str(exc)[:300]})
+
+        create_audit_log(
+            db,
+            action="user_password_reset_requested",
+            entity_type="user",
+            entity_id=user.id,
+            actor_user_id=user.id,
+            actor_role=user.role.value,
+            details={
+                "email": user.email,
+                "delivery_status": delivery_status,
+                "delivery_id": delivery_id,
+            },
+        )
+
+    return PasswordResetRequestResponse(
+        status="accepted",
+        message=GENERIC_PASSWORD_RESET_MESSAGE,
+    )
+
+
+@router.post("/password-reset/confirm", response_model=PasswordResetConfirmResponse)
+def confirm_password_reset(payload: PasswordResetConfirmPayload, db: Session = Depends(get_db)):
+    user = consume_password_reset_token(db, token=payload.token, new_password=payload.new_password)
+    create_audit_log(
+        db,
+        action="user_password_reset_completed",
+        entity_type="user",
+        entity_id=user.id,
+        actor_user_id=user.id,
+        actor_role=user.role.value,
+        details={"email": user.email},
+    )
+    return PasswordResetConfirmResponse(status="success", message="Şifreniz güncellendi. Giriş yapabilirsiniz.")
 
 
 @router.get("/me", response_model=UserResponse)

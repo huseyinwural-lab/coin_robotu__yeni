@@ -88,6 +88,25 @@ class AuthResponse(BaseModel):
     user: UserResponse
 
 
+class PasswordResetRequestPayload(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+
+
+class PasswordResetRequestResponse(BaseModel):
+    status: str
+    message: str
+
+
+class PasswordResetConfirmPayload(BaseModel):
+    token: str = Field(min_length=12, max_length=512)
+    new_password: str = Field(min_length=10, max_length=128)
+
+
+class PasswordResetConfirmResponse(BaseModel):
+    status: str
+    message: str
+
+
 class BotProfileBase(BaseModel):
     name: str
     exchange: str = "binance"
