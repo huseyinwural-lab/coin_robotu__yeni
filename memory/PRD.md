@@ -1,3 +1,35 @@
+## 2026-03-18 — Iteration Update (Bugfix-First: Smoke Suite Crash-Safety)
+
+### User Priority Applied
+- Kullanıcı tercihi: **bug fix first** (yeni özelliklerden önce hata giderimi).
+
+### Çözülen Kritik Hata
+- Dosya: `/app/backend/cli/final_release_smoke_suite.py`
+- Problem: Ağ timeout / bağlantı hatasında script traceback ile düşebiliyordu.
+- Etki: Ops doğrulama scripti deterministik FAIL raporu üretmek yerine crash edebiliyordu.
+
+### Uygulanan Düzeltme
+- Yeni helper eklendi:
+  - `_http_request(...)`: `requests` çağrılarını `RequestException` için güvenli şekilde sarar.
+  - `_safe_json(...)`: `None` veya JSON parse hatalarında boş dict döner.
+- Tüm smoke adımları (`health`, `admin_login`, `release_gate`, `execution_readiness`, `validate_order`, `guard_probe`, `audit/export` vb.) güvenli wrapper ile çalışacak şekilde güncellendi.
+- Her check çıktısına `error` alanı eklenerek hata nedeni rapora taşındı.
+- Auth başarısızsa script artık kontrollü JSON (`overall: FAIL`) üretip çıkıyor; traceback atmıyor.
+
+### Doğrulama
+- Self test:
+  - `python /app/backend/cli/final_release_smoke_suite.py` → **PASS**
+  - `REACT_APP_BACKEND_URL=http://127.0.0.1:9 python /app/backend/cli/final_release_smoke_suite.py` → **graceful FAIL JSON + exit 1**
+- Testing agent raporu: `/app/test_reports/iteration_159.json`
+  - backend: **100%**
+  - kritik issue: **yok**
+  - Ek test dosyası: `/app/backend/tests/test_smoke_suite_reliability.py`
+- Backend deep test agent: **PASS** (valid URL, unreachable URL, 9/9 reliability tests)
+- Frontend smoke agent: **PASS** (landing yükleniyor, top auth butonları çalışıyor, kritik console hatası yok)
+
+### Durum
+- Reliability bugfix tamamlandı; smoke suite artık network failure senaryolarında crash-free ve deterministik raporlama yapıyor.
+
 ## 2026-03-18 — Iteration Update (FAZ-A+B FINAL LOCK / Son Kapanış)
 
 ### Uygulanan final-lock maddeleri

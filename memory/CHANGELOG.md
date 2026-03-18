@@ -1,5 +1,17 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-18
+### Iteration-159 — Smoke Suite Reliability Bugfix (Crash-Safety)
+- `backend/cli/final_release_smoke_suite.py` ağ hatalarında traceback crash üretmeyecek şekilde harden edildi.
+- Yeni yardımcılar eklendi:
+  - `_http_request` (RequestException-safe)
+  - `_safe_json` (invalid/non-JSON response-safe)
+- Tüm endpoint kontrolleri güvenli request katmanına taşındı; check detaylarına `error` alanı eklendi.
+- Auth başarısızlığı dahil hata senaryolarında script kontrollü JSON (`overall=FAIL`) döndürerek deterministik şekilde sonlanıyor.
+- Doğrulama:
+  - Testing agent: `/app/test_reports/iteration_159.json` → backend **100%**
+  - Ek test dosyası doğrulandı: `/app/backend/tests/test_smoke_suite_reliability.py` (9/9 PASS)
+
 ## 2026-03-15
 ### Iteration-107 — MASTER FINAL TASK ORDER (P0-first) Uygulaması
 - **FINAL-1 Exchange execution activation (credential-aware)**
