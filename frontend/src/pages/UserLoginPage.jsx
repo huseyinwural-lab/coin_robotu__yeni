@@ -37,7 +37,36 @@ export const UserLoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#edf0f5] px-4 py-8" data-testid="user-login-page">
+    <div className="relative min-h-screen bg-[#edf0f5] px-4 py-8" data-testid="user-login-page">
+      <div className="mx-auto flex w-full max-w-6xl items-start justify-between gap-4" data-testid="user-login-top-strip">
+        <div className="rounded-xl border border-slate-300 bg-white/95 p-2 shadow-sm" data-testid="user-login-brand-block">
+          <img
+            src="/xilo-logo.png"
+            alt="XILO User Trading Engine"
+            className="h-auto w-[180px] sm:w-[220px]"
+            data-testid="user-login-brand-logo"
+          />
+        </div>
+        <div className="flex items-center gap-2" data-testid="user-login-panel-toggle-group">
+          <Button
+            type="button"
+            className="h-10 rounded-none bg-black px-4 text-sm text-orange-300 hover:bg-zinc-900"
+            data-testid="user-login-panel-toggle-user-button"
+          >
+            Kullanıcı Girişi
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 rounded-none border-slate-400 bg-white px-4 text-sm text-slate-800 hover:bg-slate-100"
+            onClick={() => navigate("/admin/login")}
+            data-testid="user-login-panel-toggle-admin-button"
+          >
+            Admin Girişi
+          </Button>
+        </div>
+      </div>
+
       <div className="mx-auto w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8" data-testid="user-login-card">
         <header className="text-center" data-testid="user-login-header">
           <h1 className="text-3xl font-black text-slate-900" data-testid="user-login-title">Giriş yap</h1>
