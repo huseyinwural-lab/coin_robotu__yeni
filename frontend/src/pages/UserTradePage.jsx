@@ -54,6 +54,8 @@ export const UserTradePage = () => {
     return Number((sizeValue / price).toFixed(6));
   }, [form.size_mode, form.size_value, midPrice]);
 
+  const canRunValidation = Number(midPrice || 0) > 0 && Number(estimatedQty || 0) > 0 && Boolean(form.symbol);
+
   useEffect(() => {
     const symbolFromQuery = String(searchParams.get("symbol") || "").trim().toUpperCase();
     if (symbolFromQuery) {
@@ -375,18 +377,29 @@ export const UserTradePage = () => {
         )}
 
         <div className="mt-4 flex flex-wrap gap-2" data-testid="user-trade-action-buttons">
-          <Button type="button" variant="outline" onClick={handleValidateOnly} data-testid="user-trade-validate-button">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleValidateOnly}
+            disabled={!canRunValidation}
+            data-testid="user-trade-validate-button"
+          >
             Validate
           </Button>
           <Button
             type="button"
             onClick={handleOpenPosition}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !canRunValidation}
             data-testid="user-trade-open-position-button"
           >
             {isSubmitting ? "Submitting..." : "Validate + Open Position"}
           </Button>
         </div>
+        {!canRunValidation && (
+          <p className="mt-2 text-xs text-amber-300" data-testid="user-trade-actions-disabled-hint">
+            Market fiyatı yüklenene kadar validate/trade aksiyonu kilitli.
+          </p>
+        )}
       </div>
 
       <aside className="col-span-12 lg:col-span-5 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-trade-result-card">
