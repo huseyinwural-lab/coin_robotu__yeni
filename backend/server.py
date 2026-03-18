@@ -1,9 +1,9 @@
 import asyncio
 import logging
-import os
 
 from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from core.config import settings
 from core.observability.http_logging_middleware import RequestObservabilityMiddleware
@@ -93,6 +93,7 @@ from services.realtime.socket_gateway import create_socket_app
 from services.state_rebuild_service import run_state_rebuild
 from services.user_exchange_health_loop import run_exchange_connection_health_loop
 from services.weekly_report_service import run_weekly_report_loop
+from db import engine, verify_database_connection
 
 configure_structured_logging(logging.INFO)
 logger = logging.getLogger(__name__)
@@ -105,7 +106,10 @@ api_router = APIRouter(prefix="/api")
 
 @api_router.get("/health")
 def health_check():
-    return {"status": "ok"}
+    verify_database_connection()
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+    return {"status": "ok", "db": "ok"}
 
 
 @api_router.get("/")
@@ -207,17 +211,11 @@ fastapi_app.add_middleware(RequestObservabilityMiddleware)
 
 @fastapi_app.on_event("startup")
 async def startup_event():
-    from db import Base, SessionLocal, engine
+    run_alembic_upgrade()
+    verify_database_connection()
 
-    if str(os.environ.get("RUN_STARTUP_MIGRATIONS", "0")).strip() == "1":
-        try:
-            run_alembic_upgrade()
-        except Exception as exc:
-            logger.warning("Alembic upgrade skipped on startup", extra={"error": str(exc)})
-    else:
-        logger.info("Startup migrations disabled (RUN_STARTUP_MIGRATIONS!=1)")
+    from db import SessionLocal
 
-    Base.metadata.create_all(bind=engine)
     seed_default_admin()
     reliability_policy = load_connection_reliability_policy(force_refresh=True)
 

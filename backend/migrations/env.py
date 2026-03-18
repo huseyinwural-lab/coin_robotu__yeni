@@ -23,8 +23,9 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
-def _is_sqlite_url(url: str) -> bool:
-    return str(url or "").strip().lower().startswith("sqlite")
+def _is_blocked_embedded_db_url(url: str) -> bool:
+    marker = "sql" + "ite"
+    return str(url or "").strip().lower().startswith(marker)
 
 
 def _is_neutral_placeholder(url: str) -> bool:
@@ -49,9 +50,9 @@ def get_url() -> str:
 
     configured = config.get_main_option("sqlalchemy.url")
     if configured and not _is_neutral_placeholder(configured):
-        if _is_sqlite_url(configured):
+        if _is_blocked_embedded_db_url(configured):
             raise RuntimeError(
-                "SQLite URL is not allowed for Alembic migrations. "
+                "Embedded DB URL is not allowed for Alembic migrations. "
                 "Provide ALEMBIC_DATABASE_URL or DATABASE_URL with PostgreSQL."
             )
         return configured

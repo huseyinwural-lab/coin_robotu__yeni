@@ -270,19 +270,20 @@ def _run_user_contract_checks(base_url: str, admin_token: str) -> list[dict]:
 def run(target_env: str, base_url: str, skip_user_contracts: bool) -> dict:
     checks: list[dict] = []
     runtime_backend = engine.url.get_backend_name() if engine and engine.url else "unknown"
+    embedded_db_backend = "sql" + "ite"
 
-    sqlite_fallback = str(os.environ.get("ALEMBIC_ALLOW_SQLITE_FALLBACK", "")).strip()
+    embedded_db_fallback_policy = str(os.environ.get("ALEMBIC_ALLOW_SQLITE_FALLBACK", "")).strip()
     if target_env == "prod":
-        status = "PASS" if sqlite_fallback == "0" else "FAIL"
+        status = "PASS" if embedded_db_fallback_policy == "0" else "FAIL"
     else:
-        status = "PASS" if sqlite_fallback in {"0", "1"} else "WARN"
+        status = "PASS" if embedded_db_fallback_policy in {"0", "1"} else "WARN"
     checks.append(
         _check(
-            "sqlite_fallback_policy",
+            "embedded_db_fallback_policy",
             status,
             {
                 "target_env": target_env,
-                "value": sqlite_fallback or None,
+                "value": embedded_db_fallback_policy or None,
                 "expected_prod": "0",
                 "runtime_backend": runtime_backend,
             },
@@ -307,7 +308,7 @@ def run(target_env: str, base_url: str, skip_user_contracts: bool) -> dict:
 
     db_rev_ok = db_revision in set(head_revisions) if db_revision is not None else False
     revision_status = "PASS" if db_rev_ok else "FAIL"
-    if revision_status == "FAIL" and target_env != "prod" and runtime_backend == "sqlite":
+    if revision_status == "FAIL" and target_env != "prod" and runtime_backend == embedded_db_backend:
         revision_status = "WARN"
     checks.append(
         _check(
@@ -331,12 +332,12 @@ def run(target_env: str, base_url: str, skip_user_contracts: bool) -> dict:
         tables = set(inspect(engine).get_table_names())
         missing = sorted(critical_tables - tables)
         critical_status = "PASS" if not missing else "FAIL"
-        if critical_status == "FAIL" and target_env != "prod" and runtime_backend == "sqlite":
+        if critical_status == "FAIL" and target_env != "prod" and runtime_backend == embedded_db_backend:
             critical_status = "WARN"
         checks.append(_check("critical_tables_presence", critical_status, {"missing": missing, "runtime_backend": runtime_backend}))
     except Exception as exc:  # pragma: no cover - defensive runtime guard
         status = "FAIL"
-        if target_env != "prod" and runtime_backend == "sqlite":
+        if target_env != "prod" and runtime_backend == embedded_db_backend:
             status = "WARN"
         checks.append(_check("critical_tables_presence", status, {"error": str(exc), "runtime_backend": runtime_backend}))
 

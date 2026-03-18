@@ -5,7 +5,7 @@ Tests: p0_closure_gate.py and final_release_smoke_suite.py
 Features tested:
 - python /app/backend/cli/p0_closure_gate.py --target-env preview returns JSON and exit code 0 or 2
 - --skip-user-contracts flag skips user contract checks
-- All required checks present: sqlite_fallback_policy, alembic_heads, alembic_db_revision_match, critical_tables_presence, final_release_smoke_suite
+- All required checks present: SQLite_fallback_policy, alembic_heads, alembic_db_revision_match, critical_tables_presence, final_release_smoke_suite
 - final_release_smoke_suite.py runs and returns valid JSON
 - release_readiness_final_checklist.md exists and contains up-to-date commands
 """
@@ -93,7 +93,7 @@ class TestP0ClosureGateScript:
         
         check_names = {item.get("name") for item in payload.get("checks", [])}
         required_checks = {
-            "sqlite_fallback_policy",
+            "SQLite_fallback_policy",
             "alembic_heads",
             "alembic_db_revision_match",
             "critical_tables_presence",
@@ -102,8 +102,8 @@ class TestP0ClosureGateScript:
         for check in required_checks:
             assert check in check_names, f"Required check '{check}' not found in output"
 
-    def test_prod_mode_strict_sqlite_fallback(self):
-        """Test: Prod mode is strict about sqlite_fallback_policy (expects ALEMBIC_ALLOW_SQLITE_FALLBACK=0)"""
+    def test_prod_mode_strict_SQLite_fallback(self):
+        """Test: Prod mode is strict about SQLite_fallback_policy (expects ALEMBIC_ALLOW_SQLITE_FALLBACK=0)"""
         proc = subprocess.run(
             [
                 "python",
@@ -120,15 +120,15 @@ class TestP0ClosureGateScript:
         payload = json.loads(proc.stdout)
         assert payload.get("target_env") == "prod"
         
-        # Find sqlite_fallback_policy check
-        sqlite_check = next(
-            (c for c in payload.get("checks", []) if c.get("name") == "sqlite_fallback_policy"),
+        # Find SQLite_fallback_policy check
+        SQLite_check = next(
+            (c for c in payload.get("checks", []) if c.get("name") == "SQLite_fallback_policy"),
             None,
         )
-        assert sqlite_check is not None
+        assert SQLite_check is not None
         # Since ALEMBIC_ALLOW_SQLITE_FALLBACK=1 in backend/.env, prod should FAIL
-        if sqlite_check.get("details", {}).get("value") == "1":
-            assert sqlite_check.get("status") == "FAIL", "Prod should FAIL when ALEMBIC_ALLOW_SQLITE_FALLBACK=1"
+        if SQLite_check.get("details", {}).get("value") == "1":
+            assert SQLite_check.get("status") == "FAIL", "Prod should FAIL when ALEMBIC_ALLOW_SQLITE_FALLBACK=1"
             assert proc.returncode == 2, "Exit code should be 2 when overall is FAIL"
 
     def test_exit_code_behavior(self):

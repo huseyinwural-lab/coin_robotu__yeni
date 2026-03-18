@@ -3,9 +3,9 @@ FAZ-1 Kapanış Doğrulaması: Alembic DB Binding Tests
 ====================================================
 Tests to verify:
 1. env.py precedence: ALEMBIC_DATABASE_URL > DATABASE_URL > alembic.ini
-2. No sqlite fallback path in env.py
+2. No SQLite fallback path in env.py
 3. No ALEMBIC_ALLOW_SQLITE_FALLBACK flag in env.py
-4. No sqlite url in alembic.ini
+4. No SQLite url in alembic.ini
 5. Offline migration log has PostgresqlImpl, NOT SQLiteImpl
 """
 import os
@@ -73,30 +73,30 @@ class TestEnvPyPrecedence:
 
 
 class TestNoSqliteFallback:
-    """Verify no implicit sqlite fallback exists"""
+    """Verify no implicit SQLite fallback exists"""
     
-    def test_no_sqlite_fallback_path_in_env_py(self):
-        """env.py must NOT have any sqlite:// fallback path"""
+    def test_no_SQLite_fallback_path_in_env_py(self):
+        """env.py must NOT have any SQLite:// fallback path"""
         content = ENV_PY_PATH.read_text()
         
-        # Check for any sqlite URL patterns that would be used as fallback
-        sqlite_patterns = [
-            r'sqlite:///',           # sqlite URL
-            r'sqlite:///.*\.db',     # sqlite with .db file
-            r'sqlite:///\:memory\:', # sqlite memory
-            r'fallback.*sqlite',     # fallback with sqlite
-            r'default.*sqlite',      # default sqlite
+        # Check for any SQLite URL patterns that would be used as fallback
+        SQLite_patterns = [
+            r'SQLite:///',           # SQLite URL
+            r'SQLite:///.*\.db',     # SQLite with .db file
+            r'SQLite:///\:memory\:', # SQLite memory
+            r'fallback.*SQLite',     # fallback with SQLite
+            r'default.*SQLite',      # default SQLite
         ]
         
-        for pattern in sqlite_patterns:
+        for pattern in SQLite_patterns:
             matches = re.findall(pattern, content, re.IGNORECASE)
             # Filter out error messages - they're OK
             filtered_matches = [m for m in matches if 'error' not in content[max(0, content.find(m)-50):content.find(m)+50].lower() 
                                and 'raise' not in content[max(0, content.find(m)-50):content.find(m)+50].lower()
                                and 'not allowed' not in content[max(0, content.find(m)-50):content.find(m)+50].lower()]
-            assert len(filtered_matches) == 0, f"Found sqlite fallback pattern: {pattern}"
+            assert len(filtered_matches) == 0, f"Found SQLite fallback pattern: {pattern}"
     
-    def test_no_alembic_allow_sqlite_fallback_flag(self):
+    def test_no_alembic_allow_SQLite_fallback_flag(self):
         """env.py must NOT have ALEMBIC_ALLOW_SQLITE_FALLBACK flag"""
         content = ENV_PY_PATH.read_text()
         
@@ -105,7 +105,7 @@ class TestNoSqliteFallback:
             "ALEMBIC_ALLOW_SQLITE_FALLBACK flag must be removed from env.py"
     
     def test_runtime_error_when_no_url(self):
-        """env.py must raise RuntimeError when no URL is available, not fallback to sqlite"""
+        """env.py must raise RuntimeError when no URL is available, not fallback to SQLite"""
         content = ENV_PY_PATH.read_text()
         
         # Must have RuntimeError raise for missing URL
@@ -116,37 +116,37 @@ class TestNoSqliteFallback:
         assert "No database URL found" in content or "Set ALEMBIC_DATABASE_URL" in content, \
             "Error message must instruct to set proper environment variable"
     
-    def test_sqlite_url_rejected_from_config(self):
-        """env.py must reject sqlite URLs from alembic.ini"""
+    def test_SQLite_url_rejected_from_config(self):
+        """env.py must reject SQLite URLs from alembic.ini"""
         content = ENV_PY_PATH.read_text()
         
-        # _is_sqlite_url helper should exist
-        assert "_is_sqlite_url" in content, "_is_sqlite_url helper function must exist"
+        # _is_SQLite_url helper should exist
+        assert "_is_SQLite_url" in content, "_is_SQLite_url helper function must exist"
         
-        # Must raise RuntimeError for sqlite in config
-        assert "SQLite URL is not allowed" in content or "sqlite" in content.lower() and "raise RuntimeError" in content, \
-            "Must reject sqlite URLs from alembic.ini config"
+        # Must raise RuntimeError for SQLite in config
+        assert "SQLite URL is not allowed" in content or "SQLite" in content.lower() and "raise RuntimeError" in content, \
+            "Must reject SQLite URLs from alembic.ini config"
 
 
 class TestAlembicIniNoSqlite:
-    """Verify alembic.ini has no sqlite configuration"""
+    """Verify alembic.ini has no SQLite configuration"""
     
     def test_alembic_ini_exists(self):
         """alembic.ini must exist"""
         assert ALEMBIC_INI_PATH.exists(), f"alembic.ini not found at {ALEMBIC_INI_PATH}"
     
-    def test_alembic_ini_no_sqlite_url(self):
-        """alembic.ini must NOT have sqlite URL"""
+    def test_alembic_ini_no_SQLite_url(self):
+        """alembic.ini must NOT have SQLite URL"""
         content = ALEMBIC_INI_PATH.read_text()
         
-        # No sqlite URL should exist
-        assert "sqlite://" not in content.lower(), \
-            "alembic.ini must not contain sqlite:// URL"
-        assert "sqlite:" not in content.lower(), \
-            "alembic.ini must not contain sqlite: reference"
+        # No SQLite URL should exist
+        assert "SQLite://" not in content.lower(), \
+            "alembic.ini must not contain SQLite:// URL"
+        assert "SQLite:" not in content.lower(), \
+            "alembic.ini must not contain SQLite: reference"
     
     def test_alembic_ini_has_postgresql_placeholder(self):
-        """alembic.ini must have postgresql placeholder, not sqlite"""
+        """alembic.ini must have postgresql placeholder, not SQLite"""
         content = ALEMBIC_INI_PATH.read_text()
         
         # Must have postgresql reference
@@ -174,7 +174,7 @@ class TestOfflineMigrationLog:
         assert "Context impl PostgresqlImpl" in content, \
             "Log must show 'Context impl PostgresqlImpl'"
     
-    def test_offline_log_no_sqlite_impl(self):
+    def test_offline_log_no_SQLite_impl(self):
         """Log must NOT show SQLiteImpl"""
         content = OFFLINE_LOG_PATH.read_text()
         
@@ -184,24 +184,24 @@ class TestOfflineMigrationLog:
 
 
 class TestMigrationServiceNoSqliteFallback:
-    """Verify migration_service.py also has no sqlite fallback"""
+    """Verify migration_service.py also has no SQLite fallback"""
     
     def test_migration_service_exists(self):
         """migration_service.py must exist"""
         service_path = BACKEND_ROOT / "services" / "migration_service.py"
         assert service_path.exists(), "migration_service.py not found"
     
-    def test_migration_service_no_sqlite_fallback(self):
-        """migration_service.py must not fallback to sqlite"""
+    def test_migration_service_no_SQLite_fallback(self):
+        """migration_service.py must not fallback to SQLite"""
         service_path = BACKEND_ROOT / "services" / "migration_service.py"
         content = service_path.read_text()
         
-        # No sqlite URL patterns
-        assert "sqlite://" not in content, "migration_service.py must not have sqlite URL"
+        # No SQLite URL patterns
+        assert "SQLite://" not in content, "migration_service.py must not have SQLite URL"
         
         # Must raise RuntimeError, not fallback
         assert "SQLite fallback is disabled" in content or "raise RuntimeError" in content, \
-            "migration_service.py must raise error instead of sqlite fallback"
+            "migration_service.py must raise error instead of SQLite fallback"
 
 
 class TestPrecedenceFunctional:

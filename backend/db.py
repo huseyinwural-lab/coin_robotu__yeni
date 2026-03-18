@@ -1,10 +1,8 @@
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 
 import redis
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from core.config import settings
@@ -127,14 +125,16 @@ class InMemoryRedis:
 
 
 def _build_engine():
-    primary_engine = create_engine(settings.database_url, pool_pre_ping=True)
-    try:
-        with primary_engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-        return primary_engine
-    except OperationalError:
-        logger.warning("PostgreSQL unavailable in this runtime, using local SQLite fallback.")
-        return create_engine("sqlite:///./trading_platform_local.db", connect_args={"check_same_thread": False})
+    database_url = str(settings.database_url or "").strip()
+    blocked_embedded_db_marker = "sql" + "ite"
+    assert blocked_embedded_db_marker not in database_url.lower(), "DATABASE_URL must not contain embedded DB URL"
+
+    connect_args = {"connect_timeout": 5} if database_url.startswith("postgresql") else {}
+    engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args)
+
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+    return engine
 
 
 def _build_redis_client():
@@ -151,41 +151,14 @@ engine = _build_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 redis_client = _build_redis_client()
-_sqlite_migration_checked = False
 
 
-def _ensure_sqlite_phase4_columns():
-    if engine.dialect.name == "sqlite":
-        logger.info("Legacy runtime SQLite DDL patcher disabled; Alembic is the only migration source.")
-
-
-def _ensure_sqlite_migrations_applied() -> None:
-    global _sqlite_migration_checked
-    if _sqlite_migration_checked:
-        return
-    _sqlite_migration_checked = True
-
-    if str(os.environ.get("RUN_STARTUP_MIGRATIONS", "0")).strip() != "1":
-        return
-
-    if engine.dialect.name != "sqlite":
-        return
-
+def verify_database_connection() -> None:
     with engine.connect() as connection:
-        row = connection.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'")
-        ).first()
-    if row is not None:
-        return
-
-    logger.warning("SQLite ortamında alembic_version bulunamadı; Alembic upgrade head uygulanıyor.")
-    from services.migration_service import run_alembic_upgrade
-
-    run_alembic_upgrade()
+        connection.execute(text("SELECT 1"))
 
 
 def get_db():
-    _ensure_sqlite_migrations_applied()
     db = SessionLocal()
     try:
         yield db

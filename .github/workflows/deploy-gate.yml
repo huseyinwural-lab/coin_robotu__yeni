@@ -30,6 +30,12 @@ jobs:
           pip install ruff
           ruff check backend
 
+      - name: Block embedded DB references
+        working-directory: backend
+        run: |
+          pattern=$(printf '\x73\x71\x6c\x69\x74\x65')
+          grep -R "$pattern" . && exit 1 || exit 0
+
       - name: Pytest smoke gate
         working-directory: backend
         run: |

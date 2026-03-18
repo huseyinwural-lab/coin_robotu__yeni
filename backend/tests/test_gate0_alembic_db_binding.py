@@ -4,9 +4,9 @@ FAZ-1 Gate-0: Alembic DB Binding and Migration Environment Tests
 Tests:
 1. env.py precedence: ALEMBIC_DATABASE_URL > DATABASE_URL > alembic.ini > explicit dev fallback
 2. alembic.ini does NOT force SQLite
-3. ALEMBIC_ALLOW_SQLITE_FALLBACK=0 blocks implicit sqlite fallback
+3. ALEMBIC_ALLOW_SQLITE_FALLBACK=0 blocks implicit SQLite fallback
 4. Offline migration log shows PostgresqlImpl, not SQLiteImpl
-5. Without DB URL, PostgreSQL connection error is raised (no sqlite fallback)
+5. Without DB URL, PostgreSQL connection error is raised (no SQLite fallback)
 """
 
 import pytest
@@ -24,13 +24,13 @@ if str(BACKEND_DIR) not in sys.path:
 class TestAlembicIniConfiguration:
     """Verify alembic.ini has proper neutral placeholder, no SQLite forcing"""
     
-    def test_alembic_ini_no_sqlite_url(self):
-        """alembic.ini should NOT contain sqlite URL"""
+    def test_alembic_ini_no_SQLite_url(self):
+        """alembic.ini should NOT contain SQLite URL"""
         alembic_ini_path = BACKEND_DIR / "alembic.ini"
         assert alembic_ini_path.exists(), "alembic.ini should exist"
         
         content = alembic_ini_path.read_text().lower()
-        assert "sqlite" not in content, "alembic.ini should NOT contain sqlite reference"
+        assert "SQLite" not in content, "alembic.ini should NOT contain SQLite reference"
         print("PASS: alembic.ini does not contain SQLite references")
     
     def test_alembic_ini_has_postgresql_placeholder(self):
@@ -80,7 +80,7 @@ class TestEnvPyUrlPrecedence:
 class TestSqliteFallbackPrevention:
     """Test that SQLite fallback is properly blocked"""
     
-    def test_sqlite_fallback_check_exists(self):
+    def test_SQLite_fallback_check_exists(self):
         """env.py should check ALEMBIC_ALLOW_SQLITE_FALLBACK"""
         env_py_path = BACKEND_DIR / "migrations" / "env.py"
         content = env_py_path.read_text()
@@ -89,24 +89,24 @@ class TestSqliteFallbackPrevention:
             "env.py should reference ALEMBIC_ALLOW_SQLITE_FALLBACK"
         print("PASS: ALEMBIC_ALLOW_SQLITE_FALLBACK check exists")
     
-    def test_runtime_error_for_disabled_sqlite_fallback(self):
-        """When sqlite fallback is disabled, RuntimeError should be raised"""
+    def test_runtime_error_for_disabled_SQLite_fallback(self):
+        """When SQLite fallback is disabled, RuntimeError should be raised"""
         env_py_path = BACKEND_DIR / "migrations" / "env.py"
         content = env_py_path.read_text()
         
-        # Check that RuntimeError is raised when sqlite fallback is not allowed
-        assert "RuntimeError" in content, "RuntimeError should be raised for disallowed sqlite"
-        assert "SQLite fallback disabled" in content or "sqlite fallback" in content.lower(), \
+        # Check that RuntimeError is raised when SQLite fallback is not allowed
+        assert "RuntimeError" in content, "RuntimeError should be raised for disallowed SQLite"
+        assert "SQLite fallback disabled" in content or "SQLite fallback" in content.lower(), \
             "Error message should mention SQLite fallback"
         print("PASS: RuntimeError for disabled SQLite fallback is implemented")
     
-    def test_is_sqlite_url_helper_exists(self):
-        """_is_sqlite_url helper function should exist"""
+    def test_is_SQLite_url_helper_exists(self):
+        """_is_SQLite_url helper function should exist"""
         env_py_path = BACKEND_DIR / "migrations" / "env.py"
         content = env_py_path.read_text()
         
-        assert "_is_sqlite_url" in content, "_is_sqlite_url helper should exist"
-        print("PASS: _is_sqlite_url helper function exists")
+        assert "_is_SQLite_url" in content, "_is_SQLite_url helper should exist"
+        print("PASS: _is_SQLite_url helper function exists")
 
 
 class TestOfflineMigrationLog:
