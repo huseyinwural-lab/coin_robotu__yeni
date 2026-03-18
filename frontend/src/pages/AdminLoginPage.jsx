@@ -27,7 +27,7 @@ export const AdminLoginPage = () => {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-slate-950 p-6" data-testid="admin-login-page">
+    <div className="relative flex min-h-screen items-center justify-center bg-white p-6" data-testid="admin-login-page">
       <div className="absolute left-4 top-4 right-4 flex items-start justify-between gap-4 sm:left-8 sm:top-6 sm:right-8" data-testid="admin-login-top-strip">
         <div className="rounded-xl border border-slate-300 bg-white/95 p-2 shadow-sm" data-testid="admin-login-brand-block">
           <img
@@ -57,10 +57,10 @@ export const AdminLoginPage = () => {
         </div>
       </div>
 
-      <form onSubmit={onSubmit} className="mt-24 w-full max-w-md border border-orange-500/40 bg-slate-900 p-6" data-testid="admin-login-form">
-        <p className="text-xs uppercase tracking-widest text-orange-400" data-testid="admin-login-kicker">Admin Panel</p>
-        <h1 className="mt-2 text-4xl font-black uppercase tracking-tight text-orange-300" data-testid="admin-login-title">Yönetici Girişi</h1>
-        <p className="mt-2 text-sm text-slate-300" data-testid="admin-login-description">Sadece admin hesapları bu panelden giriş yapabilir.</p>
+      <form onSubmit={onSubmit} className="mt-24 w-full max-w-md border border-slate-300 bg-white p-6 shadow-sm" data-testid="admin-login-form">
+        <p className="text-xs uppercase tracking-widest text-orange-500" data-testid="admin-login-kicker">Admin Panel</p>
+        <h1 className="mt-2 text-4xl font-black uppercase tracking-tight text-slate-900" data-testid="admin-login-title">Yönetici Girişi</h1>
+        <p className="mt-2 text-sm text-slate-600" data-testid="admin-login-description">Sadece admin hesapları bu panelden giriş yapabilir.</p>
 
         <div className="mt-5 space-y-3" data-testid="admin-login-fields">
           <Input
@@ -68,7 +68,7 @@ export const AdminLoginPage = () => {
             placeholder="admin e-posta"
             value={form.email}
             onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-            className="border-slate-700 bg-slate-950"
+            className="border-slate-300 bg-white"
             data-testid="admin-login-email-input"
             required
           />
@@ -77,14 +77,14 @@ export const AdminLoginPage = () => {
             placeholder="şifre"
             value={form.password}
             onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
-            className="border-slate-700 bg-slate-950"
+            className="border-slate-300 bg-white"
             data-testid="admin-login-password-input"
             required
           />
 
           <button
             type="button"
-            className="text-sm text-orange-300 underline underline-offset-2"
+            className="text-sm text-orange-600 underline underline-offset-2"
             onClick={() => navigate(`/forgot-password?panel=admin&email=${encodeURIComponent(form.email || "")}`)}
             data-testid="admin-login-forgot-password-link"
           >
@@ -92,7 +92,7 @@ export const AdminLoginPage = () => {
           </button>
         </div>
 
-        <Button className="mt-5 w-full bg-orange-500 text-black hover:bg-orange-600" data-testid="admin-login-submit-button" disabled={submitting}>
+        <Button className="mt-5 w-full rounded-none bg-black text-orange-300 hover:bg-zinc-900" data-testid="admin-login-submit-button" disabled={submitting}>
           {submitting ? "İşleniyor..." : "Admin Olarak Giriş Yap"}
         </Button>
       </form>

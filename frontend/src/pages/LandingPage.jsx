@@ -4,11 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { Upload } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
-
-const heroImage = "https://images.unsplash.com/photo-1762278805112-a0f50365845e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMGdlb21ldHJpYyUyMG9yYW5nZSUyMGJsYWNrJTIwZGlnaXRhbHxlbnwwfHx8fDE3NzMxODM1Njh8MA&ixlib=rb-4.1.0&q=85";
 
 export const LandingPage = () => {
   const navigate = useNavigate();
@@ -22,6 +22,7 @@ export const LandingPage = () => {
     confirmPassword: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logoPreview, setLogoPreview] = useState("/xilo-logo.png");
   const [onboarding, setOnboarding] = useState({
     email: "",
     verificationCode: "",
@@ -97,6 +98,20 @@ export const LandingPage = () => {
     }
   };
 
+  const onLogoFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setLogoPreview(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const onRegisterSubmit = async (event) => {
     event.preventDefault();
     if (form.password !== form.confirmPassword) {
@@ -134,7 +149,9 @@ export const LandingPage = () => {
           transition={{ duration: 0.6 }}
           className="flex flex-wrap items-center justify-between gap-3"
         >
-          <p className="font-mono text-sm font-bold uppercase tracking-widest" data-testid="landing-brand">Algorithmic Platform</p>
+          <div className="rounded border border-slate-300 bg-white p-2" data-testid="landing-brand-logo-block">
+            <img src={logoPreview} alt="XILO logo" className="h-auto w-[170px] sm:w-[230px]" data-testid="landing-brand-logo" />
+          </div>
           <div className="flex flex-wrap gap-2" data-testid="landing-login-actions">
             <Link to="/user/login" data-testid="landing-user-login-link">
               <Button className="border border-black bg-black text-orange-500 hover:bg-zinc-900" data-testid="landing-user-login-button">Kullanıcı Girişi</Button>
@@ -166,6 +183,10 @@ export const LandingPage = () => {
 
             <form className="mt-6 max-w-lg space-y-3 rounded border border-black/60 bg-orange-400/30 p-4" onSubmit={onRegisterSubmit} data-testid="landing-register-form">
               <p className="text-xs font-bold uppercase tracking-widest" data-testid="landing-register-title">Hesap Aç</p>
+              <label className="block" data-testid="landing-logo-upload-block">
+                <span className="mb-1 inline-flex items-center gap-2 text-xs font-semibold" data-testid="landing-logo-upload-label"><Upload className="h-3 w-3" /> Logo Yükle</span>
+                <Input type="file" accept="image/*" onChange={onLogoFileChange} className="h-10 border-black bg-orange-50 file:mr-3 file:border-0 file:bg-black file:px-3 file:py-1 file:text-xs file:text-orange-500" data-testid="landing-logo-file-input" />
+              </label>
               <div className="grid gap-2" data-testid="landing-register-fields">
                 <Input
                   type="text"
@@ -267,17 +288,18 @@ export const LandingPage = () => {
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.7, delay: 0.2 }}
-            className="border border-black bg-black/10 p-2"
+            className="border-2 border-[#c76916] bg-black p-2"
             data-testid="landing-hero-image-wrapper"
           >
-            <div className="aspect-[4/3] max-h-[420px] overflow-hidden" data-testid="landing-hero-image-container">
-              <img
-                src={heroImage}
-                alt="Abstract Orange Data Flow"
-                className="h-full w-full object-cover object-center"
-                data-testid="landing-hero-image"
-              />
-            </div>
+            <div
+              className="aspect-[4/3] max-h-[420px] overflow-hidden"
+              style={{
+                backgroundColor: "#020202",
+                backgroundImage: "repeating-linear-gradient(120deg, #ff8a00 0 6px, transparent 6px 16px), repeating-linear-gradient(120deg, transparent 0 42px, #ffffff 42px 45px)",
+                backgroundBlendMode: "screen",
+              }}
+              data-testid="landing-hero-image-container"
+            />
           </motion.div>
         </section>
 
