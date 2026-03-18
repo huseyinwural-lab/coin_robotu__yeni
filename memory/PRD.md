@@ -1,3 +1,51 @@
+## 2026-03-18 — P1 Tamamlama + 423 Readiness Engel Kapatma
+
+### Kullanıcı Talebi
+- `UserTradePage.jsx` üzerindeki eksik `data-testid` etiketlerinin tamamlanması.
+- `423 EXECUTION_BLOCKED_BY_READINESS` engellerinin temizlenmesi.
+- Admin panelden gerçek akış benzeri `Approve` tıklamasıyla işlemin sonuna kadar kanıtlanması.
+
+### Uygulanan Değişiklikler
+- `frontend/src/pages/UserTradePage.jsx`
+  - Form label ve boş connection option için ek `data-testid` etiketleri eklendi:
+    - `user-trade-symbol-label`
+    - `user-trade-connection-label`
+    - `user-trade-connection-option-empty`
+    - `user-trade-size-mode-label`
+    - `user-trade-size-value-label`
+    - `user-trade-leverage-label`
+    - `user-trade-margin-type-label`
+    - `user-trade-order-type-label`
+
+- Kullanıcı sağladığı Binance testnet API key/secret, user exchange connection’a işlendi ve revalidate edildi.
+  - Sonuç: `can_trade=true`, `connection_health=online`, `readiness_status=ready_for_test_order`.
+
+- `scripts/start_live.sh`
+  - Micro test-order adımı, düşük bakiye hesaplarda false-negative üretmemesi için leverage fallback (1,2,3,5) ile iyileştirildi.
+  - Balance check adımı, `insufficient_balance` durumunu hem `200/REJECTED` hem `400/detail.failure_code=insufficient_balance` sözleşmeleriyle uyumlu hale getirildi.
+
+### Kanıt / Doğrulama
+- Admin UI canlı kanıt:
+  - `/admin/execution-queue` üzerinde hedef intent için Approve tıklaması yapıldı.
+  - Ağ yanıtı: `APPROVE_HTTP_STATUS=200`.
+
+- API zinciri kanıtı:
+  - Yeni intent `QUEUED` oluşturuldu.
+  - Admin approve sonrası status `RELEASED` doğrulandı.
+  - User positions listesinde işlem yansıması doğrulandı.
+
+- Release/Readiness durumu:
+  - `execution-readiness`: `READY` (admin görünüm reason_codes içinde sadece bilgi amaçlı `mocked_mode_active` kalemi görünebilir).
+  - `release-gate`: `PASS`, `deploy_enable_flag=true`, `fail_reasons=[]`, execution quality score yükseldi.
+
+- Checklist script:
+  - `LIVE_USER_EMAIL=testuser1773706589@example.com LIVE_USER_PASSWORD=TestPassword123! bash /app/scripts/start_live.sh`
+  - Çıktı: `ok=true`, `execution_mode=live`, `micro_trade.status=FILLED`, `readiness=READY_STABLE`.
+
+- Testing agent raporu:
+  - `/app/test_reports/iteration_3.json`
+  - Özet: UserTradePage `data-testid` doğrulaması geçti (16/16), approve regression negatif (kritik hata yok), `start_live.sh ok=true`.
+
 ## 2026-03-18 — Fork Devamı: Admin Execution Queue Frontend Stabilizasyonu
 
 ### Kapsam (kullanıcı seçimi: 1A, 2B, 3A)
