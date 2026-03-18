@@ -216,6 +216,7 @@ export const AuditLogsPage = () => {
               <p data-testid={`audit-logs-incident-replay-step-action-${step.step_index}`}>{step.step_index}. {step.action}</p>
               <p className="text-slate-400" data-testid={`audit-logs-incident-replay-step-meta-${step.step_index}`}>{step.timestamp} · {step.method || "-"} {step.route || "-"} · Δ{step.delta_ms_from_prev ?? 0}ms</p>
               <p className="text-slate-400" data-testid={`audit-logs-incident-replay-step-root-cause-${step.step_index}`}>root={step.root_cause_type} · stage={step.failure_stage} · code={step.primary_error_code}</p>
+              <p className="text-slate-400" data-testid={`audit-logs-incident-replay-step-intelligence-${step.step_index}`}>confidence={step.confidence_score ?? 0} · priority={step.priority_level || "LOW"} · secondary={step.secondary_cause?.type || "none"}</p>
             </article>
           ))}
           {(replayData?.steps || []).length === 0 && <p className="p-2 text-xs text-slate-500" data-testid="audit-logs-incident-replay-empty">Replay step bulunamadı.</p>}

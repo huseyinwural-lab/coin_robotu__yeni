@@ -60,6 +60,9 @@ def test_incident_replay_for_request_id(admin_headers: dict):
     assert "root_cause_type" in first
     assert "failure_stage" in first
     assert "primary_error_code" in first
+    assert "confidence_score" in first
+    assert "priority_level" in first
+    assert "primary_cause" in first
     assert "root_cause_breakdown" in payload.get("summary", {})
 
 
@@ -90,6 +93,8 @@ def test_slo_sla_trend_endpoint(admin_headers: dict):
     assert len(points) == 3
     window_set = {point.get("window_days") for point in points}
     assert window_set == {7, 30, 90}
+    assert "anomaly_detection" in payload
+    assert "signal" in (payload.get("anomaly_detection") or {})
 
 
 def test_ops_alert_simulate_endpoint(admin_headers: dict):

@@ -22,6 +22,7 @@ export const AdminSystemAlertsPage = () => {
   const [burnIn, setBurnIn] = useState(null);
   const [sloSla, setSloSla] = useState(null);
   const [sloTrend, setSloTrend] = useState([]);
+  const [sloTrendMeta, setSloTrendMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [filters, setFilters] = useState({
@@ -66,6 +67,7 @@ export const AdminSystemAlertsPage = () => {
       setBurnIn(burnInData || null);
       setSloSla(sloData || null);
       setSloTrend(trendData?.points || []);
+      setSloTrendMeta(trendData?.anomaly_detection || null);
       setSelectedIds((prev) => prev.filter((id) => (alertData || []).some((item) => item.id === id)));
     } catch (error) {
       toast.error(error?.response?.data?.detail || "System alerts verisi alınamadı");
@@ -286,11 +288,20 @@ export const AdminSystemAlertsPage = () => {
           <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-mttr">mttr_minutes={sloSla?.metrics?.mttr_minutes ?? 0}</p>
           <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-critical">critical_alerts={sloSla?.metrics?.critical_alerts ?? 0}</p>
           <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-status">slo_status={sloSla?.slo_status || "-"}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-error-budget-target">error_budget_target_pct={sloSla?.metrics?.error_budget_target_pct ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-error-budget-consumed">error_budget_consumed_pct={sloSla?.metrics?.error_budget_consumed_pct ?? 0}</p>
+          <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-breach-flag">sla_breached={String(Boolean(sloSla?.metrics?.sla_breached))}</p>
         </div>
       </div>
 
       <div className="space-y-3 border border-black/30 bg-orange-100 p-4" data-testid="admin-system-alerts-slo-trend-panel">
         <p className="text-sm font-semibold text-black" data-testid="admin-system-alerts-slo-trend-title">SLO Trend (7/30/90)</p>
+        <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-trend-anomaly-signal">
+          anomaly_signal={sloTrendMeta?.signal || "NONE"}
+        </p>
+        <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-trend-anomaly-reason">
+          anomaly_reason={sloTrendMeta?.reason || "-"}
+        </p>
         <div className="h-64 w-full" data-testid="admin-system-alerts-slo-trend-chart-wrap">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={sloTrend}>

@@ -109,6 +109,7 @@ def test_incident_export_zip_contains_incident_and_summary(admin_headers: dict):
     names = set(archive.namelist())
     assert "incident.json" in names
     assert "summary.json" in names
+    assert "timeline.csv" in names
     incident_payload = json.loads(archive.read("incident.json").decode("utf-8"))
     assert int((incident_payload.get("filters") or {}).get("window_days") or 0) == 7
 

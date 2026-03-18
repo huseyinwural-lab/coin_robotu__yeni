@@ -1,6 +1,7 @@
 import io
 import json
 import zipfile
+import csv
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
@@ -99,18 +100,43 @@ def _root_cause_labels(*, action: str, details: dict, route: str | None) -> dict
     reason_candidates = [str(item).lower() for item in reason_codes if item is not None]
 
     explicit_error = str(details.get("error") or details.get("error_code") or "").strip().lower()
-    primary_error_code = reason_candidates[0] if reason_candidates else (explicit_error or "unknown")
+    status_code_raw = details.get("status_code")
+    try:
+        status_code = int(status_code_raw) if status_code_raw is not None else None
+    except (TypeError, ValueError):
+        status_code = None
 
-    if any(code in {"invalid_key", "missing_trade_permission", "permission_restricted", "auth_failed"} for code in reason_candidates):
-        root_cause_type = "AUTH"
-    elif any(code in {"timeout", "network_error", "exchange_unreachable"} for code in reason_candidates):
-        root_cause_type = "TIMEOUT_NETWORK"
-    elif any(code in {"assignment_required", "environment_not_allowed", "futures_not_allowed", "validation_failed"} for code in reason_candidates):
-        root_cause_type = "VALIDATION"
-    elif "exchange" in (action or "").lower() or any("exchange" in code for code in reason_candidates):
-        root_cause_type = "EXCHANGE"
-    else:
-        root_cause_type = "UNKNOWN"
+    causes: list[dict] = []
+
+    if any(code in {"timeout", "network_error", "exchange_unreachable"} for code in reason_candidates) or "timeout" in explicit_error:
+        causes.append({"type": "TIMEOUT_NETWORK", "error_code": "timeout", "confidence": 0.92, "priority": "HIGH"})
+
+    if (status_code in {401, 403}) or any(code in {"invalid_key", "missing_trade_permission", "permission_restricted", "auth_failed"} for code in reason_candidates):
+        causes.append({"type": "AUTH", "error_code": "auth_error", "confidence": 0.9, "priority": "HIGH"})
+
+    if (status_code is not None and status_code >= 500) or any(code in {"exchange_unreachable", "exchange_http_error", "exchange_error"} for code in reason_candidates):
+        causes.append({"type": "EXCHANGE", "error_code": "exchange_5xx", "confidence": 0.86, "priority": "HIGH"})
+
+    if any(code in {"assignment_required", "environment_not_allowed", "futures_not_allowed", "validation_failed"} for code in reason_candidates):
+        causes.append({"type": "VALIDATION", "error_code": "validation_failed", "confidence": 0.78, "priority": "MED"})
+
+    if not causes:
+        fallback_error = reason_candidates[0] if reason_candidates else (explicit_error or "unknown")
+        causes.append({"type": "UNKNOWN", "error_code": fallback_error, "confidence": 0.25, "priority": "LOW"})
+
+    dedup = []
+    seen = set()
+    for cause in causes:
+        key = cause["type"]
+        if key in seen:
+            continue
+        seen.add(key)
+        dedup.append(cause)
+
+    primary = dedup[0]
+    secondary = dedup[1] if len(dedup) > 1 else None
+    confidence_score = round(float(primary["confidence"]), 3)
+    priority_level = primary["priority"]
 
     normalized_route = str(route or "").lower()
     if "/v1/user/trading/preview" in normalized_route:
@@ -125,10 +151,57 @@ def _root_cause_labels(*, action: str, details: dict, route: str | None) -> dict
         failure_stage = "unknown_stage"
 
     return {
-        "root_cause_type": root_cause_type,
+        "root_cause_type": primary["type"],
         "failure_stage": failure_stage,
-        "primary_error_code": primary_error_code,
+        "primary_error_code": primary["error_code"],
+        "primary_cause": primary,
+        "secondary_cause": secondary,
+        "confidence_score": confidence_score,
+        "priority_level": priority_level,
+        "causes": dedup,
     }
+
+
+def _build_replay_steps(rows: list[AuditLog]) -> tuple[list[dict], Counter]:
+    steps = []
+    root_cause_counter: Counter = Counter()
+    prev_ts = None
+    for index, row in enumerate(rows, start=1):
+        details = row.details or {}
+        current_ts = row.created_at
+        delta_ms = None
+        if prev_ts is not None:
+            delta_ms = round((current_ts - prev_ts).total_seconds() * 1000, 2)
+        prev_ts = current_ts
+
+        labels = _root_cause_labels(action=row.action, details=details, route=details.get("route"))
+        root_cause_counter[labels["root_cause_type"]] += 1
+        steps.append(
+            {
+                "step_index": index,
+                "timestamp": current_ts.isoformat(),
+                "delta_ms_from_prev": delta_ms,
+                "status": "error" if str(row.severity or "").lower() in {"warning", "critical"} else "ok",
+                "action": row.action,
+                "severity": row.severity,
+                "entity_type": row.entity_type,
+                "entity_id": row.entity_id,
+                "route": details.get("route"),
+                "method": details.get("method"),
+                "request_id": details.get("request_id"),
+                "session_id": details.get("session_id"),
+                "root_cause_type": labels["root_cause_type"],
+                "failure_stage": labels["failure_stage"],
+                "primary_error_code": labels["primary_error_code"],
+                "primary_cause": labels["primary_cause"],
+                "secondary_cause": labels["secondary_cause"],
+                "confidence_score": labels["confidence_score"],
+                "priority_level": labels["priority_level"],
+                "causes": labels["causes"],
+                "details": details,
+            }
+        )
+    return steps, root_cause_counter
 
 
 def _resolve_export_window(
@@ -269,7 +342,8 @@ def export_incident_package(
         date_from=effective_date_from,
         date_to=effective_date_to,
     )
-    timeline_rows = query.order_by(AuditLog.created_at.desc()).limit(limit).all()
+    timeline_rows = query.order_by(AuditLog.created_at.asc()).limit(limit).all()
+    replay_steps, root_cause_counter = _build_replay_steps(timeline_rows)
     timeline_items = [_serialize_timeline_item(row) for row in timeline_rows]
 
     request_ids = {item.get("request_id") for item in timeline_items if item.get("request_id")}
@@ -317,6 +391,7 @@ def export_incident_package(
             "date_to": effective_date_to,
         },
         "timeline": timeline_items,
+        "replay_steps": replay_steps,
         "related_domain_events": domain_items,
     }
     summary_payload = {
@@ -328,8 +403,9 @@ def export_incident_package(
             "unique_session_ids": len(session_ids),
             "severity_breakdown": dict(severity_counter),
             "top_actions": action_counter.most_common(10),
-            "window_start": timeline_items[-1]["created_at"] if timeline_items else None,
-            "window_end": timeline_items[0]["created_at"] if timeline_items else None,
+            "window_start": timeline_items[0]["created_at"] if timeline_items else None,
+            "window_end": timeline_items[-1]["created_at"] if timeline_items else None,
+            "root_cause_breakdown": dict(root_cause_counter),
         },
         "notes": [
             "Bu özet hızlı yönetici okuması için hazırlanır.",
@@ -337,10 +413,45 @@ def export_incident_package(
         ],
     }
 
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    writer.writerow([
+        "timeline",
+        "step",
+        "status",
+        "timestamp",
+        "action",
+        "severity",
+        "route",
+        "root_cause_type",
+        "failure_stage",
+        "primary_error_code",
+        "confidence_score",
+        "priority_level",
+    ])
+    for step in replay_steps:
+        writer.writerow(
+            [
+                "incident_replay",
+                step.get("step_index"),
+                step.get("status"),
+                step.get("timestamp"),
+                step.get("action"),
+                step.get("severity"),
+                step.get("route"),
+                step.get("root_cause_type"),
+                step.get("failure_stage"),
+                step.get("primary_error_code"),
+                step.get("confidence_score"),
+                step.get("priority_level"),
+            ]
+        )
+
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("incident.json", json.dumps(incident_payload, ensure_ascii=False, indent=2))
         archive.writestr("summary.json", json.dumps(summary_payload, ensure_ascii=False, indent=2))
+        archive.writestr("timeline.csv", csv_buffer.getvalue())
     buffer.seek(0)
 
     create_audit_log(
@@ -397,38 +508,7 @@ def incident_replay(
             "related_domain_events": [],
         }
 
-    steps = []
-    root_cause_counter: Counter = Counter()
-    prev_ts = None
-    for index, row in enumerate(rows, start=1):
-        details = row.details or {}
-        current_ts = row.created_at
-        delta_ms = None
-        if prev_ts is not None:
-            delta_ms = round((current_ts - prev_ts).total_seconds() * 1000, 2)
-        prev_ts = current_ts
-
-        labels = _root_cause_labels(action=row.action, details=details, route=details.get("route"))
-        root_cause_counter[labels["root_cause_type"]] += 1
-        steps.append(
-            {
-                "step_index": index,
-                "timestamp": current_ts.isoformat(),
-                "delta_ms_from_prev": delta_ms,
-                "action": row.action,
-                "severity": row.severity,
-                "entity_type": row.entity_type,
-                "entity_id": row.entity_id,
-                "route": details.get("route"),
-                "method": details.get("method"),
-                "request_id": details.get("request_id"),
-                "session_id": details.get("session_id"),
-                "root_cause_type": labels["root_cause_type"],
-                "failure_stage": labels["failure_stage"],
-                "primary_error_code": labels["primary_error_code"],
-                "details": details,
-            }
-        )
+    steps, root_cause_counter = _build_replay_steps(rows)
 
     window_start = rows[0].created_at
     window_end = rows[-1].created_at

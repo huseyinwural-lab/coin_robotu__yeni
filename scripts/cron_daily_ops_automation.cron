@@ -1,0 +1,2 @@
+# Daily ops automation sample (00:10 UTC)
+10 0 * * * /app/scripts/run_daily_ops_automation.sh /app/test_reports/release_gate_latest.json >> /app/test_reports/daily_ops_automation.log 2>&1
