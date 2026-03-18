@@ -1,3 +1,36 @@
+## 2026-03-18 — FAZ 0: SQLite Temizliği & Deterministik PostgreSQL (KATI MOD)
+
+### Uygulanan Değişiklikler
+- Runtime DB akışı PostgreSQL’e kilitlendi; fallback tamamen kaldırıldı.
+  - `backend/db.py`: embedded DB URL bloklayıcı assert + startup connection check
+  - `backend/services/migration_service.py`: yalnız PostgreSQL migration URL, fallback kaldırıldı
+  - `backend/migrations/env.py`: embedded DB URL hard-block
+  - `backend/server.py`: `/health` endpointine DB doğrulaması eklendi (`{"status":"ok","db":"ok"}`)
+- `.db` dosyaları repo içinden fiziksel olarak silindi.
+- Alembic doğrulama canlı PostgreSQL üzerinde alındı (`current == head`).
+- CI gate’e embedded DB referans kontrolü eklendi:
+  - `/app/.github/workflows/deploy-gate.yml`
+
+### Operasyonel Adımlar
+- Local PostgreSQL paketleri kuruldu (`postgresql`, `postgresql-client`)
+- Cluster başlatıldı, `trader` rolü ve `trading_platform` veritabanı oluşturuldu.
+- `backend/.env` sabitlendi:
+  - `DATABASE_URL=postgresql+psycopg2://trader:trader@localhost:5432/trading_platform`
+  - `ALEMBIC_ALLOW_SQLITE_FALLBACK="0"`
+
+### Kanıt Dosyaları
+- `/app/artifacts/faz0_exit_report.json`
+- `/app/artifacts/faz0_find_db.txt`
+- `/app/artifacts/faz0_sqlite_grep_backend.txt`
+- `/app/artifacts/faz0_alembic_current.txt`
+- `/app/artifacts/faz0_alembic_heads.txt`
+- `/app/artifacts/faz0_runtime_backend.txt`
+- `/app/artifacts/faz0_db_down_crash_snippet.log`
+- Testing agent raporu: `/app/test_reports/iteration_6.json`
+
+### FAZ 0 Durumu
+- EXIT kriterleri: **PASS**
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi

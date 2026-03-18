@@ -1,0 +1,40 @@
+{
+  "phase": "FAZ 0",
+  "status": "PASS",
+  "checks": {
+    "repo_db_files_zero": {
+      "status": "PASS",
+      "evidence_file": "/app/artifacts/faz0_find_db.txt"
+    },
+    "sqlite_reference_zero_backend_scope": {
+      "status": "PASS",
+      "evidence_file": "/app/artifacts/faz0_sqlite_grep_backend.txt"
+    },
+    "alembic_current_equals_head": {
+      "status": "PASS",
+      "current": "20260318_0052 (head)",
+      "head": "20260318_0052 (head)"
+    },
+    "runtime_backend_postgresql": {
+      "status": "PASS",
+      "evidence_file": "/app/artifacts/faz0_runtime_backend.txt"
+    },
+    "db_down_hard_fail": {
+      "status": "PASS",
+      "evidence_file": "/app/artifacts/faz0_db_down_crash_snippet.log"
+    },
+    "restart_persistence": {
+      "status": "PASS",
+      "evidence": "marker_count 1 after restart (marker=faz0-marker-1773877703)"
+    }
+  },
+  "artifacts": [
+    "/app/artifacts/faz0_find_db.txt",
+    "/app/artifacts/faz0_sqlite_grep_backend.txt",
+    "/app/artifacts/faz0_alembic_current.txt",
+    "/app/artifacts/faz0_alembic_heads.txt",
+    "/app/artifacts/faz0_runtime_backend.txt",
+    "/app/artifacts/faz0_db_down_crash_snippet.log",
+    "/app/test_reports/iteration_6.json"
+  ]
+}
