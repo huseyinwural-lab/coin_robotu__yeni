@@ -18,5 +18,8 @@ def test_daily_ops_automation_dry_run_executes():
     assert proc.returncode == 0
     payload = json.loads(proc.stdout)
     assert "gate_overall" in payload
+    assert "storage" in payload
+    assert "before" in payload["storage"]
+    assert "after" in payload["storage"]
     assert "slo_30d" in payload
     assert isinstance(payload.get("actions"), list)

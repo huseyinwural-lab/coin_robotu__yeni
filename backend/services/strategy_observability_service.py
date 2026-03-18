@@ -1,9 +1,121 @@
+import os
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from models import PaperPosition, PositionLedgerEvent, StrategyObservabilityEvent, StrategyTemplate
+
+
+def _resolve_max_events_per_cycle() -> int:
+    raw_value = os.getenv("STRATEGY_OBSERVABILITY_MAX_EVENTS_PER_CYCLE")
+    try:
+        parsed = int(str(raw_value or "300").strip())
+    except (TypeError, ValueError):
+        parsed = 300
+    return min(max(parsed, 50), 2000)
+
+
+def _delete_oldest_rows_in_batches(
+    db: Session,
+    *,
+    base_query,
+    model,
+    target_delete_count: int,
+    batch_size: int = 200,
+    dry_run: bool = False,
+) -> int:
+    remaining = max(int(target_delete_count), 0)
+    deleted_total = 0
+
+    while remaining > 0:
+        current_batch = min(batch_size, remaining)
+        batch_ids = [
+            row[0]
+            for row in base_query.limit(current_batch).all()
+        ]
+        if not batch_ids:
+            break
+
+        if not dry_run:
+            db.query(model).filter(model.id.in_(batch_ids)).delete(synchronize_session=False)
+            db.commit()
+
+        deleted_now = len(batch_ids)
+        deleted_total += deleted_now
+        remaining -= deleted_now
+
+    return int(deleted_total)
+
+
+def prune_strategy_observability_events(
+    db: Session,
+    *,
+    retention_days: int = 3,
+    max_rows: int = 300000,
+    dry_run: bool = False,
+) -> dict:
+    retention_days = min(max(int(retention_days), 1), 30)
+    max_rows = max(int(max_rows), 10000)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+
+    try:
+        total_before = db.query(StrategyObservabilityEvent.id).count()
+        old_rows_query = (
+            db.query(StrategyObservabilityEvent.id)
+            .filter(StrategyObservabilityEvent.created_at < cutoff)
+            .order_by(StrategyObservabilityEvent.created_at.asc())
+        )
+        old_rows_count = old_rows_query.count()
+
+        deleted_by_retention = _delete_oldest_rows_in_batches(
+            db,
+            base_query=old_rows_query,
+            model=StrategyObservabilityEvent,
+            target_delete_count=old_rows_count,
+            dry_run=dry_run,
+        )
+
+        remaining_after_retention = max(total_before - deleted_by_retention, 0)
+        overflow = max(remaining_after_retention - max_rows, 0)
+
+        overflow_query = (
+            db.query(StrategyObservabilityEvent.id)
+            .order_by(StrategyObservabilityEvent.created_at.asc())
+        )
+        deleted_by_cap = _delete_oldest_rows_in_batches(
+            db,
+            base_query=overflow_query,
+            model=StrategyObservabilityEvent,
+            target_delete_count=overflow,
+            dry_run=dry_run,
+        )
+
+        total_after = max(total_before - deleted_by_retention - deleted_by_cap, 0)
+        return {
+            "retention_days": retention_days,
+            "max_rows": max_rows,
+            "total_before": int(total_before),
+            "deleted_by_retention": int(deleted_by_retention),
+            "deleted_by_cap": int(deleted_by_cap),
+            "total_after": int(total_after),
+            "dry_run": bool(dry_run),
+            "status": "DONE" if not dry_run else "DRY_RUN",
+        }
+    except SQLAlchemyError as exc:
+        db.rollback()
+        return {
+            "retention_days": retention_days,
+            "max_rows": max_rows,
+            "total_before": 0,
+            "deleted_by_retention": 0,
+            "deleted_by_cap": 0,
+            "total_after": 0,
+            "dry_run": bool(dry_run),
+            "status": "SKIPPED",
+            "reason": str(exc)[:220],
+        }
 
 
 def _global_strategy_stats(db: Session) -> dict:
@@ -68,9 +180,27 @@ def log_strategy_observability_events(
     selected: list[dict],
 ):
     selected_rank_map = {item.get("symbol", "").upper(): item.get("selection_rank") for item in selected}
+    max_events_per_cycle = _resolve_max_events_per_cycle()
+    total_ranked_candidates = len(ranked)
+    sampled_ranked = list(ranked[:max_events_per_cycle])
+
+    if total_ranked_candidates > max_events_per_cycle:
+        sampled_symbols = {
+            str(item.get("symbol", "")).upper()
+            for item in sampled_ranked
+            if str(item.get("symbol", "")).strip()
+        }
+        for candidate in ranked[max_events_per_cycle:]:
+            candidate_symbol = str(candidate.get("symbol", "")).upper()
+            if not candidate_symbol:
+                continue
+            if candidate_symbol in selected_rank_map and candidate_symbol not in sampled_symbols:
+                sampled_ranked.append(candidate)
+                sampled_symbols.add(candidate_symbol)
+
     rows: list[StrategyObservabilityEvent] = []
 
-    for candidate in ranked:
+    for candidate in sampled_ranked:
         symbol = str(candidate.get("symbol", "")).upper()
         if not symbol:
             continue
@@ -104,6 +234,12 @@ def log_strategy_observability_events(
                     "reason_codes": reason_codes,
                     "component_scores": candidate.get("component_scores", {}),
                     "metadata": candidate.get("metadata", {}),
+                    "sampling": {
+                        "total_ranked_candidates": total_ranked_candidates,
+                        "logged_candidates": len(sampled_ranked),
+                        "truncated": total_ranked_candidates > len(sampled_ranked),
+                        "max_events_per_cycle": max_events_per_cycle,
+                    },
                 },
             )
         )

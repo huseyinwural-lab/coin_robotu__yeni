@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from sqlalchemy.exc import SQLAlchemyError
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
+os.chdir(BACKEND_ROOT)
 
 from db import SessionLocal
+from models import AuditLog, UserDecisionTrace
 from services.slo_analytics_service import compute_slo_metrics, load_alert_rows_for_window
+from services.strategy_observability_service import prune_strategy_observability_events
 from services.system_alert_service import create_system_alert
 from services.audit_service import create_audit_log
 
@@ -25,6 +32,83 @@ def _load_release_gate_payload(path: Path) -> dict:
         return {"overall": "INVALID_JSON", "fail_count": None, "warn_count": None}
 
 
+def _disk_snapshot(path: str = "/app") -> dict:
+    usage = shutil.disk_usage(path)
+    total = int(usage.total)
+    used = int(usage.used)
+    free = int(usage.free)
+    usage_pct = (used / total) * 100 if total > 0 else 0.0
+    return {
+        "path": path,
+        "total_gb": round(total / (1024**3), 2),
+        "used_gb": round(used / (1024**3), 2),
+        "free_gb": round(free / (1024**3), 2),
+        "usage_pct": round(usage_pct, 2),
+    }
+
+
+def _prune_old_audit_logs(db, *, days: int, dry_run: bool) -> dict:
+    days = min(max(int(days), 1), 365)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    try:
+        to_delete_ids = [
+            row[0]
+            for row in db.query(AuditLog.id)
+            .filter(AuditLog.created_at < cutoff)
+            .order_by(AuditLog.created_at.asc())
+            .all()
+        ]
+    except SQLAlchemyError as exc:
+        db.rollback()
+        return {
+            "retention_days": days,
+            "deleted_count": 0,
+            "dry_run": bool(dry_run),
+            "status": "SKIPPED",
+            "reason": str(exc)[:220],
+        }
+    delete_count = len(to_delete_ids)
+    if not dry_run and to_delete_ids:
+        db.query(AuditLog).filter(AuditLog.id.in_(to_delete_ids)).delete(synchronize_session=False)
+        db.commit()
+    return {
+        "retention_days": days,
+        "deleted_count": int(delete_count),
+        "dry_run": bool(dry_run),
+    }
+
+
+def _prune_old_decision_traces(db, *, days: int, dry_run: bool) -> dict:
+    days = min(max(int(days), 1), 365)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    try:
+        to_delete_ids = [
+            row[0]
+            for row in db.query(UserDecisionTrace.id)
+            .filter(UserDecisionTrace.created_at < cutoff)
+            .order_by(UserDecisionTrace.created_at.asc())
+            .all()
+        ]
+    except SQLAlchemyError as exc:
+        db.rollback()
+        return {
+            "retention_days": days,
+            "deleted_count": 0,
+            "dry_run": bool(dry_run),
+            "status": "SKIPPED",
+            "reason": str(exc)[:220],
+        }
+    delete_count = len(to_delete_ids)
+    if not dry_run and to_delete_ids:
+        db.query(UserDecisionTrace).filter(UserDecisionTrace.id.in_(to_delete_ids)).delete(synchronize_session=False)
+        db.commit()
+    return {
+        "retention_days": days,
+        "deleted_count": int(delete_count),
+        "dry_run": bool(dry_run),
+    }
+
+
 def run(*, gate_file: str, dry_run: bool) -> dict:
     report_path = Path(gate_file)
     gate = _load_release_gate_payload(report_path)
@@ -32,6 +116,59 @@ def run(*, gate_file: str, dry_run: bool) -> dict:
     db = SessionLocal()
     try:
         actions: list[dict] = []
+        storage_before = _disk_snapshot("/app")
+        storage_pressure = float(storage_before.get("usage_pct") or 0.0) >= 85.0
+
+        strategy_retention_days = 2 if storage_pressure else 3
+        strategy_max_rows = 120000 if storage_pressure else 300000
+        audit_retention_days = 7 if storage_pressure else 30
+        trace_retention_days = 14 if storage_pressure else 30
+
+        try:
+            strategy_prune = prune_strategy_observability_events(
+                db,
+                retention_days=strategy_retention_days,
+                max_rows=strategy_max_rows,
+                dry_run=dry_run,
+            )
+            strategy_status = str(strategy_prune.get("status") or ("DRY_RUN" if dry_run else "DONE"))
+        except Exception as exc:  # pragma: no cover - runtime defensive guard
+            db.rollback()
+            strategy_prune = {
+                "retention_days": strategy_retention_days,
+                "max_rows": strategy_max_rows,
+                "status": "SKIPPED",
+                "reason": str(exc)[:220],
+            }
+            strategy_status = "SKIPPED"
+        actions.append({
+            "type": "strategy_observability_prune",
+            "status": strategy_status,
+            "summary": strategy_prune,
+        })
+
+        audit_prune = _prune_old_audit_logs(
+            db,
+            days=audit_retention_days,
+            dry_run=dry_run,
+        )
+        actions.append({
+            "type": "audit_logs_prune",
+            "status": "DRY_RUN" if dry_run else "DONE",
+            "summary": audit_prune,
+        })
+
+        trace_prune = _prune_old_decision_traces(
+            db,
+            days=trace_retention_days,
+            dry_run=dry_run,
+        )
+        actions.append({
+            "type": "decision_trace_prune",
+            "status": "DRY_RUN" if dry_run else "DONE",
+            "summary": trace_prune,
+        })
+
         if str(gate.get("overall") or "").upper() == "FAIL":
             payload = {
                 "alert_type": "release_gate_failure",
@@ -97,6 +234,12 @@ def run(*, gate_file: str, dry_run: bool) -> dict:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "gate_file": str(report_path),
             "gate_overall": gate.get("overall"),
+            "storage": {
+                "before": storage_before,
+                "after": _disk_snapshot("/app"),
+                "pressure_threshold_pct": 85.0,
+                "pressure_mode": storage_pressure,
+            },
             "slo_30d": {
                 "availability_pct": slo_metrics.get("availability_pct"),
                 "sla_target_pct": slo_metrics.get("sla_target_pct"),
