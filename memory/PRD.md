@@ -35,6 +35,8 @@
 - `open-position` → `200`, `intent_status=QUEUED_FOR_APPROVAL`, `execution_mode=live`
 - `exchange/test-order` micro test → `200`, `FILLED`
 - UI smoke doğrulama: `/user/trade` validate akışı çalışıyor.
+- UI güvenlik iyileştirmesi: market fiyatı yüklenmeden Validate/Open butonları kilitleniyor (erken/yanlış validation fail azaltıldı).
+- Frontend retest (agent): trade açılışı sonrası `/user/positions` redirect ve live mode akışı **PASS**.
 
 ### Not
 - Execution queue tasarım gereği `QUEUED_FOR_APPROVAL` döner; bu, canlı moda geçişle çelişmez.

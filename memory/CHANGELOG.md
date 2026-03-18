@@ -9,6 +9,8 @@
   - `order_type/leverage/margin_mode` artık `normalized_order_payload` içinden okunuyor.
 - Market order precheck’te `price=0` kaynaklı yanlış `min_notional_violation` giderildi (`price = notional/size` fallback).
 - Sonuç: `validate-order` live + `open-position` 200 (`QUEUED_FOR_APPROVAL`, `execution_mode=live`) + `exchange/test-order` FILLED.
+- Frontend trade UX guard: market fiyatı yüklenmeden Validate/Open butonları disabled.
+- Frontend retest: Validate + Open Position sonrası `/user/positions` redirect doğrulandı (PASS).
 
 ## 2026-03-18
 ### Iteration-160 — FAZ-C Ultra Minimal Closure
