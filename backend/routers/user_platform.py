@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from dependencies.execution_guard_dependency import execution_guard_dependency
+
 from core.users.user_exchange_connector import (
     exchange_connection_view,
     get_or_create_user_exchange_setting,
@@ -457,7 +459,7 @@ def validate_order(
     return OrderValidationResponse(**result)
 
 
-@router.post("/open-position", response_model=ExecutionIntentSubmitResponse)
+@router.post("/open-position", response_model=ExecutionIntentSubmitResponse, dependencies=[Depends(execution_guard_dependency)])
 def open_position(
     payload: ExecutionIntentSubmitRequest,
     current_user: User = Depends(require_user),
@@ -466,7 +468,7 @@ def open_position(
     return _submit_trade_with_guard(payload=payload, current_user=current_user, db=db, source="user_open_position")
 
 
-@router.post("/execute-order", response_model=ExecutionIntentSubmitResponse)
+@router.post("/execute-order", response_model=ExecutionIntentSubmitResponse, dependencies=[Depends(execution_guard_dependency)])
 def execute_order(
     payload: ExecutionIntentSubmitRequest,
     current_user: User = Depends(require_user),
@@ -475,7 +477,7 @@ def execute_order(
     return _submit_trade_with_guard(payload=payload, current_user=current_user, db=db, source="user_execute_order")
 
 
-@router.post("/manual-trade", response_model=ExecutionIntentSubmitResponse)
+@router.post("/manual-trade", response_model=ExecutionIntentSubmitResponse, dependencies=[Depends(execution_guard_dependency)])
 def manual_trade(
     payload: ExecutionIntentSubmitRequest,
     current_user: User = Depends(require_user),

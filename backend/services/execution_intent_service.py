@@ -9,7 +9,7 @@ from models import BotProfile, PaperPosition, Position, PositionLedgerEvent, Use
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
-from services.execution_readiness_service import enforce_execution_guard_or_raise
+from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.portfolio_risk_service import portfolio_risk_check
 from services.position_management_service import sync_position_state
@@ -705,6 +705,30 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         raise ValueError("preview_required")
     if preview_hash and preview_hash != intent.preview_hash:
         raise ValueError("preview_hash_mismatch")
+
+    if intent.intent_type == "OPEN_POSITION":
+        enforce_execution_guard_or_raise(
+            db,
+            user_id=user_id,
+            actor_user_id=user_id,
+            actor_role="USER",
+            source="execution_intent_service_submit",
+        )
+
+        precheck = validate_order_precheck(
+            db,
+            user_id=user_id,
+            symbol=str(intent.symbol or "").upper(),
+            market_type=str(intent.market_type or "spot"),
+            order_type=str(intent.order_type or "market"),
+            side=str(intent.side or "buy"),
+            price=float(intent.price or 0),
+            size=float(intent.size or 0),
+            leverage=int(intent.leverage or 1),
+            margin_mode=str(intent.margin_mode or "isolated"),
+        )
+        if not precheck.get("valid"):
+            raise ValueError("order_validation_failed")
 
     intent.status = "SUBMITTED"
     intent.submitted_at = datetime.now(timezone.utc)

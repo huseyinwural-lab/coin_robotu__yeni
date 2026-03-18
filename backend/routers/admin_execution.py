@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from dependencies.execution_guard_dependency import execution_guard_admin_approve_trade_dependency
 from db import get_db
 from deps import require_admin
 from models import AuditLog, User
@@ -21,6 +23,11 @@ from services.execution_readiness_service import evaluate_execution_readiness
 from services.live_mode_service import create_release_gate_override, enforce_release_gate, revoke_release_gate_override
 
 router = APIRouter(prefix="/admin", tags=["admin_execution"])
+
+
+class ApproveTradeRequest(BaseModel):
+    intent_id: str
+    note: str = ""
 
 
 @router.get("/execution-queue", response_model=list[ExecutionIntentQueueItemResponse])
@@ -111,6 +118,24 @@ def approve_intent(
     return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note, execution_mode=execution_mode)
 
 
+@router.post(
+    "/approve-trade",
+    response_model=AdminExecutionQueueDecisionResponse,
+    dependencies=[Depends(execution_guard_admin_approve_trade_dependency)],
+)
+def approve_trade_alias(
+    payload: ApproveTradeRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return approve_intent(
+        intent_id=payload.intent_id,
+        payload=AdminExecutionQueueDecisionRequest(note=payload.note),
+        current_user=current_user,
+        db=db,
+    )
+
+
 @router.post("/execution-queue/{intent_id}/reject", response_model=AdminExecutionQueueDecisionResponse)
 def reject_intent(
     intent_id: str,
@@ -190,7 +215,7 @@ def admin_release_gate_alias(current_user: User = Depends(require_admin), db: Se
             "environment": "prod",
         }
     if str(payload.get("status") or "") == "BLOCKED" and not (payload.get("reason_codes") or []):
-        payload["reason_codes"] = [str(payload.get("reason_code") or "release_gate_blocked_unspecified")]
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="INVALID_RELEASE_GATE_CONTRACT")
     payload["blocking_metrics"] = payload.get("blocking_metrics") or payload.get("metrics") or {}
     return ReleaseGateStatusResponse(**payload)
 

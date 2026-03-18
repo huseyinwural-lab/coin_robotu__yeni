@@ -345,9 +345,7 @@ def admin_release_gate(
     if str(payload.get("status") or "") == "BLOCKED":
         reason_codes = list(payload.get("reason_codes") or [])
         if not reason_codes:
-            fallback_reason = str(payload.get("reason_code") or "release_gate_blocked_unspecified")
-            reason_codes = [fallback_reason]
-            payload["reason_codes"] = reason_codes
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="INVALID_RELEASE_GATE_CONTRACT")
         payload["blocking_metrics"] = payload.get("blocking_metrics") or payload.get("metrics") or {}
 
     return ReleaseGateStatusResponse(**payload)

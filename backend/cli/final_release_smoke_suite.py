@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -88,6 +89,86 @@ def run() -> int:
             },
         )
     )
+
+    guard_email = f"smoke_guard_{uuid.uuid4().hex[:8]}@example.com"
+    guard_password = "SmokeGuard123!"
+
+    register = requests.post(
+        f"{base}/api/auth/register",
+        json={"email": guard_email, "password": guard_password},
+        timeout=20,
+    )
+    register_ok = register.status_code == 200 and bool(register.json().get("id")) if register.status_code == 200 else False
+    checks.append(_check(register_ok, "guard_user_register", {"status_code": register.status_code}))
+
+    if register_ok:
+        user_id = register.json()["id"]
+        approve = requests.post(
+            f"{base}/api/auth/admin/user-approval-requests/{user_id}/approve",
+            headers=headers,
+            timeout=20,
+        )
+        approve_ok = approve.status_code == 200
+        checks.append(_check(approve_ok, "guard_user_approve", {"status_code": approve.status_code}))
+    else:
+        approve_ok = False
+
+    if approve_ok:
+        user_login = requests.post(
+            f"{base}/api/auth/login/user",
+            json={"email": guard_email, "password": guard_password},
+            timeout=20,
+        )
+        user_login_ok = user_login.status_code == 200 and bool(user_login.json().get("access_token")) if user_login.status_code == 200 else False
+        checks.append(_check(user_login_ok, "guard_user_login", {"status_code": user_login.status_code}))
+    else:
+        user_login_ok = False
+
+    if user_login_ok:
+        user_headers = {"Authorization": f"Bearer {user_login.json()['access_token']}"}
+        validate_order = requests.post(
+            f"{base}/api/user/validate-order",
+            headers=user_headers,
+            json={
+                "symbol": "BTCUSDT",
+                "market_type": "futures",
+                "order_type": "market",
+                "side": "buy",
+                "price": 100,
+                "size": 0.0001,
+                "leverage": 100,
+                "margin_mode": "isolated",
+            },
+            timeout=20,
+        )
+        validate_ok = validate_order.status_code == 200
+        validate_payload = validate_order.json() if validate_ok else {}
+        checks.append(
+            _check(
+                validate_ok,
+                "validate_order_endpoint",
+                {
+                    "status_code": validate_order.status_code,
+                    "valid": validate_payload.get("valid"),
+                    "violations_count": len(validate_payload.get("violations") or []),
+                    "execution_mode": validate_payload.get("execution_mode"),
+                },
+            )
+        )
+
+        guard_probe = requests.post(
+            f"{base}/api/user/manual-trade",
+            headers=user_headers,
+            json={"intent_token": "smoke_guard_token", "preview_hash": "smoke_guard_hash"},
+            timeout=20,
+        )
+        checks.append(
+            _check(
+                guard_probe.status_code == 423,
+                "execution_guard_423",
+                {"status_code": guard_probe.status_code, "body": guard_probe.text[:180]},
+            )
+        )
 
     futures_path = requests.get(
         f"{base}/api/admin/users/futures-live-path-check",
