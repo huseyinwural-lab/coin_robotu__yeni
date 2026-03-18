@@ -8,11 +8,16 @@ from schemas import (
     AdminExecutionQueueDecisionRequest,
     AdminExecutionQueueDecisionResponse,
     ExecutionIntentQueueItemResponse,
+    ExecutionReadinessResponse,
+    ReleaseGateOverrideRequest,
+    ReleaseGateOverrideResponse,
 )
 from services.audit_service import create_audit_log
 from services.execution_intent_service import approve_execution_intent, list_execution_queue, reject_execution_intent
 from services.execution_intent_service import queue_status_summary, rejection_reason_summary, retry_execution_intent
 from services.execution_precheck_service import load_execution_policy_registry
+from services.execution_readiness_service import evaluate_execution_readiness
+from services.live_mode_service import create_release_gate_override, revoke_release_gate_override
 
 router = APIRouter(prefix="/admin", tags=["admin_execution"])
 
@@ -101,7 +106,8 @@ def approve_intent(
         actor_role=current_user.role.value,
         details={"released_at": row.released_at.isoformat() if row.released_at else None},
     )
-    return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note)
+    execution_mode = "mocked" if bool((row.execution_provider_payload or {}).get("mocked")) else "live"
+    return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note, execution_mode=execution_mode)
 
 
 @router.post("/execution-queue/{intent_id}/reject", response_model=AdminExecutionQueueDecisionResponse)
@@ -125,7 +131,8 @@ def reject_intent(
         actor_role=current_user.role.value,
         details={"note": payload.note, "reason_codes": row.reject_reason_codes or []},
     )
-    return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note)
+    execution_mode = "mocked" if bool((row.execution_provider_payload or {}).get("mocked")) else "live"
+    return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note, execution_mode=execution_mode)
 
 
 @router.post("/execution-queue/{intent_id}/retry", response_model=AdminExecutionQueueDecisionResponse)
@@ -149,7 +156,91 @@ def retry_intent(
         actor_role=current_user.role.value,
         details={"note": payload.note},
     )
-    return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note)
+    execution_mode = "mocked" if bool((row.execution_provider_payload or {}).get("mocked")) else "live"
+    return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note, execution_mode=execution_mode)
+
+
+@router.get("/execution-readiness", response_model=ExecutionReadinessResponse)
+def execution_readiness(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_user
+    return ExecutionReadinessResponse(**evaluate_execution_readiness(db))
+
+
+@router.post("/execution-readiness/override", response_model=ReleaseGateOverrideResponse)
+def create_execution_guard_override(
+    payload: ReleaseGateOverrideRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    reason_code = payload.reason_code or "execution_guard_manual_override"
+    try:
+        row = create_release_gate_override(
+            db,
+            admin_user_id=current_user.id,
+            reason_code=reason_code,
+            reason_note=payload.reason_note,
+            ttl_minutes=payload.ttl_minutes,
+            deploy_context={"source": "execution_guard", **(payload.deploy_context or {})},
+            environment="prod",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    create_audit_log(
+        db,
+        action="execution_guard_override_created",
+        entity_type="execution_guard_override",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning",
+        details={"reason_code": row.reason_code, "reason_note": row.reason_note, "expires_at": row.expires_at.isoformat()},
+    )
+    return ReleaseGateOverrideResponse(
+        override_id=row.id,
+        admin_user_id=row.admin_user_id,
+        reason_code=row.reason_code,
+        reason_note=row.reason_note,
+        release_gate_snapshot=row.release_gate_snapshot or {},
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+        revoked_at=row.revoked_at,
+        deploy_context=row.deploy_context or {},
+        used_deploy_count=int(row.used_deploy_count or 0),
+    )
+
+
+@router.post("/execution-readiness/override/{override_id}/revoke", response_model=ReleaseGateOverrideResponse)
+def revoke_execution_guard_override(
+    override_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = revoke_release_gate_override(db, override_id=override_id, admin_user_id=current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    create_audit_log(
+        db,
+        action="execution_guard_override_revoked",
+        entity_type="execution_guard_override",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning",
+        details={"revoked_at": row.revoked_at.isoformat() if row.revoked_at else None},
+    )
+    return ReleaseGateOverrideResponse(
+        override_id=row.id,
+        admin_user_id=row.admin_user_id,
+        reason_code=row.reason_code,
+        reason_note=row.reason_note,
+        release_gate_snapshot=row.release_gate_snapshot or {},
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+        revoked_at=row.revoked_at,
+        deploy_context=row.deploy_context or {},
+        used_deploy_count=int(row.used_deploy_count or 0),
+    )
 
 
 @router.get("/execution-policies")

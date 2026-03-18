@@ -52,6 +52,10 @@ export const AdminFuturesStrategyAnalyticsPage = () => {
   );
   const gateTrend = useMemo(() => executionQuality?.gate_reason_trend_7d || [], [executionQuality]);
   const checklist15 = useMemo(() => executionQuality?.architecture_checklist_15 || [], [executionQuality]);
+  const isEmptyState = useMemo(
+    () => performance?.status === "EMPTY_STATE" || executionQuality?.status === "EMPTY_STATE",
+    [executionQuality, performance],
+  );
 
   return (
     <section className="space-y-4" data-testid="admin-futures-strategy-analytics-page">
@@ -91,6 +95,12 @@ export const AdminFuturesStrategyAnalyticsPage = () => {
       {!loading && Boolean(errorMessage) && (
         <div className="border border-red-700 bg-red-100 p-4 text-sm text-red-900" data-testid="strategy-analytics-error-state">
           Hata: {errorMessage}
+        </div>
+      )}
+
+      {!loading && !errorMessage && isEmptyState && (
+        <div className="border border-orange-500/60 bg-orange-100 p-4 text-sm text-black" data-testid="strategy-analytics-empty-state-banner">
+          EMPTY_STATE: Strateji analitiği verisi henüz hazır değil veya geçici olarak alınamadı.
         </div>
       )}
 

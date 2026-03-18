@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from core.audit.audit_events import AuditEvent
 from db import get_db
 from deps import require_user
-from models import User
+from models import User, UserExecutionIntent
 from schemas import (
     ExecutionIntentCancelRequest,
     ExecutionIntentCancelResponse,
@@ -25,6 +25,7 @@ from services.execution_intent_service import (
     preview_execution_intent,
     submit_execution_intent,
 )
+from services.execution_readiness_service import enforce_execution_guard_or_raise
 from services.rate_limiter_service import consume_exchange_rate_limit
 from services.position_management_service import list_user_positions
 from services.strategy_intelligence_service import evaluate_hedge_suggestion
@@ -285,6 +286,16 @@ def submit_position_action(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    preview_intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.intent_token == payload.intent_token).first()
+    readiness = {"mode": "MOCKED"}
+    if preview_intent is not None and str(preview_intent.intent_type or "").upper() == "OPEN_POSITION":
+        readiness = enforce_execution_guard_or_raise(
+            db,
+            user_id=current_user.id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            source="user_execution_position_action_submit",
+        )
     _guard_exchange_rate_limit()
     try:
         intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
@@ -321,6 +332,7 @@ def submit_position_action(
         intent_status="QUEUED_FOR_APPROVAL",
         reason_codes=[],
         queue_state=intent.status,
+        execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
     )
 
 
@@ -330,6 +342,16 @@ def submit_intent(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    preview_intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.intent_token == payload.intent_token).first()
+    readiness = {"mode": "MOCKED"}
+    if preview_intent is not None and str(preview_intent.intent_type or "").upper() == "OPEN_POSITION":
+        readiness = enforce_execution_guard_or_raise(
+            db,
+            user_id=current_user.id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            source="user_execution_intent_submit",
+        )
     _guard_exchange_rate_limit()
     try:
         intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
@@ -375,6 +397,7 @@ def submit_intent(
         intent_status="QUEUED_FOR_APPROVAL",
         reason_codes=[],
         queue_state=intent.status,
+        execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
     )
 
 

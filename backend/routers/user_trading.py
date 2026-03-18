@@ -15,6 +15,7 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.execution_intent_service import preview_execution_intent, submit_execution_intent
+from services.execution_readiness_service import enforce_execution_guard_or_raise
 from services.rate_limiter_service import consume_exchange_rate_limit
 from services.trading_preview_service import build_execution_preview_metrics
 
@@ -184,6 +185,14 @@ def execute_trading(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    readiness = enforce_execution_guard_or_raise(
+        db,
+        user_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        source="user_trading_execute",
+    )
+
     allowed, retry_after_seconds, _ = consume_exchange_rate_limit("binance", tokens=1.0)
     if not allowed:
         raise HTTPException(
@@ -228,4 +237,5 @@ def execute_trading(
         intent_status="QUEUED_FOR_APPROVAL",
         reason_codes=[],
         queue_state=intent.status,
+        execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
     )

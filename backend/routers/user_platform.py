@@ -37,6 +37,8 @@ from schemas import (
     UserExchangeConnectRequest,
     UserExchangeConnectResponse,
     UserPerformanceSnapshotResponse,
+    OrderValidationRequest,
+    OrderValidationResponse,
     UserPortfolioMapRequest,
     UserPortfolioMapResponse,
     UserPortfolioSnapshotResponse,
@@ -45,6 +47,7 @@ from schemas import (
     UserTradeResponse,
 )
 from services.audit_service import create_audit_log, create_domain_event
+from services.execution_readiness_service import validate_order_precheck
 
 router = APIRouter(prefix="/user", tags=["user_platform"])
 
@@ -345,6 +348,43 @@ def apply_risk_settings(
         details=serialize_user_risk_settings(row),
     )
     return UserRiskSettingsResponse(**serialize_user_risk_settings(row))
+
+
+@router.post("/validate-order", response_model=OrderValidationResponse)
+def validate_order(
+    payload: OrderValidationRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    result = validate_order_precheck(
+        db,
+        user_id=current_user.id,
+        symbol=payload.symbol,
+        market_type=payload.market_type,
+        order_type=payload.order_type,
+        side=payload.side,
+        price=payload.price,
+        size=payload.size,
+        leverage=payload.leverage,
+        margin_mode=payload.margin_mode,
+    )
+    create_audit_log(
+        db,
+        action="USER_ORDER_PRECHECK",
+        entity_type="order_validation",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning" if not result.get("valid") else "info",
+        details={
+            "symbol": payload.symbol,
+            "market_type": payload.market_type,
+            "valid": bool(result.get("valid")),
+            "violations": result.get("violations") or [],
+            "execution_mode": result.get("execution_mode"),
+        },
+    )
+    return OrderValidationResponse(**result)
 
 
 @router.get("/portfolio", response_model=UserPortfolioSnapshotResponse)

@@ -9,6 +9,7 @@ from models import BotProfile, PaperPosition, Position, PositionLedgerEvent, Use
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
+from services.execution_readiness_service import enforce_execution_guard_or_raise
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.portfolio_risk_service import portfolio_risk_check
 from services.position_management_service import sync_position_state
@@ -995,6 +996,15 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
         raise ValueError("intent_not_found")
     if intent.status != "QUEUED":
         raise ValueError("intent_not_in_queue")
+
+    if intent.intent_type == "OPEN_POSITION":
+        enforce_execution_guard_or_raise(
+            db,
+            user_id=intent.user_id,
+            actor_user_id=admin_user_id,
+            actor_role="ADMIN",
+            source="admin_execution_approval",
+        )
 
     intent.status = "APPROVED"
     intent.admin_user_id = admin_user_id

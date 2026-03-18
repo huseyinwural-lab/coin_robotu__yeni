@@ -1989,6 +1989,7 @@ class ExecutionIntentPreviewResponse(BaseModel):
     applied_leverage: int | None = None
     leverage_policy_mode: str | None = None
     leverage_clamp_reasons: list[str] = Field(default_factory=list)
+    execution_mode: str = "mocked"
 
 
 class TradingPreviewRateLimitResponse(BaseModel):
@@ -2013,6 +2014,31 @@ class ExecutionIntentSubmitResponse(BaseModel):
     intent_status: str
     reason_codes: list[str]
     queue_state: str
+    execution_mode: str = "mocked"
+
+
+class OrderValidationRequest(BaseModel):
+    symbol: str
+    market_type: str = "spot"
+    order_type: str = "market"
+    side: str = "buy"
+    price: float = 0
+    size: float = 0
+    leverage: int = 1
+    margin_mode: str = "isolated"
+
+
+class OrderValidationViolation(BaseModel):
+    code: str
+    message: str
+    details: dict = Field(default_factory=dict)
+
+
+class OrderValidationResponse(BaseModel):
+    valid: bool
+    violations: list[OrderValidationViolation] = Field(default_factory=list)
+    execution_mode: str = "mocked"
+    checks: dict = Field(default_factory=dict)
 
 
 class AdminEmergencyStopRequest(BaseModel):
@@ -2542,6 +2568,19 @@ class AdminExecutionQueueDecisionResponse(BaseModel):
     intent_id: str
     status: str
     admin_note: str
+    execution_mode: str = "mocked"
+
+
+class ExecutionReadinessResponse(BaseModel):
+    exchange_connection: str
+    permissions: str
+    latency_ms: int
+    order_test: str
+    mode: str
+    final_status: str
+    mocked_flag: bool = False
+    override_active: bool = False
+    reason_codes: list[str] = Field(default_factory=list)
 
 
 class AlertPolicyResponse(BaseModel):
@@ -2790,9 +2829,12 @@ class ReleaseGateStatusResponse(BaseModel):
     reasons: list[str]
     fail_reasons: list[str]
     warning_reasons: list[str]
+    reason_codes: list[str] = Field(default_factory=list)
+    blocking_metrics: dict = Field(default_factory=dict)
     live_activation: str
     environment: str | None = None
     reason_code: str | None = None
+    deploy_enable_flag: bool = False
     override_active: bool = False
     override_expires_at: datetime | None = None
     override_id: str | None = None

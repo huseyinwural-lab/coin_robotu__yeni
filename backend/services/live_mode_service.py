@@ -2599,6 +2599,9 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
         reason_code = warning_reasons[0]
 
     reasons = [*fail_reasons, *warning_reasons]
+    reason_codes = list(dict.fromkeys(fail_reasons if status == "BLOCKED" else reasons))
+    if status == "BLOCKED" and not reason_codes:
+        reason_codes = ["release_gate_blocked_unspecified"]
 
     if status == "BLOCKED":
         create_system_alert(
@@ -2623,30 +2626,36 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
             state_key="warning",
         )
 
+    metrics = {
+        "exchange_health": exchange_health,
+        "execution_quality_score": execution_quality_score,
+        "permission_drift_alert": permission_drift_alert,
+        "active_override": active_override,
+        "live_mode_enabled": live_mode_enabled,
+        "clock_drift_seconds": clock_drift,
+        "worker_lag_seconds": worker_lag,
+        "rate_limit_health": rate_limit_health,
+        "risk_orchestrator_enabled": risk_orchestrator_ok,
+        "kill_switch_tested": kill_switch_tested,
+        "chain_integrity_broken": chain_status.get("chain_broken"),
+        "failed_event_backlog": failed_backlog,
+    }
+
     return {
         "status": status,
         "environment": env,
         "reasons": reasons,
         "fail_reasons": fail_reasons,
         "warning_reasons": warning_reasons,
+        "reason_codes": reason_codes,
+        "blocking_metrics": metrics if status == "BLOCKED" else {},
         "reason_code": reason_code,
+        "deploy_enable_flag": status != "BLOCKED",
+        "override_active": active_override,
         "override_expires_at": override.expires_at if active_override else None,
         "override_id": override.id if active_override else None,
         "live_activation": live_activation,
-        "metrics": {
-            "exchange_health": exchange_health,
-            "execution_quality_score": execution_quality_score,
-            "permission_drift_alert": permission_drift_alert,
-            "active_override": active_override,
-            "live_mode_enabled": live_mode_enabled,
-            "clock_drift_seconds": clock_drift,
-            "worker_lag_seconds": worker_lag,
-            "rate_limit_health": rate_limit_health,
-            "risk_orchestrator_enabled": risk_orchestrator_ok,
-            "kill_switch_tested": kill_switch_tested,
-            "chain_integrity_broken": chain_status.get("chain_broken"),
-            "failed_event_backlog": failed_backlog,
-        },
+        "metrics": metrics,
     }
 
 

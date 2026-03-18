@@ -21,6 +21,7 @@ from services.slo_analytics_service import compute_slo_metrics, load_alert_rows_
 from services.strategy_observability_service import prune_strategy_observability_events
 from services.system_alert_service import create_system_alert
 from services.audit_service import create_audit_log
+from services.audit_retention_service import prune_audit_logs_with_policy
 
 
 def _load_release_gate_payload(path: Path) -> dict:
@@ -51,13 +52,7 @@ def _prune_old_audit_logs(db, *, days: int, dry_run: bool) -> dict:
     days = min(max(int(days), 1), 365)
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     try:
-        to_delete_ids = [
-            row[0]
-            for row in db.query(AuditLog.id)
-            .filter(AuditLog.created_at < cutoff)
-            .order_by(AuditLog.created_at.asc())
-            .all()
-        ]
+        result = prune_audit_logs_with_policy(db, cutoff=cutoff, dry_run=dry_run)
     except SQLAlchemyError as exc:
         db.rollback()
         return {
@@ -67,13 +62,13 @@ def _prune_old_audit_logs(db, *, days: int, dry_run: bool) -> dict:
             "status": "SKIPPED",
             "reason": str(exc)[:220],
         }
-    delete_count = len(to_delete_ids)
-    if not dry_run and to_delete_ids:
-        db.query(AuditLog).filter(AuditLog.id.in_(to_delete_ids)).delete(synchronize_session=False)
-        db.commit()
+
     return {
         "retention_days": days,
-        "deleted_count": int(delete_count),
+        "deleted_count": int(result.get("deleted_count") or 0),
+        "protected_count": int(result.get("protected_count") or 0),
+        "retention_policy_applied": bool(result.get("retention_policy_applied")),
+        "preserved_categories": result.get("preserved_categories") or [],
         "dry_run": bool(dry_run),
     }
 

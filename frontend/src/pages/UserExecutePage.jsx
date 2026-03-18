@@ -57,6 +57,8 @@ export const UserExecutePage = () => {
   const [preview, setPreview] = useState(null);
   const [previewTrace, setPreviewTrace] = useState(null);
   const [previewTraceLoading, setPreviewTraceLoading] = useState(false);
+  const [orderValidation, setOrderValidation] = useState(null);
+  const [executionModeBadge, setExecutionModeBadge] = useState("mocked");
   const [flowContext, setFlowContext] = useState(null);
   const [liveMetrics, setLiveMetrics] = useState(null);
   const [autoPreviewEnabled, setAutoPreviewEnabled] = useState(true);
@@ -437,10 +439,29 @@ export const UserExecutePage = () => {
       return;
     }
     try {
+      const validationPayload = {
+        symbol: form.symbol,
+        market_type: form.market_type,
+        order_type: form.order_type,
+        side: form.side,
+        price: Number(preview?.normalized_order_payload?.price || preview?.price || 0),
+        size: Number(preview?.normalized_order_payload?.size || preview?.size || 0),
+        leverage: Number(form.leverage || 1),
+        margin_mode: form.margin_mode,
+      };
+      const { data: validationData } = await apiClient.post("/user/validate-order", validationPayload);
+      setOrderValidation(validationData);
+      if (!validationData?.valid) {
+        const violations = (validationData?.violations || []).map((item) => item.code).join(", ") || "validation_failed";
+        toast.error(`Order validation fail: ${violations}`);
+        return;
+      }
+
       const { data } = await apiClient.post("/v1/user/trading/execute", {
         intent_token: preview.intent_token,
         preview_hash: preview.preview_hash,
       });
+      setExecutionModeBadge(data?.execution_mode || validationData?.execution_mode || "mocked");
       toast.success(`Queue status: ${data.intent_status}`);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Submit başarısız");
@@ -469,6 +490,11 @@ export const UserExecutePage = () => {
       <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-execute-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-execute-title">Trade Execution Control</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-execute-description">Preview token zorunlu, submit assisted queue’ya gider.</p>
+        {String(executionModeBadge || "").toLowerCase() === "mocked" && (
+          <div className="mt-3 inline-flex rounded-full border border-orange-500/70 bg-orange-500/20 px-3 py-1 text-xs font-semibold text-orange-200" data-testid="user-execute-simulated-trade-badge">
+            Simulated Trade
+          </div>
+        )}
         {flowContext && (
           <div className="mt-3 flex flex-wrap items-center gap-3 rounded border border-emerald-400/40 bg-emerald-400/10 p-2" data-testid="user-execute-flow-context-banner">
             <p className="text-xs text-emerald-200" data-testid="user-execute-flow-context-text">
@@ -482,6 +508,18 @@ export const UserExecutePage = () => {
       </header>
 
       <div className="col-span-12 lg:col-span-7 grid grid-cols-12 gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-execute-form-grid">
+        {orderValidation && !orderValidation.valid && (
+          <div className="col-span-12 rounded border border-red-600/70 bg-red-950/30 p-3" data-testid="user-execute-order-validation-fail-panel">
+            <p className="text-xs font-semibold text-red-200" data-testid="user-execute-order-validation-fail-title">Order Validation Failed</p>
+            <div className="mt-1 space-y-1" data-testid="user-execute-order-validation-fail-list">
+              {(orderValidation.violations || []).map((violation, index) => (
+                <p key={`${violation.code}-${index}`} className="text-xs text-red-100" data-testid={`user-execute-order-validation-fail-item-${index}`}>
+                  {violation.code}: {violation.message}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
         <div className={policyNoticeClass} data-testid="user-execute-quote-policy-notice">
           <div className="flex flex-wrap items-center gap-2" data-testid="user-execute-quote-policy-notice-content">
             <span

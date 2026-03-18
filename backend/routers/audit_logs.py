@@ -15,6 +15,7 @@ from deps import require_admin, require_super_admin
 from models import AuditLog, User
 from schemas import AuditLogResponse, AuditTimelineItemResponse, AuditTimelineResponse
 from services.audit_service import create_audit_log
+from services.audit_retention_service import prune_audit_logs_with_policy
 
 router = APIRouter(prefix="/audit-logs", tags=["audit_logs"])
 
@@ -285,15 +286,7 @@ def prune_old_audit_logs(
     days: int = Query(default=90, ge=30, le=365),
 ):
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    to_delete_ids = [row.id for row in db.query(AuditLog.id).filter(AuditLog.created_at < cutoff).all()]
-    deleted_count = 0
-    if to_delete_ids:
-        deleted_count = (
-            db.query(AuditLog)
-            .filter(AuditLog.id.in_(to_delete_ids))
-            .delete(synchronize_session=False)
-        )
-        db.commit()
+    result = prune_audit_logs_with_policy(db, cutoff=cutoff, dry_run=False)
 
     create_audit_log(
         db,
@@ -303,9 +296,21 @@ def prune_old_audit_logs(
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
         severity="warning",
-        details={"days": days, "deleted_count": int(deleted_count)},
+        details={
+            "days": days,
+            "deleted_count": int(result.get("deleted_count") or 0),
+            "protected_count": int(result.get("protected_count") or 0),
+            "retention_policy_applied": bool(result.get("retention_policy_applied")),
+            "preserved_categories": result.get("preserved_categories") or [],
+        },
     )
-    return {"days": days, "deleted_count": int(deleted_count)}
+    return {
+        "days": days,
+        "deleted_count": int(result.get("deleted_count") or 0),
+        "protected_count": int(result.get("protected_count") or 0),
+        "retention_policy_applied": bool(result.get("retention_policy_applied")),
+        "preserved_categories": result.get("preserved_categories") or [],
+    }
 
 
 @router.get("/admin/incident-export")

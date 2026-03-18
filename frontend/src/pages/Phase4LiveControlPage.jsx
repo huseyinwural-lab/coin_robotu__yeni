@@ -30,6 +30,7 @@ export const Phase4LiveControlPage = () => {
   const [connectivity, setConnectivity] = useState(null);
   const [readinessScore, setReadinessScore] = useState(null);
   const [releaseGate, setReleaseGate] = useState(null);
+  const [executionReadiness, setExecutionReadiness] = useState(null);
   const [qualityRows, setQualityRows] = useState([]);
   const [permissionStatus, setPermissionStatus] = useState(null);
   const [permissionResult, setPermissionResult] = useState(null);
@@ -44,6 +45,7 @@ export const Phase4LiveControlPage = () => {
         { data: connectivityData },
         { data: readinessScoreData },
         { data: releaseGateData },
+        { data: executionReadinessData },
         { data: qualityData },
         { data: permissionStatusData },
       ] = await Promise.all([
@@ -52,6 +54,7 @@ export const Phase4LiveControlPage = () => {
         apiClient.get("/phase4/testnet-connectivity"),
         apiClient.get("/phase4/admin/live-readiness-score"),
         apiClient.get("/phase4/admin/release-gate"),
+        apiClient.get("/admin/execution-readiness"),
         apiClient.get("/phase4/admin/execution-quality?limit=20"),
         apiClient.get("/phase4/admin/permission-status"),
       ]);
@@ -61,6 +64,7 @@ export const Phase4LiveControlPage = () => {
       setConnectivity(connectivityData);
       setReadinessScore(readinessScoreData);
       setReleaseGate(releaseGateData);
+      setExecutionReadiness(executionReadinessData);
       setQualityRows(qualityData);
       setPermissionStatus(permissionStatusData);
     } catch (error) {
@@ -136,7 +140,7 @@ export const Phase4LiveControlPage = () => {
         </p>
       </header>
 
-      <div className="grid gap-3 md:grid-cols-4" data-testid="phase4-live-control-metrics-grid">
+      <div className="grid gap-3 md:grid-cols-5" data-testid="phase4-live-control-metrics-grid">
         <MetricCard label="Mode" value={readiness?.mode || "-"} tone="blue" testId="phase4-metric-mode" />
         <MetricCard label="Exchange" value={readiness?.exchange || "-"} tone="blue" testId="phase4-metric-exchange" />
         <MetricCard label="Market" value={readiness?.market_type || "-"} tone="blue" testId="phase4-metric-market" />
@@ -145,15 +149,43 @@ export const Phase4LiveControlPage = () => {
         <MetricCard label="Live Readiness" value={readinessScore?.readiness_score ?? "-"} tone={Number(readinessScore?.readiness_score || 0) >= 80 ? "blue" : "red"} testId="phase4-metric-live-readiness-score" />
         <MetricCard label="Release Gate" value={releaseGate?.status || "-"} tone={releaseGate?.status === "READY" ? "blue" : releaseGate?.status === "WARNING" ? "orange" : "red"} testId="phase4-metric-release-gate" />
         <MetricCard label="Live Activation" value={releaseGate?.live_activation || "disabled"} tone={releaseGate?.live_activation === "ready" ? "blue" : releaseGate?.live_activation === "guarded" || releaseGate?.live_activation === "guarded_override" ? "orange" : "red"} testId="phase4-metric-live-activation" />
+        <MetricCard label="Exec Readiness" value={executionReadiness?.final_status || "-"} tone={executionReadiness?.final_status === "READY" ? "blue" : "red"} testId="phase4-metric-execution-readiness" />
+        <MetricCard label="Exec Mode" value={executionReadiness?.mode || "-"} tone={executionReadiness?.mode === "MOCKED" ? "orange" : "blue"} testId="phase4-metric-execution-mode" />
       </div>
 
       <div className="border border-red-500/30 bg-red-950/10 p-4" data-testid="phase4-release-gate-panel">
         <p className="text-xs uppercase tracking-widest text-red-300" data-testid="phase4-release-gate-title">Dry-Run Release Gate</p>
         <p className="mt-2 text-sm text-slate-300" data-testid="phase4-release-gate-status">Status: {releaseGate?.status || "-"}</p>
+        <p className="mt-1 text-sm text-slate-300" data-testid="phase4-release-gate-deploy-flag">deploy_enable_flag: {String(Boolean(releaseGate?.deploy_enable_flag))}</p>
+        {releaseGate?.status === "BLOCKED" && (
+          <p className="mt-2 rounded border border-red-500/40 bg-red-900/20 px-2 py-1 text-xs text-red-200" data-testid="phase4-release-gate-actionable-message">
+            BLOCKED: reason_codes çözülmeden deploy aktif edilemez. Aksiyon: System Readiness + Execution Policies kontrol et; false-negative ise admin override kullan.
+          </p>
+        )}
+        <div className="mt-2 space-y-1" data-testid="phase4-release-gate-reason-codes-list">
+          {(releaseGate?.reason_codes || []).map((item, index) => (
+            <p key={`${item}-${index}`} className="text-xs font-mono text-red-200" data-testid={`phase4-release-gate-reason-code-${index}`}>{item}</p>
+          ))}
+        </div>
         <div className="mt-2 space-y-1" data-testid="phase4-release-gate-reasons-list">
           {(releaseGate?.reasons || []).map((item, index) => (
             <p key={`${item}-${index}`} className="text-xs font-mono text-red-200" data-testid={`phase4-release-gate-reason-${index}`}>{item}</p>
           ))}
+        </div>
+        <pre className="mt-2 overflow-x-auto rounded border border-red-600/30 bg-black/30 p-2 text-[11px] text-red-100" data-testid="phase4-release-gate-blocking-metrics-json">
+          {JSON.stringify(releaseGate?.blocking_metrics || {}, null, 2)}
+        </pre>
+      </div>
+
+      <div className="border border-orange-500/40 bg-orange-950/10 p-4" data-testid="phase4-execution-readiness-panel">
+        <p className="text-xs uppercase tracking-widest text-orange-300" data-testid="phase4-execution-readiness-title">Execution Readiness Contract</p>
+        <div className="mt-2 grid gap-2 text-xs text-slate-200 md:grid-cols-3" data-testid="phase4-execution-readiness-grid">
+          <p data-testid="phase4-execution-readiness-exchange">exchange_connection: {executionReadiness?.exchange_connection || "-"}</p>
+          <p data-testid="phase4-execution-readiness-permissions">permissions: {executionReadiness?.permissions || "-"}</p>
+          <p data-testid="phase4-execution-readiness-latency">latency_ms: {executionReadiness?.latency_ms ?? "-"}</p>
+          <p data-testid="phase4-execution-readiness-order-test">order_test: {executionReadiness?.order_test || "-"}</p>
+          <p data-testid="phase4-execution-readiness-mode">mode: {executionReadiness?.mode || "-"}</p>
+          <p data-testid="phase4-execution-readiness-final">final_status: {executionReadiness?.final_status || "-"}</p>
         </div>
       </div>
 

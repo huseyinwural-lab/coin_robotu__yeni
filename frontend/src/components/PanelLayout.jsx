@@ -265,6 +265,17 @@ export const PanelLayout = () => {
             <p className="text-xs uppercase tracking-[0.18em] text-slate-400" data-testid="brand-kicker">Trading Engine</p>
             <h1 className={`text-xl font-bold uppercase tracking-tight ${brandTitleClass}`} data-testid="brand-title">Industrial Cockpit</h1>
             <p className="mt-2 text-xs text-slate-300" data-testid="active-user-role">Aktif Rol: {user?.role}</p>
+            {isAdmin && gateBadge?.status === "BLOCKED" && (
+              <div className="mt-2 rounded border border-red-700 bg-red-700/20 px-2 py-2 text-[11px] text-black" data-testid="navbar-release-gate-blocked-actionable">
+                <p className="font-semibold" data-testid="navbar-release-gate-blocked-title">Release Gate BLOCKED</p>
+                <p className="mt-1" data-testid="navbar-release-gate-blocked-message">
+                  Deploy kapalı. Aksiyon: reason_codes çöz, ardından tekrar doğrula.
+                </p>
+                <p className="mt-1 font-mono" data-testid="navbar-release-gate-blocked-reasons">
+                  {(gateBadge?.reason_codes || gateBadge?.reasons || []).slice(0, 2).join(", ") || "reason_code_missing"}
+                </p>
+              </div>
+            )}
             {isAdmin && gateBadge?.override_active && (
               <div className="mt-2 rounded border border-red-700 bg-red-700/20 px-2 py-1 text-[11px] font-semibold text-black" data-testid="navbar-override-countdown-badge">
                 active override · {countdownLabel}
