@@ -17,6 +17,11 @@
   - `/api/screener` + trade response explain alanları deterministic
 - 🔜 Sonraki odak: explain detaylarını expandable drawer ile artırma ve telemetry query maliyet optimizasyonu.
 
+## 2026-03-18 Update (MFA + Brand Settings)
+- ✅ Optional MFA (User+Admin) tamamlandı (email OTP + TOTP, login sonrası step-up)
+- ✅ Kalıcı branding tamamlandı (DB logo saklama + admin upload endpoint + global yayın)
+- ✅ Admin `brand-settings` ekranı ve panel nav entegrasyonu tamamlandı.
+
 ## P0 (Tamamlandı)
 - Phase 5.1A → 5.8A institutional futures engine (risk/correlation/capital/tail-risk/live-readiness/scaling)
 - Admin observability panelleri ve release-gate operability hattı

@@ -1,6 +1,26 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-18
+### Iteration-165 — Optional MFA + Persistent Brand Settings
+- Optional MFA eklendi (User + Admin, login sonrası ikinci adım):
+  - `/api/auth/mfa/settings` (GET/PUT)
+  - `/api/auth/mfa/totp/setup`
+  - `/api/auth/mfa/totp/verify-setup`
+  - `/api/auth/mfa/challenge/verify`
+- Login endpointleri MFA-aware hale getirildi (`mfa_required`, challenge token, methods).
+- Kalıcı branding eklendi (DB blob + upload endpoint):
+  - `GET /api/branding/settings`
+  - `GET /api/branding/logo`
+  - `GET/PUT /api/admin/brand-settings`
+  - `POST /api/admin/brand-settings/logo-upload`
+- Frontend:
+  - `MfaSettingsPage` user/admin route’larına eklendi
+  - `AdminBrandSettingsPage` eklendi (`/admin/brand-settings`)
+  - Sidebar nav: MFA Settings + Brand Settings
+  - Landing/User/Admin login branding API ile senkronlandı.
+- Doğrulama: backend testleri + frontend E2E PASS.
+
+## 2026-03-18
 ### Iteration-164 — Auth Pages Reference Redesign + Logo Upload
 - `/user/login` sayfası referans görsele yakın şekilde yeniden düzenlendi (hero + turuncu form panel + sağ çizgili görsel + alt durum/feature blokları).
 - Logo upload inputu eklendi (file input + anlık preview):

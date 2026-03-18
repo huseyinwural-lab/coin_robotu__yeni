@@ -1,3 +1,87 @@
+## 2026-03-18 — MFA + Persistent Branding + Admin Brand Settings (Kapanış)
+
+### Kullanıcı talebi (3 kalem birlikte)
+1. Kullanıcı panellerinden isteğe bağlı MFA
+2. Logo inputu kalıcı saklama (DB + upload endpoint)
+3. Admin’den tüm sayfalara yayılan Brand Settings ekranı
+
+### Uygulanan MFA (User + Admin, login sonrası ikinci adım)
+
+#### Backend
+- Yeni modeller:
+  - `UserMfaPreference`
+  - `AuthMfaChallenge`
+- Yeni servis: `backend/services/mfa_service.py`
+  - TOTP setup/verify
+  - Email OTP challenge üretimi
+  - MFA challenge verify + access token üretimi
+- Auth login akışı güncellendi (`/api/auth/login/user`, `/api/auth/login/admin`):
+  - MFA aktifse `mfa_required=true` challenge response
+  - MFA doğrulama endpointi:
+    - `POST /api/auth/mfa/challenge/verify`
+- MFA ayar endpointleri:
+  - `GET /api/auth/mfa/settings`
+  - `PUT /api/auth/mfa/settings`
+  - `POST /api/auth/mfa/totp/setup`
+  - `POST /api/auth/mfa/totp/verify-setup`
+
+#### Frontend
+- AuthContext MFA challenge-aware hale getirildi:
+  - `login()` MFA-required dönüşünü handle eder
+  - `verifyMfaChallenge()` eklendi
+- Login ekranları MFA step içeriyor:
+  - `/user/login`
+  - `/admin/login`
+- Yeni panel sayfası:
+  - `MfaSettingsPage.jsx`
+  - Route: `/user/mfa-settings`, `/admin/mfa-settings`
+- Sidebar nav eklendi:
+  - User: MFA Settings
+  - Admin: MFA Settings
+
+### Uygulanan Persistent Brand Settings
+
+#### Backend
+- Yeni model:
+  - `BrandSetting` (DB blob ile logo saklama)
+- Yeni servis:
+  - `backend/services/brand_settings_service.py`
+- Public branding endpointleri:
+  - `GET /api/branding/settings`
+  - `GET /api/branding/logo`
+- Admin brand endpointleri:
+  - `GET /api/admin/brand-settings`
+  - `PUT /api/admin/brand-settings`
+  - `POST /api/admin/brand-settings/logo-upload` (multipart file upload)
+
+#### Frontend
+- Yeni admin sayfası:
+  - `AdminBrandSettingsPage.jsx`
+  - Route: `/admin/brand-settings`
+- Sidebar nav eklendi:
+  - Admin: Brand Settings
+- Landing/User/Admin login ekranları branding API’dan logo+isim çekiyor:
+  - `/`
+  - `/user/login`
+  - `/admin/login`
+
+### Test/Doğrulama
+- Backend testleri:
+  - `test_mfa_and_brand_settings.py` → PASS
+- API smoke:
+  - MFA setup/verify/login challenge flow PASS
+  - Brand update + logo upload + public logo fetch PASS
+- Frontend E2E (agent):
+  - User MFA login flow PASS
+  - Admin MFA/Brand pages PASS
+  - Public branding propagation PASS
+
+### Durum
+- İstenen 3 kalem de tamamlandı:
+  - Optional MFA (User+Admin)
+  - Kalıcı logo saklama (DB + upload endpoint)
+  - Admin brand panelinden global yayın
+
 ## 2026-03-18 — Auth UI Final Styling (Logo Upload + Reference Layout)
 
 ### Kullanıcı seçimleri
