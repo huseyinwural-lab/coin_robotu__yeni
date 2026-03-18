@@ -1,3 +1,93 @@
+## 2026-03-18 — Iteration Update (Faz-3 Derinleştirme: Root-Cause Intelligence + CSV Export + SLO Advanced + Ops Automation)
+
+### 1) Root-Cause Intelligence (Gelişmiş)
+
+- `incident-replay` adımlarına gelişmiş yorum katmanı eklendi:
+  - `confidence_score` (0-1)
+  - `priority_level` (LOW/MED/HIGH)
+  - `primary_cause` + `secondary_cause`
+  - `causes` (multi-cause list)
+- Rule engine (deterministic):
+  - timeout/network reason → `TIMEOUT_NETWORK`
+  - HTTP 401/403 veya auth reason → `AUTH`
+  - HTTP 5xx / exchange reason → `EXCHANGE`
+  - assignment/validation reason → `VALIDATION`
+  - fallback → `UNKNOWN` (düşük confidence)
+- Replay summary genişletildi:
+  - `root_cause_breakdown`
+
+### 2) Incident Replay Export (Gelişmiş)
+
+- `GET /api/audit-logs/admin/incident-export` ZIP içeriği genişletildi:
+  - `incident.json`
+  - `summary.json`
+  - `timeline.csv` ✅ yeni
+- `timeline.csv` kolonları:
+  - timeline, step, status, timestamp, action, severity, route,
+  - root_cause_type, failure_stage, primary_error_code,
+  - confidence_score, priority_level
+
+### 3) SLO/SLA Advanced Analytics
+
+- Yeni servis katmanı:
+  - `/app/backend/services/slo_analytics_service.py`
+- `GET /api/admin/system-alerts/slo-sla` artık ek alanlar döner:
+  - `error_budget_target_pct`
+  - `error_budget_consumed_pct`
+  - `error_rate_pct`
+  - `sla_breached`
+- `GET /api/admin/system-alerts/slo-sla-trend` genişletildi:
+  - 7/30/90 noktaları
+  - anomaly detection:
+    - `spike_detected`
+    - `long_term_shift`
+    - `signal`
+    - `reason`
+- Frontend:
+  - `AdminSystemAlertsPage` SLO panelinde error budget alanları
+  - SLO trend chart + anomaly labels (`signal`, `reason`)
+
+### 4) Ops Automation (Önerilen)
+
+- Yeni günlük otomasyon scripti:
+  - `/app/backend/cli/daily_ops_automation.py`
+- Runner script:
+  - `/app/scripts/run_daily_ops_automation.sh`
+- Cron şablonu:
+  - `/app/scripts/cron_daily_ops_automation.cron`
+- Davranış:
+  - `release_gate_latest.json` FAIL ise incident üretmeyi dener
+  - SLO breach için audit log (log-only yaklaşım)
+  - `--dry-run` destekli
+
+### 5) Alert Kanalı Notu (Resend)
+
+- Panel üzerinden credential işlendi.
+- Test simulate sonucu domain doğrulaması eksik olduğu için email `FAILED` döndü:
+  - `platform.local domain is not verified`
+- Kullanıcı kararıyla bu durum test ortamında blocker değil (PASS kabul).
+
+### 6) Prod Strict Gate Run (istenen adım)
+
+- Çalıştırıldı:
+  - `python /app/backend/cli/p0_closure_gate.py --target-env prod --output-file /app/test_reports/release_gate_latest.json`
+- Sonuç:
+  - `overall: FAIL` (preview runtime sqlite fallback nedeniyle beklenen)
+
+### Doğrulama
+
+- Lokal test:
+  - `pytest test_phase3_incident_replay_slo.py test_ops_automation_daily.py test_observability_mvp.py test_p0_closure_gate_script.py` → **13 PASS**
+  - `pytest test_phase3_incident_replay_slo.py test_p0_closure_gate_script.py test_p0_closure_gate_comprehensive.py` → **18 PASS**
+- Testing agent:
+  - `/app/test_reports/iteration_152.json` ✅
+- Auto frontend testing agent:
+  - replay intelligence + SLO advanced panels PASS ✅
+
+### Not
+
+- Bybit/OKX execution adapterları kullanıcı tercihiyle **MOCKED**.
+
 ## 2026-03-17 — Iteration Update (Prod Strict Gate Run + Faz-3 Genişletme Tamamlandı)
 
 ### 1) Prod Strict Gate Koşumu (istenen adım)
