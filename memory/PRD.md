@@ -1,3 +1,111 @@
+## 2026-03-18 — Iteration Update (FAZ-A + FAZ-B FINAL CLOSURE / Deterministik Güvenlik Kapanışı)
+
+### Kullanıcı seçimleri (uygulandı)
+
+- 1B: Mevcut codebase path’lerinde uygulama
+- 2C: Readiness kuralı (MOCKED + connection varsa READY, connection yoksa BLOCKED)
+- 3B: `/api/admin/execution-override` alias endpoint eklendi
+- 4B: Guard kapsamı mevcut open-position intent akışları + yeni alias trade endpointleri ile genişletildi
+
+### P0 Minimum Set — Kapanış Sonucu
+
+1) **Execution Readiness endpoint (A2)**
+- Endpoint: `GET /api/admin/execution-readiness`
+- Contract alanları doğrulandı:
+  - `exchange_connection`, `permissions`, `latency_ms`, `order_test`, `mode`, `final_status`
+- `latency_ms` null olmaz (int, fallback 0)
+
+2) **Global Execution Guard (B1)**
+- Guard aktif: `readiness != READY` -> `HTTP 423` + detail `EXECUTION_BLOCKED_BY_READINESS`
+- Audit event: `EXECUTION_BLOCKED`
+- Enforce noktaları:
+  - `/api/v1/user/trading/execute`
+  - `/api/user/execution/intent/submit` (OPEN_POSITION)
+  - `/api/user/execution/position-actions/submit` (OPEN_POSITION)
+  - Admin approval path (`approve_execution_intent`) OPEN_POSITION
+  - Yeni alias endpointler: `/api/user/open-position`, `/api/user/execute-order`, `/api/user/manual-trade`
+
+3) **Pre-check engine (B2)**
+- Endpoint: `POST /api/user/validate-order`
+- Kontroller:
+  - leverage limit
+  - max exposure
+  - margin type uygunluğu
+  - min order size
+  - min notional
+- Output: `{ valid, violations, execution_mode, checks }`
+- Execution akışında double validation uygulandı (execution öncesi backend tekrar kontrol)
+
+4) **Execution response standard (B3)**
+- `execution_mode: mocked|live` alanı execution response’larda standardize edildi.
+- UI tarafında **Simulated Trade** badge ile net ayrım gösteriliyor.
+
+5) **Release Gate contract fix (A1)**
+- Endpointler:
+  - `GET /api/phase4/admin/release-gate`
+  - `GET /api/admin/release-gate` (alias)
+- Contract:
+  - `status: PASS|BLOCKED`
+  - `reason_codes[]`
+  - `blocking_metrics {}`
+  - `deploy_enable_flag`
+- BLOCKED durumda reason_codes boş bırakılmaz.
+- Runtime hata durumunda 500 yerine kontrollü BLOCKED payload döner.
+
+6) **Audit log hardening (A3)**
+- Prune policy kritik kategorileri korur:
+  - `AUTH`, `EXECUTION`, `ADMIN_ACTION`, `EXECUTION_BLOCKED`
+- Response/summary alanı:
+  - `retention_policy_applied: true`
+
+7) **Admin UI readiness panel**
+- Yeni sayfa: `/admin/execution-readiness`
+- Görsel kontrat: connection, permissions, latency, order_test, mode, final_status
+- BLOCKED durumda actionable mesaj
+- MOCKED badge gösterimi
+- Override panel (admin-only)
+
+8) **Admin override (Karar 1)**
+- Endpointler:
+  - `POST /api/admin/execution-override`
+  - `POST /api/admin/execution-readiness/override`
+  - `POST /api/admin/execution-readiness/override/{override_id}/revoke`
+- Audit eventler:
+  - `execution_guard_override_created`
+  - `execution_guard_override_revoked`
+
+9) **Yeni test seti (istenen isimlerde eklendi)**
+- `backend/tests/test_execution_guard.py`
+- `backend/tests/test_order_validation.py`
+- `backend/tests/test_execution_mode.py`
+- `backend/tests/test_release_gate_contract.py`
+
+10) **CI/Gate entegrasyonu güncellendi**
+- `final_release_smoke_suite.py`:
+  - release-gate contract kontrolü
+  - execution-readiness READY kontrolü
+- `p0_closure_gate.py`:
+  - execution-readiness READY
+  - validate-order contract
+  - execution guard 423 enforcement probe
+
+### Test sonuçları
+
+- `pytest` (kritik paket): **27 PASS**
+- `test_iteration156_faz_closure.py`: **25 PASS, 1 SKIP**
+- `final_release_smoke_suite.py`: **overall PASS**
+- `p0_closure_gate.py`: **overall PASS**
+- Testing agent raporu: `/app/test_reports/iteration_157.json`
+  - backend: **100%**
+  - frontend: **100%**
+- Guard 423 manuel doğrulama:
+  - override revoke sonrası `/api/user/manual-trade` -> **423 EXECUTION_BLOCKED_BY_READINESS** ✅
+
+### Son güvenlik durumu
+
+- Yanlış koşulda trade açılması guard katmanı ile teknik olarak engellenmiş durumda.
+- MOCKED vs LIVE ayrımı hem API hem UI katmanında açık ve deterministik.
+
 ## 2026-03-18 — Iteration Update (FAZ-A + FAZ-B Uygulaması)
 
 ### Kapsam (Kullanıcı Onayı)
