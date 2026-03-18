@@ -11,10 +11,16 @@ Features tested:
 """
 
 import os
+from pathlib import Path
+
 import pytest
 import requests
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[2] / "frontend" / ".env")
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+pytestmark = pytest.mark.skipif(not BASE_URL, reason="REACT_APP_BACKEND_URL is required for integration tests")
 
 
 class TestPasswordResetRequest:

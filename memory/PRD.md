@@ -1,3 +1,72 @@
+## 2026-03-18 — Iteration Update (Self Password Reset + Resend Mail Token)
+
+### Kapsam
+
+- Kullanıcı talebine göre **self-reset** akışı eklendi:
+  - `Şifremi unuttum` -> mail token -> `yeni şifre`
+- Seçimler:
+  - Mail provider: **Resend**
+  - Token süre: **15 dakika**
+  - Şifre politikası: **min 10 + büyük + küçük + rakam + sembol**
+  - User enumeration koruması: **aktif** (kayıtlı/kayıtsız aynı generic response)
+  - Doğrulama tipi: **yalnız token**
+
+### Backend Değişiklikleri
+
+- `auth` router'a yeni endpointler eklendi:
+  - `POST /api/auth/password-reset/request`
+  - `POST /api/auth/password-reset/confirm`
+- Yeni servis: `/app/backend/services/password_reset_service.py`
+  - token üretim/hashleme
+  - token tüketim/invalid-expired kontrolü
+  - şifre politika doğrulaması
+  - Resend ile async mail gönderimi (`asyncio.to_thread`)
+- Model genişletmesi (`UserOnboardingProfile`):
+  - `password_reset_token_hash`
+  - `password_reset_expires_at`
+  - `password_reset_requested_at`
+- Alembic migration eklendi:
+  - `/app/backend/migrations/versions/20260318_0051_password_reset_columns.py`
+- Güvenlik:
+  - request endpoint daima generic mesaj döner
+  - confirm endpoint weak password senaryolarını açık reason code ile reddeder
+
+### Frontend Değişiklikleri
+
+- Yeni sayfalar:
+  - `/forgot-password` (`ForgotPasswordPage.jsx`)
+  - `/reset-password` (`ResetPasswordPage.jsx`)
+- Login sayfaları bağlantıları:
+  - `UserLoginPage`: "Şifremi unuttum" -> forgot page
+  - `AdminLoginPage`: "Şifremi unuttum" -> forgot page
+- Tüm yeni kritik interaktif öğelere `data-testid` eklendi.
+
+### Konfigürasyon (runtime)
+
+- Backend `.env` güncellendi:
+  - `RESEND_API_KEY`
+  - `PASSWORD_RESET_FROM_EMAIL`
+  - `PASSWORD_RESET_REDIRECT_URL`
+  - `PASSWORD_RESET_TO_OVERRIDE`
+
+### Test/Doğrulama
+
+- Local/service test:
+  - `pytest /app/backend/tests/test_password_reset_service.py` -> **3 PASS**
+  - `pytest /app/backend/tests/test_password_reset_flow.py` -> **14 PASS**
+- API self-test:
+  - password reset request (kayıtlı/kayıtsız) -> generic accepted ✅
+  - confirm endpoint -> weak/strong policy davranışı doğrulandı ✅
+  - valid token ile confirm -> şifre güncellemesi doğrulandı ✅
+- Frontend smoke:
+  - forgot/reset sayfaları açılış ve form submit akışı doğrulandı ✅
+- Testing agent:
+  - `/app/test_reports/iteration_154.json` -> backend %100, frontend %100 ✅
+
+### Not
+
+- Bybit/OKX execution adapterları bu sürümde ürün kararıyla **MOCKED**.
+
 ## 2026-03-18 — Iteration Update (P0 Login 500 Kapanışı + Storage Guard + Release-Gate 500 Fix)
 
 ### 1) P0 Blokaj Kapanışı — `/api/auth/login` 500
