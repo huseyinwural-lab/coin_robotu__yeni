@@ -1,5 +1,4 @@
 {
-  "schema_version": "1.1",
   "artifacts": [
     {
       "artifact_id": "9ce37d02-0c3e-42b6-82e6-c762314336d5",
@@ -910,16 +909,7 @@
       "chain_position": 64,
       "prev_chain_hash": "caafe0135439c114bf5725c00557138b5db00774540bd84868579d4d1d3bb844",
       "chain_hash": "65d6002d0e0a043413ceb02a45ee1d0d441737fa43142f6dd58d6bd52c8680a8"
-    },
-    {
-      "artifact_id": "69f231d4-6fe0-4c0d-9a4a-39409ab0d49b",
-      "filename": "exchange_evidence_da196389-6fca-4185-93d8-88f73f45afae_20260311131544_20260311131544_69f231d4.json",
-      "artifact_type": "exchange_evidence",
-      "sha256": "45c6a414ed192d6d5203eac78ec233cab1f0f6f8577a9c0b6b214b8cdb56076d",
-      "size": 1388,
-      "created_at": "2026-03-11T13:15:44.624204+00:00",
-      "proof_id": "da196389-6fca-4185-93d8-88f73f45afae_20260311131544",
-      "evidence_type": "blocked",
-      "status": "blocked",
-      "chain_position": 65,
-      "prev_chain_hash": "65d6002d0e0a043413ceb02a45ee1d0d441737fa
+    }
+  ],
+  "schema_version": "1.1"
+}

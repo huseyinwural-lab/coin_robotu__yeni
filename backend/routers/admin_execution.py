@@ -9,6 +9,7 @@ from schemas import (
     AdminExecutionQueueDecisionResponse,
     ExecutionIntentQueueItemResponse,
     ExecutionReadinessResponse,
+    ReleaseGateStatusResponse,
     ReleaseGateOverrideRequest,
     ReleaseGateOverrideResponse,
 )
@@ -17,7 +18,7 @@ from services.execution_intent_service import approve_execution_intent, list_exe
 from services.execution_intent_service import queue_status_summary, rejection_reason_summary, retry_execution_intent
 from services.execution_precheck_service import load_execution_policy_registry
 from services.execution_readiness_service import evaluate_execution_readiness
-from services.live_mode_service import create_release_gate_override, revoke_release_gate_override
+from services.live_mode_service import create_release_gate_override, enforce_release_gate, revoke_release_gate_override
 
 router = APIRouter(prefix="/admin", tags=["admin_execution"])
 
@@ -166,6 +167,34 @@ def execution_readiness(current_user: User = Depends(require_admin), db: Session
     return ExecutionReadinessResponse(**evaluate_execution_readiness(db))
 
 
+@router.get("/release-gate", response_model=ReleaseGateStatusResponse)
+def admin_release_gate_alias(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_user
+    try:
+        payload = enforce_release_gate(db, environment="prod")
+    except Exception:
+        db.rollback()
+        payload = {
+            "status": "BLOCKED",
+            "reasons": ["release_gate_runtime_error"],
+            "fail_reasons": ["release_gate_runtime_error"],
+            "warning_reasons": [],
+            "reason_codes": ["release_gate_runtime_error"],
+            "blocking_metrics": {"runtime_error": True},
+            "reason_code": "release_gate_runtime_error",
+            "deploy_enable_flag": False,
+            "override_active": False,
+            "override_expires_at": None,
+            "override_id": None,
+            "live_activation": "disabled",
+            "environment": "prod",
+        }
+    if str(payload.get("status") or "") == "BLOCKED" and not (payload.get("reason_codes") or []):
+        payload["reason_codes"] = [str(payload.get("reason_code") or "release_gate_blocked_unspecified")]
+    payload["blocking_metrics"] = payload.get("blocking_metrics") or payload.get("metrics") or {}
+    return ReleaseGateStatusResponse(**payload)
+
+
 @router.post("/execution-readiness/override", response_model=ReleaseGateOverrideResponse)
 def create_execution_guard_override(
     payload: ReleaseGateOverrideRequest,
@@ -207,6 +236,15 @@ def create_execution_guard_override(
         deploy_context=row.deploy_context or {},
         used_deploy_count=int(row.used_deploy_count or 0),
     )
+
+
+@router.post("/execution-override", response_model=ReleaseGateOverrideResponse)
+def create_execution_guard_override_alias(
+    payload: ReleaseGateOverrideRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return create_execution_guard_override(payload=payload, current_user=current_user, db=db)
 
 
 @router.post("/execution-readiness/override/{override_id}/revoke", response_model=ReleaseGateOverrideResponse)

@@ -342,6 +342,14 @@ def admin_release_gate(
             "override_expires_at": None,
             "override_id": None,
         }
+    if str(payload.get("status") or "") == "BLOCKED":
+        reason_codes = list(payload.get("reason_codes") or [])
+        if not reason_codes:
+            fallback_reason = str(payload.get("reason_code") or "release_gate_blocked_unspecified")
+            reason_codes = [fallback_reason]
+            payload["reason_codes"] = reason_codes
+        payload["blocking_metrics"] = payload.get("blocking_metrics") or payload.get("metrics") or {}
+
     return ReleaseGateStatusResponse(**payload)
 
 

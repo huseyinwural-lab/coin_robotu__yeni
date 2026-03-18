@@ -53,6 +53,42 @@ def run() -> int:
     token = auth.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
+    gate = requests.get(f"{base}/api/admin/release-gate", headers=headers, timeout=20)
+    gate_ok = gate.status_code == 200
+    gate_payload = gate.json() if gate_ok else {}
+    gate_contract_ok = gate_ok and isinstance(gate_payload.get("reason_codes"), list) and isinstance(gate_payload.get("blocking_metrics"), dict)
+    if gate_ok and str(gate_payload.get("status") or "") == "BLOCKED":
+        gate_contract_ok = gate_contract_ok and len(gate_payload.get("reason_codes") or []) > 0
+    checks.append(
+        _check(
+            gate_contract_ok,
+            "release_gate_contract",
+            {
+                "status_code": gate.status_code,
+                "status": gate_payload.get("status"),
+                "reason_codes": gate_payload.get("reason_codes"),
+                "deploy_enable_flag": gate_payload.get("deploy_enable_flag"),
+            },
+        )
+    )
+
+    readiness = requests.get(f"{base}/api/admin/execution-readiness", headers=headers, timeout=20)
+    readiness_ok = readiness.status_code == 200
+    readiness_payload = readiness.json() if readiness_ok else {}
+    readiness_contract_ok = readiness_ok and readiness_payload.get("final_status") == "READY" and isinstance(readiness_payload.get("latency_ms"), int)
+    checks.append(
+        _check(
+            readiness_contract_ok,
+            "execution_readiness_ready",
+            {
+                "status_code": readiness.status_code,
+                "final_status": readiness_payload.get("final_status"),
+                "mode": readiness_payload.get("mode"),
+                "latency_ms": readiness_payload.get("latency_ms"),
+            },
+        )
+    )
+
     futures_path = requests.get(
         f"{base}/api/admin/users/futures-live-path-check",
         params={"limit": 200},

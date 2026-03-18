@@ -75,6 +75,7 @@ import { AdminLiveTradingDashboardPage } from "@/pages/AdminLiveTradingDashboard
 import { AdminUniverseMonitorPage } from "@/pages/AdminUniverseMonitorPage";
 import { AdminFreshnessHeatmapPage } from "@/pages/AdminFreshnessHeatmapPage";
 import { AdminCommercialOpsPage } from "@/pages/AdminCommercialOpsPage";
+import { AdminExecutionReadinessPage } from "@/pages/AdminExecutionReadinessPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -150,6 +151,7 @@ function App() {
             <Route path="market-universe" element={<MarketUniversePage />} />
             <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
             <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
+            <Route path="execution-readiness" element={<AdminExecutionReadinessPage />} />
             <Route path="strategy/allocation" element={<AdminStrategyAllocationPage />} />
             <Route path="portfolio-risk" element={<AdminPortfolioRiskPage />} />
             <Route path="positions-monitor" element={<AdminPositionsMonitorPage />} />

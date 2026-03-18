@@ -27,9 +27,11 @@ from core.users.user_risk_settings import (
 )
 from db import get_db, redis_client
 from deps import require_user
-from models import BotProfile, PendingSignal, RiskPolicy, User
+from models import BotProfile, PendingSignal, RiskPolicy, User, UserExecutionIntent
 from services.live_mode_service import validate_exchange_credentials_for_user
 from schemas import (
+    ExecutionIntentSubmitRequest,
+    ExecutionIntentSubmitResponse,
     UserDashboardResponse,
     UserExchangeConnectionPatchRequest,
     UserExchangeConnectionResponse,
@@ -47,9 +49,77 @@ from schemas import (
     UserTradeResponse,
 )
 from services.audit_service import create_audit_log, create_domain_event
-from services.execution_readiness_service import validate_order_precheck
+from services.execution_intent_service import submit_execution_intent
+from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
+from services.rate_limiter_service import consume_exchange_rate_limit
 
 router = APIRouter(prefix="/user", tags=["user_platform"])
+
+
+def _submit_trade_with_guard(
+    *,
+    payload: ExecutionIntentSubmitRequest,
+    current_user: User,
+    db: Session,
+    source: str,
+) -> ExecutionIntentSubmitResponse:
+    readiness = enforce_execution_guard_or_raise(
+        db,
+        user_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        source=source,
+    )
+    allowed, retry_after_seconds, _ = consume_exchange_rate_limit("binance", tokens=1.0)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "exchange_rate_limit_reached", "retry_after_seconds": retry_after_seconds},
+        )
+
+    preview_intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.intent_token == payload.intent_token).first()
+    if preview_intent is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="intent_not_found")
+
+    precheck = validate_order_precheck(
+        db,
+        user_id=current_user.id,
+        symbol=str(preview_intent.symbol or "").upper(),
+        market_type=str(preview_intent.market_type or "spot"),
+        order_type=str(preview_intent.order_type or "market"),
+        side=str(preview_intent.side or "buy"),
+        price=float(preview_intent.price or 0),
+        size=float(preview_intent.size or 0),
+        leverage=int(preview_intent.leverage or 1),
+        margin_mode=str(preview_intent.margin_mode or "isolated"),
+    )
+    if not precheck.get("valid"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "order_validation_failed", "violations": precheck.get("violations") or []},
+        )
+
+    try:
+        intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="USER_TRADE_SUBMIT",
+        entity_type="execution_intent",
+        entity_id=intent.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"source": source, "intent_type": intent.intent_type, "symbol": intent.symbol},
+    )
+    return ExecutionIntentSubmitResponse(
+        intent_id=intent.id,
+        intent_status="QUEUED_FOR_APPROVAL",
+        reason_codes=[],
+        queue_state=intent.status,
+        execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+    )
 
 
 @router.post("/exchange/connect", response_model=UserExchangeConnectResponse)
@@ -385,6 +455,33 @@ def validate_order(
         },
     )
     return OrderValidationResponse(**result)
+
+
+@router.post("/open-position", response_model=ExecutionIntentSubmitResponse)
+def open_position(
+    payload: ExecutionIntentSubmitRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return _submit_trade_with_guard(payload=payload, current_user=current_user, db=db, source="user_open_position")
+
+
+@router.post("/execute-order", response_model=ExecutionIntentSubmitResponse)
+def execute_order(
+    payload: ExecutionIntentSubmitRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return _submit_trade_with_guard(payload=payload, current_user=current_user, db=db, source="user_execute_order")
+
+
+@router.post("/manual-trade", response_model=ExecutionIntentSubmitResponse)
+def manual_trade(
+    payload: ExecutionIntentSubmitRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return _submit_trade_with_guard(payload=payload, current_user=current_user, db=db, source="user_manual_trade")
 
 
 @router.get("/portfolio", response_model=UserPortfolioSnapshotResponse)

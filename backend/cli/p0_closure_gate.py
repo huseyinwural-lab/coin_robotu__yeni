@@ -155,6 +155,84 @@ def _run_user_contract_checks(base_url: str, admin_token: str) -> list[dict]:
     )
     checks.append(_check("exchange_connection_revalidate", "PASS" if revalidate.status_code == 200 else "FAIL", {"status_code": revalidate.status_code}))
 
+    validate_order = requests.post(
+        f"{base_url}/api/user/validate-order",
+        headers=headers_user,
+        json={
+            "symbol": "BTCUSDT",
+            "market_type": "futures",
+            "order_type": "market",
+            "side": "buy",
+            "price": 50000,
+            "size": 0.01,
+            "leverage": 2,
+            "margin_mode": "isolated",
+        },
+        timeout=30,
+    )
+    validate_payload = validate_order.json() if validate_order.status_code == 200 else {}
+    validate_ok = validate_order.status_code == 200 and isinstance(validate_payload.get("valid"), bool) and isinstance(validate_payload.get("violations"), list)
+    checks.append(
+        _check(
+            "validate_order_contract",
+            "PASS" if validate_ok else "FAIL",
+            {"status_code": validate_order.status_code, "valid": validate_payload.get("valid"), "violations_count": len(validate_payload.get("violations") or [])},
+        )
+    )
+
+    # Guard enforcement probe: user without exchange connection should get 423 on trade endpoint.
+    readiness_probe = requests.get(
+        f"{base_url}/api/admin/execution-readiness",
+        headers=headers_admin,
+        timeout=20,
+    )
+    readiness_payload = readiness_probe.json() if readiness_probe.status_code == 200 else {}
+    if bool(readiness_payload.get("override_active")):
+        checks.append(_check("execution_guard_enforced", "SKIP", {"reason": "override_active_true"}))
+        return checks
+
+    blocked_email = f"p0_guard_{uuid.uuid4().hex[:8]}@example.com"
+    blocked_password = "TestPass123!"
+    blocked_register = requests.post(
+        f"{base_url}/api/auth/register",
+        json={"email": blocked_email, "password": blocked_password},
+        timeout=20,
+    )
+    if blocked_register.status_code == 200:
+        blocked_user_id = blocked_register.json().get("id")
+        blocked_approve = requests.post(
+            f"{base_url}/api/auth/admin/user-approval-requests/{blocked_user_id}/approve",
+            headers=headers_admin,
+            timeout=20,
+        )
+        if blocked_approve.status_code == 200:
+            blocked_login = requests.post(
+                f"{base_url}/api/auth/login",
+                json={"email": blocked_email, "password": blocked_password},
+                timeout=20,
+            )
+            if blocked_login.status_code == 200:
+                blocked_headers = {"Authorization": f"Bearer {blocked_login.json().get('access_token')}"}
+                guard_probe = requests.post(
+                    f"{base_url}/api/user/manual-trade",
+                    headers=blocked_headers,
+                    json={"intent_token": "guard_probe_token", "preview_hash": "guard_probe_hash"},
+                    timeout=20,
+                )
+                checks.append(
+                    _check(
+                        "execution_guard_enforced",
+                        "PASS" if guard_probe.status_code == 423 else "FAIL",
+                        {"status_code": guard_probe.status_code, "body": guard_probe.text[:180]},
+                    )
+                )
+            else:
+                checks.append(_check("execution_guard_enforced", "FAIL", {"reason": "blocked_user_login_failed", "status_code": blocked_login.status_code}))
+        else:
+            checks.append(_check("execution_guard_enforced", "FAIL", {"reason": "blocked_user_approve_failed", "status_code": blocked_approve.status_code}))
+    else:
+        checks.append(_check("execution_guard_enforced", "FAIL", {"reason": "blocked_user_register_failed", "status_code": blocked_register.status_code}))
+
     bot_payload = {
         "name": "p0-soft-delete-check",
         "exchange": "binance",
@@ -274,6 +352,26 @@ def run(target_env: str, base_url: str, skip_user_contracts: bool) -> dict:
 
     admin_ok, admin_details, admin_token = _admin_login(base_url)
     checks.append(_check("admin_login_for_contract_checks", "PASS" if admin_ok else "FAIL", admin_details))
+
+    if admin_ok and admin_token:
+        readiness_probe = requests.get(
+            f"{base_url}/api/admin/execution-readiness",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            timeout=20,
+        )
+        readiness_payload = readiness_probe.json() if readiness_probe.status_code == 200 else {}
+        readiness_ready = readiness_probe.status_code == 200 and readiness_payload.get("final_status") == "READY"
+        checks.append(
+            _check(
+                "execution_readiness_ready",
+                "PASS" if readiness_ready else "FAIL",
+                {
+                    "status_code": readiness_probe.status_code,
+                    "final_status": readiness_payload.get("final_status"),
+                    "mode": readiness_payload.get("mode"),
+                },
+            )
+        )
 
     if admin_ok and admin_token and not skip_user_contracts:
         checks.extend(_run_user_contract_checks(base_url, admin_token))

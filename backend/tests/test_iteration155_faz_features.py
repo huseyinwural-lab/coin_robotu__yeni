@@ -93,7 +93,7 @@ class TestReleaseGateEndpoint:
         
         # Check status field exists
         assert "status" in data, "Response missing 'status' field"
-        assert data["status"] in ["READY", "BLOCKED", "WARNING"], f"Unknown status: {data['status']}"
+        assert data["status"] in ["PASS", "BLOCKED", "READY", "WARNING"], f"Unknown status: {data['status']}"
         
         # Check reason_codes field exists (must be a list)
         assert "reason_codes" in data, "Response missing 'reason_codes' field"

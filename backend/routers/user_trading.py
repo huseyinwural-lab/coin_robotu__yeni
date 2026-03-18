@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from core.audit.audit_events import AuditEvent
 from db import get_db
 from deps import require_user
-from models import User
+from models import User, UserExecutionIntent
 from schemas import (
     ExecutionIntentPreviewRequest,
     ExecutionIntentPreviewResponse,
@@ -15,7 +15,7 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.execution_intent_service import preview_execution_intent, submit_execution_intent
-from services.execution_readiness_service import enforce_execution_guard_or_raise
+from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.rate_limiter_service import consume_exchange_rate_limit
 from services.trading_preview_service import build_execution_preview_metrics
 
@@ -201,6 +201,28 @@ def execute_trading(
                 "code": "exchange_rate_limit_reached",
                 "retry_after_seconds": retry_after_seconds,
             },
+        )
+
+    preview_intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.intent_token == payload.intent_token).first()
+    if preview_intent is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="intent_not_found")
+
+    precheck = validate_order_precheck(
+        db,
+        user_id=current_user.id,
+        symbol=str(preview_intent.symbol or "").upper(),
+        market_type=str(preview_intent.market_type or "spot"),
+        order_type=str(preview_intent.order_type or "market"),
+        side=str(preview_intent.side or "buy"),
+        price=float(preview_intent.price or 0),
+        size=float(preview_intent.size or 0),
+        leverage=int(preview_intent.leverage or 1),
+        margin_mode=str(preview_intent.margin_mode or "isolated"),
+    )
+    if not precheck.get("valid"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "order_validation_failed", "violations": precheck.get("violations") or []},
         )
 
     try:

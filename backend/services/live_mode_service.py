@@ -1254,6 +1254,7 @@ def create_release_gate_override(
     reason_note: str,
     ttl_minutes: int,
     deploy_context: dict,
+    environment: str = "prod",
 ) -> ReleaseGateOverride:
     normalized_reason = reason_code.strip().lower()
     if normalized_reason not in OVERRIDE_REASON_CODES:
@@ -1263,7 +1264,7 @@ def create_release_gate_override(
     if ttl_minutes > 60:
         raise ValueError("ttl_minutes en fazla 60 olabilir")
 
-    gate = release_gate_view(db)
+    gate = release_gate_view(db, environment=environment)
     if gate["status"] != "BLOCKED":
         raise ValueError("Manual override sadece BLOCKED durumunda açılabilir")
 
@@ -2579,13 +2580,13 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
     fail_reasons = list(dict.fromkeys(blockers))
     warning_reasons = list(dict.fromkeys(warnings))
 
-    status = "READY"
+    status = "PASS"
     live_activation = "ready"
     reason_code = "ok"
 
     if fail_reasons:
         if active_override:
-            status = "WARNING"
+            status = "PASS"
             live_activation = "guarded_override"
             warning_reasons = ["manual_override_active", *warning_reasons]
             reason_code = override.reason_code
@@ -2594,7 +2595,7 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
             live_activation = "disabled"
             reason_code = fail_reasons[0]
     elif warning_reasons:
-        status = "WARNING"
+        status = "PASS"
         live_activation = "guarded"
         reason_code = warning_reasons[0]
 
@@ -2614,7 +2615,7 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
             root_cause_code=reason_code,
             state_key="blocked",
         )
-    elif status == "WARNING":
+    elif warning_reasons:
         create_system_alert(
             db,
             alert_type="release_gate_warning",
@@ -2732,6 +2733,9 @@ def release_gate_view(db: Session, environment: str = "prod") -> dict:
         "reasons": policy["reasons"],
         "fail_reasons": policy.get("fail_reasons", []),
         "warning_reasons": policy.get("warning_reasons", []),
+        "reason_codes": policy.get("reason_codes", []),
+        "blocking_metrics": policy.get("blocking_metrics", {}),
+        "deploy_enable_flag": bool(policy.get("deploy_enable_flag")),
         "live_activation": policy["live_activation"],
         "override_active": bool(policy.get("override_id")),
         "override_expires_at": policy.get("override_expires_at"),

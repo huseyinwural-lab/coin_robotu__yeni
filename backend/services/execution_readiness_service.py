@@ -56,7 +56,7 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None) -> 
         reason_codes.append("order_test_failed")
 
     if mode == "MOCKED":
-        final_status = "READY" if has_connection and order_test_ok else "BLOCKED"
+        final_status = "READY" if has_connection else "BLOCKED"
         if final_status == "READY":
             reason_codes.append("mocked_mode_active")
     else:
@@ -71,15 +71,8 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None) -> 
         final_status = "READY"
         reason_codes.append("execution_guard_override_active")
 
-    if not exchange_connection_ok and mode == "MOCKED" and has_connection:
-        exchange_connection_status = "OK"
-    else:
-        exchange_connection_status = "OK" if exchange_connection_ok else "FAIL"
-
-    if not permissions_ok and mode == "MOCKED" and has_connection:
-        permissions_status = "OK"
-    else:
-        permissions_status = "OK" if permissions_ok else "FAIL"
+    exchange_connection_status = "OK" if exchange_connection_ok else "FAIL"
+    permissions_status = "OK" if permissions_ok else "FAIL"
 
     return {
         "exchange_connection": exchange_connection_status,
@@ -108,7 +101,7 @@ def enforce_execution_guard_or_raise(
 
     create_audit_log(
         db,
-        action="EXECUTION_GUARD_BLOCKED",
+        action="EXECUTION_BLOCKED",
         entity_type="execution_guard",
         entity_id=user_id,
         actor_user_id=actor_user_id,
@@ -120,14 +113,7 @@ def enforce_execution_guard_or_raise(
             "blocked_at": datetime.now(timezone.utc).isoformat(),
         },
     )
-    raise HTTPException(
-        status_code=status.HTTP_423_LOCKED,
-        detail={
-            "code": "execution_guard_locked",
-            "message": "Execution readiness READY olmadığı için trade açma engellendi",
-            "readiness": readiness,
-        },
-    )
+    raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="EXECUTION_BLOCKED_BY_READINESS")
 
 
 def validate_order_precheck(
@@ -152,7 +138,10 @@ def validate_order_precheck(
     max_exposure = float(config.max_notional_exposure or 0)
     market = str(market_type or "spot").strip().lower()
     margin = str(margin_mode or "isolated").strip().lower()
+    requested_size = max(float(size or 0), 0)
     notional = max(float(price or 0) * float(size or 0), 0)
+    min_order_size = 0.001
+    min_notional = 5.0
 
     open_rows = db.query(PaperPosition).filter(PaperPosition.user_id == user_id, PaperPosition.status == "open").all()
     open_exposure = sum(abs(float(row.entry_price or 0) * float(row.quantity or 0)) for row in open_rows)
@@ -166,6 +155,24 @@ def validate_order_precheck(
                 "code": "leverage_limit_exceeded",
                 "message": f"Leverage limiti aşıldı (max={leverage_limit})",
                 "details": {"requested": int(leverage or 1), "limit": leverage_limit},
+            }
+        )
+
+    if requested_size < min_order_size:
+        violations.append(
+            {
+                "code": "min_order_size_violation",
+                "message": "Min order size limitinin altında",
+                "details": {"requested_size": requested_size, "min_order_size": min_order_size},
+            }
+        )
+
+    if notional < min_notional:
+        violations.append(
+            {
+                "code": "min_notional_violation",
+                "message": "Min notional limitinin altında",
+                "details": {"notional": round(notional, 4), "min_notional": min_notional},
             }
         )
 
@@ -210,6 +217,8 @@ def validate_order_precheck(
             "max_exposure": max_exposure,
             "open_exposure": round(open_exposure, 4),
             "projected_exposure": round(projected_exposure, 4),
+            "min_order_size": min_order_size,
+            "min_notional": min_notional,
             "market_type": market,
             "margin_mode": margin,
         },

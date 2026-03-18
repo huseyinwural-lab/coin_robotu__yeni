@@ -147,7 +147,7 @@ export const Phase4LiveControlPage = () => {
         <MetricCard label="Whitelist" value={config?.symbol_whitelist?.join(",") || "-"} tone="orange" testId="phase4-metric-whitelist" />
         <MetricCard label="Testnet" value={connectivity?.status || "-"} tone={connectivity?.status === "reachable" ? "blue" : "red"} testId="phase4-metric-testnet" />
         <MetricCard label="Live Readiness" value={readinessScore?.readiness_score ?? "-"} tone={Number(readinessScore?.readiness_score || 0) >= 80 ? "blue" : "red"} testId="phase4-metric-live-readiness-score" />
-        <MetricCard label="Release Gate" value={releaseGate?.status || "-"} tone={releaseGate?.status === "READY" ? "blue" : releaseGate?.status === "WARNING" ? "orange" : "red"} testId="phase4-metric-release-gate" />
+        <MetricCard label="Release Gate" value={releaseGate?.status || "-"} tone={releaseGate?.status === "PASS" ? "blue" : "red"} testId="phase4-metric-release-gate" />
         <MetricCard label="Live Activation" value={releaseGate?.live_activation || "disabled"} tone={releaseGate?.live_activation === "ready" ? "blue" : releaseGate?.live_activation === "guarded" || releaseGate?.live_activation === "guarded_override" ? "orange" : "red"} testId="phase4-metric-live-activation" />
         <MetricCard label="Exec Readiness" value={executionReadiness?.final_status || "-"} tone={executionReadiness?.final_status === "READY" ? "blue" : "red"} testId="phase4-metric-execution-readiness" />
         <MetricCard label="Exec Mode" value={executionReadiness?.mode || "-"} tone={executionReadiness?.mode === "MOCKED" ? "orange" : "blue"} testId="phase4-metric-execution-mode" />
