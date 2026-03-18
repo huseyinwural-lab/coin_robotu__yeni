@@ -1,3 +1,76 @@
+## 2026-03-18 — FAZ-C ULTRA MINIMAL CLOSURE (Uygulandı)
+
+### Scope (Kullanıcı görev emri)
+- Amaç: minimum kapsamla kullanıcıya çalışır trade akışı açmak.
+- Odak: **UX + API binding + E2E kapanış**, gereksiz genişleme yok.
+
+### C1 — Trade Entry Panel (tek nokta)
+- Yeni route: **`/user/trade`**
+- `/user/execute` ve `/execute` → **`/user/trade` redirect** (query string korunuyor)
+- UI zorunlu alanlar eklendi:
+  - `symbol` (select)
+  - `size` (USDT/QTY toggle)
+  - `leverage`
+  - `margin_type` (isolated/cross)
+  - `order_type` (market default)
+- Zorunlu akış bağlandı:
+  1. `POST /api/user/validate-order`
+  2. `valid=false` ise submit blok + violation gösterimi
+  3. `valid=true` ise preview token üretimi sonrası `POST /api/user/open-position`
+
+### C2 — Execution Result Binding
+- Trade panelde execution result alanı eklendi:
+  - `status` (opened/failed)
+  - `execution_mode` (mocked/live)
+  - `violations`
+- `423` için kırmızı error state + toast bağlandı
+- Başarılı akışta toast + `/user/positions` yönlendirmesi eklendi
+
+### C3 — Position List Entegrasyonu
+- `/user/positions` tablosuna `execution_mode` badge alanı eklendi
+- Backend `PositionStateResponse` genişletildi (`execution_mode`)
+- `/api/user/positions` response’unda execution mode üretimi eklendi
+
+### C4 — Screener → Chart Bridge (minimal)
+- Screener satırlarına **View Chart** butonu eklendi (desktop + mobile)
+- Yeni route: **`/user/chart?symbol=...&tf=1h`**
+- Yeni sayfa: TradingView embed (default timeframe 1h)
+
+### C5 — Filter Layer (minimal set)
+- Scanner UI’ye filtre seti eklendi:
+  - `rsi_min`, `rsi_max`, `volume_min`, `market_cap_min`, `timeframe`
+- Aktif filter chip’leri + **Clear All** butonu eklendi
+- Backend sync eklendi:
+  - Yeni endpoint: **`GET /api/screener?filters=...`**
+  - Kullanıcıya ait screener sonuçları bu filtrelerle sunuluyor
+
+### C6 — User E2E TEST
+- Testing agent raporu: `/app/test_reports/iteration_160.json`
+- Sonuç: C1/C2/C3/C4/C5/C6 senaryoları **PASS**
+- Sonradan görülen düşük öncelikli issue (`/api/admin/dashboard` 404) kapatıldı:
+  - Yeni alias endpoint: `GET /api/admin/dashboard`
+  - Doğrulama: `pytest /app/backend/tests/test_faz_c_trade_entry.py` → **15/15 PASS**
+
+### Değişen Dosyalar (özet)
+- Frontend:
+  - `frontend/src/pages/UserTradePage.jsx` (yeni)
+  - `frontend/src/pages/UserChartPage.jsx` (yeni)
+  - `frontend/src/pages/UserScannerPage.jsx`
+  - `frontend/src/components/ScannerResultsTable.jsx`
+  - `frontend/src/pages/UserPositionsPage.jsx`
+  - `frontend/src/App.js`
+  - `frontend/src/components/PanelLayout.jsx`
+- Backend:
+  - `backend/routers/screener.py` (yeni)
+  - `backend/routers/admin_dashboard_alias.py` (yeni)
+  - `backend/routers/user_execution.py`
+  - `backend/schemas.py`
+  - `backend/server.py`
+
+### Durum
+- **FAZ-C minimal closure hedefi karşılandı**: user trade flow + validate gate + positions görünürlüğü + chart bridge + minimal filters + E2E doğrulama.
+- Runtime notu: execution modu bu ortamda ağırlıklı **MOCKED** davranabilir.
+
 ## 2026-03-18 — Iteration Update (Bugfix-First: Smoke Suite Crash-Safety)
 
 ### User Priority Applied

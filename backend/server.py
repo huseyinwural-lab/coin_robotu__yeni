@@ -71,6 +71,7 @@ from routers import (
     debug_effective_universe,
     user_scanner_router,
     screener,
+    admin_dashboard_alias,
     admin_universe_router,
     admin_risk_router,
     user_indicator_screener,
@@ -122,6 +123,7 @@ api_router.include_router(user_scanner_signals.router)
 api_router.include_router(user_scanner_symbol_selection.router)
 api_router.include_router(user_scanner_router.router)
 api_router.include_router(screener.router)
+api_router.include_router(admin_dashboard_alias.router)
 api_router.include_router(user_learning_simulator.router)
 api_router.include_router(user_live_dashboard_router.router)
 api_router.include_router(user_indicator_screener.router)

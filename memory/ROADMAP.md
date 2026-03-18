@@ -1,5 +1,15 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-18 Update
+- ✅ FAZ-C Ultra Minimal Closure tamamlandı:
+  - `/user/trade` tek nokta trade entry
+  - validate→open-position zorunlu akış
+  - positions execution_mode görünürlüğü
+  - screener→chart bridge
+  - minimal filter layer + `/api/screener` backend sync
+  - C1-C6 E2E PASS
+- 🔜 Sonraki odak: Phase-9B hardening, ops script sağlamlaştırma, düşük öncelikli teknik borç temizliği.
+
 ## P0 (Tamamlandı)
 - Phase 5.1A → 5.8A institutional futures engine (risk/correlation/capital/tail-risk/live-readiness/scaling)
 - Admin observability panelleri ve release-gate operability hattı

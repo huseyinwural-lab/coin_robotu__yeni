@@ -1,6 +1,18 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-18
+### Iteration-160 — FAZ-C Ultra Minimal Closure
+- **C1**: `/user/trade` tek trade entry paneli eklendi; `/user/execute` ve `/execute` route’ları `/user/trade`’e query-preserving redirect edildi.
+- **C1 flow**: `validate-order` zorunlu doğrulama + valid=false blok + valid=true akışında preview→`open-position` bağlandı.
+- **C2**: Execution result binding (status, execution_mode, violations, 423 error state, success toast + positions redirect).
+- **C3**: Positions tablosuna `execution_mode` badge eklendi; backend response genişletildi.
+- **C4**: Screener satırlarına View Chart butonu eklendi; `/user/chart` sayfasında TradingView embed bağlandı.
+- **C5**: Minimal filter set UI + chip + clear-all eklendi; backend’de `GET /api/screener?filters=...` endpoint’i eklendi.
+- Test raporu: `/app/test_reports/iteration_160.json` (C1-C6 PASS).
+- Ek minor fix: `/api/admin/dashboard` 404 kapatıldı (`backend/routers/admin_dashboard_alias.py`).
+- Doğrulama: `pytest /app/backend/tests/test_faz_c_trade_entry.py` → **15 passed**.
+
+## 2026-03-18
 ### Iteration-159 — Smoke Suite Reliability Bugfix (Crash-Safety)
 - `backend/cli/final_release_smoke_suite.py` ağ hatalarında traceback crash üretmeyecek şekilde harden edildi.
 - Yeni yardımcılar eklendi:
