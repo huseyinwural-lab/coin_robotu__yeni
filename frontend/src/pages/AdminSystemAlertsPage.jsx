@@ -23,6 +23,7 @@ export const AdminSystemAlertsPage = () => {
   const [sloSla, setSloSla] = useState(null);
   const [sloTrend, setSloTrend] = useState([]);
   const [sloTrendMeta, setSloTrendMeta] = useState(null);
+  const [isTrendChartReady, setIsTrendChartReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [filters, setFilters] = useState({
@@ -79,6 +80,11 @@ export const AdminSystemAlertsPage = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIsTrendChartReady(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const allSelected = useMemo(() => alerts.length > 0 && selectedIds.length === alerts.length, [alerts, selectedIds]);
 
@@ -303,19 +309,23 @@ export const AdminSystemAlertsPage = () => {
           anomaly_reason={sloTrendMeta?.reason || "-"}
         </p>
         <div className="w-full" data-testid="admin-system-alerts-slo-trend-chart-wrap">
-          <ResponsiveContainer width="100%" aspect={4} minWidth={320} minHeight={220}>
-            <LineChart data={sloTrend}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="window_days" tickFormatter={(value) => `${value}d`} />
-              <YAxis yAxisId="left" />
-              <YAxis yAxisId="right" orientation="right" />
-              <Tooltip formatter={(value) => Number(value).toFixed(2)} labelFormatter={(value) => `${value} days`} />
-              <Legend />
-              <Line yAxisId="left" type="monotone" dataKey="availability_pct" stroke="#16a34a" strokeWidth={2} name="availability %" dot={{ r: 4 }} />
-              <Line yAxisId="left" type="monotone" dataKey="error_rate" stroke="#dc2626" strokeWidth={2} name="error_rate" dot={{ r: 4 }} />
-              <Line yAxisId="right" type="monotone" dataKey="mttr_minutes" stroke="#1d4ed8" strokeWidth={2} name="mttr (min)" dot={{ r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          {isTrendChartReady ? (
+            <ResponsiveContainer width="100%" aspect={4} minWidth={320} minHeight={220}>
+              <LineChart data={sloTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="window_days" tickFormatter={(value) => `${value}d`} />
+                <YAxis yAxisId="left" />
+                <YAxis yAxisId="right" orientation="right" />
+                <Tooltip formatter={(value) => Number(value).toFixed(2)} labelFormatter={(value) => `${value} days`} />
+                <Legend />
+                <Line yAxisId="left" type="monotone" dataKey="availability_pct" stroke="#16a34a" strokeWidth={2} name="availability %" dot={{ r: 4 }} />
+                <Line yAxisId="left" type="monotone" dataKey="error_rate" stroke="#dc2626" strokeWidth={2} name="error_rate" dot={{ r: 4 }} />
+                <Line yAxisId="right" type="monotone" dataKey="mttr_minutes" stroke="#1d4ed8" strokeWidth={2} name="mttr (min)" dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-56 w-full animate-pulse bg-black/10" data-testid="admin-system-alerts-slo-trend-chart-loading" />
+          )}
         </div>
       </div>
 
