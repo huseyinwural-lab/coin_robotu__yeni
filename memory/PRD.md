@@ -1,3 +1,95 @@
+## 2026-03-18 — Iteration Update (FAZ-A + FAZ-B Uygulaması)
+
+### Kapsam (Kullanıcı Onayı)
+
+- Öncelik: **Admin finalization + Execution safety**
+- Bu iterasyonda uygulananlar: **FAZ-A (A1–A4) + FAZ-B (B1–B3)**
+- Ek kararlar:
+  - Execution guard tüm trade açma akışlarında zorunlu
+  - Admin override aktif (execution readiness override endpointleri eklendi)
+  - Şifre reset test override kaldırıldı (`PASSWORD_RESET_TO_OVERRIDE` kaldırıldı)
+
+### FAZ-A Sonuçları
+
+1. **A1 — Release Gate Strict Enforcement**
+   - `/api/phase4/admin/release-gate` artık BLOCKED durumda zorunlu alanları döndürür:
+     - `reason_codes[]`
+     - `blocking_metrics`
+     - `deploy_enable_flag`
+   - Runtime hata senaryosunda endpoint 500 yerine kontrollü `BLOCKED` payload döner.
+   - UI tarafında actionable mesaj eklendi:
+     - `PanelLayout` sidebar blocked uyarısı
+     - `Phase4LiveControlPage` release gate actionable panel
+
+2. **A2 — Execution Readiness Contract**
+   - Yeni endpoint: `GET /api/admin/execution-readiness`
+   - Contract alanları:
+     - `exchange_connection`, `permissions`, `latency_ms`, `order_test`, `mode`, `final_status`
+   - `MOCKED` modda `READY` + `mocked_flag=true` davranışı var.
+   - Eksik bağlantı senaryosunda `BLOCKED` reason code üretilir.
+
+3. **A3 — Audit Log Hardening**
+   - Yeni retention servisi: `/app/backend/services/audit_retention_service.py`
+   - Prune sonrası kritik kategoriler korunur:
+     - `AUTH`, `EXECUTION`, `ADMIN_ACTION`
+   - Prune çıktısına eklendi:
+     - `retention_policy_applied: true`
+     - `preserved_categories`
+     - `protected_count`
+   - Hem manuel prune endpointi hem daily ops akışı policy-aware hale getirildi.
+
+4. **A4 — Strategy Observability Panel Fix**
+   - `/admin/futures/strategy-analytics` için backend endpointleri fail-safe hale getirildi.
+   - Servis hata/boş veri senaryosunda 500 yerine `EMPTY_STATE` payload dönüyor.
+   - Frontend’de `EMPTY_STATE` banner gösterimi eklendi.
+
+### FAZ-B Sonuçları
+
+1. **B1 — Global Execution Guard**
+   - Guard servisi eklendi: `/app/backend/services/execution_readiness_service.py`
+   - `READY` değilse trade açma adımında `HTTP 423 LOCKED` üretilir.
+   - Uygulanan akışlar:
+     - `/api/v1/user/trading/execute`
+     - `/api/user/execution/intent/submit` (OPEN_POSITION intent’lerde)
+     - `/api/user/execution/position-actions/submit` (OPEN_POSITION intent’lerde)
+     - Admin approval path (`approve_execution_intent`) OPEN_POSITION için
+
+2. **B2 — Position Pre-Check Engine**
+   - Yeni endpoint: `POST /api/user/validate-order`
+   - Kontroller:
+     - leverage limit
+     - margin mode validity
+     - max exposure
+   - Contract:
+     - `{ valid, violations, execution_mode, checks }`
+
+3. **B3 — MOCKED Execution Labeling**
+   - Execution response şemalarına `execution_mode` eklendi.
+   - User execute UI’ye **“Simulated Trade”** badge eklendi (`execution_mode=mocked`).
+
+### Admin Override (Execution Safety)
+
+- Yeni endpointler:
+  - `POST /api/admin/execution-readiness/override`
+  - `POST /api/admin/execution-readiness/override/{override_id}/revoke`
+- Release gate override mekanizmasıyla entegre + audit event üretimi.
+
+### Doğrulama / Test Sonuçları
+
+- Testing agent: `/app/test_reports/iteration_155.json`
+  - Backend: **18/18 PASS**
+  - Frontend: **100%**
+- Ek yerel testler:
+  - `test_execution_readiness_contract.py` -> PASS
+  - `test_audit_retention_policy.py` -> PASS
+  - `test_iteration155_faz_features.py` -> PASS
+  - `final_release_smoke_suite.py` -> overall PASS
+
+### Durum
+
+- FAZ-A + FAZ-B hedefleri tamamlandı.
+- Kalan öncelik: **FAZ-C (User Trading Flow Completion)** ve **FAZ-D (Stability & Ops cleanup)**.
+
 ## 2026-03-18 — Iteration Update (Self Password Reset + Resend Mail Token)
 
 ### Kapsam

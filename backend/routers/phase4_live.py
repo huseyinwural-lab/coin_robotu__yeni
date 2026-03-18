@@ -292,8 +292,19 @@ def admin_permission_drift_trend(
 
 @router.get("/admin/live-readiness-score", response_model=LiveReadinessScoreResponse)
 def admin_live_readiness_score(_: User = Depends(require_admin), db: Session = Depends(get_db)):
-    enforce_release_gate(db)
-    return LiveReadinessScoreResponse(**compute_live_readiness_score(db))
+    try:
+        enforce_release_gate(db)
+        return LiveReadinessScoreResponse(**compute_live_readiness_score(db))
+    except Exception as exc:  # pragma: no cover - runtime defensive guard
+        db.rollback()
+        logger.exception("live_readiness_score_runtime_error", extra={"error": str(exc)[:300]})
+        payload = compute_live_readiness_score(db)
+        blockers = list(dict.fromkeys([*(payload.get("critical_blockers") or []), "release_gate_runtime_error"]))
+        payload["critical_blockers"] = blockers
+        payload["release_gate_status"] = "BLOCKED"
+        payload["live_activation"] = "disabled"
+        payload["readiness_score"] = min(float(payload.get("readiness_score") or 0), 80.0)
+        return LiveReadinessScoreResponse(**payload)
 
 
 @router.get("/admin/permission-status", response_model=PermissionStatusResponse)
