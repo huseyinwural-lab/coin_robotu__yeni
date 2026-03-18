@@ -10,6 +10,8 @@
 - User Trade UI’de validation explain + execution explain paneli eklendi; scanner satırlarına explain summary bağlandı.
 - Yeni testler: `test_guard_telemetry.py`, `test_explain_fields.py`, `test_explain_consistency.py`.
 - Testing agent raporu: `/app/test_reports/iteration_161.json` → acceptance PASS.
+- UI stabilizasyon: 423 path’te execution explain render fallback düzeltildi ve UserTradePage option hydration uyarısı kaldırıldı.
+- Frontend retest (auto agent): 4/4 PASS.
 
 ## 2026-03-18
 ### Iteration-161 — Binance Testnet Live Mode Activation + Submit Path Fixes

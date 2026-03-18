@@ -82,6 +82,11 @@
   - `/app/test_reports/iteration_161.json`
   - Sonuç: backend/frontend acceptance PASS
 
+### Iteration-162 Sonrası UI Stabilizasyon Notu
+- Trade explain listesi 423 path’te de görünür hale getirildi (latest validation explain fallback düzeltildi).
+- UserTradePage connection option render’ında hydration uyarısı giderildi (option içi child yapısı sadeleştirildi).
+- Frontend re-test (agent): tüm 4 kriter PASS (admin card, scanner explain, validation explain, execution explain).
+
 ### Sonuç Durumu
 - SYSTEM → **SAFE + VISIBLE + TRUSTABLE** (mini closure hedefi karşılandı)
 
