@@ -20,6 +20,11 @@
   - Landing/User/Admin login branding API ile senkronlandı.
 - Doğrulama: backend testleri + frontend E2E PASS.
 
+### Iteration-165b — User Login Form Rollback Fix
+- Kullanıcı geri bildirimi üzerine `/user/login` sayfası klasik çalışan form yapısına geri alındı.
+- MFA step-up (email/TOTP challenge panel) login ekranında korunarak çalışır bırakıldı.
+- Admin login beyaz zemin ve logo düzeni korunarak PASS doğrulandı.
+
 ## 2026-03-18
 ### Iteration-164 — Auth Pages Reference Redesign + Logo Upload
 - `/user/login` sayfası referans görsele yakın şekilde yeniden düzenlendi (hero + turuncu form panel + sağ çizgili görsel + alt durum/feature blokları).

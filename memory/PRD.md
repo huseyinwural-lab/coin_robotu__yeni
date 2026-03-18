@@ -82,6 +82,16 @@
   - Kalıcı logo saklama (DB + upload endpoint)
   - Admin brand panelinden global yayın
 
+### Sonraki Düzeltme (Kullanıcı geri bildirimi)
+- Geri bildirim: "Kullanıcı girişi yanlış, giriş formu yok"
+- Uygulanan düzeltme:
+  - `/user/login` ekranı **sade klasik çalışan login/register formuna** geri alındı.
+  - Email + password + submit + forgot password akışı geri geldi.
+  - MFA paneli korunarak login sonrası ikinci adım çalışır halde bırakıldı.
+  - Brand logo üst bantta korunarak beyaz kart form düzeni geri getirildi.
+- Doğrulama:
+  - Frontend agent: PASS (form görünür, MFA flow PASS, admin white background korunuyor).
+
 ## 2026-03-18 — Auth UI Final Styling (Logo Upload + Reference Layout)
 
 ### Kullanıcı seçimleri
