@@ -28,6 +28,14 @@ const parseErrorText = (error) => {
   return "trade_submit_failed";
 };
 
+const formatConnectionLabel = (connection) => {
+  const accountLabel = String(connection?.account_label || "connection").trim();
+  const exchange = String(connection?.exchange || "-").trim();
+  const marketType = String(connection?.market_type || "-").trim();
+  const environment = String(connection?.environment || "-").trim();
+  return `${accountLabel} · ${exchange}/${marketType}/${environment}`;
+};
+
 export const UserTradePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -146,9 +154,11 @@ export const UserTradePage = () => {
   const handleOpenPosition = async () => {
     setIsSubmitting(true);
     setExecutionResult(null);
+    let latestValidation = null;
 
     try {
       const validation = await runValidation({ silent: true });
+      latestValidation = validation;
       if (!validation?.valid) {
         setExecutionResult({
           status: "failed",
@@ -212,9 +222,9 @@ export const UserTradePage = () => {
 
       setExecutionResult({
         status: "failed",
-        execution_mode: validationResult?.execution_mode || "mocked",
+        execution_mode: latestValidation?.execution_mode || validationResult?.execution_mode || "mocked",
         violations,
-        explain: validationResult?.explain || [],
+        explain: latestValidation?.explain || validationResult?.explain || [],
         error_text: statusCode === 423 ? "EXECUTION_BLOCKED_BY_READINESS" : parseErrorText(error),
       });
       if (statusCode === 423) {
@@ -280,7 +290,7 @@ export const UserTradePage = () => {
               {connections.length === 0 && <option value="">no-connection</option>}
               {connections.map((connection) => (
                 <option key={connection.id} value={connection.id} data-testid={`user-trade-connection-option-${connection.id}`}>
-                  {connection.account_label} · {connection.exchange}/{connection.market_type}/{connection.environment}
+                  {formatConnectionLabel(connection)}
                 </option>
               ))}
             </select>
