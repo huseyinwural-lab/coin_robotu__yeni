@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -62,6 +63,7 @@ from services.live_mode_service import (
 )
 
 router = APIRouter(prefix="/phase4", tags=["phase4_live"])
+logger = logging.getLogger(__name__)
 
 
 def _quality_response(item) -> ExecutionQualitySummaryResponse:
@@ -305,7 +307,28 @@ def admin_release_gate(
     db: Session = Depends(get_db),
     environment: str = Query(default="prod"),
 ):
-    return ReleaseGateStatusResponse(**enforce_release_gate(db, environment=environment))
+    env = str(environment or "prod").strip().lower()
+    if env not in {"prod", "stage"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="environment must be stage or prod")
+
+    try:
+        payload = enforce_release_gate(db, environment=env)
+    except Exception as exc:  # pragma: no cover - runtime defensive guard
+        db.rollback()
+        logger.exception("release_gate_evaluation_failed", extra={"environment": env, "error": str(exc)[:300]})
+        payload = {
+            "status": "BLOCKED",
+            "reasons": ["release_gate_runtime_error"],
+            "fail_reasons": ["release_gate_runtime_error"],
+            "warning_reasons": [],
+            "live_activation": "disabled",
+            "environment": env,
+            "reason_code": "release_gate_runtime_error",
+            "override_active": False,
+            "override_expires_at": None,
+            "override_id": None,
+        }
+    return ReleaseGateStatusResponse(**payload)
 
 
 @router.post("/admin/release-gate/override", response_model=ReleaseGateOverrideResponse)
