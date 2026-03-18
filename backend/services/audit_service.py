@@ -1,9 +1,17 @@
 from enum import Enum
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from core.observability.request_context import get_request_context
 from models import AuditLog
+
+
+GUARD_EVENT_TYPES = {
+    "EXECUTION_BLOCKED",
+    "EXECUTION_ALLOWED",
+    "EXECUTION_OVERRIDE_ENABLED",
+}
 
 
 def create_audit_log(
@@ -62,4 +70,45 @@ def create_domain_event(
         actor_role=actor_role,
         severity=severity,
         details={"event_name": normalized, "payload": payload or {}},
+    )
+
+
+def create_guard_audit_event(
+    db: Session,
+    *,
+    event: str,
+    reason: str,
+    user_id: str,
+    symbol: str | None = None,
+    actor_user_id: str | None = None,
+    actor_role: str = "system",
+    severity: str = "info",
+    metadata: dict | None = None,
+) -> AuditLog:
+    event_name = str(event or "").strip().upper()
+    if event_name not in GUARD_EVENT_TYPES:
+        raise ValueError("invalid_guard_event")
+
+    normalized_reason = str(reason or "").strip().upper()
+    if not normalized_reason:
+        raise ValueError("guard_reason_required")
+
+    payload = {
+        "event": event_name,
+        "reason": normalized_reason,
+        "symbol": str(symbol or "UNKNOWN").upper(),
+        "user_id": str(user_id or ""),
+        "metadata": dict(metadata or {}),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+    return create_audit_log(
+        db,
+        action=event_name,
+        entity_type="execution_guard",
+        entity_id=str(user_id or "unknown"),
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        severity=severity,
+        details=payload,
     )

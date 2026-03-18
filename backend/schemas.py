@@ -1530,8 +1530,10 @@ class UserScannerResultResponse(BaseModel):
     strategy_code: str
     signal: str
     confidence: float
+    score: float | None = None
     signal_score: float
     reason_codes: list[str]
+    explain: list[str] = Field(default_factory=list, min_length=1)
     payload: dict
     generated_at: datetime
 
@@ -2015,6 +2017,7 @@ class ExecutionIntentSubmitResponse(BaseModel):
     reason_codes: list[str]
     queue_state: str
     execution_mode: str = "mocked"
+    explain: list[str] = Field(default_factory=list, min_length=1)
 
 
 class OrderValidationRequest(BaseModel):
@@ -2039,6 +2042,7 @@ class OrderValidationResponse(BaseModel):
     violations: list[OrderValidationViolation] = Field(default_factory=list)
     execution_mode: str = "mocked"
     checks: dict = Field(default_factory=dict)
+    explain: list[str] = Field(default_factory=list, min_length=1)
 
 
 class AdminEmergencyStopRequest(BaseModel):
@@ -2582,6 +2586,17 @@ class ExecutionReadinessResponse(BaseModel):
     mocked_flag: bool = False
     override_active: bool = False
     reason_codes: list[str] = Field(default_factory=list)
+
+
+class GuardTelemetryReasonResponse(BaseModel):
+    reason: str
+    count: int
+
+
+class GuardTelemetryResponse(BaseModel):
+    blocked_24h: int = 0
+    override_24h: int = 0
+    top_reasons: list[GuardTelemetryReasonResponse] = Field(default_factory=list)
 
 
 class AlertPolicyResponse(BaseModel):

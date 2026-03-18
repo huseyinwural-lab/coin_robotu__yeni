@@ -27,6 +27,7 @@ from services.execution_intent_service import (
 )
 from services.execution_readiness_service import enforce_execution_guard_or_raise
 from services.execution_readiness_service import evaluate_execution_readiness
+from services.explainability_rules_service import build_trade_explain
 from services.rate_limiter_service import consume_exchange_rate_limit
 from services.position_management_service import list_user_positions
 from services.strategy_intelligence_service import evaluate_hedge_suggestion
@@ -334,6 +335,11 @@ def submit_position_action(
         reason_codes=[],
         queue_state=intent.status,
         execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+        explain=build_trade_explain(
+            validation={"valid": True, "violations": [], "checks": {}},
+            execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+            signal_score=None,
+        ),
     )
 
 
@@ -399,6 +405,11 @@ def submit_intent(
         reason_codes=[],
         queue_state=intent.status,
         execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+        explain=build_trade_explain(
+            validation={"valid": True, "violations": [], "checks": {}},
+            execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+            signal_score=None,
+        ),
     )
 
 

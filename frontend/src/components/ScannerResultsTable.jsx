@@ -163,6 +163,9 @@ export const ScannerResultsTable = ({
               return (
                 <>
             <p className="text-sm font-semibold" data-testid={`scanner-results-mobile-symbol-${item.id}`}>{item.symbol}</p>
+            <p className="text-xs text-cyan-300" data-testid={`scanner-results-mobile-explain-${item.id}`}>
+              {(item.explain || []).slice(0, 3).join(" • ") || "Signal explain unavailable"}
+            </p>
             <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-quote-asset-${item.id}`}>Quote Asset: {quoteAsset}</p>
             <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-signal-${item.id}`}>Signal: {item.signal}</p>
             <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-confidence-${item.id}`}>Confidence: {item.confidence}</p>
@@ -212,7 +215,12 @@ export const ScannerResultsTable = ({
                     data-testid={`scanner-results-row-${item.id}`}
                     onClick={() => setExpandedRowId(expanded ? "" : item.id)}
                   >
-                    <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-symbol-${item.id}`}>{item.symbol}</td>
+                    <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-symbol-${item.id}`}>
+                      <p data-testid={`scanner-results-row-symbol-label-${item.id}`}>{item.symbol}</p>
+                      <p className="text-xs text-cyan-300" data-testid={`scanner-results-row-explain-summary-${item.id}`}>
+                        {(item.explain || []).slice(0, 3).join(" • ") || "Signal explain unavailable"}
+                      </p>
+                    </td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-quote-asset-${item.id}`}>{quoteAsset}</td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-signal-${item.id}`}>{item.signal}</td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-confidence-${item.id}`}>{item.confidence}</td>
@@ -240,6 +248,13 @@ export const ScannerResultsTable = ({
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-rsi-${item.id}`}>RSI: {snapshot?.rsi ?? snapshot?.rsi14 ?? snapshot?.indicator_snapshot?.rsi14 ?? "-"}</p>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-spread-regime-${item.id}`}>spread regime: {snapshot?.spread_regime ?? snapshot?.spread_state ?? "-"}</p>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-market-volatility-${item.id}`}>market volatility: {snapshot?.market_volatility ?? snapshot?.atr_pct ?? "-"}</p>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2" data-testid={`scanner-results-explain-list-${item.id}`}>
+                          {(item.explain || []).map((entry, index) => (
+                            <span key={`${entry}-${index}`} className="rounded border border-cyan-500/50 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-100" data-testid={`scanner-results-explain-item-${item.id}-${index}`}>
+                              {entry}
+                            </span>
+                          ))}
                         </div>
                       </td>
                     </tr>

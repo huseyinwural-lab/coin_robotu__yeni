@@ -43,6 +43,7 @@ from schemas import (
     UserSignalResponse,
 )
 from services.audit_service import create_audit_log
+from services.explainability_rules_service import build_screener_explain
 from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
 
 router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
@@ -330,8 +331,10 @@ def scanner_results(
             strategy_code=row.strategy_code,
             signal=row.signal,
             confidence=float(row.confidence),
+            score=float(row.signal_score),
             signal_score=float(row.signal_score),
             reason_codes=list(row.reason_codes or []),
+            explain=build_screener_explain(payload=dict(row.payload or {}), signal=row.signal, signal_score=row.signal_score),
             payload=dict(row.payload or {}),
             generated_at=row.generated_at,
         )

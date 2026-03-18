@@ -23,6 +23,7 @@ export const MonitoringPage = () => {
   const [hardeningTrend, setHardeningTrend] = useState(null);
   const [activeAlerts, setActiveAlerts] = useState([]);
   const [alertPolicy, setAlertPolicy] = useState({});
+  const [guardTelemetry, setGuardTelemetry] = useState({ blocked_24h: 0, override_24h: 0, top_reasons: [] });
   const [overrideForm, setOverrideForm] = useState(defaultOverrideForm);
   const [isOverrideSubmitting, setIsOverrideSubmitting] = useState(false);
   const [isPageVisible, setIsPageVisible] = useState(true);
@@ -41,6 +42,7 @@ export const MonitoringPage = () => {
         { data: hardeningData },
         { data: activeAlertsData },
         { data: alertPolicyData },
+        { data: guardTelemetryData },
       ] = await Promise.all([
         apiClient.get("/pipeline/monitoring"),
         apiClient.get(`/phase4/admin/permission-drift-trend?days=${driftDays}`),
@@ -51,6 +53,7 @@ export const MonitoringPage = () => {
         apiClient.get("/admin-phase3/hardening-checklist/trend"),
         apiClient.get("/phase4/admin/active-alerts"),
         apiClient.get("/phase4/admin/alert-policy"),
+        apiClient.get("/admin/guard-telemetry"),
       ]);
       setMetrics(monitoringData);
       setDrift(driftData);
@@ -61,6 +64,7 @@ export const MonitoringPage = () => {
       setHardeningTrend(hardeningData);
       setActiveAlerts(activeAlertsData);
       setAlertPolicy(alertPolicyData);
+      setGuardTelemetry(guardTelemetryData || { blocked_24h: 0, override_24h: 0, top_reasons: [] });
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Monitoring verisi alınamadı");
     } finally {
@@ -185,6 +189,25 @@ export const MonitoringPage = () => {
         <MetricCard label="Gate Checked" value={isLoading ? "loading" : (metrics?.release_gate_last_checked ?? "-")} tone="blue" testId="monitoring-release-gate-checked" />
         <MetricCard label="Kill Switch" value={isLoading ? "loading" : String(metrics?.global_trading_pause ?? false)} tone={metrics?.global_trading_pause ? "red" : "blue"} testId="monitoring-kill-switch" />
         <MetricCard label="Exec Errors/5m" value={isLoading ? "loading" : (metrics?.execution_errors_5m ?? "-")} tone="red" testId="monitoring-execution-errors-5m" />
+      </div>
+
+      <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="monitoring-guard-telemetry-panel">
+        <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="monitoring-guard-telemetry-title">Guard Telemetry (24h)</p>
+        <div className="grid gap-3 md:grid-cols-3" data-testid="monitoring-guard-telemetry-cards-grid">
+          <MetricCard label="Blocked Trades" value={guardTelemetry?.blocked_24h ?? 0} tone="red" testId="monitoring-guard-telemetry-blocked-24h" />
+          <MetricCard label="Overrides" value={guardTelemetry?.override_24h ?? 0} tone="orange" testId="monitoring-guard-telemetry-override-24h" />
+          <MetricCard label="Top Reasons" value={(guardTelemetry?.top_reasons || []).length} tone="blue" testId="monitoring-guard-telemetry-top-reasons-count" />
+        </div>
+        <div className="space-y-2" data-testid="monitoring-guard-telemetry-top-reasons-list">
+          {(guardTelemetry?.top_reasons || []).length === 0 && (
+            <p className="text-xs text-slate-400" data-testid="monitoring-guard-telemetry-empty">No guard event in last 24h.</p>
+          )}
+          {(guardTelemetry?.top_reasons || []).map((item, index) => (
+            <p key={`${item.reason}-${index}`} className="text-xs text-slate-200" data-testid={`monitoring-guard-telemetry-reason-${index}`}>
+              {item.reason}: {item.count}
+            </p>
+          ))}
+        </div>
       </div>
 
       <div className="border border-orange-700 bg-orange-200 p-4" data-testid="monitoring-release-gate-override-status-panel">

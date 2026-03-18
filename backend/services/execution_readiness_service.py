@@ -4,8 +4,9 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from models import PaperPosition, UserExchangeConnection
-from services.audit_service import create_audit_log
+from services.audit_service import create_guard_audit_event
 from services.exchange_adapter.execution_adapter import ExchangeExecutionAdapter
+from services.explainability_rules_service import build_trade_explain
 
 
 def _latest_connection(db: Session, user_id: str | None) -> UserExchangeConnection | None:
@@ -123,24 +124,50 @@ def enforce_execution_guard_or_raise(
     actor_user_id: str,
     actor_role: str,
     source: str,
+    symbol: str | None = None,
 ) -> dict:
     readiness = evaluate_execution_readiness(db, user_id=user_id)
+    reason_codes = list(readiness.get("reason_codes") or [])
+    primary_reason = str((reason_codes[0] if reason_codes else "READINESS_FAIL") or "READINESS_FAIL").strip().upper()
+    mode = str(readiness.get("mode") or "MOCKED").lower()
+
     if str(readiness.get("final_status") or "") == "READY":
+        allowed_reason = "OVERRIDE_ACTIVE" if bool(readiness.get("override_active")) else "READY"
+        create_guard_audit_event(
+            db,
+            event="EXECUTION_ALLOWED",
+            reason=allowed_reason,
+            symbol=symbol,
+            user_id=user_id,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            severity="info",
+            metadata={"source": source, "mode": mode, "reason_codes": reason_codes},
+        )
+        if bool(readiness.get("override_active")):
+            create_guard_audit_event(
+                db,
+                event="EXECUTION_OVERRIDE_ENABLED",
+                reason="OVERRIDE_ACTIVE",
+                symbol=symbol,
+                user_id=user_id,
+                actor_user_id=actor_user_id,
+                actor_role=actor_role,
+                severity="warning",
+                metadata={"source": source, "mode": mode, "reason_codes": reason_codes},
+            )
         return readiness
 
-    create_audit_log(
+    create_guard_audit_event(
         db,
-        action="EXECUTION_BLOCKED",
-        entity_type="execution_guard",
-        entity_id=user_id,
+        event="EXECUTION_BLOCKED",
+        reason=primary_reason,
+        symbol=symbol,
+        user_id=user_id,
         actor_user_id=actor_user_id,
         actor_role=actor_role,
         severity="warning",
-        details={
-            "source": source,
-            "readiness": readiness,
-            "blocked_at": datetime.now(timezone.utc).isoformat(),
-        },
+        metadata={"source": source, "mode": mode, "readiness": readiness, "blocked_at": datetime.now(timezone.utc).isoformat()},
     )
     raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="EXECUTION_BLOCKED_BY_READINESS")
 
@@ -237,12 +264,13 @@ def validate_order_precheck(
         )
 
     readiness = evaluate_execution_readiness(db, user_id=user_id)
-    return {
+    result = {
         "valid": len(violations) == 0,
         "violations": violations,
         "execution_mode": str(readiness.get("mode") or "MOCKED").lower(),
         "checks": {
             "leverage_limit": leverage_limit,
+            "requested_leverage": int(leverage or 1),
             "max_exposure": max_exposure,
             "open_exposure": round(open_exposure, 4),
             "projected_exposure": round(projected_exposure, 4),
@@ -252,3 +280,9 @@ def validate_order_precheck(
             "margin_mode": margin,
         },
     }
+    result["explain"] = build_trade_explain(
+        validation=result,
+        execution_mode=result.get("execution_mode") or "mocked",
+        signal_score=None,
+    )
+    return result

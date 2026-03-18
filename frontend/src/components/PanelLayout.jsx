@@ -55,7 +55,7 @@ const adminOnlyItems = [
     items: [
       { to: "/admin/dashboard", label: "Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
       { to: "/admin/live-trading-dashboard", label: "Live Trading Dashboard", icon: Activity, testId: "nav-admin-live-trading-dashboard-link" },
-      { to: "/admin/monitoring", label: "System Status", icon: Activity, testId: "nav-admin-system-status-link" },
+      { to: "/admin/system-status", label: "System Status", icon: Activity, testId: "nav-admin-system-status-link" },
       { to: "/admin/universe-monitor", label: "Scanner Monitor", icon: Gauge, testId: "nav-admin-scanner-monitor-link" },
       { to: "/admin/futures/strategy-analytics", label: "Strategy Analytics", icon: BarChart3, testId: "nav-admin-strategy-analytics-link" },
     ],

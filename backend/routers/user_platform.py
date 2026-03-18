@@ -51,6 +51,7 @@ from schemas import (
     UserTradeResponse,
 )
 from services.audit_service import create_audit_log, create_domain_event
+from services.explainability_rules_service import build_trade_explain
 from services.execution_intent_service import submit_execution_intent
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.rate_limiter_service import consume_exchange_rate_limit
@@ -71,6 +72,7 @@ def _submit_trade_with_guard(
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
         source=source,
+        symbol="UNKNOWN",
     )
     allowed, retry_after_seconds, _ = consume_exchange_rate_limit("binance", tokens=1.0)
     if not allowed:
@@ -127,6 +129,11 @@ def _submit_trade_with_guard(
         reason_codes=[],
         queue_state=intent.status,
         execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+        explain=build_trade_explain(
+            validation=precheck,
+            execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+            signal_score=None,
+        ),
     )
 
 

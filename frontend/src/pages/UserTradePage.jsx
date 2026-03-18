@@ -154,6 +154,7 @@ export const UserTradePage = () => {
           status: "failed",
           execution_mode: validation?.execution_mode || "mocked",
           violations: validation?.violations || [],
+          explain: validation?.explain || [],
           error_text: "validation_failed",
         });
         toast.error("Validation fail: trade açılamaz");
@@ -198,11 +199,12 @@ export const UserTradePage = () => {
         status: "opened",
         execution_mode: executionMode,
         violations: [],
+        explain: submitRes.data?.explain || validation?.explain || [],
         error_text: "",
       });
 
       toast.success("Trade açıldı, positions sayfasına yönlendiriliyorsunuz");
-      setTimeout(() => navigate("/user/positions"), 700);
+      setTimeout(() => navigate("/user/positions"), 1500);
     } catch (error) {
       const statusCode = Number(error?.response?.status || 0);
       const detail = error?.response?.data?.detail;
@@ -212,6 +214,7 @@ export const UserTradePage = () => {
         status: "failed",
         execution_mode: validationResult?.execution_mode || "mocked",
         violations,
+        explain: validationResult?.explain || [],
         error_text: statusCode === 423 ? "EXECUTION_BLOCKED_BY_READINESS" : parseErrorText(error),
       });
       if (statusCode === 423) {
@@ -376,6 +379,19 @@ export const UserTradePage = () => {
           </div>
         )}
 
+        {validationResult && (validationResult.explain || []).length > 0 && (
+          <div className="mt-4 rounded border border-cyan-500/60 bg-cyan-500/10 p-3" data-testid="user-trade-validation-explain-panel">
+            <p className="text-sm font-semibold text-cyan-100" data-testid="user-trade-validation-explain-title">Validation Explain</p>
+            <div className="mt-2 space-y-1" data-testid="user-trade-validation-explain-list">
+              {(validationResult.explain || []).map((item, index) => (
+                <p key={`${item}-${index}`} className="text-xs text-cyan-50" data-testid={`user-trade-validation-explain-item-${index}`}>
+                  {item}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 flex flex-wrap gap-2" data-testid="user-trade-action-buttons">
           <Button
             type="button"
@@ -427,6 +443,15 @@ export const UserTradePage = () => {
                 {(executionResult.violations || []).map((violation, index) => (
                   <p key={`${violation.code || "violation"}-${index}`} className="text-xs" data-testid={`user-trade-result-violation-item-${index}`}>
                     {violation.code}: {violation.message}
+                  </p>
+                ))}
+              </div>
+            )}
+            {(executionResult.explain || []).length > 0 && (
+              <div className="mt-2 space-y-1" data-testid="user-trade-result-explain-list">
+                {(executionResult.explain || []).map((item, index) => (
+                  <p key={`${item}-${index}`} className="text-xs" data-testid={`user-trade-result-explain-item-${index}`}>
+                    {item}
                   </p>
                 ))}
               </div>

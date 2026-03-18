@@ -176,6 +176,7 @@ function App() {
             <Route path="state-rebuild" element={<StateRebuildLogsPage />} />
             <Route path="backtest-cards" element={<BacktestCardsPage />} />
             <Route path="monitoring" element={<MonitoringPage />} />
+            <Route path="system-status" element={<MonitoringPage />} />
             <Route path="phase4-live" element={<Phase4LiveControlPage />} />
             <Route path="audit-logs" element={<AuditLogsPage />} />
 

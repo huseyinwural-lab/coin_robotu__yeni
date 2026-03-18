@@ -10,6 +10,7 @@ from deps import require_user
 from models import User, UserScannerResult
 from schemas import UserScannerResultResponse
 from services.quote_asset_policy import extract_quote_asset
+from services.explainability_rules_service import build_screener_explain
 
 router = APIRouter(tags=["screener"])
 
@@ -108,6 +109,9 @@ def list_filtered_screener_results(
             continue
 
         results.append(
+            # Deterministic explainability payload for user trust layer
+            # (always at least one item)
+            # keep order stable for consistency tests
             UserScannerResultResponse(
                 id=row.id,
                 run_id=row.run_id,
@@ -117,8 +121,10 @@ def list_filtered_screener_results(
                 strategy_code=row.strategy_code,
                 signal=row.signal,
                 confidence=float(row.confidence or 0),
+                score=float(row.signal_score or 0),
                 signal_score=float(row.signal_score or 0),
                 reason_codes=list(row.reason_codes or []),
+                explain=build_screener_explain(payload=payload, signal=row.signal, signal_score=row.signal_score),
                 payload=payload,
                 generated_at=row.generated_at,
             )

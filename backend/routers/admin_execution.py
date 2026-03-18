@@ -11,6 +11,7 @@ from schemas import (
     AdminExecutionQueueDecisionResponse,
     ExecutionIntentQueueItemResponse,
     ExecutionReadinessResponse,
+    GuardTelemetryResponse,
     ReleaseGateStatusResponse,
     ReleaseGateOverrideRequest,
     ReleaseGateOverrideResponse,
@@ -20,6 +21,7 @@ from services.execution_intent_service import approve_execution_intent, list_exe
 from services.execution_intent_service import queue_status_summary, rejection_reason_summary, retry_execution_intent
 from services.execution_precheck_service import load_execution_policy_registry
 from services.execution_readiness_service import evaluate_execution_readiness
+from services.guard_metrics_service import build_guard_telemetry_payload
 from services.live_mode_service import create_release_gate_override, enforce_release_gate, revoke_release_gate_override
 
 router = APIRouter(prefix="/admin", tags=["admin_execution"])
@@ -190,6 +192,13 @@ def retry_intent(
 def execution_readiness(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     _ = current_user
     return ExecutionReadinessResponse(**evaluate_execution_readiness(db))
+
+
+@router.get("/guard-telemetry", response_model=GuardTelemetryResponse)
+def guard_telemetry(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_user
+    payload = build_guard_telemetry_payload(db)
+    return GuardTelemetryResponse(**payload)
 
 
 @router.get("/release-gate", response_model=ReleaseGateStatusResponse)
