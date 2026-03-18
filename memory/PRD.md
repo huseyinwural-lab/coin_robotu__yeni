@@ -1,3 +1,77 @@
+## 2026-03-18 — "Ekle" Paketi Tamamlandı (P1/P2 + Operasyonel İyileştirme)
+
+### Kullanıcı Talebi
+- Dashboard’da `execution_mode=live` daha görünür badge.
+- Explainability satırlarına confidence badge + risk severity chip.
+- MFA backup recovery codes.
+- `start_live.sh` için `--quick/--full` ve JSON export.
+- Admin execution queue satırında “Neden 423 alırım?” inline yardımcı metin + tek tık revalidate.
+
+### Uygulanan Değişiklikler
+
+#### 1) User Dashboard — execution mode badge (P1)
+- `backend/core/users/user_portfolio_engine.py`
+  - `/api/user/portfolio` snapshot’ına `execution_mode` alanı eklendi (`live|mocked`).
+- `backend/schemas.py`
+  - `UserPortfolioSnapshotResponse` modeline `execution_mode` alanı eklendi.
+- `frontend/src/pages/UserDashboardPage.jsx`
+  - Quick Summary + Live Control Status alanlarına görünür execution mode badge eklendi.
+  - Test id: `user-dashboard-execution-mode-badge`, `user-dashboard-live-control-execution-mode-chip`.
+
+#### 2) Explainability confidence/risk chips (P2)
+- `frontend/src/pages/user/components/DecisionCard.jsx`
+  - Confidence chip (`HIGH/MEDIUM/LOW`) ve Risk Severity chip (`HIGH/MEDIUM/LOW`) eklendi.
+  - Test id’ler: `user-decision-card-confidence-chip-{symbol}`, `user-decision-card-risk-severity-chip-{symbol}`.
+- `frontend/src/pages/user/components/ExplainabilityDrawer.jsx`
+  - Summary ve template satırlarında confidence/risk chips eklendi.
+  - Test id’ler: `user-explainability-confidence-chip`, `user-explainability-risk-severity-chip`, `user-explainability-template-confidence-chip-{idx}`, `user-explainability-template-risk-chip-{idx}`.
+
+#### 3) MFA Backup Recovery Codes (P2)
+- `backend/model_domains/security_branding.py`
+  - Yeni tablo: `user_mfa_backup_codes` (`UserMfaBackupCode`).
+- `backend/models.py`
+  - Yeni model export edildi.
+- `backend/services/mfa_service.py`
+  - Backup code üretme/saklama (hash), kalan code sayısı, challenge verify’de `backup_code` doğrulaması eklendi.
+- `backend/routers/mfa.py`
+  - Yeni endpoint: `POST /api/auth/mfa/backup-codes/regenerate`.
+- `backend/schemas.py`
+  - `MfaSettingsResponse` içine `backup_codes_remaining` eklendi.
+  - Yeni response: `MfaBackupCodesResponse`.
+- `frontend/src/pages/MfaSettingsPage.jsx`
+  - Backup code card + regenerate butonu + tek seferlik code listesi UI eklendi.
+
+#### 4) start_live.sh quick/full/json (Backlog maddesi tamamlandı)
+- `scripts/start_live.sh`
+  - Argümanlar: `--quick`, `--full`, `--json-out <path>`.
+  - `quick` modda kısa canlı uygunluk özeti,
+  - `full` modda tam checklist,
+  - JSON rapor export eklendi.
+  - Low balance false-negative’lerini azaltmak için micro test-order leverage fallback + balance check sözleşme toleransı iyileştirildi.
+
+#### 5) Admin queue 423 helper + one-click revalidate
+- `backend/routers/admin_execution.py`
+  - Yeni endpoint: `POST /api/admin/execution-queue/{intent_id}/owner-revalidate`.
+- `backend/schemas.py`
+  - Yeni response: `AdminExecutionIntentOwnerRevalidateResponse`.
+- `frontend/src/pages/AdminExecutionQueuePage.jsx`
+  - QUEUED satırlarına 423 açıklama metni + `Tek Tık Revalidate` butonu eklendi.
+  - Test id’ler: `admin-execution-queue-423-helper-*`, `admin-execution-queue-owner-revalidate-button-*`.
+
+### Operasyonel Stabilizasyon Notu
+- Runtime’da Alembic fallback geçişinde SQLite migration kilidi nedeniyle startup blokları görüldü.
+- Stabil çalıştırma için startup akışında migration çağrısı env-gated hale getirildi; SQLite tarafında metadata create-all ile tablo varlığı garanti altına alındı.
+- Bu nedenle runtime SQLite dosyası yeniden oluşturuldu ve test user (`testuser1773706589@example.com`) yeniden register+approve edilerek akışlar tekrar kuruldu.
+
+### Doğrulama Kanıtı
+- Testing agent raporu: `/app/test_reports/iteration_4.json`
+  - Backend: **12/12 PASS**
+  - Frontend: **PASS** (kritik özellikler doğrulandı)
+- start_live script:
+  - `--quick --json-out`: PASS
+  - `--full --json-out`: PASS
+  - Rapor dosyaları üretildi (`/app/artifacts/live_quick_report.json`, `/app/artifacts/live_full_report.json`).
+
 ## 2026-03-18 — P1 Tamamlama + 423 Readiness Engel Kapatma
 
 ### Kullanıcı Talebi
