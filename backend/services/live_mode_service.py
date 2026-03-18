@@ -59,7 +59,7 @@ MAX_SAFE_POSITION_PCT = 0.1
 MAX_SAFE_LEVERAGE = 1
 MAX_SAFE_NOTIONAL_EXPOSURE = 150
 VALIDATION_STALE_MINUTES = 10
-OVERRIDE_REASON_CODES = {"false_positive", "exchange_incident", "ops_emergency", "manual_review"}
+OVERRIDE_REASON_CODES = {"false_positive", "exchange_incident", "ops_emergency", "manual_review", "execution_guard_manual_override"}
 logger = logging.getLogger(__name__)
 
 
