@@ -1,3 +1,24 @@
+## 2026-03-18 — Fork Devamı: Admin Execution Queue Frontend Stabilizasyonu
+
+### Kapsam (kullanıcı seçimi: 1A, 2B, 3A)
+- Öncelik execution queue frontend yüklenme sorununun net doğrulanması ve admin approve/reject akışının test edilmesi.
+
+### Yapılanlar
+- `frontend/src/components/PanelLayout.jsx` içinde admin queue menü linki test-id standardize edildi:
+  - `nav-admin-execution-monitor-link` → `nav-admin-execution-queue-link`
+- `/admin/execution-queue` sayfası canlı preview ortamında login + nav + route üzerinden yeniden üretildi ve doğrulandı.
+- Reject/Retry aksiyonları UI ve API tarafında çalışır doğrulandı.
+- Approve aksiyonunda `423 EXECUTION_BLOCKED_BY_READINESS` davranışının release gate BLOCKED durumunda beklenen kontrat olduğu doğrulandı (UI toast görünürlüğü mevcut).
+
+### Test Kanıtı
+- Smoke screenshot: admin login → sidebar → execution queue page PASS.
+- Frontend testing agent raporu: `/app/test_reports/iteration_2.json`
+  - Sonuç: frontend %100, blank/timeout yok, nav/data-testid/filtre/aksiyonlar PASS.
+
+### Operasyonel Not
+- Disk baskısı nedeniyle `backend/trading_platform_local.db` dosyası `/tmp/trading_platform_local.db` konumuna taşınıp symlink ile bağlandı.
+- Backend supervisor yeniden başlatılarak açık silinmiş inode kaynaklı disk doluluğu giderildi.
+
 ## 2026-03-18 — MFA + Persistent Branding + Admin Brand Settings (Kapanış)
 
 ### Kullanıcı talebi (3 kalem birlikte)
