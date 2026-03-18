@@ -1,3 +1,39 @@
+## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
+
+### Kullanıcı Talebi
+- Aşağıdaki 8 kalem için sözlü değil kanıtlı rapor:
+  1) PostgreSQL persistence + backup
+  2) Rollback mekanizması (komut + demo)
+  3) Idempotency / double execution koruması
+  4) Monitoring + alert sistemi (test)
+  5) Security hardening (rate limit + encrypted keys)
+  6) Execution safety (kill switch + exposure limit)
+  7) Exchange failure handling (retry / circuit breaker benzeri recovery)
+  8) GitHub Actions deploy gate
+
+### Bu Iterasyonda Eklenenler
+- **Yeni scriptler:**
+  - `/app/scripts/db_backup.sh`
+  - `/app/scripts/db_restore.sh`
+  - `/app/scripts/db_rollback_demo.sh`
+- **CI gate workflow:**
+  - `/app/.github/workflows/deploy-gate.yml`
+- **Backend smoke test (CI için):**
+  - `/app/backend/tests/test_iteration165_prod_gate_smoke.py`
+- **Rapor dosyaları:**
+  - `/app/artifacts/production_readiness_report.json`
+  - `/app/artifacts/production_readiness_report.md`
+  - `/app/artifacts/postgres_backup_attempt.log`
+  - `/app/artifacts/rollback_demo.log`
+
+### Test Doğrulaması
+- Testing agent raporu: `/app/test_reports/iteration_5.json`
+  - Özet: PostgreSQL backup kalemi ortam kısıtı nedeniyle FAIL, diğer kalemler PASS olarak doğrulandı.
+
+### Mevcut Durum (Toplam)
+- **Overall Production Readiness:** `FAIL` (tek P0 bloker nedeniyle)
+- **P0 Bloker:** `postgres_persistence_backup` (bu preview ortamda `pg_dump` yok; PostgreSQL backup zinciri PASS değil)
+
 ## 2026-03-18 — "Ekle" Paketi Tamamlandı (P1/P2 + Operasyonel İyileştirme)
 
 ### Kullanıcı Talebi
