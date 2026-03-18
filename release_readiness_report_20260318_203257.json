@@ -1,0 +1,92 @@
+{
+  "backend_health": {
+    "GET /api/health = 200": {
+      "success": true,
+      "details": "Response: {'status': 'ok'}",
+      "timestamp": "2026-03-18T20:32:49.540377"
+    }
+  },
+  "auth_flows": {
+    "Admin Login (admin@platform.local)": {
+      "success": true,
+      "details": "Token received: eyJhbGciOiJIUzI1NiIs...",
+      "timestamp": "2026-03-18T20:32:49.943138"
+    },
+    "User Login (testuser1773706589@example.com)": {
+      "success": true,
+      "details": "Token received: eyJhbGciOiJIUzI1NiIs...",
+      "timestamp": "2026-03-18T20:32:51.338578"
+    }
+  },
+  "release_gate": {
+    "GET /api/admin/release-gate": {
+      "success": true,
+      "details": "Gate Status: UNKNOWN, Blocking: execution_quality_score",
+      "timestamp": "2026-03-18T20:32:52.269811"
+    },
+    "GET /api/admin/execution-readiness": {
+      "success": true,
+      "details": "Status: READY, Mode: MOCKED",
+      "timestamp": "2026-03-18T20:32:55.049440"
+    }
+  },
+  "execution_readiness": {},
+  "exchange_connections": {
+    "POST /api/user/exchange-connections/a8f8ec0d-3f1f-469b-8d37-a446439ce8cd/revalidate": {
+      "success": true,
+      "details": "Revalidation result - Valid: False, Can Trade: False, Reason: Unknown",
+      "timestamp": "2026-03-18T20:32:55.867720"
+    },
+    "GET /api/user/exchange-connections": {
+      "success": true,
+      "details": "Found 1 connection(s), Default: a8f8ec0d-3f1f-469b-8d37-a446439ce8cd, Valid: False, Can Trade: False",
+      "timestamp": "2026-03-18T20:32:55.868290"
+    },
+    "GET /api/exchange/readiness-checklist": {
+      "success": true,
+      "details": "Checklist data received",
+      "timestamp": "2026-03-18T20:32:56.003082"
+    },
+    "GET /api/exchange/validate": {
+      "success": false,
+      "details": "Status 422: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"query\",\"exchange\"],\"msg\":\"Field required\",\"input\":null,\"url\":\"https://errors.pydantic.dev/2.12/v/missing\"},{\"type\":\"missing\",\"loc\":[\"query\",\"market_type\"],\"msg\":\"Field required\",\"input\":null,\"url\":\"https://errors.pydantic.dev/2.12/v/missing\"},{\"type\":\"missing\",\"loc\":[\"query\",\"environment\"],\"msg\":\"Field required\",\"input\":null,\"url\":\"https://errors.pydantic.dev/2.12/v/missing\"}]}",
+      "timestamp": "2026-03-18T20:32:56.253083"
+    }
+  },
+  "execution_queue": {
+    "Queue reject action test": {
+      "success": true,
+      "details": "Action endpoint accessible",
+      "timestamp": "2026-03-18T20:32:56.566606"
+    },
+    "Queue retry action test": {
+      "success": true,
+      "details": "Action endpoint accessible",
+      "timestamp": "2026-03-18T20:32:56.731969"
+    },
+    "GET /api/admin/execution-queue": {
+      "success": true,
+      "details": "Found 20 queued items",
+      "timestamp": "2026-03-18T20:32:56.732585"
+    }
+  },
+  "production_readiness": "\u274c HAYIR - Not Production Ready",
+  "blocking_issues": [
+    "Release Gate: execution_quality_score"
+  ],
+  "warnings": [
+    "Exchange connection issue: Unknown issue"
+  ],
+  "frontend_smoke": {
+    "Landing page accessibility": {
+      "success": false,
+      "details": "Page loaded (10758 chars), Login buttons: User=False, Admin=False",
+      "timestamp": "2026-03-18T20:32:56.853649"
+    },
+    "Admin dashboard flow": {
+      "success": true,
+      "details": "Admin dashboard accessible",
+      "timestamp": "2026-03-18T20:32:57.073558"
+    }
+  }
+}
