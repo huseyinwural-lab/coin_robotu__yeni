@@ -10,6 +10,13 @@
   - C1-C6 E2E PASS
 - 🔜 Sonraki odak: Phase-9B hardening, ops script sağlamlaştırma, düşük öncelikli teknik borç temizliği.
 
+## 2026-03-18 Update (Telemetry + Explainability)
+- ✅ Guard telemetry + explainability mini fast close tamamlandı.
+  - `/api/admin/guard-telemetry` hazır
+  - `/admin/system-status` guard kartı canlı
+  - `/api/screener` + trade response explain alanları deterministic
+- 🔜 Sonraki odak: explain detaylarını expandable drawer ile artırma ve telemetry query maliyet optimizasyonu.
+
 ## P0 (Tamamlandı)
 - Phase 5.1A → 5.8A institutional futures engine (risk/correlation/capital/tail-risk/live-readiness/scaling)
 - Admin observability panelleri ve release-gate operability hattı

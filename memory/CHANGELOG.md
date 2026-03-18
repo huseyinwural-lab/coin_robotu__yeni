@@ -1,6 +1,17 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-18
+### Iteration-162 — Telemetry + Explainability Mini Fast Close
+- Guard event standardizasyonu eklendi (`EXECUTION_BLOCKED`, `EXECUTION_ALLOWED`, `EXECUTION_OVERRIDE_ENABLED`) ve boş reason engeli getirildi.
+- Yeni guard aggregation servisi eklendi (`guard_metrics_service.py`) + endpoint: `GET /api/admin/guard-telemetry`.
+- Admin `/admin/system-status` (monitoring alias) ekranına Guard Telemetry kartı eklendi (blocked_24h, override_24h, top_reasons).
+- Screener response’larına deterministic explain eklendi (`/api/screener`, `/api/user/scanner/results`) + `score` alanı.
+- Trade validation/submit response’larına explain eklendi (`OrderValidationResponse`, `ExecutionIntentSubmitResponse`).
+- User Trade UI’de validation explain + execution explain paneli eklendi; scanner satırlarına explain summary bağlandı.
+- Yeni testler: `test_guard_telemetry.py`, `test_explain_fields.py`, `test_explain_consistency.py`.
+- Testing agent raporu: `/app/test_reports/iteration_161.json` → acceptance PASS.
+
+## 2026-03-18
 ### Iteration-161 — Binance Testnet Live Mode Activation + Submit Path Fixes
 - Kullanıcı bağlantısı üzerinde Binance futures testnet credential doğrulaması gerçekleştirildi; exchange validate/test-order başarıyla geçti.
 - `execution_readiness_service` binance için readiness snapshot temelli mode üretir hale getirildi; uygun durumda `execution_mode=live` dönüyor.

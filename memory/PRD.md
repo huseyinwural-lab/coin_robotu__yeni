@@ -1,3 +1,90 @@
+## 2026-03-18 — TELEMETRY + EXPLAINABILITY (Mini Fast Close)
+
+### Hedef
+- Sistem görünürlüğünü artırmak (guard telemetry)
+- Kullanıcı güven katmanını güçlendirmek (deterministic explainability)
+- Minimum kapsam + düşük maliyet + doğrudan değer
+
+### T1 — Audit Event Standardizasyonu (Guard)
+- Dosya: `backend/services/audit_service.py`
+- Yeni standart guard event helper eklendi: `create_guard_audit_event(...)`
+- Event tipleri:
+  - `EXECUTION_BLOCKED`
+  - `EXECUTION_ALLOWED`
+  - `EXECUTION_OVERRIDE_ENABLED`
+- Zorunlu reason doğrulaması eklendi (`reason` boş olamaz)
+- Event payload standardı:
+  - `event`, `reason`, `symbol`, `user_id`, `metadata`, `timestamp`
+
+### T2 — Guard Metrics Aggregation
+- Yeni dosya: `backend/services/guard_metrics_service.py`
+- Fonksiyonlar:
+  - `count_blocked_trades(last_24h)`
+  - `count_overrides(last_24h)`
+  - `top_block_reasons()`
+  - `build_guard_telemetry_payload()`
+- Boş veri durumunda crash yerine sıfır/boş liste döner.
+
+### T3 — Admin Telemetry Endpoint
+- Endpoint: `GET /api/admin/guard-telemetry`
+- Dosya: `backend/routers/admin_execution.py`
+- Response şeması: `GuardTelemetryResponse`
+- 200 + crash-safe zero contract doğrulandı.
+
+### T4 — Admin UI Kartı
+- Sayfa: `/admin/system-status` (Monitoring alias route)
+- Frontend:
+  - `frontend/src/pages/MonitoringPage.jsx`
+  - `frontend/src/App.js` (`/admin/system-status` route)
+  - `frontend/src/components/PanelLayout.jsx` (nav link)
+- Kart içerikleri:
+  - Blocked trades (24h)
+  - Overrides (24h)
+  - Top reasons list
+
+### E1 — Screener Explain Field
+- `/api/screener` ve `/api/user/scanner/results` response’larına deterministic `explain` eklendi.
+- `UserScannerResultResponse` genişletildi:
+  - `score`
+  - `explain` (min 1 item)
+- Rule-based explain üretimi yeni servisle yapılıyor:
+  - `backend/services/explainability_rules_service.py`
+
+### E2 — Trade Explain (Execution)
+- `OrderValidationResponse` ve `ExecutionIntentSubmitResponse` içine `explain` alanı eklendi.
+- `validate_order_precheck` çıktısına deterministic explain üretimi bağlandı.
+- Trade submit endpoint’leri explain ile dönüyor:
+  - `/api/user/open-position`
+  - `/api/v1/user/trading/execute`
+  - `/api/user/position-actions/submit`
+  - `/api/user/intent/submit`
+
+### E3 — UI Explain Panel
+- Trade panel (`/user/trade`):
+  - Validation explain panel
+  - Execution explain panel (success/fail state)
+- Screener tablo+mobile kartlarında explain summary:
+  - `RSI oversold • Volume spike • Above MA50` formatı
+
+### E4 — Explain Consistency Rule
+- Servis fonksiyonu: `explain_consistency_ok(...)`
+- Çelişki tespiti:
+  - oversold vs overbought
+  - above MA50 vs below MA50
+  - trend up vs trend down
+
+### Testler
+- Yeni test dosyaları:
+  - `backend/tests/test_guard_telemetry.py`
+  - `backend/tests/test_explain_fields.py`
+  - `backend/tests/test_explain_consistency.py`
+- Ek test agent raporu:
+  - `/app/test_reports/iteration_161.json`
+  - Sonuç: backend/frontend acceptance PASS
+
+### Sonuç Durumu
+- SYSTEM → **SAFE + VISIBLE + TRUSTABLE** (mini closure hedefi karşılandı)
+
 ## 2026-03-18 — Binance Testnet Live Activation & MOCKED Removal (Kullanıcı Talebi)
 
 ### Talep
