@@ -291,6 +291,7 @@ def run(target_env: str, base_url: str, skip_user_contracts: bool) -> dict:
         "target_env": target_env,
         "base_url": base_url,
         "overall": overall,
+        "overall_status": overall,
         "fail_count": fail_count,
         "warn_count": warn_count,
         "checks": checks,

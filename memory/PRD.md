@@ -74,6 +74,13 @@
 - Sonuç:
   - `overall: FAIL` (preview runtime sqlite fallback nedeniyle beklenen)
 
+### 7) Final Gate Output Contract
+
+- `p0_closure_gate.py` çıktısına `overall_status` alanı eklendi (deterministik PASS/FAIL parse kolaylığı).
+- Son dosya:
+  - `/app/test_reports/release_gate_latest.json`
+  - `overall_status: FAIL` (bu runtime prod olmadığından)
+
 ### Doğrulama
 
 - Lokal test:
