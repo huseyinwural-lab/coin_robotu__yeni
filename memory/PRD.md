@@ -92,6 +92,35 @@
 - Doğrulama:
   - Frontend agent: PASS (form görünür, MFA flow PASS, admin white background korunuyor).
 
+## 2026-03-18 — Live Bring-Up Script (Tek Komut)
+
+### Talep
+- Kullanıcı canlıya alma öncesi tek komutla sistemi ayağa kaldıran ve kritik kontrolleri yapan script istedi.
+
+### Uygulama
+- Yeni script: ` /app/scripts/start_live.sh `
+- Kapsam:
+  1) frontend/backend supervisor restart
+  2) health check
+  3) admin+user auth (MFA destekli login)
+  4) exchange connection revalidate
+  5) readiness stabilite kontrolü
+  6) micro test-order (5–10 USDT aralığı hedefi)
+  7) guard/risk/balance kontrolleri
+  8) trade open + position yansıma kontrolü
+  9) telemetry + explainability kontrolleri
+
+### Çalıştırma
+- Tek komut:
+  `LIVE_USER_EMAIL='...' LIVE_USER_PASSWORD='...' bash /app/scripts/start_live.sh`
+
+### Doğrulama
+- Script local doğrulama: PASS
+- Backend test agent doğrulaması: PASS
+  - `execution_mode=live`
+  - micro trade `FILLED`
+  - readiness/guard/risk/balance/telemetry/explainability/positions marker’ları başarılı
+
 ## 2026-03-18 — Auth UI Final Styling (Logo Upload + Reference Layout)
 
 ### Kullanıcı seçimleri

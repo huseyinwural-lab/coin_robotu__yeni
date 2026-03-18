@@ -25,6 +25,12 @@
 - MFA step-up (email/TOTP challenge panel) login ekranında korunarak çalışır bırakıldı.
 - Admin login beyaz zemin ve logo düzeni korunarak PASS doğrulandı.
 
+### Iteration-166 — Live Bring-up Script (One-command)
+- Yeni script eklendi: `/app/scripts/start_live.sh`
+- Script, servis restart + health + MFA-aware auth + readiness + micro test-order + guard/risk/balance + telemetry/explainability + position kontrolünü tek akışta doğrular.
+- Çalıştırma: `LIVE_USER_EMAIL='...' LIVE_USER_PASSWORD='...' bash /app/scripts/start_live.sh`
+- Doğrulama: script self-run PASS + backend deep test PASS.
+
 ## 2026-03-18
 ### Iteration-164 — Auth Pages Reference Redesign + Logo Upload
 - `/user/login` sayfası referans görsele yakın şekilde yeniden düzenlendi (hero + turuncu form panel + sağ çizgili görsel + alt durum/feature blokları).
