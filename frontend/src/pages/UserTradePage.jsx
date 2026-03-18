@@ -262,7 +262,7 @@ export const UserTradePage = () => {
       <div className="col-span-12 lg:col-span-7 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-trade-form-card">
         <div className="grid grid-cols-12 gap-3" data-testid="user-trade-form-grid">
           <div className="col-span-12 md:col-span-6" data-testid="user-trade-symbol-field">
-            <label className="text-xs text-slate-400" htmlFor="user-trade-symbol-select">Symbol</label>
+            <label className="text-xs text-slate-400" htmlFor="user-trade-symbol-select" data-testid="user-trade-symbol-label">Symbol</label>
             <select
               id="user-trade-symbol-select"
               className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm"
@@ -279,7 +279,7 @@ export const UserTradePage = () => {
           </div>
 
           <div className="col-span-12 md:col-span-6" data-testid="user-trade-connection-field">
-            <label className="text-xs text-slate-400" htmlFor="user-trade-connection-select">Exchange Connection</label>
+            <label className="text-xs text-slate-400" htmlFor="user-trade-connection-select" data-testid="user-trade-connection-label">Exchange Connection</label>
             <select
               id="user-trade-connection-select"
               className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm"
@@ -287,7 +287,7 @@ export const UserTradePage = () => {
               onChange={(event) => setSelectedConnectionId(event.target.value)}
               data-testid="user-trade-connection-select"
             >
-              {connections.length === 0 && <option value="">no-connection</option>}
+              {connections.length === 0 && <option value="" data-testid="user-trade-connection-option-empty">no-connection</option>}
               {connections.map((connection) => (
                 <option key={connection.id} value={connection.id} data-testid={`user-trade-connection-option-${connection.id}`}>
                   {formatConnectionLabel(connection)}
@@ -297,7 +297,7 @@ export const UserTradePage = () => {
           </div>
 
           <div className="col-span-6 md:col-span-3" data-testid="user-trade-size-mode-field">
-            <label className="text-xs text-slate-400" htmlFor="user-trade-size-mode-select">Size Mode</label>
+            <label className="text-xs text-slate-400" htmlFor="user-trade-size-mode-select" data-testid="user-trade-size-mode-label">Size Mode</label>
             <select
               id="user-trade-size-mode-select"
               className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm"
@@ -311,7 +311,7 @@ export const UserTradePage = () => {
           </div>
 
           <div className="col-span-6 md:col-span-3" data-testid="user-trade-size-value-field">
-            <label className="text-xs text-slate-400" htmlFor="user-trade-size-value-input">Size</label>
+            <label className="text-xs text-slate-400" htmlFor="user-trade-size-value-input" data-testid="user-trade-size-value-label">Size</label>
             <Input
               id="user-trade-size-value-input"
               type="number"
@@ -324,7 +324,7 @@ export const UserTradePage = () => {
           </div>
 
           <div className="col-span-6 md:col-span-3" data-testid="user-trade-leverage-field">
-            <label className="text-xs text-slate-400" htmlFor="user-trade-leverage-input">Leverage</label>
+            <label className="text-xs text-slate-400" htmlFor="user-trade-leverage-input" data-testid="user-trade-leverage-label">Leverage</label>
             <Input
               id="user-trade-leverage-input"
               type="number"
@@ -337,7 +337,7 @@ export const UserTradePage = () => {
           </div>
 
           <div className="col-span-6 md:col-span-3" data-testid="user-trade-margin-type-field">
-            <label className="text-xs text-slate-400" htmlFor="user-trade-margin-type-select">Margin Type</label>
+            <label className="text-xs text-slate-400" htmlFor="user-trade-margin-type-select" data-testid="user-trade-margin-type-label">Margin Type</label>
             <select
               id="user-trade-margin-type-select"
               className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm"
@@ -351,7 +351,7 @@ export const UserTradePage = () => {
           </div>
 
           <div className="col-span-12 md:col-span-4" data-testid="user-trade-order-type-field">
-            <label className="text-xs text-slate-400" htmlFor="user-trade-order-type-select">Order Type</label>
+            <label className="text-xs text-slate-400" htmlFor="user-trade-order-type-select" data-testid="user-trade-order-type-label">Order Type</label>
             <select
               id="user-trade-order-type-select"
               className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm"

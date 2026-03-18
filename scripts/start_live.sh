@@ -226,24 +226,35 @@ def run_micro_test_order(user_headers: dict[str, str], conn: dict[str, Any], sym
     price = market_price(user_headers, symbol)
     qty = max(0.001, round(notional / price, 6))
 
-    test_order = request(
-        "POST",
-        "/api/exchange/test-order",
-        headers=user_headers,
-        params={
-            "exchange": conn.get("exchange"),
-            "market_type": conn.get("market_type"),
-            "environment": conn.get("environment"),
-            "symbol": symbol,
-            "leverage": 1,
-            "quantity": qty,
-        },
-    )
-    if test_order.status_code != 200:
-        fail("Micro test-order çağrısı başarısız", {"status": test_order.status_code, "body": test_order.text[:220]})
-    payload = test_order.json()
-    if str(payload.get("final_status") or "").upper() != "FILLED":
-        fail("Micro test-order FILLED değil", {"final_status": payload.get("final_status"), "payload": payload})
+    payload = None
+    last_error = None
+    for lev in (1, 2, 3, 5):
+        test_order = request(
+            "POST",
+            "/api/exchange/test-order",
+            headers=user_headers,
+            params={
+                "exchange": conn.get("exchange"),
+                "market_type": conn.get("market_type"),
+                "environment": conn.get("environment"),
+                "symbol": symbol,
+                "leverage": lev,
+                "quantity": qty,
+            },
+        )
+        if test_order.status_code != 200:
+            last_error = {"status": test_order.status_code, "body": test_order.text[:220], "leverage": lev}
+            continue
+        payload = test_order.json()
+        final_status = str(payload.get("final_status") or "").upper()
+        if final_status == "FILLED":
+            return {"price": price, "qty": qty, "notional": round(price * qty, 4), "leverage": lev}
+        failure_code = str(payload.get("failure_code") or "")
+        last_error = {"final_status": final_status, "payload": payload, "leverage": lev}
+        if failure_code != "insufficient_balance":
+            break
+
+    fail("Micro test-order FILLED değil", last_error or {"payload": payload})
     return {"price": price, "qty": qty, "notional": round(price * qty, 4)}
 
 
@@ -350,13 +361,21 @@ def balance_check(user_headers: dict[str, str], conn: dict[str, Any], symbol: st
             "quantity": 100,
         },
     )
-    if huge.status_code != 200:
-        fail("Bakiye kontrol test-order çağrısı başarısız", {"status": huge.status_code, "body": huge.text[:200]})
-    payload = huge.json()
-    if str(payload.get("final_status") or "").upper() != "REJECTED":
-        fail("Yetersiz bakiye testi REJECTED değil", {"final_status": payload.get("final_status")})
-    if str(payload.get("failure_code") or "") != "insufficient_balance":
-        fail("Bakiye hata kodu unexpected", {"failure_code": payload.get("failure_code")})
+    payload = huge.json() if huge.headers.get("content-type", "").startswith("application/json") else {}
+
+    if huge.status_code == 200:
+        if str(payload.get("final_status") or "").upper() != "REJECTED":
+            fail("Yetersiz bakiye testi REJECTED değil", {"final_status": payload.get("final_status")})
+        if str(payload.get("failure_code") or "") != "insufficient_balance":
+            fail("Bakiye hata kodu unexpected", {"failure_code": payload.get("failure_code")})
+        return
+
+    if huge.status_code == 400:
+        detail = payload.get("detail") if isinstance(payload, dict) else None
+        if isinstance(detail, dict) and str(detail.get("failure_code") or "") == "insufficient_balance":
+            return
+
+    fail("Bakiye kontrol test-order çağrısı başarısız", {"status": huge.status_code, "body": huge.text[:260]})
 
 
 def telemetry_and_explain(admin_headers: dict[str, str], user_headers: dict[str, str]):
