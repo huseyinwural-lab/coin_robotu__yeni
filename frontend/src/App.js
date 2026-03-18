@@ -77,6 +77,8 @@ import { AdminUniverseMonitorPage } from "@/pages/AdminUniverseMonitorPage";
 import { AdminFreshnessHeatmapPage } from "@/pages/AdminFreshnessHeatmapPage";
 import { AdminCommercialOpsPage } from "@/pages/AdminCommercialOpsPage";
 import { AdminExecutionReadinessPage } from "@/pages/AdminExecutionReadinessPage";
+import { AdminBrandSettingsPage } from "@/pages/AdminBrandSettingsPage";
+import { MfaSettingsPage } from "@/pages/MfaSettingsPage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -159,6 +161,8 @@ function App() {
             <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
             <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
             <Route path="execution-readiness" element={<AdminExecutionReadinessPage />} />
+            <Route path="mfa-settings" element={<MfaSettingsPage />} />
+            <Route path="brand-settings" element={<AdminBrandSettingsPage />} />
             <Route path="strategy/allocation" element={<AdminStrategyAllocationPage />} />
             <Route path="portfolio-risk" element={<AdminPortfolioRiskPage />} />
             <Route path="positions-monitor" element={<AdminPositionsMonitorPage />} />
@@ -213,6 +217,7 @@ function App() {
             <Route path="strategies" element={<StrategyTemplatesPage />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
             <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />
+            <Route path="mfa-settings" element={<MfaSettingsPage />} />
             <Route path="positions" element={<UserPositionsPage />} />
             <Route path="live-trading-dashboard" element={<UserLiveTradingDashboardPage />} />
             <Route path="paper-positions" element={<PaperPositionsPage />} />

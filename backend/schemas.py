@@ -83,9 +83,57 @@ class AlertChannelConfigUpdateRequest(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    access_token: str
-    token_type: str
-    user: UserResponse
+    access_token: str | None = None
+    token_type: str = "bearer"
+    user: UserResponse | None = None
+    mfa_required: bool = False
+    mfa_challenge_token: str | None = None
+    mfa_methods: list[str] = Field(default_factory=list)
+    mfa_expires_at: datetime | None = None
+    email_delivery_status: str | None = None
+    email_code_preview: str | None = None
+
+
+class MfaSettingsUpdateRequest(BaseModel):
+    is_enabled: bool
+    enabled_methods: list[str] = Field(default_factory=list)
+
+
+class MfaSettingsResponse(BaseModel):
+    is_enabled: bool
+    enabled_methods: list[str] = Field(default_factory=list)
+    totp_configured: bool
+    totp_verified: bool
+    email_otp_verified: bool
+    updated_at: datetime | None = None
+
+
+class MfaTotpSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+    issuer: str
+    account_name: str
+
+
+class MfaTotpVerifyRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=8)
+
+
+class MfaChallengeVerifyRequest(BaseModel):
+    challenge_token: str = Field(min_length=20, max_length=200)
+    method: str = Field(min_length=4, max_length=20)
+    code: str = Field(min_length=4, max_length=12)
+
+
+class BrandSettingsUpdateRequest(BaseModel):
+    app_name: str = Field(min_length=2, max_length=120)
+
+
+class BrandSettingsResponse(BaseModel):
+    app_name: str
+    logo_url: str | None = None
+    has_logo: bool = False
+    updated_at: datetime | None = None
 
 
 class PasswordResetRequestPayload(BaseModel):

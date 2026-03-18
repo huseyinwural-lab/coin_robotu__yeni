@@ -34,6 +34,31 @@ export const AuthProvider = ({ children }) => {
   const login = async ({ email, password, panel = "user" }) => {
     const loginEndpoint = panel === "admin" ? "/auth/login/admin" : "/auth/login/user";
     const { data } = await apiClient.post(loginEndpoint, { email, password });
+    if (data?.mfa_required) {
+      return {
+        mfaRequired: true,
+        challengeToken: data.mfa_challenge_token,
+        methods: data.mfa_methods || [],
+        expiresAt: data.mfa_expires_at,
+        emailDeliveryStatus: data.email_delivery_status,
+        emailCodePreview: data.email_code_preview,
+        user: data.user || null,
+      };
+    }
+
+    localStorage.setItem("token", data.access_token);
+    setAuthToken(data.access_token);
+    setToken(data.access_token);
+    setUser(data.user);
+    return { mfaRequired: false, user: data.user };
+  };
+
+  const verifyMfaChallenge = async ({ challengeToken, method, code }) => {
+    const { data } = await apiClient.post("/auth/mfa/challenge/verify", {
+      challenge_token: challengeToken,
+      method,
+      code,
+    });
     localStorage.setItem("token", data.access_token);
     setAuthToken(data.access_token);
     setToken(data.access_token);
@@ -61,7 +86,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const value = useMemo(
-    () => ({ user, token, loading, login, register, logout }),
+    () => ({ user, token, loading, login, verifyMfaChallenge, register, logout }),
     [user, token, loading],
   );
 

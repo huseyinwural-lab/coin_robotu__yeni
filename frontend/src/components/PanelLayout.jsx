@@ -33,6 +33,7 @@ const userNavItems = [
   { to: "/user/live-trading-dashboard", label: "Live Trading", icon: Gauge, testId: "nav-user-live-trading-dashboard-link" },
   { to: "/user/trade", label: "Trade Entry", icon: Wrench, testId: "nav-user-trade-entry-link" },
   { to: "/user/exchange-settings", label: "Exchange Settings", icon: KeyRound, testId: "nav-user-exchange-settings-link" },
+  { to: "/user/mfa-settings", label: "MFA Settings", icon: ShieldAlert, testId: "nav-user-mfa-settings-link" },
   { to: "/user/risk-policy", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
   { to: "/user/bot-profiles", label: "Bot Profilleri", icon: TrendingUp, testId: "nav-bot-profiles-link" },
   { to: "/user/scanner", label: "Scanner", icon: Gauge, testId: "nav-user-scanner-link" },
@@ -92,6 +93,8 @@ const adminOnlyItems = [
       { to: "/admin/commercial-ops", label: "Commercial Ops", icon: BarChartBig, testId: "nav-admin-commercial-ops-link", superAdminOnly: true },
       { to: "/admin/user-approvals", label: "User Approvals", icon: UserCog, testId: "nav-admin-user-approvals-link" },
       { to: "/admin/exchanges", label: "Exchange Settings", icon: Globe, testId: "nav-admin-exchange-settings-link" },
+      { to: "/admin/mfa-settings", label: "MFA Settings", icon: ShieldAlert, testId: "nav-admin-mfa-settings-link" },
+      { to: "/admin/brand-settings", label: "Brand Settings", icon: Settings2, testId: "nav-admin-brand-settings-link" },
     ],
   },
   {

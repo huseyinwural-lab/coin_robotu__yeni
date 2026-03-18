@@ -1,15 +1,18 @@
 import { Eye, EyeOff, Lock, Mail, Upload } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
+import { apiClient } from "@/lib/api";
+
+const backendBase = process.env.REACT_APP_BACKEND_URL;
 
 export const UserLoginPage = () => {
   const navigate = useNavigate();
-  const { login, register } = useAuth();
+  const { login, verifyMfaChallenge, register } = useAuth();
   const [mode, setMode] = useState("register");
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
@@ -22,6 +25,33 @@ export const UserLoginPage = () => {
   });
   const [logoPreview, setLogoPreview] = useState("/xilo-logo.png");
   const [submitting, setSubmitting] = useState(false);
+  const [mfaState, setMfaState] = useState(null);
+  const [mfaMethod, setMfaMethod] = useState("totp");
+  const [mfaCode, setMfaCode] = useState("");
+
+  const resolvedLogoPreview = useMemo(() => {
+    if (!logoPreview || String(logoPreview).startsWith("data:")) {
+      return logoPreview || "/xilo-logo.png";
+    }
+    if (String(logoPreview).startsWith("http")) {
+      return logoPreview;
+    }
+    return `${backendBase}${logoPreview}`;
+  }, [logoPreview]);
+
+  useEffect(() => {
+    const loadBrand = async () => {
+      try {
+        const { data } = await apiClient.get("/branding/settings");
+        if (data?.logo_url) {
+          setLogoPreview(`${data.logo_url}${data.updated_at ? `?v=${encodeURIComponent(data.updated_at)}` : ""}`);
+        }
+      } catch {
+        // silent fallback to bundled logo
+      }
+    };
+    loadBrand();
+  }, []);
 
   const onLogoFileChange = (event) => {
     const file = event.target.files?.[0];
@@ -56,7 +86,14 @@ export const UserLoginPage = () => {
         toast.success("Talebiniz alındı. Admin onayı sonrası giriş yapabilirsiniz.");
         setMode("login");
       } else {
-        await login({ email: form.email, password: form.password, panel: "user" });
+        const loginResult = await login({ email: form.email, password: form.password, panel: "user" });
+        if (loginResult?.mfaRequired) {
+          setMfaState(loginResult);
+          setMfaMethod((loginResult.methods || ["totp"])[0] || "totp");
+          setMfaCode("");
+          toast.info("MFA doğrulama kodunu giriniz");
+          return;
+        }
         toast.success("Giriş başarılı");
         navigate("/user/dashboard");
       }
@@ -67,12 +104,32 @@ export const UserLoginPage = () => {
     }
   };
 
+  const onVerifyMfa = async () => {
+    if (!mfaState?.challengeToken) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await verifyMfaChallenge({
+        challengeToken: mfaState.challengeToken,
+        method: mfaMethod,
+        code: mfaCode,
+      });
+      toast.success("MFA doğrulandı");
+      navigate("/user/dashboard");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "MFA doğrulaması başarısız");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f3f4f2] px-4 py-6 text-black" data-testid="user-login-page">
       <div className="mx-auto w-full max-w-7xl space-y-6" data-testid="user-login-layout">
         <header className="flex flex-wrap items-start justify-between gap-4" data-testid="user-login-top-strip">
           <div className="rounded border border-slate-300 bg-white p-2" data-testid="user-login-brand-block">
-            <img src={logoPreview} alt="XILO logo" className="h-auto w-[170px] sm:w-[230px]" data-testid="user-login-brand-logo" />
+            <img src={resolvedLogoPreview} alt="XILO logo" className="h-auto w-[170px] sm:w-[230px]" data-testid="user-login-brand-logo" />
           </div>
           <div className="flex flex-wrap gap-2" data-testid="user-login-panel-toggle-group">
             <Button type="button" className="rounded-none bg-black text-orange-300 hover:bg-zinc-900" data-testid="user-login-panel-toggle-user-button">Kullanıcı Girişi</Button>
@@ -134,6 +191,27 @@ export const UserLoginPage = () => {
               </div>
 
               <button type="button" className="text-xs underline" onClick={() => navigate(`/forgot-password?panel=user&email=${encodeURIComponent(form.email || "")}`)} data-testid="user-login-forgot-password-link">Şifremi unuttum</button>
+
+              {mfaState?.mfaRequired && (
+                <div className="space-y-2 rounded border border-black bg-white/70 p-3" data-testid="user-login-mfa-panel">
+                  <p className="text-xs font-semibold uppercase" data-testid="user-login-mfa-title">MFA Doğrulama</p>
+                  <p className="text-xs" data-testid="user-login-mfa-methods">Yöntemler: {(mfaState.methods || []).join(", ")}</p>
+                  {(mfaState.methods || []).length > 1 && (
+                    <select value={mfaMethod} onChange={(event) => setMfaMethod(event.target.value)} className="h-10 w-full border border-black bg-white px-3 text-sm" data-testid="user-login-mfa-method-select">
+                      {(mfaState.methods || []).map((item) => (
+                        <option key={item} value={item} data-testid={`user-login-mfa-method-option-${item}`}>{item}</option>
+                      ))}
+                    </select>
+                  )}
+                  <Input value={mfaCode} onChange={(event) => setMfaCode(event.target.value)} placeholder={mfaMethod === "email" ? "E-posta OTP kodu" : "Authenticator kodu"} className="h-10 border-black bg-white" data-testid="user-login-mfa-code-input" />
+                  <Button type="button" onClick={onVerifyMfa} className="rounded-none border border-black bg-black text-orange-300 hover:bg-zinc-900" data-testid="user-login-mfa-verify-button" disabled={submitting}>
+                    {submitting ? "Doğrulanıyor..." : "MFA Doğrula"}
+                  </Button>
+                  {mfaState.emailCodePreview && (
+                    <p className="text-xs text-slate-700" data-testid="user-login-mfa-email-code-preview">email otp preview: {mfaState.emailCodePreview}</p>
+                  )}
+                </div>
+              )}
             </form>
           </div>
 

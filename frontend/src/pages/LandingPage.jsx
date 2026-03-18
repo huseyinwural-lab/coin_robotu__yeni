@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -9,6 +9,8 @@ import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
+
+const backendBase = process.env.REACT_APP_BACKEND_URL;
 
 export const LandingPage = () => {
   const navigate = useNavigate();
@@ -23,6 +25,7 @@ export const LandingPage = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [logoPreview, setLogoPreview] = useState("/xilo-logo.png");
+  const [appName, setAppName] = useState("XILO-USER TRADING ENGINE");
   const [onboarding, setOnboarding] = useState({
     email: "",
     verificationCode: "",
@@ -112,6 +115,37 @@ export const LandingPage = () => {
     reader.readAsDataURL(file);
   };
 
+  const resolvedLogoPreview = useMemo(() => {
+    if (!logoPreview || String(logoPreview).startsWith("data:")) {
+      return logoPreview || "/xilo-logo.png";
+    }
+    if (String(logoPreview).startsWith("http")) {
+      return logoPreview;
+    }
+    return `${backendBase}${logoPreview}`;
+  }, [logoPreview]);
+
+  useEffect(() => {
+    const loadBrand = async () => {
+      try {
+        const response = await fetch("/api/branding/settings");
+        const payload = await response.json();
+        if (!response.ok) {
+          return;
+        }
+        if (payload?.app_name) {
+          setAppName(String(payload.app_name).toUpperCase());
+        }
+        if (payload?.logo_url) {
+          setLogoPreview(`${payload.logo_url}${payload.updated_at ? `?v=${encodeURIComponent(payload.updated_at)}` : ""}`);
+        }
+      } catch {
+        // silent fallback
+      }
+    };
+    loadBrand();
+  }, []);
+
   const onRegisterSubmit = async (event) => {
     event.preventDefault();
     if (form.password !== form.confirmPassword) {
@@ -150,7 +184,7 @@ export const LandingPage = () => {
           className="flex flex-wrap items-center justify-between gap-3"
         >
           <div className="rounded border border-slate-300 bg-white p-2" data-testid="landing-brand-logo-block">
-            <img src={logoPreview} alt="XILO logo" className="h-auto w-[170px] sm:w-[230px]" data-testid="landing-brand-logo" />
+            <img src={resolvedLogoPreview} alt="XILO logo" className="h-auto w-[170px] sm:w-[230px]" data-testid="landing-brand-logo" />
           </div>
           <div className="flex flex-wrap gap-2" data-testid="landing-login-actions">
             <Link to="/user/login" data-testid="landing-user-login-link">
@@ -168,9 +202,7 @@ export const LandingPage = () => {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.7, delay: 0.1 }}
           >
-            <h1 className="text-4xl font-black uppercase tracking-tight sm:text-5xl lg:text-5xl" data-testid="landing-main-heading">
-              XILO-USER Trading Engine
-            </h1>
+            <h1 className="text-4xl font-black uppercase tracking-tight sm:text-5xl lg:text-5xl" data-testid="landing-main-heading">{appName}</h1>
             <p className="mt-3 max-w-xl text-base font-medium" data-testid="landing-subtitle">
               Binance adapter + MOCK execution ile güvenli başlangıç. User/Admin panel, bot config, risk policy ve strategy template yönetimi ilk fazda hazır.
             </p>

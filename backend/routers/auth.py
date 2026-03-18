@@ -31,6 +31,7 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.admin_profile_service import change_admin_password, update_admin_profile
+from services.mfa_service import start_mfa_challenge_if_required
 from services.password_reset_service import (
     build_password_reset_link,
     consume_password_reset_token,
@@ -117,6 +118,30 @@ def _login_with_policy(
 ) -> AuthResponse:
     session = user_login_with_policy(db, payload, target_role=target_role, allowed_roles=allowed_roles)
     user = session.user
+
+    mfa_payload = start_mfa_challenge_if_required(db, user=user)
+    if mfa_payload:
+        create_audit_log(
+            db,
+            action="user_login_mfa_required",
+            entity_type="user",
+            entity_id=user.id,
+            actor_user_id=user.id,
+            actor_role=user.role.value,
+            details={"email": user.email, "mfa_methods": mfa_payload.get("mfa_methods")},
+        )
+        return AuthResponse(
+            access_token=None,
+            token_type="mfa_challenge",
+            user=user,
+            mfa_required=True,
+            mfa_challenge_token=mfa_payload.get("mfa_challenge_token"),
+            mfa_methods=list(mfa_payload.get("mfa_methods") or []),
+            mfa_expires_at=mfa_payload.get("mfa_expires_at"),
+            email_delivery_status=mfa_payload.get("email_delivery_status"),
+            email_code_preview=mfa_payload.get("email_code_preview"),
+        )
+
     create_audit_log(
         db,
         action="user_login",
