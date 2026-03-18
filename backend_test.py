@@ -25,7 +25,7 @@ from pathlib import Path
 import requests
 
 # Base URL from frontend/.env 
-BASE_URL = "https://peaceful-visvesvaraya-2.preview.emergentagent.com"
+BASE_URL = "https://error-tracker-80.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Admin credentials
