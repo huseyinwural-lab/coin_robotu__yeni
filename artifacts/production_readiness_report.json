@@ -1,0 +1,61 @@
+{
+  "generated_at": "2026-03-18T23:22:09Z",
+  "base_url": "https://trade-flow-deploy.preview.emergentagent.com/api",
+  "checks": {
+    "postgres_persistence_backup": {
+      "status": "FAIL",
+      "return_code": 1,
+      "evidence": "ERROR: pg_dump bulunamadı"
+    },
+    "rollback_mechanism": {
+      "status": "PASS",
+      "command": "bash /app/scripts/db_rollback_demo.sh",
+      "stdout": "BACKUP_OK sqlite /tmp/rollback_demo_1773876131.bak\nMUTATION_COUNT 1\nRESTORE_OK sqlite /tmp/rollback_demo_1773876131.bak\nROLLBACK_OK marker reverted\nDEMO_OK rollback verified"
+    },
+    "idempotency_double_execution": {
+      "status": "PASS",
+      "evidence": {
+        "first": 200,
+        "second": 400,
+        "second_detail": "preview_required"
+      }
+    },
+    "monitoring_and_alerting": {
+      "status": "PASS",
+      "dashboard_summary_status": 200,
+      "simulate_alert_status": 200,
+      "active_alerts_status": 200,
+      "active_alerts_count": 0,
+      "alert_id": "34eedd86-29d0-455a-b343-0fa52606a2a4"
+    },
+    "security_hardening": {
+      "status": "PASS",
+      "rate_limit_before": 1199.0,
+      "rate_limit_after": 1199.0,
+      "encrypted_at_rest": true,
+      "encrypted_key_prefix": "aesgcm:v"
+    },
+    "execution_safety": {
+      "status": "PASS",
+      "exposure_limit_triggered": true,
+      "kill_switch_control_ok": true,
+      "kill_switch_active_after_stop": true,
+      "kill_switch_active_after_reset": false
+    },
+    "exchange_failure_handling": {
+      "status": "PASS",
+      "state_rebuild_status": 200,
+      "state_transition_sim_status": 200,
+      "retry_budget_used": 0,
+      "websocket_resilience": "pass"
+    },
+    "github_actions_gate": {
+      "status": "PASS",
+      "workflow_file_exists": true,
+      "backend_gate_rc": 0,
+      "frontend_build_rc": 0,
+      "workflow_file": "/app/.github/workflows/deploy-gate.yml"
+    }
+  },
+  "overall_status": "FAIL"
+}
