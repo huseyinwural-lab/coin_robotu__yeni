@@ -1,6 +1,16 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-18
+### Iteration-161 — Binance Testnet Live Mode Activation + Submit Path Fixes
+- Kullanıcı bağlantısı üzerinde Binance futures testnet credential doğrulaması gerçekleştirildi; exchange validate/test-order başarıyla geçti.
+- `execution_readiness_service` binance için readiness snapshot temelli mode üretir hale getirildi; uygun durumda `execution_mode=live` dönüyor.
+- `open-position` 500 hatası düzeltildi:
+  - `UserExecutionIntent` üzerinde olmayan alan erişimleri kaldırıldı,
+  - `order_type/leverage/margin_mode` artık `normalized_order_payload` içinden okunuyor.
+- Market order precheck’te `price=0` kaynaklı yanlış `min_notional_violation` giderildi (`price = notional/size` fallback).
+- Sonuç: `validate-order` live + `open-position` 200 (`QUEUED_FOR_APPROVAL`, `execution_mode=live`) + `exchange/test-order` FILLED.
+
+## 2026-03-18
 ### Iteration-160 — FAZ-C Ultra Minimal Closure
 - **C1**: `/user/trade` tek trade entry paneli eklendi; `/user/execute` ve `/execute` route’ları `/user/trade`’e query-preserving redirect edildi.
 - **C1 flow**: `validate-order` zorunlu doğrulama + valid=false blok + valid=true akışında preview→`open-position` bağlandı.

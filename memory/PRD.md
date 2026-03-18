@@ -1,3 +1,44 @@
+## 2026-03-18 — Binance Testnet Live Activation & MOCKED Removal (Kullanıcı Talebi)
+
+### Talep
+- Kullanıcı, paylaşılan Binance API key/secret ile testnet bağlantısının doğrulanmasını,
+- 20 saniye civarı kopma/timeout algısının giderilmesini,
+- ve uygun durumda `MOCKED` yerine canlı (`live`) execution mode akışının aktif edilmesini istedi.
+
+### Uygulanan İşlemler
+- Kullanıcı hesabı: `user1773706589@example.com`
+- Binance futures testnet bağlantısı kullanıcı bağlantılarına eklendi/güncellendi ve revalidate edildi.
+- Doğrulama endpointleriyle test edildi:
+  - `GET /api/exchange/validate?exchange=binance&market_type=futures&environment=testnet` → `is_valid=true`, `can_trade=true`
+  - `POST /api/exchange/test-order` (micro qty) → `final_status=FILLED`
+
+### Giderilen Teknik Hatalar
+1) **Execution readiness modunun gereksiz MOCKED kalması**
+- Dosya: `backend/services/execution_readiness_service.py`
+- Kök neden: readiness mode değerlendirmesi binance-user snapshot yerine adapter fallback’e düşerek `MOCKED` üretebiliyordu.
+- Düzeltme: Binance için user exchange connection `readiness_snapshot` üzerinden mode/health kararına geçildi.
+
+2) **Open-position 500 Internal Server Error**
+- Dosyalar:
+  - `backend/routers/user_platform.py`
+  - `backend/routers/user_trading.py`
+  - `backend/services/execution_intent_service.py`
+- Kök neden: `UserExecutionIntent` modelinde olmayan alanlara (`order_type`, `leverage`, `margin_mode`) doğrudan erişim.
+- Düzeltme: Bu değerler `normalized_order_payload` içinden okunacak şekilde düzeltildi.
+
+3) **Open-position precheck false negative (min_notional_violation)**
+- Aynı üç dosyada precheck fiyatı `price=0` kaldığında `notional=0` hesaplanıyordu.
+- Düzeltme: `price<=0` ve `notional>0,size>0` durumunda `price = notional / size` fallback’i eklendi.
+
+### Son Doğrulama Sonucu
+- `validate-order` → `valid=true`, `execution_mode=live`
+- `open-position` → `200`, `intent_status=QUEUED_FOR_APPROVAL`, `execution_mode=live`
+- `exchange/test-order` micro test → `200`, `FILLED`
+- UI smoke doğrulama: `/user/trade` validate akışı çalışıyor.
+
+### Not
+- Execution queue tasarım gereği `QUEUED_FOR_APPROVAL` döner; bu, canlı moda geçişle çelişmez.
+
 ## 2026-03-18 — FAZ-C ULTRA MINIMAL CLOSURE (Uygulandı)
 
 ### Scope (Kullanıcı görev emri)
