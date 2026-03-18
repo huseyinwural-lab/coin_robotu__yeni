@@ -16,7 +16,7 @@ import pytest
 import requests
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://error-tracker-80.preview.emergentagent.com")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trade-flow-deploy.preview.emergentagent.com")
 
 # Credentials for admin login
 ADMIN_EMAIL = "admin@platform.local"

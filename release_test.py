@@ -19,7 +19,7 @@ import json
 from datetime import datetime
 
 # Backend URL from environment
-BACKEND_URL = "https://error-tracker-80.preview.emergentagent.com/api"
+BACKEND_URL = "https://trade-flow-deploy.preview.emergentagent.com/api"
 
 # Test admin credentials
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")

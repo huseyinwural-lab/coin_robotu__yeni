@@ -22,7 +22,7 @@ from typing import Dict, Any
 from datetime import datetime
 
 # Base URL from frontend/.env
-BASE_URL = "https://error-tracker-80.preview.emergentagent.com"
+BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Admin credentials

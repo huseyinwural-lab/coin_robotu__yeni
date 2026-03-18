@@ -8,7 +8,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://error-tracker-80.preview.emergentagent.com"
+    BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
 
 
 @pytest.fixture(scope="module")
