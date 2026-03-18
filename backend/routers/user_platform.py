@@ -83,17 +83,23 @@ def _submit_trade_with_guard(
     if preview_intent is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="intent_not_found")
 
+    precheck_price = float(preview_intent.price or 0)
+    precheck_size = float(preview_intent.size or 0)
+    precheck_notional = float(preview_intent.notional or 0)
+    if precheck_price <= 0 and precheck_notional > 0 and precheck_size > 0:
+        precheck_price = precheck_notional / precheck_size
+
     precheck = validate_order_precheck(
         db,
         user_id=current_user.id,
         symbol=str(preview_intent.symbol or "").upper(),
         market_type=str(preview_intent.market_type or "spot"),
-        order_type=str(preview_intent.order_type or "market"),
+        order_type=str((preview_intent.normalized_order_payload or {}).get("order_type") or "market"),
         side=str(preview_intent.side or "buy"),
-        price=float(preview_intent.price or 0),
-        size=float(preview_intent.size or 0),
-        leverage=int(preview_intent.leverage or 1),
-        margin_mode=str(preview_intent.margin_mode or "isolated"),
+        price=precheck_price,
+        size=precheck_size,
+        leverage=int((preview_intent.normalized_order_payload or {}).get("leverage") or 1),
+        margin_mode=str((preview_intent.normalized_order_payload or {}).get("margin_mode") or "isolated"),
     )
     if not precheck.get("valid"):
         raise HTTPException(

@@ -715,17 +715,23 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
             source="execution_intent_service_submit",
         )
 
+        precheck_price = float(intent.price or 0)
+        precheck_size = float(intent.size or 0)
+        precheck_notional = float(intent.notional or 0)
+        if precheck_price <= 0 and precheck_notional > 0 and precheck_size > 0:
+            precheck_price = precheck_notional / precheck_size
+
         precheck = validate_order_precheck(
             db,
             user_id=user_id,
             symbol=str(intent.symbol or "").upper(),
             market_type=str(intent.market_type or "spot"),
-            order_type=str(intent.order_type or "market"),
+            order_type=str((intent.normalized_order_payload or {}).get("order_type") or "market"),
             side=str(intent.side or "buy"),
-            price=float(intent.price or 0),
-            size=float(intent.size or 0),
-            leverage=int(intent.leverage or 1),
-            margin_mode=str(intent.margin_mode or "isolated"),
+            price=precheck_price,
+            size=precheck_size,
+            leverage=int((intent.normalized_order_payload or {}).get("leverage") or 1),
+            margin_mode=str((intent.normalized_order_payload or {}).get("margin_mode") or "isolated"),
         )
         if not precheck.get("valid"):
             raise ValueError("order_validation_failed")

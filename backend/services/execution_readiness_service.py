@@ -26,18 +26,41 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None) -> 
     exchange_connection_ok = has_connection and connection_health in {"online", "degraded"}
     permissions_ok = has_connection and bool(snapshot.get("can_trade"))
 
-    adapter = ExchangeExecutionAdapter()
-    probe = adapter.submit_order(
-        exchange=(row.exchange if row else "bybit"),
-        symbol="BTCUSDT",
-        side="buy",
-        price=50000,
-        qty=0.001,
-        leverage=1,
-        environment=(row.environment if row else "testnet"),
-    )
-    order_test_ok = str(probe.get("status") or "").upper() in {"MOCKED", "SUBMITTED"}
-    mode = "MOCKED" if bool(probe.get("mocked")) else "LIVE"
+    mode = "MOCKED"
+    order_test_ok = False
+    probe: dict = {}
+
+    if row and str(row.exchange or "").strip().lower() == "binance" and user_id:
+        validation_success = bool(snapshot.get("validation_success") or snapshot.get("is_valid"))
+        can_trade_snapshot = bool(snapshot.get("can_trade"))
+        last_error_reason = str(snapshot.get("last_error_reason") or "").strip().lower()
+
+        order_test_ok = validation_success and can_trade_snapshot
+        mode = "LIVE" if order_test_ok else "MOCKED"
+        probe = {
+            "status": "SUBMITTED" if order_test_ok else "MOCKED",
+            "mocked": not order_test_ok,
+            "source": "exchange_connection_snapshot",
+            "last_error_reason": last_error_reason,
+            "exchange": row.exchange,
+            "market_type": row.market_type,
+            "environment": row.environment,
+            "validation_success": validation_success,
+            "can_trade": can_trade_snapshot,
+        }
+    else:
+        adapter = ExchangeExecutionAdapter()
+        probe = adapter.submit_order(
+            exchange=(row.exchange if row else "bybit"),
+            symbol="BTCUSDT",
+            side="buy",
+            price=50000,
+            qty=0.001,
+            leverage=1,
+            environment=(row.environment if row else "testnet"),
+        )
+        order_test_ok = str(probe.get("status") or "").upper() in {"MOCKED", "SUBMITTED"}
+        mode = "MOCKED" if bool(probe.get("mocked")) else "LIVE"
 
     latency_ms = snapshot.get("validation_latency_ms") or snapshot.get("latency_ms") or 0
     try:
@@ -54,9 +77,15 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None) -> 
         reason_codes.append("missing_trade_permission")
     if not order_test_ok:
         reason_codes.append("order_test_failed")
+        if str(probe.get("last_error_reason") or "").strip():
+            reason_codes.append(str(probe.get("last_error_reason")).strip())
 
     if mode == "MOCKED":
-        final_status = "READY" if has_connection else "BLOCKED"
+        mocked_source = str(probe.get("source") or "")
+        if mocked_source == "exchange_connection_snapshot":
+            final_status = "READY" if (exchange_connection_ok and permissions_ok) else "BLOCKED"
+        else:
+            final_status = "READY" if has_connection else "BLOCKED"
         if final_status == "READY":
             reason_codes.append("mocked_mode_active")
     else:
