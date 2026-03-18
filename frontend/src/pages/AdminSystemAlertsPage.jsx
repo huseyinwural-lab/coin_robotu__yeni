@@ -302,8 +302,8 @@ export const AdminSystemAlertsPage = () => {
         <p className="text-xs text-black/80" data-testid="admin-system-alerts-slo-trend-anomaly-reason">
           anomaly_reason={sloTrendMeta?.reason || "-"}
         </p>
-        <div className="h-64 w-full" data-testid="admin-system-alerts-slo-trend-chart-wrap">
-          <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={220}>
+        <div className="w-full" data-testid="admin-system-alerts-slo-trend-chart-wrap">
+          <ResponsiveContainer width="100%" aspect={4} minWidth={320} minHeight={220}>
             <LineChart data={sloTrend}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="window_days" tickFormatter={(value) => `${value}d`} />
