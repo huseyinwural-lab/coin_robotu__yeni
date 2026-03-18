@@ -1,5 +1,5 @@
 import "@/App.css";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -57,7 +57,8 @@ import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
 import { UserSymbolDecisionDetailPage } from "@/pages/UserSymbolDecisionDetailPage";
 import { UserReportsPage } from "@/pages/UserReportsPage";
-import { UserExecutePage } from "@/pages/UserExecutePage";
+import { UserTradePage } from "@/pages/UserTradePage";
+import { UserChartPage } from "@/pages/UserChartPage";
 import { UserPositionsPage } from "@/pages/UserPositionsPage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/pages/ResetPasswordPage";
@@ -90,6 +91,12 @@ const HomeRedirect = () => {
   return <Navigate to="/user/dashboard" replace />;
 };
 
+const ExecuteToTradeRedirect = () => {
+  const location = useLocation();
+  const search = String(location?.search || "");
+  return <Navigate to={`/user/trade${search}`} replace />;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -108,7 +115,7 @@ function App() {
           <Route path="/scanner" element={<Navigate to="/user/scanner" replace />} />
           <Route path="/signals" element={<Navigate to="/user/signals" replace />} />
           <Route path="/reports" element={<Navigate to="/user/reports" replace />} />
-          <Route path="/execute" element={<Navigate to="/user/execute" replace />} />
+          <Route path="/execute" element={<ExecuteToTradeRedirect />} />
 
           <Route
             path="/admin"
@@ -195,7 +202,9 @@ function App() {
             <Route path="signals" element={<UserSignalsPage />} />
             <Route path="symbol/:symbol" element={<UserSymbolDecisionDetailPage />} />
             <Route path="reports" element={<UserReportsPage />} />
-            <Route path="execute" element={<UserExecutePage />} />
+            <Route path="execute" element={<ExecuteToTradeRedirect />} />
+            <Route path="trade" element={<UserTradePage />} />
+            <Route path="chart" element={<UserChartPage />} />
             <Route path="bot-profiles" element={<BotProfilesPage />} />
             <Route path="bots" element={<Navigate to="/user/bot-profiles" replace />} />
             <Route path="risk-policy" element={<RiskPoliciesPage />} />

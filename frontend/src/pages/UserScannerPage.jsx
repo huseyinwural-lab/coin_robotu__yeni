@@ -42,6 +42,29 @@ const PROFILE_INTERVAL_OPTIONS = [
   { value: 120, label: "120 saniye" },
 ];
 
+const MINIMAL_FILTER_DEFAULTS = {
+  rsi_min: "",
+  rsi_max: "",
+  volume_min: "",
+  market_cap_min: "",
+  timeframe: "1h",
+};
+
+const compactMinimalFilters = (filters) => Object.entries(filters || {}).reduce((acc, [key, value]) => {
+  if (value === "" || value === null || typeof value === "undefined") {
+    return acc;
+  }
+  if (key === "timeframe") {
+    acc[key] = String(value).trim().toLowerCase();
+    return acc;
+  }
+  const numeric = Number(value);
+  if (!Number.isNaN(numeric)) {
+    acc[key] = numeric;
+  }
+  return acc;
+}, {});
+
 export const UserScannerPage = () => {
   const navigate = useNavigate();
   const [mode, setMode] = useState("ASSISTED");
@@ -74,8 +97,10 @@ export const UserScannerPage = () => {
   const [isSavingAutomation, setIsSavingAutomation] = useState(false);
   const [selectionSavedAt, setSelectionSavedAt] = useState(null);
   const [selectionHydrated, setSelectionHydrated] = useState(false);
+  const [minimalFilters, setMinimalFilters] = useState(MINIMAL_FILTER_DEFAULTS);
   const profileRunTrackerRef = useRef({});
   const symbolPersistTimerRef = useRef(null);
+  const minimalFiltersRef = useRef(MINIMAL_FILTER_DEFAULTS);
 
   const activeProfile = useMemo(() => {
     if (!automationProfiles.length) {
@@ -89,6 +114,19 @@ export const UserScannerPage = () => {
   }, [activeProfileId, automationProfiles]);
 
   const activeAutomation = activeProfile || automationConfig;
+
+  const activeMinimalFilterChips = useMemo(() => {
+    const mapping = {
+      rsi_min: "RSI min",
+      rsi_max: "RSI max",
+      volume_min: "Volume min",
+      market_cap_min: "Market Cap min",
+      timeframe: "Timeframe",
+    };
+    return Object.entries(minimalFilters)
+      .filter(([key, value]) => key === "timeframe" ? Boolean(value) : value !== "")
+      .map(([key, value]) => ({ key, label: `${mapping[key]}: ${value}` }));
+  }, [minimalFilters]);
 
   const activeModeLabel = String(overview?.mode || mode || "ASSISTED").toUpperCase();
   const scannerRunType = activeAutomation?.auto_enabled ? "OTOMATİK TARAMA" : "MANUEL TARAMA";
@@ -112,6 +150,10 @@ export const UserScannerPage = () => {
     }
     return parsed.toLocaleString("tr-TR");
   };
+
+  useEffect(() => {
+    minimalFiltersRef.current = minimalFilters;
+  }, [minimalFilters]);
 
   const loadSymbolExplainability = async (symbol) => {
     if (!symbol) {
@@ -279,7 +321,12 @@ export const UserScannerPage = () => {
       const responses = await Promise.allSettled([
         apiClient.get("/user/signal-mode"),
         apiClient.get("/user/scanner"),
-        apiClient.get("/user/scanner/results", { params: { limit: 80 } }),
+        apiClient.get("/screener", {
+          params: {
+            limit: 80,
+            filters: JSON.stringify(compactMinimalFilters(minimalFiltersRef.current)),
+          },
+        }),
         apiClient.get("/user/scanner/automation"),
         apiClient.get("/user/scanner/automation-profiles"),
         apiClient.get("/user/decision-cards", { params: { limit: 60 } }),
@@ -383,6 +430,13 @@ export const UserScannerPage = () => {
   useEffect(() => {
     load({ hydrateSelection: true });
   }, [load]);
+
+  useEffect(() => {
+    if (!selectionHydrated) {
+      return;
+    }
+    load({ silent: true, notifyAutoRuns: false });
+  }, [selectionHydrated, minimalFilters, load]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -581,7 +635,12 @@ export const UserScannerPage = () => {
       timestamp: new Date().toISOString(),
       intent_payload: buildIntentPayload(item),
     });
-    navigate(`/user/execute?source=scanner&symbol=${encodeURIComponent(item.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(marketType)}&preset=spot_basic`);
+    navigate(`/user/trade?source=scanner&symbol=${encodeURIComponent(item.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(marketType)}&preset=spot_basic`);
+  };
+
+  const openChartFromScanner = (item) => {
+    const symbol = String(item?.symbol || "BTCUSDT").trim().toUpperCase();
+    navigate(`/user/chart?symbol=${encodeURIComponent(symbol)}&tf=1h`);
   };
 
   const buildIntentPayload = (item) => ({
@@ -878,7 +937,91 @@ export const UserScannerPage = () => {
         />
       </section>
 
-      <section className="order-7 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-strategy-presets-section">
+      <section className="order-7 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-minimal-filter-section">
+        <div data-testid="user-scanner-minimal-filter-header">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-minimal-filter-kicker">Filter Layer</p>
+          <h3 className="text-base font-semibold" data-testid="user-scanner-minimal-filter-title">Minimal Set</h3>
+        </div>
+
+        <div className="grid grid-cols-12 gap-3" data-testid="user-scanner-minimal-filter-grid">
+          <label className="col-span-6 md:col-span-2" data-testid="user-scanner-filter-rsi-min-field">
+            <span className="text-xs text-slate-400" data-testid="user-scanner-filter-rsi-min-label">rsi_min</span>
+            <input
+              type="number"
+              value={minimalFilters.rsi_min}
+              onChange={(event) => setMinimalFilters((prev) => ({ ...prev, rsi_min: event.target.value }))}
+              className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm"
+              data-testid="user-scanner-filter-rsi-min-input"
+            />
+          </label>
+          <label className="col-span-6 md:col-span-2" data-testid="user-scanner-filter-rsi-max-field">
+            <span className="text-xs text-slate-400" data-testid="user-scanner-filter-rsi-max-label">rsi_max</span>
+            <input
+              type="number"
+              value={minimalFilters.rsi_max}
+              onChange={(event) => setMinimalFilters((prev) => ({ ...prev, rsi_max: event.target.value }))}
+              className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm"
+              data-testid="user-scanner-filter-rsi-max-input"
+            />
+          </label>
+          <label className="col-span-6 md:col-span-3" data-testid="user-scanner-filter-volume-min-field">
+            <span className="text-xs text-slate-400" data-testid="user-scanner-filter-volume-min-label">volume_min</span>
+            <input
+              type="number"
+              value={minimalFilters.volume_min}
+              onChange={(event) => setMinimalFilters((prev) => ({ ...prev, volume_min: event.target.value }))}
+              className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm"
+              data-testid="user-scanner-filter-volume-min-input"
+            />
+          </label>
+          <label className="col-span-6 md:col-span-3" data-testid="user-scanner-filter-market-cap-min-field">
+            <span className="text-xs text-slate-400" data-testid="user-scanner-filter-market-cap-min-label">market_cap_min</span>
+            <input
+              type="number"
+              value={minimalFilters.market_cap_min}
+              onChange={(event) => setMinimalFilters((prev) => ({ ...prev, market_cap_min: event.target.value }))}
+              className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm"
+              data-testid="user-scanner-filter-market-cap-min-input"
+            />
+          </label>
+          <label className="col-span-12 md:col-span-2" data-testid="user-scanner-filter-timeframe-field">
+            <span className="text-xs text-slate-400" data-testid="user-scanner-filter-timeframe-label">timeframe</span>
+            <select
+              value={minimalFilters.timeframe}
+              onChange={(event) => setMinimalFilters((prev) => ({ ...prev, timeframe: event.target.value }))}
+              className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm"
+              data-testid="user-scanner-filter-timeframe-select"
+            >
+              <option value="15m" data-testid="user-scanner-filter-timeframe-option-15m">15m</option>
+              <option value="1h" data-testid="user-scanner-filter-timeframe-option-1h">1h</option>
+              <option value="4h" data-testid="user-scanner-filter-timeframe-option-4h">4h</option>
+              <option value="1d" data-testid="user-scanner-filter-timeframe-option-1d">1d</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2" data-testid="user-scanner-minimal-filter-chip-row">
+          {activeMinimalFilterChips.map((chip) => (
+            <span
+              key={chip.key}
+              className="inline-flex rounded-full border border-cyan-500/60 bg-cyan-500/15 px-2 py-1 text-xs text-cyan-100"
+              data-testid={`user-scanner-filter-chip-${chip.key}`}
+            >
+              {chip.label}
+            </span>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setMinimalFilters(MINIMAL_FILTER_DEFAULTS)}
+            data-testid="user-scanner-filter-clear-all-button"
+          >
+            Clear All
+          </Button>
+        </div>
+      </section>
+
+      <section className="order-8 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-strategy-presets-section">
         <div data-testid="user-scanner-strategy-presets-header">
           <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-strategy-presets-kicker">Strategy Presets</p>
           <h3 className="text-base font-semibold" data-testid="user-scanner-strategy-presets-title">Preset Runner</h3>
@@ -957,6 +1100,7 @@ export const UserScannerPage = () => {
           results={scannerResults}
           compactMode={compactMode}
           onOpenTrade={openExecuteFromScanner}
+          onViewChart={openChartFromScanner}
           onViewCard={(item) => onSelectDecisionCard(item.symbol)}
           onAddWatchlist={addWatchlistFromResult}
         />

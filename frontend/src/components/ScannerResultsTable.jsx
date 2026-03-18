@@ -28,6 +28,7 @@ export const ScannerResultsTable = ({
   onOpenTrade,
   onViewCard,
   onAddWatchlist,
+  onViewChart = () => {},
 }) => {
   const [selectedStrategy, setSelectedStrategy] = useState("all");
   const [minConfidence, setMinConfidence] = useState(0);
@@ -173,6 +174,7 @@ export const ScannerResultsTable = ({
             )}
             <div className="mt-2 flex flex-wrap gap-2" data-testid={`scanner-results-mobile-actions-${item.id}`}>
               <Button variant="outline" disabled={unsupported} onClick={() => onOpenTrade(item)} data-testid={`scanner-results-mobile-open-trade-${item.id}`}>Open Trade</Button>
+              <Button variant="outline" onClick={() => onViewChart(item)} data-testid={`scanner-results-mobile-view-chart-${item.id}`}>View Chart</Button>
               <Button variant="outline" disabled={unsupported} onClick={() => onViewCard(item)} data-testid={`scanner-results-mobile-view-card-${item.id}`}>View Card</Button>
               <Button variant="outline" disabled={unsupported} onClick={() => onAddWatchlist(item)} data-testid={`scanner-results-mobile-add-watchlist-${item.id}`}>Add Watchlist</Button>
             </div>
@@ -224,6 +226,7 @@ export const ScannerResultsTable = ({
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-actions-${item.id}`}>
                       <div className="flex flex-wrap gap-2" data-testid={`scanner-results-row-actions-wrap-${item.id}`}>
                         <Button variant="outline" disabled={unsupported} onClick={(event) => { event.stopPropagation(); onOpenTrade(item); }} data-testid={`scanner-results-open-trade-${item.id}`}>Open Trade</Button>
+                        <Button variant="outline" onClick={(event) => { event.stopPropagation(); onViewChart(item); }} data-testid={`scanner-results-view-chart-${item.id}`}>View Chart</Button>
                         <Button variant="outline" disabled={unsupported} onClick={(event) => { event.stopPropagation(); onViewCard(item); }} data-testid={`scanner-results-view-card-${item.id}`}>View Card</Button>
                         <Button variant="outline" disabled={unsupported} onClick={(event) => { event.stopPropagation(); onAddWatchlist(item); }} data-testid={`scanner-results-add-watchlist-${item.id}`}>Add Watchlist</Button>
                       </div>

@@ -31,7 +31,7 @@ import { apiClient } from "@/lib/api";
 const userNavItems = [
   { to: "/user/dashboard", label: "User Dashboard", icon: BarChart3, testId: "nav-user-dashboard-link" },
   { to: "/user/live-trading-dashboard", label: "Live Trading", icon: Gauge, testId: "nav-user-live-trading-dashboard-link" },
-  { to: "/user/execute", label: "Execute", icon: Wrench, testId: "nav-user-execute-link" },
+  { to: "/user/trade", label: "Trade Entry", icon: Wrench, testId: "nav-user-trade-entry-link" },
   { to: "/user/exchange-settings", label: "Exchange Settings", icon: KeyRound, testId: "nav-user-exchange-settings-link" },
   { to: "/user/risk-policy", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
   { to: "/user/bot-profiles", label: "Bot Profilleri", icon: TrendingUp, testId: "nav-bot-profiles-link" },

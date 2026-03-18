@@ -26,6 +26,7 @@ from services.execution_intent_service import (
     submit_execution_intent,
 )
 from services.execution_readiness_service import enforce_execution_guard_or_raise
+from services.execution_readiness_service import evaluate_execution_readiness
 from services.rate_limiter_service import consume_exchange_rate_limit
 from services.position_management_service import list_user_positions
 from services.strategy_intelligence_service import evaluate_hedge_suggestion
@@ -469,6 +470,8 @@ def user_positions(
 ):
     rows = list_user_positions(db, current_user.id, include_closed=include_closed)
     hedge_suggestion = evaluate_hedge_suggestion(db, user_id=current_user.id, volatility=4.0)
+    readiness = evaluate_execution_readiness(db, user_id=current_user.id)
+    execution_mode = str(readiness.get("mode") or "MOCKED").lower()
     return [
         PositionStateResponse(
             position_id=row.position_id,
@@ -481,6 +484,7 @@ def user_positions(
             strategy_id=row.strategy_id,
             cluster_id=row.cluster_id,
             status=row.status,
+            execution_mode=execution_mode,
             recommended_action=(
                 "reduce_or_hedge"
                 if (float(row.unrealized_pnl or 0) < 0 and int(row.leverage or 1) >= 3)

@@ -2128,6 +2128,7 @@ class PositionStateResponse(BaseModel):
     strategy_id: str | None
     cluster_id: str | None
     status: str
+    execution_mode: str = "mocked"
     recommended_action: str | None = None
     risk_reduction_score: float | None = None
     hedge_suggestion: dict = Field(default_factory=dict)

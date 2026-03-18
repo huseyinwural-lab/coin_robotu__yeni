@@ -83,7 +83,7 @@ export const UserPositionsPage = () => {
           <div className="mt-3 flex flex-wrap gap-2" data-testid="user-positions-empty-state-actions">
             <Button variant="outline" onClick={() => navigate("/user/scanner")} data-testid="user-positions-empty-go-scanner-button">Scanner’a Git</Button>
             <Button variant="outline" onClick={() => navigate("/user/signals")} data-testid="user-positions-empty-go-signals-button">Signals’a Git</Button>
-            <Button variant="outline" onClick={() => navigate("/user/execute")} data-testid="user-positions-empty-go-execute-button">Execute’a Git</Button>
+            <Button variant="outline" onClick={() => navigate("/user/trade")} data-testid="user-positions-empty-go-trade-button">Trade Paneline Git</Button>
           </div>
         </section>
       )}
@@ -98,6 +98,7 @@ export const UserPositionsPage = () => {
               <th className="px-3 py-2">Current</th>
               <th className="px-3 py-2">Unrealized PnL</th>
               <th className="px-3 py-2">Leverage</th>
+              <th className="px-3 py-2">Execution Mode</th>
               <th className="px-3 py-2">Strategy</th>
               <th className="px-3 py-2">Cluster</th>
               <th className="px-3 py-2">Recommended Action</th>
@@ -115,6 +116,11 @@ export const UserPositionsPage = () => {
                 <td className="px-3 py-2" data-testid={`user-positions-current-${row.position_id}`}>{row.current_price}</td>
                 <td className="px-3 py-2" data-testid={`user-positions-unrealized-${row.position_id}`}>{row.unrealized_pnl}</td>
                 <td className="px-3 py-2" data-testid={`user-positions-leverage-${row.position_id}`}>{row.leverage}</td>
+                <td className="px-3 py-2" data-testid={`user-positions-execution-mode-${row.position_id}`}>
+                  <span className="inline-flex rounded-full border border-cyan-500/60 bg-cyan-500/15 px-2 py-0.5 text-xs text-cyan-100" data-testid={`user-positions-execution-mode-badge-${row.position_id}`}>
+                    {String(row.execution_mode || "mocked").toLowerCase()}
+                  </span>
+                </td>
                 <td className="px-3 py-2" data-testid={`user-positions-strategy-${row.position_id}`}>{row.strategy_id || "-"}</td>
                 <td className="px-3 py-2" data-testid={`user-positions-cluster-${row.position_id}`}>{row.cluster_id || "UNCLUSTERED"}</td>
                 <td className="px-3 py-2" data-testid={`user-positions-recommended-action-${row.position_id}`}>{row.recommended_action || "monitor"}</td>
