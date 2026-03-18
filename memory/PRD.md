@@ -1,3 +1,72 @@
+## 2026-03-18 — Iteration Update (FAZ-A+B FINAL LOCK / Son Kapanış)
+
+### Uygulanan final-lock maddeleri
+
+1. **API Exposure**
+   - `GET /api/admin/execution-readiness` aktif ve deterministik contract döndürüyor.
+   - `POST /api/user/validate-order` aktif; `validate_order_precheck()` çıktısı forward ediliyor.
+
+2. **Global Enforce (Dependency Layer)**
+   - Yeni dependency dosyası: `/app/backend/dependencies/execution_guard_dependency.py`
+   - Guard dependency aşağıdaki endpointlere zorunlu bağlandı:
+     - `/api/user/open-position`
+     - `/api/user/execute-order`
+     - `/api/user/manual-trade`
+     - `/api/admin/approve-trade`
+   - FAIL durumda davranış:
+     - `HTTP 423`
+     - `detail="EXECUTION_BLOCKED_BY_READINESS"`
+   - Audit event doğrulaması: `EXECUTION_BLOCKED`
+
+3. **Execution Hard Bind (Double Safety)**
+   - Service layer’da da zorunlu kontrol eklendi:
+     - `submit_execution_intent(...)` içinde
+       - `enforce_execution_guard_or_raise(...)`
+       - `validate_order_precheck(...)`
+   - Böylece dependency unutulsa bile execution path güvenli kalıyor.
+
+4. **Release Gate strict contract lock**
+   - `/api/admin/release-gate` ve `/api/phase4/admin/release-gate` için:
+     - `BLOCKED && reason_codes empty` => `INVALID_RELEASE_GATE_CONTRACT` (strict fail)
+   - Contract alanları korunuyor:
+     - `status (PASS|BLOCKED)`
+     - `reason_codes[]`
+     - `blocking_metrics{}`
+     - `deploy_enable_flag`
+
+5. **Alias/ops endpoint tamamlaması**
+   - `POST /api/admin/approve-trade` alias eklendi.
+   - `POST /api/admin/execution-override` alias korunuyor.
+
+6. **Yeni test seti (son kilit)**
+   - `test_execution_guard_global.py`
+   - `test_validate_order_api.py`
+   - `test_execution_double_bind.py`
+
+7. **CI/Gate update**
+   - `final_release_smoke_suite.py` yeni kontroller:
+     - execution-readiness READY
+     - validate-order endpoint
+     - guard 423 enforcement
+   - `p0_closure_gate.py` yeni kontrollerin PASS doğrulaması devam ediyor.
+
+### Doğrulama sonuçları
+
+- `pytest` final-lock paketi: **8 PASS**
+- `final_release_smoke_suite.py`: **PASS (13/13)**
+- `p0_closure_gate.py`: **PASS**
+- Testing agent raporu: `/app/test_reports/iteration_158.json`
+  - backend: **100% (16/16)**
+  - frontend: **100%**
+
+### Final güvenlik durumu
+
+- ✅ API endpointler mevcut
+- ✅ Global enforce aktif
+- ✅ Execution service double-check aktif
+
+Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
+
 ## 2026-03-18 — Iteration Update (FAZ-A + FAZ-B FINAL CLOSURE / Deterministik Güvenlik Kapanışı)
 
 ### Kullanıcı seçimleri (uygulandı)
