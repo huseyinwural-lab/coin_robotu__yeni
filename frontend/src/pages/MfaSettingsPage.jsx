@@ -17,9 +17,12 @@ export const MfaSettingsPage = () => {
     totp_configured: false,
     totp_verified: false,
     email_otp_verified: false,
+    backup_codes_remaining: 0,
   });
   const [totpSetup, setTotpSetup] = useState(null);
   const [totpCode, setTotpCode] = useState("");
+  const [backupCodes, setBackupCodes] = useState([]);
+  const [isGeneratingBackupCodes, setIsGeneratingBackupCodes] = useState(false);
 
   const roleLabel = useMemo(() => (user?.role === "user" ? "User" : "Admin"), [user?.role]);
 
@@ -89,6 +92,23 @@ export const MfaSettingsPage = () => {
       toast.error(error?.response?.data?.detail || "TOTP kodu doğrulanamadı");
     } finally {
       setVerifying(false);
+    }
+  };
+
+  const regenerateBackupCodes = async () => {
+    setIsGeneratingBackupCodes(true);
+    try {
+      const { data } = await apiClient.post("/auth/mfa/backup-codes/regenerate");
+      setBackupCodes(data?.generated_codes || []);
+      setSettings((prev) => ({
+        ...prev,
+        backup_codes_remaining: Number(data?.backup_codes_remaining || 0),
+      }));
+      toast.success("Backup kodları yenilendi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Backup kodları üretilemedi");
+    } finally {
+      setIsGeneratingBackupCodes(false);
     }
   };
 
@@ -167,6 +187,38 @@ export const MfaSettingsPage = () => {
           </div>
         </section>
       )}
+
+      <section className="space-y-3 border border-amber-700/60 bg-amber-950/20 p-4" data-testid="mfa-backup-codes-card">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="mfa-backup-codes-header-row">
+          <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="mfa-backup-codes-title">MFA Backup Codes</p>
+          <p className="text-xs text-amber-100" data-testid="mfa-backup-codes-remaining">remaining: {settings.backup_codes_remaining || 0}</p>
+        </div>
+        <p className="text-xs text-amber-100" data-testid="mfa-backup-codes-description">
+          Tek kullanımlık kurtarma kodlarıdır. Girişte MFA method olarak <b>backup_code</b> seçip kullanabilirsiniz.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={regenerateBackupCodes}
+          disabled={isGeneratingBackupCodes}
+          data-testid="mfa-backup-codes-regenerate-button"
+        >
+          {isGeneratingBackupCodes ? "Üretiliyor..." : "Backup Kodları Yenile"}
+        </Button>
+
+        {backupCodes.length > 0 && (
+          <div className="rounded border border-amber-700/50 bg-black/30 p-3" data-testid="mfa-backup-codes-list-card">
+            <p className="text-xs font-semibold text-amber-200" data-testid="mfa-backup-codes-list-title">Bu kodlar sadece bir kez gösterilir:</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2" data-testid="mfa-backup-codes-list">
+              {backupCodes.map((code, index) => (
+                <p key={`${code}-${index}`} className="rounded border border-amber-600/40 px-2 py-1 text-xs tracking-wider text-amber-100" data-testid={`mfa-backup-code-item-${index}`}>
+                  {code}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
     </section>
   );
 };

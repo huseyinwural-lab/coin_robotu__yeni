@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from core.users.user_portfolio_mapper import map_user_portfolio
 from core.users.user_risk_settings import get_or_create_user_risk_settings
-from models import ExecutionMetric, PaperPosition, PendingSignal, UserDecisionTrace
+from models import ExecutionMetric, PaperPosition, PendingSignal, UserDecisionTrace, UserExchangeConnection
 
 
 def _safe_float(value: float | None) -> float:
@@ -13,6 +13,17 @@ def _safe_float(value: float | None) -> float:
 
 def build_user_portfolio_snapshot(db: Session, user_id: str) -> dict:
     mapped = map_user_portfolio(db, user_id=user_id, market_type="futures", leverage=1)
+    connection = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == user_id)
+        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+        .first()
+    )
+    readiness_snapshot = connection.readiness_snapshot if connection and isinstance(connection.readiness_snapshot, dict) else {}
+    can_trade_live = bool(readiness_snapshot.get("can_trade")) and bool(
+        readiness_snapshot.get("validation_success") or readiness_snapshot.get("is_valid")
+    )
+    execution_mode = "live" if can_trade_live else "mocked"
     open_positions_count = int(mapped["open_positions_count"])
     closed_positions_count = (
         db.query(PaperPosition)
@@ -22,6 +33,7 @@ def build_user_portfolio_snapshot(db: Session, user_id: str) -> dict:
     return {
         "current_capital": mapped["current_capital"],
         "available_balance": mapped["available_balance"],
+        "execution_mode": execution_mode,
         "open_notional": mapped["open_notional"],
         "open_unrealized_pnl": mapped["open_unrealized_pnl"],
         "closed_pnl": mapped["closed_pnl"],

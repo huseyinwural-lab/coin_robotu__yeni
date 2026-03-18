@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 from dependencies.execution_guard_dependency import execution_guard_admin_approve_trade_dependency
 from db import get_db
 from deps import require_admin
-from models import AuditLog, User
+from models import AuditLog, User, UserExchangeConnection, UserExecutionIntent
 from schemas import (
+    AdminExecutionIntentOwnerRevalidateResponse,
     AdminExecutionQueueDecisionRequest,
     AdminExecutionQueueDecisionResponse,
     ExecutionIntentQueueItemResponse,
@@ -22,7 +23,12 @@ from services.execution_intent_service import queue_status_summary, rejection_re
 from services.execution_precheck_service import load_execution_policy_registry
 from services.execution_readiness_service import evaluate_execution_readiness
 from services.guard_metrics_service import build_guard_telemetry_payload
-from services.live_mode_service import create_release_gate_override, enforce_release_gate, revoke_release_gate_override
+from services.live_mode_service import (
+    create_release_gate_override,
+    enforce_release_gate,
+    revoke_release_gate_override,
+    validate_exchange_credentials_for_user,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin_execution"])
 
@@ -197,6 +203,63 @@ def retry_intent(
     )
     execution_mode = _resolve_execution_mode_from_intent(row)
     return AdminExecutionQueueDecisionResponse(intent_id=row.id, status=row.status, admin_note=row.admin_note, execution_mode=execution_mode)
+
+
+@router.post("/execution-queue/{intent_id}/owner-revalidate", response_model=AdminExecutionIntentOwnerRevalidateResponse)
+def revalidate_intent_owner_connection(
+    intent_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = db.query(UserExecutionIntent).filter(UserExecutionIntent.id == intent_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="execution_intent_not_found")
+
+    connection = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == row.user_id)
+        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+        .first()
+    )
+    if connection is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="owner_exchange_connection_not_found")
+
+    payload, response_code = validate_exchange_credentials_for_user(
+        db,
+        row.user_id,
+        exchange=connection.exchange,
+        market_type=connection.market_type,
+        environment=connection.environment,
+        connection_id=connection.id,
+    )
+    reason_codes = payload.get("reason_codes") or []
+    connection_snapshot = ((payload.get("connection") or {}).get("readiness_snapshot") or {}) if isinstance(payload, dict) else {}
+
+    create_audit_log(
+        db,
+        action="EXECUTION_INTENT_OWNER_REVALIDATED",
+        entity_type="execution_intent",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "owner_user_id": row.user_id,
+            "connection_id": connection.id,
+            "response_code": response_code,
+            "reason_codes": reason_codes,
+        },
+    )
+
+    return AdminExecutionIntentOwnerRevalidateResponse(
+        intent_id=row.id,
+        owner_user_id=row.user_id,
+        connection_id=connection.id,
+        can_trade=bool(payload.get("can_trade")),
+        reason_codes=reason_codes,
+        connection_health=str(connection_snapshot.get("connection_health") or "unknown"),
+        readiness_status=str(connection_snapshot.get("readiness_status") or "unknown"),
+        response_code=int(response_code),
+    )
 
 
 @router.get("/execution-readiness", response_model=ExecutionReadinessResponse)

@@ -188,6 +188,12 @@ export const UserDashboardPage = () => {
     };
   }, [activeBotCount, recentSignals, signalMode?.mode]);
 
+  const executionModeBadge = useMemo(() => {
+    const raw = String(portfolio?.execution_mode || "mocked").toUpperCase();
+    const tone = raw === "LIVE" ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-200" : "border-amber-500/60 bg-amber-500/20 text-amber-200";
+    return { label: raw, tone };
+  }, [portfolio?.execution_mode]);
+
   const setSignalModeAuto = async () => {
     setIsControlBusy(true);
     try {
@@ -367,6 +373,11 @@ export const UserDashboardPage = () => {
 
       <div className="col-span-12 lg:col-span-4 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-dashboard-summary-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-dashboard-summary-title">Quick Summary</p>
+        <div className="mt-2" data-testid="user-dashboard-execution-mode-badge-wrapper">
+          <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${executionModeBadge.tone}`} data-testid="user-dashboard-execution-mode-badge">
+            execution_mode: {executionModeBadge.label}
+          </span>
+        </div>
         <p className="mt-2 text-sm" data-testid="user-dashboard-current-capital">Current Capital: {dashboard?.current_capital ?? "-"}</p>
         <p className="mt-1 text-sm" data-testid="user-dashboard-available-balance">Available Balance: {dashboard?.available_balance ?? "-"}</p>
         <p className="mt-1 text-sm" data-testid="user-dashboard-closed-pnl">Closed PnL: {portfolio?.closed_pnl ?? "-"}</p>
@@ -382,7 +393,12 @@ export const UserDashboardPage = () => {
       <section className="col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-dashboard-live-control-status-card">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-dashboard-live-control-status-header">
           <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-dashboard-live-control-status-title">Live Control Status</p>
-          <p className="text-xs text-cyan-100" data-testid="user-dashboard-live-control-status-refresh">Auto Refresh: 10s</p>
+          <div className="flex items-center gap-2" data-testid="user-dashboard-live-control-status-badges">
+            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${executionModeBadge.tone}`} data-testid="user-dashboard-live-control-execution-mode-chip">
+              {executionModeBadge.label}
+            </span>
+            <p className="text-xs text-cyan-100" data-testid="user-dashboard-live-control-status-refresh">Auto Refresh: 10s</p>
+          </div>
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="user-dashboard-live-control-status-grid">
           <p className="text-sm" data-testid="user-dashboard-live-control-mode">Signal Mode: {liveControlState.rawMode}</p>

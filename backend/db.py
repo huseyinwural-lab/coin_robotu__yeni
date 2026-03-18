@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 import redis
@@ -163,6 +164,9 @@ def _ensure_sqlite_migrations_applied() -> None:
     if _sqlite_migration_checked:
         return
     _sqlite_migration_checked = True
+
+    if str(os.environ.get("RUN_STARTUP_MIGRATIONS", "0")).strip() != "1":
+        return
 
     if engine.dialect.name != "sqlite":
         return

@@ -17,6 +17,23 @@ export const ExplainabilityDrawer = ({
   const familyScores = Object.entries(explainability?.family_scores || {});
   const sourceStrategies = Array.isArray(explainability?.source_strategies) ? explainability.source_strategies : [];
   const timeline = Array.isArray(explainability?.blocked_reason_timeline) ? explainability.blocked_reason_timeline : [];
+  const confidenceValue = Number(explainability?.decision_confidence ?? 0);
+  const confidenceLevel = confidenceValue >= 0.75 ? "HIGH" : confidenceValue >= 0.5 ? "MEDIUM" : "LOW";
+  const riskSeverity = String(explainability?.final_decision || "").toUpperCase() === "BLOCKED"
+    ? "HIGH"
+    : confidenceLevel === "LOW"
+      ? "MEDIUM"
+      : "LOW";
+  const confidenceTone = confidenceLevel === "HIGH"
+    ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-200"
+    : confidenceLevel === "MEDIUM"
+      ? "border-amber-500/60 bg-amber-500/20 text-amber-200"
+      : "border-rose-500/60 bg-rose-500/20 text-rose-200";
+  const riskTone = riskSeverity === "HIGH"
+    ? "border-rose-500/60 bg-rose-500/20 text-rose-200"
+    : riskSeverity === "MEDIUM"
+      ? "border-amber-500/60 bg-amber-500/20 text-amber-200"
+      : "border-emerald-500/60 bg-emerald-500/20 text-emerald-200";
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -38,12 +55,30 @@ export const ExplainabilityDrawer = ({
               <p className="text-xs" data-testid="user-explainability-score">Long/Short Score: {explainability.long_score} / {explainability.short_score}</p>
               <p className="text-xs" data-testid="user-explainability-winning-side">Winning Side: {explainability.winning_side}</p>
               <p className="text-xs" data-testid="user-explainability-confidence">Decision Confidence: {explainability.decision_confidence}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="user-explainability-summary-chips">
+                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${confidenceTone}`} data-testid="user-explainability-confidence-chip">
+                  confidence: {confidenceLevel}
+                </span>
+                <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${riskTone}`} data-testid="user-explainability-risk-severity-chip">
+                  risk: {riskSeverity}
+                </span>
+              </div>
             </div>
 
             <div data-testid="user-explainability-template-list">
               <p className="text-xs font-semibold">Explanation Templates</p>
               {(explainability.explanation_templates || []).map((item, idx) => (
-                <p key={`${selectedSymbol}-tpl-${idx}`} className="text-xs text-fuchsia-100" data-testid={`user-explainability-template-${idx}`}>{item}</p>
+                <div key={`${selectedSymbol}-tpl-${idx}`} className="mt-1 rounded border border-fuchsia-700/40 bg-fuchsia-950/10 p-2" data-testid={`user-explainability-template-row-${idx}`}>
+                  <div className="mb-1 flex flex-wrap items-center gap-1" data-testid={`user-explainability-template-chips-${idx}`}>
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${confidenceTone}`} data-testid={`user-explainability-template-confidence-chip-${idx}`}>
+                      confidence: {confidenceLevel}
+                    </span>
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${riskTone}`} data-testid={`user-explainability-template-risk-chip-${idx}`}>
+                      risk: {riskSeverity}
+                    </span>
+                  </div>
+                  <p className="text-xs text-fuchsia-100" data-testid={`user-explainability-template-${idx}`}>{item}</p>
+                </div>
               ))}
             </div>
 

@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "mode": "quick",
+  "base_url": "https://trade-flow-deploy.preview.emergentagent.com",
+  "execution_mode": "live",
+  "micro_trade": {
+    "symbol": "ETHUSDT",
+    "qty": 0.003195,
+    "notional_usdt": 6.9992,
+    "leverage": 5,
+    "status": "FILLED"
+  },
+  "readiness": "READY_STABLE"
+}

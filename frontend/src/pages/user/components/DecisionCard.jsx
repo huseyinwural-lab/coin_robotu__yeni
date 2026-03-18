@@ -8,16 +8,39 @@ const decisionBadgeClass = {
   NO_TRADE: "border-slate-500/60 bg-slate-500/20 text-slate-200",
 };
 
+const confidenceChipClass = {
+  HIGH: "border-emerald-500/60 bg-emerald-500/20 text-emerald-200",
+  MEDIUM: "border-amber-500/60 bg-amber-500/20 text-amber-200",
+  LOW: "border-rose-500/60 bg-rose-500/20 text-rose-200",
+};
+
+const riskChipClass = {
+  LOW: "border-emerald-500/60 bg-emerald-500/20 text-emerald-200",
+  MEDIUM: "border-amber-500/60 bg-amber-500/20 text-amber-200",
+  HIGH: "border-rose-500/60 bg-rose-500/20 text-rose-200",
+};
+
 export const DecisionCard = ({ card, onOpenExplainability, onOpenSymbolDetail, onOpenImpactSimulator }) => {
   const decision = String(card?.decision || "NO_TRADE").toUpperCase();
   const badgeClass = decisionBadgeClass[decision] || decisionBadgeClass.NO_TRADE;
+  const confidenceValue = Number(card?.confidence ?? 0);
+  const confidenceLevel = confidenceValue >= 0.75 ? "HIGH" : confidenceValue >= 0.5 ? "MEDIUM" : "LOW";
+  const riskSeverity = card?.risk_block || card?.blocked_reason ? "HIGH" : confidenceLevel === "LOW" ? "MEDIUM" : "LOW";
   const topContributors = Array.isArray(card?.top_contributors) ? card.top_contributors.slice(0, 2) : [];
 
   return (
     <article className="rounded border border-blue-700/70 bg-black/20 p-3" data-testid={`user-decision-card-${card.symbol}`}>
       <div className="flex items-center justify-between gap-2" data-testid={`user-decision-card-head-${card.symbol}`}>
         <p className="text-sm font-semibold" data-testid={`user-decision-card-symbol-${card.symbol}`}>{card.symbol}</p>
-        <Badge className={badgeClass} data-testid={`user-decision-card-decision-${card.symbol}`}>{decision}</Badge>
+        <div className="flex flex-wrap items-center justify-end gap-1" data-testid={`user-decision-card-head-badges-${card.symbol}`}>
+          <Badge className={badgeClass} data-testid={`user-decision-card-decision-${card.symbol}`}>{decision}</Badge>
+          <Badge className={confidenceChipClass[confidenceLevel]} data-testid={`user-decision-card-confidence-chip-${card.symbol}`}>
+            confidence: {confidenceLevel}
+          </Badge>
+          <Badge className={riskChipClass[riskSeverity]} data-testid={`user-decision-card-risk-severity-chip-${card.symbol}`}>
+            risk: {riskSeverity}
+          </Badge>
+        </div>
       </div>
 
       <p className="mt-1 text-xs text-slate-300" data-testid={`user-decision-card-regime-${card.symbol}`}>Regime: {card.market_regime}</p>

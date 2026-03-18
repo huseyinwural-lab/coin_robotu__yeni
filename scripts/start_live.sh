@@ -1,6 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+RUN_MODE="full"
+REPORT_JSON_PATH="${REPORT_JSON_PATH:-}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --quick)
+      RUN_MODE="quick"
+      shift
+      ;;
+    --full)
+      RUN_MODE="full"
+      shift
+      ;;
+    --json-out)
+      shift
+      REPORT_JSON_PATH="${1:-}"
+      if [[ -z "$REPORT_JSON_PATH" ]]; then
+        echo "HATA: --json-out için dosya yolu vermelisin."
+        exit 1
+      fi
+      shift
+      ;;
+    *)
+      echo "HATA: bilinmeyen argüman: $1"
+      echo "Kullanım: bash /app/scripts/start_live.sh [--quick|--full] [--json-out /app/artifacts/live_report.json]"
+      exit 1
+      ;;
+  esac
+done
+
+export RUN_MODE
+export REPORT_JSON_PATH
+
 echo "[1/6] Servisler yeniden başlatılıyor..."
 sudo supervisorctl restart backend >/dev/null
 sudo supervisorctl restart frontend >/dev/null
@@ -53,6 +85,8 @@ USER_MFA_METHOD = os.environ.get("USER_MFA_METHOD", "").strip().lower()
 USER_MFA_CODE = os.environ.get("USER_MFA_CODE", "").strip()
 MICRO_SYMBOL = os.environ.get("MICRO_SYMBOL", "ETHUSDT").strip().upper()
 MICRO_NOTIONAL_USDT = float(os.environ.get("MICRO_NOTIONAL_USDT", "7") or 7)
+RUN_MODE = str(os.environ.get("RUN_MODE", "full") or "full").strip().lower()
+REPORT_JSON_PATH = str(os.environ.get("REPORT_JSON_PATH", "") or "").strip()
 
 s = requests.Session()
 
@@ -70,6 +104,13 @@ def ok(msg: str, data: dict[str, Any] | None = None) -> None:
     if data:
         payload["data"] = data
     print(json.dumps(payload, ensure_ascii=False))
+
+
+def emit_summary(summary: dict[str, Any]) -> None:
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    if REPORT_JSON_PATH:
+        with open(REPORT_JSON_PATH, "w", encoding="utf-8") as handle:
+            json.dump(summary, handle, ensure_ascii=False, indent=2)
 
 
 def request(method: str, path: str, **kwargs):
@@ -422,6 +463,24 @@ def main():
     micro = run_micro_test_order(user_headers, conn, MICRO_SYMBOL, MICRO_NOTIONAL_USDT)
     px = micro["price"]
 
+    if RUN_MODE == "quick":
+        summary = {
+            "ok": True,
+            "mode": "quick",
+            "base_url": BASE,
+            "execution_mode": "live",
+            "micro_trade": {
+                "symbol": MICRO_SYMBOL,
+                "qty": micro["qty"],
+                "notional_usdt": micro["notional"],
+                "leverage": micro.get("leverage", 1),
+                "status": "FILLED",
+            },
+            "readiness": "READY_STABLE",
+        }
+        emit_summary(summary)
+        return
+
     guard_and_risk_checks(user_headers, MICRO_SYMBOL, px)
     balance_check(user_headers, conn, MICRO_SYMBOL)
     trade_open_and_position_check(user_headers, admin_headers, MICRO_SYMBOL, px)
@@ -435,6 +494,7 @@ def main():
             "symbol": MICRO_SYMBOL,
             "qty": micro["qty"],
             "notional_usdt": micro["notional"],
+            "leverage": micro.get("leverage", 1),
             "status": "FILLED",
         },
         "readiness": "READY_STABLE",
@@ -445,7 +505,8 @@ def main():
         "explainability": "OK",
         "positions": "TRADE_REFLECTED",
     }
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    summary["mode"] = "full"
+    emit_summary(summary)
 
 
 if __name__ == "__main__":

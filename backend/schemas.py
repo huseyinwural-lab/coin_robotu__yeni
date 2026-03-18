@@ -105,6 +105,7 @@ class MfaSettingsResponse(BaseModel):
     totp_configured: bool
     totp_verified: bool
     email_otp_verified: bool
+    backup_codes_remaining: int = 0
     updated_at: datetime | None = None
 
 
@@ -117,6 +118,12 @@ class MfaTotpSetupResponse(BaseModel):
 
 class MfaTotpVerifyRequest(BaseModel):
     code: str = Field(min_length=6, max_length=8)
+
+
+class MfaBackupCodesResponse(BaseModel):
+    generated_codes: list[str] = Field(default_factory=list)
+    backup_codes_remaining: int = 0
+    generated_at: datetime
 
 
 class MfaChallengeVerifyRequest(BaseModel):
@@ -1401,6 +1408,7 @@ class UserPortfolioMapResponse(BaseModel):
 class UserPortfolioSnapshotResponse(BaseModel):
     current_capital: float
     available_balance: float
+    execution_mode: str = "mocked"
     open_notional: float
     open_unrealized_pnl: float
     closed_pnl: float
@@ -2622,6 +2630,17 @@ class AdminExecutionQueueDecisionResponse(BaseModel):
     status: str
     admin_note: str
     execution_mode: str = "mocked"
+
+
+class AdminExecutionIntentOwnerRevalidateResponse(BaseModel):
+    intent_id: str
+    owner_user_id: str
+    connection_id: str
+    can_trade: bool
+    reason_codes: list[str] = Field(default_factory=list)
+    connection_health: str = "unknown"
+    readiness_status: str = "unknown"
+    response_code: int = 200
 
 
 class ExecutionReadinessResponse(BaseModel):

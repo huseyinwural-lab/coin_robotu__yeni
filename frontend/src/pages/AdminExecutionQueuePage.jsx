@@ -13,6 +13,28 @@ export const AdminExecutionQueuePage = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [loadError, setLoadError] = useState("");
   const [decisionIntentId, setDecisionIntentId] = useState("");
+  const [ownerRevalidateIntentId, setOwnerRevalidateIntentId] = useState("");
+
+  const extractErrorMessage = (error, fallbackText) => {
+    const detail = error?.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
+    if (detail && typeof detail === "object") {
+      const failureCode = detail.failure_code || detail.code;
+      const message = detail.message;
+      if (failureCode && message) {
+        return `${failureCode}: ${message}`;
+      }
+      if (failureCode) {
+        return String(failureCode);
+      }
+      if (message) {
+        return String(message);
+      }
+    }
+    return fallbackText;
+  };
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -62,7 +84,7 @@ export const AdminExecutionQueuePage = () => {
       toast.success(`Intent ${action} edildi`);
       await load();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || `Intent ${action} başarısız`);
+      toast.error(extractErrorMessage(error, `Intent ${action} başarısız`));
     } finally {
       setDecisionIntentId("");
     }
@@ -75,9 +97,23 @@ export const AdminExecutionQueuePage = () => {
       toast.success("Intent yeniden kuyruğa alındı");
       await load();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Retry başarısız");
+      toast.error(extractErrorMessage(error, "Retry başarısız"));
     } finally {
       setDecisionIntentId("");
+    }
+  };
+
+  const revalidateIntentOwner = async (intentId) => {
+    setOwnerRevalidateIntentId(intentId);
+    try {
+      const { data } = await apiClient.post(`/admin/execution-queue/${intentId}/owner-revalidate`);
+      const reasonCodes = (data?.reason_codes || []).join(", ") || "none";
+      toast.success(`Owner revalidate: can_trade=${String(Boolean(data?.can_trade))} · reason_codes=${reasonCodes}`);
+      await load();
+    } catch (error) {
+      toast.error(extractErrorMessage(error, "Owner revalidate başarısız"));
+    } finally {
+      setOwnerRevalidateIntentId("");
     }
   };
 
@@ -199,9 +235,27 @@ export const AdminExecutionQueuePage = () => {
                 <td className="px-3 py-2" data-testid={`admin-execution-queue-row-created-at-${row.id}`}>{new Date(row.created_at).toLocaleString()}</td>
                 <td className="px-3 py-2">
                   {row.status === "QUEUED" ? (
-                    <div className="flex gap-2" data-testid={`admin-execution-queue-actions-${row.id}`}>
-                      <Button className="bg-emerald-500 text-black hover:bg-emerald-400" onClick={() => decide(row.id, "approve")} disabled={decisionIntentId === row.id} data-testid={`admin-execution-queue-approve-button-${row.id}`}>Approve</Button>
-                      <Button variant="outline" onClick={() => decide(row.id, "reject")} disabled={decisionIntentId === row.id} data-testid={`admin-execution-queue-reject-button-${row.id}`}>Reject</Button>
+                    <div className="space-y-2" data-testid={`admin-execution-queue-actions-${row.id}`}>
+                      <div className="flex gap-2" data-testid={`admin-execution-queue-actions-primary-${row.id}`}>
+                        <Button className="bg-emerald-500 text-black hover:bg-emerald-400" onClick={() => decide(row.id, "approve")} disabled={decisionIntentId === row.id} data-testid={`admin-execution-queue-approve-button-${row.id}`}>Approve</Button>
+                        <Button variant="outline" onClick={() => decide(row.id, "reject")} disabled={decisionIntentId === row.id} data-testid={`admin-execution-queue-reject-button-${row.id}`}>Reject</Button>
+                      </div>
+                      <div className="rounded border border-amber-600/40 bg-amber-950/20 p-2" data-testid={`admin-execution-queue-423-helper-${row.id}`}>
+                        <p className="text-[11px] text-amber-100" data-testid={`admin-execution-queue-423-helper-text-${row.id}`}>
+                          Neden 423 alırım? Bu intent sahibinin connection readiness/can_trade durumu fail ise approve bloklanır.
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mt-2"
+                          onClick={() => revalidateIntentOwner(row.id)}
+                          disabled={ownerRevalidateIntentId === row.id}
+                          data-testid={`admin-execution-queue-owner-revalidate-button-${row.id}`}
+                        >
+                          {ownerRevalidateIntentId === row.id ? "Revalidate..." : "Tek Tık Revalidate"}
+                        </Button>
+                      </div>
                     </div>
                   ) : row.status === "REJECTED" ? (
                     <div className="flex gap-2" data-testid={`admin-execution-queue-retry-actions-${row.id}`}>

@@ -7,6 +7,7 @@ from deps import get_current_user
 from models import User
 from schemas import (
     AuthResponse,
+    MfaBackupCodesResponse,
     MfaChallengeVerifyRequest,
     MfaSettingsResponse,
     MfaSettingsUpdateRequest,
@@ -17,6 +18,7 @@ from services.audit_service import create_audit_log
 from services.mfa_service import (
     begin_totp_setup,
     get_mfa_settings,
+    regenerate_backup_codes,
     update_mfa_settings,
     verify_mfa_challenge,
     verify_totp_setup,
@@ -89,6 +91,21 @@ def post_totp_verify_setup(
         actor_role=current_user.role.value,
     )
     return MfaSettingsResponse(**result)
+
+
+@router.post("/backup-codes/regenerate", response_model=MfaBackupCodesResponse)
+def post_backup_codes_regenerate(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    payload = regenerate_backup_codes(db, user_id=current_user.id)
+    create_audit_log(
+        db,
+        action="mfa_backup_codes_regenerated",
+        entity_type="user",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"count": payload.get("backup_codes_remaining", 0)},
+    )
+    return MfaBackupCodesResponse(**payload)
 
 
 @router.post("/challenge/verify", response_model=AuthResponse)

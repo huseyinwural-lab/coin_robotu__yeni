@@ -36,6 +36,16 @@ class AuthMfaChallenge(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class UserMfaBackupCode(Base):
+    __tablename__ = "user_mfa_backup_codes"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(128), index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class BrandSetting(Base):
     __tablename__ = "brand_settings"
 

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
@@ -206,10 +207,19 @@ fastapi_app.add_middleware(RequestObservabilityMiddleware)
 
 @fastapi_app.on_event("startup")
 async def startup_event():
-    run_alembic_upgrade()
+    from db import Base, SessionLocal, engine
+
+    if str(os.environ.get("RUN_STARTUP_MIGRATIONS", "0")).strip() == "1":
+        try:
+            run_alembic_upgrade()
+        except Exception as exc:
+            logger.warning("Alembic upgrade skipped on startup", extra={"error": str(exc)})
+    else:
+        logger.info("Startup migrations disabled (RUN_STARTUP_MIGRATIONS!=1)")
+
+    Base.metadata.create_all(bind=engine)
     seed_default_admin()
     reliability_policy = load_connection_reliability_policy(force_refresh=True)
-    from db import SessionLocal
 
     db_session = SessionLocal()
     try:

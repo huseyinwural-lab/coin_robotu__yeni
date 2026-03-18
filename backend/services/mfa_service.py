@@ -11,10 +11,11 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.security import create_access_token
-from models import AuthMfaChallenge, User, UserMfaPreference
+from models import AuthMfaChallenge, User, UserMfaBackupCode, UserMfaPreference
 
 MFA_ALLOWED_METHODS = {"totp", "email"}
 MFA_CHALLENGE_TTL_MINUTES = 10
+MFA_BACKUP_CODES_DEFAULT_COUNT = 8
 
 
 def _now() -> datetime:
@@ -25,21 +26,47 @@ def _hash_token(value: str) -> str:
     return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()
 
 
-def _normalize_methods(values: list[str] | None) -> list[str]:
+def _normalize_methods(values: list[str] | None, *, include_backup: bool = False) -> list[str]:
+    allowed_methods = set(MFA_ALLOWED_METHODS)
+    if include_backup:
+        allowed_methods.add("backup_code")
     normalized = []
     for value in values or []:
         method = str(value or "").strip().lower()
-        if method in MFA_ALLOWED_METHODS and method not in normalized:
+        if method in allowed_methods and method not in normalized:
             normalized.append(method)
     return normalized
 
 
 def _ensure_mfa_tables(db: Session):
-    for model in (UserMfaPreference, AuthMfaChallenge):
+    for model in (UserMfaPreference, AuthMfaChallenge, UserMfaBackupCode):
         try:
             model.__table__.create(bind=db.bind, checkfirst=True)
         except Exception:
             continue
+
+
+def _normalize_backup_code(raw_code: str) -> str:
+    return "".join(ch for ch in str(raw_code or "").upper() if ch.isalnum())
+
+
+def _generate_backup_codes(count: int) -> list[str]:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    rows: list[str] = []
+    for _ in range(max(1, count)):
+        block_a = "".join(secrets.choice(alphabet) for _ in range(4))
+        block_b = "".join(secrets.choice(alphabet) for _ in range(4))
+        rows.append(f"{block_a}-{block_b}")
+    return rows
+
+
+def _active_backup_codes_count(db: Session, user_id: str) -> int:
+    _ensure_mfa_tables(db)
+    return (
+        db.query(UserMfaBackupCode)
+        .filter(UserMfaBackupCode.user_id == user_id, UserMfaBackupCode.used_at.is_(None))
+        .count()
+    )
 
 
 def _get_or_create_preference(db: Session, user_id: str) -> UserMfaPreference:
@@ -63,7 +90,30 @@ def get_mfa_settings(db: Session, user_id: str) -> dict:
         "totp_configured": bool(pref.totp_secret),
         "totp_verified": bool(pref.totp_verified),
         "email_otp_verified": bool(pref.email_otp_verified),
+        "backup_codes_remaining": _active_backup_codes_count(db, user_id),
         "updated_at": pref.updated_at,
+    }
+
+
+def regenerate_backup_codes(db: Session, *, user_id: str, count: int = MFA_BACKUP_CODES_DEFAULT_COUNT) -> dict:
+    _ensure_mfa_tables(db)
+    usable_count = max(4, min(int(count or MFA_BACKUP_CODES_DEFAULT_COUNT), 20))
+    generated_codes = _generate_backup_codes(usable_count)
+
+    db.query(UserMfaBackupCode).filter(UserMfaBackupCode.user_id == user_id).delete(synchronize_session=False)
+    for item in generated_codes:
+        db.add(
+            UserMfaBackupCode(
+                user_id=user_id,
+                code_hash=_hash_token(_normalize_backup_code(item)),
+            )
+        )
+    db.commit()
+
+    return {
+        "generated_codes": generated_codes,
+        "backup_codes_remaining": usable_count,
+        "generated_at": _now(),
     }
 
 
@@ -159,6 +209,11 @@ def start_mfa_challenge_if_required(db: Session, *, user: User) -> dict | None:
     if not pref.is_enabled or not methods:
         return None
 
+    backup_codes_remaining = _active_backup_codes_count(db, user.id)
+    challenge_methods = list(methods)
+    if backup_codes_remaining > 0 and "backup_code" not in challenge_methods:
+        challenge_methods.append("backup_code")
+
     challenge_token = secrets.token_urlsafe(32)
     now = _now()
     email_code = f"{secrets.randbelow(900000) + 100000}"
@@ -170,7 +225,7 @@ def start_mfa_challenge_if_required(db: Session, *, user: User) -> dict | None:
     challenge = AuthMfaChallenge(
         user_id=user.id,
         challenge_token_hash=_hash_token(challenge_token),
-        allowed_methods=methods,
+        allowed_methods=challenge_methods,
         email_otp_hash=_hash_token(email_code) if "email" in methods else None,
         email_delivery_status=email_delivery_status,
         expires_at=now + timedelta(minutes=MFA_CHALLENGE_TTL_MINUTES),
@@ -181,7 +236,7 @@ def start_mfa_challenge_if_required(db: Session, *, user: User) -> dict | None:
     return {
         "mfa_required": True,
         "mfa_challenge_token": challenge_token,
-        "mfa_methods": methods,
+        "mfa_methods": challenge_methods,
         "mfa_expires_at": challenge.expires_at,
         "email_delivery_status": email_delivery_status,
         "email_code_preview": email_code if email_delivery_status != "SENT" and "email" in methods else None,
@@ -205,7 +260,7 @@ def verify_mfa_challenge(db: Session, *, challenge_token: str, method: str, code
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="mfa_challenge_expired")
 
     normalized_method = str(method or "").strip().lower()
-    allowed_methods = _normalize_methods(row.allowed_methods)
+    allowed_methods = _normalize_methods(row.allowed_methods, include_backup=True)
     if normalized_method not in allowed_methods:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="mfa_method_not_allowed")
 
@@ -224,6 +279,20 @@ def verify_mfa_challenge(db: Session, *, challenge_token: str, method: str, code
         valid_totp = pyotp.TOTP(pref.totp_secret).verify(normalized_code, valid_window=1)
         if not valid_totp:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_totp_code")
+    elif normalized_method == "backup_code":
+        normalized_backup_code = _normalize_backup_code(normalized_code)
+        backup_row = (
+            db.query(UserMfaBackupCode)
+            .filter(
+                UserMfaBackupCode.user_id == user.id,
+                UserMfaBackupCode.code_hash == _hash_token(normalized_backup_code),
+                UserMfaBackupCode.used_at.is_(None),
+            )
+            .first()
+        )
+        if backup_row is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_backup_code")
+        backup_row.used_at = now
 
     row.consumed_at = now
     db.commit()

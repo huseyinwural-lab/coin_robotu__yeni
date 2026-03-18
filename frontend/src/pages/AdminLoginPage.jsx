@@ -165,7 +165,12 @@ export const AdminLoginPage = () => {
                 ))}
               </select>
             )}
-            <Input value={mfaCode} onChange={(event) => setMfaCode(event.target.value)} placeholder={mfaMethod === "email" ? "E-posta OTP kodu" : "Authenticator kodu"} data-testid="admin-login-mfa-code-input" />
+            <Input
+              value={mfaCode}
+              onChange={(event) => setMfaCode(event.target.value)}
+              placeholder={mfaMethod === "email" ? "E-posta OTP kodu" : mfaMethod === "backup_code" ? "Backup code" : "Authenticator kodu"}
+              data-testid="admin-login-mfa-code-input"
+            />
             <Button type="button" onClick={onVerifyMfa} className="w-full rounded-none bg-black text-orange-300 hover:bg-zinc-900" data-testid="admin-login-mfa-verify-button" disabled={submitting}>
               {submitting ? "Doğrulanıyor..." : "MFA Doğrula"}
             </Button>
