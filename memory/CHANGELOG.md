@@ -1,6 +1,16 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-18
+### Iteration-164 — Auth Pages Reference Redesign + Logo Upload
+- `/user/login` sayfası referans görsele yakın şekilde yeniden düzenlendi (hero + turuncu form panel + sağ çizgili görsel + alt durum/feature blokları).
+- Logo upload inputu eklendi (file input + anlık preview):
+  - `/`
+  - `/user/login`
+- `/admin/login` arka planı beyaz yapıldı ve form stili sadeleştirildi.
+- User/Admin toggle akışı korundu ve doğrulandı.
+- Frontend test agent sonucu: tüm kontroller PASS.
+
+## 2026-03-18
 ### Iteration-163 — Login Logo Integration (User + Admin)
 - Kullanıcı referansına göre login sayfalarına logo sol üst konumda entegre edildi.
 - `frontend/public/xilo-logo.png` eklendi.

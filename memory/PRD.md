@@ -1,3 +1,42 @@
+## 2026-03-18 — Auth UI Final Styling (Logo Upload + Reference Layout)
+
+### Kullanıcı seçimleri
+- Logo input tercihi: **B** (file upload + anlık önizleme)
+- Düzen kapsamı: **B** (`/user/login` + `/admin/login`)
+- Ek talep: **ana sayfa (`/`) unutulmayacak**
+
+### Uygulananlar
+1) **/user/login** referans görsele yakın hale getirildi
+- Sol üst logo blok
+- Sağ üst Kullanıcı/Admin toggle butonları
+- Büyük hero başlık + açıklama
+- Turuncu form panel
+- Sağda diagonal çizgili görsel panel
+- Alt canlı durum kartı + özellik kartları
+
+2) **Logo yükleme inputu** eklendi
+- `type=file` + `accept=image/*`
+- Anlık logo önizleme (local FileReader)
+- Hem **ana sayfa** hem **user login** ekranında aktif
+
+3) **/admin/login zemin beyaz** yapıldı
+- Arkaplan `white`
+- Form beyaz/sade stile çekildi
+- Sol üst logo + toggle korunarak uyumlu hale getirildi
+
+4) **Ana sayfa (/)** güncellendi
+- Header’da logo görseli
+- Register formuna logo upload inputu
+- Sağ panel referans görsele yakın diagonal pattern ile güncellendi
+
+### Test
+- Manual smoke + frontend test agent ile doğrulandı
+- Sonuç: **PASS**
+  - `/` logo + logo input görünür
+  - `/user/login` referans düzen blokları + logo input görünür
+  - `/admin/login` beyaz zemin doğrulandı
+  - User/Admin toggle navigasyonu çalışıyor
+
 ## 2026-03-18 — Login Logo Integration (Final UI Close)
 
 ### Kullanıcı talebi
