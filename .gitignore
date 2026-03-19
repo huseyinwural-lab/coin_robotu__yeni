@@ -29,3 +29,7 @@ admin_token.txt
 # --- Artifacts ---
 artifacts/
 test_reports/
+-e 
+# Environment files
+*.env
+*.env.*
