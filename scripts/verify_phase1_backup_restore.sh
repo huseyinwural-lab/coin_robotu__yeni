@@ -40,6 +40,50 @@ log "T-1.H1/H2 .gitignore yeniden yazım + zorunlu kural doğrulaması"
 GITIGNORE_PATH="${APP_ROOT}/.gitignore"
 [[ -f "$GITIGNORE_PATH" ]] || fail "H1" ".gitignore yok"
 
+EXPECTED_GITIGNORE_PATH="${ARTIFACT_DIR}/faz1_gitignore_expected.txt"
+CANONICAL_STATE_LOG="${ARTIFACT_DIR}/faz1_gitignore_canonical_state.log"
+CANONICAL_DIFF_LOG="${ARTIFACT_DIR}/faz1_gitignore_canonical_diff.log"
+
+cat > "$EXPECTED_GITIGNORE_PATH" <<'EOF'
+# --- Environment ---
+.env
+.env.*
+
+# --- Python ---
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# --- Node ---
+node_modules/
+dist/
+build/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Backup / DB ---
+backups/*.sql
+backups/*.bak
+*.sqlite
+*.sqlite3
+*.db
+admin_token.txt
+
+# --- Artifacts ---
+artifacts/
+test_reports/
+EOF
+
+if ! cmp -s "$GITIGNORE_PATH" "$EXPECTED_GITIGNORE_PATH"; then
+  diff -u "$EXPECTED_GITIGNORE_PATH" "$GITIGNORE_PATH" > "$CANONICAL_DIFF_LOG" || true
+  fail "H1" ".gitignore canonical state mismatch (detay: artifacts/faz1_gitignore_canonical_diff.log)"
+fi
+echo "CANONICAL_MATCH" > "$CANONICAL_STATE_LOG"
+
 echo "VERIFYING FILE: $GITIGNORE_PATH" | tee -a "$SUMMARY_LOG"
 cat "$GITIGNORE_PATH" | tee -a "$SUMMARY_LOG"
 
@@ -93,6 +137,8 @@ fi
   cat "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"
   echo "# duplicate_scan"
   cat "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
+  echo "# canonical_state"
+  cat "$CANONICAL_STATE_LOG"
 } >> "$GITIGNORE_SCAN_LOG"
 log "PASS[H1/H2]"
 
