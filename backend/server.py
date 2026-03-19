@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, FastAPI
@@ -99,7 +98,7 @@ from services.state_rebuild_service import run_state_rebuild
 from services.user_exchange_health_loop import run_exchange_connection_health_loop
 from services.weekly_report_service import run_weekly_report_loop
 from services.db_backup_scheduler_service import run_backup_scheduler_loop
-from db import engine, get_db, redis_client, verify_database_connection
+from db import get_db, redis_client, verify_database_connection
 from core.db_determinism import enforce_postgresql_only
 from services.observability_service import (
     QUEUE_SIZE_THRESHOLD,
