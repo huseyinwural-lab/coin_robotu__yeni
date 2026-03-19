@@ -1,3 +1,58 @@
+## 2026-03-19 — FAZ 3 EXECUTION SAFETY (P0) ✅
+
+### Uygulanan kapsam (T-3.1 → T-3.9)
+- **T-3.1 Merkezi Kill Switch Altyapısı**
+  - DB source-of-truth alanları eklendi (LiveActivationConfig):
+    - `trading_enabled` (default false)
+    - `max_total_exposure`
+    - `max_active_positions`
+  - migration: `backend/migrations/versions/20260319_0054_phase3_execution_safety_controls.py`
+
+- **T-3.2 / T-3.3 Exposure + Active Position Guard**
+  - yeni merkezi policy katmanı: `backend/services/execution_safety_service.py`
+  - hesaplama: açık pozisyon + pending user intent + pending runtime intent
+  - blokaj reason code:
+    - `TRADING_DISABLED`
+    - `MAX_TOTAL_EXPOSURE_EXCEEDED`
+    - `MAX_ACTIVE_POSITIONS_EXCEEDED`
+
+- **T-3.4 Admin Operasyon Endpoint**
+  - yeni endpoint: `POST /api/admin/kill-switch`
+  - GET endpoint: `GET /api/admin/kill-switch`
+  - audit: eski/yeni state + reason_code + idempotent bilgisi
+  - kod: `backend/routers/admin_kill_switch.py`
+
+- **T-3.5 Entry Guard Consolidation**
+  - Guard eklenen akışlar:
+    - `execution_intent_service.submit_execution_intent`
+    - `execution_intent_service.approve_execution_intent`
+    - `runtime_execution_service.dispatch_decision_result` (scanner bridge)
+    - `runtime_execution_service.process_submission_event_once` (worker)
+    - `user_execution`, `user_trading`, `admin_execution` router’larında standard 423 mapping
+
+- **T-3.6 Reject Reason Standardizasyonu**
+  - API ve worker path’te deterministic reason code payload
+  - audit log detaylarına reason_code yazımı
+
+- **T-3.7 Test Paketi**
+  - `backend/tests/test_phase3_execution_safety.py` (6 test PASS)
+  - testing agent doğrulaması: `/app/test_reports/iteration_23.json` (16 test PASS, issue yok)
+
+- **T-3.8 Verify Script**
+  - `scripts/verify_phase3_execution_safety.sh`
+  - çıktı: `artifacts/faz3_execution_safety_summary.log` => `SUMMARY: PASS`
+
+- **T-3.9 CI Gate**
+  - workflow job: `phase3-execution-safety-gate`
+  - `deploy-gate.yml` içine required job olarak eklendi, verify script çalıştırılıyor
+
+### Faz 3 teslim paketi
+- `/app/artifacts/faz3_final_execution_safety_bundle_with_iteration19.zip`
+- İçerik: `iteration_19.json` + Faz 3 kanıtları + ilgili workflow/script/migration dosyaları
+
+Kod yazıldıktan sonra gerçek execution akışı çalıştırılacak; limit aşıldığında bloklama logu ve doğrulama artefaktı üretilmeden task bitmiş sayılmayacak.
+Kod yazdıktan sonra repo içinde gerçekten çalıştır, artifact üretmeden işi bitmiş sayma.
+
 ## 2026-03-19 — FAZ 6 SECURITY (P0) ✅
 
 ### Kullanıcı seçimleri (uygulandı)
