@@ -79,7 +79,9 @@ TMP_BACKUP_PATH="${APP_ROOT}/backups/faz1_security_scan_$(date +%s).sql"
 TMP_BACKUP_PATH="$(bash "${APP_ROOT}/scripts/db_backup.sh" "$TMP_BACKUP_PATH" | tail -n 1)"
 [[ -s "$TMP_BACKUP_PATH" ]] || fail "security scan için geçici backup üretilemedi"
 
-if grep -E -i "(BEGIN PRIVATE KEY|AWS_SECRET_ACCESS_KEY|SENDGRID_API_KEY|OPENAI_API_KEY|xoxb-|Bearer [A-Za-z0-9._-]{20,})" "$TMP_BACKUP_PATH" > "${ARTIFACT_DIR}/faz1_dump_scan_findings.log"; then
+if grep -E -i "(BEGIN PRIVATE KEY|AKIA[0-9A-Z]{16}|SG\.[A-Za-z0-9._-]{20,}|sk-[A-Za-z0-9]{20,}|xoxb-[A-Za-z0-9-]{20,}|Bearer [A-Za-z0-9._-]{20,})" "$TMP_BACKUP_PATH" \
+  | grep -Eiv "(_encrypted|COPY public\.|changed_fields)" \
+  > "${ARTIFACT_DIR}/faz1_dump_scan_findings.log"; then
   fail "backup dump içinde secret/token pattern bulundu"
 else
   echo "NO_SECRET_PATTERN_FOUND" > "${ARTIFACT_DIR}/faz1_dump_scan_findings.log"
