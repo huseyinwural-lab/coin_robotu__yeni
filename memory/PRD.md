@@ -96,6 +96,23 @@
   - `eslint-disable` hook satırları: 0
   - `CI=true yarn build`: PASS
 
+## 2026-03-19 — Teknik Borç Temizliği 3. Dalga (tests/cli F401 + perf smoke)
+
+### Yapılanlar
+- `backend/tests` + `backend/cli` için F401 birikimi auto-fix ile temizlendi.
+- Deploy gate ruff adımı güncellendi:
+  - runtime: `E9,F63,F7,F82,F401,E402`
+  - tests/cli: `E402,F401`
+- Hook refactor edilen sayfalar için küçük performans/regresyon smoke testi koşturuldu.
+
+### Doğrulama
+- `/app/test_reports/iteration_12.json`
+  - backend: 100%
+  - frontend: 100%
+  - tests/cli F401/E402: PASS
+  - CI=true build: PASS
+  - remaining technical debt: NONE
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi
