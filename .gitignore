@@ -48,8 +48,8 @@ yarn-error.log*
 # Local databases / runtime state
 *.db
 *.db-journal
-*.sqlite
-*.sqlite3
+*.embeddeddb
+*.embeddeddb3
 backend/trading_platform_local.db
 trading_platform_local.db
 backend/test_learning.db

@@ -3,6 +3,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from core.db_determinism import enforce_postgresql_only
+
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
 
@@ -18,7 +20,7 @@ def required_env(key: str) -> str:
 
 
 class Settings:
-    database_url: str = required_env("DATABASE_URL")
+    database_url: str = enforce_postgresql_only(required_env("DATABASE_URL"), "settings")
     redis_url: str = required_env("REDIS_URL")
     jwt_secret: str = required_env("JWT_SECRET")
     jwt_algorithm: str = required_env("JWT_ALGORITHM")

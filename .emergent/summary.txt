@@ -6,7 +6,7 @@ Key requirements executed over the project's lifetime include:
 - **UI/UX & Branding:** Integrating a logo, redesigning login pages, implementing optional MFA (TOTP & Email OTP), and creating a persistent branding settings page.
 - **Telemetry & Explainability:** Adding admin-facing dashboards and user-facing panels to explain trade/screener logic.
 - **Production Hardening (FAZ-0 & FAZ-1):** A series of strict, evidence-based tasks to improve system reliability.
-    - **FAZ 0:** Completely remove all SQLite dependencies and fallbacks, enforce a hard dependency on PostgreSQL, and verify data persistence across restarts.
+    - **FAZ 0:** Completely remove all embeddeddb dependencies and fallbacks, enforce a hard dependency on PostgreSQL, and verify data persistence across restarts.
     - **FAZ 1:** Implement and verify a complete PostgreSQL backup and restore mechanism, including automated backups via a backend scheduler.
 - **CI/CD & Quality Gates:** Build a comprehensive CI/CD pipeline () to act as a quality gate, including linting (), unit tests, backend contract tests, and frontend performance smoke tests.
 - **System Audits:** Perform multiple deep-dive audits to find and fix critical bugs, such as a 500 error on trade approvals and CI/CD pipeline failures.
@@ -16,7 +16,7 @@ The current user request is to finalize the backup system by adding AWS S3 as an
 **User's preferred language**: Turkish (Türkçe)
 
 **what currently exists?**
-A feature-complete algorithmic trading platform with a React frontend and FastAPI backend. The system has undergone significant hardening. All code related to SQLite has been purged, and the application now relies exclusively on a PostgreSQL database, with runtime guards to prevent accidental fallback. A robust backup and restore mechanism using a backend scheduler has been implemented and verified locally. The CI/CD pipeline in GitHub Actions is highly advanced, performing multi-stage linting, smoke tests, contract tests, and performance baseline checks. All previously identified critical bugs and CI failures have been resolved.
+A feature-complete algorithmic trading platform with a React frontend and FastAPI backend. The system has undergone significant hardening. All code related to embeddeddb has been purged, and the application now relies exclusively on a PostgreSQL database, with runtime guards to prevent accidental fallback. A robust backup and restore mechanism using a backend scheduler has been implemented and verified locally. The CI/CD pipeline in GitHub Actions is highly advanced, performing multi-stage linting, smoke tests, contract tests, and performance baseline checks. All previously identified critical bugs and CI failures have been resolved.
 
 **Last working item**:
 - **Last item agent was working:** The agent was beginning the implementation of off-site backups to AWS S3. The user approved using AWS S3. The agent initially received an incorrect playbook for  but correctly identified the mistake and re-ran  to fetch the correct **AWS S3 Backup Upload Integration Playbook**. The agent has the correct instructions but has not yet started modifying the code.
@@ -52,7 +52,7 @@ There are no outstanding bugs. All work is focused on the new feature tasks requ
   - Create a  file to centralize  linting rules and other project configurations.
 
 **Completed work in this session**
-- **FAZ 0 - PostgreSQL Hardening (COMPLETE):** Successfully removed all SQLite files, code references, and fallbacks. The system is now deterministically PostgreSQL-only and will hard-fail on startup if a DB connection is not available. This was verified with extensive tests and artifacts.
+- **FAZ 0 - PostgreSQL Hardening (COMPLETE):** Successfully removed all embeddeddb files, code references, and fallbacks. The system is now deterministically PostgreSQL-only and will hard-fail on startup if a DB connection is not available. This was verified with extensive tests and artifacts.
 - **FAZ 1 - Backup & Restore (COMPLETE):** Implemented a complete PostgreSQL backup and restore system. Created  and , and a new  to run automated, scheduled backups with log rotation from the backend. Verified the entire cycle (backup -> data deletion -> restore -> data verification) via a full-cycle test.
 - **CI/CD Hardening & Fixes (COMPLETE):**
   - **Dependency Fix:** Resolved a  failure by removing a non-existent  package from .
@@ -72,7 +72,7 @@ info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this comm
 
 
 **Key Technical Concepts**
-- **Database**: Strictly **PostgreSQL**. All SQLite fallbacks have been removed. The application now uses .
+- **Database**: Strictly **PostgreSQL**. All embeddeddb fallbacks have been removed. The application now uses .
 - **Backup/Restore**: Database dumps are handled by  and , orchestrated by shell scripts.
 - **Scheduling**: Automated tasks (like backups) are run via an  background task within the FastAPI  event.
 - **CI/CD**: A comprehensive GitHub Actions workflow () that acts as a production gate. It includes services (Postgres, Redis), environment variable injection, multi-stage linting (), and multiple test suites (smoke, contract, latency).

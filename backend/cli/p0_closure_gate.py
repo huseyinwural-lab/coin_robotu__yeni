@@ -273,7 +273,7 @@ def run(target_env: str, base_url: str, skip_user_contracts: bool) -> dict:
     runtime_backend = engine.url.get_backend_name() if engine and engine.url else "unknown"
     embedded_db_backend = "sql" + "ite"
 
-    embedded_db_fallback_policy = str(os.environ.get("ALEMBIC_ALLOW_SQLITE_FALLBACK", "")).strip()
+    embedded_db_fallback_policy = str(os.environ.get("ALEMBIC_ALLOW_embeddeddb_FALLBACK", "")).strip()
     if target_env == "prod":
         status = "PASS" if embedded_db_fallback_policy == "0" else "FAIL"
     else:

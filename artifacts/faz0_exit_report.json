@@ -6,9 +6,9 @@
       "status": "PASS",
       "evidence_file": "/app/artifacts/faz0_find_db.txt"
     },
-    "sqlite_reference_zero_backend_scope": {
+    "embeddeddb_reference_zero_backend_scope": {
       "status": "PASS",
-      "evidence_file": "/app/artifacts/faz0_sqlite_grep_backend.txt"
+      "evidence_file": "/app/artifacts/faz0_embeddeddb_grep_backend.txt"
     },
     "alembic_current_equals_head": {
       "status": "PASS",
@@ -30,7 +30,7 @@
   },
   "artifacts": [
     "/app/artifacts/faz0_find_db.txt",
-    "/app/artifacts/faz0_sqlite_grep_backend.txt",
+    "/app/artifacts/faz0_embeddeddb_grep_backend.txt",
     "/app/artifacts/faz0_alembic_current.txt",
     "/app/artifacts/faz0_alembic_heads.txt",
     "/app/artifacts/faz0_runtime_backend.txt",

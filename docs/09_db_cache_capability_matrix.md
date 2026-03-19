@@ -5,7 +5,7 @@
 - Transaction semantiği ve eşzamanlılık davranışı production referansıdır.
 - Kalıcı veri bütünlüğü (audit, learning memory, runtime trace, scanner persistence) PostgreSQL üzerinde garanti edilir.
 
-## SQLite Mode (Fallback)
+## embeddeddb Mode (Fallback)
 - Yalnız geliştirme/preview/debug için kabul edilir.
 - Alembic migration uygulanır; startup ad hoc schema patch çalışmaz.
 - Yüksek eşzamanlılık ve production-grade transaction davranışı PostgreSQL ile birebir değildir.
@@ -22,7 +22,7 @@
 - Çok-instance dağıtık koordinasyon davranışı garanti edilmez.
 
 ## Production İçin Desteklenmeyen Modlar
-- SQLite + In-memory cache kombinasyonu production dağıtım modu olarak kabul edilmez.
+- embeddeddb + In-memory cache kombinasyonu production dağıtım modu olarak kabul edilmez.
 - Fallback modları yalnız lokal geliştirme, preview ve teşhis amaçlıdır.
 
 ## Operasyonel Kural

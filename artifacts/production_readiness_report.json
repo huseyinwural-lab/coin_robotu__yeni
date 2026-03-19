@@ -10,7 +10,7 @@
     "rollback_mechanism": {
       "status": "PASS",
       "command": "bash /app/scripts/db_rollback_demo.sh",
-      "stdout": "BACKUP_OK sqlite /tmp/rollback_demo_1773876131.bak\nMUTATION_COUNT 1\nRESTORE_OK sqlite /tmp/rollback_demo_1773876131.bak\nROLLBACK_OK marker reverted\nDEMO_OK rollback verified"
+      "stdout": "BACKUP_OK embeddeddb /tmp/rollback_demo_1773876131.bak\nMUTATION_COUNT 1\nRESTORE_OK embeddeddb /tmp/rollback_demo_1773876131.bak\nROLLBACK_OK marker reverted\nDEMO_OK rollback verified"
     },
     "idempotency_double_execution": {
       "status": "PASS",

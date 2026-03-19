@@ -2,13 +2,13 @@
 
 ## 1) Active Head Revision
 - **Current head**: `20260316_0046`
-- **Policy**: PostgreSQL-first migration flow. SQLite fallback intentionally disabled.
+- **Policy**: PostgreSQL-first migration flow. embeddeddb fallback intentionally disabled.
 
 ## 2) batch_alter_table Inventory & Decision Table
 
 | Migration File | Batch Block | Reason (Historical) | Decision | Applied Action |
 |---|---|---|---|---|
-| `20260311_0005_user_approval_flow.py` | users alter/drop columns | SQLite-compatible alter/drop pattern | REFACTOR | Direct `op.alter_column` + `op.drop_column` |
+| `20260311_0005_user_approval_flow.py` | users alter/drop columns | embeddeddb-compatible alter/drop pattern | REFACTOR | Direct `op.alter_column` + `op.drop_column` |
 | `20260311_0007_execution_metrics_and_permission_drift.py` | user_exchange_settings alter/drop | Legacy compatibility style | REFACTOR | Direct `op.alter_column` + `op.drop_column` |
 | `20260311_0008_release_gate_override_and_validation_snapshot.py` | user_exchange_settings alter/drop | Legacy compatibility style | REFACTOR | Direct `op.alter_column` + `op.drop_column` |
 | `20260311_0009_execution_evidence_fields.py` | execution_metrics/user_exchange_settings alter/drop | Legacy compatibility style | REFACTOR | Direct `op.alter_column` + `op.drop_column` |
@@ -56,7 +56,7 @@
 - Bu fazda **LEGACY** olarak sınıflanan tablo yok.
 
 ## 4) PostgreSQL dışı migration desteği
-- SQLite fallback **desteklenmiyor** (bilinçli karar).
+- embeddeddb fallback **desteklenmiyor** (bilinçli karar).
 - Migration safety akışı PostgreSQL odaklıdır.
 
 ## 5) Clean Install Expectation

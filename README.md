@@ -113,7 +113,7 @@ yarn test
 
 Development:
 
-- PostgreSQL erişilemezse SQLite fallback devreye alınabilir.
+- `SQLite` fallback artık **deprecated** ve kullanılmıyor.
 - Redis erişilemezse in-memory fallback devreye alınabilir.
 
 Production hedefi:
@@ -123,7 +123,7 @@ Production hedefi:
 
 ## 9) Fallback davranış özeti
 
-- DB fallback: PostgreSQL bağlantısı kurulamazsa SQLite kullanılabilir.
+- DB fallback: PostgreSQL bağlantısı kurulamazsa uygulama fail-fast kapanır.
 - Cache fallback: Redis bağlantısı kurulamazsa in-memory cache kullanılabilir.
 - Bu modlarda davranış sınırları capability matrix ile değerlendirilmelidir.
 

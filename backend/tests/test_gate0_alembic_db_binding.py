@@ -3,10 +3,10 @@ FAZ-1 Gate-0: Alembic DB Binding and Migration Environment Tests
 
 Tests:
 1. env.py precedence: ALEMBIC_DATABASE_URL > DATABASE_URL > alembic.ini > explicit dev fallback
-2. alembic.ini does NOT force SQLite
-3. ALEMBIC_ALLOW_SQLITE_FALLBACK=0 blocks implicit SQLite fallback
-4. Offline migration log shows PostgresqlImpl, not SQLiteImpl
-5. Without DB URL, PostgreSQL connection error is raised (no SQLite fallback)
+2. alembic.ini does NOT force embeddeddb
+3. ALEMBIC_ALLOW_embeddeddb_FALLBACK=0 blocks implicit embeddeddb fallback
+4. Offline migration log shows PostgresqlImpl, not embeddeddbImpl
+5. Without DB URL, PostgreSQL connection error is raised (no embeddeddb fallback)
 """
 
 import pytest
@@ -21,16 +21,16 @@ if str(BACKEND_DIR) not in sys.path:
 
 
 class TestAlembicIniConfiguration:
-    """Verify alembic.ini has proper neutral placeholder, no SQLite forcing"""
+    """Verify alembic.ini has proper neutral placeholder, no embeddeddb forcing"""
     
-    def test_alembic_ini_no_SQLite_url(self):
-        """alembic.ini should NOT contain SQLite URL"""
+    def test_alembic_ini_no_embeddeddb_url(self):
+        """alembic.ini should NOT contain embeddeddb URL"""
         alembic_ini_path = BACKEND_DIR / "alembic.ini"
         assert alembic_ini_path.exists(), "alembic.ini should exist"
         
         content = alembic_ini_path.read_text().lower()
-        assert "SQLite" not in content, "alembic.ini should NOT contain SQLite reference"
-        print("PASS: alembic.ini does not contain SQLite references")
+        assert "embeddeddb" not in content, "alembic.ini should NOT contain embeddeddb reference"
+        print("PASS: alembic.ini does not contain embeddeddb references")
     
     def test_alembic_ini_has_postgresql_placeholder(self):
         """alembic.ini should have postgresql placeholder"""
@@ -76,36 +76,36 @@ class TestEnvPyUrlPrecedence:
         print("PASS: get_url() function exists in env.py")
 
 
-class TestSqliteFallbackPrevention:
-    """Test that SQLite fallback is properly blocked"""
+class TestembeddeddbFallbackPrevention:
+    """Test that embeddeddb fallback is properly blocked"""
     
-    def test_SQLite_fallback_check_exists(self):
-        """env.py should check ALEMBIC_ALLOW_SQLITE_FALLBACK"""
+    def test_embeddeddb_fallback_check_exists(self):
+        """env.py should check ALEMBIC_ALLOW_embeddeddb_FALLBACK"""
         env_py_path = BACKEND_DIR / "migrations" / "env.py"
         content = env_py_path.read_text()
         
-        assert "ALEMBIC_ALLOW_SQLITE_FALLBACK" in content, \
-            "env.py should reference ALEMBIC_ALLOW_SQLITE_FALLBACK"
-        print("PASS: ALEMBIC_ALLOW_SQLITE_FALLBACK check exists")
+        assert "ALEMBIC_ALLOW_embeddeddb_FALLBACK" in content, \
+            "env.py should reference ALEMBIC_ALLOW_embeddeddb_FALLBACK"
+        print("PASS: ALEMBIC_ALLOW_embeddeddb_FALLBACK check exists")
     
-    def test_runtime_error_for_disabled_SQLite_fallback(self):
-        """When SQLite fallback is disabled, RuntimeError should be raised"""
+    def test_runtime_error_for_disabled_embeddeddb_fallback(self):
+        """When embeddeddb fallback is disabled, RuntimeError should be raised"""
         env_py_path = BACKEND_DIR / "migrations" / "env.py"
         content = env_py_path.read_text()
         
-        # Check that RuntimeError is raised when SQLite fallback is not allowed
-        assert "RuntimeError" in content, "RuntimeError should be raised for disallowed SQLite"
-        assert "SQLite fallback disabled" in content or "SQLite fallback" in content.lower(), \
-            "Error message should mention SQLite fallback"
-        print("PASS: RuntimeError for disabled SQLite fallback is implemented")
+        # Check that RuntimeError is raised when embeddeddb fallback is not allowed
+        assert "RuntimeError" in content, "RuntimeError should be raised for disallowed embeddeddb"
+        assert "embeddeddb fallback disabled" in content or "embeddeddb fallback" in content.lower(), \
+            "Error message should mention embeddeddb fallback"
+        print("PASS: RuntimeError for disabled embeddeddb fallback is implemented")
     
-    def test_is_SQLite_url_helper_exists(self):
-        """_is_SQLite_url helper function should exist"""
+    def test_is_embeddeddb_url_helper_exists(self):
+        """_is_embeddeddb_url helper function should exist"""
         env_py_path = BACKEND_DIR / "migrations" / "env.py"
         content = env_py_path.read_text()
         
-        assert "_is_SQLite_url" in content, "_is_SQLite_url helper should exist"
-        print("PASS: _is_SQLite_url helper function exists")
+        assert "_is_embeddeddb_url" in content, "_is_embeddeddb_url helper should exist"
+        print("PASS: _is_embeddeddb_url helper function exists")
 
 
 class TestOfflineMigrationLog:
@@ -119,7 +119,7 @@ class TestOfflineMigrationLog:
         print("PASS: Offline log file exists")
     
     def test_offline_log_shows_postgresql_impl(self):
-        """Log should show PostgresqlImpl, not SQLiteImpl"""
+        """Log should show PostgresqlImpl, not embeddeddbImpl"""
         log_path = Path("/tmp/alembic_offline_gate0.log")
         if not log_path.exists():
             pytest.skip("Offline log file not generated in this environment")
@@ -130,11 +130,11 @@ class TestOfflineMigrationLog:
         assert "PostgresqlImpl" in content, \
             "Offline migration should use PostgresqlImpl"
         
-        # Must NOT have SQLiteImpl
-        assert "SQLiteImpl" not in content, \
-            "Offline migration should NOT use SQLiteImpl"
+        # Must NOT have embeddeddbImpl
+        assert "embeddeddbImpl" not in content, \
+            "Offline migration should NOT use embeddeddbImpl"
         
-        print("PASS: Offline log shows PostgresqlImpl (not SQLiteImpl)")
+        print("PASS: Offline log shows PostgresqlImpl (not embeddeddbImpl)")
 
 
 class TestNeutralPlaceholderDetection:
@@ -157,8 +157,8 @@ class TestNeutralPlaceholderDetection:
         print("PASS: Neutral placeholder detection is implemented")
 
 
-class TestNoImplicitSqliteFallback:
-    """Integration test: No implicit SQLite fallback when env vars not set"""
+class TestNoImplicitembeddeddbFallback:
+    """Integration test: No implicit embeddeddb fallback when env vars not set"""
     
     def test_get_url_raises_without_db_url(self):
         """get_url() should raise RuntimeError when no URL is available and fallback disabled"""

@@ -1,5 +1,5 @@
 """
-FAZ 0: SQLite Cleanup and Deterministic PostgreSQL Mode Tests
+FAZ 0: embeddeddb Cleanup and Deterministic PostgreSQL Mode Tests
 This test file verifies all FAZ0 exit criteria for database configuration.
 """
 import os
@@ -12,8 +12,8 @@ from pathlib import Path
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 
-class TestFaz0SqliteCleanup:
-    """FAZ0 Exit Criteria: SQLite cleanup and PostgreSQL deterministic mode"""
+class TestFaz0embeddeddbCleanup:
+    """FAZ0 Exit Criteria: embeddeddb cleanup and PostgreSQL deterministic mode"""
     
     def test_no_db_files_in_repo(self):
         """FAZ0-1: Verify no .db files exist in repository"""
@@ -26,28 +26,28 @@ class TestFaz0SqliteCleanup:
         assert len(db_files) == 0, f"Found .db files in repo: {db_files}"
         print("PASS: No .db files found in repository")
     
-    def test_no_SQLite_references_in_backend(self):
-        """FAZ0-2: Verify no SQLite references in backend Python code (excluding tests)"""
+    def test_no_embeddeddb_references_in_backend(self):
+        """FAZ0-2: Verify no embeddeddb references in backend Python code (excluding tests)"""
         result = subprocess.run(
-            ['grep', '-r', '-i', 'SQLite', '/app/backend', '--include=*.py'],
+            ['grep', '-r', '-i', 'embeddeddb', '/app/backend', '--include=*.py'],
             capture_output=True,
             text=True
         )
-        # Filter out test files and SQLite blocking code (which mentions SQLite to block it)
+        # Filter out test files and embeddeddb blocking code (which mentions embeddeddb to block it)
         lines = [
             line for line in result.stdout.strip().split('\n')
             if line and 
             '/tests/' not in line and  # Exclude all test files
             'blocked_embedded_db' not in line and
             '_is_blocked_embedded' not in line and
-            '_is_SQLite_url' not in line.lower() and
+            '_is_embeddeddb_url' not in line.lower() and
             'not allowed' not in line.lower() and
             'Embedded DB URL' not in line and
             'sql" + "ite' not in line and  # String concatenation for blocking
             'cli/p0_closure_gate.py' not in line  # Gate check file
         ]
-        assert len(lines) == 0, f"Found SQLite references: {lines}"
-        print("PASS: No unwanted SQLite references in backend code")
+        assert len(lines) == 0, f"Found embeddeddb references: {lines}"
+        print("PASS: No unwanted embeddeddb references in backend code")
     
     def test_database_url_is_postgresql(self):
         """FAZ0-3: Verify DATABASE_URL in .env is PostgreSQL"""
@@ -61,7 +61,7 @@ class TestFaz0SqliteCleanup:
             if line.startswith('DATABASE_URL='):
                 url = line.split('=', 1)[1].strip('"\'')
                 assert 'postgresql' in url.lower(), f"DATABASE_URL is not PostgreSQL: {url}"
-                assert 'SQLite' not in url.lower(), f"DATABASE_URL contains SQLite: {url}"
+                assert 'embeddeddb' not in url.lower(), f"DATABASE_URL contains embeddeddb: {url}"
                 print(f"PASS: DATABASE_URL is PostgreSQL: {url[:50]}...")
                 break
     
@@ -128,29 +128,29 @@ print(engine.dialect.name)
         assert backend_name == 'postgresql', f"Runtime backend is not postgresql: {backend_name}"
         print(f"PASS: Runtime engine backend = {backend_name}")
     
-    def test_db_py_blocks_SQLite(self):
-        """FAZ0-7: Verify db.py has SQLite blocking assertion"""
+    def test_db_py_blocks_embeddeddb(self):
+        """FAZ0-7: Verify db.py has embeddeddb blocking assertion"""
         db_path = Path('/app/backend/db.py')
         content = db_path.read_text()
         
-        # Check for SQLite blocking mechanism
-        assert 'blocked_embedded_db_marker' in content or 'SQLite' in content.lower(), \
-            "db.py should have SQLite blocking mechanism"
-        assert 'assert' in content, "db.py should have assertion for SQLite blocking"
-        print("PASS: db.py contains SQLite blocking assertion")
+        # Check for embeddeddb blocking mechanism
+        assert 'blocked_embedded_db_marker' in content or 'embeddeddb' in content.lower(), \
+            "db.py should have embeddeddb blocking mechanism"
+        assert 'assert' in content, "db.py should have assertion for embeddeddb blocking"
+        print("PASS: db.py contains embeddeddb blocking assertion")
     
-    def test_migration_service_blocks_SQLite(self):
-        """FAZ0-8: Verify migration_service.py blocks SQLite URLs"""
+    def test_migration_service_blocks_embeddeddb(self):
+        """FAZ0-8: Verify migration_service.py blocks embeddeddb URLs"""
         migration_path = Path('/app/backend/services/migration_service.py')
         content = migration_path.read_text()
         
-        assert 'SQLite' in content.lower() or 'sql" + "ite' in content, \
-            "migration_service.py should check for SQLite"
+        assert 'embeddeddb' in content.lower() or 'sql" + "ite' in content, \
+            "migration_service.py should check for embeddeddb"
         assert 'RuntimeError' in content or 'raise' in content, \
-            "migration_service.py should raise error for SQLite"
-        print("PASS: migration_service.py blocks SQLite URLs")
+            "migration_service.py should raise error for embeddeddb"
+        print("PASS: migration_service.py blocks embeddeddb URLs")
     
-    def test_alembic_env_blocks_SQLite(self):
+    def test_alembic_env_blocks_embeddeddb(self):
         """FAZ0-9: Verify migrations/env.py blocks embedded DB URLs"""
         env_path = Path('/app/backend/migrations/env.py')
         content = env_path.read_text()
@@ -170,12 +170,12 @@ class TestFaz0HardFailBehavior:
         crash_log = Path('/app/artifacts/faz0_db_down_crash_snippet.log')
         if crash_log.exists():
             content = crash_log.read_text()
-            # Should show connection error without fallback to SQLite
+            # Should show connection error without fallback to embeddeddb
             assert 'OperationalError' in content or 'Connection refused' in content, \
                 "Crash log should show connection error"
-            assert 'SQLite' not in content.lower(), \
-                "Crash log should not mention SQLite fallback"
-            print("PASS: DB down scenario shows hard-fail behavior (no SQLite fallback)")
+            assert 'embeddeddb' not in content.lower(), \
+                "Crash log should not mention embeddeddb fallback"
+            print("PASS: DB down scenario shows hard-fail behavior (no embeddeddb fallback)")
         else:
             print("SKIP: faz0_db_down_crash_snippet.log not found (manual verification done)")
 
@@ -207,13 +207,13 @@ class TestFaz0ArtifactVerification:
             assert content == '', f"Artifact should be empty but contains: {content}"
             print("PASS: faz0_find_db.txt is empty (no .db files)")
     
-    def test_artifact_SQLite_grep_empty(self):
-        """FAZ0-13: Verify faz0_SQLite_grep_backend.txt artifact is empty"""
-        artifact = Path('/app/artifacts/faz0_SQLite_grep_backend.txt')
+    def test_artifact_embeddeddb_grep_empty(self):
+        """FAZ0-13: Verify faz0_embeddeddb_grep_backend.txt artifact is empty"""
+        artifact = Path('/app/artifacts/faz0_embeddeddb_grep_backend.txt')
         if artifact.exists():
             content = artifact.read_text().strip()
             assert content == '', f"Artifact should be empty but contains: {content}"
-            print("PASS: faz0_SQLite_grep_backend.txt is empty (no SQLite refs)")
+            print("PASS: faz0_embeddeddb_grep_backend.txt is empty (no embeddeddb refs)")
     
     def test_artifact_runtime_backend_postgresql(self):
         """FAZ0-14: Verify faz0_runtime_backend.txt shows postgresql"""

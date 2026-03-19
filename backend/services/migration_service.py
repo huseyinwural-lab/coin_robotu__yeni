@@ -7,30 +7,30 @@ from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from core.db_determinism import enforce_postgresql_only
+
 logger = logging.getLogger(__name__)
 
 
 def _resolve_migration_url() -> str:
     explicit_url = os.getenv("ALEMBIC_DATABASE_URL")
     if explicit_url:
-        if ("sql" + "ite") in explicit_url.lower():
-            raise RuntimeError("SQLite URL is not allowed for Alembic migration")
-        return explicit_url
+        return enforce_postgresql_only(explicit_url, "alembic_explicit_url")
 
     env_url = os.getenv("DATABASE_URL")
     if not env_url:
         raise RuntimeError("Missing DATABASE_URL for Alembic migration")
-    if ("sql" + "ite") in env_url.lower():
-        raise RuntimeError("SQLite URL is not allowed for Alembic migration")
+
+    normalized_env_url = enforce_postgresql_only(env_url, "alembic_database_url")
 
     try:
         connect_args = {}
-        if str(env_url).startswith("postgresql"):
+        if str(normalized_env_url).startswith("postgresql"):
             connect_args = {"connect_timeout": 3}
-        engine = create_engine(env_url, pool_pre_ping=True, connect_args=connect_args, future=True)
+        engine = create_engine(normalized_env_url, pool_pre_ping=True, connect_args=connect_args, future=True)
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-        return env_url
+        return normalized_env_url
     except SQLAlchemyError:
         raise RuntimeError("Alembic DB URL unreachable")
 

@@ -96,6 +96,7 @@ from services.user_exchange_health_loop import run_exchange_connection_health_lo
 from services.weekly_report_service import run_weekly_report_loop
 from services.db_backup_scheduler_service import run_backup_scheduler_loop
 from db import engine, verify_database_connection
+from core.db_determinism import enforce_postgresql_only
 
 configure_structured_logging(logging.INFO)
 logger = logging.getLogger(__name__)
@@ -214,10 +215,8 @@ fastapi_app.add_middleware(RequestObservabilityMiddleware)
 
 @fastapi_app.on_event("startup")
 async def startup_event():
-    db_url = os.getenv("DATABASE_URL", "")
-    blocked_db_marker = "sql" + "ite"
-    if blocked_db_marker in db_url.lower():
-        raise RuntimeError("SQLite kullanımı yasaklandı (FAZ 0 enforcement)")
+    db_url = os.getenv("DATABASE_URL")
+    enforce_postgresql_only(db_url, "startup")
 
     run_alembic_upgrade()
     verify_database_connection()

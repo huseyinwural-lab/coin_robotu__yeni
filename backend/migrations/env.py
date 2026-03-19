@@ -14,6 +14,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from db import Base  # noqa: E402
 import models  # noqa: E402,F401
+from core.db_determinism import enforce_postgresql_only  # noqa: E402
 
 config = context.config
 
@@ -42,11 +43,11 @@ def _is_neutral_placeholder(url: str) -> bool:
 def get_url() -> str:
     explicit = os.getenv("ALEMBIC_DATABASE_URL")
     if explicit:
-        return explicit
+        return enforce_postgresql_only(explicit, "alembic_env_explicit")
 
     env_url = os.getenv("DATABASE_URL")
     if env_url:
-        return env_url
+        return enforce_postgresql_only(env_url, "alembic_env_database_url")
 
     configured = config.get_main_option("sqlalchemy.url")
     if configured and not _is_neutral_placeholder(configured):
@@ -55,7 +56,7 @@ def get_url() -> str:
                 "Embedded DB URL is not allowed for Alembic migrations. "
                 "Provide ALEMBIC_DATABASE_URL or DATABASE_URL with PostgreSQL."
             )
-        return configured
+        return enforce_postgresql_only(configured, "alembic_env_configured")
 
     raise RuntimeError(
         "No database URL found for Alembic. Set ALEMBIC_DATABASE_URL or DATABASE_URL."

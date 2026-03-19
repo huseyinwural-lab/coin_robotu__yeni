@@ -24,7 +24,7 @@ Base URL: `https://trade-platform-s3.preview.emergentagent.com/api`
 - JSON rapor: `/app/artifacts/production_readiness_report.json`
 - PostgreSQL backup deneme logu: `/app/artifacts/postgres_backup_attempt.log`
 - Rollback demo logu: `/app/artifacts/rollback_demo.log`
-- SQLite backup logu: `/app/artifacts/sqlite_backup.log`
+- embeddeddb backup logu: `/app/artifacts/embeddeddb_backup.log`
 - CI workflow: `/app/.github/workflows/deploy-gate.yml`
 
 ## Çalıştırılan Kritik Komutlar

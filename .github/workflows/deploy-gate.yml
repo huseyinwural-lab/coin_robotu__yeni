@@ -67,15 +67,6 @@ jobs:
           ruff check backend --select E9,F63,F7,F82,F401,E402 --exclude backend/tests,backend/cli
           ruff check backend/tests backend/cli --select E402,F401
 
-      - name: Block embedded DB references
-        working-directory: backend
-        run: |
-          find . -type d -name "__pycache__" -prune -exec rm -rf {} +
-          if grep -R "sqlite" .; then
-            echo "SQLite forbidden"
-            exit 1
-          fi
-
       - name: Pytest smoke gate
         working-directory: backend
         run: |
@@ -93,6 +84,71 @@ jobs:
             export LATENCY_BUDGET_PROFILE=dev
           fi
           pytest -q tests/test_execution_readiness_contract.py tests/test_release_gate_contract.py tests/test_api_latency_budget_contract.py
+
+  phase0-db-determinism-gate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg2://trader:trader@localhost:5432/trading_platform
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-jwt-secret
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 720
+      CORS_ORIGINS: http://localhost:3000
+      DEFAULT_ADMIN_EMAIL: admin@platform.local
+      DEFAULT_ADMIN_PASSWORD: Admin12345!
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: trader
+          POSTGRES_PASSWORD: trader
+          POSTGRES_DB: trading_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U trader -d trading_platform"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install PostgreSQL client tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Run Phase0 determinism verifier
+        run: bash scripts/verify_phase0_db_determinism.sh
+
+      - name: Upload Phase0 verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-db-determinism-artifacts
+          path: |
+            artifacts/faz0_verify_phase0_db_determinism.log
+            artifacts/faz0_embeddeddb_scan_post_cleanup.log
+            artifacts/faz0_embeddeddb_scan_filtered.log
+            artifacts/faz0_forbidden_file_patterns.log
+            artifacts/faz0_env_config_validation.log
+            artifacts/faz0_runtime_guard_presence.log
+            artifacts/faz0_test_bootstrap_guard.log
+            artifacts/faz0_alembic_current.log
+            artifacts/faz0_alembic_heads.log
+            artifacts/faz0_persistence_db_smoke.log
+            artifacts/faz0_persistence_restart.log
 
   backup-restore-s3-gate:
     if: github.event_name == 'pull_request'

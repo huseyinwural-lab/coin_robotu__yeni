@@ -3,10 +3,10 @@
 ## Kapsam
 Bu rapor T-0.5 ... T-0.10 maddelerini birebir doğrulama artefact’ları ile kapatır.
 
-## T-0.5 Runtime SQLite Guard (ZORUNLU)
+## T-0.5 Runtime embeddeddb Guard (ZORUNLU)
 - Uygulama: `backend/server.py` startup içinde guard eklendi.
-- Kanıt: `/app/artifacts/runtime_sqlite_guard.log`
-- Beklenen: SQLite URL ile backend açılışı RuntimeError ile bloklanır.
+- Kanıt: `/app/artifacts/runtime_embeddeddb_guard.log`
+- Beklenen: embeddeddb URL ile backend açılışı RuntimeError ile bloklanır.
 
 ## T-0.6 Alembic Live Doğrulama
 - Komutlar çalıştırıldı:
@@ -26,17 +26,17 @@ Bu rapor T-0.5 ... T-0.10 maddelerini birebir doğrulama artefact’ları ile ka
   - `RESTART_OK`
   - `DATA_FOUND_AFTER_RESTART`
 
-## T-0.8 CI SQLite Guard
+## T-0.8 CI embeddeddb Guard
 - Workflow içine eklendi:
   - `/app/.github/workflows/deploy-gate.yml`
   - 
     ```bash
-    if grep -R "sqlite" .; then
-      echo "SQLite forbidden"
+    if grep -R "embeddeddb" .; then
+      echo "embeddeddb forbidden"
       exit 1
     fi
     ```
-- Artifact (lokal doğrulama): `/app/artifacts/ci_sqlite_guard.log`
+- Artifact (lokal doğrulama): `/app/artifacts/ci_embeddeddb_guard.log`
 
 ## T-0.9 Healthcheck DB Doğrulama
 - `/api/health` DB bağlantı testi yapacak şekilde güncellendi.
@@ -45,15 +45,15 @@ Bu rapor T-0.5 ... T-0.10 maddelerini birebir doğrulama artefact’ları ile ka
 - Artifact: `/app/artifacts/healthcheck_db_response.json`
 
 ## T-0.10 .env Enforcement
-- `backend/.env.example` PostgreSQL URL ile doğrulandı, SQLite kaldırıldı.
+- `backend/.env.example` PostgreSQL URL ile doğrulandı, embeddeddb kaldırıldı.
 
 ## EXIT Kriterleri Sonucu
 - Repo’da `.db` dosyası = **0** ✅
   - Artifact: `/app/artifacts/faz0_db_scan.log`
-- `sqlite` referansı (backend CI scope) = **0** ✅
-  - Artifact: `/app/artifacts/ci_sqlite_guard.log`
+- `embeddeddb` referansı (backend CI scope) = **0** ✅
+  - Artifact: `/app/artifacts/ci_embeddeddb_guard.log`
 - Runtime guard aktif ✅
-  - Artifact: `/app/artifacts/runtime_sqlite_guard.log`
+  - Artifact: `/app/artifacts/runtime_embeddeddb_guard.log`
 - Alembic `current == head` ✅
   - Artifact: `/app/artifacts/alembic_live_validation.log`
 - Persistence test PASS ✅

@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from core.config import settings
+from core.db_determinism import enforce_postgresql_only
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +126,7 @@ class InMemoryRedis:
 
 
 def _build_engine():
-    database_url = str(settings.database_url or "").strip()
-    blocked_embedded_db_marker = "sql" + "ite"
-    assert blocked_embedded_db_marker not in database_url.lower(), "DATABASE_URL must not contain embedded DB URL"
+    database_url = enforce_postgresql_only(settings.database_url, "db_engine")
 
     connect_args = {"connect_timeout": 5} if database_url.startswith("postgresql") else {}
     engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args)

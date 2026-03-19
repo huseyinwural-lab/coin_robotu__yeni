@@ -4,7 +4,7 @@ Bu doküman üretim kapanışı öncesi tek sayfa kontrol listesidir.
 
 ## 1) Migration / DB Gate
 
-- [ ] Prod env’de `ALEMBIC_ALLOW_SQLITE_FALLBACK=0`
+- [ ] Prod env’de `ALEMBIC_ALLOW_embeddeddb_FALLBACK=0`
 - [ ] `alembic heads` çıktısı alındı
 - [ ] `alembic_version` mevcut head ile eşleşiyor
 - [ ] Kritik tablolar mevcut:

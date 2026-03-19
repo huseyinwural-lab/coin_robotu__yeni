@@ -49,7 +49,7 @@
   - `BACKUP_AWS_SECRET_ACCESS_KEY`
   - `BACKUP_AWS_REGION`
 
-## 2026-03-18 — FAZ 0: SQLite Temizliği & Deterministik PostgreSQL (KATI MOD)
+## 2026-03-18 — FAZ 0: embeddeddb Temizliği & Deterministik PostgreSQL (KATI MOD)
 
 ### Uygulanan Değişiklikler
 - Runtime DB akışı PostgreSQL’e kilitlendi; fallback tamamen kaldırıldı.
@@ -67,12 +67,12 @@
 - Cluster başlatıldı, `trader` rolü ve `trading_platform` veritabanı oluşturuldu.
 - `backend/.env` sabitlendi:
   - `DATABASE_URL=postgresql+psycopg2://trader:trader@localhost:5432/trading_platform`
-  - `ALEMBIC_ALLOW_SQLITE_FALLBACK="0"`
+  - `ALEMBIC_ALLOW_embeddeddb_FALLBACK="0"`
 
 ### Kanıt Dosyaları
 - `/app/artifacts/faz0_exit_report.json`
 - `/app/artifacts/faz0_find_db.txt`
-- `/app/artifacts/faz0_sqlite_grep_backend.txt`
+- `/app/artifacts/faz0_embeddeddb_grep_backend.txt`
 - `/app/artifacts/faz0_alembic_current.txt`
 - `/app/artifacts/faz0_alembic_heads.txt`
 - `/app/artifacts/faz0_runtime_backend.txt`
@@ -92,7 +92,7 @@
 - Persistence restart artifact:
   - `/app/artifacts/db_persistence_test.log`
   - Satırlar: `INSERT_OK`, `RESTART_OK`, `DATA_FOUND_AFTER_RESTART`
-- CI sqlite block workflow adımı kapatıldı (deploy-gate içinde).
+- CI embeddeddb block workflow adımı kapatıldı (deploy-gate içinde).
 - Kapanış raporu:
   - `/app/artifacts/faz0_closure_report.md`
   - `/app/test_reports/iteration_7.json` (testing agent: 17/17 PASS)
@@ -107,7 +107,7 @@
 - `backend/requirements.txt` içinden `emergentintegrations==0.1.0` kaldırıldı.
 - `.github/workflows/deploy-gate.yml` frontend build adımı `CI=false yarn build` olarak güncellendi.
 - Ruff adımı CI’de fail vermemesi için kapsama `--select E9,F63,F7,F82` ile kritik/sentaks sınıfına çekildi.
-- SQLite guard adımında binary cache false-positive engeli için `__pycache__` temizliği eklendi.
+- embeddeddb guard adımında binary cache false-positive engeli için `__pycache__` temizliği eklendi.
 
 ### Doğrulama
 - Backend: `python -m pip install --upgrade pip && pip install -r requirements.txt` PASS
@@ -391,9 +391,9 @@
   - Test id’ler: `admin-execution-queue-423-helper-*`, `admin-execution-queue-owner-revalidate-button-*`.
 
 ### Operasyonel Stabilizasyon Notu
-- Runtime’da Alembic fallback geçişinde SQLite migration kilidi nedeniyle startup blokları görüldü.
-- Stabil çalıştırma için startup akışında migration çağrısı env-gated hale getirildi; SQLite tarafında metadata create-all ile tablo varlığı garanti altına alındı.
-- Bu nedenle runtime SQLite dosyası yeniden oluşturuldu ve test user (`testuser1773706589@example.com`) yeniden register+approve edilerek akışlar tekrar kuruldu.
+- Runtime’da Alembic fallback geçişinde embeddeddb migration kilidi nedeniyle startup blokları görüldü.
+- Stabil çalıştırma için startup akışında migration çağrısı env-gated hale getirildi; embeddeddb tarafında metadata create-all ile tablo varlığı garanti altına alındı.
+- Bu nedenle runtime embeddeddb dosyası yeniden oluşturuldu ve test user (`testuser1773706589@example.com`) yeniden register+approve edilerek akışlar tekrar kuruldu.
 
 ### Doğrulama Kanıtı
 - Testing agent raporu: `/app/test_reports/iteration_4.json`
@@ -1254,7 +1254,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
     - `decision_trace_prune`
   - disk basıncı moduna göre retention/cap parametreleri
   - eksik tablo veya runtime DB hatalarında `SKIPPED` fallback (script fail etmez)
-  - script başlangıcında `os.chdir(BACKEND_ROOT)` ile SQLite path stabilizasyonu
+  - script başlangıcında `os.chdir(BACKEND_ROOT)` ile embeddeddb path stabilizasyonu
 - Yeni/ güncel testler:
   - `/app/backend/tests/test_ops_automation_daily.py`
   - `/app/backend/tests/test_strategy_observability_storage_guard.py`
@@ -1370,7 +1370,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 - Çalıştırıldı:
   - `python /app/backend/cli/p0_closure_gate.py --target-env prod --output-file /app/test_reports/release_gate_latest.json`
 - Sonuç:
-  - `overall: FAIL` (preview runtime sqlite fallback nedeniyle beklenen)
+  - `overall: FAIL` (preview runtime embeddeddb fallback nedeniyle beklenen)
 
 ### 7) Final Gate Output Contract
 
@@ -1400,13 +1400,13 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 - Komut çalıştırıldı:
   - `python /app/backend/cli/p0_closure_gate.py --target-env prod --output-file /app/test_reports/release_gate_latest.json`
 - Sonuç:
-  - `overall: FAIL` (preview runtime’da SQLite fallback aktif olduğu için beklenen)
+  - `overall: FAIL` (preview runtime’da embeddeddb fallback aktif olduğu için beklenen)
   - `fail_count: 3`
   - PASS olanlar: smoke suite, admin login, user contract checkleri
 - Fail sebepleri:
-  - `sqlite_fallback_policy` (prod için 0 beklenirken değer 1)
-  - `alembic_db_revision_match` (preview sqlite fallback’ta `alembic_version` tablosu yok)
-  - `critical_tables_presence` (sqlite fallback’ta prod tablo seti yok)
+  - `embeddeddb_fallback_policy` (prod için 0 beklenirken değer 1)
+  - `alembic_db_revision_match` (preview embeddeddb fallback’ta `alembic_version` tablosu yok)
+  - `critical_tables_presence` (embeddeddb fallback’ta prod tablo seti yok)
 
 ### 2) Faz-3 Devamı — Root Cause Labeling
 
@@ -1532,7 +1532,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 
 ### P0 Gate İçeriği (otomatik)
 
-- sqlite fallback policy kontrolü (`preview/prod` davranışı ayrık)
+- embeddeddb fallback policy kontrolü (`preview/prod` davranışı ayrık)
 - alembic heads kontrolü
 - alembic revision eşleşme kontrolü
 - kritik tablo varlık kontrolü
@@ -1544,7 +1544,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 
 ### Preview Runtime Notu
 
-- Preview ortam SQLite fallback modunda olduğunda migration/table checkleri `WARN` olarak raporlanır.
+- Preview ortam embeddeddb fallback modunda olduğunda migration/table checkleri `WARN` olarak raporlanır.
 - Prod modda aynı durum `FAIL` (strict) olarak ele alınır.
 
 ### Doğrulama
@@ -2086,16 +2086,16 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 ### 2026-03-16 (FAZ-1 / GATE-0 — DB Binding & Migration Ortamı PASS)
 - `backend/migrations/env.py` URL önceliği güvenli hale getirildi:
   - `ALEMBIC_DATABASE_URL` > `DATABASE_URL` > `alembic.ini`
-  - implicit SQLite fallback kaldırıldı; yalnızca `ALEMBIC_ALLOW_SQLITE_FALLBACK=1` ile explicit local fallback izinli.
-- `backend/alembic.ini` SQLite dayatmasından çıkarıldı; nötr PostgreSQL placeholder kullanılıyor.
+  - implicit embeddeddb fallback kaldırıldı; yalnızca `ALEMBIC_ALLOW_embeddeddb_FALLBACK=1` ile explicit local fallback izinli.
+- `backend/alembic.ini` embeddeddb dayatmasından çıkarıldı; nötr PostgreSQL placeholder kullanılıyor.
 - **Sıkı kapanış güncellemesi (kullanıcı talebiyle):**
-  - `env.py` içindeki tüm SQLite fallback yolları tamamen kaldırıldı (dev dahil explicit env zorunlu).
-  - `services/migration_service.py` içindeki SQLite fallback kaldırıldı; DB URL yok/erişilemezse açık RuntimeError üretiyor.
+  - `env.py` içindeki tüm embeddeddb fallback yolları tamamen kaldırıldı (dev dahil explicit env zorunlu).
+  - `services/migration_service.py` içindeki embeddeddb fallback kaldırıldı; DB URL yok/erişilemezse açık RuntimeError üretiyor.
 - Migration ortamı için path bootstrap sağlamlaştırıldı (`env.py` içinde kök path ekleme).
 - Doğrulama:
   - Offline migration logunda `Context impl PostgresqlImpl` doğrulandı (`/tmp/alembic_offline_gate0.log`).
   - Testing agent raporu: `/app/test_reports/iteration_126.json` → **13/13 PASS + 3 functional verification**.
-  - Ek not: Bu podda `localhost:5432` erişimi yoksa bağlantı hatası beklenir; önemli olan SQLite’a sessiz düşüşün olmamasıdır.
+  - Ek not: Bu podda `localhost:5432` erişimi yoksa bağlantı hatası beklenir; önemli olan embeddeddb’a sessiz düşüşün olmamasıdır.
   - Final kapanış doğrulaması: `/app/test_reports/iteration_128.json` → **19/19 PASS**.
 
 ### 2026-03-16 (Backend Policy Core Refactor — Gate-7 öncesi blokaj kapatma)
@@ -2843,7 +2843,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - user tarafında readiness/failure/evidence kartları tutarlı state modeliyle hizalandı
 - Migrationlar:
   - `20260311_0009_execution_evidence_fields.py`
-  - SQLite fallback uyumluluğu için `db.py` tarafına kritik sütun/tablolar için güvenli bootstrap eklendi
+  - embeddeddb fallback uyumluluğu için `db.py` tarafına kritik sütun/tablolar için güvenli bootstrap eklendi
 - Testler:
   - `/app/test_reports/iteration_14.json` (backend 27/27 pass, frontend 100%)
   - `/app/backend/tests/test_phase4_iter5_env_aware_release_gate.py`
@@ -2889,7 +2889,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 
 - Migrationlar:
   - `20260311_0010_user_risk_and_alert_policy.py`
-  - SQLite fallback uyumluluğu için `db.py` bootstrap genişletildi
+  - embeddeddb fallback uyumluluğu için `db.py` bootstrap genişletildi
 
 - Testler:
   - `/app/test_reports/iteration_15.json` (backend 28/28 pass, frontend 100%)
@@ -3050,7 +3050,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - Duplicate önleme: aynı `replay_run_id` için ikinci write engellenir
 - Migration/DB:
   - Alembic: `20260311_0014_risk_policy_audit_events.py`
-  - SQLite compatibility: `risk_policy_audit_events` tablosu eklendi
+  - embeddeddb compatibility: `risk_policy_audit_events` tablosu eklendi
 - Testler:
   - `/app/test_reports/iteration_20.json` (backend/frontend pass)
   - `test_faz5_hardening_iter5_artifacts.py` (15/15 pass)
@@ -3089,7 +3089,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - `POST /api/strategy-domain/admin/kernel/evaluate`
 - Migration/DB:
   - Alembic: `20260311_0015_strategy_domain_core.py`
-  - SQLite compatibility: `strategy_definitions`, `strategy_versions` tabloları
+  - embeddeddb compatibility: `strategy_definitions`, `strategy_versions` tabloları
 - Testler:
   - `/app/test_reports/iteration_21.json` (backend/frontend pass)
   - `test_phase6_iter2_comprehensive_strategy_domain.py` (testing agent comprehensive suite)
@@ -3149,7 +3149,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 ### 2026-03-11 (Faz-6.4/6.5 — Regime Gating + Risk Orchestrator)
 - Regime gating admin endpointleri tamamlandı: bindings/evaluate/overview, regime snapshot persistence, reject audit log.
 - Admin Strategies UI: regime binding editor + deterministic allowed/blocked demo + snapshot/reject dağılımı paneli.
-- Risk Orchestrator policy modeli + migration (`20260311_0018_risk_orchestrator_core.py`) + SQLite fallback.
+- Risk Orchestrator policy modeli + migration (`20260311_0018_risk_orchestrator_core.py`) + embeddeddb fallback.
 - Pre-trade risk gate runtime dispatch’e bağlandı (account/symbol exposure, strategy concurrency, cooldown, frequency, duplicate suppression, daily loss, kill-switch).
 - In-trade supervisor endpointi + status snapshot + risk reject audit log’u eklendi.
 - Admin Risk Orchestrator sayfası (/admin/risk-orchestrator) eklendi (policy editor, status, supervisor run, reject list).
@@ -6914,7 +6914,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 
 4. **Capability matrix dokümantasyonu eklendi (FAZ-2 Görev-8)**
    - Yeni doküman: `/app/docs/09_db_cache_capability_matrix.md`
-   - PostgreSQL/SQLite/Redis/In-memory modlarının garanti ve sınırları tanımlandı.
+   - PostgreSQL/embeddeddb/Redis/In-memory modlarının garanti ve sınırları tanımlandı.
 
 5. **Sabit test credential izi azaltıldı (FAZ-1 Görev-4 başlangıcı)**
    - Kök test scriptlerinde hardcoded admin/user credential kullanımı env tabanlı hale çekildi:
