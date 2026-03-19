@@ -212,6 +212,37 @@
   - threshold utilization fields: PASS
   - backend/frontend toplam: 9/9 PASS
 
+## 2026-03-19 — FAZ 1 (P0): PostgreSQL Backup & Restore Kapanışı
+
+### Uygulananlar
+- `backend/Dockerfile` içine PostgreSQL client kurulumu eklendi (`postgresql-client`).
+- Backup script production hale getirildi:
+  - `/app/scripts/db_backup.sh`
+  - `.env` üzerinden `DATABASE_URL` okuma
+  - SQLAlchemy URL -> `psql/pg_dump` uyumlu URL normalize
+  - timestamp backup, rotation (`BACKUP_KEEP_COUNT=7`), log + error handling
+- Restore script production hale getirildi:
+  - `/app/scripts/db_restore.sh`
+  - `--reset` desteği (schema reset) + restore log + error handling
+- Backend scheduler eklendi:
+  - `/app/backend/services/db_backup_scheduler_service.py`
+  - startup ile başlar, interval configurable (`BACKUP_SCHEDULER_INTERVAL_SECONDS`), log üretir
+  - `server.py` startup/shutdown lifecycle’a bağlandı
+- Full cycle test script eklendi:
+  - `/app/scripts/db_backup_restore_full_cycle_test.sh`
+  - INSERT -> BACKUP -> DB_RESET -> RESTORE -> DATA doğrulaması
+
+### Kanıt Artifact’ları
+- `/app/artifacts/pg_client_check.log`
+- `/app/artifacts/backup.log`
+- `/app/artifacts/restore.log`
+- `/app/artifacts/backup_cron.log`
+- `/app/artifacts/db_backup_restore_test.log`
+
+### FAZ 1 EXIT Sonucu
+- Testing agent raporu: `/app/test_reports/iteration_19.json`
+- Sonuç: **T-1.1 ... T-1.5 + Z-1.1 + Z-1.2 tamamı PASS**
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi
