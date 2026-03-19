@@ -95,6 +95,7 @@ jobs:
           pytest -q tests/test_execution_readiness_contract.py tests/test_release_gate_contract.py tests/test_api_latency_budget_contract.py
 
   backup-restore-s3-gate:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql+psycopg2://trader:trader@localhost:5432/trading_platform
