@@ -193,6 +193,25 @@
   - perf delta fields: PASS
   - full deploy-gate simulation: PASS
 
+## 2026-03-19 — Deploy Gate Genişletme 5 (Near-Threshold Etiket + Config Externalization)
+
+### Yapılanlar
+- Latency budget profilleri koddan ayrıştırıldı:
+  - `/app/config/api_latency_budgets.json`
+  - Contract test bu dosyayı dinamik okuyor (`LATENCY_BUDGET_PROFILE`).
+- PR perf yorumu için threshold yakınlık etiketi eklendi:
+  - 🟢 healthy
+  - 🟡 near-limit (>=90%)
+  - 🔴 over-limit
+- Perf smoke raporuna `threshold_utilization` oran alanları eklendi.
+
+### Doğrulama
+- `/app/test_reports/iteration_17.json`
+  - config externalization: PASS
+  - proximity tag logic: PASS
+  - threshold utilization fields: PASS
+  - backend/frontend toplam: 9/9 PASS
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi
