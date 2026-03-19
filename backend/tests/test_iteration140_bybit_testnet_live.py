@@ -83,7 +83,7 @@ class TestBybitCredentialFieldsInBackend:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "masked" in data, "Response should contain masked credentials"
-        print(f"PASS: bybit_testnet_api_key accepted by PATCH endpoint")
+        print("PASS: bybit_testnet_api_key accepted by PATCH endpoint")
 
     def test_patch_execution_credentials_accepts_testnet_secret(self, admin_client):
         """PATCH endpoint accepts bybit_testnet_secret field"""
@@ -93,7 +93,7 @@ class TestBybitCredentialFieldsInBackend:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "masked" in data, "Response should contain masked credentials"
-        print(f"PASS: bybit_testnet_secret accepted by PATCH endpoint")
+        print("PASS: bybit_testnet_secret accepted by PATCH endpoint")
 
     def test_patch_execution_credentials_accepts_live_api_key(self, admin_client):
         """PATCH endpoint accepts bybit_live_api_key field"""
@@ -103,7 +103,7 @@ class TestBybitCredentialFieldsInBackend:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "masked" in data, "Response should contain masked credentials"
-        print(f"PASS: bybit_live_api_key accepted by PATCH endpoint")
+        print("PASS: bybit_live_api_key accepted by PATCH endpoint")
 
     def test_patch_execution_credentials_accepts_live_secret(self, admin_client):
         """PATCH endpoint accepts bybit_live_secret field"""
@@ -113,7 +113,7 @@ class TestBybitCredentialFieldsInBackend:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "masked" in data, "Response should contain masked credentials"
-        print(f"PASS: bybit_live_secret accepted by PATCH endpoint")
+        print("PASS: bybit_live_secret accepted by PATCH endpoint")
 
     def test_patch_execution_credentials_batch_update(self, admin_client):
         """PATCH endpoint accepts all four Bybit fields at once"""
@@ -132,7 +132,7 @@ class TestBybitCredentialFieldsInBackend:
         assert "bybit_testnet_secret" in masked, "masked should contain bybit_testnet_secret"
         assert "bybit_live_api_key" in masked, "masked should contain bybit_live_api_key"
         assert "bybit_live_secret" in masked, "masked should contain bybit_live_secret"
-        print(f"PASS: All four Bybit fields accepted in batch update")
+        print("PASS: All four Bybit fields accepted in batch update")
 
 
 class TestGetExecutionCredentialsHasFields:
@@ -172,7 +172,7 @@ class TestGetExecutionCredentialsHasFields:
             assert field in data, f"Response should contain {field} field"
             assert isinstance(data[field], bool), f"{field} should be boolean"
         
-        print(f"PASS: All has_*_credentials fields present in GET response")
+        print("PASS: All has_*_credentials fields present in GET response")
         print(f"  has_bybit_credentials: {data['has_bybit_credentials']}")
         print(f"  has_bybit_testnet_credentials: {data['has_bybit_testnet_credentials']}")
         print(f"  has_bybit_live_credentials: {data['has_bybit_live_credentials']}")
@@ -194,7 +194,7 @@ class TestGetExecutionCredentialsHasFields:
         for field in expected_masked_fields:
             assert field in masked, f"masked should contain {field}"
         
-        print(f"PASS: All new Bybit fields present in masked object")
+        print("PASS: All new Bybit fields present in masked object")
 
 
 class TestExecutionValidationBybitReady:
@@ -238,7 +238,7 @@ class TestExecutionValidationBybitReady:
         for field in expected_validation_fields:
             assert field in validation, f"validation should contain {field}"
         
-        print(f"PASS: All validation fields present in execution-validation response")
+        print("PASS: All validation fields present in execution-validation response")
 
 
 class TestRegressionLeverageFields:
@@ -269,7 +269,7 @@ class TestRegressionLeverageFields:
                 if field in preview:
                     print(f"  {field}: {preview[field]}")
             
-            print(f"PASS: Preview endpoint accessible")
+            print("PASS: Preview endpoint accessible")
         else:
             print(f"PASS: Preview endpoint accessible (returned {response.status_code} due to validation)")
 
@@ -328,7 +328,7 @@ class TestRegressionAdminEndpoints:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "exchange_health" in data or "market_availability" in data, "Response should contain health data"
-        print(f"PASS: Admin health summary accessible")
+        print("PASS: Admin health summary accessible")
 
 
 class TestCleanupTestCredentials:

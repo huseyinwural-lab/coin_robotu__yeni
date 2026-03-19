@@ -5,9 +5,8 @@ Final Release Validation Test - Simplified
 
 import requests
 import subprocess
-import time
 
-BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 def test_1_admin_login():
@@ -22,7 +21,7 @@ def test_1_admin_login():
         if response.status_code == 200 and "access_token" in response.json():
             return True, response.json()["access_token"]
         return False, None
-    except Exception as e:
+    except Exception:
         return False, None
 
 def test_2_admin_profile_apis(admin_token):

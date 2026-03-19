@@ -348,7 +348,7 @@ class TestLegacyIntentEndpointsRegression:
         assert "intent_token" in data
         assert "validation_status" in data
         
-        print(f"PASS: Legacy /api/user/execution/intent/preview still works")
+        print("PASS: Legacy /api/user/execution/intent/preview still works")
 
     def test_legacy_intent_submit_still_works(self, api_client, user_token):
         """Legacy intent submit endpoint still works"""
@@ -380,7 +380,7 @@ class TestLegacyIntentEndpointsRegression:
         
         # Should be 200 or 400 (if validation invalid or already submitted)
         assert submit_response.status_code in [200, 400], f"Unexpected status: {submit_response.status_code}"
-        print(f"PASS: Legacy /api/user/execution/intent/submit still works")
+        print("PASS: Legacy /api/user/execution/intent/submit still works")
 
 
 class TestHealthAndBasicEndpoints:

@@ -240,7 +240,7 @@ class TestOnboardingFullFlow:
         assert account_created_step and account_created_step["done"] is True, "account_created step should be done"
         assert email_verified_step and email_verified_step["done"] is True, "email_verified step should be done"
         
-        print(f"[STEP 5] Final status verified:")
+        print("[STEP 5] Final status verified:")
         print(f"  - full_name: {final_status.get('full_name')}")
         print(f"  - phone: {final_status.get('phone')}")
         print(f"  - email_verified: {final_status['email_verified']}")

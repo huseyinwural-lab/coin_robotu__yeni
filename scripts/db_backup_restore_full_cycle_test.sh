@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ARTIFACT_LOG="/app/artifacts/db_backup_restore_test.log"
-mkdir -p /app/artifacts
+APP_ROOT="${APP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+ARTIFACT_LOG="${APP_ROOT}/artifacts/db_backup_restore_test.log"
+mkdir -p "${APP_ROOT}/artifacts"
 : > "$ARTIFACT_LOG"
 
 log_line() {
@@ -10,10 +11,10 @@ log_line() {
 }
 
 load_env() {
-  if [[ -f /app/backend/.env ]]; then
+  if [[ -f "${APP_ROOT}/backend/.env" ]]; then
     set -a
     # shellcheck disable=SC1091
-    source /app/backend/.env
+    source "${APP_ROOT}/backend/.env"
     set +a
   fi
 }
@@ -46,7 +47,7 @@ before_count="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM test_table;")
 before_count="$(echo "$before_count" | tr -d '[:space:]')"
 log_line "INSERT_OK"
 
-backup_path="$(bash /app/scripts/db_backup.sh)"
+backup_path="$(bash "${APP_ROOT}/scripts/db_backup.sh")"
 backup_path="$(echo "$backup_path" | tail -n 1)"
 if [[ ! -s "$backup_path" ]]; then
   echo "ERROR: backup file empty" >&2
@@ -60,7 +61,7 @@ if ! psql "$PSQL_DB_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE TABLE test_table;" >/de
 fi
 log_line "DB_RESET_OK"
 
-if ! bash /app/scripts/db_restore.sh "$backup_path" --reset >/dev/null; then
+if ! bash "${APP_ROOT}/scripts/db_restore.sh" "$backup_path" --reset >/dev/null; then
   echo "ERROR: restore failed" >&2
   exit 1
 fi

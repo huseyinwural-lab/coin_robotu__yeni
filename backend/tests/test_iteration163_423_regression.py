@@ -11,7 +11,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trade-flow-deploy.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trade-platform-s3.preview.emergentagent.com").rstrip("/")
 
 # Test credentials
 ADMIN_EMAIL = "admin@platform.local"
@@ -298,7 +298,7 @@ class TestExecutionQueueApproveFlow:
             print(f"SUCCESS: Approved! status={data.get('status')}, execution_mode={data.get('execution_mode')}")
             assert data.get("status") in ["RELEASED", "APPROVED", "SUBMITTED"]
         elif approve_resp.status_code == 423:
-            print(f"FAIL: Got 423 for fresh intent with valid connection")
+            print("FAIL: Got 423 for fresh intent with valid connection")
             pytest.fail("423 EXECUTION_BLOCKED_BY_READINESS regression detected")
         else:
             print(f"Status: {approve_resp.status_code}, body: {approve_resp.text}")
@@ -413,7 +413,7 @@ class TestValidateOrderPrecheck:
         if "leverage_limit_exceeded" in codes:
             print("SUCCESS: Leverage limit violation detected correctly")
         else:
-            print(f"NOTE: No leverage violation - current limit may be >= 50")
+            print("NOTE: No leverage violation - current limit may be >= 50")
 
 
 class TestGuardTelemetry:

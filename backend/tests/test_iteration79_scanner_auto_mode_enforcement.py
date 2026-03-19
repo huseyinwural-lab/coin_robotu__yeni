@@ -411,9 +411,9 @@ class TestOrderPrecheckFailedMessageContainsCodes:
             
             # This is a soft check - print for verification
             if has_codes_info:
-                print(f"  -> Message includes code/detail info")
+                print("  -> Message includes code/detail info")
             else:
-                print(f"  -> Message is base message (no specific codes)")
+                print("  -> Message is base message (no specific codes)")
 
 
 class TestFixAllBlockersRegressionAndCounts:
@@ -462,7 +462,7 @@ class TestFixAllBlockersRegressionAndCounts:
                 reason = s.get("blocked_reason_code", "UNKNOWN")
                 reason_counts_before[reason] = reason_counts_before.get(reason, 0) + 1
         
-        print(f"\n=== BEFORE fix-all-blockers ===")
+        print("\n=== BEFORE fix-all-blockers ===")
         print(f"Total signals: {len(before_data)}")
         print(f"Blocked signals: {blocked_before_count}")
         print(f"Blocked by reason code: {reason_counts_before}")
@@ -472,7 +472,7 @@ class TestFixAllBlockersRegressionAndCounts:
         assert fix_response.status_code == 200
         fix_data = fix_response.json()
         
-        print(f"\n=== FIX-ALL RESULT ===")
+        print("\n=== FIX-ALL RESULT ===")
         print(f"scanned_count: {fix_data.get('scanned_count')}")
         print(f"blocked_before: {fix_data.get('blocked_before')}")
         print(f"fixed_count: {fix_data.get('fixed_count')}")
@@ -493,7 +493,7 @@ class TestFixAllBlockersRegressionAndCounts:
                 reason = s.get("blocked_reason_code", "UNKNOWN")
                 reason_counts_after[reason] = reason_counts_after.get(reason, 0) + 1
         
-        print(f"\n=== AFTER fix-all-blockers ===")
+        print("\n=== AFTER fix-all-blockers ===")
         print(f"Total signals: {len(after_data)}")
         print(f"Blocked signals: {blocked_after_count}")
         print(f"Blocked by reason code: {reason_counts_after}")
@@ -549,7 +549,7 @@ class TestPrecheckMessageSampleText:
             if s.get("blocked_reason_code") == "ORDER_PRECHECK_FAILED"
         ]
         
-        print(f"\n=== SAMPLE PRECHECK MESSAGE TEXT ===")
+        print("\n=== SAMPLE PRECHECK MESSAGE TEXT ===")
         print(f"Found {len(precheck_signals)} ORDER_PRECHECK_FAILED signals")
         
         for i, signal in enumerate(precheck_signals[:3]):  # Sample 3

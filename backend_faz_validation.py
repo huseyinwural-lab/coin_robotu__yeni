@@ -14,14 +14,12 @@ Expected format: PASS/FAIL ve kısa kanıtlar
 """
 
 import requests
-import json
 import sys
 import time
 from datetime import datetime
-from typing import Dict, Any, List
 
 # Configuration
-BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 API_URL = f"{BASE_URL}/api"
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
 ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")

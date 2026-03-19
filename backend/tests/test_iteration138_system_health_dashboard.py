@@ -52,7 +52,7 @@ class TestSystemHealthDashboardBackend:
     def test_user_login(self):
         """Test user authentication"""
         assert self._login_user(), "User login failed"
-        print(f"TEST PASS: User login successful, token obtained")
+        print("TEST PASS: User login successful, token obtained")
     
     def test_exchange_connections_endpoint_returns_new_fields(self):
         """Test GET /api/user/exchange-connections returns new System Health Dashboard fields"""
@@ -181,7 +181,7 @@ class TestSystemHealthDashboardBackend:
             assert "at" in entry, "Latency history entry missing 'at' field"
             assert "latency_ms" in entry, "Latency history entry missing 'latency_ms' field"
             assert "source" in entry, "Latency history entry missing 'source' field"
-            print(f"TEST PASS: Latency history entry structure validated")
+            print("TEST PASS: Latency history entry structure validated")
         else:
             print("TEST INFO: No latency history entries yet (MOCKED exchange adapters)")
         
@@ -274,7 +274,7 @@ class TestSystemHealthDashboardBackend:
         
         data = response.json()
         assert "exchange" in data or "mode" in data, "Expected exchange/mode in response"
-        print(f"TEST PASS: Phase4 exchange settings endpoint working")
+        print("TEST PASS: Phase4 exchange settings endpoint working")
     
     def test_venues_options_endpoint(self):
         """Test venues options endpoint still working"""
@@ -322,7 +322,7 @@ class TestSystemHealthDashboardBackend:
         
         data = response.json()
         assert "overall_status" in data or "live_activation" in data, "Expected status fields"
-        print(f"TEST PASS: Permission status endpoint working")
+        print("TEST PASS: Permission status endpoint working")
 
 
 class TestRegressionExistingTabs:
@@ -359,7 +359,7 @@ class TestRegressionExistingTabs:
         for field in expected_fields:
             assert field in data, f"Missing risk settings field: {field}"
         
-        print(f"TEST PASS: Risk settings endpoint working with all expected fields")
+        print("TEST PASS: Risk settings endpoint working with all expected fields")
     
     def test_user_risk_preview(self):
         """Test user risk preview endpoint"""
@@ -374,7 +374,7 @@ class TestRegressionExistingTabs:
         data = response.json()
         assert "current_capital" in data, "Missing current_capital in preview"
         assert "position_size" in data, "Missing position_size in preview"
-        print(f"TEST PASS: Risk preview endpoint working")
+        print("TEST PASS: Risk preview endpoint working")
     
     def test_venues_access_check(self):
         """Test venues access check endpoint"""
@@ -386,7 +386,7 @@ class TestRegressionExistingTabs:
             "environment": "testnet"
         })
         assert response.status_code == 200, f"Access check failed: {response.text}"
-        print(f"TEST PASS: Venues access check endpoint working")
+        print("TEST PASS: Venues access check endpoint working")
     
     def test_market_ticker(self):
         """Test market ticker endpoint"""

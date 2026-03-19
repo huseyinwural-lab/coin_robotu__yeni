@@ -14,7 +14,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+    BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 
 
 class TestAuthSetup:
@@ -74,7 +74,7 @@ class TestExchangeConnectionsNewFields(TestAuthSetup):
         if len(data) > 0:
             conn = data[0]
             assert "action_required_message" in conn, "action_required_message field missing"
-        print(f"PASS: action_required_message field present")
+        print("PASS: action_required_message field present")
 
     def test_exchange_connections_returns_validation_24h_metrics(self, user_token):
         """validation_success_24h, validation_fail_24h, validation_success_rate_24h fields must be present"""
@@ -217,7 +217,7 @@ class TestBotSoftDeleteRegression(TestAuthSetup):
         # The soft-deleted bot should not appear in the list
         active_bot_ids = [b["id"] for b in bots if not b.get("is_deleted", False)]
         assert bot_id not in active_bot_ids, "Soft-deleted bot should not appear in active bot list"
-        print(f"PASS: Soft-deleted bot not in active list")
+        print("PASS: Soft-deleted bot not in active list")
 
 
 class TestScannerLoadRegression(TestAuthSetup):
@@ -233,7 +233,7 @@ class TestScannerLoadRegression(TestAuthSetup):
         assert response.status_code == 200, f"Scanner overview failed: {response.text}"
         data = response.json()
         assert "mode" in data or "latest_run_id" in data, "Scanner overview missing expected fields"
-        print(f"PASS: Scanner overview loads successfully")
+        print("PASS: Scanner overview loads successfully")
 
     def test_scanner_results_loads(self, user_token):
         """Scanner results endpoint should load"""
@@ -256,7 +256,7 @@ class TestScannerLoadRegression(TestAuthSetup):
             timeout=15,
         )
         assert response.status_code == 200, f"Scanner automation failed: {response.text}"
-        print(f"PASS: Scanner automation loads successfully")
+        print("PASS: Scanner automation loads successfully")
 
 
 class TestTradesTimeColumnsRegression(TestAuthSetup):
@@ -282,7 +282,7 @@ class TestTradesTimeColumnsRegression(TestAuthSetup):
             assert "closed_at" in trade, "closed_at column missing from trade"
             print(f"PASS: Trades has time columns - opened_at={trade.get('opened_at')}, closed_at={trade.get('closed_at')}")
         else:
-            print(f"PASS: Trades endpoint works, no trades to verify columns (0 trades)")
+            print("PASS: Trades endpoint works, no trades to verify columns (0 trades)")
 
 
 class TestHealthLoopBackendRunning(TestAuthSetup):
@@ -294,7 +294,7 @@ class TestHealthLoopBackendRunning(TestAuthSetup):
         assert response.status_code == 200
         data = response.json()
         assert data.get("status") == "ok", f"Health check failed: {data}"
-        print(f"PASS: Backend health check OK")
+        print("PASS: Backend health check OK")
 
     def test_exchange_connections_liveness_fields_stable(self, user_token):
         """Exchange connections should return stable liveness fields without errors"""

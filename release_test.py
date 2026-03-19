@@ -15,11 +15,10 @@ import os
 import sys
 import subprocess
 import requests
-import json
 from datetime import datetime
 
 # Backend URL from environment
-BACKEND_URL = "https://trade-flow-deploy.preview.emergentagent.com/api"
+BACKEND_URL = "https://trade-platform-s3.preview.emergentagent.com/api"
 
 # Test admin credentials
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
@@ -299,7 +298,7 @@ def test_5_endpoint_regression():
         
         if response.status_code == 200:
             log_test("GET /api/user/scanner/symbol-selection", "PASS", 
-                    f"Status 200, endpoint accessible")
+                    "Status 200, endpoint accessible")
         elif response.status_code == 403:
             # Expected - this endpoint requires user-level authentication
             # Let's try the register+approve+login flow
@@ -310,7 +309,7 @@ def test_5_endpoint_regression():
                                       headers=user_headers, timeout=10)
                 if response.status_code == 200:
                     log_test("GET /api/user/scanner/symbol-selection", "PASS", 
-                            f"Status 200 with user token")
+                            "Status 200 with user token")
                 else:
                     log_test("GET /api/user/scanner/symbol-selection", "FAIL", 
                             f"HTTP {response.status_code} with user token")

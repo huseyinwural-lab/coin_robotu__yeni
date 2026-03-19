@@ -39,7 +39,7 @@ class TestAuthFlow:
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
-        print(f"[PASS] User login successful")
+        print("[PASS] User login successful")
         return data.get("access_token")
     
     def test_admin_login(self):
@@ -50,7 +50,7 @@ class TestAuthFlow:
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
-        print(f"[PASS] Admin login successful")
+        print("[PASS] Admin login successful")
         return data.get("access_token")
 
 
@@ -138,7 +138,7 @@ class TestTradingPreviewLeverageFields:
             # Check if error response structure is correct
             print(f"[INFO] Preview returned status {response.status_code}, checking error format")
             assert response.status_code in [400, 429], f"Unexpected error status: {response.status_code}"
-            print(f"[PASS] Preview endpoint accessible but blocked (expected in test environment)")
+            print("[PASS] Preview endpoint accessible but blocked (expected in test environment)")
     
     def test_preview_spot_leverage_fields_null(self, user_token):
         """Verify spot preview returns null/None leverage fields"""
@@ -179,7 +179,7 @@ class TestTradingPreviewLeverageFields:
                   f"applied={preview.get('applied_leverage')}")
         else:
             print(f"[INFO] Spot preview returned status {response.status_code}")
-            print(f"[PASS] Preview endpoint accessible")
+            print("[PASS] Preview endpoint accessible")
     
     def test_preview_normalized_payload_leverage(self, user_token):
         """Verify applied_leverage is written to normalized_order_payload post risk clamp"""
@@ -228,10 +228,10 @@ class TestTradingPreviewLeverageFields:
             if normalized.get("leverage_applied") is not None:
                 assert normalized.get("leverage") == normalized.get("leverage_applied"), \
                     "leverage should equal leverage_applied in normalized payload"
-                print(f"[PASS] leverage equals leverage_applied in normalized payload (regression check)")
+                print("[PASS] leverage equals leverage_applied in normalized payload (regression check)")
         else:
             print(f"[INFO] Preview returned status {response.status_code}")
-            print(f"[PASS] Preview endpoint accessible")
+            print("[PASS] Preview endpoint accessible")
 
 
 class TestExchangeTestOrderLeverageFields:
@@ -254,7 +254,7 @@ class TestExchangeTestOrderLeverageFields:
             
             if readiness.get("readiness_status") != "ready_for_test_order":
                 print(f"[INFO] Not ready for test-order: {readiness.get('last_error_reason')}")
-                print(f"[PASS] Readiness check passed (test-order blocked due to credentials)")
+                print("[PASS] Readiness check passed (test-order blocked due to credentials)")
                 return
         
         # Attempt test order
@@ -292,10 +292,10 @@ class TestExchangeTestOrderLeverageFields:
             # Expected when credentials not configured
             error = response.json().get("detail", {})
             print(f"[INFO] Test-order blocked (expected): {error.get('failure_code', error)}")
-            print(f"[PASS] Test-order endpoint stable (blocked due to environment)")
+            print("[PASS] Test-order endpoint stable (blocked due to environment)")
         else:
             print(f"[INFO] Test-order unexpected status: {response.status_code}")
-            print(f"[PASS] Test-order endpoint accessible")
+            print("[PASS] Test-order endpoint accessible")
 
 
 class TestRegressionLoginScannerExchange:
@@ -311,7 +311,7 @@ class TestRegressionLoginScannerExchange:
         data = response.json()
         assert "access_token" in data
         assert "user" in data
-        print(f"[PASS] Login regression - user authenticated")
+        print("[PASS] Login regression - user authenticated")
     
     def test_scanner_run_regression(self, user_token):
         """Verify scanner run endpoint still works"""
@@ -329,7 +329,7 @@ class TestRegressionLoginScannerExchange:
             print(f"[PASS] Scanner run regression - run_id: {data.get('run_id')}")
         else:
             print(f"[INFO] Scanner run status: {response.status_code}")
-            print(f"[PASS] Scanner endpoint accessible")
+            print("[PASS] Scanner endpoint accessible")
     
     def test_exchange_settings_regression(self, user_token):
         """Verify exchange settings endpoint still works"""
@@ -392,8 +392,8 @@ class TestOverviewHealthDashboardRegression:
             
             print(f"[PASS] System Health Dashboard fields present: {list(connection.keys())[:10]}...")
         else:
-            print(f"[INFO] No connection profiles to verify")
-            print(f"[PASS] Exchange connections endpoint works")
+            print("[INFO] No connection profiles to verify")
+            print("[PASS] Exchange connections endpoint works")
     
     def test_user_risk_overview_regression(self, user_token):
         """Verify user risk overview endpoint still works"""
@@ -447,10 +447,10 @@ class TestSchemaContract:
             for field in leverage_schema_fields:
                 assert field in preview, f"Schema violation: missing {field}"
             
-            print(f"[PASS] ExecutionIntentPreviewResponse schema contract verified")
+            print("[PASS] ExecutionIntentPreviewResponse schema contract verified")
         else:
             print(f"[INFO] Preview status: {response.status_code}")
-            print(f"[PASS] Endpoint accessible, schema will be verified when credentials configured")
+            print("[PASS] Endpoint accessible, schema will be verified when credentials configured")
 
 
 if __name__ == "__main__":

@@ -6,12 +6,10 @@ Tests the 6 specific items mentioned in the release validation request.
 """
 
 import requests
-import json
 import sys
-from typing import Dict, Any, Tuple
 
 # Backend URL from frontend/.env
-BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 class FinalReleaseValidator:
@@ -196,7 +194,6 @@ class FinalReleaseValidator:
 
     def _test_user_scanner_flow(self) -> bool:
         """Test user registration → admin approval → user login → scanner endpoint"""
-        import random
         import time
         
         # Generate unique test user

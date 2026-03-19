@@ -80,7 +80,7 @@ class TestScannerAutomationConfigGET:
         ]
         for field in required_fields:
             assert field in data, f"Missing required field: {field}"
-        print(f"All required fields present in response")
+        print("All required fields present in response")
 
 
 class TestScannerAutomationConfigPUT:
@@ -222,7 +222,7 @@ class TestScannerAutomationStatus:
         else:
             # When disabled, next_run_at should be None
             assert data.get("next_run_at") is None
-        print(f"next_run_at calculation verified")
+        print("next_run_at calculation verified")
 
 
 class TestScannerRunEndpoint:

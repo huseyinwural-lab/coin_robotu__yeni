@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ARTIFACT_LOG="/app/artifacts/backup.log"
-BACKUP_DIR="/app/backups"
+APP_ROOT="${APP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+ARTIFACT_LOG="${APP_ROOT}/artifacts/backup.log"
+BACKUP_DIR="${APP_ROOT}/backups"
 KEEP_COUNT="${BACKUP_KEEP_COUNT:-7}"
 NOW_TS="$(date +%F_%H-%M-%S)"
 OUT_PATH="${1:-${BACKUP_DIR}/db_${NOW_TS}.sql}"
 DB_URL="${DATABASE_URL:-}"
 PSQL_DB_URL=""
 
-mkdir -p /app/artifacts "$BACKUP_DIR"
+mkdir -p "${APP_ROOT}/artifacts" "$BACKUP_DIR"
 
 log() {
   local line
@@ -21,10 +22,10 @@ load_env_if_missing() {
   if [[ -n "$DB_URL" ]]; then
     return
   fi
-  if [[ -f /app/backend/.env ]]; then
+  if [[ -f "${APP_ROOT}/backend/.env" ]]; then
     set -a
     # shellcheck disable=SC1091
-    source /app/backend/.env
+    source "${APP_ROOT}/backend/.env"
     set +a
     DB_URL="${DATABASE_URL:-}"
   fi
@@ -70,4 +71,19 @@ if (( ${#backup_files[@]} > KEEP_COUNT )); then
 fi
 
 log "BACKUP_OK path=$OUT_PATH size_bytes=$(wc -c < "$OUT_PATH")"
+
+S3_UPLOAD_CLI="${APP_ROOT}/backend/cli/upload_backup_to_s3.py"
+if [[ -f "$S3_UPLOAD_CLI" ]]; then
+  if ! s3_output="$(PYTHONPATH="${APP_ROOT}/backend" python "$S3_UPLOAD_CLI" "$OUT_PATH" 2>&1)"; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && log "$line"
+    done <<< "$s3_output"
+    log "ERROR: S3 upload adımı başarısız"
+    exit 1
+  fi
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && log "$line"
+  done <<< "$s3_output"
+fi
+
 echo "$OUT_PATH"

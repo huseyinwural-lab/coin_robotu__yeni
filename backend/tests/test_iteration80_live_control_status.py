@@ -265,7 +265,7 @@ class TestIteration80LiveControlStatus:
         blocker_code = current_blocker.get("blocked_reason_code") if current_blocker else "-"
         
         # All fields should be computable
-        print(f"Live Control Status Fields:")
+        print("Live Control Status Fields:")
         print(f"  Signal Mode: {raw_mode}")
         print(f"  Bot Runtime: {bot_runtime} ({active_bot_count})")
         print(f"  Execution Path: {execution_path}")

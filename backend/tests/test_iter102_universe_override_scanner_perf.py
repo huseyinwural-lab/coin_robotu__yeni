@@ -286,7 +286,7 @@ class TestUniverseMonitorMetrics:
         assert "queue_depth" in data, "Should have queue_depth"
         assert "dropped_evaluations" in data, "Should have dropped_evaluations"
         
-        print(f"Universe monitor metrics:")
+        print("Universe monitor metrics:")
         print(f"  average_cycle_latency_ms: {data.get('average_cycle_latency_ms')}")
         print(f"  stale_blocks: {data.get('stale_blocks')}")
         print(f"  queue_depth: {data.get('queue_depth')}")

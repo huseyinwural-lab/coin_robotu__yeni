@@ -6,17 +6,15 @@ COMPREHENSIVE RELEASE READINESS TEST
 Detailed audit for production deployment readiness.
 Testing critical backend endpoints and authentication flows.
 
-Base URL: https://trade-flow-deploy.preview.emergentagent.com
+Base URL: https://trade-platform-s3.preview.emergentagent.com
 """
 
 import requests
 import json
-import sys
 from datetime import datetime
-import time
 
 # Configuration
-BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 ADMIN_EMAIL = "admin@platform.local"
 ADMIN_PASSWORD = "Admin12345!"
 TEST_USER_EMAIL = "testuser1773706589@example.com"
@@ -637,16 +635,16 @@ class ReleaseReadinessTest:
         print(f"🏷️  Priority: {priority}")
         
         if self.test_results["blocking_issues"]:
-            print(f"\n❌ P0 BLOCKING ISSUES:")
+            print("\n❌ P0 BLOCKING ISSUES:")
             for issue in self.test_results["blocking_issues"]:
                 print(f"   - {issue}")
         
         if self.test_results["warnings"]:
-            print(f"\n⚠️  P1/P2 WARNINGS:")
+            print("\n⚠️  P1/P2 WARNINGS:")
             for warning in self.test_results["warnings"]:
                 print(f"   - {warning}")
         
-        print(f"\n📋 TECHNICAL EVIDENCE:")
+        print("\n📋 TECHNICAL EVIDENCE:")
         print(f"   - Backend health: {'✅' if self.test_results.get('backend_health', {}).get('GET /api/health = 200', {}).get('success') else '❌'}")
         print(f"   - Admin auth: {'✅' if self.admin_token else '❌'}")
         print(f"   - User auth: {'✅' if self.user_token else '❌'}")
@@ -654,7 +652,7 @@ class ReleaseReadinessTest:
         print(f"   - Frontend: {'✅' if self.test_results.get('frontend_smoke', {}).get('Landing page accessibility', {}).get('success') else '❌'}")
         
         if critical_failures == 0:
-            print(f"\n🚀 QUICK ACTION PLAN (Canlıya çıkmak için en kısa yol):")
+            print("\n🚀 QUICK ACTION PLAN (Canlıya çıkmak için en kısa yol):")
             print("   1. ✅ All critical systems operational")
             if warnings > 0:
                 print("   2. 📊 Monitor warning conditions during deployment")
@@ -663,7 +661,7 @@ class ReleaseReadinessTest:
                 print("   2. 🎯 Deploy immediately - all systems green")
             print("   3. 📈 Monitor production metrics after deployment")
         else:
-            print(f"\n🛠️  REQUIRED FIXES BEFORE DEPLOYMENT:")
+            print("\n🛠️  REQUIRED FIXES BEFORE DEPLOYMENT:")
             print("   1. ❌ Resolve all P0 blocking issues listed above")
             print("   2. 🔄 Re-run this test suite after fixes")
             print("   3. 📋 Verify all critical endpoints return 200")

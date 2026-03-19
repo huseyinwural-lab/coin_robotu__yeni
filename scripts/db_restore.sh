@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+APP_ROOT="${APP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
 if [[ $# -lt 1 ]]; then
   echo "Kullanım: bash /app/scripts/db_restore.sh <backup_path> [--reset]"
   exit 1
@@ -10,9 +12,9 @@ BACKUP_PATH="$1"
 RESET_DB="${2:-}"
 DB_URL="${DATABASE_URL:-}"
 PSQL_DB_URL=""
-ARTIFACT_LOG="/app/artifacts/restore.log"
+ARTIFACT_LOG="${APP_ROOT}/artifacts/restore.log"
 
-mkdir -p /app/artifacts
+mkdir -p "${APP_ROOT}/artifacts"
 
 log() {
   local line
@@ -24,10 +26,10 @@ load_env_if_missing() {
   if [[ -n "$DB_URL" ]]; then
     return
   fi
-  if [[ -f /app/backend/.env ]]; then
+  if [[ -f "${APP_ROOT}/backend/.env" ]]; then
     set -a
     # shellcheck disable=SC1091
-    source /app/backend/.env
+    source "${APP_ROOT}/backend/.env"
     set +a
     DB_URL="${DATABASE_URL:-}"
   fi

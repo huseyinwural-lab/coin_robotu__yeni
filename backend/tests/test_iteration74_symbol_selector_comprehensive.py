@@ -19,7 +19,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+    BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 
 ADMIN_CREDENTIALS = {"email": os.environ.get("TEST_ADMIN_EMAIL", ""), "password": os.environ.get("TEST_ADMIN_PASSWORD", "")}
 
@@ -196,7 +196,7 @@ class TestSymbolSelectorAPIBasics:
         # If no Alpha Vantage key, should have a warning
         if not data.get("has_provider_key"):
             assert "alpha_vantage_key_missing" in warnings
-            print(f"PASS: Stock source correctly returns alpha_vantage_key_missing warning")
+            print("PASS: Stock source correctly returns alpha_vantage_key_missing warning")
         else:
             print(f"PASS: Stock source has provider key, returned {len(data.get('rows', []))} rows")
 
@@ -534,7 +534,7 @@ class TestAdminControlSymbolUniverse:
         assert response.status_code == 200
         data = response.json()
         assert "BTCUSDT" in data.get("spot_universe", [])
-        print(f"PASS: Updated admin control universe")
+        print("PASS: Updated admin control universe")
 
 
 class TestRegressionExistingEndpoints:

@@ -5,14 +5,12 @@ Comprehensive testing for doğrulama paketi requirements.
 """
 import requests
 import subprocess
-import json
 import sys
 import os
-import time
-from typing import Dict, Any, List, Tuple
+from typing import Tuple
 
 # Configuration
-BACKEND_URL = "https://trade-flow-deploy.preview.emergentagent.com/api"
+BACKEND_URL = "https://trade-platform-s3.preview.emergentagent.com/api"
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
 ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")
 
@@ -153,7 +151,7 @@ def test_endpoint_user_scanner_symbol_selection():
             # Skip the detailed test for now as it requires user token
             return True, f"API accessible, found {len(users)} active users for potential testing"
         else:
-            return True, f"API accessible, no active users found (expected in test environment)"
+            return True, "API accessible, no active users found (expected in test environment)"
     else:
         return False, f"Admin users endpoint failed: {response.status_code}"
 
@@ -294,13 +292,13 @@ def main():
         else:
             failed += 1
     
-    print(f"\n=== VALIDATION SUMMARY ===")
+    print("\n=== VALIDATION SUMMARY ===")
     print(f"Total tests: {len(tests)}")
     print(f"✅ Passed: {passed}")
     print(f"❌ Failed: {failed}")
     
     if failed == 0:
-        print(f"\n🎉 ALL FAZ VALIDATION TESTS PASSED!")
+        print("\n🎉 ALL FAZ VALIDATION TESTS PASSED!")
         return True
     else:
         print(f"\n💥 {failed} VALIDATION TESTS FAILED!")

@@ -181,7 +181,7 @@ class TestFallbackTimelineAPI:
         for field in fallback_fields:
             assert field in data, f"Summary must have '{field}' field"
         
-        print(f"PASS: Admin universe monitor includes all fallback fields:")
+        print("PASS: Admin universe monitor includes all fallback fields:")
         print(f"  - fallback_active: {data.get('fallback_active')}")
         print(f"  - fallback_healthy_streak: {data.get('fallback_healthy_streak')}")
         print(f"  - fallback_last_trigger_metric: {data.get('fallback_last_trigger_metric')}")
@@ -215,7 +215,7 @@ class TestFallbackTimelineAPI:
         for field in required_fallback_fields:
             assert field in scanner_perf, f"scanner_perf must have '{field}'"
         
-        print(f"PASS: Scanner run returns fallback resolution fields:")
+        print("PASS: Scanner run returns fallback resolution fields:")
         print(f"  - requested_selection_mode: {scanner_perf.get('requested_selection_mode')}")
         print(f"  - effective_selection_mode: {scanner_perf.get('effective_selection_mode')}")
         print(f"  - overload_fallback_applied: {scanner_perf.get('overload_fallback_applied')}")
@@ -242,7 +242,7 @@ class TestFallbackTimelineAPI:
         assert "active" in fallback_state, "fallback_state must have 'active'"
         assert "healthy_streak" in fallback_state, "fallback_state must have 'healthy_streak'"
         
-        print(f"PASS: scanner_perf includes fallback_state:")
+        print("PASS: scanner_perf includes fallback_state:")
         print(f"  - active: {fallback_state.get('active')}")
         print(f"  - healthy_streak: {fallback_state.get('healthy_streak')}")
     
@@ -267,7 +267,7 @@ class TestFallbackTimelineAPI:
         for metric in perf_metrics:
             assert metric in scanner_perf, f"scanner_perf must have '{metric}'"
         
-        print(f"PASS: Scanner perf contains threshold metrics:")
+        print("PASS: Scanner perf contains threshold metrics:")
         print(f"  - cycle_duration_ms: {scanner_perf.get('cycle_duration_ms')}")
         print(f"  - queue_backlog: {scanner_perf.get('queue_backlog')}")
         print(f"  - stale_block_count: {scanner_perf.get('stale_block_count')}")
@@ -337,4 +337,4 @@ class TestFallbackTimelineAPI:
         scanner_perf = data.get("scanner_perf", {})
         assert scanner_perf.get("requested_selection_mode") == "top_volume" or scanner_perf.get("effective_selection_mode") == "top_volume", \
             "top_volume mode should be reflected in scanner_perf"
-        print(f"PASS: Scanner run with top_volume mode succeeds")
+        print("PASS: Scanner run with top_volume mode succeeds")

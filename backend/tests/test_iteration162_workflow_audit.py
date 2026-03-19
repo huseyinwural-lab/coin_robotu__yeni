@@ -16,7 +16,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+    BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 
 ADMIN_EMAIL = "admin@platform.local"
 ADMIN_PASSWORD = "Admin12345!"
@@ -149,7 +149,7 @@ class TestAdminCoreAPIs:
         data = response.json()
         # Verify expected fields
         assert isinstance(data, dict), "Guard telemetry should return dict"
-        print(f"PASS: Guard telemetry returned valid response")
+        print("PASS: Guard telemetry returned valid response")
 
     def test_execution_queue_endpoint(self, admin_token):
         """Test /api/admin/execution-queue returns valid response"""
@@ -167,7 +167,7 @@ class TestAdminCoreAPIs:
         assert response.status_code == 200, f"Admin dashboard failed with {response.status_code}: {response.text}"
         data = response.json()
         assert isinstance(data, dict), "Dashboard should return dict"
-        print(f"PASS: Admin dashboard returned valid response")
+        print("PASS: Admin dashboard returned valid response")
 
 
 class TestUserTradeAPIFlow:
@@ -200,7 +200,7 @@ class TestUserTradeAPIFlow:
             if response.status_code == 200:
                 return response.json()["access_token"]
         
-        pytest.skip(f"User login/registration failed")
+        pytest.skip("User login/registration failed")
 
     def test_validate_order_valid_payload(self, user_token):
         """Test validate-order with valid payload"""
@@ -488,7 +488,7 @@ class TestApproveEndpointRegression:
         assert approve_response.status_code == 400, (
             f"Expected 400 for nonexistent intent, got {approve_response.status_code}"
         )
-        print(f"PASS: Approve nonexistent intent correctly returned 400")
+        print("PASS: Approve nonexistent intent correctly returned 400")
 
 
 class TestScreenerExplainContract:

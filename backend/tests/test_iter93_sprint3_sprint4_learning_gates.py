@@ -87,7 +87,7 @@ class TestStrategyFamilyGates:
         ]
         for field in required_fields:
             assert field in gate, f"Missing required field: {field}"
-        print(f"PASS: Gate schema contains all required fields")
+        print("PASS: Gate schema contains all required fields")
 
     def test_put_strategy_family_gates_updates_persist(self, admin_token):
         """PUT /api/admin/strategy-family-gates should persist updates"""
@@ -125,7 +125,7 @@ class TestStrategyFamilyGates:
         trend_gate = next((g for g in data if g["family"] == "trend"), None)
         assert trend_gate is not None, "Trend gate not found in response"
         assert float(trend_gate["long_threshold"]) == 5.5, "long_threshold not updated"
-        print(f"PASS: PUT strategy-family-gates persisted update (long_threshold=5.5)")
+        print("PASS: PUT strategy-family-gates persisted update (long_threshold=5.5)")
 
         # Restore original value
         restore_payload = {

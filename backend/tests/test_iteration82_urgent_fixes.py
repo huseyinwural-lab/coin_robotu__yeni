@@ -120,7 +120,7 @@ class TestScannerRegression:
         data = response.json()
         # Should have mode field
         assert "mode" in data or "total_results" in data or isinstance(data, dict)
-        print(f"PASS: Scanner overview returned data")
+        print("PASS: Scanner overview returned data")
     
     def test_scanner_results_returns_list(self, user_token):
         """GET /api/user/scanner/results should return list"""
@@ -207,7 +207,7 @@ class TestExchangeValidateNoAssignmentRequired:
             reason_codes = detail.get("reason_codes", []) if isinstance(detail, dict) else []
             print(f"Validate returned {response.status_code} with reason_codes: {reason_codes}")
         else:
-            print(f"PASS: Validate returned 200")
+            print("PASS: Validate returned 200")
     
     def test_validate_reason_codes_contract(self, user_token_and_id):
         """Test that validate response has proper reason_codes field"""
@@ -348,7 +348,7 @@ class TestExchangeValidateNoAssignmentRequired:
         if found_forbidden and validate_response.status_code >= 400:
             # Check if this is because connection wasn't created
             if "matching_connection_not_found" in reason_codes:
-                print(f"NOTE: Connection not found, so assignment_required is valid")
+                print("NOTE: Connection not found, so assignment_required is valid")
             else:
                 # This is the bug - should not have assignment_required when connection exists
                 assert False, f"FAIL: Found forbidden reason codes {found_forbidden} when user has matching connection. Expected credential-based failure (invalid_key, etc.) not assignment-based."
@@ -453,13 +453,13 @@ class TestExchangeValidateWithVenueAssignment:
             # Should NOT be assignment_required or settings_mismatch
             # Expected: invalid_key (because we used fake credentials)
             assert "assignment_required" not in reason_codes, \
-                f"Should not have assignment_required when venue access is assigned"
+                "Should not have assignment_required when venue access is assigned"
             
             # After the fix, settings_mismatch should also not appear if connection exists
             if "settings_mismatch" in reason_codes:
-                print(f"NOTE: settings_mismatch still present - may need connection sync")
+                print("NOTE: settings_mismatch still present - may need connection sync")
         
-        print(f"PASS: Validate did not fail with assignment_required")
+        print("PASS: Validate did not fail with assignment_required")
 
 
 if __name__ == "__main__":

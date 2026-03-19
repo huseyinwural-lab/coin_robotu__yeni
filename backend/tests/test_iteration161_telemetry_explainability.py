@@ -24,7 +24,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+    BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 
 ADMIN_EMAIL = "admin@platform.local"
 ADMIN_PASSWORD = "Admin12345!"

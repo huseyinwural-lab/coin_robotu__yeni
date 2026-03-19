@@ -205,7 +205,7 @@ class TestUserDecisionCards:
         
         assert data["schema_version"] == "decision-card.v1", f"Expected schema_version=decision-card.v1, got {data['schema_version']}"
         assert data["engine_version"] == "canonical-engine.v3", f"Expected engine_version=canonical-engine.v3, got {data['engine_version']}"
-        print(f"PASS: Decision cards envelope contract fields correct")
+        print("PASS: Decision cards envelope contract fields correct")
     
     def test_decision_card_item_fields(self, user_client):
         """Each decision card item has required fields."""
@@ -248,7 +248,7 @@ class TestUserDecisionCardBySymbol:
             assert "decision" in data, "Response should have decision"
             print(f"PASS: GET /api/user/decision-cards/BTCUSDT returns 200 with decision={data['decision']}")
         else:
-            print(f"PASS: GET /api/user/decision-cards/BTCUSDT returns 404 (no card available)")
+            print("PASS: GET /api/user/decision-cards/BTCUSDT returns 404 (no card available)")
     
     def test_decision_card_contract_fields(self, user_client):
         """Decision card has schema_version, engine_version, generated_at."""
@@ -263,7 +263,7 @@ class TestUserDecisionCardBySymbol:
         assert "schema_version" in data, "Response should have schema_version"
         assert "engine_version" in data, "Response should have engine_version"
         assert "generated_at" in data, "Response should have generated_at"
-        print(f"PASS: Decision card contract fields present")
+        print("PASS: Decision card contract fields present")
 
 
 class TestUserExplainability:
@@ -280,7 +280,7 @@ class TestUserExplainability:
             assert "final_decision" in data, "Response should have final_decision"
             print(f"PASS: GET /api/user/explainability/BTCUSDT returns 200 with final_decision={data['final_decision']}")
         else:
-            print(f"PASS: GET /api/user/explainability/BTCUSDT returns 404 (no explainability data)")
+            print("PASS: GET /api/user/explainability/BTCUSDT returns 404 (no explainability data)")
     
     def test_explainability_contract_fields(self, user_client):
         """Explainability response has schema_version, engine_version, generated_at."""
@@ -319,7 +319,7 @@ class TestUserExplainability:
         # Verify final_decision is deterministic
         valid_decisions = {"LONG", "SHORT", "BLOCKED", "NO_TRADE"}
         assert data["final_decision"] in valid_decisions, f"Invalid final_decision: {data['final_decision']}"
-        print(f"PASS: Explainability payload has all required fields")
+        print("PASS: Explainability payload has all required fields")
     
     def test_source_strategies_status_values(self, user_client):
         """Source strategies have status: accepted/rejected/gated/blocked."""
@@ -361,7 +361,7 @@ class TestUserBlockedReasonTimeline:
             assert "items" in data, "Response should have items"
             print(f"PASS: GET /api/user/blocked-reason-timeline/BTCUSDT returns 200 with {len(data['items'])} items")
         else:
-            print(f"PASS: GET /api/user/blocked-reason-timeline/BTCUSDT returns 404 (no data)")
+            print("PASS: GET /api/user/blocked-reason-timeline/BTCUSDT returns 404 (no data)")
 
 
 class TestScannerRunStability:
@@ -428,7 +428,7 @@ class TestFamilyGatingReasons:
             assert isinstance(gate["long_threshold"], (int, float))
             assert isinstance(gate["short_threshold"], (int, float))
         
-        print(f"PASS: All family gates have threshold fields")
+        print("PASS: All family gates have threshold fields")
     
     def test_reversal_family_has_extra_confirmation(self, admin_client):
         """Reversal family gate has reversal_extra_confirmation field."""

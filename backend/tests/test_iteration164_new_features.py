@@ -160,7 +160,7 @@ class TestUserDashboardExecutionMode:
         
         # Verify basic dashboard fields
         assert "bot_count" in data or "running_bot_count" in data, "Dashboard missing bot count fields"
-        print(f"✓ User dashboard returned successfully")
+        print("✓ User dashboard returned successfully")
 
 
 class TestMfaBackupCodes:
@@ -304,7 +304,7 @@ class TestAdminExecutionQueueOwnerRevalidate:
         )
         
         assert resp.status_code == 404, f"Expected 404, got {resp.status_code}"
-        print(f"✓ Owner-revalidate returns 404 for invalid intent_id")
+        print("✓ Owner-revalidate returns 404 for invalid intent_id")
 
     def test_owner_revalidate_response_structure(self, admin_token):
         """Test owner-revalidate response structure if queue has items"""
@@ -345,14 +345,14 @@ class TestAdminExecutionQueueOwnerRevalidate:
             assert "can_trade" in data, "can_trade missing from response"
             assert "reason_codes" in data, "reason_codes missing from response"
             
-            print(f"✓ Owner-revalidate response structure valid")
+            print("✓ Owner-revalidate response structure valid")
             print(f"  - intent_id: {data.get('intent_id')}")
             print(f"  - can_trade: {data.get('can_trade')}")
             print(f"  - reason_codes: {data.get('reason_codes')}")
             print(f"  - connection_health: {data.get('connection_health')}")
             print(f"  - readiness_status: {data.get('readiness_status')}")
         else:
-            print(f"✓ Owner-revalidate returned 404 (owner has no exchange connection)")
+            print("✓ Owner-revalidate returned 404 (owner has no exchange connection)")
 
 
 class TestExplainabilityConfidenceRisk:
@@ -410,7 +410,7 @@ class TestExplainabilityConfidenceRisk:
         has_confidence = "confidence" in card or "decision_confidence" in card
         assert has_confidence, "Decision card missing confidence field"
         
-        print(f"✓ Decision cards returned with confidence data")
+        print("✓ Decision cards returned with confidence data")
         print(f"  - Total cards: {len(items)}")
         if "confidence" in card:
             print(f"  - Sample confidence: {card.get('confidence')}")
@@ -465,7 +465,7 @@ class TestStartLiveScript:
         """Verify start_live.sh script exists"""
         script_path = "/app/scripts/start_live.sh"
         assert os.path.exists(script_path), f"Script not found: {script_path}"
-        print(f"✓ start_live.sh script exists")
+        print("✓ start_live.sh script exists")
 
     def test_script_has_quick_full_flags(self):
         """Verify script supports --quick and --full flags"""
@@ -476,14 +476,14 @@ class TestStartLiveScript:
         assert "--quick" in content, "Script missing --quick flag support"
         assert "--full" in content, "Script missing --full flag support"
         assert "--json-out" in content, "Script missing --json-out flag support"
-        print(f"✓ start_live.sh has --quick, --full, --json-out flags")
+        print("✓ start_live.sh has --quick, --full, --json-out flags")
 
     def test_script_is_executable(self):
         """Verify script has executable permission"""
         script_path = "/app/scripts/start_live.sh"
         # Check if file exists and is readable
         assert os.access(script_path, os.R_OK), "Script is not readable"
-        print(f"✓ start_live.sh is readable")
+        print("✓ start_live.sh is readable")
 
 
 if __name__ == "__main__":

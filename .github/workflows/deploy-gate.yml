@@ -7,7 +7,6 @@ permissions:
 
 on:
   pull_request:
-    branches: ["main", "master"]
   push:
     branches: ["main", "master"]
   workflow_dispatch:
@@ -94,6 +93,77 @@ jobs:
             export LATENCY_BUDGET_PROFILE=dev
           fi
           pytest -q tests/test_execution_readiness_contract.py tests/test_release_gate_contract.py tests/test_api_latency_budget_contract.py
+
+  backup-restore-s3-gate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg2://trader:trader@localhost:5432/trading_platform
+      BACKUP_KEEP_COUNT: 7
+      BACKUP_S3_UPLOAD_REQUIRED: 1
+      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+      BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
+      BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
+      BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: trader
+          POSTGRES_PASSWORD: trader
+          POSTGRES_DB: trading_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U trader -d trading_platform"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install PostgreSQL client tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Validate required S3 secrets
+        run: |
+          required_vars=(BACKUP_S3_BUCKET BACKUP_AWS_ACCESS_KEY_ID BACKUP_AWS_SECRET_ACCESS_KEY BACKUP_AWS_REGION)
+          for key in "${required_vars[@]}"; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "Missing required secret/env: $key"
+              exit 1
+            fi
+          done
+
+      - name: Backup service unit test
+        working-directory: backend
+        run: pytest -q tests/test_s3_backup_service.py
+
+      - name: Backup + restore + S3 smoke
+        run: bash scripts/db_backup_restore_full_cycle_test.sh
+
+      - name: Upload backup smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-restore-s3-artifacts
+          path: |
+            artifacts/backup.log
+            artifacts/restore.log
+            artifacts/db_backup_restore_test.log
+            backups/*.sql
 
   frontend-quality-gate:
     runs-on: ubuntu-latest

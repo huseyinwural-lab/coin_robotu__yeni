@@ -38,7 +38,7 @@ def user_session(admin_session):
     session.headers.update({"Content-Type": "application/json"})
     
     # Try to login with existing user first
-    test_email = f"user1773706589@example.com"
+    test_email = "user1773706589@example.com"
     test_password = "User12345!"
     
     response = session.post(f"{BASE_URL}/api/auth/login", json={
@@ -281,7 +281,7 @@ class TestUserScannerResilience:
         """Test /api/user/decision-cards endpoint"""
         response = user_session.get(f"{BASE_URL}/api/user/decision-cards", params={"limit": 10})
         assert response.status_code == 200, f"Decision cards failed: {response.text}"
-        print(f"✓ Decision cards available")
+        print("✓ Decision cards available")
 
 
 class TestUserExchangeSettingsUIComponents:
@@ -314,7 +314,7 @@ class TestUserExchangeSettingsUIComponents:
             conn = connections[0]
             for field in expected_ui_fields:
                 assert field in conn, f"Missing UI field: {field}"
-            print(f"✓ All UI fields present for connection profile card rendering")
+            print("✓ All UI fields present for connection profile card rendering")
 
 
 class TestBackwardCompatibility:
@@ -339,7 +339,7 @@ class TestBackwardCompatibility:
             if "is_deleted" in bot:
                 assert bot["is_deleted"] in [True, False], "is_deleted should be boolean"
             
-            print(f"✓ Bot profile structure backward compatible")
+            print("✓ Bot profile structure backward compatible")
     
     def test_exchange_connection_old_fields_present(self, user_session):
         """Verify old exchange connection fields are still present"""
@@ -357,7 +357,7 @@ class TestBackwardCompatibility:
             for field in old_fields:
                 assert field in conn, f"Missing backward-compat field: {field}"
             
-            print(f"✓ Exchange connection structure backward compatible")
+            print("✓ Exchange connection structure backward compatible")
 
 
 if __name__ == "__main__":

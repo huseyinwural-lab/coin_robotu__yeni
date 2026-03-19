@@ -1,7 +1,7 @@
 {
   "ok": true,
   "mode": "quick",
-  "base_url": "https://trade-flow-deploy.preview.emergentagent.com",
+  "base_url": "https://trade-platform-s3.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",

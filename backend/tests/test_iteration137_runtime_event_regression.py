@@ -13,7 +13,7 @@ import uuid
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+    BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 
 # Test credentials from review request
 USER_EMAIL = "user1773706589@example.com"
@@ -221,7 +221,7 @@ class TestRevalidateHealthHistoryAccumulation:
         # Health history should be preserved (may or may not increase depending on state change)
         assert new_history_count >= 0, "health_history should exist"
         
-        print(f"PASS: health_history preserved after revalidate")
+        print("PASS: health_history preserved after revalidate")
         print(f"  Before: {initial_history_count} entries")
         print(f"  After: {new_history_count} entries")
 
@@ -344,7 +344,7 @@ class TestRegressionBotProfileDelete:
         delete_response = authenticated_user_client.delete(f"{BASE_URL}/api/bot-profiles/{bot_id}")
         assert delete_response.status_code in [200, 204], f"Bot delete failed: {delete_response.status_code}"
         
-        print(f"PASS: Bot profile CRUD (create/delete) working")
+        print("PASS: Bot profile CRUD (create/delete) working")
     
     def test_bot_profiles_list(self, authenticated_user_client):
         """GET /api/bot-profiles should return list"""

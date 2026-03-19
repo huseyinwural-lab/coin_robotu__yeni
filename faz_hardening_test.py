@@ -13,14 +13,12 @@ Usage: python faz_hardening_test.py
 """
 
 import requests
-import json
 import sys
 import time
 from datetime import datetime
-from typing import Dict, Any
 
 # Configuration
-BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 API_URL = f"{BASE_URL}/api"
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
 ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")
@@ -43,7 +41,7 @@ class TestResults:
     def print_summary(self):
         total = self.passed + self.failed
         print(f"\n{'='*60}")
-        print(f"FAZ-1 + FAZ-2 HARDENING VALIDATION RESULTS")
+        print("FAZ-1 + FAZ-2 HARDENING VALIDATION RESULTS")
         print(f"{'='*60}")
         print(f"TOTAL TESTS: {total}")
         print(f"PASSED: {self.passed}")
@@ -51,7 +49,7 @@ class TestResults:
         print(f"SUCCESS RATE: {(self.passed/total*100):.1f}%" if total > 0 else "0%")
         
         if self.errors:
-            print(f"\nFAILED TESTS:")
+            print("\nFAILED TESTS:")
             for error in self.errors:
                 print(f"  ❌ {error}")
         
@@ -217,10 +215,10 @@ def main():
     success = results.print_summary()
     
     if success:
-        print(f"\n🎉 FAZ-1 + FAZ-2 HARDENİNG DEĞİŞİKLİKLERİ DOĞRULANDI")
+        print("\n🎉 FAZ-1 + FAZ-2 HARDENİNG DEĞİŞİKLİKLERİ DOĞRULANDI")
         print("ÇIKIŞ: PASS - Tüm testler başarılı")
     else:
-        print(f"\n⚠️  FAZ-1 + FAZ-2 HARDENİNG VALİDASYON HATASI")
+        print("\n⚠️  FAZ-1 + FAZ-2 HARDENİNG VALİDASYON HATASI")
         print("ÇIKIŞ: FAIL - Bazı testler başarısız")
         
     return 0 if success else 1

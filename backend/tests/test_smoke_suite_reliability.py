@@ -66,7 +66,7 @@ class TestSmokeScriptReliability:
         
         # Should return gracefully, not crash
         assert response is None or error is not None, "Should handle timeout gracefully"
-        print(f"PASS: _http_request handles timeout gracefully")
+        print("PASS: _http_request handles timeout gracefully")
 
     def test_safe_json_handles_none_response(self):
         """Verify _safe_json returns empty dict for None response"""
@@ -161,7 +161,7 @@ class TestSmokeScriptExecution:
             output = json.loads(result.stdout)
             assert output["overall"] == "FAIL", "Expected overall=FAIL for unreachable URL"
             assert "checks" in output, "Missing checks field"
-            print(f"PASS: Smoke script gracefully failed with JSON output")
+            print("PASS: Smoke script gracefully failed with JSON output")
             print(f"  Exit code: {result.returncode}")
             print(f"  Overall: {output['overall']}")
             print(f"  Base URL: {output.get('base_url', 'N/A')}")
@@ -192,7 +192,7 @@ class TestSmokeScriptExecution:
         try:
             output = json.loads(result.stdout)
             assert output["overall"] == "FAIL"
-            print(f"PASS: Script handled invalid host gracefully")
+            print("PASS: Script handled invalid host gracefully")
             print(f"  Exit code: {result.returncode}")
         except json.JSONDecodeError:
             pytest.fail(f"No JSON output for invalid host. Stdout: {result.stdout}\nStderr: {result.stderr}")

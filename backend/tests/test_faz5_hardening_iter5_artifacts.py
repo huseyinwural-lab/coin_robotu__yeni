@@ -21,13 +21,12 @@ Key Features Tested:
 import os
 
 import json
-import os
 from pathlib import Path
 
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trade-flow-deploy.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trade-platform-s3.preview.emergentagent.com").rstrip("/")
 EXPORT_DIR = Path("/app/backend/exports")
 MANIFEST_PATH = EXPORT_DIR / "artifact_manifest.json"
 

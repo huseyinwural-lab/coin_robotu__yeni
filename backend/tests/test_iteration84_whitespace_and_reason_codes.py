@@ -408,7 +408,7 @@ class TestExchangeConnectionCRUDRegression:
         assert update_response.status_code == 200, f"Update failed: {update_response.text}"
         data = update_response.json()
         assert data.get("market_type") == "futures"
-        print(f"Update connection: PASS - market_type updated to futures")
+        print("Update connection: PASS - market_type updated to futures")
 
     def test_delete_connection(self, test_user):
         """DELETE /api/user/exchange-connections/{id} should delete connection"""
@@ -436,7 +436,7 @@ class TestExchangeConnectionCRUDRegression:
         assert delete_response.status_code == 200, f"Delete failed: {delete_response.text}"
         data = delete_response.json()
         assert data.get("deleted") == True
-        print(f"Delete connection: PASS - connection deleted")
+        print("Delete connection: PASS - connection deleted")
 
 
 # ============================================================================
@@ -494,7 +494,7 @@ class TestValidateEndpointRegression:
             # hint should be present for failures
             print(f"Validate returns hint: {data.get('hint')}")
         
-        print(f"Validate endpoint structure: PASS - all expected fields present")
+        print("Validate endpoint structure: PASS - all expected fields present")
 
 
 # ============================================================================

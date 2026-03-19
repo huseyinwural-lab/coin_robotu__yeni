@@ -228,7 +228,7 @@ class TestSignalsFunnelAndDiagnose:
             for field in trace_fields:
                 assert field in signal or signal.get(field, "MISSING") != "MISSING"
         
-        print(f"PASS: Signals contain all required and trace fields")
+        print("PASS: Signals contain all required and trace fields")
     
     def test_signal_diagnose_endpoint(self, user_headers):
         """Test signal diagnose endpoint without auto_fix"""
@@ -387,7 +387,7 @@ class TestReportsFilters:
         data = response.json()
         # Even if no data, should return a valid structure
         assert "status" in data or "detail" in data
-        print(f"PASS: Weekly report with week override returns valid response")
+        print("PASS: Weekly report with week override returns valid response")
     
     def test_weekly_report_invalid_week_format(self, user_headers):
         """Test weekly report handles invalid week format gracefully"""
@@ -566,7 +566,7 @@ class TestIndicatorScreenerContext:
             assert "exchange" in row
             assert "signal_score" in row or row.get("signal_score") is None
             assert "confidence" in row or row.get("confidence") is None
-        print(f"PASS: Screener results contain fields for execute context")
+        print("PASS: Screener results contain fields for execute context")
 
 
 # ==============================================================================
@@ -591,7 +591,7 @@ class TestDecisionTraceEndpoints:
         data = response.json()
         # May have latest_trace or be empty
         assert "latest_trace" in data or "timeline" in data or data == {}
-        print(f"PASS: Signal decision trace endpoint returns valid response")
+        print("PASS: Signal decision trace endpoint returns valid response")
     
     def test_strategy_explain_endpoint(self, user_headers):
         """Test strategy explain endpoint"""

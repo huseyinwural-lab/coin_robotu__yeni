@@ -5,14 +5,13 @@ Comprehensive testing for doğrulama paketi requirements.
 """
 import requests
 import subprocess
-import json
 import sys
 import os
 import time
-from typing import Dict, Any, List, Tuple
+from typing import Tuple
 
 # Configuration
-BACKEND_URL = "https://trade-flow-deploy.preview.emergentagent.com/api"
+BACKEND_URL = "https://trade-platform-s3.preview.emergentagent.com/api"
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
 ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "Admin12345!")
 
@@ -41,14 +40,14 @@ class ValidationResults:
     
     def summary(self):
         total = len(self.passed) + len(self.failed) + len(self.skipped)
-        print(f"\n=== VALIDATION SUMMARY ===")
+        print("\n=== VALIDATION SUMMARY ===")
         print(f"Total tests: {total}")
         print(f"✅ Passed: {len(self.passed)}")
         print(f"❌ Failed: {len(self.failed)}")
         print(f"⏭️ Skipped: {len(self.skipped)}")
         
         if self.failed:
-            print(f"\nFAILED TESTS:")
+            print("\nFAILED TESTS:")
             for test_name, error in self.failed:
                 print(f"  - {test_name}: {error}")
         
@@ -71,8 +70,6 @@ def get_admin_token() -> str:
 
 def create_and_approve_user() -> Tuple[str, str]:
     """Create a new user and approve them. Returns (user_email, user_token)"""
-    import random
-    import time
     
     # Generate unique user email
     timestamp = int(time.time())

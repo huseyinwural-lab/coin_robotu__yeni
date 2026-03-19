@@ -4,10 +4,9 @@ Debug user registration and scanner flow
 """
 
 import requests
-import json
 import time
 
-BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 def test_user_registration_debug():

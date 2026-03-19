@@ -260,7 +260,7 @@ class TestWorkflowStructure:
         for log in expected_logs:
             assert log in artifact_path, f"Artifact should include {log}"
         
-        print(f"[OK] Workflow uploads all relevant logs")
+        print("[OK] Workflow uploads all relevant logs")
 
     def test_workflow_has_checkout(self, workflow_content):
         """Workflow should checkout repository"""

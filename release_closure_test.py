@@ -32,11 +32,10 @@ import os
 import sys
 import subprocess
 import requests
-import json
 from datetime import datetime
 
 # Backend URL from environment
-BACKEND_URL = "https://trade-flow-deploy.preview.emergentagent.com/api"
+BACKEND_URL = "https://trade-platform-s3.preview.emergentagent.com/api"
 
 # Test admin credentials - using the platform.local variant as mentioned in review
 TEST_ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")  
@@ -137,7 +136,7 @@ def test_1_bootstrap_admin():
     # 1A) Test login with admin@platform.local (CI script credentials) - REQUIRED by review
     success, token, result = authenticate_admin(TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD)
     if success:
-        log_test("1A) Login admin@platform.local (REQUIRED)", "PASS", f"Admin login successful with CI credentials")
+        log_test("1A) Login admin@platform.local (REQUIRED)", "PASS", "Admin login successful with CI credentials")
         admin_token = token
         passed += 1
     else:
@@ -146,7 +145,7 @@ def test_1_bootstrap_admin():
         # 1B) Fallback: Try with default admin@platform.local for continued testing
         success_fallback, token_fallback, result_fallback = authenticate_admin(DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD)
         if success_fallback:
-            log_test("1B) Login admin@platform.local (fallback for testing)", "PASS", f"Fallback successful, but admin@platform.local MISSING")
+            log_test("1B) Login admin@platform.local (fallback for testing)", "PASS", "Fallback successful, but admin@platform.local MISSING")
             admin_token = token_fallback
             # Don't increment passed count - this is a fallback, not a success
         else:
@@ -217,7 +216,7 @@ def test_2_admin_profile_password():
             updated_user = profile_response.json()
             # Check that response contains user data (the profile update doesn't necessarily add full_name to User object)
             if updated_user.get("id") and updated_user.get("email"):
-                log_test("2A) PATCH /api/auth/admin/profile", "PASS", f"Profile updated successfully")
+                log_test("2A) PATCH /api/auth/admin/profile", "PASS", "Profile updated successfully")
                 passed += 1
             else:
                 log_test("2A) PATCH /api/auth/admin/profile", "FAIL", "Profile update response invalid structure")
@@ -359,7 +358,7 @@ def test_4_endpoint_regression():
                     log_test("4B) GET /api/admin/universe-monitor", "PASS", f"Data contains {len(data)} fields")
                     passed += 1
                 else:
-                    log_test("4B) GET /api/admin/universe-monitor", "FAIL", f"Missing required fields")
+                    log_test("4B) GET /api/admin/universe-monitor", "FAIL", "Missing required fields")
             else:
                 log_test("4B) GET /api/admin/universe-monitor", "FAIL", f"Status: {response.status_code}")
         except Exception as e:
@@ -381,7 +380,7 @@ def test_4_endpoint_regression():
                         log_test("4C) GET /api/user/scanner/symbol-selection", "PASS", f"User scanner data: {len(data)} fields")
                         passed += 1
                     else:
-                        log_test("4C) GET /api/user/scanner/symbol-selection", "FAIL", f"Missing required fields")
+                        log_test("4C) GET /api/user/scanner/symbol-selection", "FAIL", "Missing required fields")
                 else:
                     log_test("4C) GET /api/user/scanner/symbol-selection", "FAIL", f"Status: {response.status_code}")
             except Exception as e:
@@ -403,7 +402,7 @@ def test_5_frontend_smoke():
     
     # 5A) Landing page accessibility (check if frontend URL is reachable)
     try:
-        frontend_url = "https://trade-flow-deploy.preview.emergentagent.com"
+        frontend_url = "https://trade-platform-s3.preview.emergentagent.com"
         response = requests.get(frontend_url, timeout=10)
         if response.status_code == 200 and len(response.text) > 500:  # Not blank page
             log_test("5A) Landing page accessibility", "PASS", f"Frontend loads: {len(response.text)} chars")

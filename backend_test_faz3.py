@@ -10,12 +10,11 @@ import json
 import sys
 import uuid
 import subprocess
-import time
 
 
 class FAZ3ValidationTest:
     def __init__(self):
-        self.base_url = "https://trade-flow-deploy.preview.emergentagent.com"
+        self.base_url = "https://trade-platform-s3.preview.emergentagent.com"
         self.admin_token = None
         self.test_user_email = f"test_user_faz3_{uuid.uuid4().hex[:8]}@test.com"
         self.test_user_password = "TestPassword123!"
@@ -36,7 +35,7 @@ class FAZ3ValidationTest:
                 timeout=30
             )
             
-            print(f"Command: bash /app/scripts/ci_alembic_drift_gate.sh")
+            print("Command: bash /app/scripts/ci_alembic_drift_gate.sh")
             print(f"Exit Code: {result.returncode}")
             print(f"Output: {result.stdout}")
             
@@ -104,7 +103,7 @@ class FAZ3ValidationTest:
                 timeout=10
             )
             
-            print(f"POST /api/auth/login/admin")
+            print("POST /api/auth/login/admin")
             print(f"Status: {response.status_code}")
             
             if response.status_code == 200:
@@ -140,12 +139,12 @@ class FAZ3ValidationTest:
                 timeout=10
             )
             
-            print(f"GET /api/admin/universe-monitor")
+            print("GET /api/admin/universe-monitor")
             print(f"Status: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"✅ PASS: Universe monitor endpoint working")
+                print("✅ PASS: Universe monitor endpoint working")
                 print(f"Response fields count: {len(data.keys()) if isinstance(data, dict) else len(data)}")
                 return True
             else:
@@ -180,7 +179,7 @@ class FAZ3ValidationTest:
                 timeout=10
             )
             
-            print(f"POST /api/auth/register")
+            print("POST /api/auth/register")
             print(f"Status: {response.status_code}")
             
             if response.status_code in [200, 201]:
@@ -267,7 +266,7 @@ class FAZ3ValidationTest:
                 timeout=10
             )
             
-            print(f"POST /api/auth/login")
+            print("POST /api/auth/login")
             print(f"Status: {response.status_code}")
             
             if response.status_code == 200:
@@ -303,12 +302,12 @@ class FAZ3ValidationTest:
                 timeout=10
             )
             
-            print(f"GET /api/user/scanner/symbol-selection")
+            print("GET /api/user/scanner/symbol-selection")
             print(f"Status: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"✅ PASS: User scanner endpoint working")
+                print("✅ PASS: User scanner endpoint working")
                 print(f"Response fields: {list(data.keys()) if isinstance(data, dict) else 'List response'}")
                 return True
             else:
@@ -338,12 +337,12 @@ class FAZ3ValidationTest:
                 timeout=10
             )
             
-            print(f"GET /api/admin/universe/runtime-summary")
+            print("GET /api/admin/universe/runtime-summary")
             print(f"Status: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"✅ PASS: Universe runtime summary endpoint working")
+                print("✅ PASS: Universe runtime summary endpoint working")
                 print(f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'Non-dict response'}")
                 
                 # Check for required fields
@@ -386,12 +385,12 @@ class FAZ3ValidationTest:
                 timeout=10
             )
             
-            print(f"GET /api/admin/universe/runtime-latest-scan")
+            print("GET /api/admin/universe/runtime-latest-scan")
             print(f"Status: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"✅ PASS: Universe runtime latest scan endpoint working")
+                print("✅ PASS: Universe runtime latest scan endpoint working")
                 print(f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'Non-dict response'}")
                 return True
             else:
@@ -425,12 +424,12 @@ class FAZ3ValidationTest:
                 timeout=15
             )
             
-            print(f"POST /api/user/scanner/runtime/run")
+            print("POST /api/user/scanner/runtime/run")
             print(f"Status: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"✅ PASS: Scanner runtime run endpoint working")
+                print("✅ PASS: Scanner runtime run endpoint working")
                 print(f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'Non-dict response'}")
                 
                 # Check for required fields
@@ -475,12 +474,12 @@ class FAZ3ValidationTest:
                 timeout=10
             )
             
-            print(f"GET /api/user/scanner/runtime/snapshot")
+            print("GET /api/user/scanner/runtime/snapshot")
             print(f"Status: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"✅ PASS: Scanner runtime snapshot endpoint working")
+                print("✅ PASS: Scanner runtime snapshot endpoint working")
                 print(f"Response keys: {list(data.keys()) if isinstance(data, dict) else 'Non-dict response'}")
                 return True
             else:

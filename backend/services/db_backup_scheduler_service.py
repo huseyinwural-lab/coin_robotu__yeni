@@ -1,16 +1,17 @@
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
-BACKUP_SCRIPT_PATH = "/app/scripts/db_backup.sh"
-BACKUP_CRON_LOG_PATH = Path("/app/artifacts/backup_cron.log")
+APP_ROOT = Path(os.getenv("APP_ROOT") or "/app")
+BACKUP_SCRIPT_PATH = str(APP_ROOT / "scripts" / "db_backup.sh")
+BACKUP_CRON_LOG_PATH = APP_ROOT / "artifacts" / "backup_cron.log"
 
 
 def _log(message: str) -> None:
     BACKUP_CRON_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S%z")
     with BACKUP_CRON_LOG_PATH.open("a", encoding="utf-8") as handle:
         handle.write(f"[{timestamp}] {message}\n")
 

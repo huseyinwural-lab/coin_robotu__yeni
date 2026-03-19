@@ -5,7 +5,6 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Optional
 
 # Get backend URL from environment variable
 BACKEND_URL = os.getenv("REACT_APP_BACKEND_URL", "").rstrip("/")

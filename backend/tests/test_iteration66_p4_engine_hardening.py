@@ -8,7 +8,7 @@ import pytest
 import requests
 
 # Read BASE_URL from frontend/.env
-BASE_URL = "https://trade-flow-deploy.preview.emergentagent.com"
+BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
 with open("/app/frontend/.env") as f:
     for line in f:
         if line.startswith("REACT_APP_BACKEND_URL"):
@@ -73,7 +73,7 @@ class TestT01RiskEngineClosure:
         assert response.status_code == 200
         data = response.json()
         assert "current_capital" in data or "total_positions" in data or len(data) > 0
-        print(f"T-01 Exposure Control: portfolio overview accessible")
+        print("T-01 Exposure Control: portfolio overview accessible")
 
     def test_cluster_guard_exposure_groups(self, admin_headers):
         """Verify cluster guard / exposure groups"""
@@ -498,7 +498,7 @@ class TestT10EventPersistence:
         data = response.json()
         # Should have items or be a list
         assert "items" in data or isinstance(data, list)
-        print(f"T-10 Execution Events: endpoint accessible")
+        print("T-10 Execution Events: endpoint accessible")
 
     def test_signal_events_model(self):
         """Verify SignalEvent model exists with required fields"""
@@ -571,7 +571,7 @@ class TestT11DevOpsMonitoringAlerts:
         data = response.json()
         # Alert policy fields
         assert "admin_notification_enabled" in data or "monitoring_alert_log_enabled" in data or len(data) > 0
-        print(f"T-11 Alert Policy: configuration accessible")
+        print("T-11 Alert Policy: configuration accessible")
 
     def test_live_readiness_score(self, admin_headers):
         """Verify live readiness monitoring"""
@@ -579,7 +579,7 @@ class TestT11DevOpsMonitoringAlerts:
         assert response.status_code == 200
         data = response.json()
         assert "readiness_score" in data or "live_readiness_score" in data
-        print(f"T-11 Live Readiness: monitoring endpoint accessible")
+        print("T-11 Live Readiness: monitoring endpoint accessible")
 
     def test_hardening_checklist_endpoint(self, admin_headers):
         """Verify hardening checklist for production readiness"""
@@ -587,7 +587,7 @@ class TestT11DevOpsMonitoringAlerts:
         assert response.status_code == 200
         data = response.json()
         assert "score" in data or "checklist_items" in data or "readiness_status" in data
-        print(f"T-11 Hardening Checklist: endpoint accessible")
+        print("T-11 Hardening Checklist: endpoint accessible")
 
     def test_release_gate_status(self, admin_headers):
         """Verify release gate status for deployment safety"""
@@ -595,7 +595,7 @@ class TestT11DevOpsMonitoringAlerts:
         assert response.status_code == 200
         data = response.json()
         assert "release_status" in data or "blocked" in data or "status" in data
-        print(f"T-11 Release Gate: status accessible for deployment safety")
+        print("T-11 Release Gate: status accessible for deployment safety")
 
 
 # ==============================================================================

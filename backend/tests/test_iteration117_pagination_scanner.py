@@ -381,7 +381,7 @@ class TestLiveReadinessEndpoint:
         # Check max_risk_guard
         max_risk_guard = payload.get("max_risk_guard", {})
         assert max_risk_guard.get("max_positions") == 3, f"Expected max_positions=3, got {max_risk_guard.get('max_positions')}"
-        print(f"Live readiness max_positions=3 OK")
+        print("Live readiness max_positions=3 OK")
     
     def test_live_readiness_daily_loss_limit(self, user_headers):
         """live-readiness should contain daily_loss_limit_pct=1.0"""
@@ -397,7 +397,7 @@ class TestLiveReadinessEndpoint:
         # Check max_risk_guard
         max_risk_guard = payload.get("max_risk_guard", {})
         assert max_risk_guard.get("daily_loss_limit_pct") == 1.0, f"Expected daily_loss_limit_pct=1.0, got {max_risk_guard.get('daily_loss_limit_pct')}"
-        print(f"Live readiness daily_loss_limit_pct=1.0 OK")
+        print("Live readiness daily_loss_limit_pct=1.0 OK")
     
     def test_live_readiness_symbol_integrity(self, user_headers):
         """live-readiness should contain symbol_integrity with ok field"""
@@ -413,7 +413,7 @@ class TestLiveReadinessEndpoint:
         # Check symbol_integrity
         symbol_integrity = payload.get("symbol_integrity", {})
         assert "ok" in symbol_integrity, f"Missing 'ok' field in symbol_integrity: {symbol_integrity}"
-        assert isinstance(symbol_integrity.get("ok"), bool), f"symbol_integrity.ok should be bool"
+        assert isinstance(symbol_integrity.get("ok"), bool), "symbol_integrity.ok should be bool"
         print(f"Live readiness symbol_integrity.ok={symbol_integrity.get('ok')} OK")
     
     def test_live_readiness_full_structure(self, user_headers):

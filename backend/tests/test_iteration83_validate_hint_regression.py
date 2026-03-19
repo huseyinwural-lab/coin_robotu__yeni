@@ -218,7 +218,7 @@ class TestExchangeValidateBypassLogic:
                 json=connection_payload,
             )
             assert create_response.status_code in [200, 201]
-            print(f"Created connection profile")
+            print("Created connection profile")
 
         # Now test validate - should NOT return assignment_required
         validate_response = requests.get(

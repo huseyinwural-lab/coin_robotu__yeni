@@ -454,7 +454,7 @@ class TestValidateOrderContract:
         # Should have violation for min size
         violations = data.get("violations", [])
         size_violations = [v for v in violations if "size" in v.get("code", "").lower() or "notional" in v.get("code", "").lower()]
-        assert len(size_violations) > 0 or data.get("valid") is False, f"Expected size/notional violation for tiny order"
+        assert len(size_violations) > 0 or data.get("valid") is False, "Expected size/notional violation for tiny order"
 
 
 class TestManualTradeGuardEnforcement:
