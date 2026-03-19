@@ -6,7 +6,10 @@ import os
 from pathlib import Path
 
 
-POLICY_PATH = Path("/app/config/connection_reliability_policy.json")
+POLICY_PATH = Path(
+    os.environ.get("CONNECTION_RELIABILITY_POLICY_PATH")
+    or (Path(__file__).resolve().parents[2] / "config" / "connection_reliability_policy.json")
+)
 _POLICY_CACHE: dict | None = None
 
 
