@@ -1,0 +1,17 @@
+{
+  "dev": {
+    "/api/health": 180,
+    "/api/admin/execution-readiness": 1300,
+    "/api/dashboard/summary": 1500
+  },
+  "stage": {
+    "/api/health": 150,
+    "/api/admin/execution-readiness": 1100,
+    "/api/dashboard/summary": 1300
+  },
+  "prod": {
+    "/api/health": 120,
+    "/api/admin/execution-readiness": 900,
+    "/api/dashboard/summary": 1100
+  }
+}

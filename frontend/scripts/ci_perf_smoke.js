@@ -111,6 +111,10 @@ function main() {
     main_js_within_limit: jsGzipKb <= report.thresholds.main_js_gzip_kb_max,
     main_css_within_limit: cssGzipKb <= report.thresholds.main_css_gzip_kb_max,
   };
+  report.threshold_utilization = {
+    main_js_used_ratio: Number((jsGzipKb / report.thresholds.main_js_gzip_kb_max).toFixed(4)),
+    main_css_used_ratio: Number((cssGzipKb / report.thresholds.main_css_gzip_kb_max).toFixed(4)),
+  };
 
   if (!report.threshold_result.main_js_within_limit || !report.threshold_result.main_css_within_limit) {
     report.status = "WARN";

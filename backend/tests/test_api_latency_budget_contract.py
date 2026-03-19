@@ -1,6 +1,7 @@
 # ruff: noqa: E402
 import os
 import sys
+import json
 from pathlib import Path
 from time import perf_counter
 
@@ -13,6 +14,8 @@ if str(BACKEND_ROOT) not in sys.path:
 import deps
 import server
 from models import UserRole
+
+LATENCY_BUDGETS_PATH = BACKEND_ROOT.parent / "config" / "api_latency_budgets.json"
 
 
 class _DummyConnection:
@@ -65,24 +68,11 @@ def test_api_latency_budget_p95_by_endpoint(monkeypatch):
     server.fastapi_app.dependency_overrides[deps.get_current_user] = lambda: _DummyUser()
 
     profile = str(os.environ.get("LATENCY_BUDGET_PROFILE", "dev") or "dev").strip().lower()
-    budget_profiles = {
-        "dev": {
-            "/api/health": 180.0,
-            "/api/admin/execution-readiness": 1300.0,
-            "/api/dashboard/summary": 1500.0,
-        },
-        "stage": {
-            "/api/health": 150.0,
-            "/api/admin/execution-readiness": 1100.0,
-            "/api/dashboard/summary": 1300.0,
-        },
-        "prod": {
-            "/api/health": 120.0,
-            "/api/admin/execution-readiness": 900.0,
-            "/api/dashboard/summary": 1100.0,
-        },
-    }
-    budgets_ms = budget_profiles.get(profile, budget_profiles["dev"])
+    assert LATENCY_BUDGETS_PATH.exists(), f"Latency budget config not found: {LATENCY_BUDGETS_PATH}"
+    with LATENCY_BUDGETS_PATH.open("r", encoding="utf-8") as handle:
+        budget_profiles = json.load(handle)
+    budgets_ms = budget_profiles.get(profile, budget_profiles.get("dev", {}))
+    assert budgets_ms, "Latency budget profile is empty"
 
     try:
         client = TestClient(server.fastapi_app)

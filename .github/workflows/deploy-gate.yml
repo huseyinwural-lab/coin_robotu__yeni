@@ -117,19 +117,35 @@ jobs:
             const profile = report.threshold_profile || 'dev';
             const js = report.metrics?.main_js?.gzip_kb;
             const css = report.metrics?.main_css?.gzip_kb;
+            const jsMax = report.thresholds?.main_js_gzip_kb_max;
+            const cssMax = report.thresholds?.main_css_gzip_kb_max;
             const deltaJs = report.delta_vs_previous?.main_js_gzip_kb_delta;
             const deltaCss = report.delta_vs_previous?.main_css_gzip_kb_delta;
             const deltaNote = report.delta_vs_previous?.note || report.delta_vs_previous?.error || '';
+            const jsRatio = Number(report.threshold_utilization?.main_js_used_ratio || 0);
+            const cssRatio = Number(report.threshold_utilization?.main_css_used_ratio || 0);
 
-            const body = `${marker}
-            ### Frontend Perf Smoke Delta
-            - Profile: **${profile}**
-            - Main JS (gzip): **${js} KB**
-            - Main CSS (gzip): **${css} KB**
-            - Δ JS vs previous: **${deltaJs ?? 'n/a'} KB**
-            - Δ CSS vs previous: **${deltaCss ?? 'n/a'} KB**
-            - Delta source note: ${deltaNote || 'ok'}
-            - Threshold result: JS=${report.threshold_result?.main_js_within_limit}, CSS=${report.threshold_result?.main_css_within_limit}`;
+            const proximityTag = (ratio) => {
+              if (!Number.isFinite(ratio) || ratio <= 0) return '⚪ n/a';
+              if (ratio > 1) return '🔴 over-limit';
+              if (ratio >= 0.9) return '🟡 near-limit';
+              return '🟢 healthy';
+            };
+
+            const jsProximity = proximityTag(jsRatio);
+            const cssProximity = proximityTag(cssRatio);
+
+            const body = [
+              marker,
+              '### Frontend Perf Smoke Delta',
+              `- Profile: **${profile}**`,
+              `- Main JS (gzip): **${js} KB** / limit **${jsMax} KB** → ${jsProximity}`,
+              `- Main CSS (gzip): **${css} KB** / limit **${cssMax} KB** → ${cssProximity}`,
+              `- Δ JS vs previous: **${deltaJs ?? 'n/a'} KB**`,
+              `- Δ CSS vs previous: **${deltaCss ?? 'n/a'} KB**`,
+              `- Delta source note: ${deltaNote || 'ok'}`,
+              `- Threshold result: JS=${report.threshold_result?.main_js_within_limit}, CSS=${report.threshold_result?.main_css_within_limit}`,
+            ].join('\n');
 
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
