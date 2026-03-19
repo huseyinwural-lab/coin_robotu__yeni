@@ -1,47 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
-import { apiClient } from "@/lib/api";
-
-const backendBase = process.env.REACT_APP_BACKEND_URL;
 
 export const AdminLoginPage = () => {
   const navigate = useNavigate();
   const { login, verifyMfaChallenge } = useAuth();
   const [form, setForm] = useState({ email: "", password: "" });
   const [submitting, setSubmitting] = useState(false);
-  const [logoPreview, setLogoPreview] = useState("/xilo-logo.png");
   const [mfaState, setMfaState] = useState(null);
   const [mfaMethod, setMfaMethod] = useState("totp");
   const [mfaCode, setMfaCode] = useState("");
-
-  const resolvedLogoPreview = useMemo(() => {
-    if (!logoPreview || String(logoPreview).startsWith("data:")) {
-      return logoPreview || "/xilo-logo.png";
-    }
-    if (String(logoPreview).startsWith("http")) {
-      return logoPreview;
-    }
-    return `${backendBase}${logoPreview}`;
-  }, [logoPreview]);
-
-  useEffect(() => {
-    const loadBrand = async () => {
-      try {
-        const { data } = await apiClient.get("/branding/settings");
-        if (data?.logo_url) {
-          setLogoPreview(`${data.logo_url}${data.updated_at ? `?v=${encodeURIComponent(data.updated_at)}` : ""}`);
-        }
-      } catch {
-        // silent fallback
-      }
-    };
-    loadBrand();
-  }, []);
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -87,13 +59,8 @@ export const AdminLoginPage = () => {
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-white p-6" data-testid="admin-login-page">
       <div className="absolute left-4 top-4 right-4 flex items-start justify-between gap-4 sm:left-8 sm:top-6 sm:right-8" data-testid="admin-login-top-strip">
-        <div className="rounded-xl border border-slate-300 bg-white/95 p-2 shadow-sm" data-testid="admin-login-brand-block">
-          <img
-            src={resolvedLogoPreview}
-            alt="XILO User Trading Engine"
-            className="h-auto w-[170px] sm:w-[220px]"
-            data-testid="admin-login-brand-logo"
-          />
+        <div className="rounded-xl border border-slate-300 bg-white/95 px-3 py-2 shadow-sm" data-testid="admin-login-brand-block">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-700" data-testid="admin-login-brand-text">Admin Panel</p>
         </div>
         <div className="flex items-center gap-2" data-testid="admin-login-panel-toggle-group">
           <Button

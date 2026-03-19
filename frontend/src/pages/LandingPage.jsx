@@ -181,18 +181,36 @@ export const LandingPage = () => {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="flex flex-wrap items-center justify-between gap-3"
+          className="flex flex-wrap items-start justify-between gap-4"
+          data-testid="landing-header"
         >
-          <div className="rounded border border-slate-300 bg-white p-2" data-testid="landing-brand-logo-block">
-            <img src={resolvedLogoPreview} alt="XILO logo" className="h-auto w-[170px] sm:w-[230px]" data-testid="landing-brand-logo" />
-          </div>
-          <div className="flex flex-wrap gap-2" data-testid="landing-login-actions">
+          <div className="flex min-h-[96px] items-center" data-testid="landing-user-login-area">
             <Link to="/user/login" data-testid="landing-user-login-link">
               <Button className="border border-black bg-black text-orange-500 hover:bg-zinc-900" data-testid="landing-user-login-button">Kullanıcı Girişi</Button>
             </Link>
-            <Link to="/admin/login" data-testid="landing-admin-login-link">
-              <Button className="border border-black bg-orange-300 text-black hover:bg-orange-200" data-testid="landing-admin-login-button">Admin Girişi</Button>
-            </Link>
+          </div>
+
+          <div className="w-full max-w-[340px] rounded border border-black/70 bg-orange-400/30 p-3" data-testid="landing-header-logo-upload-panel">
+            <label className="block" data-testid="landing-header-logo-upload-block">
+              <span className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide" data-testid="landing-header-logo-upload-label">
+                <Upload className="h-3 w-3" /> Header Logo Yükle
+              </span>
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={onLogoFileChange}
+                className="h-10 border-black bg-orange-50 file:mr-3 file:border-0 file:bg-black file:px-3 file:py-1 file:text-xs file:text-orange-500"
+                data-testid="landing-header-logo-file-input"
+              />
+            </label>
+            <div className="mt-3 rounded border border-slate-300 bg-white p-2" data-testid="landing-header-logo-preview-block">
+              <img
+                src={resolvedLogoPreview}
+                alt="Yüklenen logo önizleme"
+                className="h-[72px] w-[240px] max-w-full object-contain object-left"
+                data-testid="landing-header-logo-preview"
+              />
+            </div>
           </div>
         </motion.header>
 
@@ -215,10 +233,6 @@ export const LandingPage = () => {
 
             <form className="mt-6 max-w-lg space-y-3 rounded border border-black/60 bg-orange-400/30 p-4" onSubmit={onRegisterSubmit} data-testid="landing-register-form">
               <p className="text-xs font-bold uppercase tracking-widest" data-testid="landing-register-title">Hesap Aç</p>
-              <label className="block" data-testid="landing-logo-upload-block">
-                <span className="mb-1 inline-flex items-center gap-2 text-xs font-semibold" data-testid="landing-logo-upload-label"><Upload className="h-3 w-3" /> Logo Yükle</span>
-                <Input type="file" accept="image/*" onChange={onLogoFileChange} className="h-10 border-black bg-orange-50 file:mr-3 file:border-0 file:bg-black file:px-3 file:py-1 file:text-xs file:text-orange-500" data-testid="landing-logo-file-input" />
-              </label>
               <div className="grid gap-2" data-testid="landing-register-fields">
                 <Input
                   type="text"
