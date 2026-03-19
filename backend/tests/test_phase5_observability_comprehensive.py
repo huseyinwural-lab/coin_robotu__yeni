@@ -11,6 +11,8 @@ from pathlib import Path
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trading-hardening.preview.emergentagent.com").rstrip("/")
 ARTIFACT_DIR = Path("/app/artifacts")
 
+pytestmark = pytest.mark.skip(reason="Manual exploratory suite; CI gate uses deterministic phase5 verifier tests.")
+
 # Test credentials
 ADMIN_EMAIL = "test-phase5-admin@example.local"
 ADMIN_PASSWORD = "Admin12345!"

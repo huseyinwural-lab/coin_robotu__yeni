@@ -5,13 +5,13 @@ observability_error_rate_4xx_ratio{window="5m"} 0.285714
 # TYPE observability_error_rate_5xx_ratio gauge
 observability_error_rate_5xx_ratio{window="5m"} 0.0
 # TYPE observability_latency_ms_p95 gauge
-observability_latency_ms_p95 281.28
+observability_latency_ms_p95 293.79
 # TYPE observability_latency_ms_avg gauge
-observability_latency_ms_avg 44.61
+observability_latency_ms_avg 47.65
 # TYPE observability_queue_size gauge
-observability_queue_size 12
-observability_endpoint_latency_ms_p95{endpoint="admin_kill_switch"} 11.16
-observability_endpoint_latency_ms_p95{endpoint="auth_login"} 281.28
-observability_endpoint_latency_ms_p95{endpoint="execution_intent_submit"} 1.73
-observability_endpoint_latency_ms_p95{endpoint="other"} 10.89
+observability_queue_size 0
+observability_endpoint_latency_ms_p95{endpoint="admin_kill_switch"} 21.26
+observability_endpoint_latency_ms_p95{endpoint="auth_login"} 293.79
+observability_endpoint_latency_ms_p95{endpoint="execution_intent_submit"} 1.75
+observability_endpoint_latency_ms_p95{endpoint="other"} 9.62
 observability_endpoint_latency_ms_p95{endpoint="queue_processing"} 0.0
