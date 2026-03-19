@@ -39,6 +39,9 @@
 - FAZ 0 kabul kriterleri doğrulandı: **PASS**
 - Testing agent raporu: `/app/test_reports/iteration_21.json` (backend başarı oranı %100)
 
+Kod yazıldıktan sonra gerçek ortamda çalıştırılacak, doğrulama logu üretilecek, artefakt/kanıt oluşmadan task bitmiş sayılmayacak.
+Kod yazdıktan sonra repo içinde gerçekten çalıştır, artifact üretmeden işi bitmiş sayma.
+
 ## 2026-03-19 — FAZ 1 (P0) S3 Off-site Backup + CI Merge Gate (Tamamlandı)
 
 ### Kullanıcı Onayı (uygulanan seçimler)

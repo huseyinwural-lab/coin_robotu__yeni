@@ -1,14 +1,13 @@
 .github/workflows/deploy-gate.yml
-README.md
-backend/.env
 backend/core/db_determinism.py
 backend/core/config.py
 backend/db.py
 backend/server.py
 backend/services/migration_service.py
 backend/migrations/env.py
-scripts/phase0_runtime_persistence_test.sh
+backend/.env
+README.md
 scripts/verify_phase0_db_determinism.sh
+scripts/phase0_runtime_persistence_test.sh
 backend/tests/test_faz0_db_determinism.py
-artifacts/* (phase0 verification outputs)
-test_reports/iteration_21.json (marker cleanup)
+memory/PRD.md
