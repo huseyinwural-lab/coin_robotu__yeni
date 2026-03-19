@@ -100,12 +100,20 @@ for rule in "${required_rules[@]}"; do
   echo "REQUIRED_RULE_OK $rule" >> "$GITIGNORE_SCAN_LOG"
 done
 
-if grep -n '^[[:space:]]*-e[[:space:]]*$' "$GITIGNORE_PATH" > "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"; then
+if grep -nE '^-e|^[[:space:]]*-e' "$GITIGNORE_PATH" > "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"; then
   echo "FAIL: invalid '-e' line detected" | tee -a "$SUMMARY_LOG"
   cat "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log" | tee -a "$SUMMARY_LOG"
   exit 1
 else
   echo "NO_MINUS_E_LINE" > "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"
+fi
+
+if grep -nE '^[[:space:]]+|[[:space:]]+$' "$GITIGNORE_PATH" > "${ARTIFACT_DIR}/faz1_gitignore_whitespace_scan.log"; then
+  echo "FAIL: extra leading/trailing whitespace detected in .gitignore" | tee -a "$SUMMARY_LOG"
+  cat "${ARTIFACT_DIR}/faz1_gitignore_whitespace_scan.log" | tee -a "$SUMMARY_LOG"
+  exit 1
+else
+  echo "NO_EXTRA_WHITESPACE" > "${ARTIFACT_DIR}/faz1_gitignore_whitespace_scan.log"
 fi
 
 NORMALIZED=$(sed 's/[[:space:]]\+$//' "$GITIGNORE_PATH" | sed '/^$/d')
@@ -135,6 +143,8 @@ fi
 ' "${required_rules[@]}"
   echo "# minus_e_scan"
   cat "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"
+  echo "# whitespace_scan"
+  cat "${ARTIFACT_DIR}/faz1_gitignore_whitespace_scan.log"
   echo "# duplicate_scan"
   cat "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
   echo "# canonical_state"
