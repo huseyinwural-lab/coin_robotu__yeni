@@ -70,15 +70,13 @@ Backend startup sırası:
 
 Not: Startup içinde `create_all` kullanılmaz; schema otoritesi Alembic’tir.
 
-## 6) Varsayılan admin bootstrap davranışı
+## 6) Admin bootstrap davranışı
 
-Varsayılan admin seed yalnızca `users` tablosu tamamen boşken çalışır.
+Bootstrap admin yalnızca `users` tablosu tamamen boşken ve güvenli env değerleri sağlandığında çalışır.
 
-- Kimlik bilgileri `backend/.env` içindeki `DEFAULT_ADMIN_EMAIL` ve `DEFAULT_ADMIN_PASSWORD` alanlarından okunur.
-- Repo içinde operasyonel kullanım için sabit credential tekrarları tutulmamalıdır.
-- Kurulum varsayılan bootstrap admin:
-  - Email/Kullanıcı adı: `admin@platform.local`
-  - Şifre: `Admin12345!`
+- Kimlik bilgileri `backend/.env` içindeki `ADMIN_BOOTSTRAP_EMAIL` ve `ADMIN_BOOTSTRAP_PASSWORD` alanlarından okunur.
+- Repo içinde operasyonel kullanım için sabit credential tekrarları tutulmaz.
+- Kurulumda gerçek değerler sadece secret manager / runtime env üzerinden verilmelidir.
 
 - Tablo doluysa seed/recreate/reset yapılmaz.
 - Duplicate kullanıcı üretilmez.
@@ -96,8 +94,8 @@ pytest
 Credential gerektiren script/testler için env tabanlı kullanım:
 
 ```bash
-export TEST_ADMIN_EMAIL="admin@platform.local"
-export TEST_ADMIN_PASSWORD="Admin12345!"
+export TEST_ADMIN_EMAIL="<admin-email>"
+export TEST_ADMIN_PASSWORD="<admin-password>"
 export TEST_USER_EMAIL="<user-email>"
 export TEST_USER_PASSWORD="<user-password>"
 ```
@@ -140,7 +138,5 @@ Production hedefi:
 - Bybit/OKX bu turda placeholder warning modundadır.
 - `candidate_count = 0` bazı taramalarda hata değil, karar sonucu olabilir.
 - Fallback aktifleştiğinde top volume moda geçiş normal davranıştır.
-- Bootstrap admin bilgileri:
-  - `admin@platform.local`
-  - `Admin12345!`
+- Bootstrap admin bilgileri runtime secret olarak verilmeli, repoda tutulmamalıdır.
 - Prod/stage için ilk girişten sonra admin profil ve şifre güncellenmelidir.

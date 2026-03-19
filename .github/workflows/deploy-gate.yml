@@ -12,17 +12,38 @@ on:
   workflow_dispatch:
 
 jobs:
+  secret-leak-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run secret leak guard
+        run: bash scripts/ci_secret_leak_guard.sh
+
+      - name: Upload secret scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: faz6-secret-scan-artifacts
+          path: |
+            artifacts/faz6_secret_scan_report.log
+            artifacts/faz6_secret_scan_report.json
+
   backend-quality-gate:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql+psycopg2://trader:trader@localhost:5432/trading_platform
       REDIS_URL: redis://localhost:6379/0
-      JWT_SECRET: ci-jwt-secret
+      JWT_SECRET: ${{ secrets.JWT_SECRET || vars.JWT_SECRET }}
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 720
+      EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: ${{ secrets.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY || vars.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY }}
       CORS_ORIGINS: http://localhost:3000
-      DEFAULT_ADMIN_EMAIL: admin@platform.local
-      DEFAULT_ADMIN_PASSWORD: Admin12345!
+      ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.ADMIN_BOOTSTRAP_EMAIL || vars.ADMIN_BOOTSTRAP_EMAIL }}
+      ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.ADMIN_BOOTSTRAP_PASSWORD || vars.ADMIN_BOOTSTRAP_PASSWORD }}
+      TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || vars.TEST_ADMIN_EMAIL }}
+      TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || vars.TEST_ADMIN_PASSWORD }}
     services:
       postgres:
         image: postgres:15
@@ -90,12 +111,15 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg2://trader:trader@localhost:5432/trading_platform
       REDIS_URL: redis://localhost:6379/0
-      JWT_SECRET: ci-jwt-secret
+      JWT_SECRET: ${{ secrets.JWT_SECRET || vars.JWT_SECRET }}
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 720
+      EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: ${{ secrets.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY || vars.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY }}
       CORS_ORIGINS: http://localhost:3000
-      DEFAULT_ADMIN_EMAIL: admin@platform.local
-      DEFAULT_ADMIN_PASSWORD: Admin12345!
+      ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.ADMIN_BOOTSTRAP_EMAIL || vars.ADMIN_BOOTSTRAP_EMAIL }}
+      ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.ADMIN_BOOTSTRAP_PASSWORD || vars.ADMIN_BOOTSTRAP_PASSWORD }}
+      TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || vars.TEST_ADMIN_EMAIL }}
+      TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || vars.TEST_ADMIN_PASSWORD }}
     services:
       postgres:
         image: postgres:15
@@ -123,6 +147,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
+
+      - name: Validate required security env
+        run: |
+          required_vars=(JWT_SECRET EXCHANGE_CREDENTIALS_ENCRYPTION_KEY ADMIN_BOOTSTRAP_EMAIL ADMIN_BOOTSTRAP_PASSWORD TEST_ADMIN_EMAIL TEST_ADMIN_PASSWORD)
+          for key in "${required_vars[@]}"; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "Missing required secret/env/var: $key"
+              exit 1
+            fi
+          done
 
       - name: Install PostgreSQL client tools
         run: |
@@ -189,6 +223,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
+
+      - name: Validate required security env
+        run: |
+          required_vars=(JWT_SECRET EXCHANGE_CREDENTIALS_ENCRYPTION_KEY ADMIN_BOOTSTRAP_EMAIL ADMIN_BOOTSTRAP_PASSWORD TEST_ADMIN_EMAIL TEST_ADMIN_PASSWORD)
+          for key in "${required_vars[@]}"; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "Missing required secret/env/var: $key"
+              exit 1
+            fi
+          done
 
       - name: Install PostgreSQL client tools
         run: |

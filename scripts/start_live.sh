@@ -48,8 +48,8 @@ if [[ -z "$BASE_URL" ]]; then
 fi
 
 export BASE_URL
-export ADMIN_EMAIL="${ADMIN_EMAIL:-admin@platform.local}"
-export ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin12345!}"
+export ADMIN_EMAIL="${ADMIN_EMAIL:-}"
+export ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 export LIVE_USER_EMAIL="${LIVE_USER_EMAIL:-}"
 export LIVE_USER_PASSWORD="${LIVE_USER_PASSWORD:-}"
 export ADMIN_MFA_METHOD="${ADMIN_MFA_METHOD:-}"
@@ -59,9 +59,14 @@ export USER_MFA_CODE="${USER_MFA_CODE:-}"
 export MICRO_SYMBOL="${MICRO_SYMBOL:-ETHUSDT}"
 export MICRO_NOTIONAL_USDT="${MICRO_NOTIONAL_USDT:-7}"
 
+if [[ -z "$ADMIN_EMAIL" || -z "$ADMIN_PASSWORD" ]]; then
+  echo "HATA: ADMIN_EMAIL ve ADMIN_PASSWORD export etmelisin."
+  exit 1
+fi
+
 if [[ -z "$LIVE_USER_EMAIL" || -z "$LIVE_USER_PASSWORD" ]]; then
   echo "HATA: LIVE_USER_EMAIL ve LIVE_USER_PASSWORD export etmelisin."
-  echo "Örnek: LIVE_USER_EMAIL='user@example.com' LIVE_USER_PASSWORD='Pass123!' bash /app/scripts/start_live.sh"
+  echo "Örnek: ADMIN_EMAIL='ops@example.com' ADMIN_PASSWORD='***' LIVE_USER_EMAIL='user@example.com' LIVE_USER_PASSWORD='***' bash /app/scripts/start_live.sh"
   exit 1
 fi
 

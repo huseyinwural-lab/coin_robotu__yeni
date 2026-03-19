@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-export TEST_ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-admin@platform.local}"
-export TEST_ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-Admin12345!}"
+: "${TEST_ADMIN_EMAIL:?Missing TEST_ADMIN_EMAIL}"
+: "${TEST_ADMIN_PASSWORD:?Missing TEST_ADMIN_PASSWORD}"
 
 "$ROOT/scripts/ci_formula_gate.sh"
 "$ROOT/scripts/ci_contract_gate.sh"

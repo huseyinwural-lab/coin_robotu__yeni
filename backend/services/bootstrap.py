@@ -28,16 +28,21 @@ logger = logging.getLogger(__name__)
 
 
 def _seed_admin(db: Session):
-    if not settings.default_admin_email or not settings.default_admin_password:
-        return
-
     users_count = db.query(User).count()
     if users_count > 0:
         return
 
+    bootstrap_email = (settings.bootstrap_admin_email or "").strip()
+    bootstrap_password = (settings.bootstrap_admin_password or "").strip()
+    if not bootstrap_email or not bootstrap_password:
+        raise RuntimeError(
+            "Missing ADMIN_BOOTSTRAP_EMAIL or ADMIN_BOOTSTRAP_PASSWORD. "
+            "First admin must be created via secure bootstrap env values."
+        )
+
     admin = User(
-        email=settings.default_admin_email,
-        password_hash=hash_password(settings.default_admin_password),
+        email=bootstrap_email,
+        password_hash=hash_password(bootstrap_password),
         role=UserRole.SUPER_ADMIN,
         is_active=True,
         approval_status="approved",

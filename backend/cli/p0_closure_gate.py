@@ -48,8 +48,10 @@ def _run_subprocess(command: list[str], cwd: str | None = None) -> tuple[int, st
 
 
 def _admin_login(base_url: str) -> tuple[bool, dict, str | None]:
-    email = os.environ.get("TEST_ADMIN_EMAIL", "admin@platform.local")
-    password = os.environ.get("TEST_ADMIN_PASSWORD", "Admin12345!")
+    email = (os.environ.get("TEST_ADMIN_EMAIL") or "").strip()
+    password = (os.environ.get("TEST_ADMIN_PASSWORD") or "").strip()
+    if not email or not password:
+        return False, {"reason": "missing_TEST_ADMIN_EMAIL_or_TEST_ADMIN_PASSWORD"}, None
     response = requests.post(
         f"{base_url}/api/auth/login/admin",
         json={"email": email, "password": password},

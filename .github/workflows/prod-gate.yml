@@ -6,6 +6,9 @@ on:
 jobs:
   prod-gate:
     runs-on: ubuntu-latest
+    env:
+      TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || vars.TEST_ADMIN_EMAIL }}
+      TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || vars.TEST_ADMIN_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - name: Make CI scripts executable
@@ -14,8 +17,8 @@ jobs:
         run: bash scripts/ci_alembic_drift_gate.sh
       - name: Run hermetic runtime tests
         run: |
-          export TEST_ADMIN_EMAIL="admin@platform.local"
-          export TEST_ADMIN_PASSWORD="Admin12345!"
+          test -n "$TEST_ADMIN_EMAIL"
+          test -n "$TEST_ADMIN_PASSWORD"
           cd backend
           PYTHONPATH="$PWD" pytest -q tests/test_full_market_scan.py tests/test_top_volume_fallback.py tests/test_decision_contract.py tests/test_runtime_candidate_persistence.py tests/test_freshness_policy.py tests/test_event_priority_scheduler.py tests/test_bootstrap_admin_first_install.py tests/test_admin_profile_update.py tests/test_admin_password_change.py
       - name: Run prod release gate

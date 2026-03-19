@@ -38,12 +38,13 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://trader:trader@postgres:5432/trading_platform
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: change-this
+      JWT_SECRET: ${JWT_SECRET:?missing}
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: "720"
+      EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: ${EXCHANGE_CREDENTIALS_ENCRYPTION_KEY:?missing}
       CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
-      DEFAULT_ADMIN_EMAIL: admin@platform.local
-      DEFAULT_ADMIN_PASSWORD: Admin12345!
+      ADMIN_BOOTSTRAP_EMAIL: ${ADMIN_BOOTSTRAP_EMAIL:?missing}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:?missing}
     depends_on:
       postgres:
         condition: service_healthy

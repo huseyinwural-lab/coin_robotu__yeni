@@ -14,16 +14,36 @@ from models import UserExchangeSetting
 AES_PREFIX = "aesgcm:v1"
 
 
-def _derived_key_bytes() -> bytes:
-    return hashlib.sha256(settings.jwt_secret.encode()).digest()
+def _current_key_bytes() -> bytes:
+    return hashlib.sha256(settings.exchange_credentials_encryption_key.encode()).digest()
+
+
+def _legacy_key_candidates() -> list[bytes]:
+    candidates: list[bytes] = []
+    jwt_key = hashlib.sha256(settings.jwt_secret.encode()).digest()
+    if jwt_key not in candidates:
+        candidates.append(jwt_key)
+    return candidates
+
+
+def _fernet_from_bytes(key_bytes: bytes) -> Fernet:
+    return Fernet(urlsafe_b64encode(key_bytes))
 
 
 def _legacy_fernet() -> Fernet:
-    return Fernet(urlsafe_b64encode(_derived_key_bytes()))
+    return _fernet_from_bytes(_legacy_key_candidates()[0])
+
+
+def _current_fernet() -> Fernet:
+    return _fernet_from_bytes(_current_key_bytes())
+
+
+def _aesgcm_from_bytes(key_bytes: bytes) -> AESGCM:
+    return AESGCM(key_bytes)
 
 
 def _aesgcm() -> AESGCM:
-    return AESGCM(_derived_key_bytes())
+    return _aesgcm_from_bytes(_current_key_bytes())
 
 
 def _b64encode(data: bytes) -> str:
@@ -49,7 +69,13 @@ def _decrypt_aes_payload(raw_encrypted: str) -> str:
     nonce_encoded, encrypted_encoded = payload.split(":", 1)
     nonce = _b64decode(nonce_encoded)
     encrypted = _b64decode(encrypted_encoded)
-    return _aesgcm().decrypt(nonce, encrypted, None).decode()
+    aes_keys = [_current_key_bytes(), *_legacy_key_candidates()]
+    for key_bytes in aes_keys:
+        try:
+            return _aesgcm_from_bytes(key_bytes).decrypt(nonce, encrypted, None).decode()
+        except Exception:
+            continue
+    raise ValueError("unable_to_decrypt_exchange_secret")
 
 
 def decrypt_exchange_secret(raw_encrypted: str) -> str:
@@ -60,7 +86,13 @@ def decrypt_exchange_secret(raw_encrypted: str) -> str:
     try:
         if cipher.startswith(f"{AES_PREFIX}:"):
             return _decrypt_aes_payload(cipher)
-        return _legacy_fernet().decrypt(cipher.encode()).decode()
+        fernet_candidates = [_current_fernet(), _legacy_fernet()]
+        for fernet in fernet_candidates:
+            try:
+                return fernet.decrypt(cipher.encode()).decode()
+            except Exception:
+                continue
+        return ""
     except Exception:
         return ""
 

@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
-export TEST_ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-admin@platform.local}"
-export TEST_ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-Admin12345!}"
+: "${TEST_ADMIN_EMAIL:?Missing TEST_ADMIN_EMAIL}"
+: "${TEST_ADMIN_PASSWORD:?Missing TEST_ADMIN_PASSWORD}"
 
 cd "$BACKEND_DIR"
 PYTHONPATH="$BACKEND_DIR" python -m cli.validate_contract_snapshot

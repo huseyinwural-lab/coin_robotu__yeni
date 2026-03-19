@@ -13,8 +13,8 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
   echo "[ERROR] Missing DATABASE_URL"
   exit 1
 fi
-if [[ -z "${DEFAULT_ADMIN_EMAIL:-}" || -z "${DEFAULT_ADMIN_PASSWORD:-}" ]]; then
-  echo "[ERROR] Missing DEFAULT_ADMIN_EMAIL or DEFAULT_ADMIN_PASSWORD"
+if [[ -z "${TEST_ADMIN_EMAIL:-}" || -z "${TEST_ADMIN_PASSWORD:-}" ]]; then
+  echo "[ERROR] Missing TEST_ADMIN_EMAIL or TEST_ADMIN_PASSWORD"
   exit 1
 fi
 
@@ -54,7 +54,7 @@ import os
 from sqlalchemy import create_engine, text
 
 url = os.environ["DATABASE_URL"]
-email = os.environ["DEFAULT_ADMIN_EMAIL"]
+email = os.environ["TEST_ADMIN_EMAIL"]
 engine = create_engine(url)
 with engine.connect() as conn:
     row = conn.execute(
@@ -70,7 +70,7 @@ echo "[3/4] Admin login smoke"
 LOGIN_STATUS=$(curl -s -o "$LOGIN_BODY_FILE" -w "%{http_code}" \
   -X POST "$BACKEND_URL/api/auth/login/admin" \
   -H "Content-Type: application/json" \
-  -d "{\"email\":\"${DEFAULT_ADMIN_EMAIL}\",\"password\":\"${DEFAULT_ADMIN_PASSWORD}\"}")
+  -d "{\"email\":\"${TEST_ADMIN_EMAIL}\",\"password\":\"${TEST_ADMIN_PASSWORD}\"}")
 
 if [[ "$LOGIN_STATUS" != "200" ]]; then
   echo "[ERROR] Admin login failed: status=$LOGIN_STATUS"

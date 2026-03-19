@@ -15,7 +15,12 @@ if [[ -z "$BASE_URL" ]]; then
   exit 1
 fi
 
-TOKEN="$(curl -sS -X POST "$BASE_URL/api/auth/login/admin" -H 'Content-Type: application/json' -d '{"email":"admin@platform.local","password":"Admin12345!"}' | python -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))')"
+if [[ -z "${TEST_ADMIN_EMAIL:-}" || -z "${TEST_ADMIN_PASSWORD:-}" ]]; then
+  echo "missing_test_admin_credentials"
+  exit 1
+fi
+
+TOKEN="$(curl -sS -X POST "$BASE_URL/api/auth/login/admin" -H 'Content-Type: application/json' -d "{\"email\":\"${TEST_ADMIN_EMAIL}\",\"password\":\"${TEST_ADMIN_PASSWORD}\"}" | python -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))')"
 
 if [[ -z "$TOKEN" ]]; then
   echo "admin_token_missing"

@@ -66,10 +66,15 @@ echo "[5/8] Backend smoke: login + protected admin endpoint"
 LOGIN_BODY="$OUT_DIR/login_body.json"
 SUMMARY_BODY="$OUT_DIR/admin_summary.json"
 
+if [[ -z "${TEST_ADMIN_EMAIL:-}" || -z "${TEST_ADMIN_PASSWORD:-}" ]]; then
+  echo "[ERROR] Missing TEST_ADMIN_EMAIL or TEST_ADMIN_PASSWORD"
+  exit 1
+fi
+
 LOGIN_STATUS=$(curl -s -o "$LOGIN_BODY" -w "%{http_code}" \
   -X POST "http://localhost:8001/api/auth/login/admin" \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@platform.local","password":"Admin12345!"}')
+  -d "{\"email\":\"${TEST_ADMIN_EMAIL}\",\"password\":\"${TEST_ADMIN_PASSWORD}\"}")
 
 if [[ "$LOGIN_STATUS" != "200" ]]; then
   echo "[ERROR] Login failed status=$LOGIN_STATUS"
@@ -99,7 +104,7 @@ curl -fsS "http://localhost:3000/" -o "$OUT_DIR/frontend_index.html"
 FRONTEND_LOGIN_STATUS=$(curl -s -o "$OUT_DIR/frontend_login.json" -w "%{http_code}" \
   -X POST "http://localhost:8001/api/auth/login/admin" \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@platform.local","password":"Admin12345!"}')
+  -d "{\"email\":\"${TEST_ADMIN_EMAIL}\",\"password\":\"${TEST_ADMIN_PASSWORD}\"}")
 if [[ "$FRONTEND_LOGIN_STATUS" != "200" ]]; then
   echo "[ERROR] Frontend auth chain failed status=$FRONTEND_LOGIN_STATUS"
   exit 1

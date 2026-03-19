@@ -83,7 +83,10 @@ if [[ -z "${BACKEND_URL:-}" ]]; then
   exit 1
 fi
 
-if [[ -z "${DEFAULT_ADMIN_EMAIL:-}" || -z "${DEFAULT_ADMIN_PASSWORD:-}" ]]; then
+ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-${ADMIN_BOOTSTRAP_EMAIL:-}}"
+ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-${ADMIN_BOOTSTRAP_PASSWORD:-}}"
+
+if [[ -z "${ADMIN_EMAIL:-}" || -z "${ADMIN_PASSWORD:-}" ]]; then
   log "FAIL admin_env_missing"
   exit 1
 fi
@@ -93,7 +96,7 @@ log "INSERT_START app_name=${unique_app_name}"
 
 login_response="$(curl -sS -X POST "${BACKEND_URL}/api/auth/login/admin" \
   -H "Content-Type: application/json" \
-  -d "{\"email\":\"${DEFAULT_ADMIN_EMAIL}\",\"password\":\"${DEFAULT_ADMIN_PASSWORD}\"}")"
+  -d "{\"email\":\"${ADMIN_EMAIL}\",\"password\":\"${ADMIN_PASSWORD}\"}")"
 token="$(json_get "$login_response" "access_token")"
 if [[ -z "$token" ]]; then
   log "FAIL admin_login_failed"

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import logging
@@ -38,6 +38,7 @@ from services.password_reset_service import (
     issue_password_reset_token,
     send_password_reset_email,
 )
+from services.auth_rate_limit_service import enforce_login_rate_limit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -155,17 +156,20 @@ def _login_with_policy(
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: LocalLoginRequest, db: Session = Depends(get_db)):
+def login(payload: LocalLoginRequest, request: Request, db: Session = Depends(get_db)):
+    enforce_login_rate_limit(request, "login")
     return _login_with_policy(payload, db)
 
 
 @router.post("/login/admin", response_model=AuthResponse)
-def admin_login(payload: LocalLoginRequest, db: Session = Depends(get_db)):
+def admin_login(payload: LocalLoginRequest, request: Request, db: Session = Depends(get_db)):
+    enforce_login_rate_limit(request, "login_admin")
     return _login_with_policy(payload, db, allowed_roles={UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS})
 
 
 @router.post("/login/user", response_model=AuthResponse)
-def user_login(payload: LocalLoginRequest, db: Session = Depends(get_db)):
+def user_login(payload: LocalLoginRequest, request: Request, db: Session = Depends(get_db)):
+    enforce_login_rate_limit(request, "login_user")
     return _login_with_policy(payload, db, target_role=UserRole.USER)
 
 

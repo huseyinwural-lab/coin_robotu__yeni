@@ -50,8 +50,24 @@ def _safe_json(response: requests.Response | None) -> dict:
 
 def run() -> int:
     base = _resolve_base_url()
-    admin_email = os.environ.get("TEST_ADMIN_EMAIL", "admin@platform.local")
-    admin_password = os.environ.get("TEST_ADMIN_PASSWORD", "Admin12345!")
+    admin_email = (os.environ.get("TEST_ADMIN_EMAIL") or "").strip()
+    admin_password = (os.environ.get("TEST_ADMIN_PASSWORD") or "").strip()
+    if not admin_email or not admin_password:
+        print(
+            json.dumps(
+                {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "base_url": base,
+                    "checks": [
+                        _check(False, "admin_credentials_present", {"reason": "missing_TEST_ADMIN_EMAIL_or_TEST_ADMIN_PASSWORD"})
+                    ],
+                    "overall": "FAIL",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 1
 
     checks: list[dict] = []
 

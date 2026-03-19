@@ -85,9 +85,19 @@ echo "[6/7] Frontend -> backend network validation"
 docker compose exec -T frontend sh -lc 'node -e "require(\"http\").get(\"http://backend:8001/api/health\",r=>{console.log(\"status=\"+r.statusCode);process.exit(r.statusCode===200?0:1)}).on(\"error\",e=>{console.error(e.message);process.exit(1)})"' | tee "$LOG_DIR/frontend_backend_health.txt"
 
 echo "[7/7] Frontend auth flow smoke (network-level)"
-docker compose exec -T frontend sh -lc 'node - <<"JS"
+if [[ -z "${TEST_ADMIN_EMAIL:-}" || -z "${TEST_ADMIN_PASSWORD:-}" ]]; then
+  echo "[ERROR] Missing TEST_ADMIN_EMAIL or TEST_ADMIN_PASSWORD"
+  exit 1
+fi
+docker compose exec -T -e TEST_ADMIN_EMAIL="$TEST_ADMIN_EMAIL" -e TEST_ADMIN_PASSWORD="$TEST_ADMIN_PASSWORD" frontend sh -lc 'node - <<"JS"
 const http = require("http");
-const payload = JSON.stringify({ email: "admin@platform.local", password: "Admin12345!" });
+const email = process.env.TEST_ADMIN_EMAIL || "";
+const password = process.env.TEST_ADMIN_PASSWORD || "";
+if (!email || !password) {
+  console.error("missing TEST_ADMIN_EMAIL or TEST_ADMIN_PASSWORD");
+  process.exit(1);
+}
+const payload = JSON.stringify({ email, password });
 const req = http.request({
   hostname: "backend",
   port: 8001,

@@ -31,15 +31,15 @@ class _DbMock:
 
 
 def test_bootstrap_admin_created_only_when_users_empty(monkeypatch):
-    monkeypatch.setattr(bootstrap.settings, "default_admin_email", "admin@platform.local")
-    monkeypatch.setattr(bootstrap.settings, "default_admin_password", "Admin12345!")
+    monkeypatch.setattr(bootstrap.settings, "bootstrap_admin_email", "bootstrap_admin@example.local")
+    monkeypatch.setattr(bootstrap.settings, "bootstrap_admin_password", "BootstrapPass!123")
     monkeypatch.setattr(bootstrap, "create_audit_log", lambda *args, **kwargs: None)
 
     empty_db = _DbMock(users_count=0)
     bootstrap._seed_admin(empty_db)
 
     assert len(empty_db.added) == 1
-    assert empty_db.added[0].email == "admin@platform.local"
+    assert empty_db.added[0].email == "bootstrap_admin@example.local"
 
     non_empty_db = _DbMock(users_count=3)
     bootstrap._seed_admin(non_empty_db)
