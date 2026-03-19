@@ -5,7 +5,7 @@ Bu test dosyası FAZ 0 görev emri final maddelerini doğrular:
 - T-0.5: Runtime SQLite guard aktif mi
 - T-0.6: Alembic current == head artifact doğrulaması
 - T-0.7: db_persistence_test.log içeriği exact 3 satır
-- T-0.8: CI sqlite guard workflow adımı var mı
+- T-0.8: CI SQLite guard workflow adımı var mı
 - T-0.9: /api/health response exact {status:ok, database:connected}
 - T-0.10: backend/.env.example postgres URL doğrulaması
 - FAZ0 exit: .db dosyası 0
@@ -34,8 +34,8 @@ class TestFaz0RuntimeSqliteGuard:
         assert 'RuntimeError' in content, "RuntimeError raise bulunamadı"
     
     def test_runtime_guard_artifact_exists(self):
-        """runtime_sqlite_guard.log artifact dosyası mevcut olmalı"""
-        artifact_path = "/app/artifacts/runtime_sqlite_guard.log"
+        """runtime_SQLite_guard.log artifact dosyası mevcut olmalı"""
+        artifact_path = "/app/artifacts/runtime_SQLite_guard.log"
         assert os.path.exists(artifact_path), f"Artifact dosyası bulunamadı: {artifact_path}"
         
         with open(artifact_path, 'r') as f:
@@ -98,27 +98,27 @@ class TestFaz0DbPersistence:
 
 
 class TestFaz0CiSqliteGuard:
-    """T-0.8: CI sqlite guard workflow adımı var mı"""
+    """T-0.8: CI SQLite guard workflow adımı var mı"""
     
     def test_ci_workflow_exists(self):
         """deploy-gate.yml workflow dosyası mevcut olmalı"""
         workflow_path = "/app/.github/workflows/deploy-gate.yml"
         assert os.path.exists(workflow_path), f"Workflow dosyası bulunamadı: {workflow_path}"
     
-    def test_ci_sqlite_guard_step_exists(self):
+    def test_ci_SQLite_guard_step_exists(self):
         """Workflow'da SQLite guard step'i olmalı"""
         workflow_path = "/app/.github/workflows/deploy-gate.yml"
         with open(workflow_path, 'r') as f:
             content = f.read()
         
-        # grep -R "sqlite" kontrolü
-        assert 'grep -R "sqlite"' in content, "CI SQLite guard grep komutu bulunamadı"
+        # grep -R "SQLite" kontrolü
+        assert 'grep -R "SQLite"' in content, "CI SQLite guard grep komutu bulunamadı"
         assert 'SQLite forbidden' in content, "CI SQLite forbidden mesajı bulunamadı"
         assert 'exit 1' in content, "CI exit 1 komutu bulunamadı"
     
-    def test_ci_sqlite_guard_artifact_exists(self):
-        """ci_sqlite_guard.log artifact dosyası mevcut olmalı"""
-        artifact_path = "/app/artifacts/ci_sqlite_guard.log"
+    def test_ci_SQLite_guard_artifact_exists(self):
+        """ci_SQLite_guard.log artifact dosyası mevcut olmalı"""
+        artifact_path = "/app/artifacts/ci_SQLite_guard.log"
         assert os.path.exists(artifact_path), f"Artifact dosyası bulunamadı: {artifact_path}"
         
         with open(artifact_path, 'r') as f:
@@ -173,7 +173,7 @@ class TestFaz0EnvExample:
         
         assert 'DATABASE_URL=' in content, "DATABASE_URL tanımı bulunamadı"
         assert 'postgresql' in content.lower(), "PostgreSQL URL bulunamadı"
-        assert 'sqlite' not in content.lower(), "SQLite referansı bulundu - yasak!"
+        assert 'SQLite' not in content.lower(), "SQLite referansı bulundu - yasak!"
 
 
 class TestFaz0DbFileExit:

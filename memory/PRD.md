@@ -5,7 +5,7 @@
   - `backend/db.py`: embedded DB URL bloklayıcı assert + startup connection check
   - `backend/services/migration_service.py`: yalnız PostgreSQL migration URL, fallback kaldırıldı
   - `backend/migrations/env.py`: embedded DB URL hard-block
-  - `backend/server.py`: `/health` endpointine DB doğrulaması eklendi (`{"status":"ok","db":"ok"}`)
+- `backend/server.py`: `/health` endpointine DB doğrulaması eklendi (`{"status":"ok","database":"connected"}`)
 - `.db` dosyaları repo içinden fiziksel olarak silindi.
 - Alembic doğrulama canlı PostgreSQL üzerinde alındı (`current == head`).
 - CI gate’e embedded DB referans kontrolü eklendi:
@@ -30,6 +30,21 @@
 
 ### FAZ 0 Durumu
 - EXIT kriterleri: **PASS**
+
+### FAZ 0 Kapanış Güncellemesi (T-0.5 ... T-0.10 bire bir)
+- Runtime startup guard sertleştirildi (embedded DB URL hard-block).
+- `/api/health` yanıt formatı kapanış emrine göre güncellendi:
+  - `{"status":"ok","database":"connected"}`
+- Alembic live doğrulama artifact:
+  - `/app/artifacts/alembic_live_validation.log`
+  - `CURRENT == HEAD`
+- Persistence restart artifact:
+  - `/app/artifacts/db_persistence_test.log`
+  - Satırlar: `INSERT_OK`, `RESTART_OK`, `DATA_FOUND_AFTER_RESTART`
+- CI sqlite block workflow adımı kapatıldı (deploy-gate içinde).
+- Kapanış raporu:
+  - `/app/artifacts/faz0_closure_report.md`
+  - `/app/test_reports/iteration_7.json` (testing agent: 17/17 PASS)
 
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
