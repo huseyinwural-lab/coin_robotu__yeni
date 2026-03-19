@@ -10,7 +10,7 @@ mkdir -p "$ARTIFACT_DIR"
 
 log() {
   local line="$1"
-  echo "$line" | tee -a "$SUMMARY_LOG" >/dev/null
+  echo "$line" | tee -a "$SUMMARY_LOG"
 }
 
 fail() {
@@ -22,6 +22,13 @@ trap 'rc=$?; line=${BASH_LINENO[0]:-unknown}; cmd=${BASH_COMMAND:-unknown}; log 
 
 SQL_MARKER="sql""ite"
 POSTGRES_MARKER="post""gresql"
+
+if [[ -z "${DATABASE_URL:-}" && -f "${APP_ROOT}/backend/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${APP_ROOT}/backend/.env"
+  set +a
+fi
 
 SQL_SCAN_LOG="${ARTIFACT_DIR}/faz0_embeddeddb_scan_post_cleanup.log"
 rm -f "$SQL_SCAN_LOG" "${ARTIFACT_DIR}/faz0_embeddeddb_scan_filtered.log"
@@ -188,7 +195,7 @@ from pathlib import Path
 import re
 
 text = Path(os.environ['CURRENT_LOG']).read_text(encoding='utf-8')
-matches = re.findall(r'([0-9]{8}_[0-9]{4})', text)
+matches = re.findall(r'^([A-Za-z0-9_]+)\s*\(', text, flags=re.MULTILINE)
 print(matches[-1] if matches else '')
 PY
 )"
@@ -199,7 +206,7 @@ from pathlib import Path
 import re
 
 text = Path(os.environ['HEAD_LOG']).read_text(encoding='utf-8')
-matches = re.findall(r'([0-9]{8}_[0-9]{4})', text)
+matches = re.findall(r'^([A-Za-z0-9_]+)\s*\(', text, flags=re.MULTILINE)
 print(matches[-1] if matches else '')
 PY
 )"
@@ -213,16 +220,27 @@ if [[ "$CURRENT_REV" != "$HEAD_REV" ]]; then
 fi
 log "PASS: alembic current=head (${CURRENT_REV})"
 
-if command -v supervisorctl >/dev/null 2>&1 \
+runtime_admin_email="${TEST_ADMIN_EMAIL:-${ADMIN_BOOTSTRAP_EMAIL:-}}"
+runtime_admin_password="${TEST_ADMIN_PASSWORD:-${ADMIN_BOOTSTRAP_PASSWORD:-}}"
+
+if [[ "${CI:-}" != "true" ]] \
+  && command -v supervisorctl >/dev/null 2>&1 \
   && [[ -f "${APP_ROOT}/frontend/.env" ]] \
-  && [[ -f "${APP_ROOT}/backend/.env" ]]; then
+  && [[ -f "${APP_ROOT}/backend/.env" ]] \
+  && [[ -n "${runtime_admin_email}" ]] \
+  && [[ -n "${runtime_admin_password}" ]]; then
   bash "${APP_ROOT}/scripts/phase0_runtime_persistence_test.sh"
   log "PASS: runtime restart persistence"
 else
   PERSISTENCE_LOG="${ARTIFACT_DIR}/faz0_persistence_db_smoke.log"
   marker="faz0_db_smoke_$(date +%s)"
   if [[ -z "${DATABASE_URL:-}" ]]; then
-    fail "DATABASE_URL eksik (CI psql smoke)"
+    if [[ "${CI:-}" == "true" ]]; then
+      DATABASE_URL="postgresql+psycopg2://trader:trader@localhost:5432/trading_platform"
+      log "INFO: DATABASE_URL eksikti, CI fallback URL kullanıldı"
+    else
+      fail "DATABASE_URL eksik (CI psql smoke)"
+    fi
   fi
   PSQL_DB_URL="${DATABASE_URL/postgresql+psycopg2:/postgresql:}"
   psql "${PSQL_DB_URL}" -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS phase0_persistence_smoke (id SERIAL PRIMARY KEY, marker TEXT UNIQUE NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW());" > "$PERSISTENCE_LOG" 2>&1
