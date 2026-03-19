@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
-const FIXED_LOGIN_LOGO_URL = "https://customer-assets.emergentagent.com/job_7c46efd0-6499-4da5-832c-e8dbd8b11e57/artifacts/qeyh5tzg_Gemini_Generated_Image_ikkodjikkodjikko.png";
 
 export const UserLoginPage = () => {
   const navigate = useNavigate();
@@ -86,13 +85,10 @@ export const UserLoginPage = () => {
 
   return (
     <div className="min-h-screen bg-[#edf0f5] px-4 py-8" data-testid="user-login-page">
-      <div className="mx-auto flex w-full max-w-2xl justify-center" data-testid="user-login-logo-only-strip">
-        <img src={FIXED_LOGIN_LOGO_URL} alt="XILO logo" className="h-auto w-full max-w-[320px] object-contain" data-testid="user-login-fixed-logo" />
-      </div>
-
       <div className="mx-auto mt-6 w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8" data-testid="user-login-card">
-        <header className="flex justify-center" data-testid="user-login-header-logo-only">
-          <img src={FIXED_LOGIN_LOGO_URL} alt="XILO giriş logosu" className="h-auto w-full max-w-[280px] object-contain" data-testid="user-login-card-logo" />
+        <header className="text-center" data-testid="user-login-header">
+          <h1 className="text-3xl font-black text-slate-900" data-testid="user-login-title">{mode === "register" ? "Hesap Aç" : "Giriş Yap"}</h1>
+          <p className="mt-2 text-base text-slate-600" data-testid="user-login-subtitle">Hesabınıza güvenli şekilde erişin.</p>
         </header>
 
         <form onSubmit={onSubmit} className="mx-auto mt-7 max-w-xl space-y-4" data-testid="user-login-form">
