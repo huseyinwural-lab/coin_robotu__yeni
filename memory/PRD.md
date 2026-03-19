@@ -131,6 +131,28 @@
   - frontend perf smoke: PASS
   - artifact üretimi/doğrulaması: PASS
 
+## 2026-03-19 — Deploy Gate Genişletme 2 (Env-Bazlı Threshold + API p95 Budget)
+
+### Yapılanlar
+- Frontend perf smoke threshold’ları profile bazlı hale getirildi:
+  - `dev`: JS 750KB / CSS 90KB (gzip)
+  - `stage`: JS 650KB / CSS 70KB (gzip)
+  - `prod`: JS 600KB / CSS 50KB (gzip)
+- Workflow perf adımı branch/event bazlı profile seçiyor:
+  - main/master -> prod
+  - pull_request -> stage
+  - diğer -> dev
+- Backend contract gate’e API latency budget assertion eklendi:
+  - `backend/tests/test_api_latency_budget_contract.py`
+  - `p95 < 120ms` (health endpoint, TestClient)
+
+### Doğrulama
+- `/app/test_reports/iteration_14.json`
+  - perf profile support: PASS
+  - workflow profile selection: PASS
+  - latency p95 contract: PASS
+  - deploy-gate full flow: PASS
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi
