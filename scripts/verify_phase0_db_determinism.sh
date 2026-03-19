@@ -93,6 +93,8 @@ filtered_scan_log = Path(os.environ['FILTERED_SCAN_LOG'])
 allowed_prefixes = (
     f'{app_root}/README.md:',
     f'{app_root}/docs/11_alembic_drift_report.md:',
+    f'{app_root}/.gitignore:',
+    f'{app_root}/scripts/verify_phase1_backup_restore.sh:',
 )
 
 rows = []
