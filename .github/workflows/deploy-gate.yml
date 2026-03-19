@@ -325,6 +325,7 @@ jobs:
           name: phase3-execution-safety-artifacts
           path: |
             artifacts/faz3_execution_safety_summary.log
+            artifacts/faz3_alembic_upgrade.log
             artifacts/faz3_model_guard_check.log
             artifacts/faz3_guard_consolidation.log
             artifacts/faz3_reason_code_standardization.log

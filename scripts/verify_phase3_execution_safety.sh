@@ -97,6 +97,7 @@ log "PASS: reason code standardizasyonu"
 log "T-3.7 integration test paketi"
 (
   cd "${APP_ROOT}/backend"
+  alembic upgrade head > "${ARTIFACT_DIR}/faz3_alembic_upgrade.log" 2>&1
   pytest -q tests/test_phase3_execution_safety.py
 ) | tee "${ARTIFACT_DIR}/faz3_integration_tests.log"
 log "PASS: integration testler"
