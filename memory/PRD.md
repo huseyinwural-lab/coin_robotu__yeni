@@ -173,6 +173,26 @@
   - perf delta fields: PASS
   - full deploy-gate simulation: PASS
 
+## 2026-03-19 — Deploy Gate Genişletme 4 (PR Delta Yorumu + p95 Profile Enforcement)
+
+### Yapılanlar
+- Contract gate için `LATENCY_BUDGET_PROFILE` branch/event bazlı enforce edildi:
+  - main/master -> prod
+  - pull_request -> stage
+  - diğer -> dev
+- Frontend perf delta sonuçlarını PR’a otomatik yazan comment adımı eklendi:
+  - `actions/github-script@v7`
+  - marker tabanlı create/update yorum stratejisi
+  - içerik: profile, js/css gzip, delta_vs_previous, threshold sonucu
+
+### Doğrulama
+- `/app/test_reports/iteration_16.json`
+  - profile-based latency budgets: PASS
+  - contract gate profile selection: PASS
+  - PR comment step: PASS
+  - perf delta fields: PASS
+  - full deploy-gate simulation: PASS
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi
