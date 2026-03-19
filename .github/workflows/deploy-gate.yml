@@ -48,7 +48,7 @@ jobs:
       - name: Pytest contract gate
         working-directory: backend
         run: |
-          pytest -q tests/test_execution_readiness_contract.py tests/test_release_gate_contract.py
+          pytest -q tests/test_execution_readiness_contract.py tests/test_release_gate_contract.py tests/test_api_latency_budget_contract.py
 
   frontend-quality-gate:
     runs-on: ubuntu-latest
@@ -71,7 +71,15 @@ jobs:
 
       - name: Frontend performance smoke
         working-directory: frontend
-        run: node scripts/ci_perf_smoke.js
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == "main" || "${GITHUB_REF_NAME}" == "master" ]]; then
+            export PERF_SMOKE_PROFILE=prod
+          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            export PERF_SMOKE_PROFILE=stage
+          else
+            export PERF_SMOKE_PROFILE=dev
+          fi
+          node scripts/ci_perf_smoke.js
 
       - name: Upload frontend perf smoke artifact
         uses: actions/upload-artifact@v4
