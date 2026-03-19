@@ -18,6 +18,8 @@ fail() {
   exit 1
 }
 
+trap 'rc=$?; line=${BASH_LINENO[0]:-unknown}; cmd=${BASH_COMMAND:-unknown}; log "FAIL: line=${line} cmd=${cmd} exit=${rc}"; exit ${rc}' ERR
+
 SQL_MARKER="sql""ite"
 POSTGRES_MARKER="post""gresql"
 
@@ -163,8 +165,16 @@ PY
 log "PASS: test bootstrap guard doğrulandı"
 
 pushd "${APP_ROOT}/backend" >/dev/null
-alembic current > "${ARTIFACT_DIR}/faz0_alembic_current.log" 2>&1
-alembic heads > "${ARTIFACT_DIR}/faz0_alembic_heads.log" 2>&1
+if ! alembic current > "${ARTIFACT_DIR}/faz0_alembic_current.log" 2>&1; then
+  log "FAIL: alembic current çalışmadı"
+  cat "${ARTIFACT_DIR}/faz0_alembic_current.log" >> "$SUMMARY_LOG"
+  exit 1
+fi
+if ! alembic heads > "${ARTIFACT_DIR}/faz0_alembic_heads.log" 2>&1; then
+  log "FAIL: alembic heads çalışmadı"
+  cat "${ARTIFACT_DIR}/faz0_alembic_heads.log" >> "$SUMMARY_LOG"
+  exit 1
+fi
 popd >/dev/null
 
 CURRENT_REV="$(CURRENT_LOG="${ARTIFACT_DIR}/faz0_alembic_current.log" python - <<'PY'
