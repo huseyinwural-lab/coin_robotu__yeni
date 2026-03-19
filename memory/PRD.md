@@ -153,6 +153,26 @@
   - latency p95 contract: PASS
   - deploy-gate full flow: PASS
 
+## 2026-03-19 — Deploy Gate Genişletme 3 (Endpoint Bazlı p95 + Delta Karşılaştırma)
+
+### Yapılanlar
+- API latency budget assertion endpoint bazlı çoklu tabloya çıkarıldı:
+  - `/api/health` => 120ms
+  - `/api/admin/execution-readiness` => 900ms
+  - `/api/dashboard/summary` => 1100ms
+- Perf smoke raporuna `delta_vs_previous` eklendi:
+  - `main_js_gzip_kb_delta`
+  - `main_css_gzip_kb_delta`
+- Workflow önceki commit baseline denemesi ekledi:
+  - `git show HEAD~1:frontend/perf-baseline/latest.json > build/perf-smoke-report.prev.json || true`
+
+### Doğrulama
+- `/app/test_reports/iteration_15.json`
+  - endpoint-based p95 table: PASS
+  - contract gate latency include: PASS
+  - perf delta fields: PASS
+  - full deploy-gate simulation: PASS
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi
