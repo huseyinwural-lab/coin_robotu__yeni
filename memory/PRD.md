@@ -7799,3 +7799,14 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Smoke screenshot doğrulaması: landing header yapısı ve eski alanların kaldırıldığı doğrulandı.
 - Frontend testing agent: 6/6 PASS (header/form/admin-login kontrolleri).
 
+## 2026-03-19 — Logo Yerleşim Revizyonu (Kullanıcı Geri Bildirimi) ✅
+
+### Uygulanan düzeltmeler
+- `/user/login` ekranından tüm logo görselleri kaldırıldı (üst ve kart içi).
+- Landing header logosu taşma/beyaz boşluk yapmayacak şekilde çerçeveye sığdırıldı (`overflow-hidden` + `object-cover`).
+- Landing’de kullanıcı giriş butonu sağ konumda korundu.
+
+### Doğrulama
+- Smoke test: PASS (user login logo count = 0, landing logo görünüm/fitting OK)
+- Frontend testing agent: PASS (3/3)
+
