@@ -7768,3 +7768,21 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 ### Kesin kapanış artefaktı
 - `/app/artifacts/faz1_final_closure.zip`
 
+## 2026-03-19 — FAZ 1 Production-Grade Kesin Kapanış ✅
+
+### Uygulanan adımlar (tek atım)
+1. `.gitignore` canonical minimal içeriğe tam overwrite edildi (31 satır).
+2. `.git/hooks/pre-commit` revize edildi:
+   - güvenlik denetimi devam ediyor (staged büyük dosya blokajı),
+   - `.gitignore` manipülasyonu tamamen kaldırıldı.
+3. `scripts/verify_phase1_backup_restore.sh` hard-check güncellendi:
+   - `.gitignore` satır sayısı **tam 31** kontrolü
+   - byte hizası (expected vs actual) kontrolü
+4. İstenen komutlarla kapanış gerçekleştirildi:
+   - `git add . && git commit -m "FIX: Production-grade hygiene alignment"`
+   - `git archive -o /app/artifacts/faz1_final_closure.zip HEAD`
+
+### Kanıt
+- `ZIP_REPO_ALIGNMENT=OK` (zip içi `.gitignore` ile repo birebir aynı)
+- `bash scripts/verify_phase1_backup_restore.sh` -> `SUMMARY: PASS`
+
