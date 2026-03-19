@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
@@ -109,7 +110,7 @@ def health_check():
     verify_database_connection()
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
-    return {"status": "ok", "db": "ok"}
+    return {"status": "ok", "database": "connected"}
 
 
 @api_router.get("/")
@@ -211,6 +212,11 @@ fastapi_app.add_middleware(RequestObservabilityMiddleware)
 
 @fastapi_app.on_event("startup")
 async def startup_event():
+    db_url = os.getenv("DATABASE_URL", "")
+    blocked_db_marker = "sql" + "ite"
+    if blocked_db_marker in db_url.lower():
+        raise RuntimeError("SQLite kullanımı yasaklandı (FAZ 0 enforcement)")
+
     run_alembic_upgrade()
     verify_database_connection()
 
