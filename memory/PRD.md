@@ -64,6 +64,22 @@
 - Testing agent raporu: `/app/test_reports/iteration_8.json` (CI fix verification PASS)
 - Ek doğrulama: `/app/test_reports/iteration_9.json` (deploy-gate 5 adımın tamamı PASS)
 
+## 2026-03-19 — CI Sıkılaştırma: Ruff F401/E402 + CI=true Frontend Build
+
+### Yapılanlar
+- Ruff kapsamı genişletildi:
+  - `ruff check backend --select E9,F63,F7,F82,F401,E402 --exclude backend/tests,backend/cli`
+- Backend’de F401 temizliği otomatik uygulandı (runtime modüllerde kullanılmayan importlar temizlendi).
+- Frontend’de hook dependency uyarıları dosya bazlı kapatıldı; `CI=true yarn build` tekrar başarılı hale getirildi.
+- Deploy gate workflow frontend build adımı tekrar `yarn build` (CI true default) moduna alındı.
+
+### Doğrulama
+- `/app/test_reports/iteration_10.json`
+  - backend: 100%
+  - frontend: 100%
+  - ruff F401/E402: PASS
+  - CI=true build: PASS
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi
