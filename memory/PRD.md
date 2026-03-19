@@ -7786,3 +7786,16 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - `ZIP_REPO_ALIGNMENT=OK` (zip içi `.gitignore` ile repo birebir aynı)
 - `bash scripts/verify_phase1_backup_restore.sh` -> `SUMMARY: PASS`
 
+## 2026-03-19 — Landing/Header UI Düzeltmesi (Kullanıcı Talebi) ✅
+
+### Uygulanan değişiklikler
+- Landing header üst logo bloğu kaldırıldı; solda yalnızca `Kullanıcı Girişi` aksiyonu bırakıldı.
+- Landing `Hesap Aç` formu içindeki `Logo Yükle` alanı kaldırıldı.
+- Header içine yeni `Logo Yükle` alanı + geniş logo önizleme bloğu eklendi.
+- Landing header’da `Admin Girişi` butonu kaldırıldı.
+- Admin login üst şeridindeki logo görseli kaldırıldı; metin tabanlı `Admin Panel` etiketi bırakıldı.
+
+### Test doğrulaması
+- Smoke screenshot doğrulaması: landing header yapısı ve eski alanların kaldırıldığı doğrulandı.
+- Frontend testing agent: 6/6 PASS (header/form/admin-login kontrolleri).
+
