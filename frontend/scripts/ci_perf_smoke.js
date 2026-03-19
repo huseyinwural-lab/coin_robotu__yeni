@@ -4,6 +4,7 @@ const zlib = require("zlib");
 
 const buildDir = path.join(__dirname, "..", "build");
 const reportPath = path.join(buildDir, "perf-smoke-report.json");
+const previousReportPath = process.env.PERF_SMOKE_PREV_REPORT || path.join(buildDir, "perf-smoke-report.prev.json");
 
 const thresholdProfiles = {
   dev: {
@@ -79,6 +80,29 @@ function main() {
     file: mainCssRel,
     ...statWithGzip(mainCssPath),
   };
+
+  if (fs.existsSync(previousReportPath)) {
+    try {
+      const previous = JSON.parse(fs.readFileSync(previousReportPath, "utf-8"));
+      const prevJs = Number(previous?.metrics?.main_js?.gzip_kb || 0);
+      const prevCss = Number(previous?.metrics?.main_css?.gzip_kb || 0);
+      report.delta_vs_previous = {
+        source: previousReportPath,
+        main_js_gzip_kb_delta: Number((report.metrics.main_js.gzip_kb - prevJs).toFixed(2)),
+        main_css_gzip_kb_delta: Number((report.metrics.main_css.gzip_kb - prevCss).toFixed(2)),
+      };
+    } catch {
+      report.delta_vs_previous = {
+        source: previousReportPath,
+        error: "previous_report_parse_failed",
+      };
+    }
+  } else {
+    report.delta_vs_previous = {
+      source: previousReportPath,
+      note: "no_previous_report_found",
+    };
+  }
 
   const jsGzipKb = report.metrics.main_js.gzip_kb;
   const cssGzipKb = report.metrics.main_css.gzip_kb;

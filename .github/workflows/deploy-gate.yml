@@ -79,6 +79,7 @@ jobs:
           else
             export PERF_SMOKE_PROFILE=dev
           fi
+          git show HEAD~1:frontend/perf-baseline/latest.json > build/perf-smoke-report.prev.json || true
           node scripts/ci_perf_smoke.js
 
       - name: Upload frontend perf smoke artifact
