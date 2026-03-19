@@ -7756,3 +7756,15 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - P1: kill-switch state değişimlerinde Slack/Telegram notification
 - P2: config schema gate + weekly trend artifacts + incident runbook
 
+### 2026-03-19 — FAZ 1 KESİN KAPANIŞ (State Alignment) ✅
+- Kullanıcı emrindeki sırayla uygulandı:
+  1) `.gitignore` canonical minimal yapıya temizlendi.
+  2) `verify_phase1_backup_restore.sh` hard-check sertleştirildi (regex `^-e|^[[:space:]]*-e` + leading/trailing whitespace fail-fast).
+  3) Paketleme öncesi hijyen komutu çalıştırıldı: `grep -E "^-e|^[[:space:]]*-e" .gitignore || echo "CLEAN"` → `CLEAN`.
+  4) Tek yöntem paketleme komutu birebir çalıştırıldı:
+     `git add . && git commit -m "FIX: final hygiene alignment" && git archive -o /app/artifacts/faz1_final_closure.zip HEAD`
+  5) ZIP içindeki `.gitignore` içerik doğrulandı; repo ile birebir hizalı (`STATE_ALIGNMENT=OK`).
+
+### Kesin kapanış artefaktı
+- `/app/artifacts/faz1_final_closure.zip`
+
