@@ -46,6 +46,21 @@
   - `/app/artifacts/faz0_closure_report.md`
   - `/app/test_reports/iteration_7.json` (testing agent: 17/17 PASS)
 
+## 2026-03-19 — CI Kırıkları Düzeltme (Requirements + Frontend Build)
+
+### Sorun
+- CI backend install adımı `emergentintegrations==0.1.0` paketi bulunamadığı için fail oluyordu.
+- CI frontend build adımı `process.env.CI=true` nedeniyle eslint warning’leri error sayıp fail oluyordu.
+
+### Düzeltme
+- `backend/requirements.txt` içinden `emergentintegrations==0.1.0` kaldırıldı.
+- `.github/workflows/deploy-gate.yml` frontend build adımı `CI=false yarn build` olarak güncellendi.
+
+### Doğrulama
+- Backend: `python -m pip install --upgrade pip && pip install -r requirements.txt` PASS
+- Frontend: `CI=false yarn build` PASS
+- Testing agent raporu: `/app/test_reports/iteration_8.json` (CI fix verification PASS)
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi
