@@ -15,6 +15,38 @@ on:
 jobs:
   backend-quality-gate:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg2://trader:trader@localhost:5432/trading_platform
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ci-jwt-secret
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 720
+      CORS_ORIGINS: http://localhost:3000
+      DEFAULT_ADMIN_EMAIL: admin@platform.local
+      DEFAULT_ADMIN_PASSWORD: Admin12345!
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: trader
+          POSTGRES_PASSWORD: trader
+          POSTGRES_DB: trading_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U trader -d trading_platform"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=8
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=8
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,6 +80,7 @@ jobs:
       - name: Pytest smoke gate
         working-directory: backend
         run: |
+          alembic upgrade head
           pytest -q tests/test_iteration165_prod_gate_smoke.py
 
       - name: Pytest contract gate
