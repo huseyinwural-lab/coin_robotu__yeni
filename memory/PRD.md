@@ -80,6 +80,22 @@
   - ruff F401/E402: PASS
   - CI=true build: PASS
 
+## 2026-03-19 — Teknik Borç Temizliği 2. Dalga (E402 tests/cli + hook refactor)
+
+### Yapılanlar
+- Deploy gate ruff adımı iki aşamaya çıkarıldı:
+  1) `ruff check backend --select E9,F63,F7,F82,F401,E402 --exclude backend/tests,backend/cli`
+  2) `ruff check backend/tests backend/cli --select E402`
+- Frontend’de geçici `eslint-disable-next-line react-hooks/exhaustive-deps` satırları tamamen kaldırıldı.
+- İlgili sayfa/bileşenlerde `useCallback/useEffect` dependency refactorları yapıldı.
+
+### Doğrulama
+- `/app/test_reports/iteration_11.json`
+  - backend: 100%
+  - frontend: 100%
+  - `eslint-disable` hook satırları: 0
+  - `CI=true yarn build`: PASS
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi
