@@ -195,9 +195,12 @@ class AlertChannelConfig(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default="global")
     resend_api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
+    sendgrid_api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
     alert_from: Mapped[str] = mapped_column(String(255), default="")
     alert_to: Mapped[str] = mapped_column(Text, default="")
     slack_webhook_url_encrypted: Mapped[str] = mapped_column(Text, default="")
+    telegram_bot_token_encrypted: Mapped[str] = mapped_column(Text, default="")
+    telegram_chat_id: Mapped[str] = mapped_column(String(255), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class SystemAlert(Base):

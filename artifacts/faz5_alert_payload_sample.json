@@ -1,0 +1,42 @@
+{
+  "alert_id": "c42b2290-c054-4ac9-925a-3b64f4e7b917",
+  "delivery_status": {
+    "email": {
+      "status": "SENT_TEST_SINK",
+      "sink_file": "/app/artifacts/faz5_alert_delivery.log"
+    },
+    "telegram": {
+      "status": "SENT_TEST_SINK",
+      "sink_file": "/app/artifacts/faz5_alert_delivery.log"
+    },
+    "slack": {
+      "status": "SENT_TEST_SINK",
+      "sink_file": "/app/artifacts/faz5_alert_delivery.log"
+    },
+    "routing": [
+      "email",
+      "telegram"
+    ],
+    "config": {
+      "email": "READY",
+      "telegram": "READY",
+      "slack": "READY",
+      "channel_status": {
+        "email": "ACTIVE",
+        "telegram": "ACTIVE",
+        "slack": "ACTIVE"
+      },
+      "channel_status_overall": "READY",
+      "secret_status": {
+        "sendgrid": "ready",
+        "telegram": "ready"
+      },
+      "dedup_window_seconds": 600,
+      "rate_limit_per_min": 5,
+      "critical_limit_30m": 3,
+      "config_source": "admin_config",
+      "test_mode": true
+    }
+  },
+  "correlation_id": "42a8171f-d9b6-4b69-90b3-65c6ff4e2028"
+}

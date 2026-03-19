@@ -7,6 +7,7 @@ import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from core.observability.request_context import clear_request_context, set_request_context
+from services.observability_service import record_http_observation
 
 logger = logging.getLogger("http.access")
 
@@ -41,6 +42,12 @@ class RequestObservabilityMiddleware(BaseHTTPMiddleware):
                     "session_id": session_id or None,
                 },
             )
+            record_http_observation(
+                path=request.url.path,
+                method=request.method,
+                status_code=response.status_code,
+                duration_ms=elapsed_ms,
+            )
             return response
         except Exception:
             elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
@@ -55,6 +62,12 @@ class RequestObservabilityMiddleware(BaseHTTPMiddleware):
                     "duration_ms": elapsed_ms,
                     "session_id": session_id or None,
                 },
+            )
+            record_http_observation(
+                path=request.url.path,
+                method=request.method,
+                status_code=500,
+                duration_ms=elapsed_ms,
             )
             raise
         finally:

@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "service": "backend-api",
+  "checks": {
+    "process": {
+      "status": "up",
+      "uptime_seconds": 3
+    }
+  },
+  "timestamp": "2026-03-19T13:37:45.203361+00:00"
+}

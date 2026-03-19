@@ -76,9 +76,12 @@ class AdminUserCreateRequest(BaseModel):
 
 
 class AlertChannelConfigUpdateRequest(BaseModel):
+    sendgrid_api_key: str | None = None
     resend_api_key: str | None = None
     alert_from: str | None = None
     alert_to: str | None = None
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
     slack_webhook_url: str | None = None
 
 

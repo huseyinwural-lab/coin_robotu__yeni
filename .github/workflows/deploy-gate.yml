@@ -438,6 +438,128 @@ jobs:
             artifacts/faz3_integration_tests.log
             artifacts/faz3_ci_gate_check.log
 
+  phase5-observability-gate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg2://trader:trader@localhost:5432/trading_platform
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ${{ secrets.JWT_SECRET || vars.JWT_SECRET }}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 720
+      EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: ${{ secrets.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY || vars.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY }}
+      CORS_ORIGINS: http://localhost:3000
+      ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.ADMIN_BOOTSTRAP_EMAIL || vars.ADMIN_BOOTSTRAP_EMAIL }}
+      ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.ADMIN_BOOTSTRAP_PASSWORD || vars.ADMIN_BOOTSTRAP_PASSWORD }}
+      TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || vars.TEST_ADMIN_EMAIL }}
+      TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || vars.TEST_ADMIN_PASSWORD }}
+      SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY || vars.SENDGRID_API_KEY }}
+      FROM_EMAIL: ${{ secrets.FROM_EMAIL || vars.FROM_EMAIL }}
+      TO_EMAIL: ${{ secrets.TO_EMAIL || vars.TO_EMAIL }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || vars.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || vars.TELEGRAM_CHAT_ID }}
+      OBS_ERROR_RATE_THRESHOLD: 0.03
+      OBS_LATENCY_P95_THRESHOLD_MS: 1000
+      OBS_QUEUE_SIZE_THRESHOLD: 30
+      ALERT_TEST_MODE: file_sink
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: trader
+          POSTGRES_PASSWORD: trader
+          POSTGRES_DB: trading_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U trader -d trading_platform"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=8
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare CI security env fallback
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import base64
+          import os
+          import secrets
+
+          def emit(key: str, value: str) -> None:
+              print(f"{key}={value}")
+
+          jwt_secret = os.getenv("JWT_SECRET") or secrets.token_urlsafe(48)
+          if len(jwt_secret) < 32:
+              jwt_secret = jwt_secret + secrets.token_urlsafe(32)
+
+          exchange_key = os.getenv("EXCHANGE_CREDENTIALS_ENCRYPTION_KEY")
+          if not exchange_key:
+              exchange_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+
+          admin_bootstrap_email = os.getenv("ADMIN_BOOTSTRAP_EMAIL") or f"ci-admin-{os.getenv('GITHUB_RUN_ID', '0')}@example.local"
+          admin_bootstrap_password = os.getenv("ADMIN_BOOTSTRAP_PASSWORD") or secrets.token_urlsafe(24)
+          test_admin_email = os.getenv("TEST_ADMIN_EMAIL") or admin_bootstrap_email
+          test_admin_password = os.getenv("TEST_ADMIN_PASSWORD") or admin_bootstrap_password
+
+          from_email = os.getenv("FROM_EMAIL") or "phase5-observability@example.com"
+          to_email = os.getenv("TO_EMAIL") or "huseyinwural@gmail.com"
+
+          emit("JWT_SECRET", jwt_secret)
+          emit("EXCHANGE_CREDENTIALS_ENCRYPTION_KEY", exchange_key)
+          emit("ADMIN_BOOTSTRAP_EMAIL", admin_bootstrap_email)
+          emit("ADMIN_BOOTSTRAP_PASSWORD", admin_bootstrap_password)
+          emit("TEST_ADMIN_EMAIL", test_admin_email)
+          emit("TEST_ADMIN_PASSWORD", test_admin_password)
+          emit("FROM_EMAIL", from_email)
+          emit("TO_EMAIL", to_email)
+          PY
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run phase5 observability verifier
+        run: bash scripts/verify_phase5_observability.sh
+
+      - name: Upload phase5 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase5-observability-artifacts
+          path: |
+            artifacts/faz5_verify_phase5_observability.log
+            artifacts/faz5_logging_contract_check.log
+            artifacts/faz5_stdout_log_sample.log
+            artifacts/faz5_file_log_sample.log
+            artifacts/faz5_secret_masking_proof.json
+            artifacts/faz5_alembic_upgrade.log
+            artifacts/faz5_integration_tests.log
+            artifacts/faz5_health_response.json
+            artifacts/faz5_ready_healthy_response.json
+            artifacts/faz5_ready_not_ready_response.json
+            artifacts/faz5_metrics_output.txt
+            artifacts/faz5_fake_error_test.log
+            artifacts/faz5_alert_payload_sample.json
+            artifacts/faz5_alert_delivery.log
+            artifacts/faz5_ci_gate_check.log
+            backend/logs/backend_observability.log
+
   backup-restore-s3-gate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

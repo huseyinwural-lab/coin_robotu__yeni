@@ -1,0 +1,21 @@
+{
+  "status": "ready",
+  "service": "backend-api",
+  "checks": {
+    "database": {
+      "status": "ready"
+    },
+    "redis": {
+      "status": "ready"
+    },
+    "execution_queue": {
+      "status": "ready",
+      "queue_size": 12,
+      "critical_limit": 60
+    },
+    "ready_override": {
+      "status": "ready"
+    }
+  },
+  "timestamp": "2026-03-19T13:37:45.208986+00:00"
+}

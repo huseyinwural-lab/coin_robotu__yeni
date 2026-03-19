@@ -16,7 +16,7 @@ from services.alert_channel_service import (
     channel_status,
     get_alert_config_public,
     send_email_alert,
-    send_slack_alert,
+    send_telegram_alert,
     upsert_alert_channel_config,
 )
 from services.audit_service import create_audit_log
@@ -29,7 +29,7 @@ router = APIRouter(prefix="/admin/system-alerts", tags=["system_alerts"])
 
 
 class AlertTestDeliveryRequest(BaseModel):
-    channel: str = "slack"
+    channel: str = "telegram"
     severity: str = "WARNING"
 
 
@@ -205,20 +205,23 @@ def burn_in_summary(
 
     delivery_email_sent = 0
     delivery_email_failed = 0
-    delivery_slack_sent = 0
-    delivery_slack_failed = 0
+    delivery_telegram_sent = 0
+    delivery_telegram_failed = 0
     for row in rows:
         delivery = row.delivery_status or {}
         email_status = ((delivery.get("email") or {}).get("status") or "").upper()
-        slack_status = ((delivery.get("slack") or {}).get("status") or "").upper()
+        telegram_status = (
+            ((delivery.get("telegram") or {}).get("status") or "").upper()
+            or ((delivery.get("slack") or {}).get("status") or "").upper()
+        )
         if email_status == "SENT":
             delivery_email_sent += 1
         if email_status in {"FAILED", "RATE_LIMITED", "CONFIG_MISSING", "LIB_MISSING"}:
             delivery_email_failed += 1
-        if slack_status == "SENT":
-            delivery_slack_sent += 1
-        if slack_status in {"FAILED", "RATE_LIMITED", "CONFIG_MISSING", "LIB_MISSING"}:
-            delivery_slack_failed += 1
+        if telegram_status in {"SENT", "SENT_TEST_SINK"}:
+            delivery_telegram_sent += 1
+        if telegram_status in {"FAILED", "RATE_LIMITED", "CONFIG_MISSING", "LIB_MISSING"}:
+            delivery_telegram_failed += 1
 
     total = len(rows)
     warning_plus = severity_counter.get("WARNING", 0) + severity_counter.get("CRITICAL", 0)
@@ -238,8 +241,8 @@ def burn_in_summary(
         "delivery": {
             "email_sent": delivery_email_sent,
             "email_failed": delivery_email_failed,
-            "slack_sent": delivery_slack_sent,
-            "slack_failed": delivery_slack_failed,
+            "telegram_sent": delivery_telegram_sent,
+            "telegram_failed": delivery_telegram_failed,
         },
         "recommendation": (
             "threshold_tuning_required" if critical_ratio > 0.2 else "thresholds_stable"
@@ -285,9 +288,12 @@ def refresh_alert_config(
     if changed_fields:
         upsert_alert_channel_config(
             db,
+            sendgrid_api_key=payload.sendgrid_api_key,
             resend_api_key=payload.resend_api_key,
             alert_from=payload.alert_from,
             alert_to=payload.alert_to,
+            telegram_bot_token=payload.telegram_bot_token,
+            telegram_chat_id=payload.telegram_chat_id,
             slack_webhook_url=payload.slack_webhook_url,
         )
         create_audit_log(
@@ -318,23 +324,23 @@ def test_delivery(
 ):
     channel = payload.channel.strip().lower()
     severity = payload.severity.strip().upper()
-    if channel not in {"email", "slack", "both"}:
+    if channel not in {"email", "telegram", "both"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_channel")
     if severity not in {"INFO", "WARNING", "CRITICAL"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_severity")
 
     subject = f"[TEST] {severity} delivery"
     html = "<p>Test delivery from admin system alerts panel.</p>"
-    slack_text = f"*{subject}*\nTest delivery from admin system alerts panel."
+    telegram_text = f"{subject}\nTest delivery from admin system alerts panel."
 
     result = {
         "email": {"status": "CHANNEL_DISABLED"},
-        "slack": {"status": "CHANNEL_DISABLED"},
+        "telegram": {"status": "CHANNEL_DISABLED"},
     }
     if channel in {"email", "both"}:
         result["email"] = send_email_alert(subject=subject, html_content=html, severity=severity, db=db)
-    if channel in {"slack", "both"}:
-        result["slack"] = send_slack_alert(message=slack_text, severity=severity, db=db)
+    if channel in {"telegram", "both"}:
+        result["telegram"] = send_telegram_alert(message=telegram_text, severity=severity, db=db)
 
     create_audit_log(
         db,

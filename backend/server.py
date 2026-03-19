@@ -1,10 +1,13 @@
 import asyncio
 import logging
 import os
+import json
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.observability.http_logging_middleware import RequestObservabilityMiddleware
@@ -96,14 +99,23 @@ from services.state_rebuild_service import run_state_rebuild
 from services.user_exchange_health_loop import run_exchange_connection_health_loop
 from services.weekly_report_service import run_weekly_report_loop
 from services.db_backup_scheduler_service import run_backup_scheduler_loop
-from db import engine, verify_database_connection
+from db import engine, get_db, redis_client, verify_database_connection
 from core.db_determinism import enforce_postgresql_only
+from services.observability_service import (
+    QUEUE_SIZE_THRESHOLD,
+    READY_QUEUE_CRITICAL_FACTOR,
+    build_metrics_exposition,
+    collect_observability_snapshot,
+    current_ready_override,
+    emit_threshold_alerts,
+)
 
 configure_structured_logging(logging.INFO)
 logger = logging.getLogger(__name__)
 weekly_report_task: asyncio.Task | None = None
 exchange_health_task: asyncio.Task | None = None
 backup_scheduler_task: asyncio.Task | None = None
+PROCESS_STARTED_AT = datetime.now(timezone.utc)
 
 fastapi_app = FastAPI(title="Algorithmic Trading Platform API", version="0.2.0")
 api_router = APIRouter(prefix="/api")
@@ -111,10 +123,82 @@ api_router = APIRouter(prefix="/api")
 
 @api_router.get("/health")
 def health_check():
-    verify_database_connection()
-    with engine.connect() as connection:
-        connection.execute(text("SELECT 1"))
-    return {"status": "ok", "database": "connected"}
+    return {
+        "status": "ok",
+        "service": "backend-api",
+        "checks": {
+            "process": {
+                "status": "up",
+                "uptime_seconds": int((datetime.now(timezone.utc) - PROCESS_STARTED_AT).total_seconds()),
+            }
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@api_router.get("/ready")
+def readiness_check(db: Session = Depends(get_db)):
+    checks: dict[str, dict] = {}
+    ready = True
+
+    try:
+        verify_database_connection()
+        checks["database"] = {"status": "ready"}
+    except Exception as exc:  # pragma: no cover - runtime dependency failure branch
+        ready = False
+        checks["database"] = {"status": "not_ready", "reason": str(exc)[:200]}
+
+    try:
+        redis_client.ping()
+        checks["redis"] = {"status": "ready"}
+    except Exception as exc:  # pragma: no cover - runtime dependency failure branch
+        ready = False
+        checks["redis"] = {"status": "not_ready", "reason": str(exc)[:200]}
+
+    snapshot = collect_observability_snapshot(db)
+    queue_size = int(snapshot.get("queue_size", 0))
+    queue_limit = int(QUEUE_SIZE_THRESHOLD * READY_QUEUE_CRITICAL_FACTOR)
+    if queue_size > queue_limit:
+        ready = False
+        checks["execution_queue"] = {
+            "status": "not_ready",
+            "queue_size": queue_size,
+            "critical_limit": queue_limit,
+            "reason": "queue_pressure",
+        }
+    else:
+        checks["execution_queue"] = {
+            "status": "ready",
+            "queue_size": queue_size,
+            "critical_limit": queue_limit,
+        }
+
+    override = current_ready_override()
+    if override.get("active"):
+        ready = False
+        checks["ready_override"] = {
+            "status": "not_ready",
+            "reason": override.get("reason"),
+            "until": override.get("until"),
+        }
+    else:
+        checks["ready_override"] = {"status": "ready"}
+
+    status_code = 200 if ready else 503
+    payload = {
+        "status": "ready" if ready else "not_ready",
+        "service": "backend-api",
+        "checks": checks,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    return JSONResponse(status_code=status_code, content=payload)
+
+
+@api_router.get("/metrics", response_class=PlainTextResponse)
+def metrics_export(db: Session = Depends(get_db)):
+    snapshot = collect_observability_snapshot(db)
+    emit_threshold_alerts(db, snapshot=snapshot)
+    return PlainTextResponse(build_metrics_exposition(snapshot), media_type="text/plain; version=0.0.4")
 
 
 @api_router.get("/")
