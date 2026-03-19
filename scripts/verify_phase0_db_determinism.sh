@@ -208,7 +208,9 @@ if [[ "$CURRENT_REV" != "$HEAD_REV" ]]; then
 fi
 log "PASS: alembic current=head (${CURRENT_REV})"
 
-if command -v supervisorctl >/dev/null 2>&1; then
+if command -v supervisorctl >/dev/null 2>&1 \
+  && [[ -f "${APP_ROOT}/frontend/.env" ]] \
+  && [[ -f "${APP_ROOT}/backend/.env" ]]; then
   bash "${APP_ROOT}/scripts/phase0_runtime_persistence_test.sh"
   log "PASS: runtime restart persistence"
 else
