@@ -54,6 +54,9 @@ backend/trading_platform_local.db
 trading_platform_local.db
 backend/test_learning.db
 dump.rdb
+backups/*.sql
+backups/*.bak
+admin_token.txt
 
 # Generated artifacts
 .cache/

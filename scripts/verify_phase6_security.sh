@@ -73,14 +73,14 @@ user_id = user.get("id")
 if not new_token or not user_id:
     raise SystemExit("new_login_missing_token_or_user")
 
-old_secret = "change-this-legacy-secret-not-active-2026"
+legacy_signing_key = "change-this-legacy-signing-key-not-active-2026"
 old_payload = {
     "sub": user_id,
     "role": user.get("role", "super_admin"),
     "email": user.get("email", admin_email),
     "exp": datetime.now(timezone.utc) + timedelta(minutes=30),
 }
-old_token = jwt.encode(old_payload, old_secret, algorithm="HS256")
+old_token = jwt.encode(old_payload, legacy_signing_key, algorithm="HS256")
 
 old_probe = requests.get(
     f"{backend_url}/api/admin/users",

@@ -1,3 +1,57 @@
+## 2026-03-19 — FAZ 6 SECURITY (P0) ✅
+
+### Kullanıcı seçimleri (uygulandı)
+- Secret scan kapsamı: **gerçek sızıntı pattern’leri**
+- Default admin password modeli: **hard remove + fail-fast**
+- Rate limit kapsamı: **/api/auth/login + /api/auth/login/admin + /api/auth/login/user**
+- IP tespiti: **X-Forwarded-For öncelikli, proxy-aware**
+- Secret scan: **allowlist destekli CI enforce**
+
+### Uygulanan işler
+- **T-6.1 JWT Rotation**
+  - `JWT_SECRET` güçlü random değerle döndürüldü (64 karakter)
+  - eski imzayla token doğrulaması reddedildi, yeni token kabul edildi
+  - kanıt: `artifacts/faz6_jwt_rotation_proof.log`
+
+- **T-6.2 Admin Credential Temizliği**
+  - `DEFAULT_ADMIN_EMAIL/DEFAULT_ADMIN_PASSWORD` runtime’da yasaklandı (`forbidden_env`)
+  - bootstrap modeli `ADMIN_BOOTSTRAP_EMAIL/ADMIN_BOOTSTRAP_PASSWORD` ile değiştirildi
+  - aktif kod/config taraması temiz
+  - kanıt: `artifacts/faz6_admin_credential_scan.log`
+
+- **T-6.3 Login Rate Limit**
+  - tüm login giriş noktalarına rate limit eklendi
+  - limit aşımında `429` + `Retry-After` header dönüyor
+  - kanıt: `artifacts/faz6_rate_limit_test.log` (6. istek -> 429)
+
+- **T-6.4 API Key Encryption Doğrulama**
+  - API credential encryption anahtarı `EXCHANGE_CREDENTIALS_ENCRYPTION_KEY` üzerinden yönetiliyor
+  - DB raw satırında plaintext görünmüyor (AES-GCM prefix)
+  - kanıt: `artifacts/faz6_api_key_encryption_proof.log`
+
+- **T-6.5 Repo/Artifact Secret Temizliği**
+  - `admin_token.txt`, dump/bak dosyaları temizlendi
+  - `backups/*.sql`, `backups/*.bak`, `admin_token.txt` gitignore’a eklendi
+  - kanıt: `artifacts/faz6_dump_backup_scan.log`, `artifacts/faz6_removed_files.log`
+
+- **T-6.6 Secret Leak Prevention (CI Gate)**
+  - yeni script: `scripts/ci_secret_leak_guard.sh`
+  - allowlist: `.secret-scan-allowlist`
+  - deploy gate job: `secret-leak-gate`
+  - kanıt: `artifacts/faz6_secret_scan_report.log`, `artifacts/faz6_ci_gate_evidence.log`
+
+### Doğrulama
+- doğrulama scripti: `scripts/verify_phase6_security.sh`
+- sonuç: `artifacts/faz6_security_summary.log` => `SUMMARY: PASS`
+- testing agent raporu: `/app/test_reports/iteration_22.json` (28/28 PASS)
+
+### Teslim paketi
+- `/app/artifacts/faz6_final_security_bundle_with_iteration19.zip`
+- içerik: `iteration_19.json` + FAZ 6 kanıtları + ilgili loglar
+
+Kod yazıldıktan sonra gerçek endpoint üzerinde test edilecek, güvenlik ihlali olmadığını gösteren kanıt/log üretilmeden task CLOSED kabul edilmeyecek.
+Kod yazdıktan sonra repo içinde gerçekten çalıştır, artifact üretmeden işi bitmiş sayma.
+
 ## 2026-03-19 — FAZ 0 Kapanış (Deterministik PostgreSQL, Sıfır Tolerans) ✅
 
 ### Kullanıcı onayına göre uygulanan kararlar
