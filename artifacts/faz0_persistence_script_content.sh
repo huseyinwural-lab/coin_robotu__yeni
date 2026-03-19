@@ -26,10 +26,11 @@ read_backend_url() {
     return 1
   fi
 
-  python - <<'PY'
+  FE_ENV_PATH="$fe_env" python - <<'PY'
+import os
 from pathlib import Path
 
-env_path = Path('/app/frontend/.env')
+env_path = Path(os.environ['FE_ENV_PATH'])
 for raw in env_path.read_text(encoding='utf-8').splitlines():
     line = raw.strip()
     if not line or line.startswith('#'):
@@ -119,7 +120,11 @@ if [[ "$before_name" != "$unique_app_name" ]]; then
 fi
 log "PRE_RESTART_READ_OK app_name=${before_name}"
 
-sudo supervisorctl restart backend >/dev/null
+if command -v sudo >/dev/null 2>&1; then
+  sudo supervisorctl restart backend >/dev/null || supervisorctl restart backend >/dev/null
+else
+  supervisorctl restart backend >/dev/null
+fi
 log "RESTART_OK backend"
 
 health_ok=0

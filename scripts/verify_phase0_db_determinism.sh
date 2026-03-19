@@ -39,13 +39,17 @@ grep -Rin "$SQL_MARKER" "$APP_ROOT" \
 mv "$tmp_scan_file" "$SQL_SCAN_LOG"
 
 FILTERED_SCAN_LOG="${ARTIFACT_DIR}/faz0_embeddeddb_scan_filtered.log"
-python - <<'PY'
+APP_ROOT="$APP_ROOT" SQL_SCAN_LOG="$SQL_SCAN_LOG" FILTERED_SCAN_LOG="$FILTERED_SCAN_LOG" python - <<'PY'
+import os
 from pathlib import Path
 
-scan_path = Path('/app/artifacts/faz0_embeddeddb_scan_post_cleanup.log')
+app_root = Path(os.environ['APP_ROOT'])
+scan_path = Path(os.environ['SQL_SCAN_LOG'])
+filtered_scan_log = Path(os.environ['FILTERED_SCAN_LOG'])
+
 allowed_prefixes = (
-    '/app/README.md:',
-    '/app/docs/11_alembic_drift_report.md:',
+    f'{app_root}/README.md:',
+    f'{app_root}/docs/11_alembic_drift_report.md:',
 )
 
 rows = []
@@ -58,7 +62,7 @@ if scan_path.exists():
             continue
         rows.append(line)
 
-Path('/app/artifacts/faz0_embeddeddb_scan_filtered.log').write_text('\n'.join(rows) + ('\n' if rows else ''), encoding='utf-8')
+filtered_scan_log.write_text('\n'.join(rows) + ('\n' if rows else ''), encoding='utf-8')
 print(len(rows))
 PY
 
@@ -80,14 +84,17 @@ if [[ -s "$PATTERN_LOG" ]]; then
 fi
 log "PASS: yasaklı DB artefakt dosyası bulunmadı"
 
-python - <<'PY'
+APP_ROOT="$APP_ROOT" ENV_VALIDATION_LOG="${ARTIFACT_DIR}/faz0_env_config_validation.log" python - <<'PY'
+import os
 from pathlib import Path
 
 sql_marker = 'sql' + 'ite'
 pg_marker = 'post' + 'gresql'
+app_root = Path(os.environ['APP_ROOT'])
+env_validation_log = Path(os.environ['ENV_VALIDATION_LOG'])
 
 checks = []
-for env_file in (Path('/app/backend/.env'), Path('/app/backend/.env.example')):
+for env_file in (app_root / 'backend/.env', app_root / 'backend/.env.example'):
     if not env_file.exists():
         continue
     database_url = ''
@@ -107,20 +114,24 @@ for env_file in (Path('/app/backend/.env'), Path('/app/backend/.env.example')):
         raise SystemExit(f'FAIL postgresql marker missing in {env_file}')
     checks.append(f'PASS {env_file}')
 
-Path('/app/artifacts/faz0_env_config_validation.log').write_text('\n'.join(checks) + '\n', encoding='utf-8')
+env_validation_log.write_text('\n'.join(checks) + '\n', encoding='utf-8')
 print('ok')
 PY
 log "PASS: env/config DATABASE_URL PostgreSQL-only"
 
 GUARD_CHECK_LOG="${ARTIFACT_DIR}/faz0_runtime_guard_presence.log"
-python - <<'PY'
+APP_ROOT="$APP_ROOT" GUARD_CHECK_LOG="$GUARD_CHECK_LOG" python - <<'PY'
+import os
 from pathlib import Path
 
+app_root = Path(os.environ['APP_ROOT'])
+guard_check_log = Path(os.environ['GUARD_CHECK_LOG'])
+
 required = {
-    '/app/backend/core/db_determinism.py': ['enforce_postgresql_only', 'assert', 'post" + "gresql', 'sql" + "ite'],
-    '/app/backend/server.py': ['startup_event', 'enforce_postgresql_only(db_url, "startup")'],
-    '/app/backend/services/migration_service.py': ['enforce_postgresql_only', 'alembic_database_url'],
-    '/app/backend/migrations/env.py': ['enforce_postgresql_only', 'get_url'],
+    str(app_root / 'backend/core/db_determinism.py'): ['enforce_postgresql_only', 'assert', 'post" + "gresql', 'sql" + "ite'],
+    str(app_root / 'backend/server.py'): ['startup_event', 'enforce_postgresql_only(db_url, "startup")'],
+    str(app_root / 'backend/services/migration_service.py'): ['enforce_postgresql_only', 'alembic_database_url'],
+    str(app_root / 'backend/migrations/env.py'): ['enforce_postgresql_only', 'get_url'],
 }
 
 lines = []
@@ -131,7 +142,7 @@ for file_path, tokens in required.items():
             raise SystemExit(f'FAIL guard token missing: {token} in {file_path}')
     lines.append(f'PASS {file_path}')
 
-Path('/app/artifacts/faz0_runtime_guard_presence.log').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+guard_check_log.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 print('ok')
 PY
 log "PASS: runtime guard varlığı doğrulandı"
@@ -156,21 +167,23 @@ alembic current > "${ARTIFACT_DIR}/faz0_alembic_current.log" 2>&1
 alembic heads > "${ARTIFACT_DIR}/faz0_alembic_heads.log" 2>&1
 popd >/dev/null
 
-CURRENT_REV="$(python - <<'PY'
+CURRENT_REV="$(CURRENT_LOG="${ARTIFACT_DIR}/faz0_alembic_current.log" python - <<'PY'
+import os
 from pathlib import Path
 import re
 
-text = Path('/app/artifacts/faz0_alembic_current.log').read_text(encoding='utf-8')
+text = Path(os.environ['CURRENT_LOG']).read_text(encoding='utf-8')
 matches = re.findall(r'([0-9]{8}_[0-9]{4})', text)
 print(matches[-1] if matches else '')
 PY
 )"
 
-HEAD_REV="$(python - <<'PY'
+HEAD_REV="$(HEAD_LOG="${ARTIFACT_DIR}/faz0_alembic_heads.log" python - <<'PY'
+import os
 from pathlib import Path
 import re
 
-text = Path('/app/artifacts/faz0_alembic_heads.log').read_text(encoding='utf-8')
+text = Path(os.environ['HEAD_LOG']).read_text(encoding='utf-8')
 matches = re.findall(r'([0-9]{8}_[0-9]{4})', text)
 print(matches[-1] if matches else '')
 PY
