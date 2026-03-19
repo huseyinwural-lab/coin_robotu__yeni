@@ -30,6 +30,40 @@ if [[ -z "${DATABASE_URL:-}" && -f "${APP_ROOT}/backend/.env" ]]; then
   set +a
 fi
 
+if [[ -z "${JWT_SECRET:-}" ]]; then
+  if [[ "${CI:-}" == "true" ]]; then
+    JWT_SECRET="phase0-ci-$(python - <<'PY'
+import secrets
+print(secrets.token_urlsafe(48))
+PY
+)"
+    export JWT_SECRET
+    log "INFO: JWT_SECRET eksikti, CI fallback üretildi"
+  else
+    fail "JWT_SECRET eksik"
+  fi
+fi
+
+if [[ -z "${EXCHANGE_CREDENTIALS_ENCRYPTION_KEY:-}" ]]; then
+  if [[ "${CI:-}" == "true" ]]; then
+    EXCHANGE_CREDENTIALS_ENCRYPTION_KEY="$(python - <<'PY'
+import base64
+import secrets
+print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
+PY
+)"
+    export EXCHANGE_CREDENTIALS_ENCRYPTION_KEY
+    log "INFO: EXCHANGE_CREDENTIALS_ENCRYPTION_KEY eksikti, CI fallback üretildi"
+  else
+    fail "EXCHANGE_CREDENTIALS_ENCRYPTION_KEY eksik"
+  fi
+fi
+
+export REDIS_URL="${REDIS_URL:-redis://localhost:6379/0}"
+export JWT_ALGORITHM="${JWT_ALGORITHM:-HS256}"
+export JWT_EXPIRE_MINUTES="${JWT_EXPIRE_MINUTES:-720}"
+export CORS_ORIGINS="${CORS_ORIGINS:-http://localhost:3000}"
+
 SQL_SCAN_LOG="${ARTIFACT_DIR}/faz0_embeddeddb_scan_post_cleanup.log"
 rm -f "$SQL_SCAN_LOG" "${ARTIFACT_DIR}/faz0_embeddeddb_scan_filtered.log"
 tmp_scan_file="$(mktemp)"
