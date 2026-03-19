@@ -1,59 +1,81 @@
-import requests
+import os
+import sys
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
 
 
-BASE_URL = "https://trading-hardening.preview.emergentagent.com/api"
-ADMIN_EMAIL = "admin@platform.local"
-ADMIN_PASSWORD = "Admin12345!"
-USER_EMAIL = "testuser1773706589@example.com"
-USER_PASSWORD = "TestPassword123!"
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from server import app
+from core.config import settings
 
 
-def _ensure_user_login_token() -> str:
-    login = requests.post(
-        f"{BASE_URL}/auth/login/user",
+ADMIN_EMAIL = (
+    os.getenv("TEST_ADMIN_EMAIL")
+    or os.getenv("ADMIN_BOOTSTRAP_EMAIL")
+    or settings.bootstrap_admin_email
+    or "admin@platform.local"
+)
+ADMIN_PASSWORD = (
+    os.getenv("TEST_ADMIN_PASSWORD")
+    or os.getenv("ADMIN_BOOTSTRAP_PASSWORD")
+    or settings.bootstrap_admin_password
+    or "Admin12345!"
+)
+USER_EMAIL = os.getenv("TEST_USER_EMAIL") or "testuser1773706589@example.com"
+USER_PASSWORD = os.getenv("TEST_USER_PASSWORD") or "TestPassword123!"
+
+
+@pytest.fixture(scope="module")
+def client() -> TestClient:
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def _ensure_user_login_token(client: TestClient) -> str:
+    login = client.post(
+        "/api/auth/login/user",
         json={"email": USER_EMAIL, "password": USER_PASSWORD},
-        timeout=20,
     )
     if login.status_code == 200:
         token = login.json().get("access_token")
         assert token
         return token
 
-    requests.post(
-        f"{BASE_URL}/auth/register",
+    client.post(
+        "/api/auth/register",
         json={"email": USER_EMAIL, "password": USER_PASSWORD, "role": "user"},
-        timeout=20,
     )
 
-    admin_login = requests.post(
-        f"{BASE_URL}/auth/login/admin",
+    admin_login = client.post(
+        "/api/auth/login/admin",
         json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
-        timeout=20,
     )
     assert admin_login.status_code == 200
     admin_token = admin_login.json().get("access_token")
     assert admin_token
 
-    pending = requests.get(
-        f"{BASE_URL}/auth/admin/user-approval-requests",
+    pending = client.get(
+        "/api/auth/admin/user-approval-requests",
         headers={"Authorization": f"Bearer {admin_token}"},
         params={"status": "pending"},
-        timeout=20,
     )
     assert pending.status_code == 200
     target_user = next((row for row in pending.json() if row.get("email") == USER_EMAIL), None)
     if target_user:
-        approve = requests.post(
-            f"{BASE_URL}/auth/admin/user-approval-requests/{target_user['id']}/approve",
+        approve = client.post(
+            f"/api/auth/admin/user-approval-requests/{target_user['id']}/approve",
             headers={"Authorization": f"Bearer {admin_token}"},
-            timeout=20,
         )
         assert approve.status_code == 200
 
-    retry = requests.post(
-        f"{BASE_URL}/auth/login/user",
+    retry = client.post(
+        "/api/auth/login/user",
         json={"email": USER_EMAIL, "password": USER_PASSWORD},
-        timeout=20,
     )
     assert retry.status_code == 200
     token = retry.json().get("access_token")
@@ -61,31 +83,29 @@ def _ensure_user_login_token() -> str:
     return token
 
 
-def test_prod_gate_health_ok():
-    response = requests.get(f"{BASE_URL}/health", timeout=20)
+def test_prod_gate_health_ok(client: TestClient):
+    response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json().get("status") == "ok"
 
 
-def test_prod_gate_admin_login_ok():
-    response = requests.post(
-        f"{BASE_URL}/auth/login/admin",
+def test_prod_gate_admin_login_ok(client: TestClient):
+    response = client.post(
+        "/api/auth/login/admin",
         json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
-        timeout=20,
     )
     assert response.status_code == 200
     payload = response.json()
     assert payload.get("access_token")
 
 
-def test_prod_gate_user_login_and_readiness_checklist_ok():
-    token = _ensure_user_login_token()
+def test_prod_gate_user_login_and_readiness_checklist_ok(client: TestClient):
+    token = _ensure_user_login_token(client)
 
-    response = requests.get(
-        f"{BASE_URL}/exchange/readiness-checklist",
+    response = client.get(
+        "/api/exchange/readiness-checklist",
         headers={"Authorization": f"Bearer {token}"},
         params={"exchange": "binance", "market_type": "futures", "environment": "testnet"},
-        timeout=25,
     )
     assert response.status_code == 200
     payload = response.json()
