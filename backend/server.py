@@ -94,12 +94,14 @@ from services.realtime.socket_gateway import create_socket_app
 from services.state_rebuild_service import run_state_rebuild
 from services.user_exchange_health_loop import run_exchange_connection_health_loop
 from services.weekly_report_service import run_weekly_report_loop
+from services.db_backup_scheduler_service import run_backup_scheduler_loop
 from db import engine, verify_database_connection
 
 configure_structured_logging(logging.INFO)
 logger = logging.getLogger(__name__)
 weekly_report_task: asyncio.Task | None = None
 exchange_health_task: asyncio.Task | None = None
+backup_scheduler_task: asyncio.Task | None = None
 
 fastapi_app = FastAPI(title="Algorithmic Trading Platform API", version="0.2.0")
 api_router = APIRouter(prefix="/api")
@@ -231,9 +233,10 @@ async def startup_event():
     finally:
         db_session.close()
     await pipeline_runtime.start()
-    global weekly_report_task, exchange_health_task
+    global weekly_report_task, exchange_health_task, backup_scheduler_task
     weekly_report_task = asyncio.create_task(run_weekly_report_loop(SessionLocal))
     exchange_health_task = asyncio.create_task(run_exchange_connection_health_loop(SessionLocal))
+    backup_scheduler_task = asyncio.create_task(run_backup_scheduler_loop())
     logger.info(
         "Platform startup complete with Phase-3 hardening runtime",
         extra={
@@ -247,11 +250,13 @@ async def startup_event():
 @fastapi_app.on_event("shutdown")
 async def shutdown_event():
     await pipeline_runtime.stop()
-    global weekly_report_task, exchange_health_task
+    global weekly_report_task, exchange_health_task, backup_scheduler_task
     if weekly_report_task:
         weekly_report_task.cancel()
     if exchange_health_task:
         exchange_health_task.cancel()
+    if backup_scheduler_task:
+        backup_scheduler_task.cancel()
 
 
 app = create_socket_app(fastapi_app)
