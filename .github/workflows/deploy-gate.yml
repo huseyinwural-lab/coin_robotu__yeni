@@ -640,6 +640,7 @@ jobs:
             artifacts/faz1_repo_scan_found_forbidden_paths.log
             artifacts/faz1_gitignore_minus_e_scan.log
             artifacts/faz1_gitignore_duplicates.log
+            artifacts/faz1_gitignore_cachepath_scan.log
             artifacts/faz1_cleanup_removed_files.log
             artifacts/backup.log
             artifacts/restore.log

@@ -40,7 +40,7 @@ log "T-1.H1/H2 .gitignore yeniden yazım + zorunlu kural doğrulaması"
 GITIGNORE_PATH="${APP_ROOT}/.gitignore"
 [[ -f "$GITIGNORE_PATH" ]] || fail "H1" ".gitignore yok"
 
-echo "VERIFYING FILE:" | tee -a "$SUMMARY_LOG"
+echo "VERIFYING FILE: $GITIGNORE_PATH" | tee -a "$SUMMARY_LOG"
 cat "$GITIGNORE_PATH" | tee -a "$SUMMARY_LOG"
 
 required_rules=(
@@ -73,6 +73,14 @@ if [ -n "$DUP" ]; then
   exit 1
 else
   echo "NO_DUPLICATE_RULE" > "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
+fi
+
+if grep -n 'frontend/node_modules/.cache' "$GITIGNORE_PATH" > "${ARTIFACT_DIR}/faz1_gitignore_cachepath_scan.log"; then
+  echo "FAIL: cache file path must not exist in .gitignore" | tee -a "$SUMMARY_LOG"
+  cat "${ARTIFACT_DIR}/faz1_gitignore_cachepath_scan.log" | tee -a "$SUMMARY_LOG"
+  exit 1
+else
+  echo "NO_CACHEPATH_LINE" > "${ARTIFACT_DIR}/faz1_gitignore_cachepath_scan.log"
 fi
 
 {
