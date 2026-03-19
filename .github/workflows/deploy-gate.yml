@@ -145,6 +145,7 @@ jobs:
             artifacts/faz0_env_config_validation.log
             artifacts/faz0_runtime_guard_presence.log
             artifacts/faz0_test_bootstrap_guard.log
+            artifacts/faz0_alembic_upgrade.log
             artifacts/faz0_alembic_current.log
             artifacts/faz0_alembic_heads.log
             artifacts/faz0_persistence_db_smoke.log

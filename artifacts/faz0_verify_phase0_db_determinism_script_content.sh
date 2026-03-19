@@ -18,7 +18,7 @@ fail() {
   exit 1
 }
 
-trap 'rc=$?; line=${BASH_LINENO[0]:-unknown}; cmd=${BASH_COMMAND:-unknown}; log "FAIL: line=${line} cmd=${cmd} exit=${rc}"; exit ${rc}' ERR
+trap 'rc=$?; line=${BASH_LINENO[0]:-unknown}; cmd=${BASH_COMMAND:-unknown}; log "FAIL: line=${line} cmd=${cmd} exit=${rc}"; { echo "---- verify summary ----"; cat "$SUMMARY_LOG"; } >&2 || true; exit ${rc}' ERR
 
 SQL_MARKER="sql""ite"
 POSTGRES_MARKER="post""gresql"
@@ -165,6 +165,11 @@ PY
 log "PASS: test bootstrap guard doğrulandı"
 
 pushd "${APP_ROOT}/backend" >/dev/null
+if ! alembic upgrade head > "${ARTIFACT_DIR}/faz0_alembic_upgrade.log" 2>&1; then
+  log "FAIL: alembic upgrade head çalışmadı"
+  cat "${ARTIFACT_DIR}/faz0_alembic_upgrade.log" >> "$SUMMARY_LOG"
+  exit 1
+fi
 if ! alembic current > "${ARTIFACT_DIR}/faz0_alembic_current.log" 2>&1; then
   log "FAIL: alembic current çalışmadı"
   cat "${ARTIFACT_DIR}/faz0_alembic_current.log" >> "$SUMMARY_LOG"
