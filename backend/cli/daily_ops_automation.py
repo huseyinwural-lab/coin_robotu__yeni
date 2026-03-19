@@ -17,7 +17,7 @@ if str(BACKEND_ROOT) not in sys.path:
 os.chdir(BACKEND_ROOT)
 
 from db import SessionLocal
-from models import AuditLog, UserDecisionTrace
+from models import UserDecisionTrace
 from services.slo_analytics_service import compute_slo_metrics, load_alert_rows_for_window
 from services.strategy_observability_service import prune_strategy_observability_events
 from services.system_alert_service import create_system_alert

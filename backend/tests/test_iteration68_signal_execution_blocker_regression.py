@@ -15,7 +15,6 @@ Tests cover:
 import os
 import pytest
 import requests
-from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 

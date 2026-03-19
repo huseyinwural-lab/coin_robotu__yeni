@@ -8,8 +8,6 @@ Tests for:
 import os
 import pytest
 import requests
-import time
-from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 TEST_USER_EMAIL = "TEST_phase4iter2_pipeline@example.com"

@@ -377,7 +377,7 @@ class TestCanonicalSignalEngineIntegration:
         sys.path.insert(0, "/app/backend")
         
         # This tests the service-level function
-        from services.canonical_strategy_registry_service import enabled_production_strategies, CANONICAL_STRATEGIES
+        from services.canonical_strategy_registry_service import CANONICAL_STRATEGIES
         
         # All 12 canonical strategies defined
         assert len(CANONICAL_STRATEGIES) == 12

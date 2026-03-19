@@ -8,7 +8,6 @@ Tests to verify:
 4. No SQLite url in alembic.ini
 5. Offline migration log has PostgresqlImpl, NOT SQLiteImpl
 """
-import os
 import re
 import pytest
 from pathlib import Path

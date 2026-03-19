@@ -26,8 +26,6 @@ from services.pipeline.cache_store import set_json
 from services.pipeline.spot_dynamic_score_engine import (
     run_dynamic_selection_cycle,
     _derive_market_bias_regime,
-    _build_market_snapshot,
-    _prepare_market_context,
     _build_selection_metrics,
 )
 from core.strategies.prefilters.relative_strength_cluster_scanner_v2 import RelativeStrengthClusterScannerV2

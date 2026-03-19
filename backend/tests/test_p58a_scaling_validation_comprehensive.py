@@ -185,7 +185,7 @@ class TestStressReplayEngine:
     """Stress replay scenarios deterministic tests"""
     
     def test_all_four_scenarios_available(self):
-        from core.simulation.stress_replay_engine import run_stress_replay, SCENARIO_MULTIPLIERS
+        from core.simulation.stress_replay_engine import SCENARIO_MULTIPLIERS
         
         scenarios = ["high_volatility", "low_liquidity", "flash_crash", "liquidation_cascade"]
         for scenario in scenarios:

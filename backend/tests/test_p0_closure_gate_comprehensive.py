@@ -10,7 +10,6 @@ Features tested:
 - release_readiness_final_checklist.md exists and contains up-to-date commands
 """
 import json
-import os
 import subprocess
 from pathlib import Path
 

@@ -13,7 +13,6 @@ Test Scope:
 import requests
 from pathlib import Path
 import sys
-import time
 import uuid
 
 sys.path.append(str(Path(__file__).resolve().parent))

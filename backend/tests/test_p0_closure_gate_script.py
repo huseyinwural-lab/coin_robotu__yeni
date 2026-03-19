@@ -1,6 +1,5 @@
 import json
 import subprocess
-from pathlib import Path
 
 
 def test_p0_closure_gate_preview_mode_runs():

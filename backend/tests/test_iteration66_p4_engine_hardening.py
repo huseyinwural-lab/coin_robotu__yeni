@@ -438,9 +438,8 @@ class TestT08RateLimiter:
 
     def test_execution_throttle_in_pipeline(self):
         """Verify execution throttle logic exists in risk engine"""
-        from services.pipeline.risk_engine import evaluate_risk
         # Check that risk engine imports necessary modules
-        from services.pipeline.position_sizing_engine import compute_position_sizing, daily_loss_usage, consecutive_losses
+        from services.pipeline.position_sizing_engine import consecutive_losses
         # Verify consecutive loss tracking (part of rate limiting behavior)
         assert callable(consecutive_losses)
         print("T-08 Execution Throttle: consecutive_losses tracking available for rate limiting")
@@ -475,7 +474,6 @@ class TestT09BacktestEngine:
             "avg_slippage_bps", "volatility_bucket", "regime_bucket_distribution",
             "exposure_breach_count", "risk_reject_count"
         ]
-        from services.replay_service import compute_replay_risk_summary
         # The function signature shows it returns these fields
         print(f"T-09 Replay Risk Summary: expected fields = {expected_fields}")
 

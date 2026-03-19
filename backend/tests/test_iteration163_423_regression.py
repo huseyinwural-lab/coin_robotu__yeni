@@ -10,8 +10,6 @@ Tests:
 import os
 import pytest
 import requests
-import time
-from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trade-flow-deploy.preview.emergentagent.com").rstrip("/")
 

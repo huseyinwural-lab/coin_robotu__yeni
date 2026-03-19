@@ -13,7 +13,6 @@ E4: consistency rule for screener explain + trade explain
 """
 import os
 import sys
-import uuid
 from pathlib import Path
 
 import pytest

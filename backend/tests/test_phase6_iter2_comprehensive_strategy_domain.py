@@ -15,9 +15,7 @@ Tests:
 11. Hash mismatch handling returns typed REJECT
 """
 
-import copy
 import os
-import time
 import uuid
 
 import pytest
