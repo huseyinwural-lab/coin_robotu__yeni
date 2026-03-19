@@ -1,7 +1,6 @@
 # --- Environment ---
 .env
 .env.*
-!**/.env.example
 
 # --- Python ---
 __pycache__/
@@ -9,9 +8,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
-venv/
 
-# --- Node / Frontend ---
+# --- Node ---
 node_modules/
 dist/
 build/
@@ -31,14 +29,5 @@ admin_token.txt
 # --- Artifacts ---
 artifacts/
 test_reports/
-
-# --- Misc ---
-.idea/
-.vscode/
-.DS_Store
 frontend/node_modules/.cache/default-development/0.pack
 frontend/node_modules/.cache/default-development/11.pack
--e 
-# Environment files
-*.env
-*.env.*

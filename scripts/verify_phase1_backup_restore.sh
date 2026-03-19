@@ -40,6 +40,9 @@ log "T-1.H1/H2 .gitignore yeniden yazım + zorunlu kural doğrulaması"
 GITIGNORE_PATH="${APP_ROOT}/.gitignore"
 [[ -f "$GITIGNORE_PATH" ]] || fail "H1" ".gitignore yok"
 
+echo "VERIFYING FILE:" | tee -a "$SUMMARY_LOG"
+cat "$GITIGNORE_PATH" | tee -a "$SUMMARY_LOG"
+
 required_rules=(
   "backups/*.sql"
   "backups/*.bak"
@@ -54,17 +57,20 @@ for rule in "${required_rules[@]}"; do
 done
 
 if grep -n '^[[:space:]]*-e[[:space:]]*$' "$GITIGNORE_PATH" > "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"; then
-  bad_lines="$(cat "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log")"
-  fail "H2" "bozuk -e satırı bulundu: ${bad_lines}"
+  echo "FAIL: invalid '-e' line detected" | tee -a "$SUMMARY_LOG"
+  cat "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log" | tee -a "$SUMMARY_LOG"
+  exit 1
 else
   echo "NO_MINUS_E_LINE" > "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"
 fi
 
-NORMALIZED="$(sed 's/[[:space:]]\+$//' "$GITIGNORE_PATH" | sed '/^$/d')"
-DUPLICATES="$(echo "$NORMALIZED" | sort | uniq -d || true)"
-if [[ -n "$DUPLICATES" ]]; then
-  echo "$DUPLICATES" > "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
-  fail "H2" "duplicate ignore satırı bulundu: $DUPLICATES"
+NORMALIZED=$(sed 's/[[:space:]]\+$//' "$GITIGNORE_PATH" | sed '/^$/d')
+DUP=$(echo "$NORMALIZED" | sort | uniq -d)
+if [ -n "$DUP" ]; then
+  echo "$DUP" > "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
+  echo "FAIL: duplicate lines in .gitignore" | tee -a "$SUMMARY_LOG"
+  echo "$DUP" | tee -a "$SUMMARY_LOG"
+  exit 1
 else
   echo "NO_DUPLICATE_RULE" > "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
 fi

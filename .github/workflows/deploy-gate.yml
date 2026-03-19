@@ -620,7 +620,7 @@ jobs:
         working-directory: backend
         run: pytest -q tests/test_s3_backup_service.py
 
-      - name: Run phase1 backup/restore revalidation verifier
+      - name: Phase1 verify
         run: bash scripts/verify_phase1_backup_restore.sh
 
       - name: Upload backup smoke artifacts
