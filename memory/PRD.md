@@ -45,6 +45,11 @@
 - sonuç: `artifacts/faz6_security_summary.log` => `SUMMARY: PASS`
 - testing agent raporu: `/app/test_reports/iteration_22.json` (28/28 PASS)
 
+### Son CI düzeltmeleri (2026-03-19, ek)
+- `scripts/ci_secret_leak_guard.sh` içinde hardcoded `/app` kaldırıldı; repo root artık dinamik (`ROOT_DIR`) okunuyor.
+- `backend/tests/test_faz6_security_comprehensive.py` içindeki ruff F401 (unused import) temizlendi.
+- `deploy-gate.yml` için CI fallback env hazırlığı eklendi (JWT/encryption/admin test creds eksikse ephemeral değer üretimi); yanlış `required security env` kontrolü backup job’ından kaldırıldı.
+
 ### Teslim paketi
 - `/app/artifacts/faz6_final_security_bundle_with_iteration19.zip`
 - içerik: `iteration_19.json` + FAZ 6 kanıtları + ilgili loglar

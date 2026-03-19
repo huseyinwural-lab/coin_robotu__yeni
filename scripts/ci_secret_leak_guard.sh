@@ -9,19 +9,20 @@ ALLOWLIST_FILE="$ROOT_DIR/.secret-scan-allowlist"
 
 mkdir -p "$ARTIFACT_DIR"
 
-python - <<'PY'
+ROOT_DIR="$ROOT_DIR" ARTIFACT_DIR="$ARTIFACT_DIR" ALLOWLIST_FILE="$ALLOWLIST_FILE" python - <<'PY'
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
 
-root = Path('/app')
-artifact_dir = root / 'artifacts'
+root = Path(os.environ['ROOT_DIR'])
+artifact_dir = Path(os.environ['ARTIFACT_DIR'])
 log_file = artifact_dir / 'faz6_secret_scan_report.log'
 json_file = artifact_dir / 'faz6_secret_scan_report.json'
-allowlist_file = root / '.secret-scan-allowlist'
+allowlist_file = Path(os.environ['ALLOWLIST_FILE'])
 
 allowlist: list[str] = []
 if allowlist_file.exists():
