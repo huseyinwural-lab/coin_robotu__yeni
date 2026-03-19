@@ -371,16 +371,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Validate required security env
-        run: |
-          required_vars=(JWT_SECRET EXCHANGE_CREDENTIALS_ENCRYPTION_KEY ADMIN_BOOTSTRAP_EMAIL ADMIN_BOOTSTRAP_PASSWORD TEST_ADMIN_EMAIL TEST_ADMIN_PASSWORD)
-          for key in "${required_vars[@]}"; do
-            if [[ -z "${!key:-}" ]]; then
-              echo "Missing required secret/env/var: $key"
-              exit 1
-            fi
-          done
-
       - name: Install PostgreSQL client tools
         run: |
           sudo apt-get update

@@ -1,7 +1,7 @@
 import requests
 
 
-BASE_URL = "https://trade-platform-s3.preview.emergentagent.com/api"
+BASE_URL = "https://trading-hardening.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@platform.local"
 ADMIN_PASSWORD = "Admin12345!"
 USER_EMAIL = "testuser1773706589@example.com"

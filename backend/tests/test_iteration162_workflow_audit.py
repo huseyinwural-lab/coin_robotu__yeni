@@ -16,7 +16,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
+    BASE_URL = "https://trading-hardening.preview.emergentagent.com"
 
 ADMIN_EMAIL = "admin@platform.local"
 ADMIN_PASSWORD = "Admin12345!"

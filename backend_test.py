@@ -6,7 +6,7 @@ COMPREHENSIVE RELEASE READINESS TEST
 Detailed audit for production deployment readiness.
 Testing critical backend endpoints and authentication flows.
 
-Base URL: https://trade-platform-s3.preview.emergentagent.com
+Base URL: https://trading-hardening.preview.emergentagent.com
 """
 
 import requests
@@ -14,7 +14,7 @@ import json
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://trade-platform-s3.preview.emergentagent.com"
+BASE_URL = "https://trading-hardening.preview.emergentagent.com"
 ADMIN_EMAIL = "admin@platform.local"
 ADMIN_PASSWORD = "Admin12345!"
 TEST_USER_EMAIL = "testuser1773706589@example.com"
