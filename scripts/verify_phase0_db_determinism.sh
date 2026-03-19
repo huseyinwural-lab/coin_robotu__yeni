@@ -204,9 +204,13 @@ if command -v supervisorctl >/dev/null 2>&1; then
 else
   PERSISTENCE_LOG="${ARTIFACT_DIR}/faz0_persistence_db_smoke.log"
   marker="faz0_db_smoke_$(date +%s)"
-  psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS phase0_persistence_smoke (id SERIAL PRIMARY KEY, marker TEXT UNIQUE NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW());" > "$PERSISTENCE_LOG" 2>&1
-  psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "INSERT INTO phase0_persistence_smoke(marker) VALUES('${marker}');" >> "$PERSISTENCE_LOG" 2>&1
-  count="$(psql "${DATABASE_URL}" -At -c "SELECT COUNT(*) FROM phase0_persistence_smoke WHERE marker='${marker}';")"
+  if [[ -z "${DATABASE_URL:-}" ]]; then
+    fail "DATABASE_URL eksik (CI psql smoke)"
+  fi
+  PSQL_DB_URL="${DATABASE_URL/postgresql+psycopg2:/postgresql:}"
+  psql "${PSQL_DB_URL}" -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS phase0_persistence_smoke (id SERIAL PRIMARY KEY, marker TEXT UNIQUE NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT NOW());" > "$PERSISTENCE_LOG" 2>&1
+  psql "${PSQL_DB_URL}" -v ON_ERROR_STOP=1 -c "INSERT INTO phase0_persistence_smoke(marker) VALUES('${marker}');" >> "$PERSISTENCE_LOG" 2>&1
+  count="$(psql "${PSQL_DB_URL}" -At -c "SELECT COUNT(*) FROM phase0_persistence_smoke WHERE marker='${marker}';")"
   if [[ "$count" != "1" ]]; then
     fail "db persistence smoke başarısız"
   fi
