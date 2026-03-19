@@ -113,6 +113,24 @@
   - CI=true build: PASS
   - remaining technical debt: NONE
 
+## 2026-03-19 — Deploy Gate Genişletme (Contract Gate + Frontend Perf Artifact)
+
+### Yapılanlar
+- Backend gate’e zorunlu contract test adımı eklendi:
+  - `pytest -q tests/test_execution_readiness_contract.py tests/test_release_gate_contract.py`
+- Frontend gate’e otomatik perf smoke adımı eklendi:
+  - `node scripts/ci_perf_smoke.js`
+- Frontend perf smoke raporu CI artifact olarak upload ediliyor:
+  - `actions/upload-artifact@v4`
+  - `name: frontend-perf-smoke-report`
+  - `path: frontend/build/perf-smoke-report.json`
+
+### Doğrulama
+- `/app/test_reports/iteration_13.json`
+  - backend contract gate: PASS (5/5)
+  - frontend perf smoke: PASS
+  - artifact üretimi/doğrulaması: PASS
+
 ## 2026-03-18 — Production Readiness Audit (Kanıtlı Rapor)
 
 ### Kullanıcı Talebi
