@@ -19,6 +19,7 @@ from services.runtime_event_bus_service import (
 from services.paper_exchange_adapter_service import paper_exchange_adapter
 from services.failed_event_service import upsert_failed_event
 from core.users.user_exchange_connections import note_connection_runtime_event
+from services.execution_safety_service import ExecutionSafetyViolation, enforce_execution_open_allowed_or_raise
 
 
 def _canonical(payload: dict) -> str:
@@ -171,6 +172,37 @@ def dispatch_decision_result(
             "status": existing_intent.status,
         }, emitted_events
 
+    proposed_notional = float(decision_result.get("notional") or decision_result.get("size") or intent_payload.get("quantity") or 0.0)
+    try:
+        enforce_execution_open_allowed_or_raise(
+            db,
+            proposed_notional=proposed_notional,
+            source="runtime_execution_dispatch",
+            actor_user_id=str(intent_payload.get("account_id") or ""),
+            actor_role="SYSTEM",
+            entity_type="execution_intent",
+            entity_id=str(intent_payload.get("intent_hash") or decision_result.get("decision_hash") or correlation_id),
+        )
+    except ExecutionSafetyViolation as exc:
+        reason_code = exc.reason_code
+        decision_result = {
+            **decision_result,
+            "action": "REJECT",
+            "reason_codes": [reason_code],
+            "execution_safety": {"reason_code": reason_code, **(exc.details or {})},
+        }
+        emitted_events.append(
+            publish_runtime_event(
+                event_type="execution.intent.rejected",
+                payload={"reason_codes": [reason_code], "decision_hash": decision_result.get("decision_hash")},
+                correlation_id=correlation_id,
+                causation_id=decision_result.get("decision_hash"),
+                partition_key=f"{context_payload.get('symbol')}::{strategy_id}",
+            )
+        )
+        db.commit()
+        return decision_result, None, emitted_events
+
     intent_row = ExecutionIntent(
         intent_id=str(uuid.uuid4()),
         strategy_id=strategy_id,
@@ -255,6 +287,33 @@ def process_submission_event_once(db: Session, worker_name: str = "execution-wor
         )
         if terminal_event is not None:
             raise ValueError("duplicate_terminal_event")
+
+        try:
+            enforce_execution_open_allowed_or_raise(
+                db,
+                proposed_notional=float(intent.quantity or 0.0),
+                source="runtime_execution_worker",
+                actor_user_id=str(intent.account_id or ""),
+                actor_role="SYSTEM",
+                entity_type="execution_intent",
+                entity_id=str(intent.intent_id),
+            )
+        except ExecutionSafetyViolation as exc:
+            reason_code = exc.reason_code
+            db.add(
+                ExecutionIntentEvent(
+                    id=str(uuid.uuid4()),
+                    intent_id=intent.intent_id,
+                    event_type="execution.order.finalized",
+                    event_status="rejected",
+                    payload={"reason_code": reason_code, **(exc.details or {})},
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+            db.commit()
+            mark_event_processed(event_id)
+            ack_runtime_event(processing_queue, raw)
+            return {"status": "blocked", "event_id": event_id, "reason_code": reason_code}
 
         try:
             submission = paper_exchange_adapter.submit_order(

@@ -77,6 +77,19 @@ class InMemoryRedis:
             return None
         return values.pop(0)
 
+    def lrange(self, key: str, start: int, end: int):
+        if self._is_expired(key):
+            return []
+        values = self._lists.get(key, [])
+        if not values:
+            return []
+
+        normalized_start = max(start, 0)
+        normalized_end = len(values) - 1 if end < 0 else min(end, len(values) - 1)
+        if normalized_start > normalized_end:
+            return []
+        return values[normalized_start : normalized_end + 1]
+
     def brpoplpush(self, source: str, destination: str, timeout: int = 0):
         _ = timeout
         if self._is_expired(source):

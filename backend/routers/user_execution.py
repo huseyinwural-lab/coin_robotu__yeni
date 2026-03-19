@@ -27,6 +27,7 @@ from services.execution_intent_service import (
 )
 from services.execution_readiness_service import enforce_execution_guard_or_raise
 from services.execution_readiness_service import evaluate_execution_readiness
+from services.execution_safety_service import ExecutionSafetyViolation
 from services.explainability_rules_service import build_trade_explain
 from services.rate_limiter_service import consume_exchange_rate_limit
 from services.position_management_service import list_user_positions
@@ -301,6 +302,11 @@ def submit_position_action(
     _guard_exchange_rate_limit()
     try:
         intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
+    except ExecutionSafetyViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
     except ValueError as exc:
         message = str(exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
@@ -362,6 +368,11 @@ def submit_intent(
     _guard_exchange_rate_limit()
     try:
         intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
+    except ExecutionSafetyViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
     except ValueError as exc:
         message = str(exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc

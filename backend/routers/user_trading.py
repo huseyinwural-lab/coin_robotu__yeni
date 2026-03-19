@@ -17,6 +17,7 @@ from services.audit_service import create_audit_log
 from services.explainability_rules_service import build_trade_explain
 from services.execution_intent_service import preview_execution_intent, submit_execution_intent
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
+from services.execution_safety_service import ExecutionSafetyViolation
 from services.rate_limiter_service import consume_exchange_rate_limit
 from services.trading_preview_service import build_execution_preview_metrics
 
@@ -235,6 +236,11 @@ def execute_trading(
 
     try:
         intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
+    except ExecutionSafetyViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

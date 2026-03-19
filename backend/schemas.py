@@ -674,6 +674,9 @@ class LiveActivationConfigBase(BaseModel):
     max_trades_per_hour: int = Field(ge=1, le=60)
     max_notional_exposure: float = Field(ge=10)
     kill_switch_enabled: bool
+    trading_enabled: bool = False
+    max_total_exposure: float = Field(default=150, ge=0)
+    max_active_positions: int = Field(default=3, ge=0)
     disable_futures: bool
     ip_whitelist_ready: bool
     trading_permission_ready: bool
@@ -687,6 +690,29 @@ class LiveActivationConfigResponse(LiveActivationConfigBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    updated_at: datetime
+
+
+class AdminKillSwitchRequest(BaseModel):
+    trading_enabled: bool
+    reason: str | None = None
+    requested_by: str | None = None
+    effective_at: datetime | None = None
+    max_total_exposure: float | None = Field(default=None, ge=0)
+    max_active_positions: int | None = Field(default=None, ge=0)
+
+
+class AdminKillSwitchResponse(BaseModel):
+    trading_enabled: bool
+    max_total_exposure: float
+    max_active_positions: int
+    current_total_exposure: float
+    current_active_positions: int
+    open_positions_count: int
+    pending_user_intents_count: int
+    pending_runtime_intents_count: int
+    reason_code: str
+    idempotent: bool
     updated_at: datetime
 
 

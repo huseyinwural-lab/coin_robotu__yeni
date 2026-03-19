@@ -10,6 +10,7 @@ from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_sym
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
+from services.execution_safety_service import enforce_execution_open_allowed_or_raise
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.portfolio_risk_service import portfolio_risk_check
 from services.position_management_service import sync_position_state
@@ -714,6 +715,15 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
             actor_role="USER",
             source="execution_intent_service_submit",
         )
+        enforce_execution_open_allowed_or_raise(
+            db,
+            proposed_notional=float(intent.notional or 0.0),
+            source="execution_intent_service_submit",
+            actor_user_id=user_id,
+            actor_role="USER",
+            entity_type="user_execution_intent",
+            entity_id=intent.id,
+        )
 
         precheck_price = float(intent.price or 0)
         precheck_size = float(intent.size or 0)
@@ -1034,6 +1044,15 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
             actor_user_id=admin_user_id,
             actor_role="ADMIN",
             source="admin_execution_approval",
+        )
+        enforce_execution_open_allowed_or_raise(
+            db,
+            proposed_notional=float(intent.notional or 0.0),
+            source="admin_execution_approval",
+            actor_user_id=admin_user_id,
+            actor_role="ADMIN",
+            entity_type="user_execution_intent",
+            entity_id=intent.id,
         )
 
     intent.status = "APPROVED"

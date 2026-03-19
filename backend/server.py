@@ -13,6 +13,7 @@ from routers import (
     admin_action_center,
     admin_emergency,
     admin_control,
+    admin_kill_switch,
     admin_futures_adl_status,
     admin_futures_correlation,
     admin_futures_capital,
@@ -166,6 +167,7 @@ api_router.include_router(venues.router)
 api_router.include_router(audit.router)
 api_router.include_router(market.router)
 api_router.include_router(admin_control.router)
+api_router.include_router(admin_kill_switch.router)
 api_router.include_router(admin_futures_risk_status.router)
 api_router.include_router(admin_futures_liquidation_status.router)
 api_router.include_router(admin_futures_adl_status.router)

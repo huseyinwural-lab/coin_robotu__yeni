@@ -1,0 +1,16 @@
+backend/migrations/versions/20260319_0054_phase3_execution_safety_controls.py
+backend/model_domains/risk_execution_positions.py
+backend/services/execution_safety_service.py
+backend/routers/admin_kill_switch.py
+backend/services/execution_intent_service.py
+backend/services/runtime_execution_service.py
+backend/routers/user_execution.py
+backend/routers/user_trading.py
+backend/routers/admin_execution.py
+backend/services/live_mode_service.py
+backend/schemas.py
+backend/server.py
+backend/db.py
+backend/tests/test_phase3_execution_safety.py
+scripts/verify_phase3_execution_safety.sh
+.github/workflows/deploy-gate.yml

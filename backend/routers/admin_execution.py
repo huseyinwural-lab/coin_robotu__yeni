@@ -23,6 +23,7 @@ from services.execution_intent_service import queue_status_summary, rejection_re
 from services.execution_precheck_service import load_execution_policy_registry
 from services.execution_readiness_service import evaluate_execution_readiness
 from services.guard_metrics_service import build_guard_telemetry_payload
+from services.execution_safety_service import ExecutionSafetyViolation
 from services.live_mode_service import (
     create_release_gate_override,
     enforce_release_gate,
@@ -112,6 +113,11 @@ def approve_intent(
 ):
     try:
         row = approve_execution_intent(db, intent_id, current_user.id, admin_note=payload.note)
+    except ExecutionSafetyViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
