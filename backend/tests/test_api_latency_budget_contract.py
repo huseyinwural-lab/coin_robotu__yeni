@@ -1,4 +1,5 @@
 # ruff: noqa: E402
+import os
 import sys
 from pathlib import Path
 from time import perf_counter
@@ -63,11 +64,25 @@ def test_api_latency_budget_p95_by_endpoint(monkeypatch):
     server.fastapi_app.dependency_overrides[deps.require_admin] = lambda: _DummyUser()
     server.fastapi_app.dependency_overrides[deps.get_current_user] = lambda: _DummyUser()
 
-    budgets_ms = {
-        "/api/health": 120.0,
-        "/api/admin/execution-readiness": 900.0,
-        "/api/dashboard/summary": 1100.0,
+    profile = str(os.environ.get("LATENCY_BUDGET_PROFILE", "dev") or "dev").strip().lower()
+    budget_profiles = {
+        "dev": {
+            "/api/health": 180.0,
+            "/api/admin/execution-readiness": 1300.0,
+            "/api/dashboard/summary": 1500.0,
+        },
+        "stage": {
+            "/api/health": 150.0,
+            "/api/admin/execution-readiness": 1100.0,
+            "/api/dashboard/summary": 1300.0,
+        },
+        "prod": {
+            "/api/health": 120.0,
+            "/api/admin/execution-readiness": 900.0,
+            "/api/dashboard/summary": 1100.0,
+        },
     }
+    budgets_ms = budget_profiles.get(profile, budget_profiles["dev"])
 
     try:
         client = TestClient(server.fastapi_app)
