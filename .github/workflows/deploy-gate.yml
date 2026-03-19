@@ -45,6 +45,11 @@ jobs:
         run: |
           pytest -q tests/test_iteration165_prod_gate_smoke.py
 
+      - name: Pytest contract gate
+        working-directory: backend
+        run: |
+          pytest -q tests/test_execution_readiness_contract.py tests/test_release_gate_contract.py
+
   frontend-quality-gate:
     runs-on: ubuntu-latest
     steps:
@@ -63,3 +68,13 @@ jobs:
       - name: Frontend build
         working-directory: frontend
         run: yarn build
+
+      - name: Frontend performance smoke
+        working-directory: frontend
+        run: node scripts/ci_perf_smoke.js
+
+      - name: Upload frontend perf smoke artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-perf-smoke-report
+          path: frontend/build/perf-smoke-report.json
