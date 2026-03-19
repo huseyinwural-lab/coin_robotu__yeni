@@ -43,6 +43,8 @@ GITIGNORE_PATH="${APP_ROOT}/.gitignore"
 EXPECTED_GITIGNORE_PATH="${ARTIFACT_DIR}/faz1_gitignore_expected.txt"
 CANONICAL_STATE_LOG="${ARTIFACT_DIR}/faz1_gitignore_canonical_state.log"
 CANONICAL_DIFF_LOG="${ARTIFACT_DIR}/faz1_gitignore_canonical_diff.log"
+LINECOUNT_LOG="${ARTIFACT_DIR}/faz1_gitignore_linecount_check.log"
+BYTECOUNT_LOG="${ARTIFACT_DIR}/faz1_gitignore_bytecount_check.log"
 
 cat > "$EXPECTED_GITIGNORE_PATH" <<'EOF'
 # --- Environment ---
@@ -82,6 +84,22 @@ if ! cmp -s "$GITIGNORE_PATH" "$EXPECTED_GITIGNORE_PATH"; then
   diff -u "$EXPECTED_GITIGNORE_PATH" "$GITIGNORE_PATH" > "$CANONICAL_DIFF_LOG" || true
   fail "H1" ".gitignore canonical state mismatch (detay: artifacts/faz1_gitignore_canonical_diff.log)"
 fi
+
+actual_line_count="$(wc -l < "$GITIGNORE_PATH" | tr -d '[:space:]')"
+if [[ "$actual_line_count" -ne 31 ]]; then
+  echo "EXPECTED_LINE_COUNT=31 ACTUAL_LINE_COUNT=${actual_line_count}" > "$LINECOUNT_LOG"
+  fail "H1" ".gitignore satır sayısı 31 olmalı (actual=${actual_line_count})"
+fi
+echo "EXPECTED_LINE_COUNT=31 ACTUAL_LINE_COUNT=${actual_line_count}" > "$LINECOUNT_LOG"
+
+expected_bytes="$(wc -c < "$EXPECTED_GITIGNORE_PATH" | tr -d '[:space:]')"
+actual_bytes="$(wc -c < "$GITIGNORE_PATH" | tr -d '[:space:]')"
+if [[ "$actual_bytes" -ne "$expected_bytes" ]]; then
+  echo "EXPECTED_BYTES=${expected_bytes} ACTUAL_BYTES=${actual_bytes}" > "$BYTECOUNT_LOG"
+  fail "H1" ".gitignore byte hizası bozuk (expected=${expected_bytes}, actual=${actual_bytes})"
+fi
+echo "EXPECTED_BYTES=${expected_bytes} ACTUAL_BYTES=${actual_bytes}" > "$BYTECOUNT_LOG"
+
 echo "CANONICAL_MATCH" > "$CANONICAL_STATE_LOG"
 
 echo "VERIFYING FILE: $GITIGNORE_PATH" | tee -a "$SUMMARY_LOG"
@@ -149,6 +167,10 @@ fi
   cat "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
   echo "# canonical_state"
   cat "$CANONICAL_STATE_LOG"
+  echo "# linecount_check"
+  cat "$LINECOUNT_LOG"
+  echo "# bytecount_check"
+  cat "$BYTECOUNT_LOG"
 } >> "$GITIGNORE_SCAN_LOG"
 log "PASS[H1/H2]"
 

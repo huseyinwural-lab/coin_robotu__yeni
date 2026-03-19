@@ -641,6 +641,8 @@ jobs:
             artifacts/faz1_gitignore_scan.log
             artifacts/faz1_gitignore_canonical_state.log
             artifacts/faz1_gitignore_canonical_diff.log
+            artifacts/faz1_gitignore_linecount_check.log
+            artifacts/faz1_gitignore_bytecount_check.log
             artifacts/faz1_gitignore_minus_e_scan.log
             artifacts/faz1_gitignore_whitespace_scan.log
             artifacts/faz1_gitignore_duplicates.log
