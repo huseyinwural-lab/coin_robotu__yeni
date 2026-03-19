@@ -8,9 +8,11 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from services.idempotency_service import build_execution_idempotency_key
+from services.execution_intent_service import _derive_intent_id_from_idempotency_key
 
 
-ARTIFACT_PATH = Path("/app/artifacts/faz2_idempotency_key_examples.json")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ARTIFACT_PATH = REPO_ROOT / "artifacts" / "faz2_idempotency_key_examples.json"
 
 
 def _base_payload() -> dict:
@@ -52,9 +54,11 @@ def test_faz2_deterministic_idempotency_key_generation_examples():
     key_a = build_execution_idempotency_key(user_id="user-123", payload=payload_a)
     key_b = build_execution_idempotency_key(user_id="user-123", payload=payload_b)
     key_c = build_execution_idempotency_key(user_id="user-123", payload=payload_c)
+    intent_id_a = _derive_intent_id_from_idempotency_key(key_a)
 
     assert key_a == key_b
     assert key_a != key_c
+    assert intent_id_a == key_a
 
     ARTIFACT_PATH.parent.mkdir(parents=True, exist_ok=True)
     ARTIFACT_PATH.write_text(
@@ -68,6 +72,11 @@ def test_faz2_deterministic_idempotency_key_generation_examples():
                 "different_business_request": {
                     "example_c_key": key_c,
                     "different_from_a": key_a != key_c,
+                },
+                "intent_id_contract": {
+                    "intent_id_source": "canonical_sha256",
+                    "intent_id": intent_id_a,
+                    "intent_id_equals_idempotency_key": intent_id_a == key_a,
                 },
             },
             indent=2,

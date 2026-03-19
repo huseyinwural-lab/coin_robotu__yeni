@@ -1,5 +1,7 @@
 {
   "error": "duplicate_intent",
-  "intent_id": "0c7b03f1-da69-4e79-8ff9-95e4c048675d",
-  "message": "Duplicate execution intent rejected"
+  "reason_code": "DUPLICATE_INTENT",
+  "message": "Duplicate execution intent rejected",
+  "intent_id": "f85346172f51b023a92728181c61b7732f435469cdeff48791cc678c61250c4d",
+  "idempotency_key": "f85346172f51b023a92728181c61b7732f435469cdeff48791cc678c61250c4d"
 }

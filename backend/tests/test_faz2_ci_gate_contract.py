@@ -2,17 +2,18 @@ import re
 from pathlib import Path
 
 
-WORKFLOW_PATH = Path("/app/.github/workflows/deploy-gate.yml")
-ARTIFACT_PATH = Path("/app/artifacts/faz2_ci_gate_check.log")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "deploy-gate.yml"
+ARTIFACT_PATH = REPO_ROOT / "artifacts" / "faz2_ci_gate_check.log"
 
 
 def test_faz2_ci_gate_includes_required_tests():
     content = WORKFLOW_PATH.read_text(encoding="utf-8")
 
     required_patterns = [
-        r"test_faz2_idempotency_key_unit\.py",
-        r"test_faz2_execution_integrity\.py",
-        r"test_faz2_unique_constraint_contract\.py",
+        r"phase2-idempotency-gate:",
+        r"verify_phase2_idempotency\.sh",
+        r"phase2-idempotency-artifacts",
     ]
 
     missing = [pattern for pattern in required_patterns if re.search(pattern, content) is None]

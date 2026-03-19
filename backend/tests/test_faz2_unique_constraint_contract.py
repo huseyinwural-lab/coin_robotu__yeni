@@ -11,7 +11,8 @@ if str(BACKEND_ROOT) not in sys.path:
 from db import SessionLocal
 
 
-ARTIFACT_PATH = Path("/app/artifacts/faz2_unique_constraint_check.log")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ARTIFACT_PATH = REPO_ROOT / "artifacts" / "faz2_unique_constraint_check.log"
 
 
 def test_faz2_unique_constraint_contract_and_migration_state():
@@ -45,6 +46,22 @@ def test_faz2_unique_constraint_contract_and_migration_state():
             )
         ).scalar()
 
+        user_intent_id_unique = db.execute(
+            text(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.table_constraints
+                WHERE table_name = 'user_execution_intents'
+                  AND constraint_name = 'unique_user_execution_intent_intent_id'
+                  AND constraint_type = 'UNIQUE'
+                """
+            )
+        ).scalar()
+
+        user_intent_id_null_count = db.execute(
+            text("SELECT COUNT(*) FROM user_execution_intents WHERE intent_id IS NULL OR btrim(intent_id) = ''")
+        ).scalar()
+
         ARTIFACT_PATH.parent.mkdir(parents=True, exist_ok=True)
         ARTIFACT_PATH.write_text(
             "\n".join(
@@ -54,6 +71,8 @@ def test_faz2_unique_constraint_contract_and_migration_state():
                     f"UNIQUE_INTENT_CONSTRAINT_COUNT={int(execution_unique or 0)}",
                     f"EXECUTION_INTENTS_NULL_INTENT_ID_COUNT={int(execution_null_count or 0)}",
                     f"USER_IDEMPOTENCY_UNIQUE_CONSTRAINT_COUNT={int(user_idempotency_unique or 0)}",
+                    f"USER_INTENT_ID_UNIQUE_CONSTRAINT_COUNT={int(user_intent_id_unique or 0)}",
+                    f"USER_INTENT_ID_NULL_COUNT={int(user_intent_id_null_count or 0)}",
                     "FAZ2_UNIQUE_CONSTRAINT_CHECK_PASS",
                 ]
             )
@@ -64,5 +83,7 @@ def test_faz2_unique_constraint_contract_and_migration_state():
         assert int(execution_unique or 0) == 1
         assert int(execution_null_count or 0) == 0
         assert int(user_idempotency_unique or 0) == 1
+        assert int(user_intent_id_unique or 0) == 1
+        assert int(user_intent_id_null_count or 0) == 0
     finally:
         db.close()

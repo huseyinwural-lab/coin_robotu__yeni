@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from core.audit.audit_events import AuditEvent
@@ -19,6 +20,8 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.execution_intent_service import (
+    DUPLICATE_INTENT_REASON_CODE,
+    DuplicateExecutionIntentError,
     cancel_execution_intent,
     get_execution_presets,
     list_user_execution_intents,
@@ -34,6 +37,19 @@ from services.position_management_service import list_user_positions
 from services.strategy_intelligence_service import evaluate_hedge_suggestion
 
 router = APIRouter(prefix="/user/execution", tags=["user_execution"])
+
+
+def _duplicate_intent_response(*, reason_code: str, message: str, intent_id: str, idempotency_key: str):
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={
+            "error": "duplicate_intent",
+            "reason_code": reason_code,
+            "message": message,
+            "intent_id": intent_id,
+            "idempotency_key": idempotency_key,
+        },
+    )
 
 
 def _guard_exchange_rate_limit():
@@ -64,6 +80,27 @@ def preview_intent(
     payload_data = payload.model_dump()
     try:
         intent, validation = preview_execution_intent(db, current_user.id, payload_data)
+    except DuplicateExecutionIntentError as exc:
+        create_audit_log(
+            db,
+            action="EXECUTION_INTENT_DUPLICATE_REJECTED",
+            entity_type="execution_intent",
+            entity_id=exc.intent_id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            severity="warning",
+            details={
+                "reason_code": DUPLICATE_INTENT_REASON_CODE,
+                "idempotency_key": exc.idempotency_key,
+                "intent_id": exc.intent_id,
+            },
+        )
+        return _duplicate_intent_response(
+            reason_code=DUPLICATE_INTENT_REASON_CODE,
+            message="Duplicate execution intent rejected",
+            intent_id=exc.intent_id,
+            idempotency_key=exc.idempotency_key,
+        )
     except ValueError as exc:
         error_code = str(exc)
         if error_code in {
@@ -148,7 +185,7 @@ def preview_intent(
         },
     )
     return ExecutionIntentPreviewResponse(
-        intent_id=intent.id,
+        intent_id=intent.intent_id,
         intent_token=intent.intent_token,
         preview_hash=intent.preview_hash,
         intent_type=intent.intent_type,
@@ -204,6 +241,27 @@ def preview_position_action(
     }
     try:
         intent, validation = preview_execution_intent(db, current_user.id, mapped_payload)
+    except DuplicateExecutionIntentError as exc:
+        create_audit_log(
+            db,
+            action="EXECUTION_INTENT_DUPLICATE_REJECTED",
+            entity_type="execution_intent",
+            entity_id=exc.intent_id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            severity="warning",
+            details={
+                "reason_code": DUPLICATE_INTENT_REASON_CODE,
+                "idempotency_key": exc.idempotency_key,
+                "intent_id": exc.intent_id,
+            },
+        )
+        return _duplicate_intent_response(
+            reason_code=DUPLICATE_INTENT_REASON_CODE,
+            message="Duplicate execution intent rejected",
+            intent_id=exc.intent_id,
+            idempotency_key=exc.idempotency_key,
+        )
     except ValueError as exc:
         error_code = str(exc)
         if error_code in {
@@ -254,7 +312,7 @@ def preview_position_action(
         },
     )
     return ExecutionIntentPreviewResponse(
-        intent_id=intent.id,
+        intent_id=intent.intent_id,
         intent_token=intent.intent_token,
         preview_hash=intent.preview_hash,
         intent_type=intent.intent_type,
@@ -336,7 +394,7 @@ def submit_position_action(
         details={"intent_type": intent.intent_type, "position_id": intent.position_id, "intent_token": intent.intent_token},
     )
     return ExecutionIntentSubmitResponse(
-        intent_id=intent.id,
+        intent_id=intent.intent_id,
         intent_status="QUEUED_FOR_APPROVAL",
         reason_codes=[],
         queue_state=intent.status,
@@ -411,7 +469,7 @@ def submit_intent(
         details={"queue_mode": intent.queue_mode},
     )
     return ExecutionIntentSubmitResponse(
-        intent_id=intent.id,
+        intent_id=intent.intent_id,
         intent_status="QUEUED_FOR_APPROVAL",
         reason_codes=[],
         queue_state=intent.status,

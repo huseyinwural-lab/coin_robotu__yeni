@@ -1,0 +1,13 @@
+{
+  "action": "EXECUTION_INTENT_DUPLICATE_REJECTED",
+  "entity_id": "f85346172f51b023a92728181c61b7732f435469cdeff48791cc678c61250c4d",
+  "details": {
+    "reason_code": "DUPLICATE_INTENT",
+    "idempotency_key": "f85346172f51b023a92728181c61b7732f435469cdeff48791cc678c61250c4d",
+    "intent_id": "f85346172f51b023a92728181c61b7732f435469cdeff48791cc678c61250c4d",
+    "request_id": "9e46f31b-ec0a-4815-bd16-032684dcb271",
+    "session_id": null,
+    "route": "/api/user/execution/intent/preview",
+    "method": "POST"
+  }
+}

@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import redis_client
@@ -11,6 +12,7 @@ from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.execution_safety_service import enforce_execution_open_allowed_or_raise
+from services.idempotency_service import build_execution_idempotency_key
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.portfolio_risk_service import portfolio_risk_check
 from services.position_management_service import sync_position_state
@@ -32,6 +34,23 @@ POSITION_ACTION_TYPES = {
     "MOVE_TAKE_PROFIT",
 }
 RISK_REDUCTION_ACTIONS = {"CLOSE_POSITION", "PARTIAL_CLOSE", "MOVE_STOP", "MOVE_TAKE_PROFIT"}
+DUPLICATE_INTENT_REASON_CODE = "DUPLICATE_INTENT"
+
+
+class DuplicateExecutionIntentError(ValueError):
+    """Raised when a deterministic idempotency contract detects duplicate execution intent."""
+
+    def __init__(self, *, intent_id: str, idempotency_key: str):
+        super().__init__("duplicate_execution_intent")
+        self.intent_id = intent_id
+        self.idempotency_key = idempotency_key
+        self.reason_code = DUPLICATE_INTENT_REASON_CODE
+
+
+def _derive_intent_id_from_idempotency_key(idempotency_key: str) -> str:
+    # FAZ-2 sözleşmesi:
+    # request -> canonical payload -> deterministic hash(idempotency_key) -> intent_id (persistence)
+    return idempotency_key
 
 
 def _recommended_futures_leverage(*, user_id: str, volatility_pct: float) -> int:
@@ -578,9 +597,36 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     else:
         action_size = action_size or 0
 
+    idempotency_key = build_execution_idempotency_key(
+        user_id=user_id,
+        payload=payload,
+        normalized_payload=normalized,
+    )
+    intent_id = _derive_intent_id_from_idempotency_key(idempotency_key)
+
+    duplicate_intent = (
+        db.query(UserExecutionIntent)
+        .filter(
+            UserExecutionIntent.user_id == user_id,
+            UserExecutionIntent.intent_id == intent_id,
+        )
+        .first()
+    )
+    if duplicate_intent is not None:
+        raise DuplicateExecutionIntentError(intent_id=duplicate_intent.intent_id, idempotency_key=idempotency_key)
+
+    normalized["idempotency_contract"] = {
+        "intent_id_source": "sha256_canonical_payload",
+        "intent_id": intent_id,
+        "idempotency_key": idempotency_key,
+        "reason_code_on_duplicate": DUPLICATE_INTENT_REASON_CODE,
+    }
+
     final_status = "PREVIEWED" if validation.get("validation_status") == "valid" else "REJECTED"
     intent = UserExecutionIntent(
         id=str(uuid.uuid4()),
+        intent_id=intent_id,
+        idempotency_key=idempotency_key,
         user_id=user_id,
         source_type=source_type,
         source_ref_id=str(normalized.get("source_ref_id") or payload.get("source_ref_id") or "") or None,
@@ -689,7 +735,28 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     validation["leverage_policy_mode"] = normalized.get("leverage_policy_mode")
     validation["leverage_clamp_reasons"] = normalized.get("leverage_clamp_reasons") or []
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        error_text = str(exc).lower()
+        unique_violation_markers = {
+            "unique_user_execution_intent_intent_id",
+            "unique_user_execution_intent_idempotency_key",
+            "duplicate key value violates unique constraint",
+        }
+        if any(marker in error_text for marker in unique_violation_markers):
+            existing = (
+                db.query(UserExecutionIntent)
+                .filter(
+                    UserExecutionIntent.user_id == user_id,
+                    UserExecutionIntent.intent_id == intent_id,
+                )
+                .first()
+            )
+            if existing is not None:
+                raise DuplicateExecutionIntentError(intent_id=existing.intent_id, idempotency_key=idempotency_key) from exc
+        raise
     db.refresh(intent)
     return intent, validation
 
