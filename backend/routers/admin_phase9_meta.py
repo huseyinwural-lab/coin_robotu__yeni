@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
-from models import PortfolioExposureSnapshot, RiskCluster, User, UserExecutionIntent
+from models import PortfolioExposureSnapshot, User, UserExecutionIntent
 from schemas import (
     PortfolioRiskLimitsResponse,
     PortfolioRiskLimitsUpdate,

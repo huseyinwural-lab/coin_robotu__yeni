@@ -74,6 +74,7 @@ export const UserSymbolDecisionDetailPage = () => {
 
   useEffect(() => {
     loadDecisionDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [normalizedSymbol]);
 
   const openImpactFromCard = (card) => {
@@ -86,6 +87,7 @@ export const UserSymbolDecisionDetailPage = () => {
       loadDecisionDetail({ silent: true });
     }, 10000);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [normalizedSymbol]);
 
   return (

@@ -589,6 +589,7 @@ export const UserExchangeSettingsPage = () => {
     revalidateConnectionProfile(selectedConnectionProfile, { silent: true });
   }, [
     revalidateConnectionProfile,
+    selectedConnectionProfile,
     selectedConnectionProfile?.id,
     selectedConnectionProfile?.connection_health,
     selectedConnectionProfile?.is_reconnecting,

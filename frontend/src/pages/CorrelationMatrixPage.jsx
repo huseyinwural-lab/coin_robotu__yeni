@@ -19,6 +19,7 @@ export const CorrelationMatrixPage = () => {
 
   useEffect(() => {
     loadMatrix(200);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

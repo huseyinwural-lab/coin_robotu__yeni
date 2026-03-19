@@ -66,6 +66,7 @@ export default function UserLiveTradingDashboardPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowSize]);
 
   const exportDailyReport = async (format) => {

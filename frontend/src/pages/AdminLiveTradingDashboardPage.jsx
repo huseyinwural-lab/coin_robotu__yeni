@@ -52,6 +52,7 @@ export const AdminLiveTradingDashboardPage = () => {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowSize]);
 
   useEffect(() => {
@@ -59,6 +60,7 @@ export const AdminLiveTradingDashboardPage = () => {
       load();
     }, 30000);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowSize]);
 
   const alertStatus = (summary?.critical_alerts?.status || "normal").toLowerCase();

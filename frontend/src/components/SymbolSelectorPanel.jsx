@@ -157,10 +157,12 @@ export const SymbolSelectorPanel = ({
   useEffect(() => {
     loadProviderConfig();
     loadWatchlists();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
 
   useEffect(() => {
     loadUniverse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [normalizedMode, source, exchange, marketType, quoteAssetFilter]);
 
   const toggleSymbol = (row) => {

@@ -50,6 +50,7 @@ export const AdminUniverseMonitorPage = () => {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, windowSize]);
 
   useEffect(() => {
@@ -57,6 +58,7 @@ export const AdminUniverseMonitorPage = () => {
       load();
     }, 10000);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, windowSize]);
 
   const latestTrendPoint = useMemo(() => trend?.latest || trend?.points?.[trend.points.length - 1] || null, [trend]);

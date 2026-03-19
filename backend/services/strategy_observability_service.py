@@ -1,7 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 

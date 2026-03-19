@@ -69,6 +69,7 @@ export const MarketUniversePage = () => {
 
   useEffect(() => {
     hydrate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

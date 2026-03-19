@@ -53,7 +53,6 @@ from services.live_mode_service import (
     revoke_release_gate_override,
     alert_history,
     permission_status_for_user,
-    release_gate_view,
     resolve_runtime_credentials,
     run_controlled_test_order,
     save_exchange_settings,

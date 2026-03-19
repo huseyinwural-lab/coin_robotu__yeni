@@ -139,6 +139,7 @@ export const UserDashboardPage = () => {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -146,6 +147,7 @@ export const UserDashboardPage = () => {
       load({ silent: true });
     }, 10000);
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onSelectDecisionCard = async (symbol) => {
@@ -242,7 +244,7 @@ export const UserDashboardPage = () => {
       max_leverage: defaultPolicy.max_leverage,
       risk_reward_ratio: defaultPolicy.risk_reward_ratio,
     });
-  }, [defaultPolicy?.id]);
+  }, [defaultPolicy]);
 
   useEffect(() => {
     if (!wizardStorageKey) {

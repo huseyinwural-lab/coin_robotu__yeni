@@ -425,7 +425,7 @@ export const UserScannerPage = () => {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [selectedDecisionSymbol]);
 
   useEffect(() => {
     load({ hydrateSelection: true });

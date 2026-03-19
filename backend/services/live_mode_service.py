@@ -13,7 +13,6 @@ from urllib.parse import urlencode
 import httpx
 from sqlalchemy.orm import Session
 
-from core.config import settings
 from core.users.user_exchange_connector import (
     decrypt_exchange_secret,
     encrypt_exchange_secret,

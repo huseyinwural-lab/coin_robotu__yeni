@@ -187,7 +187,7 @@ export const PanelLayout = () => {
     if (!gateBadge?.override_active || !gateBadge?.override_expires_at) {
       return "";
     }
-    const ms = new Date(gateBadge.override_expires_at).getTime() - Date.now();
+    const ms = new Date(gateBadge.override_expires_at).getTime() - nowTick;
     if (ms <= 0) {
       return "expired";
     }

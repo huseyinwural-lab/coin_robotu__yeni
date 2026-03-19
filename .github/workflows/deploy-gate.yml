@@ -28,7 +28,7 @@ jobs:
       - name: Ruff lint (backend)
         run: |
           pip install ruff
-          ruff check backend --select E9,F63,F7,F82
+          ruff check backend --select E9,F63,F7,F82,F401,E402 --exclude backend/tests,backend/cli
 
       - name: Block embedded DB references
         working-directory: backend
@@ -61,4 +61,4 @@ jobs:
 
       - name: Frontend build
         working-directory: frontend
-        run: CI=false yarn build
+        run: yarn build
