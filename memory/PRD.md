@@ -7726,3 +7726,33 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Son aktif log: `/app/logs/deploy3_mock_stability_20260315_1952.log`
 - Exchange execution akışı kullanıcı tercihi gereği **MOCKED** durumdadır.
 
+## 2026-03-19 — FAZ 1 SON DÜZELTME (STATE ALIGNMENT FIX) ✅
+
+### Kapsam (P0)
+- `.gitignore` minimal canonical duruma çekildi ve kirli satırlar temizlendi:
+  - kaldırıldı: `-e` satırı, duplicate env blokları, `frontend/node_modules/.cache/default-development/*.pack`
+- `scripts/verify_phase1_backup_restore.sh` canonical kilit ile sertleştirildi:
+  - `.gitignore` artık beklenen template ile birebir karşılaştırılıyor (fail-fast)
+  - yeni kanıt dosyaları: `faz1_gitignore_canonical_state.log`, `faz1_gitignore_canonical_diff.log`
+- `deploy-gate.yml` backup artifact path’leri verify çıktılarıyla hizalandı.
+
+### Kök Neden (RCA)
+- Drift kaynağı tespit edildi: lokal git hook `/.git/hooks/pre-commit`
+  - hook, `>90MB` dosyaları otomatik olarak `.gitignore` içine append ediyor.
+  - bu nedenle `frontend/node_modules/.cache/default-development/0.pack` ve `11.pack` tekrar ekleniyordu.
+- Düzeltme:
+  - büyük cache pack dosyaları temizlendi.
+  - canonical doğrulama ile future drift fail-fast yakalanır hale getirildi.
+
+### Doğrulama / Kanıt
+- `bash scripts/verify_phase1_backup_restore.sh` → `SUMMARY: PASS`
+- test agent raporu: `/app/test_reports/iteration_27.json` → backend `%100`, issue yok
+- HEAD archive doğrulaması:
+  - `/app/artifacts/faz1_closure_bundle_head_20260319_162444.zip`
+  - zip içindeki `.gitignore` temiz (no `-e`, no cachepath)
+
+### Sonraki İşler
+- P1: CI perf proximity warning + last-5 average comment
+- P1: kill-switch state değişimlerinde Slack/Telegram notification
+- P2: config schema gate + weekly trend artifacts + incident runbook
+
