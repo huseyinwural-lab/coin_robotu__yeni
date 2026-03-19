@@ -154,12 +154,12 @@ export const LandingPage = () => {
           className="flex flex-wrap items-center justify-between gap-4"
           data-testid="landing-header"
         >
-          <div className="w-full max-w-[320px] overflow-hidden rounded border border-black/70 bg-black/25 p-1" data-testid="landing-fixed-logo-area">
-            <div className="aspect-[16/5] w-full overflow-hidden rounded bg-black/70" data-testid="landing-fixed-logo-frame">
+          <div className="w-full max-w-[340px] overflow-hidden rounded border border-black/70 bg-black/25 p-1" data-testid="landing-fixed-logo-area">
+            <div className="h-[128px] w-full overflow-hidden rounded bg-[#11161f]" data-testid="landing-fixed-logo-frame">
               <img
                 src={FIXED_HEADER_LOGO_URL}
                 alt="XILO sabit logo"
-                className="h-full w-full object-cover object-center"
+                className="h-full w-full object-contain object-bottom"
                 data-testid="landing-fixed-logo-image"
               />
             </div>
