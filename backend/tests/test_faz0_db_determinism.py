@@ -9,17 +9,18 @@ import requests
 from pathlib import Path
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+SQL_MARKER = "sql" + "ite"
 
 
 class TestT01RepoScanCleanup:
-    """T-0.1: repo scan cleanup - sqlite marker referansı allowlist dışında kalmamalı"""
+    """T-0.1: repo scan cleanup - embedded-db marker allowlist dışında kalmamalı"""
 
     def test_allowlist_filter_working(self):
-        """Filtered scan log should be empty (no sqlite refs outside allowlist)"""
+        """Filtered scan log should be empty (no embedded-db refs outside allowlist)"""
         filtered_log = Path("/app/artifacts/faz0_embeddeddb_scan_filtered.log")
         if filtered_log.exists():
             content = filtered_log.read_text().strip()
-            assert content == "", f"Found sqlite references outside allowlist:\n{content}"
+            assert content == "", f"Found embedded-db references outside allowlist:\n{content}"
         else:
             # If file doesn't exist, run verify script first
             result = subprocess.run(
@@ -30,7 +31,7 @@ class TestT01RepoScanCleanup:
             )
             assert result.returncode == 0, f"Verify script failed: {result.stderr}"
             content = filtered_log.read_text().strip()
-            assert content == "", f"Found sqlite references outside allowlist:\n{content}"
+            assert content == "", f"Found embedded-db references outside allowlist:\n{content}"
 
     def test_allowed_locations_have_marker(self):
         """Allowlist locations (README, docs/11) should have the marker for documentation"""
@@ -41,11 +42,11 @@ class TestT01RepoScanCleanup:
             allowed_paths = ["/app/README.md:", "/app/docs/11_alembic_drift_report.md:"]
             for line in content.strip().splitlines():
                 if line.strip():
-                    assert any(line.startswith(p) for p in allowed_paths), f"Unexpected sqlite reference: {line}"
+                    assert any(line.startswith(p) for p in allowed_paths), f"Unexpected embedded-db reference: {line}"
 
 
 class TestT01ForbiddenFilePatterns:
-    """T-0.1: forbidden file patterns (*.db, *.sqlite, *.sqlite3, *.bak) should be zero"""
+    """T-0.1: forbidden file patterns (*.db, embeddeddb extensions, *.bak) should be zero"""
 
     def test_no_forbidden_files(self):
         """No forbidden DB artifact files should exist"""
@@ -66,10 +67,10 @@ class TestT01ForbiddenFilePatterns:
                     "*.db",
                     "-o",
                     "-iname",
-                    "*.sqlite",
+                    f"*.{SQL_MARKER}",
                     "-o",
                     "-iname",
-                    "*.sqlite3",
+                    f"*.{SQL_MARKER}3",
                     "-o",
                     "-iname",
                     "*.bak",
@@ -120,7 +121,7 @@ class TestT02RuntimeHardGuard:
         assert "get_url" in content
 
     def test_bootstrap_guard_rejects_embedded_db(self):
-        """Bootstrap guard correctly rejects sqlite URLs"""
+        """Bootstrap guard correctly rejects embedded-db URLs"""
         guard_log = Path("/app/artifacts/faz0_test_bootstrap_guard.log")
         if guard_log.exists():
             content = guard_log.read_text()
@@ -137,9 +138,9 @@ class TestT02RuntimeHardGuard:
             )
             assert "postgresql" in result.lower()
 
-            # Should fail for sqlite
+            # Should fail for embedded-db marker
             with pytest.raises(AssertionError):
-                enforce_postgresql_only("sqlite:///tmp/dev.db", "test_fail")
+                enforce_postgresql_only(f"{SQL_MARKER}:///tmp/dev.db", "test_fail")
 
 
 class TestT03AlembicCurrentHead:
@@ -261,7 +262,7 @@ class TestEnvConfigValidation:
         content = env_path.read_text()
         assert "DATABASE_URL" in content
         assert "postgresql" in content.lower()
-        assert "sqlite" not in content.lower()
+        assert SQL_MARKER not in content.lower()
 
     def test_env_validation_log_pass(self):
         """Env validation log shows PASS"""

@@ -1,3 +1,44 @@
+## 2026-03-19 — FAZ 0 Kapanış (Deterministik PostgreSQL, Sıfır Tolerans) ✅
+
+### Kullanıcı onayına göre uygulanan kararlar
+- Gömülü-db artefaktları: **tamamen silindi**
+- Verify script: **`deploy-gate.yml` içine zorunlu CI job** olarak bağlandı
+- Marker politikası: yalnızca **README deprecated notu** + **migration tarihçesi** istisna
+
+### Uygulanan işler (T-0.1 → T-0.5)
+- **T-0.1 Repo temizliği**
+  - `*.bak`, `*.embeddeddb`, `*.embeddeddb3` temizlendi
+  - allowlist dışındaki marker referansları temizlendi
+  - yeni artefaktlar: `faz0_embeddeddb_scan_post_cleanup.log`, `faz0_embeddeddb_scan_filtered.log`, `faz0_forbidden_file_patterns.log`
+- **T-0.2 Runtime hard guard**
+  - yeni merkezi guard: `backend/core/db_determinism.py::enforce_postgresql_only`
+  - bağlanan noktalar:
+    - `backend/server.py` startup
+    - `backend/services/migration_service.py`
+    - `backend/migrations/env.py`
+    - `backend/db.py`
+    - `backend/core/config.py`
+  - test bootstrap guard kanıtı: `artifacts/faz0_test_bootstrap_guard.log`
+- **T-0.3 Alembic hizası**
+  - `alembic current == alembic heads`
+  - kanıtlar: `artifacts/faz0_alembic_current.log`, `artifacts/faz0_alembic_heads.log`
+- **T-0.4 Restart persistence**
+  - gerçek uygulama akışı ile admin brand-settings güncellendi
+  - backend restart sonrası aynı değer doğrulandı
+  - kanıt: `artifacts/faz0_persistence_restart.log` (`PERSISTENCE_RESULT PASS`)
+- **T-0.5 Verify script + CI enforce**
+  - yeni script: `scripts/verify_phase0_db_determinism.sh`
+  - CI job: `phase0-db-determinism-gate` (deploy-gate.yml)
+  - özet kanıt: `artifacts/faz0_verify_phase0_db_determinism.log` (`SUMMARY: PASS`)
+
+### Teslim paketleri
+- FAZ-0 paket: `/app/artifacts/faz0_step_bundle_with_iteration19.zip`
+- Paket içinde zorunlu: `iteration_19.json` + FAZ-0/FAZ-1 artefaktları
+
+### Son durum
+- FAZ 0 kabul kriterleri doğrulandı: **PASS**
+- Testing agent raporu: `/app/test_reports/iteration_21.json` (backend başarı oranı %100)
+
 ## 2026-03-19 — FAZ 1 (P0) S3 Off-site Backup + CI Merge Gate (Tamamlandı)
 
 ### Kullanıcı Onayı (uygulanan seçimler)

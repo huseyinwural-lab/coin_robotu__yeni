@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict dH3tdfH2wsNCVZIRW3xIzXpsBeeDTsGS9gkc0aDM8nNhGAE8mc3OXLD9uAZLnOG
+\restrict gb9Xthwsehje4fmlEMphFOfnbuQPMLVNErqR77lLSKBBJkGALclmLZooRMfcOOG
 
 -- Dumped from database version 15.16 (Debian 15.16-0+deb12u1)
 -- Dumped by pg_dump version 15.16 (Debian 15.16-0+deb12u1)
@@ -2312,6 +2312,36 @@ f87e13fa-dda0-4325-beb3-94cf7f037bd1	\N	system	SPOT_UNIVERSE_REFRESHED	spot_univ
 2f91db97-9635-4028-a227-d643265323f3	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:49:56.133039+00
 61bc447d-fd7e-48cb-9d1e-da463b961e96	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:50:06.279791+00
 061bac92-8d2c-4ae5-a248-59e5b35d05b1	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:51:27.088631+00
+df6f393a-99dc-49a7-81db-e200e4272a4c	\N	system	release_gate_status_changed	release_gate	phase4	warning	{"status": "BLOCKED", "reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:51:57.618748+00
+0913f4b0-b439-421a-893c-694be9189291	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	user_login	user	9ca118ab-d054-415a-92e0-023e9e08fe22	info	{"email": "admin@platform.local", "request_id": "a0e0fb67-2577-47a3-8475-726ad10f6217", "session_id": null, "route": "/api/auth/login/admin", "method": "POST"}	2026-03-19 07:56:17.314513+00
+c462335b-805d-45bf-9f5c-173a88912010	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	brand_settings_updated	brand_settings	default	info	{"app_name": "faz0-persist-1773906976", "request_id": "9da4f437-93bb-44ae-83eb-685423d31e75", "session_id": null, "route": "/api/admin/brand-settings", "method": "PUT"}	2026-03-19 07:56:17.48745+00
+c37fb998-4b7c-4551-833f-5658ab1d01de	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:56:23.468656+00
+9ce4d7a0-a955-49a9-8d7f-debbea9337b4	\N	system	release_gate_status_changed	release_gate	phase4	warning	{"status": "BLOCKED", "reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:56:53.769815+00
+28e1ce9c-9fe2-4731-adf8-f6ace714a957	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:57:02.439008+00
+2fb92b2a-0e69-436f-9672-37fd69aa4425	\N	system	release_gate_status_changed	release_gate	phase4	warning	{"status": "BLOCKED", "reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:57:33.026297+00
+f3e076c3-e1d8-4d85-941d-fcc003fbc462	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	user_login	user	9ca118ab-d054-415a-92e0-023e9e08fe22	info	{"email": "admin@platform.local", "request_id": "d653bab8-5a54-45fa-888e-c4fce9f4b012", "session_id": null, "route": "/api/auth/login/admin", "method": "POST"}	2026-03-19 07:57:35.274651+00
+1c667ab0-3602-4630-a0f7-22e625640bd9	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	brand_settings_updated	brand_settings	default	info	{"app_name": "faz0-persist-1773907054", "request_id": "4d917608-6072-490d-9e6f-2d5022c5340e", "session_id": null, "route": "/api/admin/brand-settings", "method": "PUT"}	2026-03-19 07:57:35.50333+00
+4577d591-5754-43e9-bf67-c2ae34a1be4c	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:57:41.18683+00
+59d44a17-9d00-415e-9711-4a224a59c8a2	\N	system	release_gate_status_changed	release_gate	phase4	warning	{"status": "BLOCKED", "reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:58:11.753545+00
+35e4a70a-9340-47bf-8a4b-f41e4e8d0f94	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	user_login	user	9ca118ab-d054-415a-92e0-023e9e08fe22	info	{"email": "admin@platform.local", "request_id": "07a84db1-73c8-4bb3-8fb9-55689133f83f", "session_id": null, "route": "/api/auth/login/admin", "method": "POST"}	2026-03-19 07:58:32.179608+00
+1973d9b6-9b47-41c7-8e73-471d155bec52	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	brand_settings_updated	brand_settings	default	info	{"app_name": "faz0-persist-1773907111", "request_id": "8e083f98-c990-43d3-9ede-587999de0d5e", "session_id": null, "route": "/api/admin/brand-settings", "method": "PUT"}	2026-03-19 07:58:32.357706+00
+a09a0c18-ed0b-4d4e-8aad-20435a77e65e	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:58:37.887535+00
+8dd2bf2d-0806-4aef-836f-c996554b1ef2	\N	system	release_gate_status_changed	release_gate	phase4	warning	{"status": "BLOCKED", "reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:59:08.186401+00
+29c45a3f-ab34-4d66-a5a3-fbde3aa88889	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:59:41.808463+00
+f1f0abe0-92e2-4cbc-be30-5d9369b427d3	\N	system	release_gate_status_changed	release_gate	phase4	warning	{"status": "BLOCKED", "reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 08:00:12.06334+00
+d0f2bfe4-3d45-425c-971f-1ea27c73a24b	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 08:01:52.72437+00
+b2af7f83-dace-4368-87db-245d3eb48f90	\N	system	release_gate_status_changed	release_gate	phase4	warning	{"status": "BLOCKED", "reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 08:02:23.046239+00
+85297db1-6612-4c86-876a-07f0d6bb1838	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	user_login	user	9ca118ab-d054-415a-92e0-023e9e08fe22	info	{"email": "admin@platform.local", "request_id": "1ee620ae-ffe7-4dbe-9a58-41d923713ef0", "session_id": null, "route": "/api/auth/login/admin", "method": "POST"}	2026-03-19 08:02:26.396805+00
+943d11a5-3c23-4cf7-a095-a747c3997f79	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	brand_settings_updated	brand_settings	default	info	{"app_name": "faz0-persist-1773907345", "request_id": "276d9b3e-f563-434d-94f1-f4fc9d8d1e1c", "session_id": null, "route": "/api/admin/brand-settings", "method": "PUT"}	2026-03-19 08:02:26.566496+00
+ee9b567f-d43b-467b-b5c2-dc53c6ee88ec	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 08:02:32.230929+00
+d6375259-3514-491a-a50e-95889b3db460	\N	system	release_gate_status_changed	release_gate	phase4	warning	{"status": "BLOCKED", "reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 08:03:02.594793+00
+c2d3b2b8-9b41-47ba-b492-b7d1ff6d5533	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	user_login	user	9ca118ab-d054-415a-92e0-023e9e08fe22	info	{"email": "admin@platform.local", "request_id": "ecc7f640-a974-4568-920d-5c929fdf422d", "session_id": null, "route": "/api/auth/login/admin", "method": "POST"}	2026-03-19 08:04:09.135429+00
+f9410096-179f-421d-8f7f-f434987e4db8	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	brand_settings_updated	brand_settings	default	info	{"app_name": "faz0-persist-1773907448", "request_id": "16d4ab4e-0d18-41e9-a487-e140dd031700", "session_id": null, "route": "/api/admin/brand-settings", "method": "PUT"}	2026-03-19 08:04:09.282964+00
+48325041-8dfa-4ede-974a-8904d86e7c9c	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 08:04:14.96509+00
+52c78bdc-4fcb-46f0-b921-ef3f2069e0f6	\N	system	release_gate_status_changed	release_gate	phase4	warning	{"status": "BLOCKED", "reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 08:04:45.564563+00
+ea442049-42b3-4b88-8db8-e6d445021c1c	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	user_login	user	9ca118ab-d054-415a-92e0-023e9e08fe22	info	{"email": "admin@platform.local", "request_id": "2bd4cdbf-7aa9-4490-9359-756b780fb1a5", "session_id": null, "route": "/api/auth/login/admin", "method": "POST"}	2026-03-19 08:05:11.943752+00
+43bd418a-d323-49ad-9de8-b74c3243a90b	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	brand_settings_updated	brand_settings	default	info	{"app_name": "faz0-persist-1773907511", "request_id": "3a0e0d5e-b4f0-44c0-bc6e-a6a130817db2", "session_id": null, "route": "/api/admin/brand-settings", "method": "PUT"}	2026-03-19 08:05:12.083578+00
+9a467ba5-873a-4763-8948-787c6c065cea	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 08:05:17.679294+00
 \.
 
 
@@ -2348,7 +2378,7 @@ cbccc782-c5d9-452f-b167-03bce90b16a2	059dab08-b67a-43a5-ba71-e0721d317f78	Execut
 --
 
 COPY public.brand_settings (id, app_name, logo_filename, logo_mime_type, logo_blob, logo_storage_note, metadata_json, updated_by_user_id, updated_at, created_at) FROM stdin;
-default	XILO User Trading Engine	\N	\N	\N	db_blob	{}	\N	2026-03-19 07:07:48.991271+00	2026-03-19 07:07:48.991274+00
+default	faz0-persist-1773907511	\N	\N	\N	db_blob	{}	9ca118ab-d054-415a-92e0-023e9e08fe22	2026-03-19 08:05:12.079483+00	2026-03-19 07:07:48.991274+00
 \.
 
 
@@ -2554,7 +2584,7 @@ COPY public.learning_recommendations (id, strategy_id, family, recommendation_ty
 --
 
 COPY public.live_activation_config (id, exchange, market_type, safe_mode_enabled, live_mode_enabled, symbol_whitelist, max_position_pct, leverage_cap, max_trades_per_hour, max_notional_exposure, kill_switch_enabled, disable_futures, ip_whitelist_ready, trading_permission_ready, updated_at) FROM stdin;
-global	binance	futures_testnet	t	f	[]	0.1	1	6	150	f	f	f	f	2026-03-19 07:48:59.177693+00
+global	binance	futures_testnet	t	f	[]	0.1	1	6	150	f	f	f	f	2026-03-19 08:04:45.562675+00
 \.
 
 
@@ -2772,6 +2802,15 @@ e939828d-f595-4ed8-bc47-25a5c26a7fbf	full_runtime_state	completed	startup	{"open
 5bb4e3ff-78c4-402e-bf94-8c24fb138beb	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:49:53.245554+00	2026-03-19 07:49:53.254771+00
 31a64829-6250-4650-b41d-0ff8b5c5fe05	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:50:03.43756+00	2026-03-19 07:50:03.446307+00
 fbe85480-b1dc-4b09-b391-c86b89dcb613	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:51:12.91353+00	2026-03-19 07:51:12.921239+00
+fdde9683-e95e-4219-8064-24649cfd874b	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:56:20.617831+00	2026-03-19 07:56:20.625691+00
+63a18e64-86a4-47e3-b213-a419e1fff988	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:56:59.536658+00	2026-03-19 07:56:59.544468+00
+a9209713-b00b-4743-a7bf-c92d0a335715	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:57:38.232143+00	2026-03-19 07:57:38.23988+00
+67cbfb65-0e23-4b0f-a51e-25bf02999dd4	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:58:35.07616+00	2026-03-19 07:58:35.084913+00
+291a9ce8-e429-4c5f-bcd2-a1d986109206	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:59:38.835089+00	2026-03-19 07:59:38.842623+00
+f37d5836-13bd-44e9-a020-9e456cdb71e7	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 08:01:49.76099+00	2026-03-19 08:01:49.76888+00
+c6362b59-6a2d-4c98-8975-f49bb5bd6e7b	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 08:02:29.250884+00	2026-03-19 08:02:29.259138+00
+2b234648-2649-4744-ba2b-512205b4d74c	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 08:04:12.028449+00	2026-03-19 08:04:12.03627+00
+846a5ed5-5901-42d2-968d-3679c44df2f3	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 08:05:14.748131+00	2026-03-19 08:05:14.755827+00
 \.
 
 
@@ -2797,10 +2836,10 @@ COPY public.strategy_definitions (strategy_id, name, code, description, owner_ty
 --
 
 COPY public.strategy_family_gates (family, is_enabled, long_threshold, short_threshold, min_strategy_count, max_conflict_score, regime_match_required, risk_clear_required, reversal_extra_confirmation, created_at, updated_at) FROM stdin;
-breakout	t	4	4	1	2	t	t	f	2026-03-19 06:49:08.767588+00	2026-03-19 07:51:12.901759+00
-pullback	t	4	4	1	2	t	t	f	2026-03-19 06:49:08.767589+00	2026-03-19 07:51:12.901766+00
-reversal	t	3	3	1	1.5	t	t	t	2026-03-19 06:49:08.76759+00	2026-03-19 07:51:12.901772+00
-trend	t	5	5	1	2	t	t	f	2026-03-19 06:49:08.767585+00	2026-03-19 07:51:12.901748+00
+breakout	t	4	4	1	2	t	t	f	2026-03-19 06:49:08.767588+00	2026-03-19 08:05:14.736693+00
+pullback	t	4	4	1	2	t	t	f	2026-03-19 06:49:08.767589+00	2026-03-19 08:05:14.736699+00
+reversal	t	3	3	1	1.5	t	t	t	2026-03-19 06:49:08.76759+00	2026-03-19 08:05:14.736706+00
+trend	t	5	5	1	2	t	t	f	2026-03-19 06:49:08.767585+00	2026-03-19 08:05:14.736682+00
 \.
 
 
@@ -2857,7 +2896,7 @@ COPY public.symbol_selection_watchlists (id, user_id, name, source, exchange, ma
 --
 
 COPY public.system_alerts (id, alert_type, severity, message, details, status, occurrences, last_triggered_at, created_at, updated_at, fingerprint, entity_key, root_cause_code, state_key, delivery_status) FROM stdin;
-bb9f036e-7a74-4bef-a4b9-68b2b7413a3b	release_gate_blocked	CRITICAL	Release gate BLOCKED	{"reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "environment": "prod"}	open	106	2026-03-19 07:48:59.174674+00	2026-03-19 06:49:42.585021+00	2026-03-19 07:48:59.175279+00	67e0bac46e45e360f1ef30fddbad9c8b2a0cbec688a3c53fb5861a3050ca72f7	prod	permission_check_fail	blocked	{"status": "DEDUPED", "dedupe_window_seconds": 600}
+bb9f036e-7a74-4bef-a4b9-68b2b7413a3b	release_gate_blocked	CRITICAL	Release gate BLOCKED	{"reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "environment": "prod"}	open	128	2026-03-19 08:04:45.557216+00	2026-03-19 06:49:42.585021+00	2026-03-19 08:04:45.5594+00	67e0bac46e45e360f1ef30fddbad9c8b2a0cbec688a3c53fb5861a3050ca72f7	prod	permission_check_fail	blocked	{"status": "DEDUPED", "dedupe_window_seconds": 600}
 \.
 
 
@@ -5793,5 +5832,5 @@ ALTER TABLE ONLY public.user_venue_assignments
 -- PostgreSQL database dump complete
 --
 
-\unrestrict dH3tdfH2wsNCVZIRW3xIzXpsBeeDTsGS9gkc0aDM8nNhGAE8mc3OXLD9uAZLnOG
+\unrestrict gb9Xthwsehje4fmlEMphFOfnbuQPMLVNErqR77lLSKBBJkGALclmLZooRMfcOOG
 
