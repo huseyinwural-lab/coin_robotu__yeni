@@ -1,16 +1,14 @@
 import { motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-
-import { Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
 
-const backendBase = process.env.REACT_APP_BACKEND_URL;
+const FIXED_HEADER_LOGO_URL = "https://customer-assets.emergentagent.com/job_7c46efd0-6499-4da5-832c-e8dbd8b11e57/artifacts/qeyh5tzg_Gemini_Generated_Image_ikkodjikkodjikko.png";
 
 export const LandingPage = () => {
   const navigate = useNavigate();
@@ -24,7 +22,6 @@ export const LandingPage = () => {
     confirmPassword: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [logoPreview, setLogoPreview] = useState("/xilo-logo.png");
   const [appName, setAppName] = useState("XILO-USER TRADING ENGINE");
   const [onboarding, setOnboarding] = useState({
     email: "",
@@ -101,30 +98,6 @@ export const LandingPage = () => {
     }
   };
 
-  const onLogoFileChange = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setLogoPreview(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const resolvedLogoPreview = useMemo(() => {
-    if (!logoPreview || String(logoPreview).startsWith("data:")) {
-      return logoPreview || "/xilo-logo.png";
-    }
-    if (String(logoPreview).startsWith("http")) {
-      return logoPreview;
-    }
-    return `${backendBase}${logoPreview}`;
-  }, [logoPreview]);
-
   useEffect(() => {
     const loadBrand = async () => {
       try {
@@ -135,9 +108,6 @@ export const LandingPage = () => {
         }
         if (payload?.app_name) {
           setAppName(String(payload.app_name).toUpperCase());
-        }
-        if (payload?.logo_url) {
-          setLogoPreview(`${payload.logo_url}${payload.updated_at ? `?v=${encodeURIComponent(payload.updated_at)}` : ""}`);
         }
       } catch {
         // silent fallback
@@ -181,36 +151,22 @@ export const LandingPage = () => {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="flex flex-wrap items-start justify-between gap-4"
+          className="flex flex-wrap items-center justify-between gap-4"
           data-testid="landing-header"
         >
+          <div className="rounded border border-black/70 bg-white p-2" data-testid="landing-fixed-logo-area">
+            <img
+              src={FIXED_HEADER_LOGO_URL}
+              alt="XILO sabit logo"
+              className="h-[72px] w-[240px] max-w-full object-contain object-left"
+              data-testid="landing-fixed-logo-image"
+            />
+          </div>
+
           <div className="flex min-h-[96px] items-center" data-testid="landing-user-login-area">
             <Link to="/user/login" data-testid="landing-user-login-link">
               <Button className="border border-black bg-black text-orange-500 hover:bg-zinc-900" data-testid="landing-user-login-button">Kullanıcı Girişi</Button>
             </Link>
-          </div>
-
-          <div className="w-full max-w-[340px] rounded border border-black/70 bg-orange-400/30 p-3" data-testid="landing-header-logo-upload-panel">
-            <label className="block" data-testid="landing-header-logo-upload-block">
-              <span className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide" data-testid="landing-header-logo-upload-label">
-                <Upload className="h-3 w-3" /> Header Logo Yükle
-              </span>
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={onLogoFileChange}
-                className="h-10 border-black bg-orange-50 file:mr-3 file:border-0 file:bg-black file:px-3 file:py-1 file:text-xs file:text-orange-500"
-                data-testid="landing-header-logo-file-input"
-              />
-            </label>
-            <div className="mt-3 rounded border border-slate-300 bg-white p-2" data-testid="landing-header-logo-preview-block">
-              <img
-                src={resolvedLogoPreview}
-                alt="Yüklenen logo önizleme"
-                className="h-[72px] w-[240px] max-w-full object-contain object-left"
-                data-testid="landing-header-logo-preview"
-              />
-            </div>
           </div>
         </motion.header>
 
