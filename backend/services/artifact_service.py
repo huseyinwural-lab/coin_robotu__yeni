@@ -1,12 +1,14 @@
 import copy
 import hashlib
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 
-EXPORT_DIR = Path("/app/backend/exports")
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+EXPORT_DIR = Path(os.environ.get("ARTIFACT_EXPORT_DIR") or (BACKEND_ROOT / "exports"))
 MANIFEST_PATH = EXPORT_DIR / "artifact_manifest.json"
 CHAIN_SCHEMA_VERSION = "1.1"
 
