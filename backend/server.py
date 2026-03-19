@@ -98,7 +98,7 @@ from services.state_rebuild_service import run_state_rebuild
 from services.user_exchange_health_loop import run_exchange_connection_health_loop
 from services.weekly_report_service import run_weekly_report_loop
 from services.db_backup_scheduler_service import run_backup_scheduler_loop
-from db import get_db, redis_client, verify_database_connection
+from db import engine, get_db, redis_client, verify_database_connection
 from core.db_determinism import enforce_postgresql_only
 from services.observability_service import (
     QUEUE_SIZE_THRESHOLD,
@@ -115,6 +115,8 @@ weekly_report_task: asyncio.Task | None = None
 exchange_health_task: asyncio.Task | None = None
 backup_scheduler_task: asyncio.Task | None = None
 PROCESS_STARTED_AT = datetime.now(timezone.utc)
+# Contract-test compatibility: some tests monkeypatch `server.engine` directly.
+ENGINE_COMPAT = engine
 
 fastapi_app = FastAPI(title="Algorithmic Trading Platform API", version="0.2.0")
 api_router = APIRouter(prefix="/api")
