@@ -1,11 +1,15 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 
 from core.audit.audit_events import AuditEvent
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 
-POLICY_PATH = Path("/app/config/execution_policy_registry.json")
+POLICY_PATH = Path(
+    os.environ.get("EXECUTION_POLICY_REGISTRY_PATH")
+    or (Path(__file__).resolve().parents[2] / "config" / "execution_policy_registry.json")
+)
 ALLOWED_EXECUTION_MODES = {"manual", "bot_assisted", "signal_follow"}
 
 
