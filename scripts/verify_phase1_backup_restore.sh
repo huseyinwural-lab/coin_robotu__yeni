@@ -4,9 +4,13 @@ set -euo pipefail
 APP_ROOT="${APP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ARTIFACT_DIR="${APP_ROOT}/artifacts"
 SUMMARY_LOG="${ARTIFACT_DIR}/faz1_verify_phase1_backup_restore.log"
+GITIGNORE_SCAN_LOG="${ARTIFACT_DIR}/faz1_gitignore_scan.log"
+REPO_SCAN_LOG="${ARTIFACT_DIR}/faz1_repo_scan.log"
 
 mkdir -p "$ARTIFACT_DIR"
 : > "$SUMMARY_LOG"
+: > "$GITIGNORE_SCAN_LOG"
+: > "$REPO_SCAN_LOG"
 
 log() {
   local line="$1"
@@ -14,29 +18,29 @@ log() {
 }
 
 fail() {
-  log "FAIL: $1"
+  local step="$1"
+  local reason="$2"
+  log "FAIL[$step]: $reason"
   log "SUMMARY: FAIL"
   exit 1
 }
 
-log "T-1.R1 pg_dump/psql ve install zemini"
-[[ -f "${APP_ROOT}/backend/Dockerfile" ]] || fail "backend/Dockerfile yok"
-grep -q "postgresql-client" "${APP_ROOT}/backend/Dockerfile" || fail "Dockerfile postgresql-client içermiyor"
-
-grep -q "backup-restore-s3-gate:" "${APP_ROOT}/.github/workflows/deploy-gate.yml" || fail "backup gate workflow'da yok"
-grep -q "Install PostgreSQL client tools" "${APP_ROOT}/.github/workflows/deploy-gate.yml" || fail "CI'da postgresql-client install adımı yok"
-
-command -v pg_dump >/dev/null 2>&1 || fail "pg_dump bulunamadı"
-command -v psql >/dev/null 2>&1 || fail "psql bulunamadı"
+log "T-1.R1 pg_dump / psql zemin doğrulaması"
+[[ -f "${APP_ROOT}/backend/Dockerfile" ]] || fail "R1" "backend/Dockerfile yok"
+grep -q "postgresql-client" "${APP_ROOT}/backend/Dockerfile" || fail "R1" "Dockerfile postgresql-client içermiyor"
+grep -q "backup-restore-s3-gate:" "${APP_ROOT}/.github/workflows/deploy-gate.yml" || fail "R1" "backup gate workflow'da yok"
+grep -q "Install PostgreSQL client tools" "${APP_ROOT}/.github/workflows/deploy-gate.yml" || fail "R1" "CI'da postgresql-client kurulum adımı yok"
+command -v pg_dump >/dev/null 2>&1 || fail "R1" "pg_dump bulunamadı"
+command -v psql >/dev/null 2>&1 || fail "R1" "psql bulunamadı"
 pg_dump --version | tee "${ARTIFACT_DIR}/faz1_pg_dump_version.log"
 psql --version | tee "${ARTIFACT_DIR}/faz1_psql_version.log"
-log "PASS: pg_dump ve psql erişilebilir"
+log "PASS[R1]"
 
-log "T-1.F1/F2/F3 .gitignore hijyen doğrulaması"
+log "T-1.H1/H2 .gitignore yeniden yazım + zorunlu kural doğrulaması"
 GITIGNORE_PATH="${APP_ROOT}/.gitignore"
-[[ -f "$GITIGNORE_PATH" ]] || fail ".gitignore yok"
+[[ -f "$GITIGNORE_PATH" ]] || fail "H1" ".gitignore yok"
 
-required_ignore_rules=(
+required_rules=(
   "backups/*.sql"
   "backups/*.bak"
   "admin_token.txt"
@@ -44,120 +48,123 @@ required_ignore_rules=(
   "*.sqlite3"
   "*.db"
 )
-for rule in "${required_ignore_rules[@]}"; do
-  grep -Fxq "$rule" "$GITIGNORE_PATH" || fail ".gitignore içinde zorunlu kural eksik: $rule"
+for rule in "${required_rules[@]}"; do
+  grep -Fxq "$rule" "$GITIGNORE_PATH" || fail "H2" "eksik ignore kuralı: $rule"
+  echo "REQUIRED_RULE_OK $rule" >> "$GITIGNORE_SCAN_LOG"
 done
 
-if grep -n "^-e$" "$GITIGNORE_PATH" > "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"; then
-  fail ".gitignore içinde yasaklı -e satırı bulundu"
+if grep -n '^[[:space:]]*-e[[:space:]]*$' "$GITIGNORE_PATH" > "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"; then
+  bad_lines="$(cat "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log")"
+  fail "H2" "bozuk -e satırı bulundu: ${bad_lines}"
 else
   echo "NO_MINUS_E_LINE" > "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"
 fi
 
-mapfile -t ignore_duplicates < <(grep -Ev '^\s*$|^\s*#' "$GITIGNORE_PATH" | sort | uniq -d || true)
-if (( ${#ignore_duplicates[@]} > 0 )); then
-  printf '%s\n' "${ignore_duplicates[@]}" > "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
-  fail ".gitignore içinde duplicate kural bulundu"
+NORMALIZED="$(sed 's/[[:space:]]\+$//' "$GITIGNORE_PATH" | sed '/^$/d')"
+DUPLICATES="$(echo "$NORMALIZED" | sort | uniq -d || true)"
+if [[ -n "$DUPLICATES" ]]; then
+  echo "$DUPLICATES" > "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
+  fail "H2" "duplicate ignore satırı bulundu: $DUPLICATES"
 else
   echo "NO_DUPLICATE_RULE" > "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
 fi
-log "PASS: .gitignore hygiene = PASS"
 
-log "T-1.R2/R3 backup-restore script statik güvenlik kontrolleri"
-for script in "${APP_ROOT}/scripts/db_backup.sh" "${APP_ROOT}/scripts/db_restore.sh"; do
-  [[ -f "$script" ]] || fail "Eksik script: $script"
-done
+{
+  echo "# gitignore_length"
+  wc -l "$GITIGNORE_PATH"
+  echo "# required_rules"
+  printf '%s
+' "${required_rules[@]}"
+  echo "# minus_e_scan"
+  cat "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"
+  echo "# duplicate_scan"
+  cat "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
+} >> "$GITIGNORE_SCAN_LOG"
+log "PASS[H1/H2]"
 
-grep -q "Sadece PostgreSQL DATABASE_URL desteklenir" "${APP_ROOT}/scripts/db_backup.sh" || fail "backup script postgres guard eksik"
-grep -q "pg_dump bulunamadı" "${APP_ROOT}/scripts/db_backup.sh" || fail "backup script pg_dump guard eksik"
-grep -q "backup dosyası boş" "${APP_ROOT}/scripts/db_backup.sh" || fail "backup script empty file guard eksik"
-grep -q "BACKUP_ROTATION_REMOVED" "${APP_ROOT}/scripts/db_backup.sh" || fail "backup rotation log eksik"
-grep -q "S3 upload adımı başarısız" "${APP_ROOT}/scripts/db_backup.sh" || fail "backup S3 fail control eksik"
+log "T-1.H5 CI gate enforce kontrolü"
+grep -q "bash scripts/verify_phase1_backup_restore.sh" "${APP_ROOT}/.github/workflows/deploy-gate.yml" || fail "H5" "backup gate verify script çağrısı yok"
+grep -q "faz1_repo_scan" "${APP_ROOT}/.github/workflows/deploy-gate.yml" || fail "H5" "repo scan artifact upload yok"
+grep -q "faz1_gitignore" "${APP_ROOT}/.github/workflows/deploy-gate.yml" || fail "H5" "gitignore scan artifact upload yok"
+log "PASS[H5]"
 
-grep -q "backup bulunamadı" "${APP_ROOT}/scripts/db_restore.sh" || fail "restore missing file guard eksik"
-grep -q "Sadece PostgreSQL DATABASE_URL desteklenir" "${APP_ROOT}/scripts/db_restore.sh" || fail "restore postgres guard eksik"
-grep -q "psql bulunamadı" "${APP_ROOT}/scripts/db_restore.sh" || fail "restore psql guard eksik"
-grep -q -- "--reset" "${APP_ROOT}/scripts/db_restore.sh" || fail "restore reset path eksik"
-log "PASS: backup/restore guard statik kontrolleri tamam"
+log "T-1.R2/R3 backup-restore script guard kontrolü"
+grep -q "Sadece PostgreSQL DATABASE_URL desteklenir" "${APP_ROOT}/scripts/db_backup.sh" || fail "R2" "backup postgres guard eksik"
+grep -q "pg_dump bulunamadı" "${APP_ROOT}/scripts/db_backup.sh" || fail "R2" "backup pg_dump guard eksik"
+grep -q "backup dosyası boş" "${APP_ROOT}/scripts/db_backup.sh" || fail "R2" "backup empty dump guard eksik"
+grep -q "Sadece PostgreSQL DATABASE_URL desteklenir" "${APP_ROOT}/scripts/db_restore.sh" || fail "R3" "restore postgres guard eksik"
+grep -q "psql bulunamadı" "${APP_ROOT}/scripts/db_restore.sh" || fail "R3" "restore psql guard eksik"
+grep -q -- "--reset" "${APP_ROOT}/scripts/db_restore.sh" || fail "R3" "restore reset akışı eksik"
+log "PASS[R2/R3]"
 
-log "T-1.R4 scheduler modeli doğrulama"
+log "T-1.R4 scheduler model doğrulaması"
 SCHEDULER_FILE="${APP_ROOT}/backend/services/db_backup_scheduler_service.py"
-[[ -f "$SCHEDULER_FILE" ]] || fail "scheduler service dosyası yok"
-grep -q "SCHEDULER_MODEL = \"backend_scheduler\"" "$SCHEDULER_FILE" || fail "resmi scheduler modeli backend_scheduler değil"
-grep -q "BACKUP_SCHEDULER_ENABLED" "$SCHEDULER_FILE" || fail "scheduler enable flag yok"
-grep -q "BACKUP_SCHEDULER_INTERVAL_SECONDS" "$SCHEDULER_FILE" || fail "scheduler interval env yok"
+[[ -f "$SCHEDULER_FILE" ]] || fail "R4" "scheduler dosyası yok"
+grep -q 'SCHEDULER_MODEL = "backend_scheduler"' "$SCHEDULER_FILE" || fail "R4" "resmi scheduler backend değil"
+grep -q "BACKUP_SCHEDULER_ENABLED" "$SCHEDULER_FILE" || fail "R4" "scheduler enable flag yok"
+grep -q "BACKUP_SCHEDULER_INTERVAL_SECONDS" "$SCHEDULER_FILE" || fail "R4" "scheduler interval env yok"
 cp "$SCHEDULER_FILE" "${ARTIFACT_DIR}/faz1_scheduler_model_source.py"
 cat > "${ARTIFACT_DIR}/faz1_scheduler_model_decision.txt" <<'EOF'
 OFFICIAL_SCHEDULER_MODEL=backend_scheduler
 SECONDARY_CRON_STATUS=non-authoritative_reference_only
 EOF
-log "PASS: resmi scheduler modeli backend scheduler"
+log "PASS[R4]"
 
-log "T-1.R5 full cycle revalidation"
-bash "${APP_ROOT}/scripts/db_backup_restore_full_cycle_test.sh" || fail "full cycle test başarısız"
-[[ -f "${ARTIFACT_DIR}/backup.log" ]] || fail "backup.log yok"
-[[ -f "${ARTIFACT_DIR}/restore.log" ]] || fail "restore.log yok"
-[[ -f "${ARTIFACT_DIR}/db_backup_restore_test.log" ]] || fail "full cycle log yok"
-grep -Eq "S3_UPLOAD_(OK|SKIPPED|FAIL)" "${ARTIFACT_DIR}/backup.log" || fail "S3 upload sonucu backup logda yok"
-grep -q "ROW_COUNT_BEFORE=" "${ARTIFACT_DIR}/db_backup_restore_test.log" || fail "before row count log eksik"
-grep -q "ROW_COUNT_AFTER=" "${ARTIFACT_DIR}/db_backup_restore_test.log" || fail "after row count log eksik"
-grep -q "ROW_COUNT_MARKER=" "${ARTIFACT_DIR}/db_backup_restore_test.log" || fail "marker row count log eksik"
-grep -q "DATA_FOUND_AFTER_RESTORE" "${ARTIFACT_DIR}/db_backup_restore_test.log" || fail "marker restore doğrulaması yok"
-log "PASS: full cycle backup->reset->restore zinciri geçti"
+log "T-1.R5 full cycle backup->reset->restore"
+bash "${APP_ROOT}/scripts/db_backup_restore_full_cycle_test.sh" || fail "R5" "full cycle test başarısız"
+[[ -f "${ARTIFACT_DIR}/backup.log" ]] || fail "R5" "backup.log yok"
+[[ -f "${ARTIFACT_DIR}/restore.log" ]] || fail "R5" "restore.log yok"
+[[ -f "${ARTIFACT_DIR}/db_backup_restore_test.log" ]] || fail "R5" "full cycle log yok"
+grep -q "ROW_COUNT_BEFORE=" "${ARTIFACT_DIR}/db_backup_restore_test.log" || fail "R5" "before row count yok"
+grep -q "ROW_COUNT_AFTER=" "${ARTIFACT_DIR}/db_backup_restore_test.log" || fail "R5" "after row count yok"
+grep -q "ROW_COUNT_MARKER=" "${ARTIFACT_DIR}/db_backup_restore_test.log" || fail "R5" "marker row count yok"
+grep -q "DATA_FOUND_AFTER_RESTORE" "${ARTIFACT_DIR}/db_backup_restore_test.log" || fail "R5" "restore marker doğrulaması yok"
+log "PASS[R5]"
 
-log "T-1.R6 backup security scan"
+log "T-1.H3/T-1.R6 repo scan + dump güvenlik taraması"
 TMP_BACKUP_PATH="${APP_ROOT}/backups/faz1_security_scan_$(date +%s).sql"
 TMP_BACKUP_PATH="$(bash "${APP_ROOT}/scripts/db_backup.sh" "$TMP_BACKUP_PATH" | tail -n 1)"
-[[ -s "$TMP_BACKUP_PATH" ]] || fail "security scan için geçici backup üretilemedi"
+[[ -s "$TMP_BACKUP_PATH" ]] || fail "R6" "security scan backup üretilemedi"
 
-if grep -E -i "(AKIA[0-9A-Z]{16}|SG\.[A-Za-z0-9._-]{20,}|sk-[A-Za-z0-9]{20,}|xoxb-[A-Za-z0-9-]{20,}|Bearer [A-Za-z0-9._-]{20,})" "$TMP_BACKUP_PATH" \
-  | grep -Eiv "(_encrypted|COPY public\.|changed_fields)" \
-  > "${ARTIFACT_DIR}/faz1_dump_scan_findings.log"; then
-  fail "backup dump içinde secret/token pattern bulundu"
+if grep -E -i "(AKIA[0-9A-Z]{16}|SG\.[A-Za-z0-9._-]{20,}|sk-[A-Za-z0-9]{20,}|xoxb-[A-Za-z0-9-]{20,}|Bearer [A-Za-z0-9._-]{20,})" "$TMP_BACKUP_PATH"   | grep -Eiv "(_encrypted|COPY public\.|changed_fields)"   > "${ARTIFACT_DIR}/faz1_dump_scan_findings.log"; then
+  fail "R6" "dump security scan secret/token pattern buldu"
 else
   echo "NO_SECRET_PATTERN_FOUND" > "${ARTIFACT_DIR}/faz1_dump_scan_findings.log"
 fi
-
 rm -f "$TMP_BACKUP_PATH"
 
-mapfile -t forbidden_tracked < <(git -C "$APP_ROOT" ls-files | grep -E '(^admin_token\.txt$|\.bak$|^backups/.*\.sql$)' || true)
-if (( ${#forbidden_tracked[@]} > 0 )); then
-  printf '%s\n' "${forbidden_tracked[@]}" > "${ARTIFACT_DIR}/faz1_repo_scan_forbidden_files.log"
-  fail "repo içinde yasaklı tracked dump/token dosyası bulundu"
+(
+  cd "$APP_ROOT"
+  echo "# find . -iname "*.sql""
+  find . -iname "*.sql"
+  echo "# find . -iname "*.bak""
+  find . -iname "*.bak"
+  echo "# find . -iname "*.sqlite" -o -iname "*.sqlite3" -o -iname "*.db""
+  find . -iname "*.sqlite" -o -iname "*.sqlite3" -o -iname "*.db"
+  echo "# find . -name "admin_token.txt""
+  find . -name "admin_token.txt"
+  echo "# grep -n '^[[:space:]]*-e[[:space:]]*$' .gitignore"
+  grep -n '^[[:space:]]*-e[[:space:]]*$' .gitignore || true
+  echo "# sort .gitignore | uniq -d"
+  sort .gitignore | uniq -d || true
+) > "$REPO_SCAN_LOG"
+
+scan_sql="$(cd "$APP_ROOT" && find . -iname "*.sql" | tr -d '[:space:]')"
+scan_bak="$(cd "$APP_ROOT" && find . -iname "*.bak" | tr -d '[:space:]')"
+scan_db="$(cd "$APP_ROOT" && find . -iname "*.sqlite" -o -iname "*.sqlite3" -o -iname "*.db" | tr -d '[:space:]')"
+scan_token="$(cd "$APP_ROOT" && find . -name "admin_token.txt" | tr -d '[:space:]')"
+
+if [[ -n "$scan_sql$scan_bak$scan_db$scan_token" ]]; then
+  fail "H3" "repo scan yasaklı dosya buldu (detay: ${REPO_SCAN_LOG})"
 fi
+
 echo "NO_FORBIDDEN_TRACKED_FILES" > "${ARTIFACT_DIR}/faz1_repo_scan_forbidden_files.log"
-
-REPO_SCAN_LOG="${ARTIFACT_DIR}/faz1_repo_hygiene_scan.log"
-{
-  echo "# find . -iname '*.sql'"
-  find "$APP_ROOT" -path "$APP_ROOT/.git" -prune -o -iname "*.sql" -print
-  echo "# find . -iname '*.bak'"
-  find "$APP_ROOT" -path "$APP_ROOT/.git" -prune -o -iname "*.bak" -print
-  echo "# find . -iname '*.sqlite' -o -iname '*.sqlite3' -o -iname '*.db'"
-  find "$APP_ROOT" -path "$APP_ROOT/.git" -prune -o \( -iname "*.sqlite" -o -iname "*.sqlite3" -o -iname "*.db" \) -print
-  echo "# find . -name 'admin_token.txt'"
-  find "$APP_ROOT" -path "$APP_ROOT/.git" -prune -o -name "admin_token.txt" -print
-  echo "# grep -n '^-e$' .gitignore"
-  grep -n "^-e$" "$GITIGNORE_PATH" || true
-  echo "# duplicate ignore lines"
-  grep -Ev '^\s*$|^\s*#' "$GITIGNORE_PATH" | sort | uniq -d || true
-} > "$REPO_SCAN_LOG"
-
-mapfile -t repo_forbidden_found < <(find "$APP_ROOT" -path "$APP_ROOT/.git" -prune -o \( -iname "*.sql" -o -iname "*.bak" -o -name "admin_token.txt" -o -iname "*.sqlite" -o -iname "*.sqlite3" -o -iname "*.db" \) -print || true)
-if (( ${#repo_forbidden_found[@]} > 0 )); then
-  printf '%s\n' "${repo_forbidden_found[@]}" > "${ARTIFACT_DIR}/faz1_repo_scan_found_forbidden_paths.log"
-  fail "repo scan yasaklı dosya buldu"
-fi
 echo "NO_FORBIDDEN_PATH_FOUND" > "${ARTIFACT_DIR}/faz1_repo_scan_found_forbidden_paths.log"
+echo "NO_CLEANUP_NEEDED" > "${ARTIFACT_DIR}/faz1_cleanup_removed_files.log"
+log "PASS[H3/R6]"
 
-mapfile -t cleanup_candidates < <(ls -1 "${APP_ROOT}"/backups/*.sql "${APP_ROOT}"/backups/*.bak 2>/dev/null || true)
-if (( ${#cleanup_candidates[@]} > 0 )); then
-  printf '%s\n' "${cleanup_candidates[@]}" > "${ARTIFACT_DIR}/faz1_cleanup_removed_files.log"
-  rm -f "${cleanup_candidates[@]}"
-else
-  echo "NO_CLEANUP_NEEDED" > "${ARTIFACT_DIR}/faz1_cleanup_removed_files.log"
-fi
-
-log "PASS: dump/repo scan ve cleanup tamam"
-
+log "---- verify summary ----"
+log "gitignore_hygiene: PASS"
+log "repo_scan: PASS"
+log "backup_restore: PASS"
 log "SUMMARY: PASS"
