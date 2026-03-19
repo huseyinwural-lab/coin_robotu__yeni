@@ -1,3 +1,54 @@
+## 2026-03-19 — FAZ 1 (P0) S3 Off-site Backup + CI Merge Gate (Tamamlandı)
+
+### Kullanıcı Onayı (uygulanan seçimler)
+- S3 upload kapsamı: **Scheduler + tüm manuel backup komut akışları**
+- CI gate politikası: **Tüm PR’lerde zorunlu (merge-blocking)**
+- Şifreleme: **Koddan SSE-S3 (`AES256`) zorunlu**
+- Secret isimleri: **BACKUP_S3_BUCKET, BACKUP_AWS_ACCESS_KEY_ID, BACKUP_AWS_SECRET_ACCESS_KEY, BACKUP_AWS_REGION**
+- Güvenlik kuralı: secret paylaşımı chat içinde yok, yalnız env/GitHub Secrets
+
+### Uygulanan Değişiklikler
+- Yeni servis: `backend/services/backup_service.py`
+  - S3 config doğrulama (none/partial/full)
+  - `upload_backup_to_s3(...)` ile güvenli upload
+  - `ExtraArgs={"ServerSideEncryption":"AES256"}` ile SSE-S3 enforce
+- Yeni CLI: `backend/cli/upload_backup_to_s3.py`
+  - `BACKUP_S3_UPLOAD_REQUIRED=1` guard
+  - Missing secret durumunda required modda non-zero exit
+- Backup script güncellemesi: `scripts/db_backup.sh`
+  - Lokal SQL backup sonrası S3 CLI tetikleme
+  - S3 başarısızsa script fail (CI gate’e uygun)
+  - APP_ROOT tabanlı path çözümü
+- Restore ve full-cycle script portability güncellemesi:
+  - `scripts/db_restore.sh`
+  - `scripts/db_backup_restore_full_cycle_test.sh`
+- Scheduler log/time iyileştirmesi:
+  - `backend/services/db_backup_scheduler_service.py` (UTC-aware timestamp)
+- CI merge gate genişletmesi:
+  - `.github/workflows/deploy-gate.yml`
+  - yeni job: `backup-restore-s3-gate`
+  - adımlar: secret doğrulama + `postgresql-client` kurulumu + unit test + full cycle smoke + artifact upload
+  - `pull_request` tüm PR’leri kapsayacak şekilde genişletildi
+- Yeni test: `backend/tests/test_s3_backup_service.py`
+
+### Doğrulama / Kanıt
+- Local testler:
+  - `pytest -q tests/test_s3_backup_service.py` → PASS
+  - `bash /app/scripts/db_backup_restore_full_cycle_test.sh` → PASS
+  - `BACKUP_S3_UPLOAD_REQUIRED=1` ve secret yokken guard fail davranışı doğrulandı
+- Testing agent raporu:
+  - `/app/test_reports/iteration_20.json` → backend %100, kritik/minor issue yok
+- ZIP kanıt paketi:
+  - `/app/artifacts/faz1_s3_ci_bundle.zip`
+  - İçerik: `iteration_19.json` + backup/restore/full-cycle/S3 guard logları
+
+### Kalan Operasyonel Bloker
+- Real S3 upload’ların CI’da geçmesi için repository secrets tanımlı olmalı:
+  - `BACKUP_S3_BUCKET`
+  - `BACKUP_AWS_ACCESS_KEY_ID`
+  - `BACKUP_AWS_SECRET_ACCESS_KEY`
+  - `BACKUP_AWS_REGION`
+
 ## 2026-03-18 — FAZ 0: SQLite Temizliği & Deterministik PostgreSQL (KATI MOD)
 
 ### Uygulanan Değişiklikler
