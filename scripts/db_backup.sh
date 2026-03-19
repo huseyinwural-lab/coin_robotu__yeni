@@ -61,7 +61,18 @@ if [[ ! -s "$OUT_PATH" ]]; then
   exit 1
 fi
 
+if command -v git >/dev/null 2>&1 && git -C "$APP_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if [[ "$OUT_PATH" == "${APP_ROOT}/"* ]]; then
+    rel_path="${OUT_PATH#${APP_ROOT}/}"
+    if ! git -C "$APP_ROOT" check-ignore -q "$rel_path"; then
+      log "ERROR: backup output gitignore kapsamında değil path=$rel_path"
+      exit 1
+    fi
+  fi
+fi
+
 # rotation: son 7 backup kalsın
+log "BACKUP_ROTATION_KEEP_COUNT=${KEEP_COUNT}"
 mapfile -t backup_files < <(ls -1t "$BACKUP_DIR"/db_*.sql 2>/dev/null || true)
 if (( ${#backup_files[@]} > KEEP_COUNT )); then
   for file in "${backup_files[@]:KEEP_COUNT}"; do

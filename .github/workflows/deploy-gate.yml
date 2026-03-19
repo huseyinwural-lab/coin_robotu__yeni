@@ -620,8 +620,8 @@ jobs:
         working-directory: backend
         run: pytest -q tests/test_s3_backup_service.py
 
-      - name: Backup + restore + S3 smoke
-        run: bash scripts/db_backup_restore_full_cycle_test.sh
+      - name: Run phase1 backup/restore revalidation verifier
+        run: bash scripts/verify_phase1_backup_restore.sh
 
       - name: Upload backup smoke artifacts
         if: always()
@@ -629,10 +629,17 @@ jobs:
         with:
           name: backup-restore-s3-artifacts
           path: |
+            artifacts/faz1_verify_phase1_backup_restore.log
+            artifacts/faz1_pg_dump_version.log
+            artifacts/faz1_psql_version.log
+            artifacts/faz1_scheduler_model_source.py
+            artifacts/faz1_scheduler_model_decision.txt
+            artifacts/faz1_dump_scan_findings.log
+            artifacts/faz1_repo_scan_forbidden_files.log
+            artifacts/faz1_cleanup_removed_files.log
             artifacts/backup.log
             artifacts/restore.log
             artifacts/db_backup_restore_test.log
-            backups/*.sql
 
   frontend-quality-gate:
     runs-on: ubuntu-latest

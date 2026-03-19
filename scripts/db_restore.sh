@@ -59,6 +59,8 @@ if ! command -v psql >/dev/null 2>&1; then
   exit 1
 fi
 
+log "PSQL_VERSION=$(psql --version | tr -d '\n')"
+
 log "RESTORE_START backup=$BACKUP_PATH reset=${RESET_DB:-none}"
 
 if [[ "$RESET_DB" == "--reset" ]]; then

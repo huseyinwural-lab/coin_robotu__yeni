@@ -46,6 +46,7 @@ fi
 before_count="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM test_table;")"
 before_count="$(echo "$before_count" | tr -d '[:space:]')"
 log_line "INSERT_OK"
+log_line "ROW_COUNT_BEFORE=${before_count}"
 
 backup_path="$(bash "${APP_ROOT}/scripts/db_backup.sh")"
 backup_path="$(echo "$backup_path" | tail -n 1)"
@@ -54,6 +55,7 @@ if [[ ! -s "$backup_path" ]]; then
   exit 1
 fi
 log_line "BACKUP_OK"
+log_line "BACKUP_PATH=${backup_path}"
 
 if ! psql "$PSQL_DB_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE TABLE test_table;" >/dev/null; then
   echo "ERROR: db reset failed" >&2
@@ -71,10 +73,17 @@ after_marker_count="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM test_ta
 after_marker_count="$(echo "$after_marker_count" | tr -d '[:space:]')"
 after_count="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM test_table;")"
 after_count="$(echo "$after_count" | tr -d '[:space:]')"
+log_line "ROW_COUNT_AFTER=${after_count}"
+log_line "ROW_COUNT_MARKER=${after_marker_count}"
 
 if [[ "$after_marker_count" -ge 1 && "$after_count" == "$before_count" ]]; then
   log_line "DATA_FOUND_AFTER_RESTORE"
 else
   echo "ERROR: restore integrity check failed (before=$before_count after=$after_count marker=$after_marker_count)" >&2
   exit 1
+fi
+
+if [[ -f "$backup_path" ]]; then
+  rm -f "$backup_path"
+  log_line "BACKUP_FILE_CLEANED path=${backup_path}"
 fi

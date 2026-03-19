@@ -10,12 +10,12 @@
     },
     "execution_queue": {
       "status": "ready",
-      "queue_size": 0,
+      "queue_size": 4,
       "critical_limit": 60
     },
     "ready_override": {
       "status": "ready"
     }
   },
-  "timestamp": "2026-03-19T13:39:41.985147+00:00"
+  "timestamp": "2026-03-19T14:36:32.244544+00:00"
 }
