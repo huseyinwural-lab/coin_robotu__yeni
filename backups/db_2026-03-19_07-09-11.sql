@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict CuZhmt5gD1xVLsBU1A9IvgzBN7J0FbLkMgYhOD1vuhzUt9sD8LWpWKqf9RnqbJw
+\restrict ObThDsDAJc1celseZoRAkHlaNEUvopBgSenHdAZKNqSfNV1JTuNd8jW29kHJkac
 
 -- Dumped from database version 15.16 (Debian 15.16-0+deb12u1)
 -- Dumped by pg_dump version 15.16 (Debian 15.16-0+deb12u1)
@@ -2247,6 +2247,11 @@ df9520f2-f622-4868-b691-42cdccd5df94	okx	futures	live	f	2026-03-19 06:49:08.7775
 COPY public.audit_logs (id, actor_user_id, actor_role, action, entity_type, entity_id, severity, details, created_at) FROM stdin;
 69334b75-4533-4d21-af72-56dd0355932a	9ca118ab-d054-415a-92e0-023e9e08fe22	super_admin	bootstrap_admin_created	user	9ca118ab-d054-415a-92e0-023e9e08fe22	info	{"email": "admin@platform.local", "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 06:49:08.724348+00
 b07b5ee8-dd03-4cfb-a422-36dfc12652f9	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 06:49:12.049882+00
+1edb75a6-ec1b-41b7-a168-bda40265e826	\N	system	release_gate_status_changed	release_gate	phase4	warning	{"status": "BLOCKED", "reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 06:49:42.593888+00
+2214197d-1907-46fa-9ce0-d4c1096cd476	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:07:48.974209+00
+d3a24bc7-f0e9-4ca2-b7ef-99c4e7cea825	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:07:59.380893+00
+77cb23a6-8880-4403-a64c-f52941c37836	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:08:50.881284+00
+aa608354-a0cd-4981-abcf-27c54e24120d	\N	system	SPOT_UNIVERSE_REFRESHED	spot_universe	2026-03-19	info	{"symbol_count": 0, "seeded": 0, "failed": [], "request_id": null, "session_id": null, "route": null, "method": null}	2026-03-19 07:09:11.005931+00
 \.
 
 
@@ -2281,6 +2286,7 @@ COPY public.bot_profiles (id, user_id, name, exchange, market_type, symbols, str
 --
 
 COPY public.brand_settings (id, app_name, logo_filename, logo_mime_type, logo_blob, logo_storage_note, metadata_json, updated_by_user_id, updated_at, created_at) FROM stdin;
+default	XILO User Trading Engine	\N	\N	\N	db_blob	{}	\N	2026-03-19 07:07:48.991271+00	2026-03-19 07:07:48.991274+00
 \.
 
 
@@ -2486,7 +2492,7 @@ COPY public.learning_recommendations (id, strategy_id, family, recommendation_ty
 --
 
 COPY public.live_activation_config (id, exchange, market_type, safe_mode_enabled, live_mode_enabled, symbol_whitelist, max_position_pct, leverage_cap, max_trades_per_hour, max_notional_exposure, kill_switch_enabled, disable_futures, ip_whitelist_ready, trading_permission_ready, updated_at) FROM stdin;
-global	binance	futures_testnet	t	f	[]	0.1	1	6	150	f	f	f	f	2026-03-19 06:49:08.74668+00
+global	binance	futures_testnet	t	f	[]	0.1	1	6	150	f	f	f	f	2026-03-19 07:07:36.026956+00
 \.
 
 
@@ -2668,6 +2674,10 @@ COPY public.signal_events (id, bot_profile_id, user_id, symbol, market_type, tim
 
 COPY public.state_rebuild_logs (id, rebuild_type, status, trigger_source, details, started_at, finished_at) FROM stdin;
 850b990d-3341-44b4-b25c-6f050fbc3166	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 06:49:08.781747+00	2026-03-19 06:49:08.789409+00
+4c4db20b-c7a1-4baf-a94f-13a1f4fca832	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:07:45.709984+00	2026-03-19 07:07:45.718329+00
+67438634-7831-41ff-a229-c7cb00899c69	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:07:56.229517+00	2026-03-19 07:07:56.237543+00
+0a241231-f395-4cc4-b576-dbce010bce3f	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:08:27.255141+00	2026-03-19 07:08:27.26325+00
+adde7aa1-b721-421e-8487-73ae56661c35	full_runtime_state	completed	startup	{"open_positions_count": 0, "running_bots_count": 0, "position_sample": []}	2026-03-19 07:09:07.835466+00	2026-03-19 07:09:07.843287+00
 \.
 
 
@@ -2692,10 +2702,10 @@ COPY public.strategy_definitions (strategy_id, name, code, description, owner_ty
 --
 
 COPY public.strategy_family_gates (family, is_enabled, long_threshold, short_threshold, min_strategy_count, max_conflict_score, regime_match_required, risk_clear_required, reversal_extra_confirmation, created_at, updated_at) FROM stdin;
-trend	t	5	5	1	2	t	t	f	2026-03-19 06:49:08.767585+00	2026-03-19 06:49:08.767587+00
-breakout	t	4	4	1	2	t	t	f	2026-03-19 06:49:08.767588+00	2026-03-19 06:49:08.767589+00
-pullback	t	4	4	1	2	t	t	f	2026-03-19 06:49:08.767589+00	2026-03-19 06:49:08.76759+00
-reversal	t	3	3	1	1.5	t	t	t	2026-03-19 06:49:08.76759+00	2026-03-19 06:49:08.767591+00
+breakout	t	4	4	1	2	t	t	f	2026-03-19 06:49:08.767588+00	2026-03-19 07:09:07.823647+00
+pullback	t	4	4	1	2	t	t	f	2026-03-19 06:49:08.767589+00	2026-03-19 07:09:07.823654+00
+reversal	t	3	3	1	1.5	t	t	t	2026-03-19 06:49:08.76759+00	2026-03-19 07:09:07.82366+00
+trend	t	5	5	1	2	t	t	f	2026-03-19 06:49:08.767585+00	2026-03-19 07:09:07.823636+00
 \.
 
 
@@ -2752,6 +2762,7 @@ COPY public.symbol_selection_watchlists (id, user_id, name, source, exchange, ma
 --
 
 COPY public.system_alerts (id, alert_type, severity, message, details, status, occurrences, last_triggered_at, created_at, updated_at, fingerprint, entity_key, root_cause_code, state_key, delivery_status) FROM stdin;
+bb9f036e-7a74-4bef-a4b9-68b2b7413a3b	release_gate_blocked	CRITICAL	Release gate BLOCKED	{"reasons": ["permission_check_fail", "execution_quality_score_warning", "kill_switch_not_tested", "proof_pipeline_empty", "live_mode_disabled"], "environment": "prod"}	open	36	2026-03-19 07:07:36.02353+00	2026-03-19 06:49:42.585021+00	2026-03-19 07:07:36.02413+00	67e0bac46e45e360f1ef30fddbad9c8b2a0cbec688a3c53fb5861a3050ca72f7	prod	permission_check_fail	blocked	{"status": "DEDUPED", "dedupe_window_seconds": 600}
 \.
 
 
@@ -2760,7 +2771,7 @@ COPY public.system_alerts (id, alert_type, severity, message, details, status, o
 --
 
 COPY public.test_table (id, marker) FROM stdin;
-3	backup_test
+6	backup_test
 \.
 
 
@@ -2929,7 +2940,7 @@ COPY public.weekly_report_archives (report_id, report_type, period_start, period
 -- Name: test_table_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.test_table_id_seq', 3, true);
+SELECT pg_catalog.setval('public.test_table_id_seq', 6, true);
 
 
 --
@@ -5605,5 +5616,5 @@ ALTER TABLE ONLY public.user_venue_assignments
 -- PostgreSQL database dump complete
 --
 
-\unrestrict CuZhmt5gD1xVLsBU1A9IvgzBN7J0FbLkMgYhOD1vuhzUt9sD8LWpWKqf9RnqbJw
+\unrestrict ObThDsDAJc1celseZoRAkHlaNEUvopBgSenHdAZKNqSfNV1JTuNd8jW29kHJkac
 

@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 FAZ-1 S3 Backup Comprehensive Tests
 - backup_service.py: S3 upload functionality
@@ -10,10 +11,8 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
-import tempfile
 from pathlib import Path
-from unittest.mock import patch
+import sys
 
 import pytest
 
@@ -260,7 +259,7 @@ class TestDbBackupShellScript:
         # The S3 upload should be skipped (logged)
         log_content = (Path("/app/artifacts/backup.log").read_text() 
                       if Path("/app/artifacts/backup.log").exists() else "")
-        # Verify script ran to completion
+        assert "S3_UPLOAD_SKIPPED" in log_content
 
 
 # ============================================================================

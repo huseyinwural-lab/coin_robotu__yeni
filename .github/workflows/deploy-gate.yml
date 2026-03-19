@@ -100,10 +100,10 @@ jobs:
       DATABASE_URL: postgresql+psycopg2://trader:trader@localhost:5432/trading_platform
       BACKUP_KEEP_COUNT: 7
       BACKUP_S3_UPLOAD_REQUIRED: 1
-      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
-      BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID }}
-      BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY }}
-      BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION }}
+      BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET || vars.BACKUP_S3_BUCKET }}
+      BACKUP_AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_AWS_ACCESS_KEY_ID || vars.BACKUP_AWS_ACCESS_KEY_ID }}
+      BACKUP_AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_AWS_SECRET_ACCESS_KEY || vars.BACKUP_AWS_SECRET_ACCESS_KEY }}
+      BACKUP_AWS_REGION: ${{ secrets.BACKUP_AWS_REGION || vars.BACKUP_AWS_REGION }}
     services:
       postgres:
         image: postgres:15
@@ -140,9 +140,11 @@ jobs:
       - name: Validate required S3 secrets
         run: |
           required_vars=(BACKUP_S3_BUCKET BACKUP_AWS_ACCESS_KEY_ID BACKUP_AWS_SECRET_ACCESS_KEY BACKUP_AWS_REGION)
+          echo "GITHUB_EVENT_NAME=${GITHUB_EVENT_NAME}"
+          echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
           for key in "${required_vars[@]}"; do
             if [[ -z "${!key:-}" ]]; then
-              echo "Missing required secret/env: $key"
+              echo "Missing required secret/env/var: $key"
               exit 1
             fi
           done
