@@ -29,5 +29,3 @@ admin_token.txt
 # --- Artifacts ---
 artifacts/
 test_reports/
-frontend/node_modules/.cache/default-development/0.pack
-frontend/node_modules/.cache/default-development/11.pack
