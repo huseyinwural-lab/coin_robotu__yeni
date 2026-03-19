@@ -636,6 +636,10 @@ jobs:
             artifacts/faz1_scheduler_model_decision.txt
             artifacts/faz1_dump_scan_findings.log
             artifacts/faz1_repo_scan_forbidden_files.log
+            artifacts/faz1_repo_hygiene_scan.log
+            artifacts/faz1_repo_scan_found_forbidden_paths.log
+            artifacts/faz1_gitignore_minus_e_scan.log
+            artifacts/faz1_gitignore_duplicates.log
             artifacts/faz1_cleanup_removed_files.log
             artifacts/backup.log
             artifacts/restore.log

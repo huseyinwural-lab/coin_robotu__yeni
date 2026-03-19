@@ -1,0 +1,130 @@
+diff --git a/.gitignore b/.gitignore
+index d09f5ab..2ab3c57 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -3,31 +3,11 @@
+ .vscode/
+ .DS_Store
+ 
+-# Environment files
++# Environment
+ *.env
+ *.env.*
+ !**/.env.example
+ 
+-# JavaScript / frontend
+-node_modules/
+-**/node_modules/
+-.pnp
+-.pnp.js
+-.yarn/*
+-!.yarn/patches
+-!.yarn/plugins
+-!.yarn/releases
+-!.yarn/versions
+-.yarn/install-state.gz
+-coverage/
+-build/
+-dist/
+-.next/
+-out/
+-next-env.d.ts
+-*.tsbuildinfo
+-frontend/node_modules/.cache/
+-
+ # Python
+ __pycache__/
+ *.pyc
+@@ -36,34 +16,46 @@ __pycache__/
+ .pytest_cache/
+ .ruff_cache/
+ .mypy_cache/
+-venv/
+ .venv/
++venv/
++
++# Node / Frontend
++node_modules/
++**/node_modules/
++build/
++dist/
++.next/
++out/
++coverage/
++*.tsbuildinfo
++frontend/node_modules/.cache/
+ 
+ # Logs
++*.log
++logs/
+ npm-debug.log*
+ yarn-debug.log*
+ yarn-error.log*
+ .pnpm-debug.log*
+-*.log
+ 
+-# Local databases / runtime state
++# Backup / Dump / DB artifacts
++backups/*.sql
++backups/*.bak
++admin_token.txt
++*.sqlite
++*.sqlite3
+ *.db
+ *.db-journal
+ *.embeddeddb
+ *.embeddeddb3
++dump.rdb
+ backend/trading_platform_local.db
+ trading_platform_local.db
+ backend/test_learning.db
+ backend/migration_apply_test.db
+ backend/ci_seeded_gate.db
+-dump.rdb
+-
+-# Backup hygiene (FAZ-1)
+-backups/*.sql
+-backups/*.bak
+-admin_token.txt
+ 
+-# Generated artifacts
++# Artifacts / Test outputs
+ .cache/
+ .screenshots/
+ artifacts/tmp/
+@@ -75,7 +67,7 @@ test_reports/**
+ test_reports/artifacts_iter*/
+ test_reports/pytest/*.xml
+ 
+-# Local scratch files accidentally created in previous runs
++# Local scratch files
+ ExecutionIntent
+ admin
+ submit
+@@ -86,17 +78,16 @@ submit
+ *.pem
+ 
+ # Misc
++.pnp
++.pnp.js
++.yarn/*
++!.yarn/patches
++!.yarn/plugins
++!.yarn/releases
++!.yarn/versions
++.yarn/install-state.gz
+ .vercel
+ chainlit.md
+ .chainlit
+ .ipynb_checkpoints/
+-frontend/node_modules/.cache/default-development/0.pack
+-frontend/node_modules/.cache/default-development/11.pack
+--e 
+-# Environment files
+-*.env
+-*.env.*
+--e 
+-# Environment files
+-*.env
+-*.env.*
++next-env.d.ts

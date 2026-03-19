@@ -32,6 +32,37 @@ pg_dump --version | tee "${ARTIFACT_DIR}/faz1_pg_dump_version.log"
 psql --version | tee "${ARTIFACT_DIR}/faz1_psql_version.log"
 log "PASS: pg_dump ve psql erişilebilir"
 
+log "T-1.F1/F2/F3 .gitignore hijyen doğrulaması"
+GITIGNORE_PATH="${APP_ROOT}/.gitignore"
+[[ -f "$GITIGNORE_PATH" ]] || fail ".gitignore yok"
+
+required_ignore_rules=(
+  "backups/*.sql"
+  "backups/*.bak"
+  "admin_token.txt"
+  "*.sqlite"
+  "*.sqlite3"
+  "*.db"
+)
+for rule in "${required_ignore_rules[@]}"; do
+  grep -Fxq "$rule" "$GITIGNORE_PATH" || fail ".gitignore içinde zorunlu kural eksik: $rule"
+done
+
+if grep -n "^-e$" "$GITIGNORE_PATH" > "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"; then
+  fail ".gitignore içinde yasaklı -e satırı bulundu"
+else
+  echo "NO_MINUS_E_LINE" > "${ARTIFACT_DIR}/faz1_gitignore_minus_e_scan.log"
+fi
+
+mapfile -t ignore_duplicates < <(grep -Ev '^\s*$|^\s*#' "$GITIGNORE_PATH" | sort | uniq -d || true)
+if (( ${#ignore_duplicates[@]} > 0 )); then
+  printf '%s\n' "${ignore_duplicates[@]}" > "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
+  fail ".gitignore içinde duplicate kural bulundu"
+else
+  echo "NO_DUPLICATE_RULE" > "${ARTIFACT_DIR}/faz1_gitignore_duplicates.log"
+fi
+log "PASS: .gitignore hygiene = PASS"
+
 log "T-1.R2/R3 backup-restore script statik güvenlik kontrolleri"
 for script in "${APP_ROOT}/scripts/db_backup.sh" "${APP_ROOT}/scripts/db_restore.sh"; do
   [[ -f "$script" ]] || fail "Eksik script: $script"
@@ -95,6 +126,29 @@ if (( ${#forbidden_tracked[@]} > 0 )); then
   fail "repo içinde yasaklı tracked dump/token dosyası bulundu"
 fi
 echo "NO_FORBIDDEN_TRACKED_FILES" > "${ARTIFACT_DIR}/faz1_repo_scan_forbidden_files.log"
+
+REPO_SCAN_LOG="${ARTIFACT_DIR}/faz1_repo_hygiene_scan.log"
+{
+  echo "# find . -iname '*.sql'"
+  find "$APP_ROOT" -path "$APP_ROOT/.git" -prune -o -iname "*.sql" -print
+  echo "# find . -iname '*.bak'"
+  find "$APP_ROOT" -path "$APP_ROOT/.git" -prune -o -iname "*.bak" -print
+  echo "# find . -iname '*.sqlite' -o -iname '*.sqlite3' -o -iname '*.db'"
+  find "$APP_ROOT" -path "$APP_ROOT/.git" -prune -o \( -iname "*.sqlite" -o -iname "*.sqlite3" -o -iname "*.db" \) -print
+  echo "# find . -name 'admin_token.txt'"
+  find "$APP_ROOT" -path "$APP_ROOT/.git" -prune -o -name "admin_token.txt" -print
+  echo "# grep -n '^-e$' .gitignore"
+  grep -n "^-e$" "$GITIGNORE_PATH" || true
+  echo "# duplicate ignore lines"
+  grep -Ev '^\s*$|^\s*#' "$GITIGNORE_PATH" | sort | uniq -d || true
+} > "$REPO_SCAN_LOG"
+
+mapfile -t repo_forbidden_found < <(find "$APP_ROOT" -path "$APP_ROOT/.git" -prune -o \( -iname "*.sql" -o -iname "*.bak" -o -name "admin_token.txt" -o -iname "*.sqlite" -o -iname "*.sqlite3" -o -iname "*.db" \) -print || true)
+if (( ${#repo_forbidden_found[@]} > 0 )); then
+  printf '%s\n' "${repo_forbidden_found[@]}" > "${ARTIFACT_DIR}/faz1_repo_scan_found_forbidden_paths.log"
+  fail "repo scan yasaklı dosya buldu"
+fi
+echo "NO_FORBIDDEN_PATH_FOUND" > "${ARTIFACT_DIR}/faz1_repo_scan_found_forbidden_paths.log"
 
 mapfile -t cleanup_candidates < <(ls -1 "${APP_ROOT}"/backups/*.sql "${APP_ROOT}"/backups/*.bak 2>/dev/null || true)
 if (( ${#cleanup_candidates[@]} > 0 )); then
