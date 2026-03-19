@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 P1: Futures Strategy Integration (Paper Mode) Tests
 - Tests strategy contract, trend strategy signal generation

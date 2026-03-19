@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -36,16 +36,16 @@ export const MarketUniversePage = () => {
   const [alphaKeyInput, setAlphaKeyInput] = useState("");
   const [providerConfig, setProviderConfig] = useState(null);
 
-  const hydrateProviderConfig = async () => {
+  const hydrateProviderConfig = useCallback(async () => {
     try {
       const { data } = await apiClient.get("/symbol-selector/provider-config");
       setProviderConfig(data || null);
     } catch {
       setProviderConfig(null);
     }
-  };
+  }, []);
 
-  const hydrate = async () => {
+  const hydrate = useCallback(async () => {
     try {
       const [{ data: control }, { data: nextPreview }] = await Promise.all([
         apiClient.get("/admin-control"),
@@ -65,12 +65,11 @@ export const MarketUniversePage = () => {
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Universe ayarları yüklenemedi");
     }
-  };
+  }, [hydrateProviderConfig]);
 
   useEffect(() => {
     hydrate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hydrate]);
 
   useEffect(() => {
     setForm((prev) => ({ ...prev, spot_universe: (spotSymbols || []).join(",") }));

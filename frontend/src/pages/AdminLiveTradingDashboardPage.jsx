@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ export const AdminLiveTradingDashboardPage = () => {
   const [dailyReport, setDailyReport] = useState(null);
   const [learningSummary, setLearningSummary] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [summaryRes, scannerRes, executionRes, riskRes, dailyRes, learningRes] = await Promise.all([
@@ -48,20 +48,18 @@ export const AdminLiveTradingDashboardPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [windowSize]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowSize]);
+  }, [load]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       load();
     }, 30000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowSize]);
+  }, [load]);
 
   const alertStatus = (summary?.critical_alerts?.status || "normal").toLowerCase();
 

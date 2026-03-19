@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -75,7 +75,7 @@ export const UserDashboardPage = () => {
     return parsed.toLocaleString("tr-TR");
   };
 
-  const loadSymbolExplainability = async (symbol) => {
+  const loadSymbolExplainability = useCallback(async (symbol) => {
     if (!symbol) {
       setSymbolExplainability(null);
       return;
@@ -90,9 +90,9 @@ export const UserDashboardPage = () => {
     } finally {
       setIsExplainabilityLoading(false);
     }
-  };
+  }, []);
 
-  const load = async ({ silent = false } = {}) => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) {
       setIsLoading(true);
     }
@@ -135,20 +135,18 @@ export const UserDashboardPage = () => {
         setIsLoading(false);
       }
     }
-  };
+  }, [impactFamily, impactStrategyId, loadSymbolExplainability, selectedDecisionSymbol]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       load({ silent: true });
     }, 10000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [load]);
 
   const onSelectDecisionCard = async (symbol) => {
     setSelectedDecisionSymbol(symbol);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -8,19 +8,18 @@ export const CorrelationMatrixPage = () => {
   const [windowSize, setWindowSize] = useState(200);
   const [payload, setPayload] = useState(null);
 
-  const loadMatrix = async (nextWindow = windowSize) => {
+  const loadMatrix = useCallback(async (nextWindow = windowSize) => {
     try {
       const { data } = await apiClient.get(`/admin-phase3/correlation-matrix?window=${nextWindow}`);
       setPayload(data);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Correlation matrix alınamadı");
     }
-  };
+  }, [windowSize]);
 
   useEffect(() => {
     loadMatrix(200);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadMatrix]);
 
   return (
     <section className="space-y-4" data-testid="correlation-matrix-page">

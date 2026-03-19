@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 Phase 5.6B - Correlation Cluster Engine Comprehensive Tests
 

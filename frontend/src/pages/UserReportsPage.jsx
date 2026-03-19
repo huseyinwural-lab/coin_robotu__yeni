@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -16,7 +16,7 @@ export const UserReportsPage = () => {
 
   const isIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 
-  const load = async (requestedWeek = "") => {
+  const load = useCallback(async (requestedWeek = "") => {
     setIsLoading(true);
     try {
       const safeWeek = requestedWeek && isIsoDate(requestedWeek) ? requestedWeek : undefined;
@@ -50,12 +50,11 @@ export const UserReportsPage = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [compareEnabled]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compareEnabled]);
+  }, [load]);
 
   if (isLoading) {
     return <LoadingSkeleton rows={6} testId="user-reports-loading-skeleton" />;

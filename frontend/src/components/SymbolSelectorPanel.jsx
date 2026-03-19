@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -90,25 +90,25 @@ export const SymbolSelectorPanel = ({
     [rows, source],
   );
 
-  const loadProviderConfig = async () => {
+  const loadProviderConfig = useCallback(async () => {
     try {
       const { data } = await apiClient.get("/symbol-selector/provider-config");
       setProviderConfig(data || null);
     } catch {
       setProviderConfig(null);
     }
-  };
+  }, []);
 
-  const loadWatchlists = async () => {
+  const loadWatchlists = useCallback(async () => {
     try {
       const { data } = await apiClient.get("/symbol-selector/watchlists", { params: { source } });
       setWatchlists(data || []);
     } catch {
       setWatchlists([]);
     }
-  };
+  }, [source]);
 
-  const loadUniverse = async ({ forceMode } = {}) => {
+  const loadUniverse = useCallback(async ({ forceMode } = {}) => {
     setIsLoading(true);
     try {
       const activeMode = normalizeModeValue(forceMode || normalizedMode);
@@ -152,18 +152,26 @@ export const SymbolSelectorPanel = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [
+    exchange,
+    marketType,
+    multi,
+    normalizedMode,
+    normalizedSelectedSymbols,
+    onSelectedSymbolsChange,
+    quoteAssetFilter,
+    search,
+    source,
+  ]);
 
   useEffect(() => {
     loadProviderConfig();
     loadWatchlists();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source]);
+  }, [loadProviderConfig, loadWatchlists]);
 
   useEffect(() => {
     loadUniverse();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalizedMode, source, exchange, marketType, quoteAssetFilter]);
+  }, [loadUniverse]);
 
   const toggleSymbol = (row) => {
     const symbol = String(row?.symbol || "").trim().toUpperCase();

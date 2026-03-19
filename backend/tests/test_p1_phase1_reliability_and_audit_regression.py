@@ -1,4 +1,5 @@
 from __future__ import annotations
+# ruff: noqa: E402
 
 from datetime import datetime
 from pathlib import Path

@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 Gate-1 BTC Hard Dependency Removal + USDT/USDC Quote Policy Hardening
 Comprehensive test module for quote asset policy enforcement across all layers.

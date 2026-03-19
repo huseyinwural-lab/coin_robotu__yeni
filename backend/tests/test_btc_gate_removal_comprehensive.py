@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 BTC Gate Removal - Comprehensive Backend Tests
 Tests for symbol-driven scanner correction package:

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ export default function UserLiveTradingDashboardPage() {
   const [trades, setTrades] = useState(null);
   const [dailyReport, setDailyReport] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [
@@ -62,12 +62,11 @@ export default function UserLiveTradingDashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [windowSize]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowSize]);
+  }, [load]);
 
   const exportDailyReport = async (format) => {
     try {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -32,7 +32,7 @@ export const UserSymbolDecisionDetailPage = () => {
     return parsed.toLocaleString("tr-TR");
   };
 
-  const loadExplainability = async () => {
+  const loadExplainability = useCallback(async () => {
     if (!normalizedSymbol) {
       setExplainability(null);
       return;
@@ -47,9 +47,9 @@ export const UserSymbolDecisionDetailPage = () => {
     } finally {
       setDrawerLoading(false);
     }
-  };
+  }, [normalizedSymbol]);
 
-  const loadDecisionDetail = async ({ silent = false } = {}) => {
+  const loadDecisionDetail = useCallback(async ({ silent = false } = {}) => {
     if (!normalizedSymbol) {
       return;
     }
@@ -70,12 +70,11 @@ export const UserSymbolDecisionDetailPage = () => {
         setLoading(false);
       }
     }
-  };
+  }, [loadExplainability, normalizedSymbol]);
 
   useEffect(() => {
     loadDecisionDetail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalizedSymbol]);
+  }, [loadDecisionDetail]);
 
   const openImpactFromCard = (card) => {
     setImpactStrategyId(card?.top_contributors?.[0]?.strategy_id || "");
@@ -87,8 +86,7 @@ export const UserSymbolDecisionDetailPage = () => {
       loadDecisionDetail({ silent: true });
     }, 10000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalizedSymbol]);
+  }, [loadDecisionDetail]);
 
   return (
     <section className="space-y-4" data-testid="user-symbol-decision-detail-page">

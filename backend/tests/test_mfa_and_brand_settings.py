@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 import io
 import sys
 import uuid

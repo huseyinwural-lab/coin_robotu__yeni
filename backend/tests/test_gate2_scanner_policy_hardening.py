@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 Gate-2 Scanner Policy Hardening Verification Tests
 

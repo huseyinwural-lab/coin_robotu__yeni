@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ export const AdminFreshnessHeatmapPage = () => {
   const [heatmap, setHeatmap] = useState({ items: [] });
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await apiClient.get("/admin/universe-monitor/freshness-heatmap", { params: { window: windowSize } });
@@ -19,12 +19,11 @@ export const AdminFreshnessHeatmapPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [windowSize]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [windowSize]);
+  }, [load]);
 
   return (
     <section className="space-y-4" data-testid="admin-freshness-heatmap-page">

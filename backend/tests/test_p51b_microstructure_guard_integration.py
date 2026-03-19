@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """
 Phase 5.1B Market Microstructure Guard Integration Tests
 Test coverage:

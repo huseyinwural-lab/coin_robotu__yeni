@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -18,7 +18,7 @@ export const AdminUniverseMonitorPage = () => {
   const [fallbackEvents, setFallbackEvents] = useState([]);
   const [runtimeSummary, setRuntimeSummary] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [summaryRes, debugRes, trendRes, breakdownRes, heatmapRes, rolloutRes, fallbackEventsRes, runtimeSummaryRes] = await Promise.all([
@@ -46,20 +46,18 @@ export const AdminUniverseMonitorPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [mode, windowSize]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, windowSize]);
+  }, [load]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       load();
     }, 10000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, windowSize]);
+  }, [load]);
 
   const latestTrendPoint = useMemo(() => trend?.latest || trend?.points?.[trend.points.length - 1] || null, [trend]);
 
