@@ -54,13 +54,14 @@ ROLLBACK_END="$(date +%s)"
 ROLLBACK_TIME="$((ROLLBACK_END - ROLLBACK_START))"
 
 [[ "${ROLLBACK_TIME}" -lt 60 ]] || fail "rollback_time >= 60s"
+log "PASS: rollback çalıştı"
 log "PASS: rollback_time=${ROLLBACK_TIME}s"
 
 [[ -f "${CURRENT_FILE}" ]] || fail "current release state yok"
 # shellcheck disable=SC1090
 source "${CURRENT_FILE}"
 [[ "${CURRENT_VERSION:-}" == "${RESTORED_VERSION}" ]] || fail "rollback sonrası aktif versiyon A değil"
-log "PASS: sistem tekrar A versiyonunda"
+log "PASS: sistem tekrar A versiyonunda (${RESTORED_VERSION})"
 
 log "T-4.5 health doğrulama"
 HEALTH_CODE="$(curl -s -o /tmp/faz4_health.json -w '%{http_code}' "http://localhost:8000/health" || true)"
@@ -104,6 +105,7 @@ summary = {
   "rollback_test": "PASS",
   "rollback_time_seconds": ${ROLLBACK_TIME},
   "health_check": "PASS",
+  "ready_check": "PASS",
   "restored_version": "${RESTORED_VERSION}",
   "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
 }
