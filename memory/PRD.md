@@ -1,3 +1,30 @@
+## 2026-03-20 — FAZ C3 Canary Expansion (5 → 10 Symbol) ✅
+
+### Uygulanan kapsam
+- Yeni script: `/app/scripts/run_canary_phase_c3.sh`
+  - Konfig: `symbols=10`, `capital=800-1000` (run: `900`), `max_positions=5`, `duration=60-90m` (run: `65m`)
+  - Kritik gözlem kontrolleri eklendi:
+    - order queue davranışı (`/api/admin/execution-queue/rejection-summary`)
+    - execution latency (`/api/admin/canary-status` latency p95)
+    - parallel işlem stabilite (`/api/admin/universe-monitor?market_type=futures`)
+
+### Çalıştırma ve artefaktlar
+- Çalıştırma logu: `/app/artifacts/canary_c3_run.log`
+- Özet JSON: `/app/artifacts/canary_c3_summary.json`
+- Metrik snapshot: `/app/artifacts/canary_c3_metrics_snapshot.json`
+
+### Sonuç (C3)
+- `canary_rollout_test`: **PASS**
+- `duration_minutes`: **65**
+- `loop_count`: **12**
+- `crash_count=0`, `error_5xx_count=0`, `reject_count=0`, `violations=0`
+- `error_rate_final=0.0`, `error_rate_rule=PASS`, `error_monotonic_breaks=0`
+- `order_queue_behavior=PASS`, `execution_latency_check=PASS`, `parallel_processing_stability=PASS`
+
+### Notlar
+- Bu fork’ta backend başlangıcında PostgreSQL erişim problemi vardı; yerel PostgreSQL kurulup servis ayağa kaldırıldı.
+- C3 koşusu öncesi admin kullanıcı bootstrap edildi ve testnet anahtarları env üzerinden sağlandı.
+
 ## 2026-03-19 — FAZ 3 EXECUTION SAFETY (P0) ✅
 
 ### Uygulanan kapsam (T-3.1 → T-3.9)
