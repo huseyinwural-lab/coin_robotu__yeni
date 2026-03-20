@@ -7980,3 +7980,35 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - backend doğrulama: PASS
   - artifact-first closure: PASS
 
+## 2026-03-20 — CANARY C1 (1→3 Symbol) Tekrar Koşusu ✅
+
+### Koşu parametreleri
+- symbols: `BTCUSDT`, `ETHUSDT`, `BNBUSDT`
+- capital: `150 USDT`
+- max_positions: `2`
+- süre: `61.73 dakika` (>=60)
+- kill-switch testi: faz başı + faz sonu
+
+### Sonuç özeti
+- Script sonucu: `SUMMARY: PASS`
+- Loop: `12` döngü / `36` order denemesi (3 symbol x 12)
+- crash_count: `0`
+- error_5xx_count: `0`
+- reject_anomaly_count: `0`
+- latency_spike_count: `0`
+- health_http: `200`
+- ready_http: `200`
+
+### Metrik dökümü
+- max_error_rate: `0.130435` (son: `0.028846`)
+- max_order_fail_rate: `0.0`
+- max_reject_rate: `0.0`
+- max_latency_ms_p95: `2884.86`
+- max_pnl_drift: `0.0`
+
+### Kanıt dosyaları
+- `/app/artifacts/canary_c1_run.log`
+- `/app/artifacts/canary_c1_summary.json`
+- `/app/artifacts/canary_c1_metrics_snapshot.json`
+- bağımsız doğrulama: `/app/test_reports/iteration_38.json`
+
