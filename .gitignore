@@ -48,3 +48,7 @@ artifacts/release_state/*
 test_reports/*
 !test_reports/iteration_34.json
 !test_reports/iteration_37.json
+-e 
+# Environment files
+*.env
+*.env.*
