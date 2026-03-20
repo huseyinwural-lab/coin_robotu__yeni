@@ -1,0 +1,9 @@
+{
+  "phase": "FAZ-4",
+  "rollback_test": "PASS",
+  "rollback_time_seconds": 0,
+  "health_check": "PASS",
+  "ready_check": "PASS",
+  "restored_version": "release-cb17392bffe4",
+  "timestamp": "2026-03-20T11:36:09.890850+00:00"
+}

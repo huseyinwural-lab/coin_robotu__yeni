@@ -27,23 +27,20 @@ admin_token.txt
 # --- Artifacts ---
 artifacts/
 test_reports/
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
+
+# --- Allowed FAZ-4 evidence files (tracked exceptions) ---
+!artifacts/
+artifacts/*
+!artifacts/faz4_verify_phase4_rollback.log
+!artifacts/faz4_rollback_summary.json
+!artifacts/iteration_34.json
+!artifacts/faz4_closure_proof_bundle_with_paths.zip
+
+!artifacts/release_state/
+artifacts/release_state/*
+!artifacts/release_state/deploy_history.jsonl
+!artifacts/release_state/current_release.env
+
+!test_reports/
+test_reports/*
+!test_reports/iteration_34.json
