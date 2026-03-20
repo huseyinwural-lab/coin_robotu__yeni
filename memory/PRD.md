@@ -7931,3 +7931,52 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Son bağımsız audit raporu:
   - `/app/test_reports/iteration_36.json` (8/8 PASS, PRD-artifact hizası PASS)
 
+## 2026-03-20 — FAZ 8 KAPANIŞ: Canary Release ✅
+
+### Uygulanan kritik maddeler
+- Admin config omurgası genişletildi (yeni tablo açılmadı):
+  - `canary_enabled`
+  - `canary_symbols`
+  - `canary_max_capital_usdt`
+  - `canary_max_positions`
+- Execution enforce katmanı eklendi:
+  - whitelist dışı symbol reject (`CANARY_SYMBOL_BLOCKED`)
+  - capital limit reject (`CANARY_CAPITAL_LIMIT_EXCEEDED`)
+  - max position reject (`CANARY_MAX_POSITIONS_EXCEEDED`)
+- Yeni guard endpoint:
+  - `GET /api/admin/canary-status`
+  - runtime state + canary metrikleri + alert_ids döndürüyor.
+- Kill-switch entegrasyonu:
+  - `/api/admin/kill-switch` ile canary sırasında execution anında durdurma doğrulandı.
+
+### Gerçek 60 dk canary run kanıtı
+- Çalıştırılan script: `bash scripts/verify_phase8_canary.sh`
+- Gerçek koşu aralığı (UTC):
+  - başlangıç: `2026-03-20T12:51:36Z`
+  - bitiş: `2026-03-20T13:52:22Z`
+  - süre: `60 dakika`
+- Loop kanıtı: `RUN_LOOP_1..12` başarıyla loglandı.
+
+### Artifact’ler
+- `/app/artifacts/faz8_canary_run.log`
+- `/app/artifacts/faz8_canary_summary.json`
+- `/app/artifacts/faz8_metrics_snapshot.json`
+
+### Özet sonuç
+- crash_count = 0
+- error_5xx_count = 0
+- reject_count = 0
+- kill_switch_test = PASS
+- health_http = 200
+- ready_http = 200
+
+### CI Gate
+- `deploy-gate.yml` içine **Phase 8 Canary Gate** eklendi:
+  - `bash scripts/verify_phase8_canary.sh`
+  - fail durumda deploy bloklanır
+
+### Bağımsız doğrulama
+- `/app/test_reports/iteration_37.json`
+  - backend doğrulama: PASS
+  - artifact-first closure: PASS
+

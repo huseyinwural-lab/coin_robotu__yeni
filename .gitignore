@@ -35,6 +35,9 @@ artifacts/*
 !artifacts/faz4_rollback_summary.json
 !artifacts/iteration_34.json
 !artifacts/faz4_closure_proof_bundle_with_paths.zip
+!artifacts/faz8_canary_run.log
+!artifacts/faz8_canary_summary.json
+!artifacts/faz8_metrics_snapshot.json
 
 !artifacts/release_state/
 artifacts/release_state/*
@@ -44,11 +47,4 @@ artifacts/release_state/*
 !test_reports/
 test_reports/*
 !test_reports/iteration_34.json
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
+!test_reports/iteration_37.json
