@@ -665,7 +665,21 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: yarn install --frozen-lockfile
+        run: |
+          yarn config set registry https://registry.npmjs.org
+          for attempt in 1 2 3; do
+            echo "Yarn install attempt ${attempt}/3"
+            if yarn install --frozen-lockfile --network-timeout 600000; then
+              break
+            fi
+            if [[ "$attempt" == "3" ]]; then
+              echo "Yarn install failed after 3 attempts"
+              exit 1
+            fi
+            echo "Transient fetch error detected. Cleaning cache and retrying..."
+            yarn cache clean --all || true
+            sleep 5
+          done
 
       - name: Frontend build
         working-directory: frontend

@@ -7821,3 +7821,18 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - `grep -E "^-e|^[[:space:]]*-e" .gitignore || echo "CLEAN"` → `CLEAN`
 - `bash scripts/verify_phase1_backup_restore.sh` → `SUMMARY: PASS`
 
+## 2026-03-20 — CI Yarn 502 Fetch Hatası Dayanıklılık Düzeltmesi ✅
+
+### Sorun
+- CI adımı `yarn install --frozen-lockfile` sırasında npm registry fetch aşamasında zaman zaman `502 Bad Gateway` veriyordu.
+
+### Uygulanan düzeltme
+- `.github/workflows/deploy-gate.yml` içinde frontend dependency adımı güçlendirildi:
+  - registry: `https://registry.npmjs.org`
+  - `--network-timeout 600000`
+  - 3 denemeli retry loop
+  - denemeler arası `yarn cache clean --all` + kısa bekleme
+
+### Doğrulama
+- Lokal doğrulama: `cd frontend && yarn config set registry https://registry.npmjs.org && yarn install --frozen-lockfile --network-timeout 600000` → PASS
+
