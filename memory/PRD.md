@@ -7869,3 +7869,39 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - restart sonrası veri korunuyor: **PASS**
 - doğrulama scripti: `bash scripts/verify_phase0_db_determinism.sh` → **SUMMARY: PASS**
 
+## 2026-03-20 — FAZ 4 KAPANIŞ: Rollback ✅
+
+### T-4.1 Versioning standard
+- Zorunlu image tag standardı uygulandı: `app:release-<commit_sha>`
+- `scripts/deploy.sh` SHA formatını (7-40 hex) zorunlu doğruluyor.
+
+### T-4.2 Deploy script (version parametreli)
+- Yeni script: `/app/scripts/deploy.sh`
+- Kullanım: `./scripts/deploy.sh <version>`
+- Sonuç: istenen versiyon metadata deploy state’e işleniyor ve health gate ile doğrulanıyor.
+
+### T-4.3 Rollback script
+- Yeni script: `/app/scripts/rollback.sh`
+- Kullanım: `./scripts/rollback.sh`
+- Davranış: `deploy_history.jsonl` üzerinden previous successful version otomatik çözülüyor ve deploy ediliyor.
+
+### T-4.4 Full rollback test (kritik)
+- Yeni doğrulama scripti: `/app/scripts/verify_phase4_rollback.sh`
+- Senaryo PASS:
+  - version A deploy
+  - version B fail (forced fail)
+  - rollback çalıştır
+  - sistem A versiyonuna geri döndü
+- Ölçüm: `rollback_time_seconds < 60` (sub-second)
+
+### T-4.5 Health doğrulama
+- Rollback sonrası health kontrolleri PASS:
+  - `/health` (gerekirse `/api/health` fallback) = 200
+  - `/ready` (gerekirse `/api/ready` fallback) = 200
+
+### Kanıtlar
+- `/app/artifacts/faz4_verify_phase4_rollback.log`
+- `/app/artifacts/faz4_rollback_summary.json`
+- `/app/artifacts/release_state/deploy_history.jsonl`
+- `/app/test_reports/iteration_34.json` (13/13 PASS)
+
