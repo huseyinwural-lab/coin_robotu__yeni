@@ -7810,3 +7810,14 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Smoke test: PASS (user login logo count = 0, landing logo görünüm/fitting OK)
 - Frontend testing agent: PASS (3/3)
 
+## 2026-03-20 — .gitignore Canonical Re-Alignment ✅
+
+### Uygulanan düzeltme
+- `.gitignore` tekrar canonical 31 satıra alındı.
+- Tüm `-e` satırları ve mükerrer `*.env` blokları temizlendi.
+
+### Doğrulama
+- `wc -l .gitignore` → `31`
+- `grep -E "^-e|^[[:space:]]*-e" .gitignore || echo "CLEAN"` → `CLEAN`
+- `bash scripts/verify_phase1_backup_restore.sh` → `SUMMARY: PASS`
+
