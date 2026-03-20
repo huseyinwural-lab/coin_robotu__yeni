@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import require_admin
 from models import User
-from schemas import AdminKillSwitchRequest, AdminKillSwitchResponse
-from services.execution_safety_service import execution_safety_snapshot, update_execution_safety_state
+from schemas import AdminCanaryStatusResponse, AdminKillSwitchRequest, AdminKillSwitchResponse
+from services.execution_safety_service import canary_status_snapshot, execution_safety_snapshot, update_execution_safety_state
 
 router = APIRouter(prefix="/admin", tags=["admin_execution_safety"])
 
@@ -61,3 +61,13 @@ def get_kill_switch_state(
     snapshot = execution_safety_snapshot(db)
     reason_code = "TRADING_ENABLED" if snapshot.get("trading_enabled") else "TRADING_DISABLED"
     return _to_response(snapshot, reason_code=reason_code, idempotent=True)
+
+
+@router.get("/canary-status", response_model=AdminCanaryStatusResponse)
+def get_canary_status(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    payload = canary_status_snapshot(db)
+    return AdminCanaryStatusResponse(**payload)

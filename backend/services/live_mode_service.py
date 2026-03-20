@@ -44,6 +44,7 @@ from models import (
 )
 from services.artifact_service import verify_manifest_chain
 from services.connection_reliability_service import get_connection_reliability_policy
+from services.execution_safety_service import ExecutionSafetyViolation, enforce_execution_open_allowed_or_raise
 from services.risk_engine_service import resolve_effective_config_for_user
 from services.risk_orchestrator_service import get_or_create_policy
 from services.system_alert_service import create_system_alert
@@ -454,6 +455,16 @@ def _enforce_controlled_limits(config: LiveActivationConfig):
         config.max_position_pct = min(config.max_position_pct, MAX_SAFE_POSITION_PCT)
         config.leverage_cap = min(config.leverage_cap, MAX_SAFE_LEVERAGE)
         config.max_notional_exposure = min(config.max_notional_exposure, MAX_SAFE_NOTIONAL_EXPOSURE)
+
+    config.canary_enabled = bool(getattr(config, "canary_enabled", False))
+    config.canary_max_capital_usdt = max(float(getattr(config, "canary_max_capital_usdt", 50) or 50), 0.0)
+    config.canary_max_positions = max(int(getattr(config, "canary_max_positions", 1) or 1), 0)
+    normalized_symbols: list[str] = []
+    for item in list(getattr(config, "canary_symbols", []) or []):
+        symbol = str(item or "").strip().upper()
+        if symbol and symbol not in normalized_symbols:
+            normalized_symbols.append(symbol)
+    config.canary_symbols = normalized_symbols
 
 
 def _resolve_test_symbol(config: LiveActivationConfig | None) -> str:
@@ -1516,6 +1527,21 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     volatility_regime = "high" if volatility_pct >= 0.03 else ("medium" if volatility_pct >= 0.018 else "low")
     expected_price = adapter.mark_price(symbol)
     quantity = _safe_quantity(expected_price)
+    proposed_notional = max(expected_price * quantity, 0.0)
+
+    try:
+        enforce_execution_open_allowed_or_raise(
+            db,
+            proposed_notional=proposed_notional,
+            symbol=symbol,
+            source="phase4_test_order",
+            actor_user_id=user.id,
+            actor_role=user.role.value,
+            entity_type="testnet_execution",
+            entity_id=f"test-order:{user.id}:{symbol}",
+        )
+    except ExecutionSafetyViolation as exc:
+        raise ValueError(f"{exc.reason_code}: {exc.message}") from exc
 
     adapter.set_leverage(api_key or "", api_secret or "", symbol, MAX_SAFE_LEVERAGE)
 
@@ -2768,6 +2794,10 @@ def get_or_create_live_config(db: Session) -> LiveActivationConfig:
         trading_enabled=False,
         max_total_exposure=MAX_SAFE_NOTIONAL_EXPOSURE,
         max_active_positions=3,
+        canary_enabled=False,
+        canary_symbols=[DEFAULT_TEST_SYMBOL],
+        canary_max_capital_usdt=50,
+        canary_max_positions=1,
         disable_futures=False,
         ip_whitelist_ready=False,
         trading_permission_ready=False,
@@ -2861,6 +2891,10 @@ def build_readiness_report(config: LiveActivationConfig, api_key: str | None = N
             "leverage_cap": config.leverage_cap,
             "max_trades_per_hour": config.max_trades_per_hour,
             "max_notional_exposure": config.max_notional_exposure,
+            "canary_enabled": bool(config.canary_enabled),
+            "canary_symbols": list(config.canary_symbols or []),
+            "canary_max_capital_usdt": float(config.canary_max_capital_usdt or 0),
+            "canary_max_positions": int(config.canary_max_positions or 0),
         },
         "docs_references": adapter.docs_references,
         "connectivity": endpoint_probe,

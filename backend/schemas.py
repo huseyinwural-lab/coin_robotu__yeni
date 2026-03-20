@@ -680,6 +680,10 @@ class LiveActivationConfigBase(BaseModel):
     trading_enabled: bool = False
     max_total_exposure: float = Field(default=150, ge=0)
     max_active_positions: int = Field(default=3, ge=0)
+    canary_enabled: bool = False
+    canary_symbols: list[str] = Field(default_factory=list)
+    canary_max_capital_usdt: float = Field(default=50, ge=0)
+    canary_max_positions: int = Field(default=1, ge=0)
     disable_futures: bool
     ip_whitelist_ready: bool
     trading_permission_ready: bool
@@ -717,6 +721,20 @@ class AdminKillSwitchResponse(BaseModel):
     reason_code: str
     idempotent: bool
     updated_at: datetime
+
+
+class AdminCanaryStatusResponse(BaseModel):
+    enabled: bool
+    active_symbols: list[str]
+    capital_used: float
+    position_count: int
+    violations: int
+    error_rate: float
+    latency_ms_p95: float
+    order_fail_rate: float
+    reject_rate: float
+    pnl_drift: float
+    alert_ids: list[str] = Field(default_factory=list)
 
 
 class LiveReadinessResponse(BaseModel):

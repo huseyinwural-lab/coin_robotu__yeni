@@ -118,7 +118,14 @@ def update_live_config(
         entity_id=updated.id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details={"symbol_whitelist": updated.symbol_whitelist, "max_position_pct": updated.max_position_pct},
+        details={
+            "symbol_whitelist": updated.symbol_whitelist,
+            "max_position_pct": updated.max_position_pct,
+            "canary_enabled": bool(updated.canary_enabled),
+            "canary_symbols": list(updated.canary_symbols or []),
+            "canary_max_capital_usdt": float(updated.canary_max_capital_usdt or 0),
+            "canary_max_positions": int(updated.canary_max_positions or 0),
+        },
     )
     return updated
 

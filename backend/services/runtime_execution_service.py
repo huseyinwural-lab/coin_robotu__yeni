@@ -177,6 +177,7 @@ def dispatch_decision_result(
         enforce_execution_open_allowed_or_raise(
             db,
             proposed_notional=proposed_notional,
+            symbol=str(intent_payload.get("symbol") or ""),
             source="runtime_execution_dispatch",
             actor_user_id=str(intent_payload.get("account_id") or ""),
             actor_role="SYSTEM",

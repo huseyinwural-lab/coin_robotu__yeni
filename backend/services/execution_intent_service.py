@@ -785,6 +785,7 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         enforce_execution_open_allowed_or_raise(
             db,
             proposed_notional=float(intent.notional or 0.0),
+            symbol=str(intent.symbol or ""),
             source="execution_intent_service_submit",
             actor_user_id=user_id,
             actor_role="USER",
@@ -1115,6 +1116,7 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
         enforce_execution_open_allowed_or_raise(
             db,
             proposed_notional=float(intent.notional or 0.0),
+            symbol=str(intent.symbol or ""),
             source="admin_execution_approval",
             actor_user_id=admin_user_id,
             actor_role="ADMIN",
