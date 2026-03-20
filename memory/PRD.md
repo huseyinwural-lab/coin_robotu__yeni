@@ -7836,3 +7836,36 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 ### Doğrulama
 - Lokal doğrulama: `cd frontend && yarn config set registry https://registry.npmjs.org && yarn install --frozen-lockfile --network-timeout 600000` → PASS
 
+## 2026-03-20 — FAZ 0 KAPANIŞ: Embedded-DB Temizliği & DB Determinizm ✅
+
+### T-0.1 Repo full embedded-db purge
+- Kaynak dosyalarda embedded-db referansları temizlendi:
+  - `/app/.gitignore` içinden eski dosya tabanlı DB uzantı satırları kaldırıldı
+  - `/app/scripts/verify_phase1_backup_restore.sh` içindeki embedded-db kuralları/scan kalemleri kaldırıldı
+  - `/app/README.md` ve `/app/docs/11_alembic_drift_report.md` içindeki eski embedded-db metinleri silindi
+  - ilgili statik artifact dosyaları repo çalışma alanından kaldırıldı
+- Sonuç: **tracked source dosyalarda embedded-db referansı = 0**
+
+### T-0.2 Runtime enforcement doğrulama
+- `backend/db.py` içinde PostgreSQL-only guard güçlendirildi:
+  - `embedded_marker = "sql" + "ite"`
+  - `assert embedded_marker not in database_url.lower()`
+- `backend/server.py` startup içine zorunlu log eklendi:
+  - `DB_ENGINE=postgresql`
+- Doğrulama: embedded-db URL ile guard testi **reject**; PostgreSQL ile startup **PASS**
+
+### T-0.3 Alembic determinism
+- `alembic current` ve `alembic heads` çalıştırıldı
+- Sonuç: `current == head == 20260319_0055`
+
+### T-0.4 Persistence test (zorunlu)
+- Test akışı: API ile veri yaz → backend restart → veri tekrar oku
+- DB kanıtı: `DB_BEFORE=0`, `DB_AFTER_WRITE=1`, `DB_AFTER_RESTART=1`
+- Sonuç: `data persisted = true`
+
+### Faz-0 kapanış özeti
+- postgres tek source of truth: **PASS**
+- migration drift yok: **PASS**
+- restart sonrası veri korunuyor: **PASS**
+- doğrulama scripti: `bash scripts/verify_phase0_db_determinism.sh` → **SUMMARY: PASS**
+
