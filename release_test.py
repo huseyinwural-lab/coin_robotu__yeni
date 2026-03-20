@@ -18,7 +18,7 @@ import requests
 from datetime import datetime
 
 # Backend URL from environment
-BACKEND_URL = "https://hardening-phase1.preview.emergentagent.com/api"
+BACKEND_URL = "https://trading-phase-verify.preview.emergentagent.com/api"
 
 # Test admin credentials
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")

@@ -7,8 +7,8 @@ Focused testing for Turkish user request:
 3) Frontend data display validation
 4) API ↔ UI integration validation
 
-Target: https://hardening-phase1.preview.emergentagent.com
-API Base: https://hardening-phase1.preview.emergentagent.com/api
+Target: https://trading-phase-verify.preview.emergentagent.com
+API Base: https://trading-phase-verify.preview.emergentagent.com/api
 """
 
 import requests
@@ -18,7 +18,7 @@ import sys
 from typing import Dict, Any, Tuple
 
 # Configuration
-BASE_URL = "https://hardening-phase1.preview.emergentagent.com"
+BASE_URL = "https://trading-phase-verify.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 ADMIN_CREDENTIALS = {
     "email": "admin@platform.local",

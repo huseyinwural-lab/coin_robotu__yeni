@@ -1,7 +1,7 @@
 {
   "ok": true,
   "mode": "quick",
-  "base_url": "https://hardening-phase1.preview.emergentagent.com",
+  "base_url": "https://trading-phase-verify.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",
