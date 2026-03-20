@@ -7917,3 +7917,14 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - health/ready 200
 - Bağımsız test raporu: `/app/test_reports/iteration_35.json` (audit criteria PASS)
 
+### Artefact-first kapanış (8/8 kriter) — 2026-03-20
+- Zorunlu 4 dosya fiziksel olarak doğrulandı:
+  - `/app/artifacts/faz4_verify_phase4_rollback.log`
+  - `/app/artifacts/faz4_rollback_summary.json`
+  - `/app/artifacts/release_state/deploy_history.jsonl`
+  - `/app/test_reports/iteration_34.json`
+- Zorunlu ZIP üretildi ve 4 dosyanın tamamı içinde doğrulandı:
+  - `/app/artifacts/faz4_closure_proof_bundle.zip`
+- Son bağımsız audit raporu:
+  - `/app/test_reports/iteration_36.json` (8/8 PASS, PRD-artifact hizası PASS)
+
