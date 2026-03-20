@@ -1,0 +1,13 @@
+T-4.1 image tag standard
+PASS: app:release-<sha>
+T-4.2 version parametreli deploy
+PASS: version A deploy
+T-4.4 bozuk version deploy + rollback
+PASS: version B fail simülasyonu
+PASS: rollback çalıştı
+PASS: rollback_time=0s
+PASS: sistem tekrar A versiyonunda (release-cb17392bffe4)
+T-4.5 health doğrulama
+PASS: health=200, ready=200
+PASS: iteration_34.json artifacts altına kopyalandı
+SUMMARY: PASS
