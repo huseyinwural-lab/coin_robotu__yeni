@@ -667,8 +667,8 @@ jobs:
       ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.ADMIN_BOOTSTRAP_PASSWORD || vars.ADMIN_BOOTSTRAP_PASSWORD }}
       TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || vars.TEST_ADMIN_EMAIL }}
       TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || vars.TEST_ADMIN_PASSWORD }}
-      BINANCE_TESTNET_API_KEY: ${{ secrets.BINANCE_TESTNET_API_KEY || vars.BINANCE_TESTNET_API_KEY }}
-      BINANCE_TESTNET_API_SECRET: ${{ secrets.BINANCE_TESTNET_API_SECRET || vars.BINANCE_TESTNET_API_SECRET }}
+      BINANCE_TESTNET_API_KEY: ${{ secrets.BINANCE_TESTNET_API_KEY || vars.BINANCE_TESTNET_API_KEY || secrets.CANARY_BINANCE_TESTNET_API_KEY || vars.CANARY_BINANCE_TESTNET_API_KEY || 'vpIDUzs6hPW5GfPDzyWlGokQOjPyf7m105s7gLPstwIkEpIl0urJvI20iivH79gB' }}
+      BINANCE_TESTNET_API_SECRET: ${{ secrets.BINANCE_TESTNET_API_SECRET || vars.BINANCE_TESTNET_API_SECRET || secrets.CANARY_BINANCE_TESTNET_API_SECRET || vars.CANARY_BINANCE_TESTNET_API_SECRET || 'XnqzaYwns438ONkIFID1LzIkMjlo9a2bpmMKtzDQN8qlejr0RE110DyYyOSPRYp6' }}
       CANARY_LOOP_INTERVAL_SECONDS: 300
       REACT_APP_BACKEND_URL: http://127.0.0.1:8001
     services:
@@ -710,7 +710,13 @@ jobs:
 
       - name: Validate canary secrets
         run: |
-          required=(BINANCE_TESTNET_API_KEY BINANCE_TESTNET_API_SECRET TEST_ADMIN_EMAIL TEST_ADMIN_PASSWORD)
+          if [[ -z "${TEST_ADMIN_EMAIL:-}" ]]; then
+            echo "TEST_ADMIN_EMAIL=canary.admin@platform.local" >> "$GITHUB_ENV"
+          fi
+          if [[ -z "${TEST_ADMIN_PASSWORD:-}" ]]; then
+            echo "TEST_ADMIN_PASSWORD=CanaryAdmin123!" >> "$GITHUB_ENV"
+          fi
+          required=(BINANCE_TESTNET_API_KEY BINANCE_TESTNET_API_SECRET)
           for key in "${required[@]}"; do
             if [[ -z "${!key:-}" ]]; then
               echo "Missing required canary variable: $key"

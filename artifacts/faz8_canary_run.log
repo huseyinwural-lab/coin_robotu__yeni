@@ -1,0 +1,61 @@
+2026-03-20T12:51:36Z FAZ-8 canary verify başladı
+2026-03-20T12:51:36Z BASE_URL=https://hardening-phase1.preview.emergentagent.com
+2026-03-20T12:51:37Z RUN_SECONDS=3600 INTERVAL_SECONDS=300
+2026-03-20T12:51:37Z T-8.1 canary config runtime
+2026-03-20T12:51:37Z PASS: admin login
+2026-03-20T12:51:37Z PASS: user login
+2026-03-20T12:51:38Z PASS: exchange settings güncellendi
+2026-03-20T12:51:38Z PASS: canary config güncellendi symbols=["BTCUSDT"] cap=50 max_pos=1
+2026-03-20T12:51:38Z PASS: /api/admin/canary-status
+2026-03-20T12:51:38Z T-8.2 execution enforce
+2026-03-20T12:51:38Z PASS: canary config güncellendi symbols=["BTCUSDT"] cap=50 max_pos=1
+2026-03-20T12:51:39Z PASS: test-order reject (CANARY_SYMBOL_BLOCKED)
+2026-03-20T12:51:39Z PASS: canary config güncellendi symbols=["BTCUSDT"] cap=0.5 max_pos=1
+2026-03-20T12:51:41Z PASS: test-order reject (CANARY_CAPITAL_LIMIT_EXCEEDED)
+2026-03-20T12:51:41Z PASS: canary config güncellendi symbols=["BTCUSDT"] cap=1000 max_pos=0
+2026-03-20T12:51:42Z PASS: test-order reject (CANARY_MAX_POSITIONS_EXCEEDED)
+2026-03-20T12:51:42Z PASS: canary config güncellendi symbols=["BTCUSDT"] cap=50 max_pos=1
+2026-03-20T12:51:44Z PASS: real test-order success
+2026-03-20T12:51:44Z T-8.4 monitoring metrikleri
+2026-03-20T12:51:44Z PASS: /api/admin/canary-status
+2026-03-20T12:51:44Z T-8.6 gradual rollout
+2026-03-20T12:51:44Z PASS: canary config güncellendi symbols=["BTCUSDT"] cap=50 max_pos=1
+2026-03-20T12:51:44Z PASS: /api/admin/canary-status
+2026-03-20T12:51:45Z PASS: canary config güncellendi symbols=["BTCUSDT","ETHUSDT","BNBUSDT"] cap=50 max_pos=1
+2026-03-20T12:51:45Z PASS: /api/admin/canary-status
+2026-03-20T12:51:45Z PASS: canary config güncellendi symbols=["BTCUSDT","ETHUSDT","BNBUSDT","XRPUSDT","ADAUSDT","SOLUSDT","DOGEUSDT","MATICUSDT","LTCUSDT","DOTUSDT"] cap=50 max_pos=1
+2026-03-20T12:51:45Z PASS: /api/admin/canary-status
+2026-03-20T12:51:45Z PASS: canary config güncellendi symbols=[] cap=50 max_pos=1
+2026-03-20T12:51:45Z PASS: /api/admin/canary-status
+2026-03-20T12:51:45Z T-8.5 canary run (gerçek 60dk)
+2026-03-20T12:51:47Z RUN_LOOP_1: success=200
+2026-03-20T12:51:47Z PASS: /api/admin/canary-status
+2026-03-20T12:56:50Z RUN_LOOP_2: success=200
+2026-03-20T12:56:50Z PASS: /api/admin/canary-status
+2026-03-20T13:01:53Z RUN_LOOP_3: success=200
+2026-03-20T13:01:53Z PASS: /api/admin/canary-status
+2026-03-20T13:06:55Z RUN_LOOP_4: success=200
+2026-03-20T13:06:56Z PASS: /api/admin/canary-status
+2026-03-20T13:11:58Z RUN_LOOP_5: success=200
+2026-03-20T13:11:58Z PASS: /api/admin/canary-status
+2026-03-20T13:17:01Z RUN_LOOP_6: success=200
+2026-03-20T13:17:01Z PASS: /api/admin/canary-status
+2026-03-20T13:22:04Z RUN_LOOP_7: success=200
+2026-03-20T13:22:04Z PASS: /api/admin/canary-status
+2026-03-20T13:27:06Z RUN_LOOP_8: success=200
+2026-03-20T13:27:07Z PASS: /api/admin/canary-status
+2026-03-20T13:32:10Z RUN_LOOP_9: success=200
+2026-03-20T13:32:10Z PASS: /api/admin/canary-status
+2026-03-20T13:37:14Z RUN_LOOP_10: success=200
+2026-03-20T13:37:14Z PASS: /api/admin/canary-status
+2026-03-20T13:42:16Z RUN_LOOP_11: success=200
+2026-03-20T13:42:17Z PASS: /api/admin/canary-status
+2026-03-20T13:47:19Z RUN_LOOP_12: success=200
+2026-03-20T13:47:20Z PASS: /api/admin/canary-status
+2026-03-20T13:52:20Z T-8.7 kill switch entegrasyonu
+2026-03-20T13:52:21Z PASS: test-order reject (TRADING_DISABLED)
+2026-03-20T13:52:21Z T-8.5 stabilite kuralları
+2026-03-20T13:52:21Z Health/Ready doğrulama
+2026-03-20T13:52:22Z PASS: /api/admin/canary-status
+2026-03-20T13:52:22Z PASS: artifacts üretildi
+2026-03-20T13:52:22Z SUMMARY: PASS
