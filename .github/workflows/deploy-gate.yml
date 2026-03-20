@@ -727,6 +727,10 @@ jobs:
       - name: Start backend API for canary verification
         run: |
           cd backend
+          export JWT_SECRET="${JWT_SECRET:-phase8-ci-jwt-secret-ultra-strong-2026-03-20-abcdef}"
+          export EXCHANGE_CREDENTIALS_ENCRYPTION_KEY="${EXCHANGE_CREDENTIALS_ENCRYPTION_KEY:-phase8-ci-exchange-key-32-bytes-minimum-20260320}"
+          export TEST_ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-canary.admin@platform.local}"
+          export TEST_ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-CanaryAdmin123!}"
           alembic upgrade head
           nohup uvicorn server:app --host 0.0.0.0 --port 8001 > /tmp/phase8_backend.log 2>&1 &
           for i in $(seq 1 60); do
