@@ -26,6 +26,7 @@ fi
 [[ -n "${BASE_URL}" ]] || fail "REACT_APP_BACKEND_URL çözümlenemedi"
 
 VERSION_A="$(git -C "${ROOT_DIR}" rev-parse --short=12 HEAD)"
+RESTORED_VERSION="release-${VERSION_A}"
 VERSION_B="$(python - <<PY
 import hashlib
 seed = "${VERSION_A}" + "-broken"
@@ -58,32 +59,53 @@ log "PASS: rollback_time=${ROLLBACK_TIME}s"
 [[ -f "${CURRENT_FILE}" ]] || fail "current release state yok"
 # shellcheck disable=SC1090
 source "${CURRENT_FILE}"
-[[ "${CURRENT_VERSION:-}" == "${VERSION_A}" ]] || fail "rollback sonrası aktif versiyon A değil"
+[[ "${CURRENT_VERSION:-}" == "${RESTORED_VERSION}" ]] || fail "rollback sonrası aktif versiyon A değil"
 log "PASS: sistem tekrar A versiyonunda"
 
 log "T-4.5 health doğrulama"
-HEALTH_CODE="$(curl -s -o /tmp/faz4_health.json -w '%{http_code}' "${BASE_URL}/health" || true)"
-if [[ "${HEALTH_CODE}" != "200" ]]; then
+HEALTH_CODE="$(curl -s -o /tmp/faz4_health.json -w '%{http_code}' "http://localhost:8000/health" || true)"
+READY_CODE="$(curl -s -o /tmp/faz4_ready.json -w '%{http_code}' "http://localhost:8000/ready" || true)"
+if [[ "${HEALTH_CODE}" != "200" || "${READY_CODE}" != "200" ]]; then
   HEALTH_CODE="$(curl -s -o /tmp/faz4_health.json -w '%{http_code}' "${BASE_URL}/api/health" || true)"
-fi
-
-READY_CODE="$(curl -s -o /tmp/faz4_ready.json -w '%{http_code}' "${BASE_URL}/ready" || true)"
-if [[ "${READY_CODE}" != "200" ]]; then
   READY_CODE="$(curl -s -o /tmp/faz4_ready.json -w '%{http_code}' "${BASE_URL}/api/ready" || true)"
 fi
 [[ "${HEALTH_CODE}" == "200" ]] || fail "/health 200 değil"
 [[ "${READY_CODE}" == "200" ]] || fail "/ready 200 değil"
 log "PASS: health=${HEALTH_CODE}, ready=${READY_CODE}"
 
+if [[ -f "${ROOT_DIR}/test_reports/iteration_34.json" ]]; then
+  cp "${ROOT_DIR}/test_reports/iteration_34.json" "${ARTIFACT_DIR}/iteration_34.json"
+  log "PASS: iteration_34.json artifacts altına kopyalandı"
+fi
+
 python - <<PY
 import json
+from pathlib import Path
+history = Path("${ROOT_DIR}/artifacts/release_state/deploy_history.jsonl")
+if not history.exists():
+    raise SystemExit("FAIL: deploy_history.jsonl bulunamadı")
+versions = []
+for raw in history.read_text(encoding="utf-8").splitlines():
+    raw = raw.strip()
+    if not raw:
+        continue
+    row = json.loads(raw)
+    if row.get("version"):
+        versions.append(row["version"])
+if len(set(versions)) < 2:
+    raise SystemExit("FAIL: deploy_history en az 2 versiyon içermiyor")
+print("PASS: deploy_history en az 2 versiyon içeriyor")
+PY
+
+python - <<PY
+import json, datetime
 summary = {
-  "version_a": "${VERSION_A}",
-  "version_b": "${VERSION_B}",
+  "phase": "FAZ-4",
+  "rollback_test": "PASS",
   "rollback_time_seconds": ${ROLLBACK_TIME},
-  "health_http": int("${HEALTH_CODE}"),
-  "ready_http": int("${READY_CODE}"),
-  "result": "PASS",
+  "health_check": "PASS",
+  "restored_version": "${RESTORED_VERSION}",
+  "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
 }
 with open("${SUMMARY_JSON}", "w", encoding="utf-8") as f:
     json.dump(summary, f, ensure_ascii=False, indent=2)

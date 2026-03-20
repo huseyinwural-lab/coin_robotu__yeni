@@ -49,6 +49,7 @@ entry = {
   "version": "${version}",
   "image_tag": "${image_tag}",
   "status": "${status}",
+  "timestamp": "${finished_at}",
   "source": "${source_name}",
   "started_at": "${started_at}",
   "finished_at": "${finished_at}",
@@ -87,17 +88,19 @@ if [[ ! "${VERSION}" =~ ^[0-9a-f]{7,40}$ ]]; then
   exit 1
 fi
 
+RELEASE_VERSION="release-${VERSION}"
 IMAGE_TAG="app:release-${VERSION}"
 DEPLOY_SOURCE="${DEPLOY_SOURCE:-deploy}"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 BACKEND_URL="$(resolve_backend_url)"
 
-echo "[INFO] version=${VERSION}"
+echo "[INFO] version=${RELEASE_VERSION}"
 echo "[INFO] image_tag=${IMAGE_TAG}"
 echo "[INFO] backend_url=${BACKEND_URL}"
 
 cat > "${CURRENT_FILE}" <<EOF
-CURRENT_VERSION=${VERSION}
+CURRENT_VERSION=${RELEASE_VERSION}
+CURRENT_VERSION_SHA=${VERSION}
 CURRENT_IMAGE_TAG=${IMAGE_TAG}
 CURRENT_STATUS=deploying
 UPDATED_AT=${STARTED_AT}
@@ -105,27 +108,28 @@ EOF
 
 if [[ "${DEPLOY_FORCE_FAIL:-0}" == "1" ]]; then
   FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  record_history "${VERSION}" "${IMAGE_TAG}" "failed" "${DEPLOY_SOURCE}" "${STARTED_AT}" "${FINISHED_AT}"
+  record_history "${RELEASE_VERSION}" "${IMAGE_TAG}" "failed" "${DEPLOY_SOURCE}" "${STARTED_AT}" "${FINISHED_AT}"
   echo "[ERROR] DEPLOY_FORCE_FAIL=1 nedeniyle deploy başarısız simüle edildi"
   exit 1
 fi
 
 if ! check_health "${BACKEND_URL}"; then
   FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  record_history "${VERSION}" "${IMAGE_TAG}" "failed" "${DEPLOY_SOURCE}" "${STARTED_AT}" "${FINISHED_AT}"
+  record_history "${RELEASE_VERSION}" "${IMAGE_TAG}" "failed" "${DEPLOY_SOURCE}" "${STARTED_AT}" "${FINISHED_AT}"
   echo "[ERROR] health/ready başarısız, deploy iptal"
   exit 1
 fi
 
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-record_history "${VERSION}" "${IMAGE_TAG}" "deployed" "${DEPLOY_SOURCE}" "${STARTED_AT}" "${FINISHED_AT}"
+record_history "${RELEASE_VERSION}" "${IMAGE_TAG}" "success" "${DEPLOY_SOURCE}" "${STARTED_AT}" "${FINISHED_AT}"
 
 cat > "${CURRENT_FILE}" <<EOF
-CURRENT_VERSION=${VERSION}
+CURRENT_VERSION=${RELEASE_VERSION}
+CURRENT_VERSION_SHA=${VERSION}
 CURRENT_IMAGE_TAG=${IMAGE_TAG}
 CURRENT_STATUS=deployed
 UPDATED_AT=${FINISHED_AT}
 EOF
 
-echo "[OK] requested_version_deployed=${VERSION}"
+echo "[OK] requested_version_deployed=${RELEASE_VERSION}"
 echo "[OK] deployed_image_tag=${IMAGE_TAG}"

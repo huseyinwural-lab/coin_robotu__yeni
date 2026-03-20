@@ -34,7 +34,7 @@ for raw in history_path.read_text(encoding="utf-8").splitlines():
     except Exception:
         continue
 
-success_status = {"deployed", "rolled_back"}
+success_status = {"success", "rolled_back"}
 candidates = [r for r in rows if str(r.get("status")) in success_status]
 
 target = ""
@@ -56,8 +56,14 @@ if [[ -z "${PREVIOUS_VERSION}" ]]; then
   exit 1
 fi
 
+PREVIOUS_SHA="${PREVIOUS_VERSION#release-}"
+if [[ ! "${PREVIOUS_SHA}" =~ ^[0-9a-f]{7,40}$ ]]; then
+  echo "[ERROR] previous version SHA çözümlenemedi: ${PREVIOUS_VERSION}"
+  exit 1
+fi
+
 START_TS="$(date +%s)"
-DEPLOY_SOURCE="rollback" "${ROOT_DIR}/scripts/deploy.sh" "${PREVIOUS_VERSION}"
+DEPLOY_SOURCE="rollback" "${ROOT_DIR}/scripts/deploy.sh" "${PREVIOUS_SHA}"
 END_TS="$(date +%s)"
 ROLLBACK_TIME="$((END_TS - START_TS))"
 
@@ -70,8 +76,9 @@ python - <<PY
 import json, datetime
 entry = {
   "version": "${PREVIOUS_VERSION}",
-  "image_tag": "app:release-${PREVIOUS_VERSION}",
+  "image_tag": "app:${PREVIOUS_VERSION}",
   "status": "rolled_back",
+  "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
   "source": "rollback",
   "rollback_time_seconds": ${ROLLBACK_TIME},
   "recorded_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
