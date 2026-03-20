@@ -197,10 +197,10 @@ log "T-8.2 execution enforce"
 update_live_config_canary '["BTCUSDT"]' '50' '1' '["ETHUSDT"]'
 test_order_expect reject "CANARY_SYMBOL_BLOCKED"
 
-update_live_config_canary '["BTCUSDT"]' '1' '1' '["BTCUSDT"]'
+update_live_config_canary '["BTCUSDT"]' '0.5' '1' '["BTCUSDT"]'
 test_order_expect reject "CANARY_CAPITAL_LIMIT_EXCEEDED"
 
-update_live_config_canary '["BTCUSDT"]' '50' '0' '["BTCUSDT"]'
+update_live_config_canary '["BTCUSDT"]' '1000' '0' '["BTCUSDT"]'
 test_order_expect reject "CANARY_MAX_POSITIONS_EXCEEDED"
 
 update_live_config_canary '["BTCUSDT"]' '50' '1' '["BTCUSDT"]'

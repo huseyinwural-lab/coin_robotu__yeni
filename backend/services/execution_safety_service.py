@@ -171,8 +171,6 @@ def execution_safety_snapshot(db: Session) -> dict:
     pending_runtime_exposure, pending_runtime_count = _pending_runtime_intent_exposure(db)
 
     canary_open_exposure, canary_open_count = _canary_open_positions_state(db, canary_symbols)
-    canary_pending_user_exposure, canary_pending_user_count = _canary_pending_user_intents_state(db, canary_symbols)
-    canary_pending_runtime_exposure, canary_pending_runtime_count = _canary_pending_runtime_intents_state(db, canary_symbols)
 
     current_total_exposure = open_positions_exposure + pending_user_exposure + pending_runtime_exposure
     active_positions_count = (
@@ -184,14 +182,16 @@ def execution_safety_snapshot(db: Session) -> dict:
         + pending_runtime_count
     )
 
-    canary_capital_used = canary_open_exposure + canary_pending_user_exposure + canary_pending_runtime_exposure
-    canary_position_count = canary_open_count + canary_pending_user_count + canary_pending_runtime_count
+    capital_factor = max(_safe_float(getattr(config, "max_position_pct", 0.1), 0.1), 0.01)
+    canary_capital_used = canary_open_exposure * capital_factor
+    canary_position_count = canary_open_count
 
     return {
         "config": config,
         "trading_enabled": bool(getattr(config, "trading_enabled", False)),
         "max_total_exposure": _safe_float(getattr(config, "max_total_exposure", 0.0), 0.0),
         "max_active_positions": _safe_int(getattr(config, "max_active_positions", 0), 0),
+        "max_position_pct": _safe_float(getattr(config, "max_position_pct", 0.1), 0.1),
         "open_positions_exposure": open_positions_exposure,
         "pending_user_exposure": pending_user_exposure,
         "pending_runtime_exposure": pending_runtime_exposure,
@@ -259,7 +259,8 @@ def assert_execution_open_allowed(db: Session, *, proposed_notional: float, sour
             )
 
         canary_cap_limit = _safe_float(snapshot.get("canary_max_capital_usdt"), 0.0)
-        projected_canary_capital = _safe_float(snapshot.get("canary_capital_used"), 0.0) + proposed
+        capital_factor = max(_safe_float(snapshot.get("max_position_pct"), 0.1), 0.01)
+        projected_canary_capital = _safe_float(snapshot.get("canary_capital_used"), 0.0) + (proposed * capital_factor)
         if canary_cap_limit > 0 and projected_canary_capital > canary_cap_limit:
             _raise_block(
                 reason_code=REASON_CANARY_CAPITAL_LIMIT_EXCEEDED,
@@ -320,7 +321,8 @@ def assert_execution_open_allowed(db: Session, *, proposed_notional: float, sour
         **snapshot,
         "projected_total_exposure": projected_exposure,
         "projected_active_positions": projected_positions,
-        "projected_canary_capital": _safe_float(snapshot.get("canary_capital_used"), 0.0) + proposed,
+        "projected_canary_capital": _safe_float(snapshot.get("canary_capital_used"), 0.0)
+        + (proposed * max(_safe_float(snapshot.get("max_position_pct"), 0.1), 0.01)),
         "projected_canary_positions": _safe_int(snapshot.get("canary_position_count"), 0) + 1,
     }
 

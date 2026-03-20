@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import statistics
 import time
@@ -457,8 +458,10 @@ def _enforce_controlled_limits(config: LiveActivationConfig):
         config.max_notional_exposure = min(config.max_notional_exposure, MAX_SAFE_NOTIONAL_EXPOSURE)
 
     config.canary_enabled = bool(getattr(config, "canary_enabled", False))
-    config.canary_max_capital_usdt = max(float(getattr(config, "canary_max_capital_usdt", 50) or 50), 0.0)
-    config.canary_max_positions = max(int(getattr(config, "canary_max_positions", 1) or 1), 0)
+    raw_canary_capital = getattr(config, "canary_max_capital_usdt", 50)
+    raw_canary_positions = getattr(config, "canary_max_positions", 1)
+    config.canary_max_capital_usdt = max(float(50 if raw_canary_capital is None else raw_canary_capital), 0.0)
+    config.canary_max_positions = max(int(1 if raw_canary_positions is None else raw_canary_positions), 0)
     normalized_symbols: list[str] = []
     for item in list(getattr(config, "canary_symbols", []) or []):
         symbol = str(item or "").strip().upper()
@@ -1492,10 +1495,11 @@ def _build_execution_quality_score(
     return round(max(0, score), 2)
 
 
-def _safe_quantity(expected_price: float) -> float:
-    capped_notional = min(MAX_SAFE_NOTIONAL_EXPOSURE, 100)
+def _safe_quantity(expected_price: float, *, notional_cap: float = 100) -> float:
+    capped_notional = min(MAX_SAFE_NOTIONAL_EXPOSURE, max(float(notional_cap or 100), 1.0))
     raw_qty = capped_notional / max(expected_price, 1)
-    return round(max(raw_qty, 0.001), 3)
+    floored_qty = math.floor(max(raw_qty, 0.001) * 1000) / 1000
+    return round(max(floored_qty, 0.001), 3)
 
 
 def _map_order_status(status: str) -> str:
@@ -1526,7 +1530,11 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     volatility_pct = _market_volatility_pct()
     volatility_regime = "high" if volatility_pct >= 0.03 else ("medium" if volatility_pct >= 0.018 else "low")
     expected_price = adapter.mark_price(symbol)
-    quantity = _safe_quantity(expected_price)
+    notional_cap = 100.0
+    if bool(getattr(config, "canary_enabled", False)):
+        canary_cap = float(getattr(config, "canary_max_capital_usdt", 100) or 100)
+        notional_cap = min(notional_cap, max(canary_cap * 0.2, 1.0))
+    quantity = _safe_quantity(expected_price, notional_cap=notional_cap)
     proposed_notional = max(expected_price * quantity, 0.0)
 
     try:
