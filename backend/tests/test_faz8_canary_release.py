@@ -417,7 +417,7 @@ class TestSummaryJSONCriteria:
         assert summary.get("phase") == "FAZ-8", "Phase mismatch"
         assert summary.get("canary_test") == "PASS", "canary_test not PASS"
         assert summary.get("duration_minutes") >= 60, "Duration less than 60 minutes"
-        assert summary.get("reject_anomaly") == False, "reject_anomaly should be False"
+        assert not summary.get("reject_anomaly"), "reject_anomaly should be False"
         assert summary.get("kill_switch_test") == "PASS", "kill_switch_test not PASS"
         
         # Error rate should be acceptable (< 5%)
