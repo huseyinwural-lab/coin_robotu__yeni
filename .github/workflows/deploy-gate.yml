@@ -66,15 +66,15 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg2://trader:trader@localhost:5432/trading_platform
       REDIS_URL: redis://localhost:6379/0
-      JWT_SECRET: ${{ secrets.JWT_SECRET || vars.JWT_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET || vars.JWT_SECRET || 'phase8-ci-jwt-secret-ultra-strong-2026-03-20-abcdef' }}
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 720
-      EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: ${{ secrets.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY || vars.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY }}
+      EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: ${{ secrets.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY || vars.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY || 'phase8-ci-exchange-key-32-bytes-minimum-20260320' }}
       CORS_ORIGINS: http://localhost:3000
-      ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.ADMIN_BOOTSTRAP_EMAIL || vars.ADMIN_BOOTSTRAP_EMAIL }}
-      ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.ADMIN_BOOTSTRAP_PASSWORD || vars.ADMIN_BOOTSTRAP_PASSWORD }}
-      TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || vars.TEST_ADMIN_EMAIL }}
-      TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || vars.TEST_ADMIN_PASSWORD }}
+      ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.ADMIN_BOOTSTRAP_EMAIL || vars.ADMIN_BOOTSTRAP_EMAIL || 'canary.admin@platform.local' }}
+      ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.ADMIN_BOOTSTRAP_PASSWORD || vars.ADMIN_BOOTSTRAP_PASSWORD || 'CanaryAdmin123!' }}
+      TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || vars.TEST_ADMIN_EMAIL || 'canary.admin@platform.local' }}
+      TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || vars.TEST_ADMIN_PASSWORD || 'CanaryAdmin123!' }}
     services:
       postgres:
         image: postgres:15
