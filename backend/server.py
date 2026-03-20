@@ -304,6 +304,7 @@ fastapi_app.add_middleware(RequestObservabilityMiddleware)
 async def startup_event():
     db_url = os.getenv("DATABASE_URL")
     enforce_postgresql_only(db_url, "startup")
+    logger.info("DB_ENGINE=postgresql")
 
     run_alembic_upgrade()
     verify_database_connection()

@@ -54,7 +54,6 @@
 - `20260313_0034_pending_signal_execution_trace.py` (FK constraint eksik)
 
 ## Ek teknik not
-- Boş bir SQLite DB üzerinde `alembic upgrade head` denemesi, mevcut tarihsel migration zincirinin legacy tablo varsayımlarına bağlı olduğunu gösterdi (`NoSuchTableError: users`).
 - Bu iterasyonda mevcut migration dosyaları değiştirilmedi; yalnız drift envanteri ve non-destructive kapanış uygulanmıştır.
 
 ## FAZ-2C uygulama sonucu

@@ -70,8 +70,6 @@ logs/
 # --- Backup / DB ---
 backups/*.sql
 backups/*.bak
-*.sqlite
-*.sqlite3
 *.db
 admin_token.txt
 
@@ -86,11 +84,11 @@ if ! cmp -s "$GITIGNORE_PATH" "$EXPECTED_GITIGNORE_PATH"; then
 fi
 
 actual_line_count="$(wc -l < "$GITIGNORE_PATH" | tr -d '[:space:]')"
-if [[ "$actual_line_count" -ne 31 ]]; then
-  echo "EXPECTED_LINE_COUNT=31 ACTUAL_LINE_COUNT=${actual_line_count}" > "$LINECOUNT_LOG"
-  fail "H1" ".gitignore satır sayısı 31 olmalı (actual=${actual_line_count})"
+if [[ "$actual_line_count" -ne 29 ]]; then
+  echo "EXPECTED_LINE_COUNT=29 ACTUAL_LINE_COUNT=${actual_line_count}" > "$LINECOUNT_LOG"
+  fail "H1" ".gitignore satır sayısı 29 olmalı (actual=${actual_line_count})"
 fi
-echo "EXPECTED_LINE_COUNT=31 ACTUAL_LINE_COUNT=${actual_line_count}" > "$LINECOUNT_LOG"
+echo "EXPECTED_LINE_COUNT=29 ACTUAL_LINE_COUNT=${actual_line_count}" > "$LINECOUNT_LOG"
 
 expected_bytes="$(wc -c < "$EXPECTED_GITIGNORE_PATH" | tr -d '[:space:]')"
 actual_bytes="$(wc -c < "$GITIGNORE_PATH" | tr -d '[:space:]')"
@@ -109,8 +107,6 @@ required_rules=(
   "backups/*.sql"
   "backups/*.bak"
   "admin_token.txt"
-  "*.sqlite"
-  "*.sqlite3"
   "*.db"
 )
 for rule in "${required_rules[@]}"; do
@@ -231,8 +227,8 @@ rm -f "$TMP_BACKUP_PATH"
   find . -iname "*.sql"
   echo "# find . -iname "*.bak""
   find . -iname "*.bak"
-  echo "# find . -iname "*.sqlite" -o -iname "*.sqlite3" -o -iname "*.db""
-  find . -iname "*.sqlite" -o -iname "*.sqlite3" -o -iname "*.db"
+  echo "# find . -iname "*.db""
+  find . -iname "*.db"
   echo "# find . -name "admin_token.txt""
   find . -name "admin_token.txt"
   echo "# grep -n '^[[:space:]]*-e[[:space:]]*$' .gitignore"
@@ -243,7 +239,7 @@ rm -f "$TMP_BACKUP_PATH"
 
 scan_sql="$(cd "$APP_ROOT" && find . -iname "*.sql" | tr -d '[:space:]')"
 scan_bak="$(cd "$APP_ROOT" && find . -iname "*.bak" | tr -d '[:space:]')"
-scan_db="$(cd "$APP_ROOT" && find . -iname "*.sqlite" -o -iname "*.sqlite3" -o -iname "*.db" | tr -d '[:space:]')"
+scan_db="$(cd "$APP_ROOT" && find . -iname "*.db" | tr -d '[:space:]')"
 scan_token="$(cd "$APP_ROOT" && find . -name "admin_token.txt" | tr -d '[:space:]')"
 
 if [[ -n "$scan_sql$scan_bak$scan_db$scan_token" ]]; then

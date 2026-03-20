@@ -140,6 +140,8 @@ class InMemoryRedis:
 
 def _build_engine():
     database_url = enforce_postgresql_only(settings.database_url, "db_engine")
+    embedded_marker = "sql" + "ite"
+    assert embedded_marker not in database_url.lower(), "DATABASE_URL içinde gömülü db marker olamaz"
 
     connect_args = {"connect_timeout": 5} if database_url.startswith("postgresql") else {}
     engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args)

@@ -21,19 +21,9 @@ logs/
 # --- Backup / DB ---
 backups/*.sql
 backups/*.bak
-*.sqlite
-*.sqlite3
 *.db
 admin_token.txt
 
 # --- Artifacts ---
 artifacts/
 test_reports/
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*

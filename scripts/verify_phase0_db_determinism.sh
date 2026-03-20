@@ -174,7 +174,7 @@ guard_check_log = Path(os.environ['GUARD_CHECK_LOG'])
 
 required = {
     str(app_root / 'backend/core/db_determinism.py'): ['enforce_postgresql_only', 'assert', 'post" + "gresql', 'sql" + "ite'],
-    str(app_root / 'backend/server.py'): ['startup_event', 'enforce_postgresql_only(db_url, "startup")'],
+    str(app_root / 'backend/server.py'): ['startup_event', 'enforce_postgresql_only(db_url, "startup")', 'DB_ENGINE=postgresql'],
     str(app_root / 'backend/services/migration_service.py'): ['enforce_postgresql_only', 'alembic_database_url'],
     str(app_root / 'backend/migrations/env.py'): ['enforce_postgresql_only', 'get_url'],
 }

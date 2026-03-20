@@ -111,7 +111,6 @@ yarn test
 
 Development:
 
-- `SQLite` fallback artık **deprecated** ve kullanılmıyor.
 - Redis erişilemezse in-memory fallback devreye alınabilir.
 
 Production hedefi:
