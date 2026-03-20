@@ -7925,6 +7925,9 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `/app/test_reports/iteration_34.json`
 - Zorunlu ZIP üretildi ve 4 dosyanın tamamı içinde doğrulandı:
   - `/app/artifacts/faz4_closure_proof_bundle.zip`
+- Path-korumalı kanıt ZIP (doğrudan talebe göre):
+  - `/app/artifacts/faz4_closure_proof_bundle_with_paths.zip`
+  - İçerik: `artifacts/faz4_verify_phase4_rollback.log`, `artifacts/faz4_rollback_summary.json`, `artifacts/release_state/deploy_history.jsonl`, `test_reports/iteration_34.json`, `artifacts/iteration_34.json`
 - Son bağımsız audit raporu:
   - `/app/test_reports/iteration_36.json` (8/8 PASS, PRD-artifact hizası PASS)
 
