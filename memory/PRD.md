@@ -7905,3 +7905,15 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - `/app/artifacts/release_state/deploy_history.jsonl`
 - `/app/test_reports/iteration_34.json` (13/13 PASS)
 
+### Audit-proof kapanış (script-driven) — 2026-03-20
+- Emre uygun kanıt üretimi tamamlandı:
+  - `mkdir -p artifacts/release_state`
+  - `bash scripts/verify_phase4_rollback.sh`
+  - `cp /app/test_reports/iteration_34.json /app/artifacts/iteration_34.json`
+- Zorunlu çıktılar doğrulandı:
+  - `deploy_history.jsonl` dolu ve en az 2 versiyon içeriyor
+  - rollback gerçekten çalıştı, sistem A versiyonuna döndü
+  - `rollback_time_seconds < 60` (ölçülen: `0s`)
+  - health/ready 200
+- Bağımsız test raporu: `/app/test_reports/iteration_35.json` (audit criteria PASS)
+
