@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
@@ -179,6 +180,12 @@ export const PipelineOperationsPage = () => {
   const [bulkSelection, setBulkSelection] = useState([]);
   const [bulkSymbolsInput, setBulkSymbolsInput] = useState("BTCUSDT,ETHUSDT");
   const [symbolListModal, setSymbolListModal] = useState({ open: false, listType: "whitelist", symbolsText: "" });
+  const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
+  const [auditDrawerTab, setAuditDrawerTab] = useState("action_audit");
+  const [auditDrawerItems, setAuditDrawerItems] = useState([]);
+  const [auditLogDrawerItems, setAuditLogDrawerItems] = useState([]);
+  const [selectedAuditDetail, setSelectedAuditDetail] = useState(null);
+  const [auditFilters, setAuditFilters] = useState({ user_id: "", action_type: "", since_hours: "24", trace_id: "" });
   const [riskLimitForm, setRiskLimitForm] = useState({ max_total_exposure_pct: "50", max_symbol_exposure_pct: "25", max_cluster_exposure_pct: "35" });
   const [riskOverrideForm, setRiskOverrideForm] = useState({ override_type: "force_allow", scope: "global", ttl_minutes: "30" });
   const [slowActionForm, setSlowActionForm] = useState({ strategy_id: "spot_pullback_v1", throttle_profile: "soft", symbol: "BTCUSDT" });
@@ -372,6 +379,72 @@ export const PipelineOperationsPage = () => {
       .map((item) => item.trim().toUpperCase())
       .filter(Boolean);
     return Array.from(new Set(raw));
+  };
+
+  const loadAuditDrawerData = async (tab = auditDrawerTab) => {
+    try {
+      const sinceHours = Number(auditFilters.since_hours || 24);
+      const params = {
+        since_hours: sinceHours,
+        user_id: auditFilters.user_id || undefined,
+        action_type: auditFilters.action_type || undefined,
+      };
+      const [{ data: actionAuditRes }, { data: auditLogsRes }] = await Promise.all([
+        apiClient.get("/runtime/action-audit", { params }),
+        apiClient.get("/audit-logs/timeline", {
+          params: {
+            limit: 120,
+            actor_user_id: auditFilters.user_id || undefined,
+            action: auditFilters.action_type || undefined,
+            request_id: auditFilters.trace_id || undefined,
+            q: auditFilters.trace_id || undefined,
+            date_from: new Date(Date.now() - sinceHours * 3600 * 1000).toISOString(),
+          },
+        }),
+      ]);
+
+      const traceFilter = String(auditFilters.trace_id || "").trim().toLowerCase();
+      const filteredActionAudit = (actionAuditRes.items || []).filter((item) => {
+        if (!traceFilter) return true;
+        const details = item.details || {};
+        const traceId = String(details.trace_id || details.request_id || "").toLowerCase();
+        return traceId.includes(traceFilter);
+      });
+
+      const filteredAuditLogs = (auditLogsRes.items || []).filter((item) => {
+        if (!traceFilter) return true;
+        const details = item.details || {};
+        const traceId = String(details.trace_id || item.request_id || "").toLowerCase();
+        return traceId.includes(traceFilter);
+      });
+
+      setAuditDrawerItems(filteredActionAudit);
+      setAuditLogDrawerItems(filteredAuditLogs);
+      if (tab === "action_audit") {
+        setSelectedAuditDetail(filteredActionAudit[0] || null);
+      } else {
+        setSelectedAuditDetail(filteredAuditLogs[0] || null);
+      }
+    } catch (error) {
+      const { traceId, message } = extractErrorMeta(error);
+      toast.error(`Audit drawer yüklenemedi | trace_id: ${traceId} | ${message}`);
+    }
+  };
+
+  const openAuditDrawer = async (tab) => {
+    setAuditDrawerTab(tab);
+    setAuditDrawerOpen(true);
+    await loadAuditDrawerData(tab);
+  };
+
+  const openAuditDetail = async (id) => {
+    try {
+      const { data } = await apiClient.get(`/runtime/action-audit/${id}`);
+      setSelectedAuditDetail(data || null);
+    } catch (error) {
+      const { traceId, message } = extractErrorMeta(error);
+      toast.error(`Audit detay alınamadı | trace_id: ${traceId} | ${message}`);
+    }
   };
 
   const submitDialogAction = async () => {
@@ -1133,8 +1206,8 @@ export const PipelineOperationsPage = () => {
           reasonNode={<p className="text-xs text-slate-400" data-testid="pipeline-operations-traceability-reason">Tüm kritik aksiyonlar trace_id ile Action→Result bağlamında takip edilir.</p>}
           actionNode={
             <div className="space-y-2" data-testid="pipeline-operations-traceability-actions">
-              <Button variant="outline" onClick={() => navigate("/admin/action-audit")} data-testid="pipeline-operations-traceability-open-action-audit-button">Action Audit Sayfası</Button>
-              <Button variant="outline" onClick={() => navigate("/admin/audit-logs") } data-testid="pipeline-operations-traceability-open-audit-logs-button">Audit Logs</Button>
+              <Button variant="outline" onClick={() => openAuditDrawer("action_audit")} data-testid="pipeline-operations-traceability-open-action-audit-button">Action Audit Aç</Button>
+              <Button variant="outline" onClick={() => openAuditDrawer("audit_logs")} data-testid="pipeline-operations-traceability-open-audit-logs-button">Audit Logs Aç</Button>
               <div className="max-h-28 space-y-1 overflow-auto" data-testid="pipeline-operations-traceability-audit-list">
                 {auditSlice.map((item, idx) => (
                   <p key={item.id} className="text-[11px] text-slate-300" data-testid={`pipeline-operations-traceability-audit-item-${idx}`}>
@@ -1147,6 +1220,86 @@ export const PipelineOperationsPage = () => {
           resultNode={<ResultBadge result={panelResult.traceability} testId="pipeline-operations-traceability-result" />}
         />
       </section>
+
+      <Sheet open={auditDrawerOpen} onOpenChange={setAuditDrawerOpen}>
+        <SheetContent side="right" className="w-full max-w-4xl overflow-y-auto border-l border-emerald-700 bg-slate-950" data-testid="pipeline-operations-action-audit-drawer">
+          <SheetHeader>
+            <SheetTitle data-testid="pipeline-operations-action-audit-drawer-title">Action Audit & Logs</SheetTitle>
+            <SheetDescription data-testid="pipeline-operations-action-audit-drawer-description">Unified panel içinde traceability inceleme alanı</SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-4 space-y-3" data-testid="pipeline-operations-action-audit-drawer-filters">
+            <div className="grid gap-2 md:grid-cols-4" data-testid="pipeline-operations-action-audit-filter-grid">
+              <Input value={auditFilters.user_id} onChange={(e) => setAuditFilters((prev) => ({ ...prev, user_id: e.target.value }))} placeholder="user_id" data-testid="pipeline-operations-action-audit-filter-user-id-input" />
+              <Input value={auditFilters.action_type} onChange={(e) => setAuditFilters((prev) => ({ ...prev, action_type: e.target.value }))} placeholder="action_type" data-testid="pipeline-operations-action-audit-filter-action-type-input" />
+              <Input value={auditFilters.since_hours} onChange={(e) => setAuditFilters((prev) => ({ ...prev, since_hours: e.target.value }))} placeholder="last N hours" data-testid="pipeline-operations-action-audit-filter-since-hours-input" />
+              <Input value={auditFilters.trace_id} onChange={(e) => setAuditFilters((prev) => ({ ...prev, trace_id: e.target.value }))} placeholder="trace_id" data-testid="pipeline-operations-action-audit-filter-trace-id-input" />
+            </div>
+            <Button variant="outline" onClick={() => loadAuditDrawerData()} data-testid="pipeline-operations-action-audit-filter-apply-button">Filtre Uygula</Button>
+          </div>
+
+          <div className="mt-4 flex gap-2" data-testid="pipeline-operations-action-audit-drawer-tabs">
+            <Button variant={auditDrawerTab === "action_audit" ? "default" : "outline"} onClick={() => { setAuditDrawerTab("action_audit"); setSelectedAuditDetail(auditDrawerItems[0] || null); }} data-testid="pipeline-operations-action-audit-tab-button">Action Audit</Button>
+            <Button variant={auditDrawerTab === "audit_logs" ? "default" : "outline"} onClick={() => { setAuditDrawerTab("audit_logs"); setSelectedAuditDetail(auditLogDrawerItems[0] || null); }} data-testid="pipeline-operations-audit-logs-tab-button">Audit Logs</Button>
+            <Button variant={auditDrawerTab === "hardening" ? "default" : "outline"} onClick={() => { setAuditDrawerTab("hardening"); setSelectedAuditDetail(null); }} data-testid="pipeline-operations-hardening-analytics-tab-button">Hardening Analytics</Button>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2" data-testid="pipeline-operations-action-audit-drawer-content-grid">
+            <div className="max-h-[52vh] space-y-2 overflow-auto" data-testid="pipeline-operations-action-audit-drawer-list">
+              {auditDrawerTab === "action_audit" && auditDrawerItems.map((item, idx) => {
+                const details = item.details || {};
+                const traceId = details.trace_id || details.request_id || "-";
+                const status = details.status || item.severity || "-";
+                const message = details.message || details.reason || "-";
+                const snapshot = JSON.stringify(details.state_snapshot || details.snapshot || {}).slice(0, 120);
+                return (
+                  <button key={item.id} type="button" className="w-full rounded border border-slate-700 p-2 text-left text-xs" onClick={() => openAuditDetail(item.id)} data-testid={`pipeline-operations-action-audit-drawer-item-${idx}`}>
+                    <p data-testid={`pipeline-operations-action-audit-item-action-${idx}`}>{item.action}</p>
+                    <p data-testid={`pipeline-operations-action-audit-item-meta-${idx}`}>{item.actor_user_id} · {item.created_at}</p>
+                    <p data-testid={`pipeline-operations-action-audit-item-trace-${idx}`}>trace_id={traceId}</p>
+                    <p data-testid={`pipeline-operations-action-audit-item-status-${idx}`}>status={status}</p>
+                    <p data-testid={`pipeline-operations-action-audit-item-message-${idx}`}>message={message}</p>
+                    <p data-testid={`pipeline-operations-action-audit-item-snapshot-${idx}`}>snapshot={snapshot || "-"}</p>
+                  </button>
+                );
+              })}
+
+              {auditDrawerTab === "audit_logs" && auditLogDrawerItems.map((item, idx) => {
+                const details = item.details || {};
+                const traceId = details.trace_id || item.request_id || "-";
+                const status = details.status || item.severity || "-";
+                const message = details.message || details.reason || "-";
+                const snapshot = JSON.stringify(details.state_snapshot || details.snapshot || {}).slice(0, 120);
+                return (
+                  <button key={item.id} type="button" className="w-full rounded border border-slate-700 p-2 text-left text-xs" onClick={() => setSelectedAuditDetail(item)} data-testid={`pipeline-operations-audit-logs-drawer-item-${idx}`}>
+                    <p data-testid={`pipeline-operations-audit-logs-item-action-${idx}`}>{item.action}</p>
+                    <p data-testid={`pipeline-operations-audit-logs-item-meta-${idx}`}>{item.actor_user_id} · {item.created_at}</p>
+                    <p data-testid={`pipeline-operations-audit-logs-item-trace-${idx}`}>trace_id={traceId}</p>
+                    <p data-testid={`pipeline-operations-audit-logs-item-status-${idx}`}>status={status}</p>
+                    <p data-testid={`pipeline-operations-audit-logs-item-message-${idx}`}>message={message}</p>
+                    <p data-testid={`pipeline-operations-audit-logs-item-snapshot-${idx}`}>snapshot={snapshot || "-"}</p>
+                  </button>
+                );
+              })}
+
+              {auditDrawerTab === "hardening" && actionAudit.slice(0, 25).filter((item) => {
+                const action = String(item.action || "").toUpperCase();
+                return action.includes("OVERRIDE") || action.includes("HEARTBEAT") || action.includes("GATE") || action.includes("WS_");
+              }).map((item, idx) => (
+                <article key={item.id} className="rounded border border-amber-600 p-2 text-xs" data-testid={`pipeline-operations-hardening-analytics-item-${idx}`}>
+                  <p data-testid={`pipeline-operations-hardening-analytics-action-${idx}`}>{item.action}</p>
+                  <p data-testid={`pipeline-operations-hardening-analytics-meta-${idx}`}>{item.created_at} · {item.actor_role}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="max-h-[52vh] overflow-auto rounded border border-slate-700 p-3 text-xs" data-testid="pipeline-operations-action-audit-drawer-detail">
+              <p className="font-semibold" data-testid="pipeline-operations-action-audit-detail-title">Action / Result Detail</p>
+              <pre className="mt-2 whitespace-pre-wrap" data-testid="pipeline-operations-action-audit-detail-json">{JSON.stringify(selectedAuditDetail || {}, null, 2)}</pre>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={symbolListModal.open} onOpenChange={(open) => setSymbolListModal((prev) => ({ ...prev, open }))}>
         <DialogContent className="max-w-xl border border-emerald-700 bg-slate-950" data-testid="pipeline-operations-symbol-list-modal">

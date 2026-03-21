@@ -93,7 +93,6 @@ const adminOnlyItems = [
       { to: "/admin/commercial-ops", label: "Commercial Ops", icon: BarChartBig, testId: "nav-admin-commercial-ops-link", superAdminOnly: true },
       { to: "/admin/user-approvals", label: "User Approvals", icon: UserCog, testId: "nav-admin-user-approvals-link" },
       { to: "/admin/pipeline-operations", label: "Pipeline Operations", icon: Activity, testId: "nav-admin-pipeline-operations-link" },
-      { to: "/admin/action-audit", label: "Action Audit", icon: FileText, testId: "nav-admin-action-audit-link" },
       { to: "/admin/exchanges", label: "Exchange Settings", icon: Globe, testId: "nav-admin-exchange-settings-link" },
       { to: "/admin/mfa-settings", label: "MFA Settings", icon: ShieldAlert, testId: "nav-admin-mfa-settings-link" },
       { to: "/admin/brand-settings", label: "Brand Settings", icon: Settings2, testId: "nav-admin-brand-settings-link" },
@@ -106,7 +105,6 @@ const adminOnlyItems = [
     items: [
       { to: "/admin/execution-policies", label: "System Config", icon: Settings2, testId: "nav-admin-system-config-link" },
       { to: "/admin/system-readiness", label: "System Readiness", icon: Gauge, testId: "nav-admin-system-readiness-link" },
-      { to: "/admin/audit-logs", label: "Logs", icon: FileText, testId: "nav-admin-logs-link" },
       { to: "/admin/anomaly-timeline", label: "Anomaly Timeline", icon: Activity, testId: "nav-admin-anomaly-timeline-link" },
     ],
   },
