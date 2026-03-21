@@ -1,3 +1,43 @@
+## 2026-03-21 — Trend okları + alert toggles + 5m/15m sparkline toggle ✅
+
+### 1) CI perf comment: trend oku + renk kodlu delta
+- Dosya: `/app/.github/workflows/deploy-gate.yml`
+  - Delta satırlarına trend oku eklendi: `↑ / ↓ / →`
+  - Renk kodlu durum badge eklendi: `🔴 (regression) / 🟢 (improvement) / 🟡 (flat)`
+  - Uygulama noktaları:
+    - Δ JS/CSS vs previous
+    - Δ JS/CSS vs last-N avg
+    - Sapma (%) vs last-N avg
+
+### 2) Scanner anomaly uyarısı güçlendirildi (toast + ses)
+- Dosya: `/app/frontend/src/pages/UserScannerPage.jsx`
+  - Anomaly koşulu: son 1 dakikada fail oranı > %10
+  - Anomaly anında bir kez tetiklenen uyarılar:
+    - toast error
+    - kısa beep sesi (Web Audio API)
+  - Kullanıcı kontrolü eklendi:
+    - `user-scanner-request-health-anomaly-toast-toggle`
+    - `user-scanner-request-health-anomaly-sound-toggle`
+
+### 3) Sparkline 5m / 15m toggle
+- Dosya: `/app/frontend/src/pages/UserScannerPage.jsx`
+  - Trend penceresi toggle eklendi:
+    - `user-scanner-request-health-trend-window-5m-button`
+    - `user-scanner-request-health-trend-window-15m-button`
+  - 5 bucket mantığıyla dinamik label:
+    - 5m mod: 5/4/3/2/1m
+    - 15m mod: 15/12/9/6/3m
+  - Sparkline point tooltip’ları korunup genişletildi (ok/fail/success%).
+
+### Doğrulama
+- Frontend build PASS
+- `ci_perf_smoke.js` PASS (delta % alanları üretildi)
+- Frontend testing agent PASS (6/6):
+  - 5m/15m toggle çalışıyor
+  - toast/sound toggle butonları çalışıyor
+  - tooltip + anomaly flag mevcut
+  - refresh stabil
+
 ## 2026-03-21 — CI yüzde sapma + sparkline tooltip + anomaly flag ✅
 
 ### 1) CI perf comment: last-5 ortalamaya göre yüzde sapma
