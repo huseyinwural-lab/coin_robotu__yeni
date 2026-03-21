@@ -185,10 +185,14 @@ function main() {
   if (Number(report.last_5_baseline_avg?.sample_count || 0) > 0) {
     const avgJs = Number(report.last_5_baseline_avg.main_js_gzip_kb_avg || 0);
     const avgCss = Number(report.last_5_baseline_avg.main_css_gzip_kb_avg || 0);
+    const jsDelta = Number((jsGzipKb - avgJs).toFixed(2));
+    const cssDelta = Number((cssGzipKb - avgCss).toFixed(2));
     report.delta_vs_last_5_baseline_avg = {
       sample_count: Number(report.last_5_baseline_avg.sample_count || 0),
-      main_js_gzip_kb_delta: Number((jsGzipKb - avgJs).toFixed(2)),
-      main_css_gzip_kb_delta: Number((cssGzipKb - avgCss).toFixed(2)),
+      main_js_gzip_kb_delta: jsDelta,
+      main_css_gzip_kb_delta: cssDelta,
+      main_js_deviation_pct: avgJs > 0 ? Number(((jsDelta / avgJs) * 100).toFixed(2)) : null,
+      main_css_deviation_pct: avgCss > 0 ? Number(((cssDelta / avgCss) * 100).toFixed(2)) : null,
     };
   } else {
     report.delta_vs_last_5_baseline_avg = {

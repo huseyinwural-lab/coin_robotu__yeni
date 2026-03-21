@@ -218,15 +218,37 @@ export const UserScannerPage = () => {
     const width = 160;
     const height = 32;
     if (!requestTrend.length) {
-      return "";
+      return [];
     }
     return requestTrend.map((point, index) => {
       const x = requestTrend.length === 1 ? 0 : (index / (requestTrend.length - 1)) * width;
       const normalized = Math.max(0, Math.min(1, Number(point.successRatio || 0)));
       const y = height - (normalized * height);
-      return `${x},${y}`;
-    }).join(" ");
+      return {
+        ...point,
+        x,
+        y,
+        fail: Math.max(Number(point.total || 0) - Number(point.success || 0), 0),
+      };
+    });
   }, [requestTrend]);
+
+  const requestTrendPolylinePath = useMemo(() => {
+    const width = 160;
+    const height = 32;
+    if (!requestTrendPolylinePoints.length) {
+      return "";
+    }
+    return requestTrendPolylinePoints.map((point) => {
+      return `${point.x},${point.y}`;
+    }).join(" ");
+  }, [requestTrendPolylinePoints]);
+
+  const latestTrendPoint = requestTrendPolylinePoints[requestTrendPolylinePoints.length - 1] || null;
+  const latestFailRatio = latestTrendPoint && Number(latestTrendPoint.total || 0) > 0
+    ? Number((latestTrendPoint.fail / latestTrendPoint.total).toFixed(4))
+    : 0;
+  const hasAnomaly = Boolean(latestTrendPoint && Number(latestTrendPoint.total || 0) > 0 && latestFailRatio > 0.1);
 
   const formatDateLabel = (value) => {
     if (!value) {
@@ -832,12 +854,24 @@ export const UserScannerPage = () => {
                 fill="none"
                 stroke="#22d3ee"
                 strokeWidth="2"
-                points={requestTrendPolylinePoints}
+                points={requestTrendPolylinePath}
                 data-testid="user-scanner-request-health-trend-polyline"
               />
+              {requestTrendPolylinePoints.map((point) => (
+                <circle
+                  key={point.key}
+                  cx={point.x}
+                  cy={point.y}
+                  r="2.4"
+                  fill="#22d3ee"
+                  data-testid={`user-scanner-request-health-trend-point-${point.key}`}
+                >
+                  <title>{`${point.label}: ok=${point.success}, fail=${point.fail}, success=${(point.successRatio * 100).toFixed(1)}%`}</title>
+                </circle>
+              ))}
             </svg>
             <div className="flex gap-1" data-testid="user-scanner-request-health-trend-labels">
-              {requestTrend.map((point) => (
+              {requestTrendPolylinePoints.map((point) => (
                 <span key={point.key} className="text-[10px] text-slate-400" data-testid={`user-scanner-request-health-trend-label-${point.key}`}>
                   {point.label}
                 </span>
@@ -845,6 +879,14 @@ export const UserScannerPage = () => {
             </div>
           </div>
         </div>
+        <p
+          className={`mt-2 text-xs ${hasAnomaly ? "text-red-300" : "text-emerald-300"}`}
+          data-testid="user-scanner-request-health-anomaly-flag"
+        >
+          {hasAnomaly
+            ? `⚠️ Anomaly: son 1 dakikada fail oranı %${(latestFailRatio * 100).toFixed(1)} (>10)`
+            : `✅ Anomaly yok: son 1 dakikada fail oranı %${(latestFailRatio * 100).toFixed(1)} (≤10)`}
+        </p>
       </section>
 
       {scannerLoadDegraded && (

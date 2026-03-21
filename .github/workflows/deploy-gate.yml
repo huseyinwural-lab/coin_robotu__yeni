@@ -900,6 +900,8 @@ jobs:
             const baselineAvgCss = report.last_5_baseline_avg?.main_css_gzip_kb_avg;
             const deltaVsAvgJs = report.delta_vs_last_5_baseline_avg?.main_js_gzip_kb_delta;
             const deltaVsAvgCss = report.delta_vs_last_5_baseline_avg?.main_css_gzip_kb_delta;
+            const deviationVsAvgJsPct = report.delta_vs_last_5_baseline_avg?.main_js_deviation_pct;
+            const deviationVsAvgCssPct = report.delta_vs_last_5_baseline_avg?.main_css_deviation_pct;
 
             const proximityTag = (ratio) => {
               if (!Number.isFinite(ratio) || ratio <= 0) return '⚪ n/a';
@@ -911,6 +913,13 @@ jobs:
             const ratioLabel = (ratio) => {
               if (!Number.isFinite(ratio) || ratio <= 0) return 'n/a';
               return `${(ratio * 100).toFixed(1)}%`;
+            };
+
+            const percentLabel = (value) => {
+              if (!Number.isFinite(Number(value))) return 'n/a';
+              const parsed = Number(value);
+              const sign = parsed > 0 ? '+' : '';
+              return `${sign}${parsed.toFixed(2)}%`;
             };
 
             const jsProximity = proximityTag(jsRatio);
@@ -926,6 +935,7 @@ jobs:
               `- Δ CSS vs previous: **${deltaCss ?? 'n/a'} KB**`,
               `- Last ${baselineAvgCount || 0} baseline avg (JS/CSS gzip): **${baselineAvgJs ?? 'n/a'} KB / ${baselineAvgCss ?? 'n/a'} KB**`,
               `- Δ vs last-${baselineAvgCount || 0} avg (JS/CSS): **${deltaVsAvgJs ?? 'n/a'} KB / ${deltaVsAvgCss ?? 'n/a'} KB**`,
+              `- Sapma vs last-${baselineAvgCount || 0} avg (%): **${percentLabel(deviationVsAvgJsPct)} / ${percentLabel(deviationVsAvgCssPct)}**`,
               `- Delta source note: ${deltaNote || 'ok'}`,
               `- Threshold result: JS=${report.threshold_result?.main_js_within_limit}, CSS=${report.threshold_result?.main_css_within_limit}`,
             ].join('\n');
