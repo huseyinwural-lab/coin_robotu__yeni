@@ -1,3 +1,59 @@
+## 2026-03-21 — LIVE Dashboard Control Layer (P0+P1) Tamamlama ✅
+
+### Karar Seti Uygulaması
+- Kapsam: **P0 + P1**
+- Hedef ekran: 
+  - `/admin/dashboard` = üst seviye görünüm + yönlendirme
+  - `/admin/live-trading-dashboard` = tam kontrol paneli
+- Rol matrisi:
+  - `super_admin + admin`: kritik kontroller (mode switch, kill switch, risk override)
+  - `ops`: sınırlı operasyon (resolve/mute/fix-action + retry)
+
+### Backend Tamamlananlar
+- Yeni servis: `/app/backend/services/execution_mode_control_service.py`
+  - Global execution mode: `LIVE/PAPER/MOCK`
+  - Mode snapshot + latency threshold state
+  - Mode mismatch hard reject audit akışı
+- `execution_intent_service` entegrasyonu:
+  - submit aşamasında execution mode enforce
+- `admin_live_trading_dashboard` router genişletildi:
+  - `GET /api/admin/live-trading/control-layer/state`
+  - `POST /api/admin/live-trading/control-layer/execution-mode`
+  - `POST /api/admin/live-trading/control-layer/system-health`
+  - `GET /api/admin/live-trading/control-layer/critical-alerts`
+  - `POST /api/admin/live-trading/control-layer/critical-alerts/{alert_id}/action`
+  - `GET /api/admin/live-trading/control-layer/trading-performance/open-positions`
+  - `POST /api/admin/live-trading/control-layer/trading-performance/snapshot`
+  - `POST /api/admin/live-trading/control-layer/trading-performance/reset-daily`
+  - `POST /api/admin/live-trading/control-layer/risk-controls`
+  - `POST /api/admin/live-trading/control-layer/risk-override`
+  - `GET /api/admin/live-trading/control-layer/execution-quality/failed-orders`
+  - `POST /api/admin/live-trading/control-layer/execution-quality/retry`
+
+### Frontend Tamamlananlar
+- `/app/frontend/src/pages/AdminLiveTradingDashboardPage.jsx` yeniden inşa edildi:
+  - Execution mode control panel (double confirm)
+  - Risk & kill controls (double confirm)
+  - Critical alert action system (resolve/mute/escalate/fix-action)
+  - Execution reliability panel (failed orders + retry)
+  - Trading performance control (snapshot + daily reset + open positions)
+  - Risk engine control (parametre update + override)
+- `/app/frontend/src/pages/AdminDashboardPage.jsx`
+  - Live Control Hub yönlendirme butonu eklendi
+
+### Fix Action Set (Onaylı + Ekler)
+- reconnect-exchange
+- restart-service
+- cancel-stuck-orders
+- requeue-timeout-intents
+- flush-retry-queue
+- force-resync-positions
+
+### Test Kanıtı
+- `/app/test_reports/iteration_45.json`
+- Sonuç: Backend **39/39 PASS**, frontend kontrol panelleri PASS
+- Test ajanı notu: P0/P1 blokları (execution mode, kill/risk controls, alert-action, retry/performance, role matrix, dashboard CTA) doğrulandı
+
 ## 2026-03-21 — Son Dokunuş: Production-Grade Enforce (Double Confirm + KPI Nav) ✅
 
 ### Bu Turda Tamamlananlar
