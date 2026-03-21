@@ -78,6 +78,7 @@ import { AdminFreshnessHeatmapPage } from "@/pages/AdminFreshnessHeatmapPage";
 import { AdminCommercialOpsPage } from "@/pages/AdminCommercialOpsPage";
 import { AdminExecutionReadinessPage } from "@/pages/AdminExecutionReadinessPage";
 import { AdminBrandSettingsPage } from "@/pages/AdminBrandSettingsPage";
+import { AdminAnomalyTimelinePage } from "@/pages/AdminAnomalyTimelinePage";
 import { MfaSettingsPage } from "@/pages/MfaSettingsPage";
 
 const HomeRedirect = () => {
@@ -163,6 +164,7 @@ function App() {
             <Route path="execution-readiness" element={<AdminExecutionReadinessPage />} />
             <Route path="mfa-settings" element={<MfaSettingsPage />} />
             <Route path="brand-settings" element={<AdminBrandSettingsPage />} />
+            <Route path="anomaly-timeline" element={<AdminAnomalyTimelinePage />} />
             <Route path="strategy/allocation" element={<AdminStrategyAllocationPage />} />
             <Route path="portfolio-risk" element={<AdminPortfolioRiskPage />} />
             <Route path="positions-monitor" element={<AdminPositionsMonitorPage />} />

@@ -374,6 +374,13 @@ export const UserScannerPage = () => {
   };
 
   const formatEndpointLabel = (value) => String(value || "unknown_endpoint").replaceAll("_", " ");
+  const endpointFailRatio = (row) => {
+    const total = Number(row?.total || 0);
+    if (total <= 0) {
+      return 0;
+    }
+    return Math.max(0, Math.min(1, Number(row?.fail || 0) / total));
+  };
 
   useEffect(() => {
     minimalFiltersRef.current = minimalFilters;
@@ -1144,9 +1151,18 @@ export const UserScannerPage = () => {
             </p>
             <div className="mt-1 grid gap-1" data-testid="user-scanner-request-health-trend-detail-endpoint-list">
               {(trendDetailPoint.endpoint_breakdown || []).slice(0, 3).map((endpointRow, index) => (
-                <p key={`${trendDetailPoint.key}-endpoint-${endpointRow.endpoint}`} data-testid={`user-scanner-request-health-trend-detail-endpoint-item-${index}`}>
-                  {formatEndpointLabel(endpointRow.endpoint)} → ok/fail {endpointRow.success}/{endpointRow.fail}
-                </p>
+                <div key={`${trendDetailPoint.key}-endpoint-${endpointRow.endpoint}`} className="space-y-1" data-testid={`user-scanner-request-health-trend-detail-endpoint-item-${index}`}>
+                  <p>
+                    {formatEndpointLabel(endpointRow.endpoint)} → ok/fail {endpointRow.success}/{endpointRow.fail}
+                  </p>
+                  <div className="h-1.5 w-full overflow-hidden rounded bg-slate-800" data-testid={`user-scanner-request-health-trend-detail-endpoint-sparkbar-${index}`}>
+                    <div
+                      className="h-full bg-rose-400"
+                      style={{ width: `${(endpointFailRatio(endpointRow) * 100).toFixed(1)}%` }}
+                      data-testid={`user-scanner-request-health-trend-detail-endpoint-sparkbar-fill-${index}`}
+                    />
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -1170,9 +1186,16 @@ export const UserScannerPage = () => {
             </p>
             <div className="mt-1 grid gap-1" data-testid="user-scanner-request-health-endpoint-breakdown-1m-list">
               {requestEndpointBreakdown.oneMinute.rows.slice(0, 5).map((row, index) => (
-                <p key={`one-minute-row-${row.endpoint}`} data-testid={`user-scanner-request-health-endpoint-breakdown-1m-item-${index}`}>
-                  {formatEndpointLabel(row.endpoint)} → ok/fail {row.success}/{row.fail}
-                </p>
+                <div key={`one-minute-row-${row.endpoint}`} className="space-y-1" data-testid={`user-scanner-request-health-endpoint-breakdown-1m-item-${index}`}>
+                  <p>{formatEndpointLabel(row.endpoint)} → ok/fail {row.success}/{row.fail}</p>
+                  <div className="h-1.5 w-full overflow-hidden rounded bg-slate-800" data-testid={`user-scanner-request-health-endpoint-breakdown-1m-sparkbar-${index}`}>
+                    <div
+                      className="h-full bg-rose-400"
+                      style={{ width: `${(endpointFailRatio(row) * 100).toFixed(1)}%` }}
+                      data-testid={`user-scanner-request-health-endpoint-breakdown-1m-sparkbar-fill-${index}`}
+                    />
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -1186,9 +1209,16 @@ export const UserScannerPage = () => {
             </p>
             <div className="mt-1 grid gap-1" data-testid="user-scanner-request-health-endpoint-breakdown-5m-list">
               {requestEndpointBreakdown.fiveMinute.rows.slice(0, 5).map((row, index) => (
-                <p key={`five-minute-row-${row.endpoint}`} data-testid={`user-scanner-request-health-endpoint-breakdown-5m-item-${index}`}>
-                  {formatEndpointLabel(row.endpoint)} → ok/fail {row.success}/{row.fail}
-                </p>
+                <div key={`five-minute-row-${row.endpoint}`} className="space-y-1" data-testid={`user-scanner-request-health-endpoint-breakdown-5m-item-${index}`}>
+                  <p>{formatEndpointLabel(row.endpoint)} → ok/fail {row.success}/{row.fail}</p>
+                  <div className="h-1.5 w-full overflow-hidden rounded bg-slate-800" data-testid={`user-scanner-request-health-endpoint-breakdown-5m-sparkbar-${index}`}>
+                    <div
+                      className="h-full bg-rose-400"
+                      style={{ width: `${(endpointFailRatio(row) * 100).toFixed(1)}%` }}
+                      data-testid={`user-scanner-request-health-endpoint-breakdown-5m-sparkbar-fill-${index}`}
+                    />
+                  </div>
+                </div>
               ))}
             </div>
           </div>
