@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from db import get_db, redis_client
 from deps import require_user
 from models import User
+from schemas import UserScannerAnomalyAuditRequest, UserScannerAnomalyAuditResponse
+from services.audit_service import create_audit_log
 from services.scanner_runtime import get_runtime_snapshot, run_scanner_runtime
 from services.user_scanner_operations_service import (
     build_user_scanner_daily_report,
@@ -77,3 +79,35 @@ def get_runtime_daily_report_export(
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
     return report
+
+
+@router.post("/anomaly-event", response_model=UserScannerAnomalyAuditResponse)
+def create_runtime_anomaly_event(
+    payload: UserScannerAnomalyAuditRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    details = {
+        "source": payload.source,
+        "fail_ratio": payload.fail_ratio,
+        "total_requests": payload.total_requests,
+        "failed_requests": payload.failed_requests,
+        "success_requests": payload.success_requests,
+        "trend_window_minutes": payload.trend_window_minutes,
+        "trend_points": payload.trend_points,
+    }
+    audit_entry = create_audit_log(
+        db,
+        action="SCANNER_ANOMALY_DETECTED",
+        entity_type="user_scanner_runtime",
+        entity_id=current_user.id,
+        severity="warning",
+        actor_user_id=current_user.id,
+        actor_role=str(getattr(current_user, "role", "user") or "user").lower(),
+        details=details,
+    )
+    return UserScannerAnomalyAuditResponse(
+        status="logged",
+        audit_log_id=audit_entry.id,
+        logged_at=audit_entry.created_at,
+    )

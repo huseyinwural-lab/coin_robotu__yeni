@@ -1641,6 +1641,22 @@ class UserScannerResultResponse(BaseModel):
     generated_at: datetime
 
 
+class UserScannerAnomalyAuditRequest(BaseModel):
+    source: str = Field(default="scanner_ui", min_length=3, max_length=60)
+    fail_ratio: float = Field(default=0, ge=0, le=1)
+    total_requests: int = Field(default=0, ge=0)
+    failed_requests: int = Field(default=0, ge=0)
+    success_requests: int = Field(default=0, ge=0)
+    trend_window_minutes: int = Field(default=5, ge=1, le=60)
+    trend_points: list[dict] = Field(default_factory=list)
+
+
+class UserScannerAnomalyAuditResponse(BaseModel):
+    status: str
+    audit_log_id: str
+    logged_at: datetime
+
+
 class UserSignalResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

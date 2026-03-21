@@ -75,6 +75,8 @@ const REQUEST_HEALTH_WINDOW_MS = 60_000;
 const REQUEST_TREND_MAX_WINDOW_MS = 900_000;
 const REQUEST_TREND_BUCKETS = 5;
 const REQUEST_TREND_OPTIONS = [5, 15];
+const SCANNER_ANOMALY_TOAST_PREF_KEY = "scanner-anomaly-toast-enabled-v1";
+const SCANNER_ANOMALY_SOUND_PREF_KEY = "scanner-anomaly-sound-enabled-v1";
 
 const buildTrendPoints = (events, windowMinutes = 5, nowTs = Date.now()) => {
   const normalizedWindowMinutes = REQUEST_TREND_OPTIONS.includes(Number(windowMinutes)) ? Number(windowMinutes) : 5;
@@ -171,6 +173,7 @@ export const UserScannerPage = () => {
   const [requestTrend, setRequestTrend] = useState(() => buildTrendPoints([], 5));
   const [anomalyToastEnabled, setAnomalyToastEnabled] = useState(true);
   const [anomalySoundEnabled, setAnomalySoundEnabled] = useState(true);
+  const [hoveredTrendPointKey, setHoveredTrendPointKey] = useState(null);
   const profileRunTrackerRef = useRef({});
   const symbolPersistTimerRef = useRef(null);
   const minimalFiltersRef = useRef(MINIMAL_FILTER_DEFAULTS);
@@ -254,6 +257,13 @@ export const UserScannerPage = () => {
     }).join(" ");
   }, [requestTrendPolylinePoints]);
 
+  const latestTrendPoint = requestTrendPolylinePoints[requestTrendPolylinePoints.length - 1] || null;
+  const hoveredTrendPoint = useMemo(
+    () => requestTrendPolylinePoints.find((point) => point.key === hoveredTrendPointKey) || null,
+    [hoveredTrendPointKey, requestTrendPolylinePoints],
+  );
+  const trendDetailPoint = hoveredTrendPoint || latestTrendPoint;
+
   const latestFailRatio = requestHealth.total > 0
     ? Number((requestHealth.failed / requestHealth.total).toFixed(4))
     : 0;
@@ -273,6 +283,36 @@ export const UserScannerPage = () => {
   useEffect(() => {
     minimalFiltersRef.current = minimalFilters;
   }, [minimalFilters]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const toastPref = window.localStorage.getItem(SCANNER_ANOMALY_TOAST_PREF_KEY);
+      const soundPref = window.localStorage.getItem(SCANNER_ANOMALY_SOUND_PREF_KEY);
+      if (toastPref === "0" || toastPref === "1") {
+        setAnomalyToastEnabled(toastPref === "1");
+      }
+      if (soundPref === "0" || soundPref === "1") {
+        setAnomalySoundEnabled(soundPref === "1");
+      }
+    } catch {
+      // noop
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(SCANNER_ANOMALY_TOAST_PREF_KEY, anomalyToastEnabled ? "1" : "0");
+      window.localStorage.setItem(SCANNER_ANOMALY_SOUND_PREF_KEY, anomalySoundEnabled ? "1" : "0");
+    } catch {
+      // noop
+    }
+  }, [anomalySoundEnabled, anomalyToastEnabled]);
 
   const updateRequestHealthWindow = useCallback((settledResponses = []) => {
     const now = Date.now();
@@ -349,7 +389,35 @@ export const UserScannerPage = () => {
     if (anomalySoundEnabled) {
       playAnomalyAlertBeep();
     }
-  }, [anomalySoundEnabled, anomalyToastEnabled, hasAnomaly, latestFailRatio, playAnomalyAlertBeep]);
+    apiClient.post("/user/scanner/runtime/anomaly-event", {
+      source: "scanner_ui",
+      fail_ratio: latestFailRatio,
+      total_requests: requestHealth.total,
+      failed_requests: requestHealth.failed,
+      success_requests: requestHealth.success,
+      trend_window_minutes: selectedTrendWindowMinutes,
+      trend_points: requestTrendPolylinePoints.map((point) => ({
+        label: point.label,
+        total: point.total,
+        success: point.success,
+        fail: point.fail,
+        success_ratio: Number((point.successRatio || 0).toFixed(4)),
+      })),
+    }).catch(() => {
+      // audit write best effort
+    });
+  }, [
+    anomalySoundEnabled,
+    anomalyToastEnabled,
+    hasAnomaly,
+    latestFailRatio,
+    playAnomalyAlertBeep,
+    requestHealth.failed,
+    requestHealth.success,
+    requestHealth.total,
+    requestTrendPolylinePoints,
+    selectedTrendWindowMinutes,
+  ]);
 
   const loadSymbolExplainability = async (symbol) => {
     if (!symbol) {
@@ -963,6 +1031,8 @@ export const UserScannerPage = () => {
                   r="2.4"
                   fill="#22d3ee"
                   data-testid={`user-scanner-request-health-trend-point-${point.key}`}
+                  onMouseEnter={() => setHoveredTrendPointKey(point.key)}
+                  onMouseLeave={() => setHoveredTrendPointKey(null)}
                 >
                   <title>{`${point.label}: ok=${point.success}, fail=${point.fail}, success=${(point.successRatio * 100).toFixed(1)}%`}</title>
                 </circle>
@@ -970,13 +1040,29 @@ export const UserScannerPage = () => {
             </svg>
             <div className="flex gap-1" data-testid="user-scanner-request-health-trend-labels">
               {requestTrendPolylinePoints.map((point) => (
-                <span key={point.key} className="text-[10px] text-slate-400" data-testid={`user-scanner-request-health-trend-label-${point.key}`}>
+                <span
+                  key={point.key}
+                  className="text-[10px] text-slate-400"
+                  data-testid={`user-scanner-request-health-trend-label-${point.key}`}
+                  onMouseEnter={() => setHoveredTrendPointKey(point.key)}
+                  onMouseLeave={() => setHoveredTrendPointKey(null)}
+                >
                   {point.label}
                 </span>
               ))}
             </div>
           </div>
         </div>
+        {trendDetailPoint && (
+          <div className="mt-2 rounded border border-slate-700 bg-slate-950 p-2 text-xs text-slate-300" data-testid="user-scanner-request-health-trend-detail-card">
+            <p data-testid="user-scanner-request-health-trend-detail-title">
+              Hover detay: <span className="font-semibold text-cyan-300">{trendDetailPoint.label}</span>
+            </p>
+            <p data-testid="user-scanner-request-health-trend-detail-values">
+              total={trendDetailPoint.total}, ok={trendDetailPoint.success}, fail={trendDetailPoint.fail}, success={(trendDetailPoint.successRatio * 100).toFixed(1)}%
+            </p>
+          </div>
+        )}
         <p
           className={`mt-2 text-xs ${hasAnomaly ? "text-red-300" : "text-emerald-300"}`}
           data-testid="user-scanner-request-health-anomaly-flag"
