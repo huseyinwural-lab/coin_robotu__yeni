@@ -1,3 +1,36 @@
+## 2026-03-21 — Admin Control Hub İkinci Sıkılaştırma (Kritik Gap Kapatma) ✅
+
+### Kullanıcı Geri Bildirimi Üzerine Kapatılan Başlıklar
+- Alerts panel operasyonelleştirildi:
+  - görünür **Bulk ACK Flow** (select → reason+phrase → onay)
+  - alert detay modalı + öneri paneli
+  - root cause için **context audit** linki
+  - alert → suggested action bağı (run now / restart / ilgili route)
+- Action Center Summary metrikleri drill-down için tıklanabilir hale getirildi (drawer + hedef route).
+- KPI kartları için tıklanabilirlik, trend göstergesi ve threshold state görselliği güçlendirildi.
+- Kritik kontrol alanında role-lock görünürlüğü ve son kritik aksiyonun context-audit linki netleştirildi.
+- Auto-close için latest log drill-down (`/close-next-actions/latest`) ve context audit erişimi eklendi.
+
+### Backend Ek Güncellemeler
+- `/app/backend/routers/admin_action_center.py`
+  - Kritik aksiyon yanıtlarına `audit_log_id` eklendi
+  - `GET /api/admin/action-center/close-next-actions/latest` eklendi
+  - Alert recommendation çıktısına `suggested_action` eklendi
+
+### Frontend Ek Güncellemeler
+- `/app/frontend/src/pages/AdminDashboardPage.jsx`
+  - context audit navigation helper
+  - alert suggested action butonları
+  - incident satırına inline “Bu Aksiyonun Logu”
+  - auto-close latest-log erişimi
+- `/app/frontend/src/pages/AuditLogsPage.jsx`
+  - URL query (`action`, `q`, `request_id`, `session_id`, `severity`) ile context filtre prefill
+
+### Test Kanıtı
+- `/app/test_reports/iteration_41.json`
+- Sonuç: **Backend 19/19 PASS**, frontend kritik gap doğrulaması PASS
+- Testing agent sonucu: “All 7 user-reported critical gaps are now COVERED.”
+
 ## 2026-03-21 — Admin Dashboard Action-Oriented Control Hub (Hibrit P0 & Güvenlik) ✅
 
 ### Kullanıcı Karar Seti (Uygulandı)
