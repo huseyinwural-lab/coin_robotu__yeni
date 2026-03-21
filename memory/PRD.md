@@ -1,3 +1,59 @@
+## 2026-03-21 — FAZ-4 (P2) Aksiyonlanabilir Uyarı Katmanı ✅
+
+### Kapsam
+- Backend:
+  - `/app/backend/services/scanner_anomaly_alert_service.py` (yeni)
+  - `/app/backend/routers/admin_anomaly_alerts.py` (yeni)
+  - `/app/backend/routers/user_scanner_router.py`
+  - `/app/backend/schemas.py`
+  - `/app/backend/server.py` (router registration)
+- Frontend:
+  - `/app/frontend/src/pages/AdminAnomalyTimelinePage.jsx`
+  - `/app/frontend/src/pages/UserScannerPage.jsx`
+
+### 1) Uyarı politikası (warning/critical)
+- Yeni admin policy API:
+  - `GET /api/admin/anomaly-alerts/policy`
+  - `PUT /api/admin/anomaly-alerts/policy`
+- Politika alanları:
+  - `warning_threshold`, `critical_threshold`
+  - `smart_mute_window_seconds`, `smart_mute_trigger_count`, `smart_mute_duration_seconds`
+  - `notifications_enabled`, `notify_min_severity`, `webhook_urls`
+- `anomaly-event` akışında severity artık policy’ye göre hesaplanıyor (`info/warning/critical`).
+
+### 2) Akıllı sessize alma (pattern mute)
+- Pattern hash tabanlı mute desteği:
+  - manual mute: `POST /api/admin/anomaly-alerts/mutes`
+  - active mutes: `GET /api/admin/anomaly-alerts/mutes`
+- User anomaly endpoint’te yeni suppress reason’lar:
+  - `muted_pattern`
+  - `smart_mute_auto`
+- Pattern hit sayaçları + trigger sayısı ile auto-mute devreye alındı.
+
+### 3) Opsiyonel generic webhook bildirim
+- Provider bağımsız generic webhook gönderimi eklendi (URL verilirse çalışır).
+- Bildirimler policy’ye bağlı:
+  - `notifications_enabled`
+  - `notify_min_severity`
+  - `webhook_urls`
+- Gönderim sonuçları anomaly audit details içinde tutuluyor (`attempted/sent/failed`).
+
+### 4) Timeline tablosuna time-to-recover kolonu
+- Admin timeline tablosuna `Time-to-Recover` kolonu eklendi.
+- Aynı user+source akışında fail ratio düşüşüne göre dakika bazlı TTR tahmini gösteriliyor.
+
+### 5) UI geliştirmeleri (FAZ-4)
+- Admin anomaly timeline sayfasına policy panel eklendi (eşikler, smart-mute, webhook, save).
+- Drill-down panelden seçili pattern için doğrudan mute aksiyonu eklendi.
+- Active mute listesi paneli eklendi.
+- Scanner endpoint breakdown sparkbarları korunup doğrulandı.
+
+### Test Kanıtı
+- Backend testing agent: **8/8 PASS**
+  - policy get/put, critical log, mute flow, muted suppression, mutes list, validation 422, health 200
+- Frontend testing agent: **11/11 PASS**
+  - policy panel kontrolleri, save akışı, TTR kolonu, drill-down mute, active mutes, preset filtreler, scanner sparkbar render
+
 ## 2026-03-21 — FAZ-3: Admin anomaly timeline widget + preset filtreler + sparkbar ✅
 
 ### Kapsam
