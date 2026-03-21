@@ -6,7 +6,9 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from core.policy.quote_policy import extract_quote
 from models import AuditLog, ExecutionIntent, ExecutionMetric, LiveActivationConfig, PaperPosition, UserExecutionIntent
+from services.quote_asset_constraints import INVALID_QUOTE_ASSET_ERROR_CODE, INVALID_QUOTE_ASSET_MESSAGE
 from services.audit_service import create_audit_log
 from services.observability_service import collect_observability_snapshot
 from services.system_alert_service import create_system_alert
@@ -17,6 +19,7 @@ REASON_MAX_ACTIVE_POSITIONS_EXCEEDED = "MAX_ACTIVE_POSITIONS_EXCEEDED"
 REASON_CANARY_SYMBOL_BLOCKED = "CANARY_SYMBOL_BLOCKED"
 REASON_CANARY_CAPITAL_LIMIT_EXCEEDED = "CANARY_CAPITAL_LIMIT_EXCEEDED"
 REASON_CANARY_MAX_POSITIONS_EXCEEDED = "CANARY_MAX_POSITIONS_EXCEEDED"
+REASON_INVALID_QUOTE_ASSET = INVALID_QUOTE_ASSET_ERROR_CODE
 
 CANARY_ALERT_ERROR_RATE_THRESHOLD = 0.05
 CANARY_ALERT_REJECT_RATE_THRESHOLD = 0.35
@@ -245,6 +248,16 @@ def assert_execution_open_allowed(db: Session, *, proposed_notional: float, sour
     snapshot = execution_safety_snapshot(db)
     proposed = max(_safe_float(proposed_notional), 0.0)
     normalized_symbol = str(symbol or "").strip().upper()
+
+    if normalized_symbol and extract_quote(normalized_symbol) is None:
+        _raise_block(
+            reason_code=REASON_INVALID_QUOTE_ASSET,
+            message=INVALID_QUOTE_ASSET_MESSAGE,
+            source=source,
+            proposed_notional=proposed,
+            symbol=normalized_symbol,
+            snapshot=snapshot,
+        )
 
     if bool(snapshot.get("canary_enabled")):
         canary_symbols = list(snapshot.get("canary_symbols") or [])

@@ -378,6 +378,7 @@ export const PipelineOperationsPage = () => {
   };
 
   const topReasons = useMemo(() => (guardTelemetry?.top_reasons || []).slice(0, 6), [guardTelemetry]);
+  const blockedTrades = useMemo(() => (guardTelemetry?.blocked_trade_list || []).slice(0, 10), [guardTelemetry]);
   const exchangeTrend = useMemo(() => (exchangeMonitoring?.trend || []).slice(-8), [exchangeMonitoring]);
   const auditSlice = useMemo(() => actionAudit.slice(0, 20), [actionAudit]);
 
@@ -559,10 +560,19 @@ export const PipelineOperationsPage = () => {
             }
             reasonNode={<p className="text-xs text-slate-400" data-testid="pipeline-operations-guard-reason">Bu panel root-cause önceliklendirmesi için kullanılır.</p>}
             actionNode={
-              <div className="max-h-28 space-y-1 overflow-auto" data-testid="pipeline-operations-guard-actions-view">
-                {topReasons.map((item, idx) => (
-                  <p key={`${item.reason}-${idx}`} className="text-[11px] text-slate-300" data-testid={`pipeline-operations-guard-top-reason-${idx}`}>{item.reason}: {item.count}</p>
-                ))}
+              <div className="space-y-2" data-testid="pipeline-operations-guard-actions-view">
+                <div className="max-h-20 space-y-1 overflow-auto" data-testid="pipeline-operations-guard-top-reasons-list">
+                  {topReasons.map((item, idx) => (
+                    <p key={`${item.reason}-${idx}`} className="text-[11px] text-slate-300" data-testid={`pipeline-operations-guard-top-reason-${idx}`}>{item.reason}: {item.count}</p>
+                  ))}
+                </div>
+                <div className="max-h-24 space-y-1 overflow-auto" data-testid="pipeline-operations-guard-blocked-trades-list">
+                  {blockedTrades.map((item, idx) => (
+                    <p key={`${item.id}-${idx}`} className="text-[11px] text-slate-300" data-testid={`pipeline-operations-guard-blocked-trade-${idx}`}>
+                      {item.symbol || "UNKNOWN"} → {(item.reason_codes || [item.reason || "UNKNOWN"])[0] || "UNKNOWN"}
+                    </p>
+                  ))}
+                </div>
               </div>
             }
             resultNode={<ResultBadge result={panelResult.monitoring} testId="pipeline-operations-guard-result" />}

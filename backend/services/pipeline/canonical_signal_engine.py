@@ -4,6 +4,7 @@ from statistics import fmean, pstdev
 
 from sqlalchemy.orm import Session
 
+from core.policy.quote_policy import filter_allowed_symbols
 from models import CanonicalStrategyRegistry
 from services.canonical_strategy_registry_service import GLOBAL_RISK_POLICY, enabled_production_strategies
 from services.pipeline.cache_store import get_json, set_json, utc_now_iso
@@ -435,9 +436,11 @@ def scan_canonical_universe_for_signals(
     universe = build_effective_universe(db, cache)
     advisory_lookup = (universe.get("liquidity_advisory") or {}).get("spot") or {}
     if symbols_override:
-        symbols = sorted({str(symbol or "").upper().strip() for symbol in symbols_override if str(symbol or "").strip()})
+        symbols = filter_allowed_symbols(
+            [str(symbol or "").upper().strip() for symbol in symbols_override if str(symbol or "").strip()]
+        )
     else:
-        symbols = [symbol.upper() for symbol in (universe.get("spot_symbols") or [])]
+        symbols = filter_allowed_symbols([symbol.upper() for symbol in (universe.get("spot_symbols") or [])])
     symbols = symbols[: max(1, min(int(max_symbols or 50), 2000))]
     strategies = enabled_production_strategies(db)
     family_gates = {row["family"]: row for row in [strategy_family_gate_payload(item) for item in list_strategy_family_gates(db)]}

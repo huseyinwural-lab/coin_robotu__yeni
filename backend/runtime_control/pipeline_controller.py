@@ -2,7 +2,8 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 
-from models import UserExecutionIntent
+from models import AuditLog, UserExecutionIntent
+from services.quote_asset_constraints import normalize_reason_code
 
 PIPELINE_QUEUE_KEYS = [
     "runtime:events:all",
@@ -68,8 +69,9 @@ def get_guard_telemetry(db, *, limit: int = 100) -> dict:
     override_impacted: list[dict] = []
 
     for row in rows:
-        reason_codes = row.reject_reason_codes or []
-        reason_text = reason_codes[0] if reason_codes else (row.admin_note or "unknown")
+        raw_reason_codes = row.reject_reason_codes or []
+        reason_codes = [normalize_reason_code(code) for code in raw_reason_codes] or [normalize_reason_code(row.admin_note)]
+        reason_text = reason_codes[0] if reason_codes else "UNKNOWN"
         reason_counter[reason_text] += 1
         blocked_item = {
             "id": row.id,
@@ -77,6 +79,7 @@ def get_guard_telemetry(db, *, limit: int = 100) -> dict:
             "symbol": row.symbol,
             "status": row.status,
             "reason_codes": reason_codes,
+            "reason": reason_text,
             "admin_note": row.admin_note,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
             "override_id": row.override_id,
@@ -91,6 +94,34 @@ def get_guard_telemetry(db, *, limit: int = 100) -> dict:
                     "updated_at": blocked_item["updated_at"],
                 }
             )
+
+    guard_rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "EXECUTION_BLOCKED")
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    for audit in guard_rows:
+        details = dict(audit.details or {})
+        metadata = details.get("metadata") or {}
+        reason_code = normalize_reason_code(details.get("reason") or details.get("reason_code") or metadata.get("reason_code"))
+        symbol = str(details.get("symbol") or metadata.get("symbol") or "UNKNOWN").upper()
+        reason_counter[reason_code] += 1
+        blocked_trades.append(
+            {
+                "id": f"audit:{audit.id}",
+                "intent_token": None,
+                "symbol": symbol,
+                "status": "BLOCKED",
+                "reason_codes": [reason_code],
+                "reason": reason_code,
+                "admin_note": details.get("message") or details.get("last_error") or None,
+                "updated_at": audit.created_at.isoformat() if audit.created_at else None,
+                "override_id": None,
+            }
+        )
 
     return {
         "blocked_trade_list": blocked_trades,

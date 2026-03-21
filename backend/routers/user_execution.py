@@ -18,7 +18,7 @@ from schemas import (
     ExecutionIntentSubmitResponse,
     ExecutionPresetResponse,
 )
-from services.audit_service import create_audit_log
+from services.audit_service import create_audit_log, create_guard_audit_event
 from services.execution_intent_service import (
     DUPLICATE_INTENT_REASON_CODE,
     DuplicateExecutionIntentError,
@@ -32,11 +32,23 @@ from services.execution_readiness_service import enforce_execution_guard_or_rais
 from services.execution_readiness_service import evaluate_execution_readiness
 from services.execution_safety_service import ExecutionSafetyViolation
 from services.explainability_rules_service import build_trade_explain
+from services.quote_asset_constraints import (
+    INVALID_QUOTE_ASSET_ERROR_CODE,
+    build_invalid_quote_asset_detail,
+    is_invalid_quote_asset_code,
+)
 from services.rate_limiter_service import consume_exchange_rate_limit
 from services.position_management_service import list_user_positions
 from services.strategy_intelligence_service import evaluate_hedge_suggestion
 
 router = APIRouter(prefix="/user/execution", tags=["user_execution"])
+
+
+def _quote_asset_http_exception(symbol: str | None):
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=build_invalid_quote_asset_detail(symbol),
+    )
 
 
 def _duplicate_intent_response(*, reason_code: str, message: str, intent_id: str, idempotency_key: str):
@@ -121,6 +133,19 @@ def preview_intent(
                 severity="warning",
                 details={"error_code": error_code, "symbol": payload_data.get("symbol")},
             )
+        if is_invalid_quote_asset_code(error_code):
+            create_guard_audit_event(
+                db,
+                event="EXECUTION_BLOCKED",
+                reason=INVALID_QUOTE_ASSET_ERROR_CODE,
+                symbol=payload_data.get("symbol"),
+                user_id=current_user.id,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                severity="warning",
+                metadata={"source": "user_execution_intent_preview", "raw_error_code": error_code},
+            )
+            raise _quote_asset_http_exception(payload_data.get("symbol")) from exc
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     create_audit_log(
@@ -282,6 +307,19 @@ def preview_position_action(
                 severity="warning",
                 details={"error_code": error_code, "symbol": mapped_payload.get("symbol")},
             )
+        if is_invalid_quote_asset_code(error_code):
+            create_guard_audit_event(
+                db,
+                event="EXECUTION_BLOCKED",
+                reason=INVALID_QUOTE_ASSET_ERROR_CODE,
+                symbol=mapped_payload.get("symbol"),
+                user_id=current_user.id,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                severity="warning",
+                metadata={"source": "user_execution_position_action_preview", "raw_error_code": error_code},
+            )
+            raise _quote_asset_http_exception(mapped_payload.get("symbol")) from exc
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     create_audit_log(
         db,

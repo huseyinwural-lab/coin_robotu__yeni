@@ -13,15 +13,27 @@ from schemas import (
     TradingPreviewRateLimitResponse,
     TradingPreviewResponse,
 )
-from services.audit_service import create_audit_log
+from services.audit_service import create_audit_log, create_guard_audit_event
 from services.explainability_rules_service import build_trade_explain
 from services.execution_intent_service import preview_execution_intent, submit_execution_intent
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.execution_safety_service import ExecutionSafetyViolation
+from services.quote_asset_constraints import (
+    INVALID_QUOTE_ASSET_ERROR_CODE,
+    build_invalid_quote_asset_detail,
+    is_invalid_quote_asset_code,
+)
 from services.rate_limiter_service import consume_exchange_rate_limit
 from services.trading_preview_service import build_execution_preview_metrics
 
 router = APIRouter(prefix="/v1/user/trading", tags=["v1_user_trading"])
+
+
+def _quote_asset_http_exception(symbol: str | None):
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=build_invalid_quote_asset_detail(symbol),
+    )
 
 
 def _build_preview_response(intent, validation: dict) -> ExecutionIntentPreviewResponse:
@@ -99,6 +111,19 @@ def preview_trading(
                 severity="warning",
                 details={"error_code": error_code, "symbol": payload_data.get("symbol")},
             )
+        if is_invalid_quote_asset_code(error_code):
+            create_guard_audit_event(
+                db,
+                event="EXECUTION_BLOCKED",
+                reason=INVALID_QUOTE_ASSET_ERROR_CODE,
+                symbol=payload_data.get("symbol"),
+                user_id=current_user.id,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                severity="warning",
+                metadata={"source": "user_trading_preview", "raw_error_code": error_code},
+            )
+            raise _quote_asset_http_exception(payload_data.get("symbol")) from exc
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     create_audit_log(

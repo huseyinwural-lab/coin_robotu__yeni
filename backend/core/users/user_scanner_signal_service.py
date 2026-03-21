@@ -1124,8 +1124,8 @@ def run_user_scanner(
         )
 
     universe_payload = build_effective_universe(db, redis_client)
-    spot_scope = [str(item).upper() for item in (universe_payload.get("spot_symbols") or [])]
-    futures_scope = [str(item).upper() for item in (universe_payload.get("futures_symbols") or [])]
+    spot_scope = filter_allowed_quote_symbols([str(item).upper() for item in (universe_payload.get("spot_symbols") or [])])
+    futures_scope = filter_allowed_quote_symbols([str(item).upper() for item in (universe_payload.get("futures_symbols") or [])])
     market_scope = list(dict.fromkeys([*spot_scope, *futures_scope]))
     advisory_lookup = {
         **((universe_payload.get("liquidity_advisory") or {}).get("spot") or {}),
