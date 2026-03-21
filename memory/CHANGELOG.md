@@ -1,6 +1,15 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-21
+### Cleanup — Pipeline Monitoring/Control Removal
+- `AdminPipelineControlPage` kaldırıldı (dosya + import temizliği).
+- Redirect davranışı korundu:
+  - `/admin/pipeline-control` -> `/admin/pipeline-operations`
+  - `/admin/pipeline-monitoring` -> `/admin/pipeline-operations`
+- Navigation sadece unified panel linkini gösteriyor.
+- Test: `/app/test_reports/iteration_54.json` (Frontend 5/5 PASS)
+
+## 2026-03-21
 ### Hotfix — Admin Login Failure (Backend DB Down)
 - PostgreSQL eksik/kapalı durumundan kaynaklı backend startup hatası giderildi.
 - DB cluster + role/database yeniden oluşturuldu.

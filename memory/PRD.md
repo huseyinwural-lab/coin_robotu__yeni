@@ -1,3 +1,17 @@
+## 2026-03-21 — Cleanup: Pipeline Monitoring/Control Kaldırma ✅
+
+### Uygulanan
+- `AdminPipelineControlPage.jsx` dosyası tamamen kaldırıldı.
+- `App.js` içindeki `AdminPipelineControlPage` importu kaldırıldı.
+- Redirectler korundu:
+  - `/admin/pipeline-control` -> `/admin/pipeline-operations`
+  - `/admin/pipeline-monitoring` -> `/admin/pipeline-operations`
+- Sidebar'da eski pipeline-control/monitoring linkleri bulunmuyor.
+
+### Doğrulama
+- Test raporu: `/app/test_reports/iteration_54.json`
+- Frontend: **100% (5/5 PASS)**
+
 ## 2026-03-21 — Acil Bug Fix: Admin Login Başarısızlığı ✅
 
 ### Root Cause
