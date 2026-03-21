@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -125,6 +125,7 @@ export const AdminDashboardPage = () => {
   const [alerts, setAlerts] = useState([]);
   const [previousMetrics, setPreviousMetrics] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [alertFilters, setAlertFilters] = useState({
@@ -156,6 +157,7 @@ export const AdminDashboardPage = () => {
   const [isAlertDetailOpen, setIsAlertDetailOpen] = useState(false);
   const [isCloseResultOpen, setIsCloseResultOpen] = useState(false);
   const [drilldown, setDrilldown] = useState({ open: false, metricKey: "", route: "" });
+  const hasLoadedOnceRef = useRef(false);
 
   const isManagerRole = ["super_admin", "admin"].includes(String(user?.role || ""));
   const killSwitchActive = useMemo(() => {
@@ -207,7 +209,11 @@ export const AdminDashboardPage = () => {
   const allFilteredSelected = filteredAlerts.length > 0 && filteredAlerts.every((item) => selectedAlertIds.includes(item.id));
 
   const loadDashboard = useCallback(async () => {
-    setIsLoading(true);
+    if (hasLoadedOnceRef.current) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     setLoadError("");
 
     try {
@@ -247,7 +253,9 @@ export const AdminDashboardPage = () => {
       setLoadError(typeof message === "string" ? message : "Admin dashboard verisi yüklenemedi");
       toast.error(typeof message === "string" ? message : "Admin dashboard verisi yüklenemedi");
     } finally {
+      hasLoadedOnceRef.current = true;
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [alertFilters]);
 
@@ -484,7 +492,7 @@ export const AdminDashboardPage = () => {
     setDrilldown({ open: true, metricKey: metric.key, route: metric.route });
   };
 
-  if (isLoading) {
+  if (isLoading && !summary) {
     return <LoadingSkeleton rows={8} testId="admin-dashboard-loading-skeleton" />;
   }
 
@@ -513,6 +521,9 @@ export const AdminDashboardPage = () => {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2" data-testid="admin-dashboard-header-controls">
+            {isRefreshing && (
+              <p className="text-xs text-cyan-300" data-testid="admin-dashboard-refreshing-indicator">yenileniyor...</p>
+            )}
             <label className="text-xs text-slate-400" data-testid="admin-dashboard-auto-refresh-toggle-wrapper">
               <input
                 type="checkbox"
