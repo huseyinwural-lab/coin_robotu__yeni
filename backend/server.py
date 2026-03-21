@@ -61,6 +61,7 @@ from routers import (
     ops_alerts,
     report_archive,
     reports_alias,
+    runtime_control,
     risk_policies,
     symbol_selector,
     admin_execution,
@@ -289,6 +290,7 @@ api_router.include_router(spot_strategy.router)
 api_router.include_router(paper_positions.router)
 api_router.include_router(backtest.router)
 api_router.include_router(phase4_live.router)
+api_router.include_router(runtime_control.router)
 
 fastapi_app.include_router(api_router)
 
