@@ -197,6 +197,77 @@
   background-color: #3f9f44 !important;
 }
 
+/* Admin content area: açık yeşil panel yüzeyleri (sidebar/navbar hariç) */
+.admin-light-panels {
+  background: #eafbe7 !important;
+  color: #11331a !important;
+}
+
+.admin-light-panels [class*="bg-slate-"],
+.admin-light-panels [class*="bg-zinc-"],
+.admin-light-panels [class*="bg-neutral-"],
+.admin-light-panels [class*="bg-stone-"],
+.admin-light-panels [class*="bg-gray-"],
+.admin-light-panels [class*="bg-black"],
+.admin-light-panels [class*="bg-transparent"] {
+  background: #d8f7d1 !important;
+  color: #11331a !important;
+}
+
+.admin-light-panels [class*="border-slate-"],
+.admin-light-panels [class*="border-zinc-"],
+.admin-light-panels [class*="border-neutral-"],
+.admin-light-panels [class*="border-gray-"],
+.admin-light-panels [class*="border-black"] {
+  border-color: #6ebd72 !important;
+}
+
+.admin-light-panels input,
+.admin-light-panels textarea,
+.admin-light-panels select,
+.admin-light-panels [role="combobox"] {
+  background: #efffe9 !important;
+  color: #11331a !important;
+  border-color: #64b86a !important;
+}
+
+.admin-light-panels button {
+  background: #b5efaa !important;
+  color: #0f2f13 !important;
+  border-color: #4e9d53 !important;
+}
+
+.admin-light-panels button:hover {
+  background: #a3e79a !important;
+}
+
+.admin-light-panels [class*="text-slate-"],
+.admin-light-panels [class*="text-zinc-"],
+.admin-light-panels [class*="text-neutral-"],
+.admin-light-panels [class*="text-gray-"] {
+  color: #11331a !important;
+}
+
+.admin-light-panels [class*="from-slate-"],
+.admin-light-panels [class*="from-zinc-"],
+.admin-light-panels [class*="from-black"] {
+  --tw-gradient-from: #d8f7d1 !important;
+  --tw-gradient-to: rgb(216 247 209 / 0) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.admin-light-panels [class*="via-slate-"],
+.admin-light-panels [class*="via-zinc-"],
+.admin-light-panels [class*="via-black"] {
+  --tw-gradient-stops: var(--tw-gradient-from), #cef2c6, var(--tw-gradient-to) !important;
+}
+
+.admin-light-panels [class*="to-slate-"],
+.admin-light-panels [class*="to-zinc-"],
+.admin-light-panels [class*="to-black"] {
+  --tw-gradient-to: #c6edbe !important;
+}
+
 .user-theme :focus-visible,
 .admin-ops-theme :focus-visible {
   outline: 2px solid #065f46 !important;

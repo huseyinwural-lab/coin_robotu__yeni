@@ -346,7 +346,7 @@ export const PanelLayout = () => {
           </Button>
         </aside>
 
-        <main className="h-full overflow-y-auto p-4 md:p-5" data-testid="panel-content-area" aria-label="Panel içerik alanı">
+        <main className={`h-full overflow-y-auto p-4 md:p-5 ${isAdmin ? "admin-light-panels" : ""}`} data-testid="panel-content-area" aria-label="Panel içerik alanı">
           <Outlet />
         </main>
       </div>
