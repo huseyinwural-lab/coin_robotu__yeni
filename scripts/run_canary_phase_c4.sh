@@ -72,14 +72,31 @@ request_json() {
   local token="${4:-}"
   local out="$5"
   local headers=(-H "Content-Type: application/json")
+  local http_code=""
+  local attempt
   if [[ -n "${token}" ]]; then
     headers+=(-H "Authorization: Bearer ${token}")
   fi
-  if [[ "${method}" == "GET" ]]; then
-    curl -sS -o "${out}" -w '%{http_code}' "${headers[@]}" "${url}"
-  else
-    curl -sS -o "${out}" -w '%{http_code}' -X "${method}" "${headers[@]}" -d "${body}" "${url}"
-  fi
+
+  for attempt in 1 2 3; do
+    if [[ "${method}" == "GET" ]]; then
+      http_code="$(curl -sS -o "${out}" -w '%{http_code}' "${headers[@]}" "${url}" 2>>"${LOG_FILE}" || true)"
+    else
+      http_code="$(curl -sS -o "${out}" -w '%{http_code}' -X "${method}" "${headers[@]}" -d "${body}" "${url}" 2>>"${LOG_FILE}" || true)"
+    fi
+
+    if [[ -n "${http_code}" ]]; then
+      echo "${http_code}"
+      return 0
+    fi
+
+    log "WARN: request retry method=${method} attempt=${attempt}"
+    sleep 2
+  done
+
+  printf '{}' > "${out}"
+  echo "000"
+  return 0
 }
 
 extract_token() {
