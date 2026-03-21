@@ -1,3 +1,53 @@
+## 2026-03-21 — Admin Dashboard Action-Oriented Control Hub (Hibrit P0 & Güvenlik) ✅
+
+### Kullanıcı Karar Seti (Uygulandı)
+- Hedef ekran: mevcut `/admin/dashboard`
+- Kritik aksiyon yetkisi: `super_admin + admin` (ops izleme)
+- Kritik aksiyonlar: gerçek backend aksiyonu + double-confirm + zorunlu audit
+
+### Tamamlanan Eksikler
+- **Global Action Toolbar**: Kill Switch aktif/pasif, Restart Services, Clear All Alerts
+- **Double-confirm UI**: reason + confirmation phrase modalı (görünür güvenlik kapısı)
+- **RBAC Güvenliği**: kritik action endpointlerinde ops için 403 (backend enforce)
+- **Alerts Operasyonu**:
+  - bulk select + bulk ack
+  - alert detay modalı
+  - root cause / çözüm önerisi runbook linki
+  - filtreler: severity + type + source + time + status
+- **Action Center Summary**:
+  - tüm kritik metrikler tıklanabilir drill-down
+  - “Go to approvals / intents” aksiyonları
+- **Auto-Close**:
+  - manual `Run Now`
+  - sonuç detay modalı + audit erişimi
+- **KPI Kartları**:
+  - kart tıklama ile ilgili sayfaya gitme
+  - trend göstergesi (↑/↓/→)
+  - threshold metni (örn WS disconnected)
+- **Genel Operasyon**:
+  - global search / quick action bar
+  - audit log hızlı erişim
+  - incident history paneli
+
+### Backend Eklemeleri
+- Dosya: `/app/backend/routers/admin_action_center.py`
+- Yeni/iyileştirilen endpointler:
+  - `GET /api/admin/action-center/alerts`
+  - `GET /api/admin/action-center/alerts/{alert_id}/detail`
+  - `POST /api/admin/action-center/alerts/bulk-ack`
+  - `POST /api/admin/action-center/alerts/clear-all`
+  - `POST /api/admin/action-center/global-kill-switch/toggle`
+  - `POST /api/admin/action-center/restart-services`
+  - `GET /api/admin/action-center/incident-history`
+  - `POST /api/admin/action-center/close-next-actions` (manager RBAC ile sıkılaştırıldı)
+
+### Frontend Eklemeleri
+- Dosya: `/app/frontend/src/pages/AdminDashboardPage.jsx` (kapsamlı operasyonel genişletme)
+
+### Test Kanıtı
+- `/app/test_reports/iteration_40.json`
+- Sonuç: Backend **19/19 PASS**, frontend akışlar PASS, kritik issue yok
+
 ## 2026-03-21 — FAZ D0-UI FIX Tamamlandı: Blokajı Çöz Remediation Flow ✅
 
 ### Kullanıcı Onaylı Kapsam
