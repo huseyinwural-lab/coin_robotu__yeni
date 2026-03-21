@@ -128,7 +128,7 @@ export const AdminDashboardPage = () => {
   const [loadError, setLoadError] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [alertFilters, setAlertFilters] = useState({
-    status_filter: "open",
+    status_filter: "all",
     severity: "all",
     alert_type: "all",
     source: "",
@@ -147,6 +147,7 @@ export const AdminDashboardPage = () => {
     actionKey: "",
     reason: "",
     phrase: "",
+    step: 1,
     restartTargets: { backend: true, frontend: true },
   });
   const [alertDetail, setAlertDetail] = useState(null);
@@ -276,8 +277,17 @@ export const AdminDashboardPage = () => {
       actionKey,
       reason: defaultReason,
       phrase: "",
+      step: 1,
       restartTargets: { backend: true, frontend: true },
     });
+  };
+
+  const advanceCriticalStep = () => {
+    if (!criticalDialogState.reason || criticalDialogState.reason.trim().length < 5) {
+      toast.error("1. adım için reason zorunlu (min 5 karakter)");
+      return;
+    }
+    setCriticalDialogState((prev) => ({ ...prev, step: 2 }));
   };
 
   const executeSuggestedAction = (alert) => {
@@ -320,7 +330,13 @@ export const AdminDashboardPage = () => {
       return;
     }
 
+    if (criticalDialogState.step !== 2) {
+      toast.error("Lütfen önce 1. adımı tamamlayın");
+      return;
+    }
+
     try {
+      let actionResponse = null;
       if (criticalDialogState.actionKey === "kill_on") {
         const { data } = await apiClient.post("/admin/action-center/global-kill-switch/toggle", {
           active: true,
@@ -328,6 +344,7 @@ export const AdminDashboardPage = () => {
           confirmation_phrase: criticalDialogState.phrase,
           requested_by: user?.email,
         });
+        actionResponse = data;
         setCloseResult(data || null);
       }
       if (criticalDialogState.actionKey === "kill_off") {
@@ -337,6 +354,7 @@ export const AdminDashboardPage = () => {
           confirmation_phrase: criticalDialogState.phrase,
           requested_by: user?.email,
         });
+        actionResponse = data;
         setCloseResult(data || null);
       }
       if (criticalDialogState.actionKey === "restart_services") {
@@ -348,6 +366,7 @@ export const AdminDashboardPage = () => {
           reason: criticalDialogState.reason,
           confirmation_phrase: criticalDialogState.phrase,
         });
+        actionResponse = data;
         setCloseResult(data || null);
       }
       if (criticalDialogState.actionKey === "clear_all_alerts") {
@@ -356,6 +375,7 @@ export const AdminDashboardPage = () => {
           reason: criticalDialogState.reason,
           confirmation_phrase: criticalDialogState.phrase,
         });
+        actionResponse = data;
         setCloseResult(data || null);
       }
       if (criticalDialogState.actionKey === "bulk_ack_alerts") {
@@ -363,6 +383,7 @@ export const AdminDashboardPage = () => {
           ids: selectedAlertIds,
           reason: criticalDialogState.reason,
         });
+        actionResponse = data;
         setCloseResult(data || null);
         setSelectedAlertIds([]);
       }
@@ -374,8 +395,14 @@ export const AdminDashboardPage = () => {
           retry_timeout_rejections: true,
           clear_kill_switch: false,
         });
+        actionResponse = data;
         setCloseResult(data || null);
         setIsCloseResultOpen(true);
+      }
+
+      if (!actionResponse?.audit_log_id) {
+        toast.error("Audit log üretilemedi, aksiyon doğrulanmadı");
+        return;
       }
 
       toast.success(`${config.title} tamamlandı`);
@@ -491,7 +518,11 @@ export const AdminDashboardPage = () => {
             <p className="text-xs text-amber-300" data-testid="admin-dashboard-global-action-toolbar-lock">LOCKED: kritik aksiyonlar sadece super_admin + admin</p>
           )}
         </div>
-        <div className="mt-3 flex flex-wrap gap-2" data-testid="admin-dashboard-global-action-toolbar-actions">
+        <fieldset
+          disabled={!isManagerRole}
+          className="mt-3 flex flex-wrap gap-2 disabled:cursor-not-allowed disabled:opacity-70"
+          data-testid="admin-dashboard-global-action-toolbar-actions"
+        >
           <Button
             className="bg-red-700 text-white hover:bg-red-800"
             onClick={() => openCriticalDialog("kill_on")}
@@ -524,7 +555,7 @@ export const AdminDashboardPage = () => {
           >
             Clear All Alerts
           </Button>
-        </div>
+        </fieldset>
         <div className="mt-2 grid gap-1 text-xs text-slate-300 md:grid-cols-3" data-testid="admin-dashboard-global-action-toolbar-status-grid">
           <p data-testid="admin-dashboard-kill-switch-status">kill_switch_active: {String(killSwitchActive)}</p>
           <p data-testid="admin-dashboard-trading-enabled-status">trading_enabled: {String(killSwitchState?.trading_enabled ?? false)}</p>
@@ -572,8 +603,11 @@ export const AdminDashboardPage = () => {
                 data-testid={`admin-dashboard-action-center-drilldown-${item.key}`}
               >
                 <span>{item.label} · drilldown</span>
-                <span className="font-semibold" data-testid={`admin-dashboard-action-center-value-${item.key}`}>
-                  {String(actionCenterSummary?.[item.key] ?? "-")}
+                <span className="flex items-center gap-2">
+                  <span className="font-semibold" data-testid={`admin-dashboard-action-center-value-${item.key}`}>
+                    {String(actionCenterSummary?.[item.key] ?? "-")}
+                  </span>
+                  <span className="text-cyan-300" data-testid={`admin-dashboard-action-center-open-icon-${item.key}`}>↗</span>
                 </span>
               </button>
             ))}
@@ -764,6 +798,7 @@ export const AdminDashboardPage = () => {
                   <span className="ml-1" data-testid={`admin-alert-severity-${alert.id}`}>{alert.severity}</span> ·
                   <span className="ml-1" data-testid={`admin-alert-occurrences-${alert.id}`}>x{alert.occurrences}</span>
                   <span className="ml-1" data-testid={`admin-alert-source-${alert.id}`}>source={alert.source || "unknown"}</span>
+                  <span className="ml-1" data-testid={`admin-alert-service-${alert.id}`}>service={String(alert.source || "core").split(".")[0]}</span>
                   <p className="text-slate-300" data-testid={`admin-alert-message-${alert.id}`}>{alert.message}</p>
                 </div>
                 <div className="flex flex-wrap gap-2" data-testid={`admin-alert-actions-${alert.id}`}>
@@ -774,7 +809,7 @@ export const AdminDashboardPage = () => {
                     onClick={() => ackSingleAlert(alert.id)}
                     data-testid={`admin-alert-ack-${alert.id}`}
                   >
-                    Ack
+                    Mute / Ack
                   </Button>
                   <Button
                     size="sm"
@@ -795,12 +830,25 @@ export const AdminDashboardPage = () => {
                     }
                     data-testid={`admin-alert-root-cause-link-${alert.id}`}
                   >
-                    Root Cause / Çözüm
+                    Investigate
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openCriticalDialog("restart_services", { reasonHint: `${alert.id}_restart_from_alert` })}
+                    disabled={!isManagerRole}
+                    data-testid={`admin-alert-restart-service-${alert.id}`}
+                  >
+                    Restart Service
                   </Button>
                   <Button
                     size="sm"
                     className="bg-emerald-700 text-white hover:bg-emerald-800"
                     onClick={() => executeSuggestedAction(alert)}
+                    disabled={
+                      !isManagerRole
+                      && ["auto_close_run", "restart_services"].includes(alert?.recommendation?.suggested_action?.action_key)
+                    }
                     data-testid={`admin-alert-suggested-action-${alert.id}`}
                   >
                     {alert?.recommendation?.suggested_action?.action_label || "Önerilen Aksiyon"}
@@ -858,7 +906,11 @@ export const AdminDashboardPage = () => {
             Bu bölümde çalıştırma yetkisi yok. Sadece super_admin + admin aksiyon başlatabilir.
           </p>
         )}
-        <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="admin-critical-actions-grid">
+        <fieldset
+          disabled={!isManagerRole}
+          className="mt-3 grid gap-2 md:grid-cols-2 disabled:cursor-not-allowed disabled:opacity-70"
+          data-testid="admin-critical-actions-grid"
+        >
           <Button
             variant="outline"
             className="border-red-400 bg-transparent text-red-300 hover:bg-red-900/40 hover:text-red-100"
@@ -894,7 +946,7 @@ export const AdminDashboardPage = () => {
           >
             İşlem Logları (Kim / Ne Zaman)
           </Button>
-        </div>
+        </fieldset>
         {(incidentHistory?.audit_events || []).length > 0 && (
           <div className="mt-3 rounded border border-red-700/50 bg-black/20 p-2 text-xs" data-testid="admin-critical-actions-last-operation-panel">
             <p className="font-semibold text-red-200" data-testid="admin-critical-actions-last-operation-title">Son Kritik Aksiyon</p>
@@ -932,8 +984,11 @@ export const AdminDashboardPage = () => {
           </DialogHeader>
 
           <div className="space-y-3" data-testid="admin-dashboard-critical-confirm-form">
+            <p className="text-xs text-slate-300" data-testid="admin-dashboard-critical-confirm-step-indicator">
+              execution_step: {criticalDialogState.step}/2
+            </p>
             <div data-testid="admin-dashboard-critical-confirm-reason-field">
-              <p className="text-xs text-slate-400">Reason</p>
+              <p className="text-xs text-slate-400">Step 1 · Reason</p>
               <Textarea
                 value={criticalDialogState.reason}
                 onChange={(event) => setCriticalDialogState((prev) => ({ ...prev, reason: event.target.value }))}
@@ -976,17 +1031,19 @@ export const AdminDashboardPage = () => {
               </div>
             )}
 
-            <div data-testid="admin-dashboard-critical-confirm-phrase-field">
-              <p className="text-xs text-slate-400">
-                Confirm phrase: <span data-testid="admin-dashboard-critical-confirm-expected-phrase">{ACTION_CONFIG[criticalDialogState.actionKey]?.expectedPhrase || "-"}</span>
-              </p>
-              <Input
-                value={criticalDialogState.phrase}
-                onChange={(event) => setCriticalDialogState((prev) => ({ ...prev, phrase: event.target.value }))}
-                className="mt-1 bg-slate-900"
-                data-testid="admin-dashboard-critical-confirm-phrase-input"
-              />
-            </div>
+            {criticalDialogState.step >= 2 && (
+              <div data-testid="admin-dashboard-critical-confirm-phrase-field">
+                <p className="text-xs text-slate-400">
+                  Step 2 · Confirm phrase: <span data-testid="admin-dashboard-critical-confirm-expected-phrase">{ACTION_CONFIG[criticalDialogState.actionKey]?.expectedPhrase || "-"}</span>
+                </p>
+                <Input
+                  value={criticalDialogState.phrase}
+                  onChange={(event) => setCriticalDialogState((prev) => ({ ...prev, phrase: event.target.value }))}
+                  className="mt-1 bg-slate-900"
+                  data-testid="admin-dashboard-critical-confirm-phrase-input"
+                />
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -997,9 +1054,15 @@ export const AdminDashboardPage = () => {
             >
               Vazgeç
             </Button>
-            <Button onClick={runCriticalAction} disabled={!isManagerRole} data-testid="admin-dashboard-critical-confirm-submit-button">
-              Onayla ve Çalıştır
-            </Button>
+            {criticalDialogState.step === 1 ? (
+              <Button onClick={advanceCriticalStep} disabled={!isManagerRole} data-testid="admin-dashboard-critical-confirm-step1-button">
+                1. Adımı Tamamla
+              </Button>
+            ) : (
+              <Button onClick={runCriticalAction} disabled={!isManagerRole} data-testid="admin-dashboard-critical-confirm-submit-button">
+                2. Adım: Onayla ve Çalıştır
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1041,6 +1104,10 @@ export const AdminDashboardPage = () => {
                   size="sm"
                   className="bg-emerald-700 text-white hover:bg-emerald-800"
                   onClick={() => executeSuggestedAction(alertDetail)}
+                  disabled={
+                    !isManagerRole
+                    && ["auto_close_run", "restart_services"].includes(alertDetail?.recommendation?.suggested_action?.action_key)
+                  }
                   data-testid="admin-dashboard-alert-detail-suggested-action-button"
                 >
                   {alertDetail?.recommendation?.suggested_action?.action_label || "Önerilen Aksiyonu Uygula"}
