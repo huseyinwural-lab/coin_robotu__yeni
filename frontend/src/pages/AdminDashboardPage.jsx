@@ -38,8 +38,8 @@ const KPI_CONFIG = [
   { key: "running_bots", label: "Running Bot", route: "/admin/strategies" },
   { key: "risk_policies", label: "Risk Policy", route: "/admin/risk-orchestrator" },
   { key: "strategy_templates", label: "Template", route: "/admin/strategies" },
-  { key: "websocket_status", label: "WS Status", route: "/admin/monitoring" },
-  { key: "signals_5m", label: "Signal / 5m", route: "/admin/anomaly-timeline" },
+  { key: "websocket_status", label: "WS Status", route: "/admin/system-status" },
+  { key: "signals_5m", label: "Signal / 5m", route: "/admin/live-trading-dashboard" },
   { key: "paper_trades_5m", label: "Paper Trade / 5m", route: "/admin/live-trading-dashboard" },
   { key: "open_positions", label: "Open Positions", route: "/admin/positions-monitor" },
   { key: "critical_audits", label: "Critical Audit", route: "/admin/audit-logs" },
@@ -392,6 +392,7 @@ export const AdminDashboardPage = () => {
         const { data } = await apiClient.post("/admin/action-center/alerts/bulk-ack", {
           ids: selectedAlertIds,
           reason: criticalDialogState.reason,
+          confirmation_phrase: criticalDialogState.phrase,
         });
         actionResponse = data;
         setCloseResult(data || null);
@@ -404,6 +405,8 @@ export const AdminDashboardPage = () => {
           stale_days: 30,
           retry_timeout_rejections: true,
           clear_kill_switch: false,
+          reason: criticalDialogState.reason,
+          confirmation_phrase: criticalDialogState.phrase,
         });
         actionResponse = data;
         setCloseResult(data || null);
@@ -453,6 +456,7 @@ export const AdminDashboardPage = () => {
       await apiClient.post("/admin/action-center/alerts/bulk-ack", {
         ids: [alertId],
         reason: "single_row_ack",
+        confirmation_phrase: "ACK SELECTED ALERTS",
       });
       toast.success("Alert ack edildi");
       await loadDashboard();

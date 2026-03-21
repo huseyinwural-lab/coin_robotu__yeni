@@ -245,6 +245,38 @@ class TestAlertsEndpoints:
         print(f"All alerts: {len(data.get('items', []))} items")
 
 
+class TestBulkAckPhraseEnforcement:
+    """Test /api/admin/action-center/alerts/bulk-ack phrase enforcement"""
+
+    def test_bulk_ack_invalid_phrase_rejected(self, super_admin_client):
+        """Bulk ack should reject invalid confirmation phrase"""
+        response = super_admin_client.post(
+            f"{BASE_URL}/api/admin/action-center/alerts/bulk-ack",
+            json={
+                "ids": ["test-alert-id-1"],
+                "reason": "test_invalid_phrase_bulk_ack",
+                "confirmation_phrase": "WRONG PHRASE",
+            },
+        )
+        assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
+        data = response.json()
+        assert "invalid_confirmation_phrase" in str(data.get("detail", {})), f"Expected phrase error: {data}"
+        print(f"Invalid phrase correctly rejected for bulk-ack: {data}")
+
+    def test_bulk_ack_missing_phrase_rejected(self, super_admin_client):
+        """Bulk ack should reject missing confirmation phrase"""
+        response = super_admin_client.post(
+            f"{BASE_URL}/api/admin/action-center/alerts/bulk-ack",
+            json={
+                "ids": ["test-alert-id-1"],
+                "reason": "test_missing_phrase_bulk_ack",
+            },
+        )
+        # Should fail validation (422) or phrase check (400)
+        assert response.status_code in [400, 422], f"Expected 400/422, got {response.status_code}: {response.text}"
+        print(f"Missing phrase correctly rejected for bulk-ack: {response.status_code}")
+
+
 class TestIncidentHistory:
     """Test /api/admin/action-center/incident-history endpoint"""
 
@@ -262,10 +294,10 @@ class TestIncidentHistory:
 
 
 class TestCloseNextActions:
-    """Test /api/admin/action-center/close-next-actions endpoint"""
+    """Test /api/admin/action-center/close-next-actions endpoint with phrase enforcement"""
 
-    def test_close_next_actions_returns_result(self, super_admin_client):
-        """Close next actions should return completed status with counts"""
+    def test_close_next_actions_invalid_phrase_rejected(self, super_admin_client):
+        """Close next actions should reject invalid confirmation phrase"""
         response = super_admin_client.post(
             f"{BASE_URL}/api/admin/action-center/close-next-actions",
             json={
@@ -274,6 +306,44 @@ class TestCloseNextActions:
                 "stale_days": 30,
                 "retry_timeout_rejections": False,
                 "clear_kill_switch": False,
+                "reason": "test_invalid_phrase_close_next",
+                "confirmation_phrase": "WRONG PHRASE",
+            },
+        )
+        assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
+        data = response.json()
+        assert "invalid_confirmation_phrase" in str(data.get("detail", {})), f"Expected phrase error: {data}"
+        print(f"Invalid phrase correctly rejected for close-next-actions: {data}")
+
+    def test_close_next_actions_missing_phrase_rejected(self, super_admin_client):
+        """Close next actions should reject missing confirmation phrase"""
+        response = super_admin_client.post(
+            f"{BASE_URL}/api/admin/action-center/close-next-actions",
+            json={
+                "ack_open_alerts": True,
+                "reject_stale_approvals": False,
+                "stale_days": 30,
+                "retry_timeout_rejections": False,
+                "clear_kill_switch": False,
+                "reason": "test_missing_phrase_close_next",
+            },
+        )
+        # Should fail validation (422) or phrase check (400)
+        assert response.status_code in [400, 422], f"Expected 400/422, got {response.status_code}: {response.text}"
+        print(f"Missing phrase correctly rejected for close-next-actions: {response.status_code}")
+
+    def test_close_next_actions_with_correct_phrase(self, super_admin_client):
+        """Close next actions should work with correct phrase RUN AUTO CLOSE"""
+        response = super_admin_client.post(
+            f"{BASE_URL}/api/admin/action-center/close-next-actions",
+            json={
+                "ack_open_alerts": True,
+                "reject_stale_approvals": False,
+                "stale_days": 30,
+                "retry_timeout_rejections": False,
+                "clear_kill_switch": False,
+                "reason": "test_close_next_actions_action_center",
+                "confirmation_phrase": "RUN AUTO CLOSE",
             },
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
@@ -282,6 +352,7 @@ class TestCloseNextActions:
         assert "acked_alerts" in data, f"Expected acked_alerts: {data}"
         assert "rejected_approvals" in data, f"Expected rejected_approvals: {data}"
         assert "retried_intents" in data, f"Expected retried_intents: {data}"
+        assert "audit_log_id" in data, f"Expected audit_log_id: {data}"
         print(f"Close next actions result: {data}")
 
 
@@ -335,10 +406,25 @@ class TestOpsRBACRestriction:
             json={
                 "ack_open_alerts": True,
                 "reject_stale_approvals": False,
+                "reason": "test_ops_rbac_close_next",
+                "confirmation_phrase": "RUN AUTO CLOSE",
             },
         )
         assert response.status_code == 403, f"Expected 403 for OPS user, got {response.status_code}: {response.text}"
         print(f"OPS correctly blocked from close-next-actions: {response.status_code}")
+
+    def test_ops_blocked_from_bulk_ack(self, ops_client):
+        """OPS user should get 403 when trying to bulk ack alerts"""
+        response = ops_client.post(
+            f"{BASE_URL}/api/admin/action-center/alerts/bulk-ack",
+            json={
+                "ids": ["test-alert-id-1"],
+                "reason": "test_ops_rbac_bulk_ack",
+                "confirmation_phrase": "ACK SELECTED ALERTS",
+            },
+        )
+        assert response.status_code == 403, f"Expected 403 for OPS user, got {response.status_code}: {response.text}"
+        print(f"OPS correctly blocked from bulk-ack: {response.status_code}")
 
     def test_ops_can_read_summary(self, ops_client):
         """OPS user should be able to read summary (read-only)"""

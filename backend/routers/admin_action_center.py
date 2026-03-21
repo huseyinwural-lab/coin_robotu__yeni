@@ -18,6 +18,8 @@ router = APIRouter(prefix="/admin/action-center", tags=["admin_action_center"])
 MANAGER_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN}
 RESTART_CONFIRM_PHRASE = "RESTART SERVICES"
 ALERTS_CLEAR_CONFIRM_PHRASE = "CLEAR ALL ALERTS"
+BULK_ACK_CONFIRM_PHRASE = "ACK SELECTED ALERTS"
+AUTO_CLOSE_CONFIRM_PHRASE = "RUN AUTO CLOSE"
 
 
 class ActionCenterKillSwitchToggleRequest(BaseModel):
@@ -42,6 +44,17 @@ class ActionCenterClearAllAlertsRequest(BaseModel):
 class ActionCenterBulkAckRequest(BaseModel):
     ids: list[str] = Field(min_length=1)
     reason: str = Field(default="dashboard_bulk_ack", min_length=3, max_length=300)
+    confirmation_phrase: str = Field(min_length=5, max_length=80)
+
+
+class ActionCenterCloseNextActionsRequest(BaseModel):
+    ack_open_alerts: bool = True
+    reject_stale_approvals: bool = True
+    stale_days: int = Field(default=30, ge=1, le=365)
+    retry_timeout_rejections: bool = True
+    clear_kill_switch: bool = False
+    reason: str = Field(default="dashboard_auto_close", min_length=5, max_length=300)
+    confirmation_phrase: str = Field(min_length=5, max_length=80)
 
 
 def _require_manager(current_admin: User) -> User:
@@ -240,6 +253,17 @@ def action_center_bulk_ack_alerts(
     db: Session = Depends(get_db),
 ):
     manager = _require_manager(current_admin)
+
+    phrase = str(payload.confirmation_phrase or "").strip().upper()
+    if phrase != BULK_ACK_CONFIRM_PHRASE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "invalid_confirmation_phrase",
+                "expected_phrase": BULK_ACK_CONFIRM_PHRASE,
+            },
+        )
+
     rows = db.query(SystemAlert).filter(SystemAlert.id.in_(payload.ids)).all()
     if not rows:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alerts_not_found")
@@ -266,6 +290,7 @@ def action_center_bulk_ack_alerts(
             "acked_count": len(acked_ids),
             "ids": acked_ids,
             "reason": payload.reason,
+            "expected_phrase": BULK_ACK_CONFIRM_PHRASE,
         },
     )
 
@@ -556,14 +581,28 @@ def action_center_summary(current_admin: User = Depends(require_admin), db: Sess
 
 
 @router.post("/close-next-actions")
-def close_next_actions(payload: dict | None = None, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def close_next_actions(
+    payload: ActionCenterCloseNextActionsRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     manager = _require_manager(current_admin)
-    payload = payload or {}
-    ack_open_alerts = bool(payload.get("ack_open_alerts", True))
-    reject_stale_approvals = bool(payload.get("reject_stale_approvals", True))
-    stale_days = int(payload.get("stale_days") or 30)
-    retry_timeout_rejections = bool(payload.get("retry_timeout_rejections", True))
-    clear_kill_switch = bool(payload.get("clear_kill_switch", False))
+
+    phrase = str(payload.confirmation_phrase or "").strip().upper()
+    if phrase != AUTO_CLOSE_CONFIRM_PHRASE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "invalid_confirmation_phrase",
+                "expected_phrase": AUTO_CLOSE_CONFIRM_PHRASE,
+            },
+        )
+
+    ack_open_alerts = bool(payload.ack_open_alerts)
+    reject_stale_approvals = bool(payload.reject_stale_approvals)
+    stale_days = int(payload.stale_days)
+    retry_timeout_rejections = bool(payload.retry_timeout_rejections)
+    clear_kill_switch = bool(payload.clear_kill_switch)
 
     acked_alerts = 0
     rejected_approvals = 0
@@ -646,6 +685,8 @@ def close_next_actions(payload: dict | None = None, current_admin: User = Depend
             "retried_intents": retried_intents,
             "clear_kill_switch": clear_kill_switch,
             "stale_days": stale_days,
+            "reason": payload.reason,
+            "expected_phrase": AUTO_CLOSE_CONFIRM_PHRASE,
         },
     )
     return {
