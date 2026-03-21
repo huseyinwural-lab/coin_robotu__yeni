@@ -1,3 +1,46 @@
+## 2026-03-21 — FAZ-5 Tamamlandı: Operatör Dashboard + KPI export + TTR tooltip zenginleştirme ✅
+
+### Kapsam
+- Dosya: `/app/frontend/src/pages/AdminAnomalyTimelinePage.jsx`
+
+### Uygulananlar (sırayla)
+1) **Haftalık trend paneli**
+- Günlük anomaly sayısı (7 günlük bucket)
+- warning/critical dağılımı
+- source bazlı kırılım
+- Tüm satırlarda sparkbar görselleştirmesi
+
+2) **MTTR / MTTD KPI kartları**
+- MTTR (ortalama toparlanma süresi)
+- MTTD (ortalama tespit süresi)
+- 7g / 30g karşılaştırma kartları + delta alanları
+
+3) **Filtreli KPI görünümü**
+- user / source / severity filtreleri KPI hesaplarını etkiliyor
+- preset filtrelerle hızlı geçiş korunarak dashboard metrikleriyle entegre edildi
+
+4) **Dashboard export**
+- KPI snapshot JSON export
+- KPI snapshot CSV export
+- Haftalık özet rapor (Markdown) export
+
+5) **TTR tooltip zenginleştirme**
+- TTR hücresinde hover bilgisi:
+  - unresolved ise “Henüz recovery eşleşmesi yok”
+  - resolved ise `recovered_at`, `fail_ratio before->after`, `delta`, `confidence`
+- Önceki P0 blokaj düzeltildi:
+  - timeline fetch `limit` 1000→500
+  - 422 validation hata nesneleri güvenli string parse edilerek toast’a düşürülüyor (React child crash engeli)
+
+### Test Kanıtı
+- Frontend testing agent (ilk tur): P0 blocker bulundu ve raporlandı
+- Düzeltme sonrası frontend testing agent: **9/9 PASS**
+  - timeline sayfası runtime error olmadan açılıyor
+  - dashboard KPI/weekly/distribution/source panelleri render
+  - export butonları çalışıyor (UI crash yok)
+  - TTR tooltip doğrulandı
+  - filtre/preset ve policy save doğrulandı
+
 ## 2026-03-21 — TTR renk skalası (kapanış dokunuşu) ✅
 
 ### Yapılan
