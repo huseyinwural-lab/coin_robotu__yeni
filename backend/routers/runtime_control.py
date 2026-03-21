@@ -130,6 +130,8 @@ def _collect_gate_details(db: Session) -> dict:
             report_payload = json.loads(report_path.read_text(encoding="utf-8"))
         except Exception:
             report_payload = {}
+    rules = _build_gate_rules()
+    history = _cache_read_json("runtime:gate:history", [])
     return {
         "status": gate.get("status"),
         "reason_codes": gate.get("reason_codes") or [],
@@ -137,8 +139,89 @@ def _collect_gate_details(db: Session) -> dict:
         "metrics": gate.get("metrics") or {},
         "blocking_items": report_payload.get("blocking_items") or [],
         "final_decision": report_payload.get("final_decision"),
+        "rules": rules,
+        "history": history[-20:],
         "fix_redirect": "/admin/execution-policies",
     }
+
+
+def _cache_read_json(key: str, default):
+    raw = redis_client.get(key)
+    if raw is None:
+        return default
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+    try:
+        return json.loads(raw)
+    except Exception:
+        return default
+
+
+def _cache_write_json(key: str, payload):
+    redis_client.set(key, json.dumps(payload, ensure_ascii=False))
+
+
+def _append_cache_json_list(key: str, payload: dict, *, max_items: int = 50):
+    rows = _cache_read_json(key, [])
+    if not isinstance(rows, list):
+        rows = []
+    rows.append(payload)
+    _cache_write_json(key, rows[-max_items:])
+
+
+def _build_gate_rules() -> list[dict]:
+    rules: list[dict] = []
+
+    env_report = Path("/app/artifacts/prod_env_resolution_report.json")
+    if env_report.exists():
+        try:
+            payload = json.loads(env_report.read_text(encoding="utf-8"))
+            for row in payload.get("checks") or []:
+                status = str(row.get("status") or "UNKNOWN").upper()
+                rule_id = str(row.get("key") or "env_rule")
+                message = f"{rule_id} resolved from {row.get('resolved_source') or 'unknown'}"
+                if row.get("contains_localhost"):
+                    message = f"{rule_id} localhost içeriyor"
+                rules.append(
+                    {
+                        "rule_id": rule_id,
+                        "result": "FAIL" if status == "FAIL" else "PASS",
+                        "message": message,
+                        "fix_hint": f"{rule_id} değerini production ortam kaynağından güncelleyin",
+                    }
+                )
+        except Exception:
+            pass
+
+    preflight_report = Path("/app/artifacts/prod_preflight_check.json")
+    if preflight_report.exists():
+        try:
+            payload = json.loads(preflight_report.read_text(encoding="utf-8"))
+            for row in payload.get("checks") or []:
+                status = str(row.get("status") or "UNKNOWN").upper()
+                rule_name = str(row.get("name") or "preflight_rule")
+                rules.append(
+                    {
+                        "rule_id": rule_name,
+                        "result": "FAIL" if status == "FAIL" else "PASS",
+                        "message": str(row.get("detail") or rule_name),
+                        "fix_hint": "Preflight kontrolünü düzeltip tekrar /runtime/gate/recheck çalıştırın",
+                    }
+                )
+        except Exception:
+            pass
+
+    if not rules:
+        rules.append(
+            {
+                "rule_id": "gate_rules_unavailable",
+                "result": "FAIL",
+                "message": "Gate kural artefaktları bulunamadı",
+                "fix_hint": "CI scriptlerini çalıştırıp artefakt üretimini doğrulayın",
+            }
+        )
+
+    return rules
 
 
 def _safe_ltrim(cache, key: str, start: int, end: int):
@@ -189,7 +272,7 @@ def runtime_ws_reconnect(payload: RuntimeActionRequest, current_admin: User = De
         details={"reason": payload.reason, "state": state},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="ws reconnect request accepted",
         state_snapshot={"ws_state": state},
@@ -216,7 +299,7 @@ def runtime_ws_force_new_session(payload: RuntimeActionRequest, current_admin: U
         details={"reason": payload.reason, "result": result},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="new ws session requested",
         state_snapshot={"ws_state": result.get("state") or {}},
@@ -250,7 +333,7 @@ def runtime_pipeline_resync(payload: RuntimeActionRequest, current_admin: User =
         details={"reason": payload.reason, "result": result},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="pipeline resync queued",
         state_snapshot={"pipeline": result},
@@ -278,7 +361,7 @@ def runtime_pipeline_flush(payload: PipelineFlushRequest, current_admin: User = 
         details={"reason": payload.reason, "result": result},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="pipeline queue flush completed",
         state_snapshot={"queue_flush": result},
@@ -297,6 +380,41 @@ def runtime_guard_telemetry(limit: int = Query(default=100, ge=1, le=500), curre
 def runtime_quote_policy(current_admin: User = Depends(require_admin)):
     _ = current_admin
     return {"allowed_quote_assets": allowed_quote_assets()}
+
+
+@router.get("/state-validation")
+def runtime_state_validation(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    ws = get_ws_health(redis_client)
+    current_session_id = ws.get("session_id") or ws.get("state", {}).get("session_id")
+    previous_session_id = _cache_read_json("runtime:state_validation:last_ws_session_id", None)
+    ws_session_changed = bool(previous_session_id and current_session_id and previous_session_id != current_session_id)
+    _cache_write_json("runtime:state_validation:last_ws_session_id", current_session_id)
+
+    active_overrides = list_active_overrides(redis_client)
+    override_effect_applied = len(active_overrides) > 0
+
+    gate_state = _cache_read_json("runtime:state_validation:last_gate_state", {})
+    gate_source = gate_state.get("gate_source") or "runtime_check"
+
+    guard = get_guard_telemetry(db, limit=100)
+    guard_block_visible = len(guard.get("blocked_trade_list") or []) > 0
+
+    suggestions = {
+        "ws_session_changed": None if ws_session_changed else "WS reconnect veya force-new-session aksiyonunu çalıştırın.",
+        "override_effect_applied": None if override_effect_applied else "Test override oluşturup aktif override state değişimini doğrulayın.",
+        "gate_source": None if gate_source == "ci_script" else "Gate Re-check aksiyonunu çalıştırıp CI script sonucunu yenileyin.",
+        "guard_block_visible": None if guard_block_visible else "Guard blocked trade listesi için bir block senaryosu tetikleyin.",
+    }
+
+    return {
+        "ws_session_changed": ws_session_changed,
+        "override_effect_applied": override_effect_applied,
+        "gate_source": gate_source,
+        "guard_block_visible": guard_block_visible,
+        "suggestions": suggestions,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.post("/gate/recheck")
@@ -318,6 +436,25 @@ def runtime_gate_recheck(payload: RuntimeActionRequest, current_admin: User = De
         script_results.append({"script": script, "returncode": completed.returncode})
 
     gate = _collect_gate_details(db)
+    _cache_write_json(
+        "runtime:state_validation:last_gate_state",
+        {
+            "gate_source": "ci_script",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "status": gate.get("status"),
+            "final_decision": gate.get("final_decision"),
+        },
+    )
+    _append_cache_json_list(
+        "runtime:gate:history",
+        {
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "status": gate.get("status"),
+            "final_decision": gate.get("final_decision"),
+            "rules_count": len(gate.get("rules") or []),
+        },
+        max_items=50,
+    )
     audit = _audit(
         db,
         current_admin=current_admin,
@@ -329,7 +466,7 @@ def runtime_gate_recheck(payload: RuntimeActionRequest, current_admin: User = De
         details={"reason": payload.reason, "scripts": script_results, "gate": gate},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="release gate recheck completed",
         state_snapshot={"gate": gate},
@@ -374,7 +511,7 @@ def runtime_override_create(payload: OverrideCreateRequest, current_admin: User 
         details={"result": result},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="override created",
         state_snapshot={"override": result},
@@ -385,9 +522,42 @@ def runtime_override_create(payload: OverrideCreateRequest, current_admin: User 
 
 
 @router.get("/override/active")
-def runtime_override_active(current_admin: User = Depends(require_admin)):
+def runtime_override_active(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _ = current_admin
-    return {"items": list_active_overrides(redis_client), "max_ttl_minutes": MAX_OVERRIDE_TTL_MINUTES}
+    rows = list_active_overrides(redis_client)
+    guard = get_guard_telemetry(db, limit=500)
+    impacted = guard.get("override_impacted_trades") or []
+    impacted_map = {}
+    for item in impacted:
+        override_id = item.get("override_id")
+        if not override_id:
+            continue
+        impacted_map[override_id] = impacted_map.get(override_id, 0) + 1
+
+    now = datetime.now(timezone.utc)
+    enriched = []
+    for row in rows:
+        ttl_remaining_seconds = None
+        expires_at = row.get("expires_at")
+        if expires_at:
+            try:
+                expires = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+                ttl_remaining_seconds = max(int((expires - now).total_seconds()), 0)
+            except Exception:
+                ttl_remaining_seconds = None
+        enriched.append(
+            {
+                **row,
+                "ttl_remaining_seconds": ttl_remaining_seconds,
+                "impacted_trades_count": impacted_map.get(row.get("override_id"), 0),
+            }
+        )
+
+    return {
+        "items": enriched,
+        "max_ttl_minutes": MAX_OVERRIDE_TTL_MINUTES,
+        "total_impacted_trades": sum(item.get("impacted_trades_count", 0) for item in enriched),
+    }
 
 
 @router.post("/override/{override_id}/cancel")
@@ -409,7 +579,7 @@ def runtime_override_cancel(override_id: str, payload: OverrideCancelRequest, cu
         details={"result": result},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="override cancel completed",
         state_snapshot={"override_cancel": result},
@@ -443,7 +613,7 @@ def runtime_heartbeat_check(payload: HeartbeatCheckRequest, current_admin: User 
         },
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="manual heartbeat check completed",
         state_snapshot={"heartbeat": result},
@@ -473,7 +643,7 @@ def runtime_service_restart(payload: ServiceRestartRequest, current_admin: User 
         details={"reason": payload.reason, "result": result},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="service restart scheduled",
         state_snapshot={"service_restart": result},
@@ -547,7 +717,7 @@ def runtime_exchange_revalidate(connection_id: str, payload: RuntimeActionReques
         details={"reason": payload.reason, "snapshot": snapshot},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="exchange connection revalidated",
         state_snapshot={"exchange_snapshot": snapshot},
@@ -580,7 +750,7 @@ def runtime_exchange_disable_key(connection_id: str, payload: RuntimeActionReque
         details={"reason": payload.reason},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="exchange key disabled",
         state_snapshot={"connection_id": connection_id, "disabled": True},
@@ -678,13 +848,19 @@ def runtime_alert_history(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
     severity: str | None = Query(default=None),
+    since_hours: int = Query(default=24, ge=1, le=720),
+    event_type: str | None = Query(default=None),
     status_filter: str = Query(default="all", pattern="^(all|open|ack|resolved)$"),
     limit: int = Query(default=100, ge=1, le=500),
 ):
     _ = current_admin
     query = db.query(SystemAlert)
+    since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
+    query = query.filter(SystemAlert.created_at >= since)
     if severity:
         query = query.filter(SystemAlert.severity == severity)
+    if event_type:
+        query = query.filter(SystemAlert.alert_type.ilike(f"%{event_type}%"))
     if status_filter != "all":
         query = query.filter(SystemAlert.status == status_filter)
     rows = query.order_by(SystemAlert.last_triggered_at.desc()).limit(limit).all()
@@ -737,7 +913,7 @@ def runtime_alert_action(alert_id: str, payload: AlertActionRequest, current_adm
         details={"action": payload.action, "reason": payload.reason},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message=f"alert {payload.action} completed",
         state_snapshot={"alert_id": alert_id, "action": payload.action},
@@ -779,7 +955,7 @@ def runtime_alert_bulk_action(payload: AlertBulkRequest, current_admin: User = D
         details={"ids": payload.ids, "action": payload.action, "reason": payload.reason},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message=f"bulk alert {payload.action} completed",
         state_snapshot={"count": len(rows), "action": payload.action},
@@ -859,7 +1035,7 @@ def runtime_alert_policy_update(payload: AlertPolicyUpdateRequest, current_admin
         details={"reason": payload.reason, "new_policy": payload.model_dump()},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="alert policy updated",
         state_snapshot={
@@ -905,7 +1081,7 @@ def runtime_alert_policy_rollback(request: AlertPolicyRollbackRequest, current_a
         details={"reason": request.reason, "rolled_back_to": rollback_version},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="alert policy rollback completed",
         state_snapshot={"rolled_back_to": rollback_version},
@@ -944,7 +1120,7 @@ def runtime_alert_policy_test_alert(payload: RuntimeActionRequest, current_admin
         details={"reason": payload.reason},
     )
     return _action_result(
-        status="ok",
+        status="success",
         trace_id=trace_id,
         message="test alert created",
         state_snapshot={"alert_id": alert.id, "severity": alert.severity},

@@ -166,7 +166,8 @@ function App() {
             <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
             <Route path="execution-readiness" element={<AdminExecutionReadinessPage />} />
             <Route path="action-audit" element={<AdminActionAuditPage />} />
-            <Route path="pipeline-control" element={<AdminPipelineControlPage />} />
+            <Route path="pipeline-control" element={<Navigate to="/admin/pipeline-operations" replace />} />
+            <Route path="pipeline-monitoring" element={<Navigate to="/admin/pipeline-operations" replace />} />
             <Route path="pipeline-operations" element={<PipelineOperationsPage />} />
             <Route path="mfa-settings" element={<MfaSettingsPage />} />
             <Route path="brand-settings" element={<AdminBrandSettingsPage />} />

@@ -37,6 +37,7 @@ def reconnect_ws(cache, *, actor_user_id: str, reason: str, trace_id: str) -> di
     state["reconnect_count"] = int(state.get("reconnect_count") or 0) + 1
     state["last_reconnect_at"] = now
     state["last_reconnect_by"] = actor_user_id
+    state["reconnect_reason"] = reason
     state["status"] = "reconnecting"
     _write_json(cache, "runtime:ws:state", state)
 
@@ -61,6 +62,7 @@ def force_new_ws_session(cache, *, actor_user_id: str, reason: str, trace_id: st
     state["status"] = "new_session_requested"
     state["last_reconnect_at"] = now
     state["last_reconnect_by"] = actor_user_id
+    state["reconnect_reason"] = reason
     state["reconnect_count"] = int(state.get("reconnect_count") or 0) + 1
     _write_json(cache, "runtime:ws:state", state)
 
@@ -119,8 +121,30 @@ def get_ws_health(cache) -> dict:
             continue
 
     multi = _read_json(cache, "runtime:ws:connections", {"active": [], "history": []})
+    reconnect_reasons = [
+        {
+            "reason": item.get("reason"),
+            "created_at": item.get("created_at"),
+            "event": item.get("event"),
+        }
+        for item in logs
+        if item.get("event") in {"ws_reconnect_requested", "ws_force_new_session"}
+    ]
+    reconnect_reasons = reconnect_reasons[-5:]
+
+    inferred_last_error = None
+    for item in reversed(logs):
+        if item.get("error"):
+            inferred_last_error = item.get("error")
+            break
+
     return {
         "state": state,
+        "session_id": state.get("session_id"),
+        "reconnect_count": int(state.get("reconnect_count") or 0),
+        "last_error": state.get("last_error") or inferred_last_error,
+        "reconnect_reason": state.get("reconnect_reason") or (reconnect_reasons[-1]["reason"] if reconnect_reasons else None),
         "connection_logs": logs,
+        "recent_reconnect_reasons": reconnect_reasons,
         "multi_connection_state": multi,
     }

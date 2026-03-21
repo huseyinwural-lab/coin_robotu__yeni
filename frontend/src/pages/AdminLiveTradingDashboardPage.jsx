@@ -392,7 +392,6 @@ export const AdminLiveTradingDashboardPage = () => {
         </label>
 
         <Button type="button" variant="outline" onClick={load} data-testid="admin-live-trading-dashboard-refresh-button">Yenile</Button>
-        <Button type="button" variant="outline" onClick={() => navigate("/admin/pipeline-control")} data-testid="admin-live-trading-dashboard-open-pipeline-control-button">Pipeline Control</Button>
         <Button type="button" variant="outline" onClick={() => navigate("/admin/pipeline-operations")} data-testid="admin-live-trading-dashboard-open-pipeline-operations-button">Unified Pipeline Ops</Button>
         <Button type="button" variant="outline" onClick={() => setAutoRefresh((prev) => !prev)} data-testid="admin-live-trading-dashboard-auto-refresh-toggle-button">
           auto-refresh: {autoRefresh ? "ON" : "OFF"}

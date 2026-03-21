@@ -543,7 +543,6 @@ export const AdminDashboardPage = () => {
             </label>
             <Button variant="outline" onClick={() => navigate("/admin/audit-logs")} data-testid="admin-dashboard-go-audit-logs-button">Audit Logs</Button>
             <Button variant="outline" onClick={() => navigate("/admin/live-trading-dashboard")} data-testid="admin-dashboard-go-live-control-hub-button">Live Control Hub</Button>
-            <Button variant="outline" onClick={() => navigate("/admin/pipeline-control")} data-testid="admin-dashboard-go-pipeline-control-button">Pipeline Control</Button>
             <Button variant="outline" onClick={() => navigate("/admin/pipeline-operations")} data-testid="admin-dashboard-go-pipeline-operations-button">Unified Pipeline Ops</Button>
             <Button variant="outline" onClick={runCloseNextActions} data-testid="admin-dashboard-auto-close-run-now-button">Auto-Close Run Now</Button>
             <Button onClick={loadDashboard} data-testid="admin-dashboard-refresh-button">Yenile</Button>

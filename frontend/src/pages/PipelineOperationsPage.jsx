@@ -26,6 +26,8 @@ const ACTION_META = {
   policy_update: { endpoint: "/runtime/alert-policy", phrase: "UPDATE ALERT POLICY", panelKey: "control", method: "put" },
   policy_rollback: { endpoint: "/runtime/alert-policy/rollback", phrase: "ROLLBACK ALERT POLICY", panelKey: "control" },
   policy_test_alert: { endpoint: "/runtime/alert-policy/test-alert", phrase: "SEND TEST ALERT", panelKey: "control" },
+  exchange_revalidate: { endpoint: "/runtime/exchange/revalidate/{connection_id}", phrase: "REVALIDATE EXCHANGE", panelKey: "monitoring" },
+  exchange_disable: { endpoint: "/runtime/exchange/disable-key/{connection_id}", phrase: "DISABLE EXCHANGE KEY", panelKey: "monitoring" },
 };
 
 const extractErrorMeta = (error) => {
@@ -49,6 +51,7 @@ const ResultBadge = ({ result, testId }) => {
       <p data-testid={`${testId}-status`}>status={result.status || "-"}</p>
       <p data-testid={`${testId}-trace-id`}>trace_id={result.trace_id || "-"}</p>
       <p data-testid={`${testId}-message`}>message={result.message || "-"}</p>
+      <p data-testid={`${testId}-state-snapshot`}>state_snapshot={JSON.stringify(result.state_snapshot || {}).slice(0, 180)}</p>
     </div>
   );
 };
@@ -129,6 +132,9 @@ export const PipelineOperationsPage = () => {
   const [serviceTarget, setServiceTarget] = useState("all");
   const [lagThreshold, setLagThreshold] = useState("60");
   const [severityFilter, setSeverityFilter] = useState("all");
+  const [alertSinceHours, setAlertSinceHours] = useState("24");
+  const [alertEventFilter, setAlertEventFilter] = useState("");
+  const [runtimeMode, setRuntimeMode] = useState("MOCK");
 
   const [reasonControl, setReasonControl] = useState("pipeline_control_manual_action");
   const [reasonRecovery, setReasonRecovery] = useState("pipeline_recovery_manual_action");
@@ -150,10 +156,11 @@ export const PipelineOperationsPage = () => {
 
   const [bulkSelection, setBulkSelection] = useState([]);
   const [stateValidation, setStateValidation] = useState({
-    wsReconnectSessionChanged: null,
-    overrideAffectsExecution: null,
-    gateUsesCiResult: null,
-    tradeBlockVisible: null,
+    wsReconnectSessionChanged: false,
+    overrideAffectsExecution: false,
+    gateUsesCiResult: false,
+    tradeBlockVisible: false,
+    suggestions: {},
     lastCheckedAt: null,
   });
   const [panelResult, setPanelResult] = useState({
@@ -171,6 +178,7 @@ export const PipelineOperationsPage = () => {
     reason: "",
     phrase: "",
     panelKey: "control",
+    context: {},
   });
 
   const load = useCallback(async (showLoader = true) => {
@@ -189,6 +197,7 @@ export const PipelineOperationsPage = () => {
         policyRes,
         auditRes,
         quotePolicyRes,
+        validationRes,
       ] = await Promise.all([
         apiClient.get("/runtime/ws/health"),
         apiClient.get("/runtime/gate/status"),
@@ -201,13 +210,23 @@ export const PipelineOperationsPage = () => {
           params: {
             status_filter: "all",
             severity: severityFilter === "all" ? undefined : severityFilter,
+            since_hours: Number(alertSinceHours || 24),
+            event_type: alertEventFilter || undefined,
             limit: 100,
           },
         }),
         apiClient.get("/runtime/alert-policy"),
         apiClient.get("/runtime/action-audit", { params: { since_hours: 48, limit: 40 } }),
         apiClient.get("/runtime/quote-policy"),
+        apiClient.get("/runtime/state-validation"),
       ]);
+
+      try {
+        const modeRes = await apiClient.get("/admin/live-trading/control-layer/state");
+        setRuntimeMode(String(modeRes.data?.execution_mode || "MOCK").toUpperCase());
+      } catch {
+        setRuntimeMode("MOCK");
+      }
 
       setWsHealth(wsRes.data || null);
       setGateStatus(gateRes.data || null);
@@ -220,6 +239,14 @@ export const PipelineOperationsPage = () => {
       setAlertsHistory(alertsRes.data?.items || []);
       setAlertPolicy(policyRes.data || null);
       setActionAudit(auditRes.data?.items || []);
+      setStateValidation({
+        wsReconnectSessionChanged: Boolean(validationRes.data?.ws_session_changed),
+        overrideAffectsExecution: Boolean(validationRes.data?.override_effect_applied),
+        gateUsesCiResult: String(validationRes.data?.gate_source || "").toLowerCase() === "ci_script",
+        tradeBlockVisible: Boolean(validationRes.data?.guard_block_visible),
+        suggestions: validationRes.data?.suggestions || {},
+        lastCheckedAt: validationRes.data?.checked_at || new Date().toISOString(),
+      });
 
       const policy = policyRes.data?.policy;
       if (policy) {
@@ -231,19 +258,12 @@ export const PipelineOperationsPage = () => {
         });
       }
 
-      const guardTopReasons = guardRes.data?.top_reasons || [];
-      const hasInvalidQuoteBlock = guardTopReasons.some((item) => String(item?.reason || "").toUpperCase() === "INVALID_QUOTE_ASSET");
-      setStateValidation((prev) => ({
-        ...prev,
-        tradeBlockVisible: hasInvalidQuoteBlock,
-        lastCheckedAt: new Date().toISOString(),
-      }));
-
       return {
         wsHealth: wsRes.data || null,
         gateStatus: gateRes.data || null,
         overridesActive: activeRes.data?.items || [],
         guardTelemetry: guardRes.data || null,
+        stateValidation: validationRes.data || null,
       };
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -253,19 +273,20 @@ export const PipelineOperationsPage = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [severityFilter]);
+  }, [severityFilter, alertSinceHours, alertEventFilter]);
 
   useEffect(() => {
     load(true);
   }, [load]);
 
-  const openActionDialog = (actionKey, panelKey, reasonHint) => {
+  const openActionDialog = (actionKey, panelKey, reasonHint, context = {}) => {
     setActionDialog({
       open: true,
       actionKey,
       reason: reasonHint || (panelKey === "recovery" ? reasonRecovery : reasonControl),
       phrase: "",
       panelKey,
+      context,
     });
   };
 
@@ -296,7 +317,6 @@ export const PipelineOperationsPage = () => {
       return;
     }
 
-    const previousWsSessionId = wsHealth?.state?.session_id || null;
     try {
       let response;
       if (actionDialog.actionKey === "service_restart") {
@@ -320,6 +340,17 @@ export const PipelineOperationsPage = () => {
           reason: actionDialog.reason,
           confirmation_phrase: actionDialog.phrase,
         });
+      } else if (["exchange_revalidate", "exchange_disable"].includes(actionDialog.actionKey)) {
+        const connectionId = actionDialog.context?.connectionId;
+        if (!connectionId) {
+          toast.error("connection_id gerekli");
+          return;
+        }
+        const endpoint = meta.endpoint.replace("{connection_id}", connectionId);
+        response = await apiClient.post(endpoint, {
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
       } else {
         response = await apiClient.post(meta.endpoint, {
           reason: actionDialog.reason,
@@ -329,20 +360,7 @@ export const PipelineOperationsPage = () => {
 
       setActionSuccess(actionDialog.panelKey, response.data || null, "Aksiyon başarılı");
       setActionDialog((prev) => ({ ...prev, open: false }));
-      const latest = await load(false);
-
-      if (["ws_reconnect", "ws_new_session"].includes(actionDialog.actionKey)) {
-        const nextWsSessionId = latest?.wsHealth?.state?.session_id || null;
-        setStateValidation((prev) => ({
-          ...prev,
-          wsReconnectSessionChanged: Boolean(previousWsSessionId && nextWsSessionId && previousWsSessionId !== nextWsSessionId),
-        }));
-      }
-
-      if (actionDialog.actionKey === "gate_recheck") {
-        const hasCiScripts = Array.isArray(response.data?.scripts) && response.data.scripts.length > 0;
-        setStateValidation((prev) => ({ ...prev, gateUsesCiResult: hasCiScripts }));
-      }
+      await load(false);
     } catch (error) {
       setActionFailure(actionDialog.panelKey, error, "Aksiyon başarısız");
     }
@@ -366,7 +384,6 @@ export const PipelineOperationsPage = () => {
   };
 
   const runOverrideCreate = async () => {
-    const previousCount = overridesActive.length;
     try {
       const { data } = await apiClient.post("/runtime/override/create", {
         override_type: overrideForm.override_type,
@@ -376,25 +393,20 @@ export const PipelineOperationsPage = () => {
         confirmation_phrase: overrideForm.confirmation_phrase,
       });
       setActionSuccess("override", data || null, "Override oluşturma başarılı");
-      const latest = await load(false);
-      const currentCount = latest?.overridesActive?.length ?? previousCount;
-      setStateValidation((prev) => ({ ...prev, overrideAffectsExecution: currentCount !== previousCount }));
+      await load(false);
     } catch (error) {
       setActionFailure("override", error, "Override oluşturma başarısız");
     }
   };
 
   const runOverrideCancel = async (overrideId) => {
-    const previousCount = overridesActive.length;
     try {
       const { data } = await apiClient.post(`/runtime/override/${overrideId}/cancel`, {
         reason: overrideForm.reason,
         confirmation_phrase: "CANCEL OVERRIDE",
       });
       setActionSuccess("override", data || null, "Override iptali başarılı");
-      const latest = await load(false);
-      const currentCount = latest?.overridesActive?.length ?? previousCount;
-      setStateValidation((prev) => ({ ...prev, overrideAffectsExecution: currentCount !== previousCount }));
+      await load(false);
     } catch (error) {
       setActionFailure("override", error, "Override iptali başarısız");
     }
@@ -478,11 +490,10 @@ export const PipelineOperationsPage = () => {
           <div data-testid="pipeline-operations-header-copy">
             <h1 className="text-4xl font-black uppercase tracking-tight text-slate-100" data-testid="pipeline-operations-title">Unified Pipeline Operations Panel</h1>
             <p className="mt-2 text-sm text-slate-400" data-testid="pipeline-operations-description">
-              Öncelik sırası: Control → Recovery → Monitoring → Traceability · role={user?.role || "unknown"}
+              Öncelik sırası: Control → Recovery → Monitoring → Traceability · role={user?.role || "unknown"} · MODE: {runtimeMode}
             </p>
           </div>
           <div className="flex flex-wrap gap-2" data-testid="pipeline-operations-header-actions">
-            <Button variant="outline" onClick={() => navigate("/admin/pipeline-control")} data-testid="pipeline-operations-open-legacy-page-button">Legacy Pipeline Control</Button>
             <Button variant="outline" onClick={() => navigate("/admin/live-trading-dashboard")} data-testid="pipeline-operations-open-live-dashboard-button">Live Dashboard</Button>
             <Button variant="outline" onClick={() => load(false)} data-testid="pipeline-operations-refresh-button">Yenile</Button>
           </div>
@@ -500,19 +511,23 @@ export const PipelineOperationsPage = () => {
 
       <article className="rounded-xl border border-slate-700 bg-slate-900/90 p-4" data-testid="pipeline-operations-state-validation-panel">
         <h3 className="text-base font-semibold text-slate-100" data-testid="pipeline-operations-state-validation-title">State Validation Checklist</h3>
-        <p className="text-xs text-slate-400" data-testid="pipeline-operations-state-validation-description">Dummy state yok: her kontrol canlı aksiyon/telemetry verisiyle doğrulanır.</p>
+        <p className="text-xs text-slate-400" data-testid="pipeline-operations-state-validation-description">Gerçek endpoint: `/runtime/state-validation`</p>
         <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="pipeline-operations-state-validation-grid">
           <p data-testid="pipeline-operations-state-validation-ws">
-            WS reconnect session değişimi: <span className="font-semibold">{stateValidation.wsReconnectSessionChanged === null ? "BEKLENİYOR" : stateValidation.wsReconnectSessionChanged ? "PASS" : "FAIL"}</span>
+            WS reconnect session değişimi: <span className={`font-semibold ${stateValidation.wsReconnectSessionChanged ? "text-emerald-700" : "text-red-700"}`}>{stateValidation.wsReconnectSessionChanged ? "PASS" : "FAIL"}</span>
+            {!stateValidation.wsReconnectSessionChanged && <span className="ml-2 text-xs text-red-700">{stateValidation.suggestions?.ws_session_changed}</span>}
           </p>
           <p data-testid="pipeline-operations-state-validation-override">
-            Override state etkisi: <span className="font-semibold">{stateValidation.overrideAffectsExecution === null ? "BEKLENİYOR" : stateValidation.overrideAffectsExecution ? "PASS" : "FAIL"}</span>
+            Override state etkisi: <span className={`font-semibold ${stateValidation.overrideAffectsExecution ? "text-emerald-700" : "text-red-700"}`}>{stateValidation.overrideAffectsExecution ? "PASS" : "FAIL"}</span>
+            {!stateValidation.overrideAffectsExecution && <span className="ml-2 text-xs text-red-700">{stateValidation.suggestions?.override_effect_applied}</span>}
           </p>
           <p data-testid="pipeline-operations-state-validation-gate">
-            Gate CI script sonucu: <span className="font-semibold">{stateValidation.gateUsesCiResult === null ? "BEKLENİYOR" : stateValidation.gateUsesCiResult ? "PASS" : "FAIL"}</span>
+            Gate CI script sonucu: <span className={`font-semibold ${stateValidation.gateUsesCiResult ? "text-emerald-700" : "text-red-700"}`}>{stateValidation.gateUsesCiResult ? "PASS" : "FAIL"}</span>
+            {!stateValidation.gateUsesCiResult && <span className="ml-2 text-xs text-red-700">{stateValidation.suggestions?.gate_source}</span>}
           </p>
           <p data-testid="pipeline-operations-state-validation-block">
-            Trade block guard listesine düşüş: <span className="font-semibold">{stateValidation.tradeBlockVisible === null ? "BEKLENİYOR" : stateValidation.tradeBlockVisible ? "PASS" : "FAIL"}</span>
+            Trade block guard listesine düşüş: <span className={`font-semibold ${stateValidation.tradeBlockVisible ? "text-emerald-700" : "text-red-700"}`}>{stateValidation.tradeBlockVisible ? "PASS" : "FAIL"}</span>
+            {!stateValidation.tradeBlockVisible && <span className="ml-2 text-xs text-red-700">{stateValidation.suggestions?.guard_block_visible}</span>}
           </p>
         </div>
       </article>
@@ -529,6 +544,14 @@ export const PipelineOperationsPage = () => {
               <p data-testid="pipeline-operations-ws-control-state-session">session={wsHealth?.state?.session_id || "-"}</p>
               <p data-testid="pipeline-operations-ws-control-state-reconnect">reconnect_count={wsHealth?.state?.reconnect_count || 0}</p>
               <p data-testid="pipeline-operations-ws-control-state-status">status={wsHealth?.state?.status || "-"}</p>
+              <p data-testid="pipeline-operations-ws-control-state-last-error">last_error={wsHealth?.last_error || "-"}</p>
+              <p data-testid="pipeline-operations-ws-control-state-reconnect-reason">reconnect_reason={wsHealth?.reconnect_reason || "-"}</p>
+              <div className="max-h-20 space-y-1 overflow-auto" data-testid="pipeline-operations-ws-control-connection-logs">
+                <p className="font-semibold" data-testid="pipeline-operations-ws-control-connection-logs-title">Connection Logs (son 5)</p>
+                {(wsHealth?.recent_reconnect_reasons || []).map((item, idx) => (
+                  <p key={`${item.created_at}-${idx}`} data-testid={`pipeline-operations-ws-control-connection-log-${idx}`}>{item.created_at} · {item.reason}</p>
+                ))}
+              </div>
             </div>
           }
           reasonNode={
@@ -559,6 +582,26 @@ export const PipelineOperationsPage = () => {
               <p data-testid="pipeline-operations-gate-state-status">gate_status={gateStatus?.status || "-"}</p>
               <p data-testid="pipeline-operations-gate-state-final">final_decision={gateStatus?.final_decision || "-"}</p>
               <p data-testid="pipeline-operations-gate-state-reasons">reason_count={(gateStatus?.reason_codes || []).length}</p>
+              <div className="max-h-20 space-y-1 overflow-auto" data-testid="pipeline-operations-gate-rules-table">
+                {(gateStatus?.rules || []).slice(0, 6).map((rule, idx) => (
+                  <div
+                    key={`${rule.rule_id}-${idx}`}
+                    className={`rounded border px-2 py-1 ${(rule.result || "").toUpperCase() === "FAIL" ? "border-red-500 bg-red-950/30 text-red-200" : "border-emerald-600 bg-emerald-950/20 text-emerald-200"}`}
+                    data-testid={`pipeline-operations-gate-rule-${idx}`}
+                  >
+                    <p data-testid={`pipeline-operations-gate-rule-id-${idx}`}>{rule.rule_id} · {rule.result}</p>
+                    <p data-testid={`pipeline-operations-gate-rule-message-${idx}`}>{rule.message}</p>
+                    <button
+                      type="button"
+                      className="underline"
+                      onClick={() => navigate("/admin/execution-policies")}
+                      data-testid={`pipeline-operations-gate-rule-fix-hint-${idx}`}
+                    >
+                      {rule.fix_hint}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           }
           reasonNode={
@@ -592,6 +635,7 @@ export const PipelineOperationsPage = () => {
               <p data-testid="pipeline-operations-override-state-active-count">active_count={overridesActive.length}</p>
               <p data-testid="pipeline-operations-override-state-history-count">history_count={overrideHistory.length}</p>
               <p data-testid="pipeline-operations-override-state-ttl-cap">ttl_cap=120</p>
+              <p data-testid="pipeline-operations-override-state-impacted-total">impacted_total={overridesActive.reduce((sum, item) => sum + Number(item.impacted_trades_count || 0), 0)}</p>
             </div>
           }
           reasonNode={
@@ -611,7 +655,7 @@ export const PipelineOperationsPage = () => {
               <div className="max-h-24 space-y-1 overflow-auto" data-testid="pipeline-operations-override-active-list">
                 {overridesActive.slice(0, 8).map((item, idx) => (
                   <div key={item.override_id} className="flex items-center justify-between gap-2 text-[11px]" data-testid={`pipeline-operations-override-active-item-${idx}`}>
-                    <span data-testid={`pipeline-operations-override-active-item-text-${idx}`}>{item.override_id} · {item.type}</span>
+                    <span data-testid={`pipeline-operations-override-active-item-text-${idx}`}>{item.override_id} · {item.type} · ttl={item.ttl_remaining_seconds ?? "-"}s · impacted={item.impacted_trades_count ?? 0}</span>
                     <Button size="sm" variant="outline" disabled={!isSuperAdmin} onClick={() => runOverrideCancel(item.override_id)} data-testid={`pipeline-operations-override-cancel-button-${idx}`}>Cancel</Button>
                   </div>
                 ))}
@@ -712,10 +756,23 @@ export const PipelineOperationsPage = () => {
             }
             reasonNode={<p className="text-xs text-slate-400" data-testid="pipeline-operations-exchange-reason">Drift trendi yükselirse key revalidation/disable aksiyonu planlanır.</p>}
             actionNode={
-              <div className="max-h-28 space-y-1 overflow-auto" data-testid="pipeline-operations-exchange-trend-list">
-                {exchangeTrend.map((item, idx) => (
-                  <p key={`${item.bucket}-${idx}`} className="text-[11px] text-slate-300" data-testid={`pipeline-operations-exchange-trend-item-${idx}`}>{item.bucket}: {item.count}</p>
-                ))}
+              <div className="space-y-2" data-testid="pipeline-operations-exchange-trend-list">
+                <div className="max-h-20 space-y-1 overflow-auto" data-testid="pipeline-operations-exchange-trend-buckets">
+                  {exchangeTrend.map((item, idx) => (
+                    <p key={`${item.bucket}-${idx}`} className="text-[11px] text-slate-300" data-testid={`pipeline-operations-exchange-trend-item-${idx}`}>{item.bucket}: {item.count}</p>
+                  ))}
+                </div>
+                <div className="max-h-24 space-y-1 overflow-auto" data-testid="pipeline-operations-exchange-connection-table">
+                  {(exchangeMonitoring?.connection_details || []).slice(0, 6).map((item, idx) => (
+                    <div key={item.id} className="flex items-center justify-between gap-2 text-[11px]" data-testid={`pipeline-operations-exchange-connection-row-${idx}`}>
+                      <span data-testid={`pipeline-operations-exchange-connection-text-${idx}`}>{item.exchange} · {item.market_type} · {item.user_id}</span>
+                      <div className="flex gap-1" data-testid={`pipeline-operations-exchange-connection-actions-${idx}`}>
+                        <Button size="sm" variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("exchange_revalidate", "monitoring", reasonControl, { connectionId: item.id })} data-testid={`pipeline-operations-exchange-revalidate-${idx}`}>Revalidate</Button>
+                        <Button size="sm" variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("exchange_disable", "monitoring", reasonControl, { connectionId: item.id })} data-testid={`pipeline-operations-exchange-disable-${idx}`}>Disable</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             }
             resultNode={<ResultBadge result={panelResult.monitoring} testId="pipeline-operations-exchange-result" />}
@@ -734,7 +791,9 @@ export const PipelineOperationsPage = () => {
             reasonNode={
               <div className="space-y-2" data-testid="pipeline-operations-alert-center-reason-content">
                 <Textarea value={reasonAlerts} onChange={(e) => setReasonAlerts(e.target.value)} className="min-h-20 bg-slate-950" data-testid="pipeline-operations-alert-center-reason-input" />
-                <Input value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} className="bg-slate-950" data-testid="pipeline-operations-alert-center-severity-filter-input" />
+                <Input value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} className="bg-slate-950" data-testid="pipeline-operations-alert-center-severity-filter-input" placeholder="severity (all|INFO|WARNING|CRITICAL)" />
+                <Input value={alertSinceHours} onChange={(e) => setAlertSinceHours(e.target.value)} className="bg-slate-950" data-testid="pipeline-operations-alert-center-time-filter-input" placeholder="since_hours" />
+                <Input value={alertEventFilter} onChange={(e) => setAlertEventFilter(e.target.value)} className="bg-slate-950" data-testid="pipeline-operations-alert-center-event-filter-input" placeholder="event type" />
               </div>
             }
             actionNode={
@@ -754,7 +813,10 @@ export const PipelineOperationsPage = () => {
                           onChange={(e) => setBulkSelection((prev) => (e.target.checked ? [...prev, item.id] : prev.filter((id) => id !== item.id)))}
                           data-testid={`pipeline-operations-alert-center-select-${idx}`}
                         />
-                        <span data-testid={`pipeline-operations-alert-center-text-${idx}`}>{item.alert_type} · {item.severity}</span>
+                        <span data-testid={`pipeline-operations-alert-center-text-${idx}`}>
+                          {item.alert_type} ·
+                          <span className={`ml-1 rounded px-1 py-0.5 ${(item.severity || "").toUpperCase() === "CRITICAL" ? "bg-red-700 text-white" : (item.severity || "").toUpperCase() === "WARNING" ? "bg-amber-500 text-black" : "bg-emerald-600 text-white"}`}>{item.severity}</span>
+                        </span>
                       </label>
                       <div className="flex gap-1" data-testid={`pipeline-operations-alert-center-row-actions-${idx}`}>
                         <Button size="sm" variant="outline" onClick={() => runAlertAction(item.id, "ack")} data-testid={`pipeline-operations-alert-center-ack-${idx}`}>Ack</Button>
