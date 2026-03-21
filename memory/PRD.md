@@ -1,3 +1,18 @@
+## 2026-03-21 — Acil Bug Fix: Admin Login Başarısızlığı ✅
+
+### Root Cause
+- Backend servis PostgreSQL bağlantısı olmadığı için ayağa kalkmıyordu (`connection refused`).
+
+### Uygulanan Fix
+- PostgreSQL yeniden kuruldu ve cluster ayağa kaldırıldı.
+- `trader` rolü + `trading_platform` veritabanı oluşturuldu.
+- Backend supervisor ile restart edildi.
+- Admin kullanıcı tekrar seed edildi (`canary.admin@platform.local`).
+
+### Doğrulama
+- `/api/health` -> `200`
+- `/api/auth/login` (admin) -> `200`
+
 ## 2026-03-21 — FINAL Cleanup + Real State + Lock ✅
 
 ### 1) Tek Panel Zorunluluğu

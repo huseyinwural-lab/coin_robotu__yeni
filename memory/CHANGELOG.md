@@ -1,6 +1,12 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-21
+### Hotfix — Admin Login Failure (Backend DB Down)
+- PostgreSQL eksik/kapalı durumundan kaynaklı backend startup hatası giderildi.
+- DB cluster + role/database yeniden oluşturuldu.
+- Backend restart sonrası admin login doğrulandı (`/api/auth/login` 200).
+
+## 2026-03-21
 ### Iteration-53 — Final Cleanup + Real State + Lock
 - Legacy pipeline UI linkleri kaldırıldı, route redirectler tamamlandı (`pipeline-control`, `pipeline-monitoring` -> `pipeline-operations`).
 - Yeni `GET /api/runtime/state-validation` endpointi ile gerçek state checklist bağlandı (PASS/FAIL + suggestion).
