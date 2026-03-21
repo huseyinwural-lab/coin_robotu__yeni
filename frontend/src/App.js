@@ -80,7 +80,6 @@ import { AdminExecutionReadinessPage } from "@/pages/AdminExecutionReadinessPage
 import { AdminBrandSettingsPage } from "@/pages/AdminBrandSettingsPage";
 import { AdminAnomalyTimelinePage } from "@/pages/AdminAnomalyTimelinePage";
 import { AdminActionAuditPage } from "@/pages/AdminActionAuditPage";
-import { AdminPipelineControlPage } from "@/pages/AdminPipelineControlPage";
 import { PipelineOperationsPage } from "@/pages/PipelineOperationsPage";
 import { MfaSettingsPage } from "@/pages/MfaSettingsPage";
 
