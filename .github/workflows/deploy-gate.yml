@@ -915,11 +915,34 @@ jobs:
               return `${(ratio * 100).toFixed(1)}%`;
             };
 
-            const percentLabel = (value) => {
+            const trendArrow = (value) => {
+              if (!Number.isFinite(Number(value))) return '→';
+              const parsed = Number(value);
+              if (parsed > 0) return '↑';
+              if (parsed < 0) return '↓';
+              return '→';
+            };
+
+            const toneBadge = (value) => {
+              if (!Number.isFinite(Number(value))) return '⚪';
+              const parsed = Number(value);
+              if (parsed > 0) return '🔴';
+              if (parsed < 0) return '🟢';
+              return '🟡';
+            };
+
+            const deltaLabel = (value, unit = 'KB') => {
               if (!Number.isFinite(Number(value))) return 'n/a';
               const parsed = Number(value);
               const sign = parsed > 0 ? '+' : '';
-              return `${sign}${parsed.toFixed(2)}%`;
+              return `${toneBadge(parsed)} ${sign}${parsed.toFixed(2)} ${unit} ${trendArrow(parsed)}`;
+            };
+
+            const percentDeltaLabel = (value) => {
+              if (!Number.isFinite(Number(value))) return 'n/a';
+              const parsed = Number(value);
+              const sign = parsed > 0 ? '+' : '';
+              return `${toneBadge(parsed)} ${sign}${parsed.toFixed(2)}% ${trendArrow(parsed)}`;
             };
 
             const jsProximity = proximityTag(jsRatio);
@@ -931,11 +954,11 @@ jobs:
               `- Profile: **${profile}**`,
               `- Main JS (gzip): **${js} KB** / limit **${jsMax} KB** → ${jsProximity} (budget used: ${ratioLabel(jsRatio)})`,
               `- Main CSS (gzip): **${css} KB** / limit **${cssMax} KB** → ${cssProximity} (budget used: ${ratioLabel(cssRatio)})`,
-              `- Δ JS vs previous: **${deltaJs ?? 'n/a'} KB**`,
-              `- Δ CSS vs previous: **${deltaCss ?? 'n/a'} KB**`,
+              `- Δ JS vs previous: **${deltaLabel(deltaJs)}**`,
+              `- Δ CSS vs previous: **${deltaLabel(deltaCss)}**`,
               `- Last ${baselineAvgCount || 0} baseline avg (JS/CSS gzip): **${baselineAvgJs ?? 'n/a'} KB / ${baselineAvgCss ?? 'n/a'} KB**`,
-              `- Δ vs last-${baselineAvgCount || 0} avg (JS/CSS): **${deltaVsAvgJs ?? 'n/a'} KB / ${deltaVsAvgCss ?? 'n/a'} KB**`,
-              `- Sapma vs last-${baselineAvgCount || 0} avg (%): **${percentLabel(deviationVsAvgJsPct)} / ${percentLabel(deviationVsAvgCssPct)}**`,
+              `- Δ vs last-${baselineAvgCount || 0} avg (JS/CSS): **${deltaLabel(deltaVsAvgJs)} / ${deltaLabel(deltaVsAvgCss)}**`,
+              `- Sapma vs last-${baselineAvgCount || 0} avg (%): **${percentDeltaLabel(deviationVsAvgJsPct)} / ${percentDeltaLabel(deviationVsAvgCssPct)}**`,
               `- Delta source note: ${deltaNote || 'ok'}`,
               `- Threshold result: JS=${report.threshold_result?.main_js_within_limit}, CSS=${report.threshold_result?.main_css_within_limit}`,
             ].join('\n');

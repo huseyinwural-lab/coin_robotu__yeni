@@ -72,21 +72,28 @@ const compactMinimalFilters = (filters) => Object.entries(filters || {}).reduce(
 }, {});
 
 const REQUEST_HEALTH_WINDOW_MS = 60_000;
-const REQUEST_TREND_WINDOW_MS = 300_000;
+const REQUEST_TREND_MAX_WINDOW_MS = 900_000;
+const REQUEST_TREND_BUCKETS = 5;
+const REQUEST_TREND_OPTIONS = [5, 15];
 
-const buildFiveMinuteTrend = (events, nowTs = Date.now()) => {
-  const bucketMs = 60_000;
-  const startTs = nowTs - REQUEST_TREND_WINDOW_MS;
-  return Array.from({ length: 5 }, (_, index) => {
+const buildTrendPoints = (events, windowMinutes = 5, nowTs = Date.now()) => {
+  const normalizedWindowMinutes = REQUEST_TREND_OPTIONS.includes(Number(windowMinutes)) ? Number(windowMinutes) : 5;
+  const totalWindowMs = normalizedWindowMinutes * 60_000;
+  const bucketMs = Math.max(1, Math.floor(totalWindowMs / REQUEST_TREND_BUCKETS));
+  const startTs = nowTs - totalWindowMs;
+  const labelStep = Math.max(1, Math.round(normalizedWindowMinutes / REQUEST_TREND_BUCKETS));
+
+  return Array.from({ length: REQUEST_TREND_BUCKETS }, (_, index) => {
     const bucketStart = startTs + (index * bucketMs);
     const bucketEnd = bucketStart + bucketMs;
     const bucketEvents = events.filter((item) => item.timestamp >= bucketStart && item.timestamp < bucketEnd);
     const total = bucketEvents.length;
     const success = bucketEvents.filter((item) => item.ok).length;
     const successRatio = total > 0 ? success / total : 1;
+    const minutesAgo = Math.max(1, normalizedWindowMinutes - (index * labelStep));
     return {
       key: `m${index}`,
-      label: `${5 - index}m`,
+      label: `${minutesAgo}m`,
       total,
       success,
       successRatio,
@@ -160,12 +167,17 @@ export const UserScannerPage = () => {
     windowSeconds: 60,
     updatedAt: null,
   });
-  const [requestTrend, setRequestTrend] = useState(() => buildFiveMinuteTrend([]));
+  const [selectedTrendWindowMinutes, setSelectedTrendWindowMinutes] = useState(5);
+  const [requestTrend, setRequestTrend] = useState(() => buildTrendPoints([], 5));
+  const [anomalyToastEnabled, setAnomalyToastEnabled] = useState(true);
+  const [anomalySoundEnabled, setAnomalySoundEnabled] = useState(true);
   const profileRunTrackerRef = useRef({});
   const symbolPersistTimerRef = useRef(null);
   const minimalFiltersRef = useRef(MINIMAL_FILTER_DEFAULTS);
   const requestWindowRef = useRef([]);
   const requestTrendRef = useRef([]);
+  const selectedTrendWindowRef = useRef(5);
+  const anomalyAlertArmedRef = useRef(false);
 
   const activeProfile = useMemo(() => {
     if (!automationProfiles.length) {
@@ -234,8 +246,6 @@ export const UserScannerPage = () => {
   }, [requestTrend]);
 
   const requestTrendPolylinePath = useMemo(() => {
-    const width = 160;
-    const height = 32;
     if (!requestTrendPolylinePoints.length) {
       return "";
     }
@@ -244,11 +254,10 @@ export const UserScannerPage = () => {
     }).join(" ");
   }, [requestTrendPolylinePoints]);
 
-  const latestTrendPoint = requestTrendPolylinePoints[requestTrendPolylinePoints.length - 1] || null;
-  const latestFailRatio = latestTrendPoint && Number(latestTrendPoint.total || 0) > 0
-    ? Number((latestTrendPoint.fail / latestTrendPoint.total).toFixed(4))
+  const latestFailRatio = requestHealth.total > 0
+    ? Number((requestHealth.failed / requestHealth.total).toFixed(4))
     : 0;
-  const hasAnomaly = Boolean(latestTrendPoint && Number(latestTrendPoint.total || 0) > 0 && latestFailRatio > 0.1);
+  const hasAnomaly = Boolean(requestHealth.total > 0 && latestFailRatio > 0.1);
 
   const formatDateLabel = (value) => {
     if (!value) {
@@ -277,7 +286,7 @@ export const UserScannerPage = () => {
     const merged = [...retained, ...incoming];
     requestWindowRef.current = merged;
 
-    const retainedTrend = (requestTrendRef.current || []).filter((item) => now - item.timestamp <= REQUEST_TREND_WINDOW_MS);
+    const retainedTrend = (requestTrendRef.current || []).filter((item) => now - item.timestamp <= REQUEST_TREND_MAX_WINDOW_MS);
     const mergedTrend = [...retainedTrend, ...incoming];
     requestTrendRef.current = mergedTrend;
 
@@ -287,8 +296,60 @@ export const UserScannerPage = () => {
       windowSeconds: 60,
       updatedAt: new Date(now).toISOString(),
     });
-    setRequestTrend(buildFiveMinuteTrend(mergedTrend, now));
+    setRequestTrend(buildTrendPoints(mergedTrend, selectedTrendWindowRef.current, now));
   }, []);
+
+  const playAnomalyAlertBeep = useCallback(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const AudioContextRef = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextRef) {
+      return;
+    }
+    try {
+      const ctx = new AudioContextRef();
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = 860;
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.09, ctx.currentTime + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.24);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + 0.25);
+      setTimeout(() => {
+        ctx.close().catch(() => {});
+      }, 350);
+    } catch {
+      // noop
+    }
+  }, []);
+
+  useEffect(() => {
+    const now = Date.now();
+    selectedTrendWindowRef.current = selectedTrendWindowMinutes;
+    setRequestTrend(buildTrendPoints(requestTrendRef.current || [], selectedTrendWindowMinutes, now));
+  }, [selectedTrendWindowMinutes]);
+
+  useEffect(() => {
+    if (!hasAnomaly) {
+      anomalyAlertArmedRef.current = false;
+      return;
+    }
+    if (anomalyAlertArmedRef.current) {
+      return;
+    }
+    anomalyAlertArmedRef.current = true;
+    if (anomalyToastEnabled) {
+      toast.error(`Anomaly tespit edildi: son 1 dakikada fail oranı %${(latestFailRatio * 100).toFixed(1)}`);
+    }
+    if (anomalySoundEnabled) {
+      playAnomalyAlertBeep();
+    }
+  }, [anomalySoundEnabled, anomalyToastEnabled, hasAnomaly, latestFailRatio, playAnomalyAlertBeep]);
 
   const loadSymbolExplainability = async (symbol) => {
     if (!symbol) {
@@ -836,6 +897,43 @@ export const UserScannerPage = () => {
       <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-request-health-mini-indicator">
         <div className="flex flex-wrap items-center gap-3" data-testid="user-scanner-request-health-row">
           <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-request-health-title">Scanner Request Health</p>
+          <div className="flex items-center gap-1" data-testid="user-scanner-request-health-trend-window-toggle">
+            {REQUEST_TREND_OPTIONS.map((minutes) => (
+              <Button
+                key={`trend-window-${minutes}`}
+                type="button"
+                size="sm"
+                variant={selectedTrendWindowMinutes === minutes ? "default" : "outline"}
+                className="h-7 px-2 text-xs"
+                data-testid={`user-scanner-request-health-trend-window-${minutes}m-button`}
+                onClick={() => setSelectedTrendWindowMinutes(minutes)}
+              >
+                {minutes}m
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1" data-testid="user-scanner-request-health-alert-toggle-group">
+            <Button
+              type="button"
+              size="sm"
+              variant={anomalyToastEnabled ? "default" : "outline"}
+              className="h-7 px-2 text-xs"
+              data-testid="user-scanner-request-health-anomaly-toast-toggle"
+              onClick={() => setAnomalyToastEnabled((prev) => !prev)}
+            >
+              Toast {anomalyToastEnabled ? "Açık" : "Kapalı"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={anomalySoundEnabled ? "default" : "outline"}
+              className="h-7 px-2 text-xs"
+              data-testid="user-scanner-request-health-anomaly-sound-toggle"
+              onClick={() => setAnomalySoundEnabled((prev) => !prev)}
+            >
+              Ses {anomalySoundEnabled ? "Açık" : "Kapalı"}
+            </Button>
+          </div>
           <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${requestHealthBadgeClass}`} data-testid="user-scanner-request-health-badge">
             {requestHealth.health}
           </span>
