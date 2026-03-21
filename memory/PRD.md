@@ -1,3 +1,39 @@
+## 2026-03-21 — FAZ-2 (P1/P2) Gözlemlenebilirlik Derinleştirme ✅
+
+### Kapsam
+- Dosya: `/app/frontend/src/pages/UserScannerPage.jsx`
+
+### Uygulananlar
+1) **Detail kartta endpoint katkı kırılımı**
+- Son 1m ve 5m için endpoint bazlı ok/fail katkı hesapları eklendi.
+- Yeni alanlar:
+  - 1m summary (`req`, `ok/fail`, `success%`)
+  - 5m summary (`req`, `ok/fail`, `success%`)
+  - her pencere için `most impacted endpoint`
+  - top endpoint listeleri (ok/fail)
+
+2) **Trend-detail genişletme**
+- Bucket modeli genişletildi:
+  - bucket başına `total/success/failed/successRatio`
+  - `endpoint_breakdown`
+  - `most_impacted_endpoint`
+- Hover detay kartı artık bu bilgileri gösteriyor:
+  - selected bucket metrikleri
+  - bucket için most impacted endpoint
+  - ilk 3 endpoint katkı satırı
+
+3) **Request event zenginleştirme**
+- `Promise.allSettled` sonuçları endpoint metadata ile işlendi.
+- Request event penceresi artık `endpoint` alanı taşıyor; observability hesapları bu alan üzerinden yapılıyor.
+
+### Test Kanıtı
+- Frontend testing agent sonucu: **7/7 PASS**
+  - endpoint breakdown kartları (1m/5m) mevcut
+  - summary + most impacted alanları doğru
+  - list item render doğrulandı
+  - trend hover detail + impacted endpoint doğrulandı
+  - refresh butonu 10s stabil (flicker yok)
+
 ## 2026-03-21 — FAZ-1 (P1) Stabilizasyon: anomaly-event rate-limit/cooldown + guardrail + suppressed_count ✅
 
 ### Kapsam
