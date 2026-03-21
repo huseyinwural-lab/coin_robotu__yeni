@@ -79,6 +79,7 @@ import { AdminCommercialOpsPage } from "@/pages/AdminCommercialOpsPage";
 import { AdminExecutionReadinessPage } from "@/pages/AdminExecutionReadinessPage";
 import { AdminBrandSettingsPage } from "@/pages/AdminBrandSettingsPage";
 import { AdminAnomalyTimelinePage } from "@/pages/AdminAnomalyTimelinePage";
+import { AdminActionAuditPage } from "@/pages/AdminActionAuditPage";
 import { MfaSettingsPage } from "@/pages/MfaSettingsPage";
 
 const HomeRedirect = () => {
@@ -162,6 +163,7 @@ function App() {
             <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
             <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
             <Route path="execution-readiness" element={<AdminExecutionReadinessPage />} />
+            <Route path="action-audit" element={<AdminActionAuditPage />} />
             <Route path="mfa-settings" element={<MfaSettingsPage />} />
             <Route path="brand-settings" element={<AdminBrandSettingsPage />} />
             <Route path="anomaly-timeline" element={<AdminAnomalyTimelinePage />} />

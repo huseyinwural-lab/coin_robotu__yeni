@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,11 @@ const ACTION_PHRASES = {
   snapshot: "CAPTURE SNAPSHOT",
   reset_daily: "RESET DAILY METRICS",
   retry_orders: "RETRY FAILED ORDERS",
+  remove_failed_orders: "REMOVE FAILED ORDERS",
+  scanner_restart: "RESTART SCANNER",
+  scanner_trigger: "TRIGGER MANUAL SCAN",
+  scanner_universe: "UPDATE SYMBOL UNIVERSE",
+  alert_fix: "RUN ALERT FIX ACTION",
 };
 
 const FIX_ACTIONS = [
@@ -54,8 +60,10 @@ const FIX_ACTIONS = [
 ];
 
 export const AdminLiveTradingDashboardPage = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isManager = ["super_admin", "admin"].includes(String(user?.role || ""));
+  const isOps = String(user?.role || "") === "ops";
 
   const [windowSize, setWindowSize] = useState("1h");
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -72,12 +80,19 @@ export const AdminLiveTradingDashboardPage = () => {
   const [criticalAlerts, setCriticalAlerts] = useState([]);
   const [failedOrders, setFailedOrders] = useState([]);
   const [openPositions, setOpenPositions] = useState([]);
+  const [actionAudit, setActionAudit] = useState([]);
+  const [scannerControl, setScannerControl] = useState(null);
 
   const [selectedFailedIds, setSelectedFailedIds] = useState([]);
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [expandedAlertId, setExpandedAlertId] = useState(null);
+  const [alertActionResults, setAlertActionResults] = useState({});
+  const [retryResults, setRetryResults] = useState({});
 
   const [latencyForm, setLatencyForm] = useState({ scan_latency_ms: "1500", decision_latency_ms: "900", execution_latency_ms: "1600" });
   const [riskForm, setRiskForm] = useState({ max_loss_pct: "5", account_exposure_pct: "60", symbol_exposure_pct: "25" });
   const [riskOverrideForm, setRiskOverrideForm] = useState({ decision: "force_reject", ttl_minutes: "30" });
+  const [scannerForm, setScannerForm] = useState({ action: "add", symbols: "" });
 
   const [actionDialog, setActionDialog] = useState({
     open: false,
@@ -115,6 +130,8 @@ export const AdminLiveTradingDashboardPage = () => {
         alertsRes,
         failedRes,
         positionsRes,
+        auditRes,
+        scannerControlRes,
       ] = await Promise.all([
         apiClient.get("/admin/live-trading/summary", { params: { window: windowSize } }),
         apiClient.get("/admin/live-trading/scanner-health", { params: { window: windowSize } }),
@@ -126,6 +143,8 @@ export const AdminLiveTradingDashboardPage = () => {
         apiClient.get("/admin/live-trading/control-layer/critical-alerts", { params: { status_filter: "all", limit: 40 } }),
         apiClient.get("/admin/live-trading/control-layer/execution-quality/failed-orders", { params: { status_filter: "all", limit: 100 } }),
         apiClient.get("/admin/live-trading/control-layer/trading-performance/open-positions", { params: { limit: 100 } }),
+        apiClient.get("/admin/live-trading/control-layer/action-audit", { params: { since_hours: 48, limit: 40 } }),
+        apiClient.get("/admin/live-trading/control-layer/scanner"),
       ]);
 
       setSummary(summaryRes.data || null);
@@ -138,6 +157,8 @@ export const AdminLiveTradingDashboardPage = () => {
       setCriticalAlerts(alertsRes.data?.items || []);
       setFailedOrders(failedRes.data?.items || []);
       setOpenPositions(positionsRes.data?.items || []);
+      setActionAudit(auditRes.data?.items || []);
+      setScannerControl(scannerControlRes.data || null);
 
       const threshold = controlRes.data?.latency_thresholds;
       if (threshold) {
@@ -239,21 +260,71 @@ export const AdminLiveTradingDashboardPage = () => {
       }
 
       if (actionDialog.actionKey === "retry_orders") {
-        await apiClient.post("/admin/live-trading/control-layer/execution-quality/retry", {
-          ids: selectedFailedIds,
+        const { data } = await apiClient.post("/admin/live-trading/control-layer/execution-quality/retry", {
+          ids: actionDialog.context.ids || selectedFailedIds,
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+        const results = data?.results || [];
+        setRetryResults((prev) => {
+          const next = { ...prev };
+          results.forEach((item) => {
+            next[item.id] = item.result;
+          });
+          return next;
+        });
+        setSelectedFailedIds([]);
+      }
+
+      if (actionDialog.actionKey === "remove_failed_orders") {
+        await apiClient.post("/admin/live-trading/control-layer/execution-quality/remove", {
+          ids: actionDialog.context.ids || selectedFailedIds,
           reason: actionDialog.reason,
           confirmation_phrase: actionDialog.phrase,
         });
         setSelectedFailedIds([]);
       }
 
+      if (actionDialog.actionKey === "scanner_restart") {
+        await apiClient.post("/admin/live-trading/control-layer/scanner/restart", {
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      }
+
+      if (actionDialog.actionKey === "scanner_trigger") {
+        await apiClient.post("/admin/live-trading/control-layer/scanner/manual-trigger", {
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      }
+
+      if (actionDialog.actionKey === "scanner_universe") {
+        const symbols = scannerForm.symbols
+          .split(",")
+          .map((item) => item.trim().toUpperCase())
+          .filter(Boolean);
+        if (symbols.length === 0) {
+          toast.error("En az bir symbol girin");
+          return;
+        }
+        await apiClient.post("/admin/live-trading/control-layer/scanner/symbol-universe", {
+          action: scannerForm.action,
+          symbols,
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      }
+
       if (actionDialog.actionKey === "alert_action") {
-        await apiClient.post(`/admin/live-trading/control-layer/critical-alerts/${actionDialog.context.alertId}/action`, {
+        const { data } = await apiClient.post(`/admin/live-trading/control-layer/critical-alerts/${actionDialog.context.alertId}/action`, {
           action: actionDialog.context.alertAction,
           reason: actionDialog.reason,
           fix_action: actionDialog.context.fixAction,
           mute_minutes: Number(actionDialog.context.muteMinutes || 30),
+          confirmation_phrase: actionDialog.phrase,
         });
+        setAlertActionResults((prev) => ({ ...prev, [actionDialog.context.alertId]: data?.result || {} }));
       }
 
       toast.success("Aksiyon tamamlandı");
@@ -270,6 +341,31 @@ export const AdminLiveTradingDashboardPage = () => {
     if (criticalCount > 0) return "border-red-700 bg-red-950/20";
     return "border-emerald-700 bg-emerald-950/20";
   }, [criticalAlerts]);
+
+  const filteredAlerts = useMemo(() => {
+    const needle = globalSearch.trim().toLowerCase();
+    if (!needle) return criticalAlerts;
+    return criticalAlerts.filter((item) => {
+      const text = `${item.alert_type} ${item.message} ${item.root_cause_code} ${item.entity_key}`.toLowerCase();
+      return text.includes(needle);
+    });
+  }, [criticalAlerts, globalSearch]);
+
+  const filteredFailedOrders = useMemo(() => {
+    const needle = globalSearch.trim().toLowerCase();
+    if (!needle) return failedOrders;
+    return failedOrders.filter((item) => {
+      const text = `${item.entity_id} ${item.event_type} ${item.error_message} ${item.status}`.toLowerCase();
+      return text.includes(needle);
+    });
+  }, [failedOrders, globalSearch]);
+
+  const timeDriftMs = useMemo(() => {
+    if (!controlState?.server_clock) return null;
+    const server = new Date(controlState.server_clock).getTime();
+    if (Number.isNaN(server)) return null;
+    return Date.now() - server;
+  }, [controlState?.server_clock]);
 
   return (
     <section className="space-y-4" data-testid="admin-live-trading-dashboard-page">
@@ -299,7 +395,16 @@ export const AdminLiveTradingDashboardPage = () => {
         <Button type="button" variant="outline" onClick={() => setAutoRefresh((prev) => !prev)} data-testid="admin-live-trading-dashboard-auto-refresh-toggle-button">
           auto-refresh: {autoRefresh ? "ON" : "OFF"}
         </Button>
+        <Input
+          value={globalSearch}
+          onChange={(event) => setGlobalSearch(event.target.value)}
+          placeholder="global search: trade / alert / order"
+          className="h-10 w-72 bg-slate-900"
+          data-testid="admin-live-trading-dashboard-global-search-input"
+        />
+        <Button type="button" variant="outline" onClick={() => navigate("/admin/action-audit")} data-testid="admin-live-trading-dashboard-open-action-audit-page-button">Action Audit</Button>
         <p className="text-xs text-slate-400" data-testid="admin-live-trading-dashboard-server-clock">clock: {controlState?.server_clock || "-"}</p>
+        <p className="text-xs text-slate-400" data-testid="admin-live-trading-dashboard-time-sync-diff">time_sync_diff_ms: {timeDriftMs ?? "-"}</p>
       </div>
 
       <div className="rounded border border-cyan-700/60 bg-slate-900 p-4" data-testid="live-control-execution-mode-panel">
@@ -352,15 +457,80 @@ export const AdminLiveTradingDashboardPage = () => {
         </div>
       </div>
 
+      <div className="rounded border border-sky-700/60 bg-sky-950/20 p-4" data-testid="live-control-scanner-panel">
+        <p className="text-xs uppercase tracking-widest text-sky-300" data-testid="live-control-scanner-title">Scanner Control Panel (P1)</p>
+        <div className="mt-2 flex flex-wrap gap-2" data-testid="live-control-scanner-actions">
+          <Button
+            variant="outline"
+            onClick={() =>
+              openActionDialog({
+                actionKey: "scanner_restart",
+                title: "Restart Scanner",
+                expectedPhrase: ACTION_PHRASES.scanner_restart,
+                reason: "scanner_restart",
+              })
+            }
+            data-testid="live-control-scanner-restart-button"
+          >
+            Restart Scanner
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() =>
+              openActionDialog({
+                actionKey: "scanner_trigger",
+                title: "Manual Scan Trigger",
+                expectedPhrase: ACTION_PHRASES.scanner_trigger,
+                reason: "scanner_manual_trigger",
+              })
+            }
+            data-testid="live-control-scanner-trigger-button"
+          >
+            Manual Scan Trigger
+          </Button>
+        </div>
+        <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="live-control-scanner-universe-grid">
+          <Select value={scannerForm.action} onValueChange={(value) => setScannerForm((prev) => ({ ...prev, action: value }))}>
+            <SelectTrigger data-testid="live-control-scanner-universe-action-select"><SelectValue placeholder="action" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="add" data-testid="live-control-scanner-universe-action-add">add</SelectItem>
+              <SelectItem value="remove" data-testid="live-control-scanner-universe-action-remove">remove</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            value={scannerForm.symbols}
+            onChange={(event) => setScannerForm((prev) => ({ ...prev, symbols: event.target.value }))}
+            placeholder="BTCUSDT,ETHUSDT"
+            data-testid="live-control-scanner-universe-symbols-input"
+          />
+          <Button
+            disabled={!isManager}
+            onClick={() =>
+              openActionDialog({
+                actionKey: "scanner_universe",
+                title: "Update Symbol Universe",
+                expectedPhrase: ACTION_PHRASES.scanner_universe,
+                reason: `scanner_universe_${scannerForm.action}`,
+              })
+            }
+            data-testid="live-control-scanner-universe-apply-button"
+          >
+            Symbol Universe Apply
+          </Button>
+          <p className="text-xs text-slate-300" data-testid="live-control-scanner-universe-current">{(scannerControl?.symbol_universe || []).join(", ") || "-"}</p>
+        </div>
+      </div>
+
       <div className={`rounded border p-4 ${alertPanelClass}`} data-testid="live-control-critical-alerts-panel">
         <p className="text-xs uppercase tracking-widest" data-testid="live-control-critical-alerts-title">Critical Alerts → Action System (P0)</p>
         <div className="mt-2 space-y-2" data-testid="live-control-critical-alerts-list">
-          {criticalAlerts.length === 0 && <p className="text-sm" data-testid="live-control-critical-alerts-empty">aktif alert yok</p>}
-          {criticalAlerts.map((item, idx) => (
+          {filteredAlerts.length === 0 && <p className="text-sm" data-testid="live-control-critical-alerts-empty">aktif alert yok</p>}
+          {filteredAlerts.map((item, idx) => (
             <article key={item.id} className="rounded border border-slate-700 bg-black/20 p-3" data-testid={`live-control-critical-alert-item-${idx}`}>
               <p className="text-sm font-semibold" data-testid={`live-control-critical-alert-head-${idx}`}>{item.alert_type} · {item.severity} · {item.status}</p>
               <p className="mt-1 text-xs text-slate-300" data-testid={`live-control-critical-alert-msg-${idx}`}>{item.message}</p>
               <p className="mt-1 text-xs text-slate-400" data-testid={`live-control-critical-alert-root-${idx}`}>root={item.root_cause_code || "-"}</p>
+              <p className="mt-1 text-xs text-slate-400" data-testid={`live-control-critical-alert-repeat-${idx}`}>history_count={item.history?.length || 0}</p>
               <div className="mt-2 flex flex-wrap gap-2" data-testid={`live-control-critical-alert-actions-${idx}`}>
                 <Button size="sm" variant="outline" onClick={() => openActionDialog({ actionKey: "alert_action", title: "Resolve Alert", expectedPhrase: "ACK SELECTED ALERTS", reason: "resolve_alert", context: { alertId: item.id, alertAction: "resolve" } })} data-testid={`live-control-alert-resolve-${idx}`}>Resolve</Button>
                 <Button size="sm" variant="outline" onClick={() => openActionDialog({ actionKey: "alert_action", title: "Mute Alert", expectedPhrase: "ACK SELECTED ALERTS", reason: "mute_alert", context: { alertId: item.id, alertAction: "mute", muteMinutes: 30 } })} data-testid={`live-control-alert-mute-${idx}`}>Mute</Button>
@@ -370,7 +540,7 @@ export const AdminLiveTradingDashboardPage = () => {
                     openActionDialog({
                       actionKey: "alert_action",
                       title: `Fix Action: ${value}`,
-                      expectedPhrase: "ACK SELECTED ALERTS",
+                      expectedPhrase: ACTION_PHRASES.alert_fix,
                       reason: `fix_action_${value}`,
                       context: { alertId: item.id, alertAction: "fix_action", fixAction: value },
                     })
@@ -385,14 +555,34 @@ export const AdminLiveTradingDashboardPage = () => {
                     ))}
                   </SelectContent>
                 </Select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setExpandedAlertId((prev) => (prev === item.id ? null : item.id))}
+                  data-testid={`live-control-alert-expand-${idx}`}
+                >
+                  {expandedAlertId === item.id ? "Collapse" : "Expand"}
+                </Button>
               </div>
-              <div className="mt-2 max-h-24 space-y-1 overflow-auto" data-testid={`live-control-alert-history-${idx}`}>
-                {(item.history || []).slice(0, 4).map((row, hIdx) => (
-                  <p key={`${row.id}-${hIdx}`} className="text-[11px] text-slate-400" data-testid={`live-control-alert-history-item-${idx}-${hIdx}`}>
-                    {row.created_at} · {row.action}
-                  </p>
-                ))}
-              </div>
+              {alertActionResults[item.id] && (
+                <p className="mt-2 text-xs text-emerald-300" data-testid={`live-control-alert-fix-result-${idx}`}>
+                  fix_result: {JSON.stringify(alertActionResults[item.id])}
+                </p>
+              )}
+              {expandedAlertId === item.id && (
+                <div className="mt-2 space-y-2" data-testid={`live-control-alert-expanded-panel-${idx}`}>
+                  <pre className="max-h-24 overflow-auto rounded border border-slate-700 bg-slate-900 p-2 text-[11px]" data-testid={`live-control-alert-detail-json-${idx}`}>
+                    {JSON.stringify(item.details || {}, null, 2)}
+                  </pre>
+                  <div className="max-h-28 space-y-1 overflow-auto" data-testid={`live-control-alert-history-${idx}`}>
+                    {(item.history || []).map((row, hIdx) => (
+                      <p key={`${row.id}-${hIdx}`} className="text-[11px] text-slate-400" data-testid={`live-control-alert-history-item-${idx}-${hIdx}`}>
+                        {row.created_at} · {row.action} · {row.actor_role}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </article>
           ))}
         </div>
@@ -439,10 +629,25 @@ export const AdminLiveTradingDashboardPage = () => {
             >
               Retry ({selectedFailedIds.length})
             </Button>
+            <Button
+              variant="outline"
+              onClick={() =>
+                openActionDialog({
+                  actionKey: "remove_failed_orders",
+                  title: "Remove Failed Orders",
+                  expectedPhrase: ACTION_PHRASES.remove_failed_orders,
+                  reason: "remove_failed_orders",
+                  context: { ids: selectedFailedIds },
+                })
+              }
+              data-testid="live-control-remove-selected-button"
+            >
+              Remove ({selectedFailedIds.length})
+            </Button>
           </div>
 
           <div className="mt-3 max-h-52 space-y-2 overflow-auto" data-testid="live-control-failed-orders-list">
-            {failedOrders.slice(0, 40).map((item, idx) => (
+            {filteredFailedOrders.slice(0, 40).map((item, idx) => (
               <article key={item.id} className="rounded border border-slate-700 p-2 text-xs" data-testid={`live-control-failed-order-item-${idx}`}>
                 <label className="flex items-start gap-2" data-testid={`live-control-failed-order-select-wrap-${idx}`}>
                   <input
@@ -456,14 +661,53 @@ export const AdminLiveTradingDashboardPage = () => {
                     data-testid={`live-control-failed-order-select-${idx}`}
                   />
                   <span data-testid={`live-control-failed-order-text-${idx}`}>
-                    {item.event_type} · {item.entity_id} · status={item.status} · retry={item.retry_count}/{item.max_retry}
+                    order_id={item.entity_id} · {item.event_type} · status={item.status} · retry={item.retry_count}/{item.max_retry}
                     <br />
-                    {item.error_message}
+                    reason={item.error_message}
+                    <br />
+                    timestamp={item.updated_at || item.created_at}
                   </span>
                 </label>
+                <div className="mt-2 flex flex-wrap gap-2" data-testid={`live-control-failed-order-actions-${idx}`}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      openActionDialog({
+                        actionKey: "retry_orders",
+                        title: `Retry Order ${item.entity_id}`,
+                        expectedPhrase: ACTION_PHRASES.retry_orders,
+                        reason: `retry_single_${item.entity_id}`,
+                        context: { ids: [item.id] },
+                      })
+                    }
+                    data-testid={`live-control-failed-order-retry-${idx}`}
+                  >
+                    Retry Single
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      openActionDialog({
+                        actionKey: "remove_failed_orders",
+                        title: `Remove Failed ${item.entity_id}`,
+                        expectedPhrase: ACTION_PHRASES.remove_failed_orders,
+                        reason: `remove_single_${item.entity_id}`,
+                        context: { ids: [item.id] },
+                      })
+                    }
+                    data-testid={`live-control-failed-order-remove-${idx}`}
+                  >
+                    Remove
+                  </Button>
+                  <p className="text-[11px] text-emerald-300" data-testid={`live-control-failed-order-result-${idx}`}>
+                    result={retryResults[item.id] || "-"}
+                  </p>
+                </div>
               </article>
             ))}
-            {failedOrders.length === 0 && <p className="text-xs text-slate-500" data-testid="live-control-failed-orders-empty">failed order yok</p>}
+            {filteredFailedOrders.length === 0 && <p className="text-xs text-slate-500" data-testid="live-control-failed-orders-empty">failed order yok</p>}
           </div>
         </article>
       </div>
@@ -493,6 +737,24 @@ export const AdminLiveTradingDashboardPage = () => {
         </div>
       </div>
 
+      <div className="rounded border border-violet-700/60 bg-violet-950/20 p-4" data-testid="live-control-action-audit-snippet-panel">
+        <div className="flex items-center justify-between" data-testid="live-control-action-audit-snippet-header">
+          <p className="text-xs uppercase tracking-widest text-violet-300" data-testid="live-control-action-audit-snippet-title">Global Action Audit Panel (Snippet)</p>
+          <Button variant="outline" onClick={() => navigate("/admin/action-audit")} data-testid="live-control-action-audit-open-page-button">Detay Sayfası</Button>
+        </div>
+        <div className="mt-2 max-h-36 space-y-1 overflow-auto" data-testid="live-control-action-audit-snippet-list">
+          {actionAudit.slice(0, 10).map((item, idx) => (
+            <article key={item.id} className="rounded border border-violet-700/40 p-2 text-xs" data-testid={`live-control-action-audit-snippet-item-${idx}`}>
+              <p data-testid={`live-control-action-audit-snippet-action-${idx}`}>{item.action}</p>
+              <p className="text-slate-400" data-testid={`live-control-action-audit-snippet-meta-${idx}`}>
+                {item.created_at} · {item.actor_role} · {item.actor_user_id}
+              </p>
+            </article>
+          ))}
+          {actionAudit.length === 0 && <p className="text-xs text-slate-500" data-testid="live-control-action-audit-snippet-empty">audit event yok</p>}
+        </div>
+      </div>
+
       <div className="grid gap-3 md:grid-cols-4" data-testid="admin-live-trading-dashboard-kpi-grid">
         <MetricCard title="execution_mode" value={controlState?.execution_mode || summary?.system_health?.execution_mode || "-"} testId="live-dashboard-kpi-execution-mode" />
         <MetricCard title="execution_quality_score" value={summary?.system_health?.execution_quality_score ?? "-"} testId="live-dashboard-kpi-execution-quality-score" />
@@ -507,7 +769,7 @@ export const AdminLiveTradingDashboardPage = () => {
           <DialogHeader>
             <DialogTitle data-testid="live-control-action-confirm-title">{actionDialog.title}</DialogTitle>
             <DialogDescription data-testid="live-control-action-confirm-description">
-              Double confirm zorunlu. reason + phrase olmadan aksiyon çalışmaz.
+              Emin misin? {actionDialog.actionKey.startsWith("mode_") ? `target_mode=${actionDialog.actionKey.replace("mode_", "").toUpperCase()}` : "kritik aksiyon"}. reason + phrase olmadan aksiyon çalışmaz.
             </DialogDescription>
           </DialogHeader>
 

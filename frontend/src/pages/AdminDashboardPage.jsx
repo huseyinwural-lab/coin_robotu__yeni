@@ -142,6 +142,7 @@ export const AdminDashboardPage = () => {
   const [closeResult, setCloseResult] = useState(null);
   const [latestAutoCloseAudit, setLatestAutoCloseAudit] = useState(null);
   const [killSwitchState, setKillSwitchState] = useState(null);
+  const [actionAuditSnippet, setActionAuditSnippet] = useState([]);
   const [incidentHistory, setIncidentHistory] = useState({ audit_events: [], recent_alerts: [] });
   const [criticalDialogState, setCriticalDialogState] = useState({
     open: false,
@@ -217,7 +218,7 @@ export const AdminDashboardPage = () => {
     setLoadError("");
 
     try {
-      const [summaryResponse, actionSummaryResponse, killSwitchResponse, incidentResponse, alertsResponse, latestAutoCloseResponse] = await Promise.all([
+      const [summaryResponse, actionSummaryResponse, killSwitchResponse, incidentResponse, alertsResponse, latestAutoCloseResponse, actionAuditResponse] = await Promise.all([
         apiClient.get("/dashboard/summary"),
         apiClient.get("/admin/action-center/summary"),
         apiClient.get("/admin/kill-switch"),
@@ -233,6 +234,7 @@ export const AdminDashboardPage = () => {
           },
         }),
         apiClient.get("/admin/action-center/close-next-actions/latest"),
+        apiClient.get("/admin/live-trading/control-layer/action-audit", { params: { since_hours: 48, limit: 8 } }),
       ]);
 
       const summaryPayload = summaryResponse?.data || null;
@@ -247,6 +249,7 @@ export const AdminDashboardPage = () => {
       setIncidentHistory(incidentResponse?.data || { audit_events: [], recent_alerts: [] });
       setAlerts(alertsResponse?.data?.items || []);
       setLatestAutoCloseAudit(latestAutoCloseResponse?.data?.found ? latestAutoCloseResponse?.data?.item : null);
+      setActionAuditSnippet(actionAuditResponse?.data?.items || []);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Admin dashboard verisi yüklenemedi";
@@ -719,6 +722,24 @@ export const AdminDashboardPage = () => {
           ))}
           {(incidentHistory?.audit_events || []).length === 0 && (
             <p className="text-xs text-slate-500" data-testid="admin-dashboard-incident-history-empty">Incident kaydı yok.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="border border-fuchsia-700/40 bg-slate-900 p-3" data-testid="admin-dashboard-action-audit-snippet-panel">
+        <div className="flex items-center justify-between" data-testid="admin-dashboard-action-audit-snippet-header">
+          <p className="text-xs uppercase tracking-widest text-fuchsia-300" data-testid="admin-dashboard-action-audit-snippet-title">Global Action Audit Snippet</p>
+          <Button variant="outline" onClick={() => navigate("/admin/action-audit")} data-testid="admin-dashboard-action-audit-open-page-button">Detay</Button>
+        </div>
+        <div className="mt-2 max-h-32 space-y-1 overflow-auto" data-testid="admin-dashboard-action-audit-snippet-list">
+          {actionAuditSnippet.slice(0, 8).map((item, index) => (
+            <article key={`${item.id}-${index}`} className="border border-fuchsia-700/40 p-2 text-xs" data-testid={`admin-dashboard-action-audit-snippet-item-${index}`}>
+              <p data-testid={`admin-dashboard-action-audit-snippet-action-${index}`}>{item.action}</p>
+              <p className="text-slate-400" data-testid={`admin-dashboard-action-audit-snippet-meta-${index}`}>{item.created_at} · {item.actor_role}</p>
+            </article>
+          ))}
+          {actionAuditSnippet.length === 0 && (
+            <p className="text-xs text-slate-500" data-testid="admin-dashboard-action-audit-snippet-empty">Action audit kaydı yok.</p>
           )}
         </div>
       </div>

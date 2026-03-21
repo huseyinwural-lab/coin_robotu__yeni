@@ -52,6 +52,10 @@ RISK_OVERRIDE_PHRASE = "APPLY RISK OVERRIDE"
 SNAPSHOT_PHRASE = "CAPTURE SNAPSHOT"
 RESET_DAILY_PHRASE = "RESET DAILY METRICS"
 RETRY_ORDERS_PHRASE = "RETRY FAILED ORDERS"
+REMOVE_FAILED_ORDERS_PHRASE = "REMOVE FAILED ORDERS"
+SCANNER_RESTART_PHRASE = "RESTART SCANNER"
+SCANNER_TRIGGER_PHRASE = "TRIGGER MANUAL SCAN"
+SCANNER_UNIVERSE_PHRASE = "UPDATE SYMBOL UNIVERSE"
 
 
 class ExecutionModeSwitchRequest(BaseModel):
@@ -74,6 +78,7 @@ class CriticalAlertActionRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=300)
     mute_minutes: int = Field(default=30, ge=5, le=1440)
     fix_action: str | None = Field(default=None)
+    confirmation_phrase: str | None = None
 
 
 class RiskControlUpdateRequest(BaseModel):
@@ -102,6 +107,24 @@ class RetryFailedOrdersRequest(BaseModel):
     confirmation_phrase: str = Field(min_length=5, max_length=80)
 
 
+class RemoveFailedOrdersRequest(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+    reason: str = Field(min_length=5, max_length=300)
+    confirmation_phrase: str = Field(min_length=5, max_length=80)
+
+
+class ScannerControlRequest(BaseModel):
+    reason: str = Field(min_length=5, max_length=300)
+    confirmation_phrase: str = Field(min_length=5, max_length=80)
+
+
+class ScannerSymbolUniverseRequest(BaseModel):
+    action: str = Field(pattern="^(add|remove)$")
+    symbols: list[str] = Field(min_length=1, max_length=200)
+    reason: str = Field(min_length=5, max_length=300)
+    confirmation_phrase: str = Field(min_length=5, max_length=80)
+
+
 def _require_manager(current_admin: User) -> User:
     if current_admin.role not in MANAGER_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="manager_role_required")
@@ -124,6 +147,11 @@ def _write_json_value(cache, key: str, value: dict):
     cache.set(key, json.dumps(value, ensure_ascii=False))
 
 
+def _read_symbol_universe(cache) -> list[str]:
+    payload = _read_json_value(cache, "control_layer:scanner_symbol_universe", {"symbols": []})
+    return sorted(list({str(item).upper() for item in payload.get("symbols", []) if str(item).strip()}))
+
+
 @router.get("/control-layer/state")
 def admin_live_trading_control_state(
     current_admin: User = Depends(require_admin),
@@ -140,6 +168,7 @@ def admin_live_trading_control_state(
     retry_queue_count = db.query(FailedEvent).filter(FailedEvent.status == "pending").count()
     failed_orders_count = db.query(FailedEvent).filter(FailedEvent.status.in_(["pending", "failed"])).count()
     open_positions_count = db.query(PaperPosition).filter(PaperPosition.status == "open").count()
+    scanner_symbol_universe = _read_symbol_universe(redis_client)
 
     return {
         "server_clock": datetime.now(timezone.utc).isoformat(),
@@ -152,6 +181,73 @@ def admin_live_trading_control_state(
         "retry_queue_count": retry_queue_count,
         "failed_orders_count": failed_orders_count,
         "open_positions_count": open_positions_count,
+        "scanner_symbol_universe": scanner_symbol_universe,
+    }
+
+
+@router.get("/control-layer/action-audit")
+def admin_live_trading_action_audit(
+    user_id: str | None = Query(default=None),
+    action_type: str | None = Query(default=None),
+    since_hours: int = Query(default=24, ge=1, le=720),
+    limit: int = Query(default=100, ge=1, le=500),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
+    query = db.query(AuditLog).filter(AuditLog.created_at >= since)
+    query = query.filter(
+        (AuditLog.action.ilike("LIVE_CONTROL_%"))
+        | (AuditLog.action.ilike("EXECUTION_MODE_%"))
+        | (AuditLog.action.ilike("ACTION_CENTER_%"))
+    )
+
+    if user_id:
+        query = query.filter(AuditLog.actor_user_id == user_id)
+    if action_type:
+        query = query.filter(AuditLog.action.ilike(f"%{action_type}%"))
+
+    rows = query.order_by(AuditLog.created_at.desc()).limit(limit).all()
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "action": row.action,
+                "severity": row.severity,
+                "actor_user_id": row.actor_user_id,
+                "actor_role": row.actor_role,
+                "entity_type": row.entity_type,
+                "entity_id": row.entity_id,
+                "details": row.details or {},
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ],
+        "count": len(rows),
+    }
+
+
+@router.get("/control-layer/action-audit/{audit_id}")
+def admin_live_trading_action_audit_detail(
+    audit_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    row = db.query(AuditLog).filter(AuditLog.id == audit_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="audit_not_found")
+    return {
+        "id": row.id,
+        "action": row.action,
+        "severity": row.severity,
+        "actor_user_id": row.actor_user_id,
+        "actor_role": row.actor_role,
+        "entity_type": row.entity_type,
+        "entity_id": row.entity_id,
+        "details": row.details or {},
+        "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
 
@@ -333,6 +429,12 @@ def admin_live_trading_critical_alert_action(
     if payload.action in {"escalate"}:
         _require_manager(current_admin)
 
+    if payload.action == "fix_action" and (payload.confirmation_phrase or "").strip().upper() != "RUN ALERT FIX ACTION":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_confirmation_phrase", "expected_phrase": "RUN ALERT FIX ACTION"},
+        )
+
     now = datetime.now(timezone.utc)
     action_result: dict = {}
 
@@ -462,6 +564,129 @@ def admin_live_trading_critical_alert_action(
         "result": action_result,
         "audit_log_id": audit_row.id,
     }
+
+
+@router.get("/control-layer/scanner")
+def admin_live_trading_scanner_control_state(
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    runtime = _read_json_value(redis_client, "pipeline:scanner:health", {})
+    universe = _read_symbol_universe(redis_client)
+    manual_trigger = _read_json_value(redis_client, "control_layer:scanner_manual_trigger", {})
+    restart_state = _read_json_value(redis_client, "control_layer:scanner_restart_state", {})
+    return {
+        "runtime": runtime,
+        "symbol_universe": universe,
+        "manual_trigger": manual_trigger,
+        "restart_state": restart_state,
+    }
+
+
+@router.post("/control-layer/scanner/restart")
+def admin_live_trading_scanner_restart(
+    payload: ScannerControlRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if current_admin.role not in {UserRole.OPS, *MANAGER_ROLES}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="role_not_allowed")
+    if payload.confirmation_phrase.strip().upper() != SCANNER_RESTART_PHRASE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_confirmation_phrase", "expected_phrase": SCANNER_RESTART_PHRASE},
+        )
+
+    restart_state = {
+        "reset_at": datetime.now(timezone.utc).isoformat(),
+        "reset_by": current_admin.id,
+        "reason": payload.reason,
+    }
+    _write_json_value(redis_client, "pipeline:scanner:health", {"status": "reset", **restart_state})
+    _write_json_value(redis_client, "control_layer:scanner_restart_state", restart_state)
+
+    audit_row = create_audit_log(
+        db,
+        action="LIVE_CONTROL_SCANNER_RESTART",
+        entity_type="scanner",
+        entity_id="global",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details=restart_state,
+    )
+    return {"status": "ok", "restart_state": restart_state, "audit_log_id": audit_row.id}
+
+
+@router.post("/control-layer/scanner/manual-trigger")
+def admin_live_trading_scanner_manual_trigger(
+    payload: ScannerControlRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if current_admin.role not in {UserRole.OPS, *MANAGER_ROLES}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="role_not_allowed")
+    if payload.confirmation_phrase.strip().upper() != SCANNER_TRIGGER_PHRASE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_confirmation_phrase", "expected_phrase": SCANNER_TRIGGER_PHRASE},
+        )
+
+    trigger_payload = {
+        "requested_at": datetime.now(timezone.utc).isoformat(),
+        "requested_by": current_admin.id,
+        "reason": payload.reason,
+        "status": "queued",
+    }
+    _write_json_value(redis_client, "control_layer:scanner_manual_trigger", trigger_payload)
+
+    audit_row = create_audit_log(
+        db,
+        action="LIVE_CONTROL_SCANNER_MANUAL_TRIGGER",
+        entity_type="scanner",
+        entity_id="manual_trigger",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="info",
+        details=trigger_payload,
+    )
+    return {"status": "ok", "trigger": trigger_payload, "audit_log_id": audit_row.id}
+
+
+@router.post("/control-layer/scanner/symbol-universe")
+def admin_live_trading_scanner_symbol_universe(
+    payload: ScannerSymbolUniverseRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    manager = _require_manager(current_admin)
+    if payload.confirmation_phrase.strip().upper() != SCANNER_UNIVERSE_PHRASE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_confirmation_phrase", "expected_phrase": SCANNER_UNIVERSE_PHRASE},
+        )
+
+    current = set(_read_symbol_universe(redis_client))
+    symbols = {str(item).strip().upper() for item in payload.symbols if str(item).strip()}
+    if payload.action == "add":
+        current.update(symbols)
+    else:
+        current.difference_update(symbols)
+
+    result = sorted(current)
+    _write_json_value(redis_client, "control_layer:scanner_symbol_universe", {"symbols": result})
+
+    audit_row = create_audit_log(
+        db,
+        action="LIVE_CONTROL_SCANNER_SYMBOL_UNIVERSE",
+        entity_type="scanner",
+        entity_id="symbol_universe",
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning",
+        details={"action": payload.action, "symbols": sorted(list(symbols)), "reason": payload.reason},
+    )
+    return {"status": "ok", "symbol_universe": result, "audit_log_id": audit_row.id}
 
 
 @router.get("/control-layer/trading-performance/open-positions")
@@ -716,13 +941,22 @@ def admin_live_trading_retry_failed_orders(
 
     rows = query.limit(500).all()
     now = datetime.now(timezone.utc)
-    retried_ids: list[str] = []
+    results: list[dict] = []
     for row in rows:
+        previous_status = row.status
         row.status = "pending"
         row.retry_count = int(row.retry_count or 0) + 1
         row.next_retry_at = now
         row.updated_at = now
-        retried_ids.append(row.id)
+        results.append(
+            {
+                "id": row.id,
+                "order_id": row.entity_id,
+                "previous_status": previous_status,
+                "new_status": row.status,
+                "result": "queued",
+            }
+        )
 
     db.commit()
     audit_row = create_audit_log(
@@ -733,10 +967,58 @@ def admin_live_trading_retry_failed_orders(
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
         severity="warning",
-        details={"reason": payload.reason, "retried_count": len(retried_ids), "ids": retried_ids},
+        details={"reason": payload.reason, "retried_count": len(results), "ids": [item["id"] for item in results]},
     )
 
-    return {"status": "ok", "retried_count": len(retried_ids), "ids": retried_ids, "audit_log_id": audit_row.id}
+    return {
+        "status": "ok",
+        "retried_count": len(results),
+        "results": results,
+        "audit_log_id": audit_row.id,
+    }
+
+
+@router.post("/control-layer/execution-quality/remove")
+def admin_live_trading_remove_failed_orders(
+    payload: RemoveFailedOrdersRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if current_admin.role not in {UserRole.OPS, *MANAGER_ROLES}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="role_not_allowed")
+    if payload.confirmation_phrase.strip().upper() != REMOVE_FAILED_ORDERS_PHRASE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_confirmation_phrase", "expected_phrase": REMOVE_FAILED_ORDERS_PHRASE},
+        )
+
+    query = db.query(FailedEvent)
+    if payload.ids:
+        query = query.filter(FailedEvent.id.in_(payload.ids))
+    else:
+        query = query.filter(FailedEvent.status.in_(["pending", "failed"]))
+
+    rows = query.limit(500).all()
+    now = datetime.now(timezone.utc)
+    removed: list[dict] = []
+    for row in rows:
+        row.status = "resolved"
+        row.resolved_at = now
+        row.updated_at = now
+        removed.append({"id": row.id, "order_id": row.entity_id, "result": "removed"})
+
+    db.commit()
+    audit_row = create_audit_log(
+        db,
+        action="LIVE_CONTROL_REMOVE_FAILED_ORDERS",
+        entity_type="failed_event",
+        entity_id="bulk_remove",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={"reason": payload.reason, "removed_count": len(removed), "ids": [item["id"] for item in removed]},
+    )
+    return {"status": "ok", "removed_count": len(removed), "results": removed, "audit_log_id": audit_row.id}
 
 
 @router.get("/summary")
