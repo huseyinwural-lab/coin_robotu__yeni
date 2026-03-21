@@ -504,7 +504,7 @@ class TestRuntimeHardeningAnalytics:
 
 
 class TestRuntimeActionAudit:
-    """Action audit endpoints"""
+    """Action audit endpoints - GET /runtime/action-audit and GET /runtime/action-audit/{id}"""
 
     def test_action_audit_list(self, super_admin_headers):
         """GET /runtime/action-audit should return audit list"""
@@ -518,6 +518,46 @@ class TestRuntimeActionAudit:
         assert "items" in data
         assert "count" in data
         print(f"Action audit: count={data.get('count')}")
+
+    def test_action_audit_detail_by_id(self, super_admin_headers):
+        """GET /runtime/action-audit/{id} should return audit detail"""
+        # First get list to find an audit ID
+        list_response = requests.get(
+            f"{BASE_URL}/api/runtime/action-audit",
+            headers=super_admin_headers,
+            params={"since_hours": 48, "limit": 10},
+        )
+        assert list_response.status_code == 200
+        items = list_response.json().get("items", [])
+        
+        if not items:
+            pytest.skip("No audit items available for detail test")
+        
+        audit_id = items[0].get("id")
+        assert audit_id, "Audit item should have an id"
+        
+        # Get detail by ID
+        detail_response = requests.get(
+            f"{BASE_URL}/api/runtime/action-audit/{audit_id}",
+            headers=super_admin_headers,
+        )
+        assert detail_response.status_code == 200
+        data = detail_response.json()
+        assert data.get("id") == audit_id
+        assert "action" in data
+        assert "severity" in data
+        assert "actor_user_id" in data
+        assert "details" in data
+        print(f"Action audit detail: id={audit_id}, action={data.get('action')}")
+
+    def test_action_audit_detail_not_found(self, super_admin_headers):
+        """GET /runtime/action-audit/{id} should return 404 for non-existent ID"""
+        response = requests.get(
+            f"{BASE_URL}/api/runtime/action-audit/non-existent-id-12345",
+            headers=super_admin_headers,
+        )
+        assert response.status_code == 404
+        print(f"Action audit detail 404 check passed: {response.status_code}")
 
 
 if __name__ == "__main__":
