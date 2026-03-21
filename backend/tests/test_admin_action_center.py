@@ -27,7 +27,7 @@ def api_client():
 def super_admin_token(api_client):
     """Get super_admin authentication token"""
     response = api_client.post(
-        f"{BASE_URL}/api/auth/login",
+        f"{BASE_URL}/api/auth/login/admin",
         json={"email": SUPER_ADMIN_EMAIL, "password": SUPER_ADMIN_PASSWORD},
     )
     if response.status_code == 200:
@@ -40,7 +40,7 @@ def super_admin_token(api_client):
 def ops_token(api_client):
     """Get OPS user authentication token"""
     response = api_client.post(
-        f"{BASE_URL}/api/auth/login",
+        f"{BASE_URL}/api/auth/login/admin",
         json={"email": OPS_EMAIL, "password": OPS_PASSWORD},
     )
     if response.status_code == 200:

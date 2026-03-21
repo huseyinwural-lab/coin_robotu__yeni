@@ -151,6 +151,8 @@ export const AdminDashboardPage = () => {
     restartTargets: { backend: true, frontend: true },
   });
   const [alertDetail, setAlertDetail] = useState(null);
+  const [alertDetailTimeline, setAlertDetailTimeline] = useState([]);
+  const [alertDetailTimelineLoading, setAlertDetailTimelineLoading] = useState(false);
   const [isAlertDetailOpen, setIsAlertDetailOpen] = useState(false);
   const [isCloseResultOpen, setIsCloseResultOpen] = useState(false);
   const [drilldown, setDrilldown] = useState({ open: false, metricKey: "", route: "" });
@@ -455,7 +457,24 @@ export const AdminDashboardPage = () => {
     try {
       const { data } = await apiClient.get(`/admin/action-center/alerts/${alertId}/detail`);
       setAlertDetail(data || null);
+      setAlertDetailTimeline([]);
       setIsAlertDetailOpen(true);
+
+      setAlertDetailTimelineLoading(true);
+      try {
+        const q = String(data?.root_cause_code || data?.alert_type || data?.source || "").trim();
+        const timelineRes = await apiClient.get("/audit-logs/timeline", {
+          params: {
+            q: q || undefined,
+            limit: 30,
+          },
+        });
+        setAlertDetailTimeline(timelineRes?.data?.items || []);
+      } catch {
+        setAlertDetailTimeline([]);
+      } finally {
+        setAlertDetailTimelineLoading(false);
+      }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Alert detayı alınamadı");
     }
@@ -529,7 +548,7 @@ export const AdminDashboardPage = () => {
             disabled={!isManagerRole || killSwitchActive}
             data-testid="admin-dashboard-kill-switch-enable-button"
           >
-            Kill Switch Aktif Et
+            Kill Switch (2-Step Onay)
           </Button>
           <Button
             variant="outline"
@@ -545,7 +564,7 @@ export const AdminDashboardPage = () => {
             disabled={!isManagerRole}
             data-testid="admin-dashboard-restart-services-button"
           >
-            Restart Services
+            Restart Services (2-Step Onay)
           </Button>
           <Button
             variant="outline"
@@ -553,7 +572,7 @@ export const AdminDashboardPage = () => {
             disabled={!isManagerRole}
             data-testid="admin-dashboard-clear-all-alerts-button"
           >
-            Clear All Alerts
+            Clear All Alerts (2-Step Onay)
           </Button>
         </fieldset>
         <div className="mt-2 grid gap-1 text-xs text-slate-300 md:grid-cols-3" data-testid="admin-dashboard-global-action-toolbar-status-grid">
@@ -602,7 +621,7 @@ export const AdminDashboardPage = () => {
                 className="flex cursor-pointer items-center justify-between border border-slate-700 px-2 py-2 text-left text-xs transition-colors hover:border-cyan-400"
                 data-testid={`admin-dashboard-action-center-drilldown-${item.key}`}
               >
-                <span>{item.label} · drilldown</span>
+                <span className="underline decoration-dotted">{item.label} · drilldown</span>
                 <span className="flex items-center gap-2">
                   <span className="font-semibold" data-testid={`admin-dashboard-action-center-value-${item.key}`}>
                     {String(actionCenterSummary?.[item.key] ?? "-")}
@@ -807,6 +826,7 @@ export const AdminDashboardPage = () => {
                     variant="outline"
                     className="border-red-400 bg-transparent text-red-300"
                     onClick={() => ackSingleAlert(alert.id)}
+                    disabled={!isManagerRole}
                     data-testid={`admin-alert-ack-${alert.id}`}
                   >
                     Mute / Ack
@@ -1083,6 +1103,9 @@ export const AdminDashboardPage = () => {
             <div className="rounded border border-slate-700 bg-slate-900 p-2" data-testid="admin-dashboard-alert-detail-recommendation-panel">
               <p className="font-semibold" data-testid="admin-dashboard-alert-detail-recommendation-title">{alertDetail?.recommendation?.title || "Öneri"}</p>
               <p className="mt-1 text-slate-300" data-testid="admin-dashboard-alert-detail-recommendation-description">{alertDetail?.recommendation?.description || "-"}</p>
+              <p className="mt-1 text-xs text-slate-400" data-testid="admin-dashboard-alert-detail-service-action-map">
+                service={String(alertDetail?.source || "core").split(".")[0]} → action={alertDetail?.recommendation?.suggested_action?.action_label || "investigate"}
+              </p>
               <div className="mt-2 flex flex-wrap gap-2" data-testid="admin-dashboard-alert-detail-recommendation-actions">
                 <Button
                   variant="outline"
@@ -1130,6 +1153,27 @@ export const AdminDashboardPage = () => {
             <pre className="max-h-52 overflow-auto border border-slate-700 bg-black p-2 text-[11px]" data-testid="admin-dashboard-alert-detail-json">
               {JSON.stringify(alertDetail?.details || {}, null, 2)}
             </pre>
+
+            <div className="rounded border border-slate-700 bg-slate-900 p-2" data-testid="admin-dashboard-alert-detail-event-chain-panel">
+              <p className="font-semibold" data-testid="admin-dashboard-alert-detail-event-chain-title">Event Chain / Timeline</p>
+              {alertDetailTimelineLoading ? (
+                <p className="mt-2 text-xs text-slate-400" data-testid="admin-dashboard-alert-detail-event-chain-loading">yükleniyor...</p>
+              ) : (
+                <div className="mt-2 max-h-44 space-y-1 overflow-auto" data-testid="admin-dashboard-alert-detail-event-chain-list">
+                  {alertDetailTimeline.slice(0, 10).map((item, idx) => (
+                    <article key={`${item.id}-${idx}`} className="border border-slate-700 p-2 text-[11px]" data-testid={`admin-dashboard-alert-detail-event-chain-item-${idx}`}>
+                      <p data-testid={`admin-dashboard-alert-detail-event-chain-action-${idx}`}>{item.action}</p>
+                      <p className="text-slate-400" data-testid={`admin-dashboard-alert-detail-event-chain-meta-${idx}`}>
+                        {item.created_at ? new Date(item.created_at).toLocaleString() : "-"} · {item.actor_role || "system"}
+                      </p>
+                    </article>
+                  ))}
+                  {alertDetailTimeline.length === 0 && (
+                    <p className="text-xs text-slate-500" data-testid="admin-dashboard-alert-detail-event-chain-empty">İlgili event chain bulunamadı.</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
