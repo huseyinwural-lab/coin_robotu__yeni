@@ -1,0 +1,27 @@
+{
+  "app": {
+    "name": "trading-panel",
+    "environment": "stage"
+  },
+  "scanner": {
+    "auto_scan_intervals_seconds": [
+      180,
+      300,
+      900
+    ],
+    "request_health_window_seconds": 60,
+    "request_trend_window_seconds": 300
+  },
+  "ci": {
+    "frontend_perf": {
+      "main_js_gzip_kb_max": 650,
+      "main_css_gzip_kb_max": 70,
+      "proximity_warning_ratio": 0.9
+    }
+  },
+  "canary": {
+    "enabled": true,
+    "max_capital_usdt": 300,
+    "max_positions": 3
+  }
+}

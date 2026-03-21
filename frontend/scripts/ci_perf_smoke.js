@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
+const { execSync } = require("child_process");
 
 const buildDir = path.join(__dirname, "..", "build");
 const reportPath = path.join(buildDir, "perf-smoke-report.json");
@@ -34,6 +35,70 @@ function statWithGzip(filePath) {
     gzip_bytes: gzipBuffer.length,
     gzip_kb: bytesToKb(gzipBuffer.length),
   };
+}
+
+function loadLastFiveBaselineAverages() {
+  try {
+    const revisionsRaw = execSync("git rev-list --max-count=40 HEAD -- perf-baseline/latest.json", {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+
+    if (!revisionsRaw) {
+      return {
+        sample_count: 0,
+      };
+    }
+
+    const revisions = revisionsRaw.split("\n").map((value) => value.trim()).filter(Boolean);
+    const samples = [];
+    for (const revision of revisions) {
+      if (samples.length >= 5) {
+        break;
+      }
+      try {
+        const raw = execSync(`git show ${revision}:frontend/perf-baseline/latest.json`, {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        const parsed = JSON.parse(raw);
+        const js = Number(parsed?.metrics?.main_js?.gzip_kb);
+        const css = Number(parsed?.metrics?.main_css?.gzip_kb);
+        if (!Number.isFinite(js) || !Number.isFinite(css)) {
+          continue;
+        }
+        samples.push({
+          revision,
+          main_js_gzip_kb: js,
+          main_css_gzip_kb: css,
+        });
+      } catch {
+        // broken commit payload: skip
+      }
+    }
+
+    if (samples.length === 0) {
+      return {
+        sample_count: 0,
+      };
+    }
+
+    const jsAvg = samples.reduce((acc, item) => acc + item.main_js_gzip_kb, 0) / samples.length;
+    const cssAvg = samples.reduce((acc, item) => acc + item.main_css_gzip_kb, 0) / samples.length;
+
+    return {
+      sample_count: samples.length,
+      source: "git-history:frontend/perf-baseline/latest.json",
+      main_js_gzip_kb_avg: Number(jsAvg.toFixed(2)),
+      main_css_gzip_kb_avg: Number(cssAvg.toFixed(2)),
+      revisions: samples.map((item) => item.revision),
+    };
+  } catch {
+    return {
+      sample_count: 0,
+      error: "git_history_unavailable",
+    };
+  }
 }
 
 function main() {
@@ -115,6 +180,22 @@ function main() {
     main_js_used_ratio: Number((jsGzipKb / report.thresholds.main_js_gzip_kb_max).toFixed(4)),
     main_css_used_ratio: Number((cssGzipKb / report.thresholds.main_css_gzip_kb_max).toFixed(4)),
   };
+
+  report.last_5_baseline_avg = loadLastFiveBaselineAverages();
+  if (Number(report.last_5_baseline_avg?.sample_count || 0) > 0) {
+    const avgJs = Number(report.last_5_baseline_avg.main_js_gzip_kb_avg || 0);
+    const avgCss = Number(report.last_5_baseline_avg.main_css_gzip_kb_avg || 0);
+    report.delta_vs_last_5_baseline_avg = {
+      sample_count: Number(report.last_5_baseline_avg.sample_count || 0),
+      main_js_gzip_kb_delta: Number((jsGzipKb - avgJs).toFixed(2)),
+      main_css_gzip_kb_delta: Number((cssGzipKb - avgCss).toFixed(2)),
+    };
+  } else {
+    report.delta_vs_last_5_baseline_avg = {
+      sample_count: 0,
+      note: "no_last_5_baseline_available",
+    };
+  }
 
   if (!report.threshold_result.main_js_within_limit || !report.threshold_result.main_css_within_limit) {
     report.status = "WARN";

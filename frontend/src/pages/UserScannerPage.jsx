@@ -72,6 +72,27 @@ const compactMinimalFilters = (filters) => Object.entries(filters || {}).reduce(
 }, {});
 
 const REQUEST_HEALTH_WINDOW_MS = 60_000;
+const REQUEST_TREND_WINDOW_MS = 300_000;
+
+const buildFiveMinuteTrend = (events, nowTs = Date.now()) => {
+  const bucketMs = 60_000;
+  const startTs = nowTs - REQUEST_TREND_WINDOW_MS;
+  return Array.from({ length: 5 }, (_, index) => {
+    const bucketStart = startTs + (index * bucketMs);
+    const bucketEnd = bucketStart + bucketMs;
+    const bucketEvents = events.filter((item) => item.timestamp >= bucketStart && item.timestamp < bucketEnd);
+    const total = bucketEvents.length;
+    const success = bucketEvents.filter((item) => item.ok).length;
+    const successRatio = total > 0 ? success / total : 1;
+    return {
+      key: `m${index}`,
+      label: `${5 - index}m`,
+      total,
+      success,
+      successRatio,
+    };
+  });
+};
 
 const deriveRequestHealth = (events) => {
   const total = events.length;
@@ -139,10 +160,12 @@ export const UserScannerPage = () => {
     windowSeconds: 60,
     updatedAt: null,
   });
+  const [requestTrend, setRequestTrend] = useState(() => buildFiveMinuteTrend([]));
   const profileRunTrackerRef = useRef({});
   const symbolPersistTimerRef = useRef(null);
   const minimalFiltersRef = useRef(MINIMAL_FILTER_DEFAULTS);
   const requestWindowRef = useRef([]);
+  const requestTrendRef = useRef([]);
 
   const activeProfile = useMemo(() => {
     if (!automationProfiles.length) {
@@ -191,6 +214,20 @@ export const UserScannerPage = () => {
           ? "border-red-700 bg-red-950/40 text-red-300"
           : "border-slate-700 bg-slate-950 text-slate-300";
 
+  const requestTrendPolylinePoints = useMemo(() => {
+    const width = 160;
+    const height = 32;
+    if (!requestTrend.length) {
+      return "";
+    }
+    return requestTrend.map((point, index) => {
+      const x = requestTrend.length === 1 ? 0 : (index / (requestTrend.length - 1)) * width;
+      const normalized = Math.max(0, Math.min(1, Number(point.successRatio || 0)));
+      const y = height - (normalized * height);
+      return `${x},${y}`;
+    }).join(" ");
+  }, [requestTrend]);
+
   const formatDateLabel = (value) => {
     if (!value) {
       return "-";
@@ -217,12 +254,18 @@ export const UserScannerPage = () => {
       : [];
     const merged = [...retained, ...incoming];
     requestWindowRef.current = merged;
+
+    const retainedTrend = (requestTrendRef.current || []).filter((item) => now - item.timestamp <= REQUEST_TREND_WINDOW_MS);
+    const mergedTrend = [...retainedTrend, ...incoming];
+    requestTrendRef.current = mergedTrend;
+
     const metrics = deriveRequestHealth(merged);
     setRequestHealth({
       ...metrics,
       windowSeconds: 60,
       updatedAt: new Date(now).toISOString(),
     });
+    setRequestTrend(buildFiveMinuteTrend(mergedTrend, now));
   }, []);
 
   const loadSymbolExplainability = async (symbol) => {
@@ -783,6 +826,24 @@ export const UserScannerPage = () => {
           <p className="text-xs text-slate-300" data-testid="user-scanner-request-health-success-ratio">
             başarı oranı: <span className="font-semibold">{(requestHealth.successRatio * 100).toFixed(1)}%</span>
           </p>
+          <div className="ml-auto flex items-center gap-2" data-testid="user-scanner-request-health-trend-wrapper">
+            <svg width="160" height="32" viewBox="0 0 160 32" className="rounded border border-slate-700 bg-slate-950" data-testid="user-scanner-request-health-trend-sparkline">
+              <polyline
+                fill="none"
+                stroke="#22d3ee"
+                strokeWidth="2"
+                points={requestTrendPolylinePoints}
+                data-testid="user-scanner-request-health-trend-polyline"
+              />
+            </svg>
+            <div className="flex gap-1" data-testid="user-scanner-request-health-trend-labels">
+              {requestTrend.map((point) => (
+                <span key={point.key} className="text-[10px] text-slate-400" data-testid={`user-scanner-request-health-trend-label-${point.key}`}>
+                  {point.label}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 

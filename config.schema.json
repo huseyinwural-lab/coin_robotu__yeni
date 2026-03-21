@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-panel.local/config.schema.json",
+  "title": "Trading Panel Runtime Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "app",
+    "scanner",
+    "ci",
+    "canary"
+  ],
+  "properties": {
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "environment"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 3
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "dev",
+            "stage",
+            "prod"
+          ]
+        }
+      }
+    },
+    "scanner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "auto_scan_intervals_seconds",
+        "request_health_window_seconds",
+        "request_trend_window_seconds"
+      ],
+      "properties": {
+        "auto_scan_intervals_seconds": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "enum": [
+              180,
+              300,
+              900
+            ]
+          }
+        },
+        "request_health_window_seconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 300
+        },
+        "request_trend_window_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 900
+        }
+      }
+    },
+    "ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frontend_perf"
+      ],
+      "properties": {
+        "frontend_perf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "main_js_gzip_kb_max",
+            "main_css_gzip_kb_max",
+            "proximity_warning_ratio"
+          ],
+          "properties": {
+            "main_js_gzip_kb_max": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "main_css_gzip_kb_max": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "proximity_warning_ratio": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      }
+    },
+    "canary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "max_capital_usdt",
+        "max_positions"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "max_capital_usdt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_positions": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

@@ -822,6 +822,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 60
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -893,6 +895,11 @@ jobs:
             const deltaNote = report.delta_vs_previous?.note || report.delta_vs_previous?.error || '';
             const jsRatio = Number(report.threshold_utilization?.main_js_used_ratio || 0);
             const cssRatio = Number(report.threshold_utilization?.main_css_used_ratio || 0);
+            const baselineAvgCount = Number(report.last_5_baseline_avg?.sample_count || 0);
+            const baselineAvgJs = report.last_5_baseline_avg?.main_js_gzip_kb_avg;
+            const baselineAvgCss = report.last_5_baseline_avg?.main_css_gzip_kb_avg;
+            const deltaVsAvgJs = report.delta_vs_last_5_baseline_avg?.main_js_gzip_kb_delta;
+            const deltaVsAvgCss = report.delta_vs_last_5_baseline_avg?.main_css_gzip_kb_delta;
 
             const proximityTag = (ratio) => {
               if (!Number.isFinite(ratio) || ratio <= 0) return '⚪ n/a';
@@ -917,6 +924,8 @@ jobs:
               `- Main CSS (gzip): **${css} KB** / limit **${cssMax} KB** → ${cssProximity} (budget used: ${ratioLabel(cssRatio)})`,
               `- Δ JS vs previous: **${deltaJs ?? 'n/a'} KB**`,
               `- Δ CSS vs previous: **${deltaCss ?? 'n/a'} KB**`,
+              `- Last ${baselineAvgCount || 0} baseline avg (JS/CSS gzip): **${baselineAvgJs ?? 'n/a'} KB / ${baselineAvgCss ?? 'n/a'} KB**`,
+              `- Δ vs last-${baselineAvgCount || 0} avg (JS/CSS): **${deltaVsAvgJs ?? 'n/a'} KB / ${deltaVsAvgCss ?? 'n/a'} KB**`,
               `- Delta source note: ${deltaNote || 'ok'}`,
               `- Threshold result: JS=${report.threshold_result?.main_js_within_limit}, CSS=${report.threshold_result?.main_css_within_limit}`,
             ].join('\n');
@@ -931,3 +940,31 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body });
             }
+
+  config-schema-validation-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install jsonschema validator
+        run: |
+          python -m pip install --upgrade pip
+          pip install jsonschema
+
+      - name: Validate config.schema.json contract
+        run: python scripts/validate_config_schema.py
+
+      - name: Upload config schema validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: config-schema-validation-artifacts
+          path: |
+            artifacts/config_schema_validation.log
+            artifacts/config_schema_validation_summary.json
