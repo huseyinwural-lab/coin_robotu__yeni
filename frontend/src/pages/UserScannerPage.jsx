@@ -78,6 +78,24 @@ const REQUEST_TREND_OPTIONS = [5, 15];
 const SCANNER_ANOMALY_TOAST_PREF_KEY = "scanner-anomaly-toast-enabled-v1";
 const SCANNER_ANOMALY_SOUND_PREF_KEY = "scanner-anomaly-sound-enabled-v1";
 
+const readScannerAlertPreference = (key, fallbackValue = true) => {
+  if (typeof window === "undefined") {
+    return fallbackValue;
+  }
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === "1") {
+      return true;
+    }
+    if (raw === "0") {
+      return false;
+    }
+    return fallbackValue;
+  } catch {
+    return fallbackValue;
+  }
+};
+
 const buildTrendPoints = (events, windowMinutes = 5, nowTs = Date.now()) => {
   const normalizedWindowMinutes = REQUEST_TREND_OPTIONS.includes(Number(windowMinutes)) ? Number(windowMinutes) : 5;
   const totalWindowMs = normalizedWindowMinutes * 60_000;
@@ -171,8 +189,8 @@ export const UserScannerPage = () => {
   });
   const [selectedTrendWindowMinutes, setSelectedTrendWindowMinutes] = useState(5);
   const [requestTrend, setRequestTrend] = useState(() => buildTrendPoints([], 5));
-  const [anomalyToastEnabled, setAnomalyToastEnabled] = useState(true);
-  const [anomalySoundEnabled, setAnomalySoundEnabled] = useState(true);
+  const [anomalyToastEnabled, setAnomalyToastEnabled] = useState(() => readScannerAlertPreference(SCANNER_ANOMALY_TOAST_PREF_KEY, true));
+  const [anomalySoundEnabled, setAnomalySoundEnabled] = useState(() => readScannerAlertPreference(SCANNER_ANOMALY_SOUND_PREF_KEY, true));
   const [hoveredTrendPointKey, setHoveredTrendPointKey] = useState(null);
   const profileRunTrackerRef = useRef({});
   const symbolPersistTimerRef = useRef(null);
@@ -283,24 +301,6 @@ export const UserScannerPage = () => {
   useEffect(() => {
     minimalFiltersRef.current = minimalFilters;
   }, [minimalFilters]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    try {
-      const toastPref = window.localStorage.getItem(SCANNER_ANOMALY_TOAST_PREF_KEY);
-      const soundPref = window.localStorage.getItem(SCANNER_ANOMALY_SOUND_PREF_KEY);
-      if (toastPref === "0" || toastPref === "1") {
-        setAnomalyToastEnabled(toastPref === "1");
-      }
-      if (soundPref === "0" || soundPref === "1") {
-        setAnomalySoundEnabled(soundPref === "1");
-      }
-    } catch {
-      // noop
-    }
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
