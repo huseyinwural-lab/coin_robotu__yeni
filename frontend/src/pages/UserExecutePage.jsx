@@ -35,6 +35,22 @@ const defaultForm = {
 
 const USER_EXECUTE_SYMBOL_STORAGE_KEY = "user-execute-selected-symbol-v1";
 
+const normalizeSymbolSelection = (symbols) => {
+  if (!Array.isArray(symbols)) {
+    return [];
+  }
+  return Array.from(new Set(symbols.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)));
+};
+
+const isSameSymbolSelection = (left, right) => {
+  const l = normalizeSymbolSelection(left);
+  const r = normalizeSymbolSelection(right);
+  if (l.length !== r.length) {
+    return false;
+  }
+  return l.every((value, index) => value === r[index]);
+};
+
 const extractQuoteAsset = (symbol) => {
   const normalized = String(symbol || "").trim().toUpperCase();
   if (normalized.endsWith("USDT")) return "USDT";
@@ -174,7 +190,10 @@ export const UserExecutePage = () => {
         exchange_connection_id: preselectedConnectionId,
       }));
       setIsLoading(false);
-      setSymbolSelectorSelection(initialSymbol ? [initialSymbol] : []);
+      setSymbolSelectorSelection((prev) => {
+        const next = initialSymbol ? [initialSymbol] : [];
+        return isSameSymbolSelection(prev, next) ? prev : next;
+      });
     };
     load();
   }, [searchParams]);
@@ -220,9 +239,12 @@ export const UserExecutePage = () => {
             ? storedSymbol
             : symbols[0] || "";
 
-        setSymbolSelectorSelection(preferredSymbol ? [preferredSymbol] : []);
+        setSymbolSelectorSelection((prev) => {
+          const next = preferredSymbol ? [preferredSymbol] : [];
+          return isSameSymbolSelection(prev, next) ? prev : next;
+        });
       } catch {
-        setSymbolSelectorSelection([]);
+        setSymbolSelectorSelection((prev) => (prev.length === 0 ? prev : []));
       }
     };
 

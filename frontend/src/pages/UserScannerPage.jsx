@@ -71,6 +71,32 @@ const compactMinimalFilters = (filters) => Object.entries(filters || {}).reduce(
   return acc;
 }, {});
 
+const REQUEST_HEALTH_WINDOW_MS = 60_000;
+
+const deriveRequestHealth = (events) => {
+  const total = events.length;
+  const success = events.filter((event) => event.ok).length;
+  const failed = Math.max(total - success, 0);
+  const successRatio = total > 0 ? success / total : 1;
+
+  if (total === 0) {
+    return {
+      total,
+      success,
+      failed,
+      successRatio,
+      health: "NO_DATA",
+    };
+  }
+  if (successRatio >= 0.95) {
+    return { total, success, failed, successRatio, health: "HEALTHY" };
+  }
+  if (successRatio >= 0.8) {
+    return { total, success, failed, successRatio, health: "DEGRADED" };
+  }
+  return { total, success, failed, successRatio, health: "CRITICAL" };
+};
+
 export const UserScannerPage = () => {
   const navigate = useNavigate();
   const [mode, setMode] = useState("ASSISTED");
@@ -104,9 +130,19 @@ export const UserScannerPage = () => {
   const [selectionSavedAt, setSelectionSavedAt] = useState(null);
   const [selectionHydrated, setSelectionHydrated] = useState(false);
   const [minimalFilters, setMinimalFilters] = useState(MINIMAL_FILTER_DEFAULTS);
+  const [requestHealth, setRequestHealth] = useState({
+    total: 0,
+    success: 0,
+    failed: 0,
+    successRatio: 1,
+    health: "NO_DATA",
+    windowSeconds: 60,
+    updatedAt: null,
+  });
   const profileRunTrackerRef = useRef({});
   const symbolPersistTimerRef = useRef(null);
   const minimalFiltersRef = useRef(MINIMAL_FILTER_DEFAULTS);
+  const requestWindowRef = useRef([]);
 
   const activeProfile = useMemo(() => {
     if (!automationProfiles.length) {
@@ -146,6 +182,15 @@ export const UserScannerPage = () => {
         ? "SEMI_AUTO_ACTIVE"
         : "MANUAL_REVIEW_FLOW";
 
+  const requestHealthBadgeClass =
+    requestHealth.health === "HEALTHY"
+      ? "border-emerald-700 bg-emerald-950/40 text-emerald-300"
+      : requestHealth.health === "DEGRADED"
+        ? "border-amber-700 bg-amber-950/40 text-amber-300"
+        : requestHealth.health === "CRITICAL"
+          ? "border-red-700 bg-red-950/40 text-red-300"
+          : "border-slate-700 bg-slate-950 text-slate-300";
+
   const formatDateLabel = (value) => {
     if (!value) {
       return "-";
@@ -160,6 +205,25 @@ export const UserScannerPage = () => {
   useEffect(() => {
     minimalFiltersRef.current = minimalFilters;
   }, [minimalFilters]);
+
+  const updateRequestHealthWindow = useCallback((settledResponses = []) => {
+    const now = Date.now();
+    const retained = (requestWindowRef.current || []).filter((item) => now - item.timestamp <= REQUEST_HEALTH_WINDOW_MS);
+    const incoming = Array.isArray(settledResponses)
+      ? settledResponses.map((item) => ({
+        timestamp: now,
+        ok: item?.status === "fulfilled",
+      }))
+      : [];
+    const merged = [...retained, ...incoming];
+    requestWindowRef.current = merged;
+    const metrics = deriveRequestHealth(merged);
+    setRequestHealth({
+      ...metrics,
+      windowSeconds: 60,
+      updatedAt: new Date(now).toISOString(),
+    });
+  }, []);
 
   const loadSymbolExplainability = async (symbol) => {
     if (!symbol) {
@@ -342,6 +406,8 @@ export const UserScannerPage = () => {
         apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" } }),
       ]);
 
+      updateRequestHealthWindow(responses);
+
       const failedIndexes = responses
         .map((item, index) => ({ item, index }))
         .filter(({ item }) => item.status === "rejected")
@@ -432,6 +498,13 @@ export const UserScannerPage = () => {
       }
     }
   }, [selectedDecisionSymbol]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      updateRequestHealthWindow([]);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [updateRequestHealthWindow]);
 
   useEffect(() => {
     load({ hydrateSelection: true });
@@ -694,6 +767,24 @@ export const UserScannerPage = () => {
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-scanner-title">Scanner</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-description">Responsive scanner + compact table + mobile card yapısı.</p>
       </header>
+
+      <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-request-health-mini-indicator">
+        <div className="flex flex-wrap items-center gap-3" data-testid="user-scanner-request-health-row">
+          <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-request-health-title">Scanner Request Health</p>
+          <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${requestHealthBadgeClass}`} data-testid="user-scanner-request-health-badge">
+            {requestHealth.health}
+          </span>
+          <p className="text-xs text-slate-300" data-testid="user-scanner-request-health-window">
+            Son {requestHealth.windowSeconds}s request: <span className="font-semibold">{requestHealth.total}</span>
+          </p>
+          <p className="text-xs text-slate-300" data-testid="user-scanner-request-health-success-fail">
+            ok/fail: <span className="font-semibold">{requestHealth.success}/{requestHealth.failed}</span>
+          </p>
+          <p className="text-xs text-slate-300" data-testid="user-scanner-request-health-success-ratio">
+            başarı oranı: <span className="font-semibold">{(requestHealth.successRatio * 100).toFixed(1)}%</span>
+          </p>
+        </div>
+      </section>
 
       {scannerLoadDegraded && (
         <div className="order-1 col-span-12 rounded border border-amber-700 bg-amber-950/20 p-3 text-sm text-amber-200" data-testid="user-scanner-degraded-load-banner">

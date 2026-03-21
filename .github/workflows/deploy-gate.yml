@@ -897,8 +897,13 @@ jobs:
             const proximityTag = (ratio) => {
               if (!Number.isFinite(ratio) || ratio <= 0) return '⚪ n/a';
               if (ratio > 1) return '🔴 over-limit';
-              if (ratio >= 0.9) return '🟡 near-limit';
+              if (ratio > 0.9) return '🟡 near-limit';
               return '🟢 healthy';
+            };
+
+            const ratioLabel = (ratio) => {
+              if (!Number.isFinite(ratio) || ratio <= 0) return 'n/a';
+              return `${(ratio * 100).toFixed(1)}%`;
             };
 
             const jsProximity = proximityTag(jsRatio);
@@ -908,8 +913,8 @@ jobs:
               marker,
               '### Frontend Perf Smoke Delta',
               `- Profile: **${profile}**`,
-              `- Main JS (gzip): **${js} KB** / limit **${jsMax} KB** → ${jsProximity}`,
-              `- Main CSS (gzip): **${css} KB** / limit **${cssMax} KB** → ${cssProximity}`,
+              `- Main JS (gzip): **${js} KB** / limit **${jsMax} KB** → ${jsProximity} (budget used: ${ratioLabel(jsRatio)})`,
+              `- Main CSS (gzip): **${css} KB** / limit **${cssMax} KB** → ${cssProximity} (budget used: ${ratioLabel(cssRatio)})`,
               `- Δ JS vs previous: **${deltaJs ?? 'n/a'} KB**`,
               `- Δ CSS vs previous: **${deltaCss ?? 'n/a'} KB**`,
               `- Delta source note: ${deltaNote || 'ok'}`,

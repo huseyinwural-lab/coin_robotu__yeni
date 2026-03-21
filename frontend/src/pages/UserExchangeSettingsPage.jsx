@@ -32,6 +32,24 @@ const fallbackVenue = {
 
 const USER_EXCHANGE_SYMBOL_STORAGE_KEY = "user-exchange-selected-symbol-v1";
 
+const normalizeSymbolSelection = (symbols) => {
+  if (!Array.isArray(symbols)) {
+    return [];
+  }
+  return Array.from(
+    new Set(symbols.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)),
+  );
+};
+
+const isSameSymbolSelection = (left, right) => {
+  const l = normalizeSymbolSelection(left);
+  const r = normalizeSymbolSelection(right);
+  if (l.length !== r.length) {
+    return false;
+  }
+  return l.every((value, index) => value === r[index]);
+};
+
 const initialFuturesContext = {
   leverage: 3,
   margin_mode: "cross",
@@ -326,10 +344,13 @@ export const UserExchangeSettingsPage = () => {
         const storedSymbol = typeof window !== "undefined" ? String(window.localStorage.getItem(USER_EXCHANGE_SYMBOL_STORAGE_KEY) || "").trim().toUpperCase() : "";
         const nextSymbol = storedSymbol && symbols.includes(storedSymbol) ? storedSymbol : (symbols[0] || "");
 
-        setSymbolSelectorSelection(nextSymbol ? [nextSymbol] : []);
+        setSymbolSelectorSelection((prev) => {
+          const next = nextSymbol ? [nextSymbol] : [];
+          return isSameSymbolSelection(prev, next) ? prev : next;
+        });
         setSelectedSymbol(nextSymbol);
       } catch {
-        setSymbolSelectorSelection([]);
+        setSymbolSelectorSelection((prev) => (prev.length === 0 ? prev : []));
         setSelectedSymbol("");
       }
     };
