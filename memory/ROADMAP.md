@@ -1,5 +1,16 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-21 Faz-1 Durum
+- ✅ Tamamlandı: Rollout Orchestrator, Scanner Control, Risk/Exposure, Slow Strategy/Symbol Control
+
+## Sonraki Faz (P2)
+1. Universe Management derinleştirme (symbol add/delete ayrı akış + 100+ import UX rafinesi)
+2. Freshness / SLA management (stale detection + rescan-stale + threshold UI)
+3. KPI Recommendation Engine (apply/reject/postpone + history)
+4. Trend & Analytics panel (time-range drill-down chart)
+5. Export & Data Access (CSV/JSON + API link generator)
+6. Global audit/polish (auto-refresh interval config, immutable audit görünürlüğü)
+
 ## 2026-03-21 Final Update
 - ✅ Final Cleanup + Real State + Lock tamamlandı (tek panel, gerçek state validation, action-result bağları, ws debug, gate rules, override impact, exchange action, mode visibility, alert filter).
 

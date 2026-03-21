@@ -1,3 +1,33 @@
+## 2026-03-21 — Faz-1 Universe Operations (İlk 4 Başlık) ✅
+
+### Kapsam
+- Rollout Orchestrator
+- Scanner Control
+- Risk / Exposure
+- Slow Strategy / Symbol Control
+
+### Backend (Yeni/Genişletilen)
+- `backend/routers/admin_universe_monitor.py` genişletildi:
+  - Scanner: `/scanner/start`, `/scanner/stop`, `/scanner/trigger`, `/scanner/state`
+  - Symbol listeleri: whitelist/blacklist update endpointleri
+  - Universe bulk toggle + filter config endpointleri
+  - Rollout: `/rollout/promote`, `/rollout/demote`, `/rollout/rollback`, zengin `rollout/status`
+  - Risk/Exposure: limit update, cluster exposure, exposure override + active list
+  - Slow controls: strategy disable/throttle, symbol pause, status
+- Tüm kritik aksiyonlarda double-confirm (reason + phrase) ve audit log zorunlu.
+- Aksiyon cevap kontratı standardı aktif: `{status: success, trace_id, message, state_snapshot}`.
+
+### Frontend (Unified Panel)
+- `PipelineOperationsPage.jsx` içine sekmeli Faz-1 operasyon yüzeyi eklendi:
+  - Rollout / Scanner / Risk / Slow
+- Her sekmede aksiyon butonları + sonuç görünürlüğü (`status/message/trace_id/state_snapshot`).
+- Scanner için whitelist/blacklist edit modal ve bulk symbol yönetimi eklendi.
+
+### Doğrulama
+- Test raporu: `/app/test_reports/iteration_55.json`
+  - Backend: **PASS (23/23 core checks)**
+  - Frontend: **PASS (4/4 sekme)**
+
 ## 2026-03-21 — Cleanup: Pipeline Monitoring/Control Kaldırma ✅
 
 ### Uygulanan

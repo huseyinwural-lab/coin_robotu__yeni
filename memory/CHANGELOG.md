@@ -1,6 +1,21 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-21
+### Iteration-55 — Faz-1 Universe Operations Complete
+- `admin_universe_monitor` router operasyonel hale getirildi (scanner/rollout/risk/slow endpointleri).
+- Double-confirm + reason + audit log standardı tüm kritik aksiyonlara uygulandı.
+- Aksiyon response contract standardı doğrulandı: `status=success, trace_id, message, state_snapshot`.
+- Unified Pipeline Operations paneline 4 sekme eklendi:
+  - Rollout
+  - Scanner
+  - Risk/Exposure
+  - Slow Control
+- Scanner symbol list edit modal + bulk symbol + filter config kontrolleri eklendi.
+- Test kanıtı:
+  - `/app/test_reports/iteration_55.json`
+  - Backend PASS, Frontend PASS
+
+## 2026-03-21
 ### Cleanup — Pipeline Monitoring/Control Removal
 - `AdminPipelineControlPage` kaldırıldı (dosya + import temizliği).
 - Redirect davranışı korundu:
