@@ -1,3 +1,86 @@
+## 2026-03-21 — Runtime Control & Recovery Layer (Mimari Uyumlu) ✅
+
+### Neden
+- Mevcut sistem policy-driven + contract-based + observability-first güçlüydü.
+- Eksik katman: runtime müdahale (control surface + recovery actions).
+
+### Mimari Uyumlu Eklemeler
+- Yeni backend katmanı: `/app/backend/runtime_control/`
+  - `pipeline_controller.py`
+  - `ws_controller.py`
+  - `override_controller.py`
+  - `service_controller.py`
+- Yeni API router: `/app/backend/routers/runtime_control.py` (prefix `/api/runtime`)
+- Router kaydı: `/app/backend/server.py`
+
+### Kritik Endpoint Ailesi (Özet)
+- WS/Pipeline:
+  - `POST /api/runtime/ws/reconnect`
+  - `POST /api/runtime/ws/force-new-session`
+  - `GET /api/runtime/ws/health`
+  - `POST /api/runtime/pipeline/resync`
+  - `POST /api/runtime/pipeline/flush`
+- Release Gate Runtime:
+  - `GET /api/runtime/gate/status`
+  - `POST /api/runtime/gate/recheck`
+- Override Lifecycle:
+  - `POST /api/runtime/override/create`
+  - `GET /api/runtime/override/active`
+  - `POST /api/runtime/override/{id}/cancel`
+  - `GET /api/runtime/override/history`
+- Guard/Heartbeat/Service:
+  - `GET /api/runtime/guard/telemetry`
+  - `POST /api/runtime/heartbeat/check`
+  - `POST /api/runtime/service/restart`
+- Exchange/Analytics:
+  - `GET /api/runtime/exchange/monitoring`
+  - `POST /api/runtime/exchange/revalidate/{connection_id}`
+  - `POST /api/runtime/exchange/disable-key/{connection_id}`
+  - `GET /api/runtime/hardening/analytics`
+- Alerts/Policy:
+  - `GET /api/runtime/alerts/history`
+  - `POST /api/runtime/alerts/{id}/action`
+  - `POST /api/runtime/alerts/bulk-action`
+  - `GET /api/runtime/alert-policy`
+  - `PUT /api/runtime/alert-policy`
+  - `POST /api/runtime/alert-policy/rollback`
+  - `POST /api/runtime/alert-policy/test-alert`
+- Global Action Audit:
+  - `GET /api/runtime/action-audit`
+  - `GET /api/runtime/action-audit/{id}`
+
+### Güvenlik/Hardening
+- Kritik aksiyonlar super_admin RBAC ile korundu.
+- Confirmation phrase backend seviyesinde zorunlu.
+- Tüm kritik aksiyonlar audit log + trace_id ile izlenebilir.
+- Override TTL hard cap: 120 dk.
+
+### Frontend Control Surface
+- Yeni sayfa: `/admin/pipeline-control` (`AdminPipelineControlPage.jsx`)
+  - WS/Pipeline Control
+  - Release Gate re-check + reason detay
+  - Override create/cancel/history
+  - Guard telemetry
+  - Heartbeat/service recovery
+  - Exchange monitoring
+  - Alert history (row + bulk action)
+  - Alert policy (update/test/rollback)
+- Yeni route: `/admin/action-audit` (`AdminActionAuditPage.jsx`)
+- Dashboard ve live dashboard’dan pipeline control navigasyonu eklendi.
+
+### InMemory Redis Uyumluluğu
+- `ltrim/rpop/lindex` olmayan fallback ortamı için güvenli yardımcılar eklendi.
+- Runtime endpointlerinde 500 üretmeden çalışacak şekilde stabilize edildi.
+
+### Test Kanıtı
+- Test raporu: `/app/test_reports/iteration_48.json`
+- Sonuç: Backend **31/31 PASS**, frontend section doğrulamaları PASS
+- Özellikle doğrulananlar:
+  - RBAC super_admin enforce
+  - phrase validation
+  - runtime action-audit
+  - pipeline-control 8 bölüm
+
 ## 2026-03-21 — LIVE Dashboard Kalan %30 Tamamlama (P0+P1) ✅
 
 ### Uygulanan Kararlar
