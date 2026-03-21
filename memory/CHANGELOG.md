@@ -1,6 +1,17 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-21
+### Iteration-56 — Action Audit Unified Drawer
+- Traceability aksiyonları route değiştirmeden sağ drawer açacak şekilde güncellendi.
+- Drawer yapısı: `Action Audit` + `Audit Logs` + `Hardening Analytics` tabları.
+- Filter bar eklendi (`user_id`, `action_type`, `since_hours`, `trace_id`).
+- Satır bazında required audit alanları + detay paneli (expand JSON) eklendi.
+- Sidebar’dan Action Audit / Logs linkleri kaldırıldı (operatör akışından çıkarıldı).
+- Test kanıtı:
+  - `/app/test_reports/iteration_56.json`
+  - Frontend 8/8 PASS
+
+## 2026-03-21
 ### Iteration-55 — Faz-1 Universe Operations Complete
 - `admin_universe_monitor` router operasyonel hale getirildi (scanner/rollout/risk/slow endpointleri).
 - Double-confirm + reason + audit log standardı tüm kritik aksiyonlara uygulandı.

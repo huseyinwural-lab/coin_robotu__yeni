@@ -1,3 +1,42 @@
+## 2026-03-21 — Action Audit Unified Drawer Entegrasyonu ✅
+
+### Uygulanan Davranış
+- Unified panelde traceability aksiyonları artık route değiştirmiyor.
+- `Action Audit Aç` ve `Audit Logs Aç` butonları sağdan açılan drawer tetikliyor.
+- Operatör akışı tek sayfada kaldı (`/admin/pipeline-operations`).
+
+### UI Değişiklikleri
+- Yeni sağ drawer deneyimi (Sheet):
+  - Tab-1: Action Audit
+  - Tab-2: Audit Logs
+  - Tab-3: Hardening Analytics
+- Drawer filter bar eklendi:
+  - `user_id`
+  - `action_type`
+  - `last N hours`
+  - `trace_id`
+- Satır detayları:
+  - action_name
+  - actor
+  - timestamp
+  - trace_id
+  - status
+  - message
+  - state_snapshot (kısa)
+- Seçilen satır için expand JSON detail paneli eklendi.
+
+### UI Temizliği
+- Sidebar’dan Action Audit ve audit logs yönlendirme linkleri kaldırıldı.
+- Unified panel traceability bölümünde navigate tabanlı ayrı sayfa geçişleri kaldırıldı.
+
+### Route Politikası
+- `/admin/action-audit` ve `/admin/audit-logs` route’ları teknik/debug erişim için korunabilir.
+- Operatör birincil akışında bu route’lara UI’dan yönlendirme yapılmıyor.
+
+### Doğrulama
+- Test raporu: `/app/test_reports/iteration_56.json`
+- Frontend: **100% PASS (8/8)**
+
 ## 2026-03-21 — Faz-1 Universe Operations (İlk 4 Başlık) ✅
 
 ### Kapsam
