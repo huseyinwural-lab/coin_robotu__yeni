@@ -85,6 +85,10 @@ class AlertPolicyUpdateRequest(BaseModel):
     confirmation_phrase: str = Field(min_length=4, max_length=80)
 
 
+class AlertPolicyRollbackRequest(RuntimeActionRequest):
+    pass
+
+
 def _require_super_admin(current_admin: User) -> User:
     if current_admin.role not in SUPER_ADMIN_ONLY:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_required")
@@ -184,7 +188,7 @@ def runtime_ws_reconnect(payload: RuntimeActionRequest, current_admin: User = De
         details={"reason": payload.reason, "state": state},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="ws reconnect request accepted",
         state_snapshot={"ws_state": state},
@@ -211,7 +215,7 @@ def runtime_ws_force_new_session(payload: RuntimeActionRequest, current_admin: U
         details={"reason": payload.reason, "result": result},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="new ws session requested",
         state_snapshot={"ws_state": result.get("state") or {}},
@@ -245,7 +249,7 @@ def runtime_pipeline_resync(payload: RuntimeActionRequest, current_admin: User =
         details={"reason": payload.reason, "result": result},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="pipeline resync queued",
         state_snapshot={"pipeline": result},
@@ -273,7 +277,7 @@ def runtime_pipeline_flush(payload: PipelineFlushRequest, current_admin: User = 
         details={"reason": payload.reason, "result": result},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="pipeline queue flush completed",
         state_snapshot={"queue_flush": result},
@@ -318,7 +322,7 @@ def runtime_gate_recheck(payload: RuntimeActionRequest, current_admin: User = De
         details={"reason": payload.reason, "scripts": script_results, "gate": gate},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="release gate recheck completed",
         state_snapshot={"gate": gate},
@@ -363,7 +367,7 @@ def runtime_override_create(payload: OverrideCreateRequest, current_admin: User 
         details={"result": result},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="override created",
         state_snapshot={"override": result},
@@ -398,7 +402,7 @@ def runtime_override_cancel(override_id: str, payload: OverrideCancelRequest, cu
         details={"result": result},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="override cancel completed",
         state_snapshot={"override_cancel": result},
@@ -416,26 +420,30 @@ def runtime_override_history(limit: int = Query(default=100, ge=1, le=500), curr
 
 @router.post("/heartbeat/check")
 def runtime_heartbeat_check(payload: HeartbeatCheckRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    _ = current_admin
-    result = manual_health_check(redis_client, lag_threshold_seconds=payload.lag_threshold_seconds)
-    if result.get("warning_triggered"):
-        create_audit_log(
-            db,
-            action="RUNTIME_HEARTBEAT_WARNING",
-            entity_type="heartbeat",
-            entity_id="global",
-            actor_user_id=current_admin.id,
-            actor_role=current_admin.role.value,
-            severity="warning",
-            details=result,
-        )
     trace_id = str(uuid.uuid4())
+    result = manual_health_check(redis_client, lag_threshold_seconds=payload.lag_threshold_seconds)
+    audit = _audit(
+        db,
+        current_admin=current_admin,
+        action="RUNTIME_HEARTBEAT_CHECK",
+        entity_type="heartbeat",
+        entity_id="global",
+        severity="warning" if result.get("warning_triggered") else "info",
+        trace_id=trace_id,
+        details={
+            "lag_threshold_seconds": payload.lag_threshold_seconds,
+            "result": result,
+        },
+    )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="manual heartbeat check completed",
         state_snapshot={"heartbeat": result},
         heartbeat=result,
+        lag_seconds=result.get("lag_seconds"),
+        warning_triggered=result.get("warning_triggered"),
+        audit_log_id=audit.id,
     )
 
 
@@ -458,7 +466,7 @@ def runtime_service_restart(payload: ServiceRestartRequest, current_admin: User 
         details={"reason": payload.reason, "result": result},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="service restart scheduled",
         state_snapshot={"service_restart": result},
@@ -532,7 +540,7 @@ def runtime_exchange_revalidate(connection_id: str, payload: RuntimeActionReques
         details={"reason": payload.reason, "snapshot": snapshot},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="exchange connection revalidated",
         state_snapshot={"exchange_snapshot": snapshot},
@@ -565,7 +573,7 @@ def runtime_exchange_disable_key(connection_id: str, payload: RuntimeActionReque
         details={"reason": payload.reason},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="exchange key disabled",
         state_snapshot={"connection_id": connection_id, "disabled": True},
@@ -722,7 +730,7 @@ def runtime_alert_action(alert_id: str, payload: AlertActionRequest, current_adm
         details={"action": payload.action, "reason": payload.reason},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message=f"alert {payload.action} completed",
         state_snapshot={"alert_id": alert_id, "action": payload.action},
@@ -764,7 +772,7 @@ def runtime_alert_bulk_action(payload: AlertBulkRequest, current_admin: User = D
         details={"ids": payload.ids, "action": payload.action, "reason": payload.reason},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message=f"bulk alert {payload.action} completed",
         state_snapshot={"count": len(rows), "action": payload.action},
@@ -844,7 +852,7 @@ def runtime_alert_policy_update(payload: AlertPolicyUpdateRequest, current_admin
         details={"reason": payload.reason, "new_policy": payload.model_dump()},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="alert policy updated",
         state_snapshot={
@@ -858,24 +866,27 @@ def runtime_alert_policy_update(payload: AlertPolicyUpdateRequest, current_admin
 
 
 @router.post("/alert-policy/rollback")
-def runtime_alert_policy_rollback(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def runtime_alert_policy_rollback(request: AlertPolicyRollbackRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _require_super_admin(current_admin)
+    if request.confirmation_phrase.strip().upper() != "ROLLBACK ALERT POLICY":
+        raise HTTPException(status_code=400, detail={"expected_phrase": "ROLLBACK ALERT POLICY"})
+
+    trace_id = str(uuid.uuid4())
     raw = _safe_rpop(redis_client, "runtime:alert_policy:versions")
     if not raw:
         raise HTTPException(status_code=404, detail="no_policy_version_available")
-    payload = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+    rollback_version = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
 
     row = db.query(AlertPolicy).filter(AlertPolicy.id == "global").first()
     if row is None:
         row = AlertPolicy(id="global")
         db.add(row)
-    row.execution_quality_warning_threshold = float(payload.get("execution_quality_warning_threshold") or row.execution_quality_warning_threshold)
-    row.execution_quality_critical_threshold = float(payload.get("execution_quality_critical_threshold") or row.execution_quality_critical_threshold)
-    row.permission_drift_warning_per_day = int(payload.get("permission_drift_warning_per_day") or row.permission_drift_warning_per_day)
-    row.permission_drift_critical_per_day = int(payload.get("permission_drift_critical_per_day") or row.permission_drift_critical_per_day)
+    row.execution_quality_warning_threshold = float(rollback_version.get("execution_quality_warning_threshold") or row.execution_quality_warning_threshold)
+    row.execution_quality_critical_threshold = float(rollback_version.get("execution_quality_critical_threshold") or row.execution_quality_critical_threshold)
+    row.permission_drift_warning_per_day = int(rollback_version.get("permission_drift_warning_per_day") or row.permission_drift_warning_per_day)
+    row.permission_drift_critical_per_day = int(rollback_version.get("permission_drift_critical_per_day") or row.permission_drift_critical_per_day)
     db.commit()
 
-    trace_id = str(uuid.uuid4())
     audit = _audit(
         db,
         current_admin=current_admin,
@@ -884,14 +895,14 @@ def runtime_alert_policy_rollback(current_admin: User = Depends(require_admin), 
         entity_id="global",
         severity="warning",
         trace_id=trace_id,
-        details={"rolled_back_to": payload},
+        details={"reason": request.reason, "rolled_back_to": rollback_version},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="alert policy rollback completed",
-        state_snapshot={"rolled_back_to": payload},
-        rolled_back_to=payload,
+        state_snapshot={"rolled_back_to": rollback_version},
+        rolled_back_to=rollback_version,
         audit_log_id=audit.id,
     )
 
@@ -926,7 +937,7 @@ def runtime_alert_policy_test_alert(payload: RuntimeActionRequest, current_admin
         details={"reason": payload.reason},
     )
     return _action_result(
-        status="success",
+        status="ok",
         trace_id=trace_id,
         message="test alert created",
         state_snapshot={"alert_id": alert.id, "severity": alert.severity},

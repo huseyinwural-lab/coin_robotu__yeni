@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ const ACTION_MAP = {
 };
 
 export const AdminPipelineControlPage = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isSuperAdmin = String(user?.role || "") === "super_admin";
 
@@ -69,7 +71,6 @@ export const AdminPipelineControlPage = () => {
         activeRes,
         historyRes,
         guardRes,
-        heartbeatRes,
         exchangeRes,
         hardeningRes,
         alertsRes,
@@ -81,7 +82,6 @@ export const AdminPipelineControlPage = () => {
         apiClient.get("/runtime/override/active"),
         apiClient.get("/runtime/override/history", { params: { limit: 50 } }),
         apiClient.get("/runtime/guard/telemetry", { params: { limit: 100 } }),
-        apiClient.post("/runtime/heartbeat/check", { lag_threshold_seconds: Number(lagThreshold || 60) }),
         apiClient.get("/runtime/exchange/monitoring", { params: { limit: 100 } }),
         apiClient.get("/runtime/hardening/analytics", { params: { time_window_hours: 48 } }),
         apiClient.get("/runtime/alerts/history", { params: { status_filter: "all", severity: severityFilter === "all" ? undefined : severityFilter } }),
@@ -94,7 +94,6 @@ export const AdminPipelineControlPage = () => {
       setOverridesActive(activeRes.data?.items || []);
       setOverrideHistory(historyRes.data?.items || []);
       setGuardTelemetry(guardRes.data || null);
-      setHeartbeat(heartbeatRes.data || null);
       setExchangeMonitoring(exchangeRes.data || null);
       setHardeningAnalytics(hardeningRes.data?.items || []);
       setAlertsHistory(alertsRes.data?.items || []);
@@ -243,8 +242,25 @@ export const AdminPipelineControlPage = () => {
 
   const rollbackPolicy = async () => {
     try {
-      await apiClient.post("/runtime/alert-policy/rollback", {});
+      await apiClient.post("/runtime/alert-policy/rollback", {
+        reason: "legacy_panel_policy_rollback",
+        confirmation_phrase: "ROLLBACK ALERT POLICY",
+      });
       toast.success("Alert policy rollback tamamlandı");
+      await load(false);
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      toast.error(typeof detail === "string" ? detail : JSON.stringify(detail || {}));
+    }
+  };
+
+  const runManualHeartbeat = async () => {
+    try {
+      const { data } = await apiClient.post("/runtime/heartbeat/check", {
+        lag_threshold_seconds: Number(lagThreshold || 60),
+      });
+      setHeartbeat(data || null);
+      toast.success("Heartbeat kontrolü tamamlandı");
       await load(false);
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -261,6 +277,9 @@ export const AdminPipelineControlPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="admin-pipeline-control-description">
           Runtime müdahale katmanı · role={user?.role || "unknown"} · refreshing={String(refreshing)}
         </p>
+        <div className="mt-3" data-testid="admin-pipeline-control-unified-link-wrap">
+          <Button variant="outline" onClick={() => navigate("/admin/pipeline-operations")} data-testid="admin-pipeline-control-open-unified-button">Unified Pipeline Operations</Button>
+        </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-2" data-testid="admin-pipeline-control-top-actions">
@@ -347,7 +366,7 @@ export const AdminPipelineControlPage = () => {
         <article className="rounded border border-green-700/60 bg-green-950/20 p-3" data-testid="admin-pipeline-control-heartbeat-panel">
           <p className="text-xs uppercase tracking-widest text-green-300" data-testid="admin-pipeline-control-heartbeat-title">Heartbeat & Service Recovery</p>
           <div className="mt-2 flex flex-wrap gap-2" data-testid="admin-pipeline-control-heartbeat-actions">
-            <Button variant="outline" onClick={() => load(false)} data-testid="admin-pipeline-control-manual-health-check-button">Manual Health Check</Button>
+            <Button variant="outline" onClick={runManualHeartbeat} data-testid="admin-pipeline-control-manual-health-check-button">Manual Health Check</Button>
             <Input value={serviceTarget} onChange={(e) => setServiceTarget(e.target.value)} className="w-32 bg-slate-900" data-testid="admin-pipeline-control-service-target-input" />
             <Button disabled={!isSuperAdmin} onClick={() => openAction("service_restart", { reason: `restart_${serviceTarget}` })} data-testid="admin-pipeline-control-service-restart-button">Service Restart</Button>
           </div>
