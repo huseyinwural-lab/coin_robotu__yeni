@@ -43,6 +43,15 @@ const normalizeSymbols = (symbols) => {
   return Array.from(new Set(normalized));
 };
 
+const areSameSymbolSet = (left, right) => {
+  const leftNormalized = normalizeSymbols(left).sort();
+  const rightNormalized = normalizeSymbols(right).sort();
+  if (leftNormalized.length !== rightNormalized.length) {
+    return false;
+  }
+  return leftNormalized.every((value, index) => value === rightNormalized[index]);
+};
+
 const detectQuoteAsset = (symbol) => {
   const normalized = String(symbol || "").trim().toUpperCase();
   if (normalized.endsWith("USDT")) return "USDT";
@@ -140,10 +149,15 @@ export const SymbolSelectorPanel = ({
             .map((row) => row.symbol),
         );
         const next = normalizeSymbols(data?.selected_symbols || []).filter((symbol) => selectable.has(symbol));
+        const current = multi ? normalizeSymbols(normalizedSelectedSymbols) : normalizeSymbols(normalizedSelectedSymbols).slice(0, 1);
+        const target = multi ? next : next.slice(0, 1);
+        if (areSameSymbolSet(current, target)) {
+          return;
+        }
         if (multi) {
-          onSelectedSymbolsChange(next);
+          onSelectedSymbolsChange(target);
         } else {
-          onSelectedSymbolsChange(next.slice(0, 1));
+          onSelectedSymbolsChange(target);
         }
       }
     } catch (error) {

@@ -35,12 +35,18 @@ const scannerQuickPresets = [
   },
 ];
 
-const AUTO_SCAN_INTERVAL_SECONDS = 60;
+const AUTO_SCAN_INTERVAL_SECONDS = 180;
 const PROFILE_INTERVAL_OPTIONS = [
-  { value: 30, label: "30 saniye" },
-  { value: 60, label: "60 saniye" },
-  { value: 120, label: "120 saniye" },
+  { value: 180, label: "3 dakika" },
+  { value: 300, label: "5 dakika" },
+  { value: 900, label: "15 dakika" },
 ];
+
+const normalizeIntervalSeconds = (value) => {
+  const allowed = new Set(PROFILE_INTERVAL_OPTIONS.map((option) => Number(option.value)));
+  const parsed = Number(value || AUTO_SCAN_INTERVAL_SECONDS);
+  return allowed.has(parsed) ? parsed : AUTO_SCAN_INTERVAL_SECONDS;
+};
 
 const MINIMAL_FILTER_DEFAULTS = {
   rsi_min: "",
@@ -178,7 +184,7 @@ export const UserScannerPage = () => {
     try {
       const { data } = await apiClient.put("/user/scanner/automation", {
         auto_enabled: nextEnabled,
-        interval_seconds: Number(autoScanInterval || AUTO_SCAN_INTERVAL_SECONDS),
+        interval_seconds: normalizeIntervalSeconds(autoScanInterval),
         max_results: 25,
         symbol_source: symbolSource,
         symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
@@ -239,7 +245,7 @@ export const UserScannerPage = () => {
         name: activeProfile.name,
         auto_enabled: nextEnabled,
         is_active: true,
-        interval_seconds: Number(activeProfile.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS),
+        interval_seconds: normalizeIntervalSeconds(activeProfile.interval_seconds),
         max_results: 25,
         symbol_source: symbolSource,
         symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
@@ -271,7 +277,7 @@ export const UserScannerPage = () => {
         name: profileName,
         auto_enabled: true,
         is_active: true,
-        interval_seconds: Number(profileIntervalInput || AUTO_SCAN_INTERVAL_SECONDS),
+        interval_seconds: normalizeIntervalSeconds(profileIntervalInput),
         max_results: 25,
         symbol_source: symbolSource,
         symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
@@ -398,14 +404,14 @@ export const UserScannerPage = () => {
         const selectedProfile = profiles.find((item) => item.is_active) || profiles[0] || null;
         if (selectedProfile) {
           setActiveProfileId(selectedProfile.id);
-          setProfileIntervalInput(Number(selectedProfile.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS));
-            setAutoScanInterval(Number(selectedProfile.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS));
+          setProfileIntervalInput(normalizeIntervalSeconds(selectedProfile.interval_seconds));
+            setAutoScanInterval(normalizeIntervalSeconds(selectedProfile.interval_seconds));
           setSymbolSource(selectedProfile.symbol_source || "crypto");
           setSymbolMode(selectedProfile.symbol_selection_mode || "all_market_symbols");
           setSelectedSymbols(Array.isArray(selectedProfile.selected_symbols) ? selectedProfile.selected_symbols : []);
         } else if (automation) {
           setActiveProfileId("");
-            setAutoScanInterval(Number(automation.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS));
+            setAutoScanInterval(normalizeIntervalSeconds(automation.interval_seconds));
           setSymbolSource(automation.symbol_source || "crypto");
           setSymbolMode(automation.symbol_selection_mode || "all_market_symbols");
           setSelectedSymbols(Array.isArray(automation.selected_symbols) ? automation.selected_symbols : []);
