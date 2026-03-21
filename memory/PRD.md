@@ -1,3 +1,37 @@
+## 2026-03-21 — P1 İyileştirmeleri: CI proximity + anti-loop taraması + Scanner health mini-indicator ✅
+
+### 1) CI PR yorumunda >%90 proximity warning (🟡)
+- Dosya: `/app/.github/workflows/deploy-gate.yml`
+- `Comment perf delta on PR` adımında proximity kuralı netleştirildi:
+  - `ratio > 1.0` → 🔴 over-limit
+  - `ratio > 0.9` → 🟡 near-limit
+  - aksi → 🟢 healthy
+- PR yorumuna ayrıca `budget used: xx.x%` oran etiketi eklendi (JS/CSS için).
+
+### 2) Benzer akışlarda anti-loop guard (önleyici bakım)
+- Dosya: `/app/frontend/src/pages/UserExchangeSettingsPage.jsx`
+  - `normalizeSymbolSelection` + `isSameSymbolSelection` guard eklendi.
+  - Venue default symbol yüklemesinde eşit seçim tekrar set edilmez hale getirildi.
+- Dosya: `/app/frontend/src/pages/UserExecutePage.jsx`
+  - Aynı guard modeli eklendi.
+  - Query/venue default symbol set akışlarında gereksiz tekrar state update engellendi.
+
+### 3) Scanner üstte canlı “Son 60s request + endpoint health” mini-indicator
+- Dosya: `/app/frontend/src/pages/UserScannerPage.jsx`
+- Yeni metrik penceresi eklendi:
+  - Son 60 saniye toplam request
+  - ok/fail sayısı
+  - başarı oranı
+  - health badge (`HEALTHY / DEGRADED / CRITICAL / NO_DATA`)
+- `Promise.allSettled` sonuçları 60s kayan pencereye yazılıyor, 5s aralıkla yaşlandırma güncellemesi yapılıyor.
+
+### Test Sonuçları
+- Frontend test agent: **PASS**
+  - Scanner mini-indicator render + tüm data-testid doğrulandı.
+  - Scanner refresh butonu 20s gözlemde flicker yapmadı.
+  - Interval dropdownlar yalnızca 3/5/15 dakika.
+  - Exchange settings `user-exchange-symbol-selector-refresh-button` 15s stabil + refresh sonrası stabil.
+
 ## 2026-03-21 — Scanner liste yüklenme döngüsü düzeltmesi + yeni interval seçenekleri ✅
 
 ### Bug Fix (User Scanner)
