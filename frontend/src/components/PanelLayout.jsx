@@ -274,11 +274,18 @@ export const PanelLayout = () => {
               <div className="mt-2 rounded border border-red-700 bg-red-700/20 px-2 py-2 text-[11px] text-black" data-testid="navbar-release-gate-blocked-actionable">
                 <p className="font-semibold" data-testid="navbar-release-gate-blocked-title">Release Gate BLOCKED</p>
                 <p className="mt-1" data-testid="navbar-release-gate-blocked-message">
-                  Deploy kapalı. Aksiyon: reason_codes çöz, ardından tekrar doğrula.
+                  Deploy kapalı. Aksiyon: Blokajı Çöz ekranında prod config girip yeniden doğrula.
                 </p>
                 <p className="mt-1 font-mono" data-testid="navbar-release-gate-blocked-reasons">
                   {(gateBadge?.reason_codes || gateBadge?.reasons || []).slice(0, 2).join(", ") || "reason_code_missing"}
                 </p>
+                <NavLink
+                  to="/admin/execution-policies"
+                  className="mt-2 inline-flex rounded border border-black bg-black px-2 py-1 text-[10px] font-semibold text-orange-300 hover:bg-zinc-900"
+                  data-testid="navbar-release-gate-open-remediation-link"
+                >
+                  Blokajı Çöz
+                </NavLink>
               </div>
             )}
             {isAdmin && gateBadge?.override_active && (

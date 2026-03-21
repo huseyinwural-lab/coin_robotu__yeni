@@ -2,18 +2,26 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
+import { ProdConfigRemediationModal } from "@/components/ProdConfigRemediationModal";
+import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 
 export const ExecutionPoliciesPage = () => {
   const [payload, setPayload] = useState(null);
+  const [remediationState, setRemediationState] = useState(null);
+  const [isRemediationOpen, setIsRemediationOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
-        const { data } = await apiClient.get("/admin/execution-policies");
-        setPayload(data);
+        const [{ data: policyData }, { data: remediationData }] = await Promise.all([
+          apiClient.get("/admin/execution-policies"),
+          apiClient.get("/admin/system/remediate-config"),
+        ]);
+        setPayload(policyData);
+        setRemediationState(remediationData);
       } catch (error) {
         toast.error(error?.response?.data?.detail || "Execution policy verisi alınamadı");
       } finally {
@@ -39,6 +47,35 @@ export const ExecutionPoliciesPage = () => {
         </p>
       </header>
 
+      <div className="rounded border border-red-700/70 bg-slate-900 p-4" data-testid="execution-policies-remediation-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="execution-policies-remediation-header">
+          <p className="text-xs uppercase tracking-widest text-red-300" data-testid="execution-policies-remediation-title">System Config · Release Gate Remediation</p>
+          <Button
+            className="bg-red-600 text-white hover:bg-red-700"
+            onClick={() => setIsRemediationOpen(true)}
+            data-testid="execution-policies-open-remediation-button"
+          >
+            Blokajı Çöz
+          </Button>
+        </div>
+
+        <div className="mt-3 grid gap-2 text-xs text-slate-200 md:grid-cols-2" data-testid="execution-policies-remediation-status-grid">
+          <p data-testid="execution-policies-remediation-release-gate-status">release_gate_status: {remediationState?.release_gate_status || "-"}</p>
+          <p data-testid="execution-policies-remediation-preflight-status">preflight_status: {remediationState?.preflight_status || "-"}</p>
+          <p data-testid="execution-policies-remediation-secret-status">secret_readiness_status: {remediationState?.secret_readiness_status || "-"}</p>
+          <p data-testid="execution-policies-remediation-final-decision">final_release_gate_decision: {remediationState?.final_release_gate_decision || "-"}</p>
+        </div>
+
+        <div className="mt-2 space-y-1" data-testid="execution-policies-remediation-reasons-list">
+          {(remediationState?.release_gate_reason_codes || []).map((item, index) => (
+            <p key={`${item}-${index}`} className="font-mono text-xs text-red-200" data-testid={`execution-policies-remediation-reason-${index}`}>{item}</p>
+          ))}
+          {(remediationState?.release_gate_reason_codes || []).length === 0 && (
+            <p className="text-xs text-slate-400" data-testid="execution-policies-remediation-reasons-empty">Aktif reason_code yok.</p>
+          )}
+        </div>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2" data-testid="execution-policies-grid">
         <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-registry-card">
           <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-registry-title">Registry</p>
@@ -59,6 +96,14 @@ export const ExecutionPoliciesPage = () => {
           </div>
         </div>
       </div>
+
+      <ProdConfigRemediationModal
+        open={isRemediationOpen}
+        onOpenChange={setIsRemediationOpen}
+        remediationState={remediationState}
+        onSaved={(nextState) => setRemediationState(nextState)}
+        testIdPrefix="execution-policies"
+      />
     </section>
   );
 };

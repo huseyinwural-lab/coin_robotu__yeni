@@ -1,25 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { ProdConfigRemediationModal } from "@/components/ProdConfigRemediationModal";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 
 export const AdminExecutionReadinessPage = () => {
   const [readiness, setReadiness] = useState(null);
   const [gate, setGate] = useState(null);
-  const [overrideReason, setOverrideReason] = useState("manual override for testing");
+  const [remediationState, setRemediationState] = useState(null);
+  const [isRemediationOpen, setIsRemediationOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: readinessData }, { data: gateData }] = await Promise.all([
+      const [{ data: readinessData }, { data: gateData }, { data: remediationData }] = await Promise.all([
         apiClient.get("/admin/execution-readiness"),
         apiClient.get("/phase4/admin/release-gate"),
+        apiClient.get("/admin/system/remediate-config"),
       ]);
       setReadiness(readinessData);
       setGate(gateData);
+      setRemediationState(remediationData);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Execution readiness verisi alınamadı");
     } finally {
@@ -31,20 +34,7 @@ export const AdminExecutionReadinessPage = () => {
     load();
   }, [load]);
 
-  const enableOverride = async () => {
-    try {
-      await apiClient.post("/admin/execution-override", {
-        reason_code: "execution_guard_manual_override",
-        reason_note: overrideReason,
-        ttl_minutes: 30,
-        deploy_context: { source: "admin_execution_readiness_page" },
-      });
-      toast.success("Execution override açıldı");
-      load();
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Override açılamadı");
-    }
-  };
+  const isBlocked = remediationState?.release_gate_status === "BLOCKED" || gate?.status === "BLOCKED";
 
   return (
     <section className="space-y-4" data-testid="admin-execution-readiness-page">
@@ -85,28 +75,71 @@ export const AdminExecutionReadinessPage = () => {
         </div>
       </div>
 
-      {readiness?.final_status === "BLOCKED" && (
+      {isBlocked && (
         <div className="rounded border border-red-700 bg-red-950/30 p-3 text-sm text-red-200" data-testid="admin-execution-readiness-blocked-action-message">
-          BLOCKED: Trade execution kapalı. Connection/permission reason_codes çözülmeli veya admin override uygulanmalı.
+          BLOCKED: Deploy ve live enable kapalı. "Blokajı Çöz" ile production config girip yeniden doğrula.
         </div>
       )}
 
-      <div className="rounded border border-orange-700 bg-slate-900 p-3" data-testid="admin-execution-readiness-override-panel">
-        <p className="text-xs uppercase text-orange-300" data-testid="admin-execution-readiness-override-title">Admin Override</p>
-        <Input
-          value={overrideReason}
-          onChange={(event) => setOverrideReason(event.target.value)}
-          className="mt-2 bg-slate-950"
-          data-testid="admin-execution-readiness-override-reason-input"
-        />
-        <div className="mt-3 flex gap-2">
-          <Button onClick={enableOverride} data-testid="admin-execution-readiness-override-enable-button">Override Enable</Button>
-          <Button variant="outline" onClick={load} disabled={loading} data-testid="admin-execution-readiness-refresh-button">Refresh</Button>
+      <div className="rounded border border-red-700/70 bg-slate-900 p-3" data-testid="admin-execution-readiness-remediation-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-execution-readiness-remediation-header">
+          <p className="text-xs uppercase text-red-300" data-testid="admin-execution-readiness-remediation-title">Release Gate Remediation</p>
+          <div className="flex gap-2" data-testid="admin-execution-readiness-remediation-actions">
+            <Button variant="outline" onClick={load} disabled={loading} data-testid="admin-execution-readiness-refresh-button">Yenile</Button>
+            <Button
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={() => setIsRemediationOpen(true)}
+              data-testid="admin-execution-readiness-open-remediation-button"
+            >
+              Blokajı Çöz
+            </Button>
+          </div>
         </div>
-        <p className="mt-2 text-xs text-slate-300" data-testid="admin-execution-readiness-override-active-flag">
-          override_active: {String(Boolean(readiness?.override_active || gate?.override_active))}
-        </p>
+
+        <div className="mt-3 grid gap-2 text-xs text-slate-200 md:grid-cols-2" data-testid="admin-execution-readiness-remediation-status-grid">
+          <p data-testid="admin-execution-readiness-remediation-release-gate-status">release_gate_status: {remediationState?.release_gate_status || "-"}</p>
+          <p data-testid="admin-execution-readiness-remediation-preflight-status">preflight_status: {remediationState?.preflight_status || "-"}</p>
+          <p data-testid="admin-execution-readiness-remediation-secret-status">secret_readiness_status: {remediationState?.secret_readiness_status || "-"}</p>
+          <p data-testid="admin-execution-readiness-remediation-final-decision">final_release_gate_decision: {remediationState?.final_release_gate_decision || "-"}</p>
+        </div>
+
+        <div className="mt-2 space-y-1" data-testid="admin-execution-readiness-remediation-reasons-list">
+          {(remediationState?.release_gate_reason_codes || []).map((item, index) => (
+            <p key={`${item}-${index}`} className="font-mono text-xs text-red-200" data-testid={`admin-execution-readiness-remediation-reason-${index}`}>{item}</p>
+          ))}
+          {(remediationState?.release_gate_reason_codes || []).length === 0 && (
+            <p className="text-xs text-slate-400" data-testid="admin-execution-readiness-remediation-reasons-empty">Aktif reason_code yok.</p>
+          )}
+        </div>
+
+        <div className="mt-2 space-y-1" data-testid="admin-execution-readiness-remediation-checks-list">
+          {(remediationState?.checks || []).map((item, index) => (
+            <p key={`${item.check_name}-${index}`} className="text-xs text-slate-300" data-testid={`admin-execution-readiness-remediation-check-${index}`}>
+              {item.check_name}: {item.status}
+            </p>
+          ))}
+          {(remediationState?.checks || []).length === 0 && (
+            <p className="text-xs text-slate-400" data-testid="admin-execution-readiness-remediation-checks-empty">Check sonucu henüz yok.</p>
+          )}
+        </div>
       </div>
+
+      <ProdConfigRemediationModal
+        open={isRemediationOpen}
+        onOpenChange={setIsRemediationOpen}
+        remediationState={remediationState}
+        onSaved={(nextState) => {
+          setRemediationState(nextState);
+          load();
+        }}
+        testIdPrefix="admin-execution-readiness"
+      />
+
+      {remediationState?.release_gate_status === "PASS" && (
+        <div className="rounded border border-emerald-700 bg-emerald-950/20 p-3 text-sm text-emerald-200" data-testid="admin-execution-readiness-pass-message">
+          PASS: Production preflight doğrulandı. Deploy enable yalnızca backend PASS döndüğü için açık.
+        </div>
+      )}
     </section>
   );
 };
