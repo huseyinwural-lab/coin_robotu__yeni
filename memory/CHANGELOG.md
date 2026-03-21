@@ -1,6 +1,21 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-21
+### Iteration-53 — Final Cleanup + Real State + Lock
+- Legacy pipeline UI linkleri kaldırıldı, route redirectler tamamlandı (`pipeline-control`, `pipeline-monitoring` -> `pipeline-operations`).
+- Yeni `GET /api/runtime/state-validation` endpointi ile gerçek state checklist bağlandı (PASS/FAIL + suggestion).
+- Runtime action contract status değeri `success` standardına geçirildi; frontend result panel state_snapshot dahil gösteriyor.
+- WS debug alanları genişletildi (last_error, reconnect_reason, recent reconnect reasons).
+- Release gate rules/fix_hint görünürlüğü eklendi (backend rules[] + UI rule table).
+- Override active response TTL/impact metrikleri ile zenginleştirildi.
+- Exchange monitoring UI aksiyonları (revalidate/disable) bağlandı.
+- Header’a MODE görünürlüğü eklendi.
+- Alert center filtreleri (time/severity/event) + severity badge finalize edildi.
+- Test kanıtı:
+  - `/app/test_reports/iteration_53.json`
+  - Backend 13/13 PASS, Frontend 100% PASS
+
+## 2026-03-21
 ### Iteration-52 — Admin Light Green Theme Cleanup
 - Admin içerik alanı için `admin-light-panels` tema sınıfı eklendi.
 - Koyu/siyah panel-kart-input-button yüzeyleri açık yeşil (lime pastel) tonlara çevrildi.

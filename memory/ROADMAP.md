@@ -1,5 +1,13 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-21 Final Update
+- ✅ Final Cleanup + Real State + Lock tamamlandı (tek panel, gerçek state validation, action-result bağları, ws debug, gate rules, override impact, exchange action, mode visibility, alert filter).
+
+## Sonraki Aşama (Ops)
+1. Prod rollout planı (kademeli canlıya alma)
+2. Rollback runbook (tetikleyici + adım adım geri dönüş)
+3. Post-deploy gözlem KPI seti (gate, ws, guard, alert, override)
+
 ## 2026-03-21 UI Update
 - ✅ Admin içerik yüzeylerinde koyu kutu temizliği tamamlandı (açık yeşil tema)
 

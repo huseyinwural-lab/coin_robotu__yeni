@@ -1,3 +1,69 @@
+## 2026-03-21 — FINAL Cleanup + Real State + Lock ✅
+
+### 1) Tek Panel Zorunluluğu
+- Legacy UI bağlantıları kaldırıldı.
+- Route redirect aktif:
+  - `/admin/pipeline-control` -> `/admin/pipeline-operations`
+  - `/admin/pipeline-monitoring` -> `/admin/pipeline-operations`
+
+### 2) State Validation Gerçek Endpoint
+- Yeni endpoint: `GET /api/runtime/state-validation`
+- Dönen alanlar:
+  - `ws_session_changed`
+  - `override_effect_applied`
+  - `gate_source`
+  - `guard_block_visible`
+  - `suggestions`
+- Frontend BEKLENİYOR kaldırıldı; PASS/FAIL + fail aksiyon önerisi eklendi.
+
+### 3) Action → Result Tam Bağlantı
+- Runtime action response standardı `status=success` ile güncellendi.
+- Frontend result alanında gösterim:
+  - `last_action_status`
+  - `message`
+  - `trace_id`
+  - `state_snapshot` (kısa)
+
+### 4) WS Debug Operasyonel Görünürlük
+- WS health response genişletildi:
+  - `last_error`
+  - `reconnect_reason`
+  - `session_id`
+  - `reconnect_count`
+  - `recent_reconnect_reasons` (son 5)
+- UI’da Connection Logs mini görünüm eklendi.
+
+### 5) Release Gate Gerçek Kural Görünürlüğü
+- Gate response içine `rules[]` eklendi:
+  - `rule_id`, `result`, `message`, `fix_hint`
+- UI’da rule table + FAIL highlight + fix_hint link davranışı eklendi.
+
+### 6) Override Etki Görünürlüğü
+- `/runtime/override/active` zenginleştirildi:
+  - `ttl_remaining_seconds`
+  - `impacted_trades_count`
+  - `total_impacted_trades`
+- UI’da countdown/impact görünürlüğü eklendi.
+
+### 7) Exchange Monitoring Operasyonel Aksiyon
+- Drift + connection verileri UI’da aksiyonlanabilir hale getirildi.
+- Connection bazlı aksiyonlar:
+  - revalidate
+  - disable
+
+### 8) MODE Görünürlüğü
+- Header’da MODE: `MOCK/LIVE/PAPER` görünürlüğü eklendi (runtime state’den).
+
+### 9) Alert System İyileştirme
+- Severity badge
+- Zaman/severity/event filtreleri
+- Event-type bazlı görünürlük desteklendi.
+
+### Test Kanıtı
+- `/app/test_reports/iteration_53.json`
+  - Backend: **13/13 PASS**
+  - Frontend: **PASS**
+
 ## 2026-03-21 — Admin Content Theme Cleanup (Açık Yeşil) ✅
 
 ### Kullanıcı Talebi
