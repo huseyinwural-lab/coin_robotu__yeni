@@ -1,3 +1,40 @@
+## 2026-03-21 — P2 Tamamlandı: last-5 perf avg + config schema gate + 5m sparkline ✅
+
+### 1) PR perf comment’a son 5 run ortalaması eklendi
+- Dosya: `/app/frontend/scripts/ci_perf_smoke.js`
+  - `frontend/perf-baseline/latest.json` için git history’den son 5 örnek toplanıyor.
+  - Report alanları eklendi:
+    - `last_5_baseline_avg`
+    - `delta_vs_last_5_baseline_avg`
+- Dosya: `/app/.github/workflows/deploy-gate.yml`
+  - PR perf comment içeriğine şu satırlar eklendi:
+    - Last-N baseline avg (JS/CSS gzip)
+    - Δ vs last-N avg
+  - Frontend checkout adımı `fetch-depth: 60` yapıldı (history erişimi için).
+
+### 2) `config.schema.json` validation job eklendi
+- Yeni dosyalar:
+  - `/app/config.schema.json`
+  - `/app/config/app.runtime.example.json`
+  - `/app/scripts/validate_config_schema.py`
+- Workflow job eklendi: `config-schema-validation-gate`
+  - Schema syntax + sample config doğrulaması yapıyor.
+  - Artifact üretiyor:
+    - `artifacts/config_schema_validation.log`
+    - `artifacts/config_schema_validation_summary.json`
+
+### 3) Scanner mini-indicator’a last 5m trend sparkline eklendi
+- Dosya: `/app/frontend/src/pages/UserScannerPage.jsx`
+  - 60s request health metriği korunarak,
+  - 5 dakika için dakika-bucket bazlı trend hesaplanıyor.
+  - SVG sparkline + m0..m4 label testid’leri eklendi.
+
+### Doğrulama
+- `python scripts/validate_config_schema.py` → PASS
+- `yarn --cwd frontend build` → PASS
+- `node frontend/scripts/ci_perf_smoke.js` → PASS (last_5_baseline_avg alanları üretildi)
+- Frontend testing agent smoke/regression → PASS (mini-indicator + sparkline + liste stabilitesi)
+
 ## 2026-03-21 — P1 İyileştirmeleri: CI proximity + anti-loop taraması + Scanner health mini-indicator ✅
 
 ### 1) CI PR yorumunda >%90 proximity warning (🟡)
