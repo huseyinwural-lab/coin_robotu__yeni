@@ -1,3 +1,19 @@
+## 2026-03-21 — Final Hardening Pass (Eksiksiz Kritik Tamamlama) ✅
+
+### Kapatılan Son Kritikler
+- **Double-confirm gerçek 2-step**: Step1 reason → Step2 phrase → execute
+- **Alerts operasyon akışı**: row bazlı Mute/Ack, Detay, Investigate, Restart Service, Suggested Action
+- **Action Center drilldown affordance**: satır bazlı tıklanabilir yapı + `↗` görsel işaret
+- **KPI navigation doğrulaması**: websocket_status → `/admin/monitoring`, signals_5m → `/admin/anomaly-timeline`
+- **Role-based disable + unauthorized block**: UI fieldset disable + backend 403
+- **Context audit zorunlu görünürlük**: aksiyonlardan query-parametreli audit yönlendirme + AuditLogs query prefill
+- **Auto-close log drilldown**: latest-log endpoint + modal context audit
+
+### Kanıt/Test
+- Test raporu: `/app/test_reports/iteration_42.json`
+- Sonuç: Backend **19/19 PASS**, frontend kritik doğrulamalar PASS
+- Testing agent notu: “All 9 user-reported critical items verified PASS.”
+
 ## 2026-03-21 — Admin Control Hub İkinci Sıkılaştırma (Kritik Gap Kapatma) ✅
 
 ### Kullanıcı Geri Bildirimi Üzerine Kapatılan Başlıklar
