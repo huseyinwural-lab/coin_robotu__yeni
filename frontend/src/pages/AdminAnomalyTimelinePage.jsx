@@ -24,6 +24,20 @@ const sourceOf = (item) => String(item?.details?.source || "unknown_source");
 
 const failRatioOf = (item) => Number(item?.details?.fail_ratio || 0);
 
+const ttrToneClass = (minutes) => {
+  if (minutes == null || Number.isNaN(Number(minutes))) {
+    return "text-slate-400";
+  }
+  const value = Number(minutes);
+  if (value <= 15) {
+    return "text-emerald-300";
+  }
+  if (value <= 60) {
+    return "text-amber-300";
+  }
+  return "text-rose-300";
+};
+
 const computeTimeToRecoverMap = (rows, warningThreshold) => {
   const sorted = [...rows].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   const unresolvedByKey = new Map();
@@ -438,7 +452,12 @@ export const AdminAnomalyTimelinePage = () => {
                   <TableCell className="font-mono text-xs">{item.actor_user_id || "-"}</TableCell>
                   <TableCell>{sourceOf(item)}</TableCell>
                   <TableCell>{failRatioOf(item).toFixed(3)}</TableCell>
-                  <TableCell data-testid={`admin-anomaly-timeline-ttr-${item.id}`}>{ttrByLogId[item.id] != null ? `${ttrByLogId[item.id]}m` : "-"}</TableCell>
+                  <TableCell
+                    className={ttrToneClass(ttrByLogId[item.id])}
+                    data-testid={`admin-anomaly-timeline-ttr-${item.id}`}
+                  >
+                    {ttrByLogId[item.id] != null ? `${ttrByLogId[item.id]}m` : "-"}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
