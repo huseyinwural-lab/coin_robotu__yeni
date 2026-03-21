@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Focused Backend Regression Check for 502 Outage
-Target: https://trading-phase-verify.preview.emergentagent.com
+Target: https://algo-config-remedy.preview.emergentagent.com
 Tests: GET /api/health, GET /api/ready, GET /api/
 """
 
@@ -15,7 +15,7 @@ def test_502_regression():
     Tests the 3 specific endpoints requested.
     """
     
-    BASE_URL = "https://trading-phase-verify.preview.emergentagent.com"
+    BASE_URL = "https://algo-config-remedy.preview.emergentagent.com"
     
     print("=" * 60)
     print("FOCUSED BACKEND REGRESSION CHECK - 502 OUTAGE")

@@ -8,7 +8,7 @@ import requests
 from pathlib import Path
 
 # Use public URL from environment
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trading-phase-verify.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://algo-config-remedy.preview.emergentagent.com").rstrip("/")
 ARTIFACT_DIR = Path("/app/artifacts")
 
 pytestmark = pytest.mark.skip(reason="Manual exploratory suite; CI gate uses deterministic phase5 verifier tests.")

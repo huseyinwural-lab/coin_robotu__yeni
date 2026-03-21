@@ -13,7 +13,7 @@ import re
 
 def test_ui_validation():
     """Perform concise UI validation"""
-    url = "https://trading-phase-verify.preview.emergentagent.com"
+    url = "https://algo-config-remedy.preview.emergentagent.com"
     
     try:
         # Get the landing page

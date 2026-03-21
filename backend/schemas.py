@@ -3035,6 +3035,70 @@ class ReleaseGateStatusResponse(BaseModel):
     override_id: str | None = None
 
 
+class ProdConfigFieldStatusResponse(BaseModel):
+    key: str
+    source: str
+    present: bool
+    editable: bool
+    masked_value: str
+    validation_error: str | None = None
+
+
+class ProdConfigRemediationItemResponse(BaseModel):
+    code: str
+    title: str
+    current_state: str
+    expected_state: str
+    target_field: str | None = None
+    check_action: str
+
+
+class ProdConfigCheckResultResponse(BaseModel):
+    check_name: str
+    status: str
+    artifact_path: str
+    detail: str | None = None
+
+
+class ProdConfigRemediationStateResponse(BaseModel):
+    release_gate_status: str
+    release_gate_reason_codes: list[str] = Field(default_factory=list)
+    deploy_enable_allowed: bool
+    remediation_allowed: bool
+    fields: list[ProdConfigFieldStatusResponse] = Field(default_factory=list)
+    remediation_items: list[ProdConfigRemediationItemResponse] = Field(default_factory=list)
+    preflight_status: str = "UNKNOWN"
+    secret_readiness_status: str = "UNKNOWN"
+    final_release_gate_decision: str = "UNKNOWN"
+    checks: list[ProdConfigCheckResultResponse] = Field(default_factory=list)
+
+
+class ProdConfigSaveRequest(BaseModel):
+    database_url: str | None = None
+    redis_url: str | None = None
+    jwt_secret: str | None = None
+    exchange_credentials_encryption_key: str | None = None
+    admin_bootstrap_email: str | None = None
+    admin_bootstrap_password: str | None = None
+    react_app_backend_url: str | None = None
+    resend_api_key: str | None = None
+    alert_from: str | None = None
+    alert_to: str | None = None
+
+
+class ProdConfigSaveResponse(BaseModel):
+    status: str
+    changed_keys: list[str] = Field(default_factory=list)
+    validation_errors: dict[str, str] = Field(default_factory=dict)
+
+
+class ProdConfigRunCheckResponse(BaseModel):
+    status: str
+    artifact_path: str
+    check_name: str
+    summary: dict = Field(default_factory=dict)
+
+
 class LiveReadinessScoreResponse(BaseModel):
     readiness_score: float
     permission_ready: bool

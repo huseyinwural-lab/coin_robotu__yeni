@@ -3,7 +3,7 @@
 Backend Regression Test for Phase-1 Anomaly Stabilization
 Testing anomaly event submission with guardrail suppression, cooldown, and validation logic.
 
-Base URL: https://trading-phase-verify.preview.emergentagent.com
+Base URL: https://algo-config-remedy.preview.emergentagent.com
 Test credentials: canary_1774010877@example.com / TestPass123!
 """
 
@@ -13,7 +13,7 @@ import time
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://trading-phase-verify.preview.emergentagent.com"
+BASE_URL = "https://algo-config-remedy.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 TEST_EMAIL = "canary_1774010877@example.com"
 TEST_PASSWORD = "TestPass123!"
