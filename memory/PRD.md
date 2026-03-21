@@ -1,3 +1,45 @@
+## 2026-03-21 — FAZ-1 (P1) Stabilizasyon: anomaly-event rate-limit/cooldown + guardrail + suppressed_count ✅
+
+### Kapsam
+- Endpoint: `POST /api/user/scanner/runtime/anomaly-event`
+- Dosyalar:
+  - `/app/backend/routers/user_scanner_router.py`
+  - `/app/backend/schemas.py`
+
+### Uygulananlar
+1) **Rate-limit + cooldown + duplicate suppression**
+- Aynı kullanıcı için cooldown: **60s** (`cooldown_active`)
+- Hash tabanlı duplicate bastırma penceresi: **900s** (`duplicate_payload`)
+- Dakikalık burst guard: **6 event/dk** üstü bastırılır (`burst_limit`)
+
+2) **Backend guardrail**
+- `failed_requests + success_requests <= total_requests` zorunlu (ihlalde 422)
+- Düşük gürültü koruması:
+  - `fail_ratio <= 0.10` veya `total_requests < 5` ise log yerine suppression (`guardrail_threshold`)
+- `trend_points` şema/limit eklendi (tipli model + uzunluk sınırı)
+
+3) **Kısa metrik (`suppressed_count`)**
+- Response’a eklendi:
+  - `suppressed_count`
+  - `suppress_reason`
+  - `payload_hash`
+- Loglanan event detayına da `suppressed_count` + guardrail parametreleri yazılıyor.
+
+### API Sözleşmesi Güncellemesi
+- `UserScannerAnomalyAuditRequest` daha sıkı şemaya alındı (`UserScannerAnomalyTrendPoint`)
+- `UserScannerAnomalyAuditResponse` genişletildi:
+  - `audit_log_id`/`logged_at` nullable
+  - `suppressed_count`, `suppress_reason`, `payload_hash`
+
+### Test Kanıtı
+- Self test (curl):
+  - guardrail suppression ✅
+  - valid anomaly log ✅
+  - immediate cooldown suppression ✅
+  - invalid consistency 422 ✅
+- Backend test agent (deep testing): **6/6 PASS**
+  - health 200, guardrail/cooldown/validation davranışları doğrulandı.
+
 ## 2026-03-21 — LocalStorage persist + backend anomaly audit + hover detay kartı ✅
 
 ### 1) Alert toggle ayarları localStorage’da kalıcı
