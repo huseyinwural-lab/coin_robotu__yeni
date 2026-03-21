@@ -1,3 +1,30 @@
+## 2026-03-21 — CI yüzde sapma + sparkline tooltip + anomaly flag ✅
+
+### 1) CI perf comment: last-5 ortalamaya göre yüzde sapma
+- Dosya: `/app/frontend/scripts/ci_perf_smoke.js`
+  - `delta_vs_last_5_baseline_avg` alanına yüzde sapma metrikleri eklendi:
+    - `main_js_deviation_pct`
+    - `main_css_deviation_pct`
+- Dosya: `/app/.github/workflows/deploy-gate.yml`
+  - PR perf comment içine yeni satır eklendi:
+    - `Sapma vs last-N avg (%)`
+
+### 2) Sparkline hover tooltip (dakika bazlı ok/fail)
+- Dosya: `/app/frontend/src/pages/UserScannerPage.jsx`
+  - Sparkline noktaları (`m0..m4`) için SVG `circle + title` yapısı eklendi.
+  - Tooltip içeriği: dakika etiketi + ok/fail + success %.
+
+### 3) Sparkline altı anomaly flag
+- Dosya: `/app/frontend/src/pages/UserScannerPage.jsx`
+  - Son 1 dakikadaki fail oranı hesaplanıyor.
+  - Kural: `fail_ratio > 10%` ise uyarı, aksi halde normal bilgi mesajı.
+  - Yeni test id: `user-scanner-request-health-anomaly-flag`.
+
+### Doğrulama
+- Frontend build PASS
+- `ci_perf_smoke.js` çalıştırma PASS (yüzde sapma alanları üretildi)
+- Frontend testing agent PASS (anomaly flag, tooltip point’leri, 10s liste stabilitesi)
+
 ## 2026-03-21 — P2 Tamamlandı: last-5 perf avg + config schema gate + 5m sparkline ✅
 
 ### 1) PR perf comment’a son 5 run ortalaması eklendi
