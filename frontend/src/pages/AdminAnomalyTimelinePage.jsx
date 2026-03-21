@@ -37,6 +37,34 @@ const toCsvSafe = (value) => {
   return `"${raw.replaceAll('"', '""')}"`;
 };
 
+const errorMessageOf = (error, fallback = "İşlem başarısız") => {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const joined = detail
+      .map((entry) => {
+        if (typeof entry === "string") return entry;
+        if (entry && typeof entry === "object") return entry.msg || JSON.stringify(entry);
+        return "";
+      })
+      .filter(Boolean)
+      .join("; ");
+    if (joined) {
+      return joined;
+    }
+  }
+  if (detail && typeof detail === "object") {
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+};
+
 const sourceOf = (item) => String(item?.details?.source || "unknown_source");
 
 const failRatioOf = (item) => Number(item?.details?.fail_ratio || 0);
@@ -271,7 +299,7 @@ export const AdminAnomalyTimelinePage = () => {
       setPolicy(nextPolicy);
       setWebhookInput((nextPolicy.webhook_urls || []).join("\n"));
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Alert policy yüklenemedi");
+      toast.error(errorMessageOf(error, "Alert policy yüklenemedi"));
     }
   }, []);
 
@@ -280,7 +308,7 @@ export const AdminAnomalyTimelinePage = () => {
       const { data } = await apiClient.get("/admin/anomaly-alerts/mutes", { params: { limit: 20 } });
       setActiveMutes(data || []);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Active mute listesi yüklenemedi");
+      toast.error(errorMessageOf(error, "Active mute listesi yüklenemedi"));
     }
   }, []);
 
@@ -290,7 +318,7 @@ export const AdminAnomalyTimelinePage = () => {
       const { data } = await apiClient.get("/audit-logs/timeline", {
         params: {
           action: ANOMALY_ACTION,
-          limit: 1000,
+          limit: 500,
           date_from: toIsoFromHours(HOURS_30D),
         },
       });
@@ -298,7 +326,7 @@ export const AdminAnomalyTimelinePage = () => {
       setItems(nextItems);
       setSelectedLogId((prev) => prev || nextItems[0]?.id || null);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Anomaly timeline yüklenemedi");
+      toast.error(errorMessageOf(error, "Anomaly timeline yüklenemedi"));
     } finally {
       setIsLoading(false);
     }
@@ -624,7 +652,7 @@ export const AdminAnomalyTimelinePage = () => {
       setWebhookInput((nextPolicy.webhook_urls || []).join("\n"));
       toast.success("Anomaly alert policy güncellendi");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Policy güncellenemedi");
+      toast.error(errorMessageOf(error, "Policy güncellenemedi"));
     } finally {
       setIsSavingPolicy(false);
     }
@@ -645,7 +673,7 @@ export const AdminAnomalyTimelinePage = () => {
       toast.success("Pattern geçici olarak susturuldu");
       await loadMutes();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Pattern mute başarısız");
+      toast.error(errorMessageOf(error, "Pattern mute başarısız"));
     }
   };
 
