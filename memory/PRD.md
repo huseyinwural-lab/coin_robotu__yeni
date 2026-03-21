@@ -1,3 +1,41 @@
+## 2026-03-21 — FAZ-3: Admin anomaly timeline widget + preset filtreler + sparkbar ✅
+
+### Kapsam
+- Frontend dosyaları:
+  - `/app/frontend/src/pages/AdminAnomalyTimelinePage.jsx` (yeni)
+  - `/app/frontend/src/App.js`
+  - `/app/frontend/src/components/PanelLayout.jsx`
+  - `/app/frontend/src/pages/UserScannerPage.jsx` (sparkbar iyileştirmesi)
+
+### Uygulananlar
+1) **Admin anomaly timeline widget (filtre + drill-down + export)**
+- Yeni admin sayfa eklendi: `/admin/anomaly-timeline`
+- Veri kaynağı: `/api/audit-logs/timeline?action=SCANNER_ANOMALY_DETECTED`
+- Özellikler:
+  - search, severity/source/user filtreleri
+  - zaman penceresi (24h/72h/7g/30g)
+  - satır seçimi ile drill-down JSON detay paneli
+  - JSON/CSV export butonları
+
+2) **user/source/severity hızlı filtre presetleri**
+- Severity preset butonları (all/warning/critical/info)
+- Source presetleri (top source’lar + all)
+- User presetleri (all/me + top user’lar)
+
+3) **Endpoint breakdown satırlarına mini sparkbar**
+- Scanner observability bölümünde 1m/5m endpoint listelerine fail yoğunluk sparkbar eklendi.
+- Trend-detail endpoint listesine de sparkbar eklendi.
+
+### Routing/Navigasyon
+- `App.js` içine route eklendi: `path="/admin/anomaly-timeline"`
+- `PanelLayout` SYSTEM grubuna menü eklendi: `Anomaly Timeline`
+
+### Test Kanıtı
+- Frontend testing agent: **12/12 PASS**
+  - admin timeline widget (filtre/preset/drilldown/export) doğrulandı
+  - scanner sparkbar render doğrulandı
+  - refresh stabilitesi korundu (10s flicker yok)
+
 ## 2026-03-21 — FAZ-2 (P1/P2) Gözlemlenebilirlik Derinleştirme ✅
 
 ### Kapsam
