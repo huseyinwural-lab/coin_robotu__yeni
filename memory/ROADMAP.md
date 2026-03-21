@@ -1,5 +1,27 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-21 Update (Unified Pipeline Panel)
+- ✅ **P0 tamamlandı**
+  - Runtime action contract standardizasyonu (`status, trace_id, message, state_snapshot`)
+  - Zorunlu trace/audit görünürlüğü
+  - Yeni `/admin/pipeline-operations` unified ekranı
+  - Geçiş stratejisi: legacy ekranlar korunarak yeni sayfaya linkleme
+
+## P1 (Sıradaki)
+1. Release Gate re-check script wrapper derinleştirme
+   - mevcut `scripts/ci_*` üzerinden rule breakdown + fix hint üretimi
+2. Override lifecycle sıkılaştırma
+   - strict TTL cap doğrulama
+   - aktif override görünürlüğü iyileştirme
+   - cancel override akışının operasyonel netleştirilmesi
+3. Guard telemetry genişletmesi
+   - blocked-trades endpoint derinliği + reason aggregation netleştirme
+
+## P2 (Backlog)
+1. WebSocket health session geçmişi + çoklu bağlantı görünürlüğü
+2. Exchange monitoring drift aksiyonları (`revalidate_key`, `disable_key`) operasyonel UX iyileştirmesi
+3. Alert engine policy version history + rollback ergonomisi
+
 ## 2026-03-18 Update
 - ✅ FAZ-C Ultra Minimal Closure tamamlandı:
   - `/user/trade` tek nokta trade entry

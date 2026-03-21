@@ -1,3 +1,34 @@
+## 2026-03-21 — P0 Unified Pipeline Operations (Contract + Unified Panel) ✅
+
+### Tamamlanan P0
+- `backend/routers/runtime_control.py` içinde runtime aksiyon cevapları tek sözleşmeye sabitlendi:
+  - `{ status, trace_id, message, state_snapshot }`
+  - `status="ok"` standardı
+- Runtime kontrol aksiyonlarında `trace_id` + `audit_log_id` üretimi doğrulandı.
+- `heartbeat/check` aksiyonu zorunlu audit akışına alındı (`RUNTIME_HEARTBEAT_CHECK`).
+- `alert-policy/rollback` için phrase enforce eklendi:
+  - Beklenen: `ROLLBACK ALERT POLICY`
+
+### Unified Panel (Yeni)
+- Yeni sayfa: `/admin/pipeline-operations`
+- Yeni dosya: `/app/frontend/src/pages/PipelineOperationsPage.jsx`
+- Panel düzeni kullanıcı tercihiyle teslim edildi:
+  - **Control → Recovery → Monitoring → Traceability**
+- Her panelde 4 katman görünür:
+  - **State / Reason / Action / Result**
+
+### Geçiş Stratejisi (Kullanıcı seçimi)
+- Eski ekranlar korunuyor (redirect yok):
+  - `/admin/pipeline-control`
+  - `/admin/dashboard`
+  - `/admin/live-trading-dashboard`
+- Yeni unified sayfaya görünür geçiş linkleri eklendi (sidebar + dashboard + live dashboard + legacy pipeline sayfası).
+
+### Doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_49.json`
+  - Backend: **15/15 PASS** (P0 contract)
+  - Frontend: Unified panel route/nav/section/block doğrulaması PASS
+
 ## 2026-03-21 — Runtime Control & Recovery Layer (Mimari Uyumlu) ✅
 
 ### Neden

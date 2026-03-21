@@ -1,5 +1,27 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-21
+### Iteration-49 — Unified Pipeline Operations P0 Closure
+- Backend runtime action contract standardizasyonu tamamlandı:
+  - Tüm kritik runtime action response'larında `{ status, trace_id, message, state_snapshot }`
+  - `status="ok"` standardı
+  - `audit_log_id` + traceability doğrulandı
+- `POST /api/runtime/heartbeat/check` zorunlu audit akışına alındı.
+- `POST /api/runtime/alert-policy/rollback` endpointinde phrase enforce eklendi (`ROLLBACK ALERT POLICY`).
+- Yeni unified operasyon sayfası eklendi:
+  - Route: `/admin/pipeline-operations`
+  - Dosya: `/app/frontend/src/pages/PipelineOperationsPage.jsx`
+  - Akış sırası: Control → Recovery → Monitoring → Traceability
+  - Her panelde State / Reason / Action / Result görünürlüğü
+- Eski ekranlar korundu, redirect yapılmadı; yeni unified sayfaya görünür geçişler eklendi:
+  - Sidebar nav
+  - Admin Dashboard
+  - Live Trading Dashboard
+  - Legacy Pipeline Control sayfası
+- Test kanıtı:
+  - `/app/test_reports/iteration_49.json`
+  - Backend 15/15 PASS, frontend unified panel PASS
+
 ## 2026-03-18
 ### Iteration-165 — Optional MFA + Persistent Brand Settings
 - Optional MFA eklendi (User + Admin, login sonrası ikinci adım):
