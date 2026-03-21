@@ -1001,3 +1001,79 @@ jobs:
           path: |
             artifacts/config_schema_validation.log
             artifacts/config_schema_validation_summary.json
+
+  prod-config-preflight-gate:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.PROD_DATABASE_URL || vars.PROD_DATABASE_URL || '' }}
+      REDIS_URL: ${{ secrets.PROD_REDIS_URL || vars.PROD_REDIS_URL || '' }}
+      JWT_SECRET: ${{ secrets.PROD_JWT_SECRET || vars.PROD_JWT_SECRET || '' }}
+      EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: ${{ secrets.PROD_EXCHANGE_CREDENTIALS_ENCRYPTION_KEY || vars.PROD_EXCHANGE_CREDENTIALS_ENCRYPTION_KEY || '' }}
+      ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.PROD_ADMIN_BOOTSTRAP_EMAIL || vars.PROD_ADMIN_BOOTSTRAP_EMAIL || '' }}
+      ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.PROD_ADMIN_BOOTSTRAP_PASSWORD || vars.PROD_ADMIN_BOOTSTRAP_PASSWORD || '' }}
+      REACT_APP_BACKEND_URL: ${{ secrets.PROD_REACT_APP_BACKEND_URL || vars.PROD_REACT_APP_BACKEND_URL || '' }}
+      RESEND_API_KEY: ${{ secrets.PROD_RESEND_API_KEY || vars.PROD_RESEND_API_KEY || '' }}
+      ALERT_FROM: ${{ secrets.PROD_ALERT_FROM || vars.PROD_ALERT_FROM || '' }}
+      ALERT_TO: ${{ secrets.PROD_ALERT_TO || vars.PROD_ALERT_TO || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Production env preflight (fail-fast)
+        run: |
+          chmod +x scripts/preflight_prod_env_check.sh
+          scripts/preflight_prod_env_check.sh
+
+      - name: Production secret readiness check
+        run: |
+          chmod +x scripts/prod_secret_readiness_check.sh
+          scripts/prod_secret_readiness_check.sh
+
+      - name: Config schema validation
+        run: |
+          python scripts/validate_config_schema.py
+
+      - name: Backend critical env validation
+        run: |
+          python - <<'PY'
+          import os
+          import re
+
+          required = [
+              'DATABASE_URL',
+              'REDIS_URL',
+              'JWT_SECRET',
+              'EXCHANGE_CREDENTIALS_ENCRYPTION_KEY',
+              'REACT_APP_BACKEND_URL',
+          ]
+          missing = [key for key in required if not str(os.environ.get(key, '')).strip()]
+          if missing:
+              raise SystemExit(f"Missing critical env: {', '.join(missing)}")
+
+          localhost_pattern = re.compile(r"(localhost|127\.0\.0\.1|0\.0\.0\.0)", re.IGNORECASE)
+          for key in ('DATABASE_URL', 'REDIS_URL', 'REACT_APP_BACKEND_URL'):
+              value = str(os.environ.get(key, '')).strip()
+              if localhost_pattern.search(value):
+                  raise SystemExit(f"{key} contains localhost marker: {value}")
+
+          backend_url = str(os.environ.get('REACT_APP_BACKEND_URL', '')).strip()
+          if not backend_url.startswith('https://'):
+              raise SystemExit('REACT_APP_BACKEND_URL must be https:// in production gate')
+
+          cors = str(os.environ.get('CORS_ORIGINS', '')).strip()
+          if cors and backend_url not in cors:
+              print('WARN: CORS_ORIGINS does not explicitly include REACT_APP_BACKEND_URL')
+          print('Backend critical env validation PASS')
+          PY
+
+      - name: Upload preflight artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-config-preflight-artifacts
+          path: |
+            artifacts/prod_preflight_check.json
+            artifacts/prod_preflight_check.log
+            artifacts/prod_secret_readiness_report.json
+            artifacts/config_schema_validation.log
+            artifacts/config_schema_validation_summary.json

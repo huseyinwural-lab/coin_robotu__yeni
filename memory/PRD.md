@@ -1,3 +1,62 @@
+## 2026-03-21 — FAZ D0 Production Deploy Blokaj Kapatma (Artifact-First) ✅/⛔
+
+Bu turda istenen 10 görev script + artifact üretimiyle çalıştırıldı.
+
+### Üretilen D0 Scriptleri
+- `/app/scripts/prod_env_resolution_report.sh`
+- `/app/scripts/prod_secret_readiness_check.sh`
+- `/app/scripts/preflight_prod_env_check.sh`
+- `/app/scripts/prod_like_smoke.sh`
+- `/app/scripts/prod_kill_switch_dry_run.sh`
+- `/app/scripts/prod_rollback_drill.sh`
+- `/app/scripts/release_type_and_state_report.sh`
+- `/app/scripts/final_migration_integrity_check.sh`
+- `/app/scripts/final_release_gate_report.sh`
+
+### Deploy Gate Pipeline Güncellemesi
+- Dosya: `/app/.github/workflows/deploy-gate.yml`
+- Yeni job: `prod-config-preflight-gate`
+  - prod env preflight
+  - secret readiness check
+  - config schema validation
+  - backend critical env validation
+  - artifact upload
+
+### Üretilen Artifact Kanıtları
+- `artifacts/prod_env_resolution_report.json`
+- `artifacts/prod_secret_readiness_report.json`
+- `artifacts/prod_preflight_check.json`
+- `artifacts/prod_preflight_check.log`
+- `artifacts/prod_like_smoke_summary.json`
+- `artifacts/prod_like_smoke.log`
+- `artifacts/prod_kill_switch_dry_run.json`
+- `artifacts/prod_rollback_drill.json`
+- `artifacts/release_type_and_state_report.json`
+- `artifacts/final_migration_integrity_report.json`
+- `artifacts/final_release_gate_report.json`
+- `artifacts/faz_d0_execution_summary.json`
+
+### D0 Sonuç Özeti
+- PASS:
+  - prod-like smoke
+  - kill-switch dry-run
+  - rollback drill
+  - migration integrity
+  - release type/state report (`release_type=redeploy`)
+- FAIL (blokaj):
+  - prod env preflight
+  - secret readiness
+- Final karar: `final_release_gate_report.json` => **NO_GO**
+
+### NO_GO Blokajları
+1. `DATABASE_URL` localhost işaretli (`backend/.env` çözümlemesi)
+2. `REDIS_URL` localhost işaretli (`backend/.env` çözümlemesi)
+3. `ADMIN_BOOTSTRAP_EMAIL` ve `ADMIN_BOOTSTRAP_PASSWORD` eksik
+4. Kritik secret’ların production secret manager yerine repo `.env` kaynağından çözülmesi riski
+
+### Not
+- Bu turda production managed endpoint / secret manager değerleri bu runtime’dan yazılamadığı için kontrollü şekilde NO_GO üretildi; release gate doğru şekilde deploy’u bloklayacak halde.
+
 ## 2026-03-21 — FAZ-5 Tamamlandı: Operatör Dashboard + KPI export + TTR tooltip zenginleştirme ✅
 
 ### Kapsam
