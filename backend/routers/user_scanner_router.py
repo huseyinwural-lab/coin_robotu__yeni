@@ -11,6 +11,15 @@ from models import User
 from schemas import UserScannerAnomalyAuditRequest, UserScannerAnomalyAuditResponse
 from services.audit_service import create_audit_log
 from services.pipeline.cache_store import get_counter, get_json, incr_counter, set_json
+from services.scanner_anomaly_alert_service import (
+    dispatch_generic_webhooks,
+    evaluate_anomaly_severity,
+    get_anomaly_alert_policy,
+    get_pattern_mute_state,
+    mute_pattern,
+    record_pattern_hit,
+    should_notify,
+)
 from services.scanner_runtime import get_runtime_snapshot, run_scanner_runtime
 from services.user_scanner_operations_service import (
     build_user_scanner_daily_report,
@@ -23,7 +32,6 @@ router = APIRouter(prefix="/user/scanner/runtime", tags=["user_scanner_runtime"]
 
 ANOMALY_COOLDOWN_SECONDS = 60
 ANOMALY_DUPLICATE_WINDOW_SECONDS = 900
-ANOMALY_MIN_FAIL_RATIO = 0.10
 ANOMALY_MIN_TOTAL_REQUESTS = 5
 ANOMALY_BURST_LIMIT_PER_MINUTE = 6
 
@@ -161,14 +169,29 @@ def create_runtime_anomaly_event(
         "trend_points": normalized_points,
     }
     payload_hash = _build_anomaly_payload_hash(normalized_payload)
+    policy = get_anomaly_alert_policy()
+    alert_severity = evaluate_anomaly_severity(fail_ratio=float(payload.fail_ratio), policy=policy)
 
-    if payload.fail_ratio <= ANOMALY_MIN_FAIL_RATIO or payload.total_requests < ANOMALY_MIN_TOTAL_REQUESTS:
+    if alert_severity == "info" or payload.total_requests < ANOMALY_MIN_TOTAL_REQUESTS:
         suppressed = _increase_suppressed_count(current_user.id)
         return UserScannerAnomalyAuditResponse(
             status="suppressed",
             suppressed_count=suppressed,
             suppress_reason="guardrail_threshold",
             payload_hash=payload_hash,
+            alert_severity=alert_severity,
+        )
+
+    muted_state = get_pattern_mute_state(payload_hash)
+    if muted_state:
+        suppressed = _increase_suppressed_count(current_user.id)
+        return UserScannerAnomalyAuditResponse(
+            status="suppressed",
+            suppressed_count=suppressed,
+            suppress_reason="muted_pattern",
+            payload_hash=payload_hash,
+            alert_severity=alert_severity,
+            mute_until=muted_state["mute_until"],
         )
 
     now = _utc_now()
@@ -185,6 +208,7 @@ def create_runtime_anomaly_event(
             suppressed_count=suppressed,
             suppress_reason="cooldown_active",
             payload_hash=payload_hash,
+            alert_severity=alert_severity,
         )
 
     if duplicate_until and now < duplicate_until and last_payload_hash == payload_hash:
@@ -194,6 +218,7 @@ def create_runtime_anomaly_event(
             suppressed_count=suppressed,
             suppress_reason="duplicate_payload",
             payload_hash=payload_hash,
+            alert_severity=alert_severity,
         )
 
     burst_key = _anomaly_burst_key(current_user.id, now)
@@ -206,18 +231,72 @@ def create_runtime_anomaly_event(
             suppressed_count=suppressed,
             suppress_reason="burst_limit",
             payload_hash=payload_hash,
+            alert_severity=alert_severity,
+        )
+
+    pattern_hits = record_pattern_hit(
+        user_id=current_user.id,
+        payload_hash=payload_hash,
+        window_seconds=int(policy.get("smart_mute_window_seconds") or 300),
+    )
+    trigger_count = int(policy.get("smart_mute_trigger_count") or 3)
+    if pattern_hits >= trigger_count:
+        mute_state = mute_pattern(
+            payload_hash=payload_hash,
+            duration_seconds=int(policy.get("smart_mute_duration_seconds") or 900),
+            reason="smart_mute_auto",
+            actor_user_id=current_user.id,
+        )
+        suppressed = _increase_suppressed_count(current_user.id)
+        return UserScannerAnomalyAuditResponse(
+            status="suppressed",
+            suppressed_count=suppressed,
+            suppress_reason="smart_mute_auto",
+            payload_hash=payload_hash,
+            alert_severity=alert_severity,
+            mute_until=mute_state["mute_until"],
         )
 
     suppressed_count = _read_suppressed_count(current_user.id)
+    webhook_payload = {
+        "event": "SCANNER_ANOMALY_DETECTED",
+        "severity": alert_severity,
+        "actor_user_id": current_user.id,
+        "timestamp": now.isoformat(),
+        "details": normalized_payload,
+        "payload_hash": payload_hash,
+    }
+    webhook_delivery = {
+        "attempted": 0,
+        "sent": 0,
+        "failed": 0,
+        "failures": [],
+    }
+    if should_notify(severity=alert_severity, policy=policy):
+        webhook_delivery = dispatch_generic_webhooks(payload=webhook_payload, policy=policy)
+
     details = {
         **normalized_payload,
         "payload_hash": payload_hash,
+        "alert_severity": alert_severity,
         "suppressed_count": suppressed_count,
+        "pattern_hits": pattern_hits,
+        "notification": webhook_delivery,
+        "policy_snapshot": {
+            "warning_threshold": policy.get("warning_threshold"),
+            "critical_threshold": policy.get("critical_threshold"),
+            "smart_mute_window_seconds": policy.get("smart_mute_window_seconds"),
+            "smart_mute_trigger_count": policy.get("smart_mute_trigger_count"),
+            "smart_mute_duration_seconds": policy.get("smart_mute_duration_seconds"),
+            "notify_min_severity": policy.get("notify_min_severity"),
+            "notifications_enabled": policy.get("notifications_enabled"),
+            "webhook_count": len(policy.get("webhook_urls") or []),
+        },
         "guardrails": {
             "cooldown_seconds": ANOMALY_COOLDOWN_SECONDS,
             "duplicate_window_seconds": ANOMALY_DUPLICATE_WINDOW_SECONDS,
             "burst_limit_per_minute": ANOMALY_BURST_LIMIT_PER_MINUTE,
-            "min_fail_ratio": ANOMALY_MIN_FAIL_RATIO,
+            "min_fail_ratio": float(policy.get("warning_threshold") or 0.1),
             "min_total_requests": ANOMALY_MIN_TOTAL_REQUESTS,
         },
     }
@@ -226,7 +305,7 @@ def create_runtime_anomaly_event(
         action="SCANNER_ANOMALY_DETECTED",
         entity_type="user_scanner_runtime",
         entity_id=current_user.id,
-        severity="warning",
+        severity=alert_severity,
         actor_user_id=current_user.id,
         actor_role=str(getattr(current_user, "role", "user") or "user").lower(),
         details=details,
@@ -251,4 +330,5 @@ def create_runtime_anomaly_event(
         logged_at=audit_entry.created_at,
         suppressed_count=suppressed_count,
         payload_hash=payload_hash,
+        alert_severity=alert_severity,
     )

@@ -1666,6 +1666,44 @@ class UserScannerAnomalyAuditResponse(BaseModel):
     suppressed_count: int = 0
     suppress_reason: str | None = None
     payload_hash: str | None = None
+    alert_severity: str | None = None
+    mute_until: datetime | None = None
+
+
+class AdminAnomalyAlertPolicyResponse(BaseModel):
+    warning_threshold: float = Field(default=0.1, ge=0.01, le=0.99)
+    critical_threshold: float = Field(default=0.2, ge=0.01, le=0.99)
+    smart_mute_window_seconds: int = Field(default=300, ge=30, le=3600)
+    smart_mute_trigger_count: int = Field(default=3, ge=2, le=20)
+    smart_mute_duration_seconds: int = Field(default=900, ge=60, le=86400)
+    notifications_enabled: bool = True
+    notify_min_severity: str = Field(default="warning", pattern="^(warning|critical)$")
+    webhook_urls: list[str] = Field(default_factory=list, max_length=5)
+    updated_at: datetime
+
+
+class AdminAnomalyAlertPolicyUpdateRequest(BaseModel):
+    warning_threshold: float = Field(default=0.1, ge=0.01, le=0.99)
+    critical_threshold: float = Field(default=0.2, ge=0.01, le=0.99)
+    smart_mute_window_seconds: int = Field(default=300, ge=30, le=3600)
+    smart_mute_trigger_count: int = Field(default=3, ge=2, le=20)
+    smart_mute_duration_seconds: int = Field(default=900, ge=60, le=86400)
+    notifications_enabled: bool = True
+    notify_min_severity: str = Field(default="warning", pattern="^(warning|critical)$")
+    webhook_urls: list[str] = Field(default_factory=list, max_length=5)
+
+
+class AdminAnomalyMutePatternRequest(BaseModel):
+    payload_hash: str = Field(min_length=16, max_length=128)
+    duration_seconds: int = Field(default=900, ge=60, le=86400)
+    reason: str = Field(default="manual_mute", min_length=3, max_length=120)
+
+
+class AdminAnomalyMutePatternResponse(BaseModel):
+    status: str
+    payload_hash: str
+    mute_until: datetime
+    duration_seconds: int
 
 
 class UserSignalResponse(BaseModel):

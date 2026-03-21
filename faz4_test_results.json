@@ -1,0 +1,101 @@
+{
+  "target_url": "https://trading-phase-verify.preview.emergentagent.com",
+  "test_time": "2026-03-21T11:48:44.128262",
+  "tests_total": 7,
+  "tests_passed": 8,
+  "tests_failed": 0,
+  "tests": {
+    "policy_get": {
+      "status": "PASS",
+      "status_code": 200,
+      "response_keys": [
+        "warning_threshold",
+        "critical_threshold",
+        "smart_mute_window_seconds",
+        "smart_mute_trigger_count",
+        "smart_mute_duration_seconds",
+        "notifications_enabled",
+        "notify_min_severity",
+        "webhook_urls",
+        "updated_at"
+      ]
+    },
+    "policy_put": {
+      "status": "PASS",
+      "status_code": 200,
+      "updated_policy": {
+        "warning_threshold": 0.1,
+        "critical_threshold": 0.15,
+        "smart_mute_window_seconds": 300,
+        "smart_mute_trigger_count": 3,
+        "smart_mute_duration_seconds": 900,
+        "notifications_enabled": false,
+        "notify_min_severity": "warning",
+        "webhook_urls": [],
+        "updated_at": "2026-03-21T11:48:44.924489Z"
+      }
+    },
+    "anomaly_critical": {
+      "status": "PASS",
+      "status_code": 200,
+      "response": {
+        "status": "logged",
+        "audit_log_id": "d4a516d4-48ad-4550-88ba-340e410bec56",
+        "logged_at": "2026-03-21T11:48:44.996132Z",
+        "suppressed_count": 0,
+        "suppress_reason": null,
+        "payload_hash": "ecb4a0a5ec94a86f87c62256d84e05817fe6f082a6912fe42c4b42743f49947e",
+        "alert_severity": "critical",
+        "mute_until": null
+      },
+      "payload_hash": "ecb4a0a5ec94a86f87c62256d84e05817fe6f082a6912fe42c4b42743f49947e"
+    },
+    "mute_create": {
+      "status": "PASS",
+      "status_code": 200,
+      "response": {
+        "status": "muted",
+        "payload_hash": "ecb4a0a5ec94a86f87c62256d84e05817fe6f082a6912fe42c4b42743f49947e",
+        "mute_until": "2026-03-21T11:58:45.044684Z",
+        "duration_seconds": 600
+      }
+    },
+    "anomaly_suppressed": {
+      "status": "PASS",
+      "status_code": 200,
+      "response": {
+        "status": "suppressed",
+        "audit_log_id": null,
+        "logged_at": null,
+        "suppressed_count": 1,
+        "suppress_reason": "muted_pattern",
+        "payload_hash": "ecb4a0a5ec94a86f87c62256d84e05817fe6f082a6912fe42c4b42743f49947e",
+        "alert_severity": "critical",
+        "mute_until": "2026-03-21T11:58:45.044684Z"
+      }
+    },
+    "mutes_get": {
+      "status": "PASS",
+      "status_code": 200,
+      "mutes_count": 2,
+      "sample_mute": {
+        "status": "muted",
+        "payload_hash": "ecb4a0a5ec94a86f87c62256d84e05817fe6f082a6912fe42c4b42743f49947e",
+        "mute_until": "2026-03-21T11:58:45.044684Z",
+        "duration_seconds": 600
+      }
+    },
+    "validation_guard": {
+      "status": "PASS",
+      "status_code": 422,
+      "error_response": {
+        "detail": "failed_requests + success_requests toplam_requests de\u011ferini ge\u00e7emez"
+      }
+    },
+    "health_check": {
+      "status": "PASS",
+      "status_code": 200,
+      "health_status": "ok"
+    }
+  }
+}
