@@ -1,5 +1,22 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-21 Update (Quote Asset Constraint)
+- ✅ **P0 tamamlandı**
+  - USDT/USDC hard constraint execution + scanner/signal + guard telemetry hatlarında enforce edildi
+  - Invalid quote hata sözleşmesi standardize edildi
+  - Override bypass engeli doğrulandı (hard rule)
+
+## P1 (Sıradaki)
+1. Config taşıma
+   - `config/trading.json` altında `allowed_quote_assets: ["USDT", "USDC"]`
+2. UI görünürlük genişletmesi
+   - Summary panelde `Allowed Quote Assets: USDT, USDC`
+   - Trade/Block detaylarında reason vurgusu
+
+## P2 (Backlog)
+1. Balance check daraltma (yalnız USDT/USDC bakiyeleri)
+2. Drift detection: API key yetki denetiminde USDT/USDC trade scope doğrulaması
+
 ## 2026-03-21 Update (Unified Pipeline Panel)
 - ✅ **P0 tamamlandı**
   - Runtime action contract standardizasyonu (`status, trace_id, message, state_snapshot`)

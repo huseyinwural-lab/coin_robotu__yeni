@@ -1,6 +1,23 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-21
+### Iteration-50 — Quote Asset Constraint P0 (USDT/USDC)
+- Hard rule enforce edildi: trading pipeline yalnızca USDT/USDC quote asset ile çalışır.
+- Invalid quote API hata standardı eklendi:
+  - `error_code=INVALID_QUOTE_ASSET`
+  - `message='Quote asset must be USDT or USDC'`
+  - `state_snapshot.symbol` zorunlu
+- Guard telemetry reason normalizasyonu eklendi:
+  - `invalid_quote_asset` / `unsupported_quote_asset` => `INVALID_QUOTE_ASSET`
+  - Blocked trades list + top reasons görünürlüğü güncellendi
+- Scanner/signal katmanında quote filter sıkılaştırıldı:
+  - canonical engine `symbols_override` dahil USDT/USDC dışı pair filtrelenir
+- Override güvenliği doğrulandı: invalid quote hiçbir override ile bypass edilemiyor (hard rule).
+- Test kanıtı:
+  - `/app/test_reports/iteration_50.json`
+  - Backend 23/23 PASS, frontend guard visibility PASS
+
+## 2026-03-21
 ### Iteration-49 — Unified Pipeline Operations P0 Closure
 - Backend runtime action contract standardizasyonu tamamlandı:
   - Tüm kritik runtime action response'larında `{ status, trace_id, message, state_snapshot }`

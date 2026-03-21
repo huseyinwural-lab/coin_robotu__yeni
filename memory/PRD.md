@@ -1,3 +1,31 @@
+## 2026-03-21 — P0 Quote Asset Constraint (USDT/USDC Hard Rule) ✅
+
+### Kapsam (P0)
+- Core trading constraint aktif edildi: sadece **USDT** ve **USDC** quote asset kabul edilir.
+- Case-insensitive enforcement doğrulandı (`btcusdt`, `EthUsdc` kabul).
+
+### Backend Enforcement
+- Execution girişlerinde invalid quote hata standardı zorunlu hale getirildi:
+  - `error_code: INVALID_QUOTE_ASSET`
+  - `message: Quote asset must be USDT or USDC`
+  - `state_snapshot.symbol` (zorunlu)
+- Guard event üretimi eklendi: invalid quote denemeleri `EXECUTION_BLOCKED` olarak audit’e yazılır.
+- Execution safety katmanına hard rule eklendi: invalid quote hiçbir guard/override kombinasyonuyla geçemez.
+
+### Guard Telemetry
+- `/api/runtime/guard/telemetry` artık reason kodlarını normalize eder.
+- `invalid_quote_asset` / `unsupported_quote_asset` => `INVALID_QUOTE_ASSET`.
+- Blocked trades listesinde ve top reasons’ta görünür.
+
+### Scanner / Signal Layer
+- Scanner/signal akışında sembol havuzu sadece allowed quote ile filtrelenir.
+- Canonical signal engine `symbols_override` dahil USDT/USDC dışı pair üretmez.
+
+### Doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_50.json`
+  - Backend: **23/23 PASS**
+  - Frontend: Guard telemetry görünürlüğü PASS
+
 ## 2026-03-21 — P0 Unified Pipeline Operations (Contract + Unified Panel) ✅
 
 ### Tamamlanan P0
