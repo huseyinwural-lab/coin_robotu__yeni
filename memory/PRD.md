@@ -1,3 +1,38 @@
+## 2026-03-21 — LocalStorage persist + backend anomaly audit + hover detay kartı ✅
+
+### 1) Alert toggle ayarları localStorage’da kalıcı
+- Dosya: `/app/frontend/src/pages/UserScannerPage.jsx`
+  - `anomalyToastEnabled` / `anomalySoundEnabled` başlangıç değerleri localStorage’dan lazy-init ile okunuyor.
+  - Kaydetme anahtarları:
+    - `scanner-anomaly-toast-enabled-v1`
+    - `scanner-anomaly-sound-enabled-v1`
+  - Race-condition fix: mount sırasında eski ayarı overwrite eden akış kaldırıldı.
+
+### 2) Anomaly event’leri backend audit log’a yazılıyor
+- Backend schema eklendi:
+  - `UserScannerAnomalyAuditRequest`
+  - `UserScannerAnomalyAuditResponse`
+  - Dosya: `/app/backend/schemas.py`
+- Yeni endpoint:
+  - `POST /api/user/scanner/runtime/anomaly-event`
+  - Dosya: `/app/backend/routers/user_scanner_router.py`
+  - Audit action: `SCANNER_ANOMALY_DETECTED` (severity: warning)
+- Frontend anomaly effect’inde best-effort API çağrısı eklendi.
+
+### 3) Sparkline hover detay kartı
+- Dosya: `/app/frontend/src/pages/UserScannerPage.jsx`
+  - Sparkline point hover ile detay kartı güncelleniyor.
+  - Yeni kart: `user-scanner-request-health-trend-detail-card`
+  - İçerik: bucket label + total/ok/fail/success%.
+
+### Doğrulama
+- Backend test agent PASS:
+  - anomaly-event 200 (valid payload), 422 (invalid fail_ratio), health 200
+- Frontend test agent PASS:
+  - localStorage persist doğrulandı (reload sonrası Kapalı korunuyor)
+  - hover detay kartı m4↔m0 geçişinde güncelleniyor
+  - refresh stabil
+
 ## 2026-03-21 — Trend okları + alert toggles + 5m/15m sparkline toggle ✅
 
 ### 1) CI perf comment: trend oku + renk kodlu delta
