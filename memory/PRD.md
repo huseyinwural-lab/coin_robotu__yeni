@@ -1,3 +1,20 @@
+## 2026-03-21 — TTR renk skalası (kapanış dokunuşu) ✅
+
+### Yapılan
+- Dosya: `/app/frontend/src/pages/AdminAnomalyTimelinePage.jsx`
+- Timeline `Time-to-Recover` kolonu renk kodlandı:
+  - `<=15m` → `text-emerald-300`
+  - `16-60m` → `text-amber-300`
+  - `>60m` → `text-rose-300`
+  - `-` (unresolved) → `text-slate-400`
+
+### Doğrulama
+- Frontend testing agent PASS:
+  - TTR kolonu mevcut
+  - canlı veride `-` değerleri için neutral sınıf doğrulandı
+  - diğer aralıkların kod eşlemesi kaynakta doğrulandı
+  - console error yok
+
 ## 2026-03-21 — FAZ-4 (P2) Aksiyonlanabilir Uyarı Katmanı ✅
 
 ### Kapsam
