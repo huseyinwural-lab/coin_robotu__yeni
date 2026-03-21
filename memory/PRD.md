@@ -1,3 +1,69 @@
+## 2026-03-21 — LIVE Dashboard Kalan %30 Tamamlama (P0+P1) ✅
+
+### Uygulanan Kararlar
+- Kapsam: **P0 + P1**
+- Action Audit: **snippet + detay route**
+- Scanner rol matrisi:
+  - OPS: restart + manual trigger ✅
+  - Symbol universe edit: sadece admin/super_admin ✅
+- P2 Learning panel bu tur dışı bırakıldı
+
+### P0 Blocker Tamamlamaları
+1) **Execution Mode Confirm + Audit**
+- Mode switch için double confirm phrase + reason enforce
+- Backend audit zorunlu: old/new mode + user + timestamp
+- UI’da mode history snippet görünür
+
+2) **Global Action Audit Panel**
+- Backend:
+  - `GET /api/admin/live-trading/control-layer/action-audit` (user/action/time filtre)
+  - `GET /api/admin/live-trading/control-layer/action-audit/{audit_id}` (payload drill)
+- Frontend:
+  - Yeni sayfa: `/admin/action-audit`
+  - `/admin/dashboard` + `/admin/live-trading-dashboard` içinde audit snippet + detay linki
+
+3) **Failed Orders + Retry Control**
+- Failed orders listesi: `order_id`, `reason`, `timestamp`
+- Single retry + bulk retry
+- Manual remove endpointi eklendi
+- Retry/remove aksiyonları auditleniyor
+
+### P1 Operasyon Tamamlama
+4) **Scanner Control Panel**
+- Restart scanner
+- Manual scan trigger
+- Symbol universe add/remove
+- Tüm aksiyonlar phrase + audit ile loglanıyor
+
+5) **Critical Alert Detail Expansion**
+- Expand panelde full detail JSON + history chain
+- Fix action sonrası sonuç feedback görünür
+
+6) **Execution Quality Derinleştirme**
+- Retry queue detay satırları
+- Queue item bazlı retry/remove kontrolü
+
+7) **Global Ops Tools**
+- Auto-refresh pause/resume
+- Global search (alert/order)
+- Time sync drift (server vs client ms)
+
+### Eklenen/Değişen Dosyalar (Önemli)
+- Backend:
+  - `/app/backend/routers/admin_live_trading_dashboard.py`
+  - `/app/backend/services/execution_mode_control_service.py`
+  - `/app/backend/services/execution_intent_service.py`
+- Frontend:
+  - `/app/frontend/src/pages/AdminLiveTradingDashboardPage.jsx`
+  - `/app/frontend/src/pages/AdminActionAuditPage.jsx`
+  - `/app/frontend/src/pages/AdminDashboardPage.jsx`
+  - `/app/frontend/src/App.js`
+
+### Test Kanıtı
+- `/app/test_reports/iteration_46.json`
+- Sonuç: Backend **26/26 PASS** (iteration kapsamında), frontend doğrulamalar PASS
+- Role matrix, P0 blockerlar ve P1 tamamlamalar doğrulandı
+
 ## 2026-03-21 — LIVE Dashboard Control Layer (P0+P1) Tamamlama ✅
 
 ### Karar Seti Uygulaması
