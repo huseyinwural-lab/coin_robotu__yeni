@@ -1,5 +1,29 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-21 Update (P1 Production Readiness Lock)
+- ✅ **P1 tamamlandı**
+  - config single-source quote policy lock
+  - UI şeffaflık (allowed quotes + invalid quote guard visibility)
+  - state validation checklist
+  - action→result traceability iyileştirmesi
+  - deployment checklist + rollback plan dokümantasyonu
+
+## P2 (Sıradaki)
+1. Release Gate final:
+   - rule breakdown
+   - fix_hint
+   - history
+2. Override hardening:
+   - TTL countdown UI
+   - active override ayrı panel
+   - cancel sonrası anlık state etkisi
+3. WS debug:
+   - last_error
+   - reconnect reason
+   - son 10 connection log
+4. Mode visibility:
+   - üst alanda `MODE: MOCK / LIVE`
+
 ## 2026-03-21 Update (Quote Asset Constraint)
 - ✅ **P0 tamamlandı**
   - USDT/USDC hard constraint execution + scanner/signal + guard telemetry hatlarında enforce edildi

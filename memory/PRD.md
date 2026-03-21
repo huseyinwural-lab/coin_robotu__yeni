@@ -1,3 +1,34 @@
+## 2026-03-21 — P1 Production Readiness Lock ✅
+
+### Tamamlananlar
+- Configuration lock tamamlandı: quote policy tek kaynak `/app/config/trading.json`.
+- Execution / Scanner / Guard katmanları allowed quote bilgisini config üzerinden okuyor.
+- Runtime endpoint eklendi: `/api/runtime/quote-policy`.
+
+### UI Şeffaflık
+- Unified panel Summary Bar: `Allowed Quote Assets: USDT, USDC`.
+- Guard panel:
+  - `INVALID_QUOTE_ASSET` badge
+  - highlight
+  - top reason listesinde pinned davranış
+  - blocked trade satırında `symbol + reason + timestamp`
+
+### State Doğrulama + Action→Result
+- State Validation Checklist kartı eklendi (dummy değil, gerçek aksiyon çıktılarıyla güncelleniyor).
+- Aksiyon sonrası toast zinciri tamamlandı:
+  - success/fail
+  - trace_id
+- Panellerde `last_action_result` görünürlüğü netleştirildi.
+
+### Dokümantasyon
+- `PROD Deployment Checklist + Rollback Plan` dokümanı eklendi:
+  - `/app/memory/PROD_DEPLOYMENT_CHECKLIST_ROLLBACK.md`
+
+### Doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_51.json`
+  - Backend: **32/32 PASS**
+  - Frontend: **PASS**
+
 ## 2026-03-21 — P0 Quote Asset Constraint (USDT/USDC Hard Rule) ✅
 
 ### Kapsam (P0)

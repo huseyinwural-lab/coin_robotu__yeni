@@ -1,6 +1,26 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-21
+### Iteration-51 — Production Readiness Lock (P1)
+- Config single-source lock tamamlandı:
+  - `/app/config/trading.json` -> `allowed_quote_assets`
+  - execution/scanner/guard bu kaynaktan besleniyor
+- Runtime endpoint eklendi: `GET /api/runtime/quote-policy`
+- Unified UI şeffaflık güncellemeleri:
+  - Summary bar `Allowed Quote Assets`
+  - Guard panel `INVALID_QUOTE_ASSET` badge + highlight + pinned reason
+  - blocked listte symbol/reason/timestamp görünürlüğü
+- State Validation Checklist kartı eklendi (canlı state doğrulama)
+- Action→Result UX finalize:
+  - success/fail toast + trace_id
+  - panel result alanı `last_action_result`
+- Doküman eklendi:
+  - `/app/memory/PROD_DEPLOYMENT_CHECKLIST_ROLLBACK.md`
+- Test kanıtı:
+  - `/app/test_reports/iteration_51.json`
+  - Backend 32/32 PASS, Frontend PASS
+
+## 2026-03-21
 ### Iteration-50 — Quote Asset Constraint P0 (USDT/USDC)
 - Hard rule enforce edildi: trading pipeline yalnızca USDT/USDC quote asset ile çalışır.
 - Invalid quote API hata standardı eklendi:
