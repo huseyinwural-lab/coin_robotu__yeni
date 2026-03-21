@@ -540,7 +540,7 @@ export const UserScannerPage = () => {
         setIsLoading(false);
       }
     }
-  }, [selectedDecisionSymbol]);
+  }, [selectedDecisionSymbol, updateRequestHealthWindow]);
 
   useEffect(() => {
     const timer = setInterval(() => {
