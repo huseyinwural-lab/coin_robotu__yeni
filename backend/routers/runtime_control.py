@@ -154,6 +154,17 @@ def _safe_rpop(cache, key: str):
     return last
 
 
+def _action_result(*, status: str, trace_id: str | None, message: str, state_snapshot: dict | None = None, **extra):
+    payload = {
+        "status": status,
+        "trace_id": trace_id,
+        "message": message,
+        "state_snapshot": state_snapshot or {},
+    }
+    payload.update(extra)
+    return payload
+
+
 @router.post("/ws/reconnect")
 def runtime_ws_reconnect(payload: RuntimeActionRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _require_super_admin(current_admin)
@@ -172,7 +183,13 @@ def runtime_ws_reconnect(payload: RuntimeActionRequest, current_admin: User = De
         trace_id=trace_id,
         details={"reason": payload.reason, "state": state},
     )
-    return {"status": "ok", "state": state, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="ws reconnect request accepted",
+        state_snapshot={"ws_state": state},
+        audit_log_id=audit.id,
+    )
 
 
 @router.post("/ws/force-new-session")
@@ -193,7 +210,14 @@ def runtime_ws_force_new_session(payload: RuntimeActionRequest, current_admin: U
         trace_id=trace_id,
         details={"reason": payload.reason, "result": result},
     )
-    return {"status": "ok", "result": result, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="new ws session requested",
+        state_snapshot={"ws_state": result.get("state") or {}},
+        result=result,
+        audit_log_id=audit.id,
+    )
 
 
 @router.get("/ws/health")
@@ -220,7 +244,14 @@ def runtime_pipeline_resync(payload: RuntimeActionRequest, current_admin: User =
         trace_id=trace_id,
         details={"reason": payload.reason, "result": result},
     )
-    return {"status": "ok", "result": result, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="pipeline resync queued",
+        state_snapshot={"pipeline": result},
+        result=result,
+        audit_log_id=audit.id,
+    )
 
 
 @router.post("/pipeline/flush")
@@ -241,7 +272,14 @@ def runtime_pipeline_flush(payload: PipelineFlushRequest, current_admin: User = 
         trace_id=trace_id,
         details={"reason": payload.reason, "result": result},
     )
-    return {"status": "ok", "result": result, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="pipeline queue flush completed",
+        state_snapshot={"queue_flush": result},
+        result=result,
+        audit_log_id=audit.id,
+    )
 
 
 @router.get("/guard/telemetry")
@@ -279,7 +317,15 @@ def runtime_gate_recheck(payload: RuntimeActionRequest, current_admin: User = De
         trace_id=trace_id,
         details={"reason": payload.reason, "scripts": script_results, "gate": gate},
     )
-    return {"status": "ok", "gate": gate, "scripts": script_results, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="release gate recheck completed",
+        state_snapshot={"gate": gate},
+        gate=gate,
+        scripts=script_results,
+        audit_log_id=audit.id,
+    )
 
 
 @router.get("/gate/status")
@@ -316,7 +362,15 @@ def runtime_override_create(payload: OverrideCreateRequest, current_admin: User 
         trace_id=trace_id,
         details={"result": result},
     )
-    return {"status": "ok", "override": result, "max_ttl_minutes": MAX_OVERRIDE_TTL_MINUTES, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="override created",
+        state_snapshot={"override": result},
+        override=result,
+        max_ttl_minutes=MAX_OVERRIDE_TTL_MINUTES,
+        audit_log_id=audit.id,
+    )
 
 
 @router.get("/override/active")
@@ -343,7 +397,14 @@ def runtime_override_cancel(override_id: str, payload: OverrideCancelRequest, cu
         trace_id=trace_id,
         details={"result": result},
     )
-    return {"status": "ok", "result": result, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="override cancel completed",
+        state_snapshot={"override_cancel": result},
+        result=result,
+        audit_log_id=audit.id,
+    )
 
 
 @router.get("/override/history")
@@ -368,7 +429,14 @@ def runtime_heartbeat_check(payload: HeartbeatCheckRequest, current_admin: User 
             severity="warning",
             details=result,
         )
-    return result
+    trace_id = str(uuid.uuid4())
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="manual heartbeat check completed",
+        state_snapshot={"heartbeat": result},
+        heartbeat=result,
+    )
 
 
 @router.post("/service/restart")
@@ -389,7 +457,14 @@ def runtime_service_restart(payload: ServiceRestartRequest, current_admin: User 
         trace_id=trace_id,
         details={"reason": payload.reason, "result": result},
     )
-    return {"status": "ok", "result": result, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="service restart scheduled",
+        state_snapshot={"service_restart": result},
+        result=result,
+        audit_log_id=audit.id,
+    )
 
 
 @router.get("/exchange/monitoring")
@@ -456,7 +531,14 @@ def runtime_exchange_revalidate(connection_id: str, payload: RuntimeActionReques
         trace_id=trace_id,
         details={"reason": payload.reason, "snapshot": snapshot},
     )
-    return {"status": "ok", "snapshot": snapshot, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="exchange connection revalidated",
+        state_snapshot={"exchange_snapshot": snapshot},
+        snapshot=snapshot,
+        audit_log_id=audit.id,
+    )
 
 
 @router.post("/exchange/disable-key/{connection_id}")
@@ -482,7 +564,13 @@ def runtime_exchange_disable_key(connection_id: str, payload: RuntimeActionReque
         trace_id=trace_id,
         details={"reason": payload.reason},
     )
-    return {"status": "ok", "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="exchange key disabled",
+        state_snapshot={"connection_id": connection_id, "disabled": True},
+        audit_log_id=audit.id,
+    )
 
 
 @router.get("/hardening/analytics")
@@ -633,7 +721,15 @@ def runtime_alert_action(alert_id: str, payload: AlertActionRequest, current_adm
         trace_id=trace_id,
         details={"action": payload.action, "reason": payload.reason},
     )
-    return {"status": "ok", "alert_id": alert_id, "action": payload.action, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message=f"alert {payload.action} completed",
+        state_snapshot={"alert_id": alert_id, "action": payload.action},
+        alert_id=alert_id,
+        action=payload.action,
+        audit_log_id=audit.id,
+    )
 
 
 @router.post("/alerts/bulk-action")
@@ -667,7 +763,14 @@ def runtime_alert_bulk_action(payload: AlertBulkRequest, current_admin: User = D
         trace_id=trace_id,
         details={"ids": payload.ids, "action": payload.action, "reason": payload.reason},
     )
-    return {"status": "ok", "count": len(rows), "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message=f"bulk alert {payload.action} completed",
+        state_snapshot={"count": len(rows), "action": payload.action},
+        count=len(rows),
+        audit_log_id=audit.id,
+    )
 
 
 @router.get("/alert-policy")
@@ -740,7 +843,18 @@ def runtime_alert_policy_update(payload: AlertPolicyUpdateRequest, current_admin
         trace_id=trace_id,
         details={"reason": payload.reason, "new_policy": payload.model_dump()},
     )
-    return {"status": "ok", "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="alert policy updated",
+        state_snapshot={
+            "execution_quality_warning_threshold": row.execution_quality_warning_threshold,
+            "execution_quality_critical_threshold": row.execution_quality_critical_threshold,
+            "permission_drift_warning_per_day": row.permission_drift_warning_per_day,
+            "permission_drift_critical_per_day": row.permission_drift_critical_per_day,
+        },
+        audit_log_id=audit.id,
+    )
 
 
 @router.post("/alert-policy/rollback")
@@ -772,7 +886,14 @@ def runtime_alert_policy_rollback(current_admin: User = Depends(require_admin), 
         trace_id=trace_id,
         details={"rolled_back_to": payload},
     )
-    return {"status": "ok", "rolled_back_to": payload, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="alert policy rollback completed",
+        state_snapshot={"rolled_back_to": payload},
+        rolled_back_to=payload,
+        audit_log_id=audit.id,
+    )
 
 
 @router.post("/alert-policy/test-alert")
@@ -804,4 +925,11 @@ def runtime_alert_policy_test_alert(payload: RuntimeActionRequest, current_admin
         trace_id=trace_id,
         details={"reason": payload.reason},
     )
-    return {"status": "ok", "alert_id": alert.id, "trace_id": trace_id, "audit_log_id": audit.id}
+    return _action_result(
+        status="success",
+        trace_id=trace_id,
+        message="test alert created",
+        state_snapshot={"alert_id": alert.id, "severity": alert.severity},
+        alert_id=alert.id,
+        audit_log_id=audit.id,
+    )

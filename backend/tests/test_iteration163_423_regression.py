@@ -11,7 +11,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://algo-config-remedy.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://runtime-hub-2.preview.emergentagent.com").rstrip("/")
 
 # Test credentials
 ADMIN_EMAIL = "admin@platform.local"

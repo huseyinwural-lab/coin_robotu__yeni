@@ -18,7 +18,7 @@ import requests
 from datetime import datetime
 
 # Backend URL from environment
-BACKEND_URL = "https://algo-config-remedy.preview.emergentagent.com/api"
+BACKEND_URL = "https://runtime-hub-2.preview.emergentagent.com/api"
 
 # Test admin credentials
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")
