@@ -10,6 +10,7 @@ from models import BotProfile, PaperPosition, Position, PositionLedgerEvent, Use
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
+from services.execution_mode_control_service import enforce_execution_mode_for_intent
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.execution_safety_service import enforce_execution_open_allowed_or_raise
 from services.idempotency_service import build_execution_idempotency_key
@@ -813,6 +814,15 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         )
         if not precheck.get("valid"):
             raise ValueError("order_validation_failed")
+
+    enforce_execution_mode_for_intent(
+        db,
+        redis_client,
+        intent,
+        actor_user_id=user_id,
+        actor_role="USER",
+        source="execution_intent_service_submit",
+    )
 
     intent.status = "SUBMITTED"
     intent.submitted_at = datetime.now(timezone.utc)

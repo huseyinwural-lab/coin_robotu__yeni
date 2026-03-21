@@ -539,6 +539,7 @@ export const AdminDashboardPage = () => {
               auto-refresh(30s)
             </label>
             <Button variant="outline" onClick={() => navigate("/admin/audit-logs")} data-testid="admin-dashboard-go-audit-logs-button">Audit Logs</Button>
+            <Button variant="outline" onClick={() => navigate("/admin/live-trading-dashboard")} data-testid="admin-dashboard-go-live-control-hub-button">Live Control Hub</Button>
             <Button variant="outline" onClick={runCloseNextActions} data-testid="admin-dashboard-auto-close-run-now-button">Auto-Close Run Now</Button>
             <Button onClick={loadDashboard} data-testid="admin-dashboard-refresh-button">Yenile</Button>
           </div>
