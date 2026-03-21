@@ -28,6 +28,21 @@ const ACTION_META = {
   policy_test_alert: { endpoint: "/runtime/alert-policy/test-alert", phrase: "SEND TEST ALERT", panelKey: "control" },
   exchange_revalidate: { endpoint: "/runtime/exchange/revalidate/{connection_id}", phrase: "REVALIDATE EXCHANGE", panelKey: "monitoring" },
   exchange_disable: { endpoint: "/runtime/exchange/disable-key/{connection_id}", phrase: "DISABLE EXCHANGE KEY", panelKey: "monitoring" },
+  scanner_start: { endpoint: "/admin/universe-monitor/scanner/start", phrase: "START SCANNER", panelKey: "scannerOps" },
+  scanner_stop: { endpoint: "/admin/universe-monitor/scanner/stop", phrase: "STOP SCANNER", panelKey: "scannerOps" },
+  scanner_trigger: { endpoint: "/admin/universe-monitor/scanner/trigger", phrase: "TRIGGER MANUAL SCAN", panelKey: "scannerOps" },
+  scanner_whitelist_update: { endpoint: "/admin/universe-monitor/scanner/symbol-lists/whitelist", phrase: "UPDATE SYMBOL LIST", panelKey: "scannerOps" },
+  scanner_blacklist_update: { endpoint: "/admin/universe-monitor/scanner/symbol-lists/blacklist", phrase: "UPDATE SYMBOL LIST", panelKey: "scannerOps" },
+  universe_bulk_toggle: { endpoint: "/admin/universe-monitor/universe/symbols/bulk-toggle", phrase: "BULK UPDATE SYMBOLS", panelKey: "scannerOps" },
+  universe_filter_update: { endpoint: "/admin/universe-monitor/universe/filter-config", phrase: "UPDATE FILTER CONFIG", panelKey: "scannerOps" },
+  rollout_promote: { endpoint: "/admin/universe-monitor/rollout/promote", phrase: "PROMOTE ROLLOUT", panelKey: "rolloutOps" },
+  rollout_demote: { endpoint: "/admin/universe-monitor/rollout/demote", phrase: "DEMOTE ROLLOUT", panelKey: "rolloutOps" },
+  rollout_rollback: { endpoint: "/admin/universe-monitor/rollout/rollback", phrase: "ROLLBACK ROLLOUT", panelKey: "rolloutOps" },
+  risk_exposure_limit: { endpoint: "/admin/universe-monitor/risk/exposure-limit", phrase: "UPDATE EXPOSURE LIMIT", panelKey: "riskOps", method: "put" },
+  risk_exposure_override: { endpoint: "/admin/universe-monitor/risk/exposure-override", phrase: "APPLY EXPOSURE OVERRIDE", panelKey: "riskOps" },
+  strategy_disable: { endpoint: "/admin/universe-monitor/strategy/{strategy_id}/disable", phrase: "DISABLE STRATEGY", panelKey: "slowOps" },
+  strategy_throttle: { endpoint: "/admin/universe-monitor/strategy/{strategy_id}/throttle", phrase: "THROTTLE STRATEGY", panelKey: "slowOps" },
+  symbol_pause: { endpoint: "/admin/universe-monitor/symbol/{symbol}/pause", phrase: "PAUSE SYMBOL", panelKey: "slowOps" },
 };
 
 const extractErrorMeta = (error) => {
@@ -115,6 +130,7 @@ export const PipelineOperationsPage = () => {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [opsTab, setOpsTab] = useState("rollout");
 
   const [wsHealth, setWsHealth] = useState(null);
   const [gateStatus, setGateStatus] = useState(null);
@@ -135,6 +151,12 @@ export const PipelineOperationsPage = () => {
   const [alertSinceHours, setAlertSinceHours] = useState("24");
   const [alertEventFilter, setAlertEventFilter] = useState("");
   const [runtimeMode, setRuntimeMode] = useState("MOCK");
+  const [scannerOps, setScannerOps] = useState({ runtime: {}, symbol_universe: [], whitelist: [], blacklist: [], manual_trigger: {} });
+  const [rolloutOps, setRolloutOps] = useState(null);
+  const [riskOps, setRiskOps] = useState({ cluster_exposure: [], symbol_exposure: [], config: {} });
+  const [riskOverrides, setRiskOverrides] = useState([]);
+  const [slowOps, setSlowOps] = useState({ disabled_strategies: [], throttled_strategies: {}, paused_symbols: [] });
+  const [universeFilterConfig, setUniverseFilterConfig] = useState({ min_liquidity_usd: 1000000, min_volume_24h_usd: 5000000, max_spread_bps: 40 });
 
   const [reasonControl, setReasonControl] = useState("pipeline_control_manual_action");
   const [reasonRecovery, setReasonRecovery] = useState("pipeline_recovery_manual_action");
@@ -155,6 +177,11 @@ export const PipelineOperationsPage = () => {
   });
 
   const [bulkSelection, setBulkSelection] = useState([]);
+  const [bulkSymbolsInput, setBulkSymbolsInput] = useState("BTCUSDT,ETHUSDT");
+  const [symbolListModal, setSymbolListModal] = useState({ open: false, listType: "whitelist", symbolsText: "" });
+  const [riskLimitForm, setRiskLimitForm] = useState({ max_total_exposure_pct: "50", max_symbol_exposure_pct: "25", max_cluster_exposure_pct: "35" });
+  const [riskOverrideForm, setRiskOverrideForm] = useState({ override_type: "force_allow", scope: "global", ttl_minutes: "30" });
+  const [slowActionForm, setSlowActionForm] = useState({ strategy_id: "spot_pullback_v1", throttle_profile: "soft", symbol: "BTCUSDT" });
   const [stateValidation, setStateValidation] = useState({
     wsReconnectSessionChanged: false,
     overrideAffectsExecution: false,
@@ -170,6 +197,10 @@ export const PipelineOperationsPage = () => {
     traceability: null,
     override: null,
     alerts: null,
+    scannerOps: null,
+    rolloutOps: null,
+    riskOps: null,
+    slowOps: null,
   });
 
   const [actionDialog, setActionDialog] = useState({
@@ -198,6 +229,12 @@ export const PipelineOperationsPage = () => {
         auditRes,
         quotePolicyRes,
         validationRes,
+        scannerStateRes,
+        rolloutStateRes,
+        exposureRes,
+        exposureOverrideRes,
+        slowControlRes,
+        filterConfigRes,
       ] = await Promise.all([
         apiClient.get("/runtime/ws/health"),
         apiClient.get("/runtime/gate/status"),
@@ -219,6 +256,12 @@ export const PipelineOperationsPage = () => {
         apiClient.get("/runtime/action-audit", { params: { since_hours: 48, limit: 40 } }),
         apiClient.get("/runtime/quote-policy"),
         apiClient.get("/runtime/state-validation"),
+        apiClient.get("/admin/universe-monitor/scanner/state"),
+        apiClient.get("/admin/universe-monitor/rollout/status"),
+        apiClient.get("/admin/universe-monitor/risk/exposure-clusters"),
+        apiClient.get("/admin/universe-monitor/risk/exposure-override/active"),
+        apiClient.get("/admin/universe-monitor/slow-controls/status"),
+        apiClient.get("/admin/universe-monitor/universe/filter-config"),
       ]);
 
       try {
@@ -239,6 +282,12 @@ export const PipelineOperationsPage = () => {
       setAlertsHistory(alertsRes.data?.items || []);
       setAlertPolicy(policyRes.data || null);
       setActionAudit(auditRes.data?.items || []);
+      setScannerOps(scannerStateRes.data || { runtime: {}, symbol_universe: [], whitelist: [], blacklist: [], manual_trigger: {} });
+      setRolloutOps(rolloutStateRes.data || null);
+      setRiskOps(exposureRes.data || { cluster_exposure: [], symbol_exposure: [], config: {} });
+      setRiskOverrides(exposureOverrideRes.data?.items || []);
+      setSlowOps(slowControlRes.data || { disabled_strategies: [], throttled_strategies: {}, paused_symbols: [] });
+      setUniverseFilterConfig(filterConfigRes.data || { min_liquidity_usd: 1000000, min_volume_24h_usd: 5000000, max_spread_bps: 40 });
       setStateValidation({
         wsReconnectSessionChanged: Boolean(validationRes.data?.ws_session_changed),
         overrideAffectsExecution: Boolean(validationRes.data?.override_effect_applied),
@@ -258,12 +307,24 @@ export const PipelineOperationsPage = () => {
         });
       }
 
+      const cfg = exposureRes.data?.config || {};
+      setRiskLimitForm((prev) => ({
+        ...prev,
+        max_total_exposure_pct: String(cfg.max_total_exposure_pct ?? prev.max_total_exposure_pct),
+        max_symbol_exposure_pct: String(cfg.max_symbol_exposure_pct ?? prev.max_symbol_exposure_pct),
+        max_cluster_exposure_pct: String(cfg.max_cluster_exposure_pct ?? prev.max_cluster_exposure_pct),
+      }));
+
       return {
         wsHealth: wsRes.data || null,
         gateStatus: gateRes.data || null,
         overridesActive: activeRes.data?.items || [],
         guardTelemetry: guardRes.data || null,
         stateValidation: validationRes.data || null,
+        scannerOps: scannerStateRes.data || null,
+        rolloutOps: rolloutStateRes.data || null,
+        riskOps: exposureRes.data || null,
+        slowOps: slowControlRes.data || null,
       };
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -305,6 +366,14 @@ export const PipelineOperationsPage = () => {
     toast.error(`${toastTitle} | trace_id: ${traceId} | ${message}`);
   };
 
+  const parseSymbolsText = (value) => {
+    const raw = String(value || "")
+      .split(/[\n,;\s]+/g)
+      .map((item) => item.trim().toUpperCase())
+      .filter(Boolean);
+    return Array.from(new Set(raw));
+  };
+
   const submitDialogAction = async () => {
     const meta = ACTION_META[actionDialog.actionKey];
     if (!meta) return;
@@ -325,6 +394,65 @@ export const PipelineOperationsPage = () => {
           confirmation_phrase: actionDialog.phrase,
           service: serviceTarget,
         });
+      } else if (["scanner_start", "scanner_stop", "scanner_trigger", "rollout_promote", "rollout_demote", "rollout_rollback"].includes(actionDialog.actionKey)) {
+        response = await apiClient.post(meta.endpoint, {
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      } else if (["scanner_whitelist_update", "scanner_blacklist_update"].includes(actionDialog.actionKey)) {
+        response = await apiClient.post(meta.endpoint, {
+          action: actionDialog.context?.action || "replace",
+          symbols: actionDialog.context?.symbols || [],
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      } else if (actionDialog.actionKey === "universe_bulk_toggle") {
+        response = await apiClient.post(meta.endpoint, {
+          symbols: actionDialog.context?.symbols || [],
+          enabled: Boolean(actionDialog.context?.enabled),
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      } else if (actionDialog.actionKey === "universe_filter_update") {
+        response = await apiClient.put(meta.endpoint, {
+          min_liquidity_usd: Number(universeFilterConfig.min_liquidity_usd || 0),
+          min_volume_24h_usd: Number(universeFilterConfig.min_volume_24h_usd || 0),
+          max_spread_bps: Number(universeFilterConfig.max_spread_bps || 0),
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      } else if (actionDialog.actionKey === "risk_exposure_limit") {
+        response = await apiClient.put(meta.endpoint, {
+          max_total_exposure_pct: Number(riskLimitForm.max_total_exposure_pct || 0),
+          max_symbol_exposure_pct: Number(riskLimitForm.max_symbol_exposure_pct || 0),
+          max_cluster_exposure_pct: Number(riskLimitForm.max_cluster_exposure_pct || 0),
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+          force: true,
+        });
+      } else if (actionDialog.actionKey === "risk_exposure_override") {
+        response = await apiClient.post(meta.endpoint, {
+          override_type: riskOverrideForm.override_type,
+          scope: riskOverrideForm.scope,
+          ttl_minutes: Number(riskOverrideForm.ttl_minutes || 30),
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      } else if (["strategy_disable", "strategy_throttle", "symbol_pause"].includes(actionDialog.actionKey)) {
+        let endpoint = meta.endpoint;
+        endpoint = endpoint.replace("{strategy_id}", actionDialog.context?.strategyId || "");
+        endpoint = endpoint.replace("{symbol}", actionDialog.context?.symbol || "");
+        const body = {
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        };
+        if (actionDialog.actionKey === "strategy_throttle") {
+          body.throttle_profile = actionDialog.context?.throttleProfile || "soft";
+        }
+        if (actionDialog.actionKey === "symbol_pause") {
+          body.pause = true;
+        }
+        response = await apiClient.post(endpoint, body);
       } else if (actionDialog.actionKey === "pipeline_flush") {
         response = await apiClient.post(meta.endpoint, {
           reason: actionDialog.reason,
@@ -454,6 +582,35 @@ export const PipelineOperationsPage = () => {
     }
   };
 
+  const openSymbolListEditor = (listType) => {
+    const current = listType === "whitelist" ? scannerOps?.whitelist || [] : scannerOps?.blacklist || [];
+    setSymbolListModal({
+      open: true,
+      listType,
+      symbolsText: current.join(", "),
+    });
+  };
+
+  const submitSymbolListEditor = () => {
+    const symbols = parseSymbolsText(symbolListModal.symbolsText);
+    if (symbols.length === 0) {
+      toast.error("En az bir symbol girin");
+      return;
+    }
+    const actionKey = symbolListModal.listType === "whitelist" ? "scanner_whitelist_update" : "scanner_blacklist_update";
+    openActionDialog(actionKey, "scannerOps", reasonControl, { action: "replace", symbols });
+    setSymbolListModal((prev) => ({ ...prev, open: false }));
+  };
+
+  const runUniverseBulkToggle = (enabled) => {
+    const symbols = parseSymbolsText(bulkSymbolsInput);
+    if (symbols.length === 0) {
+      toast.error("Bulk symbol list boş olamaz");
+      return;
+    }
+    openActionDialog("universe_bulk_toggle", "scannerOps", reasonControl, { symbols, enabled });
+  };
+
   const topReasons = useMemo(() => {
     const rows = [...(guardTelemetry?.top_reasons || [])];
     rows.sort((a, b) => {
@@ -508,6 +665,134 @@ export const PipelineOperationsPage = () => {
         allowedQuoteAssets={allowedQuoteAssets}
         testId="pipeline-operations-summary-bar"
       />
+
+      <article className="rounded-xl border border-slate-700 bg-slate-900/90 p-4" data-testid="pipeline-operations-universe-ops-panel">
+        <h3 className="text-base font-semibold text-slate-100" data-testid="pipeline-operations-universe-ops-title">Universe Operations (Faz-1)</h3>
+        <div className="mt-3 flex flex-wrap gap-2" data-testid="pipeline-operations-universe-ops-tabs">
+          <Button variant={opsTab === "rollout" ? "default" : "outline"} onClick={() => setOpsTab("rollout")} data-testid="pipeline-operations-tab-rollout-button">Rollout</Button>
+          <Button variant={opsTab === "scanner" ? "default" : "outline"} onClick={() => setOpsTab("scanner")} data-testid="pipeline-operations-tab-scanner-button">Scanner</Button>
+          <Button variant={opsTab === "risk" ? "default" : "outline"} onClick={() => setOpsTab("risk")} data-testid="pipeline-operations-tab-risk-button">Risk/Exposure</Button>
+          <Button variant={opsTab === "slow" ? "default" : "outline"} onClick={() => setOpsTab("slow")} data-testid="pipeline-operations-tab-slow-button">Slow Control</Button>
+        </div>
+
+        {opsTab === "rollout" && (
+          <div className="mt-4 grid gap-3 md:grid-cols-2" data-testid="pipeline-operations-rollout-tab-content">
+            <div className="space-y-2 text-xs" data-testid="pipeline-operations-rollout-state">
+              <p data-testid="pipeline-operations-rollout-current-stage">current_stage={rolloutOps?.current_stage || "-"}</p>
+              <p data-testid="pipeline-operations-rollout-recommended-stage">recommended_stage={rolloutOps?.recommended_stage || "-"}</p>
+              <p data-testid="pipeline-operations-rollout-previous-stage">previous_stage={rolloutOps?.previous_stage || "-"}</p>
+              <p data-testid="pipeline-operations-rollout-pending-approvers">pending_approvers={(rolloutOps?.pending_approvers || []).join(",") || "-"}</p>
+              <p data-testid="pipeline-operations-rollout-approval-policy">approval_policy={rolloutOps?.approval_policy || "-"}</p>
+            </div>
+            <div className="space-y-2" data-testid="pipeline-operations-rollout-actions">
+              <Button disabled={!isSuperAdmin} onClick={() => openActionDialog("rollout_promote", "rolloutOps", reasonControl)} data-testid="pipeline-operations-rollout-promote-button">Force Promote</Button>
+              <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("rollout_demote", "rolloutOps", reasonControl)} data-testid="pipeline-operations-rollout-demote-button">Force Demote</Button>
+              <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("rollout_rollback", "rolloutOps", reasonControl)} data-testid="pipeline-operations-rollout-rollback-button">Rollback</Button>
+              <ResultBadge result={panelResult.rolloutOps} testId="pipeline-operations-rollout-result" />
+            </div>
+          </div>
+        )}
+
+        {opsTab === "scanner" && (
+          <div className="mt-4 grid gap-3 md:grid-cols-2" data-testid="pipeline-operations-scanner-tab-content">
+            <div className="space-y-2 text-xs" data-testid="pipeline-operations-scanner-state">
+              <p data-testid="pipeline-operations-scanner-running">running={String(scannerOps?.runtime?.running ?? false)}</p>
+              <p data-testid="pipeline-operations-scanner-last-started">last_started_at={scannerOps?.runtime?.last_started_at || "-"}</p>
+              <p data-testid="pipeline-operations-scanner-last-stopped">last_stopped_at={scannerOps?.runtime?.last_stopped_at || "-"}</p>
+              <p data-testid="pipeline-operations-scanner-last-trigger-status">last_manual_trigger_status={scannerOps?.runtime?.last_manual_trigger_status || "-"}</p>
+              <p data-testid="pipeline-operations-scanner-last-trigger-request-id">request_id={scannerOps?.runtime?.last_manual_trigger_request_id || scannerOps?.manual_trigger?.request_id || "-"}</p>
+              <p data-testid="pipeline-operations-scanner-universe-size">universe_size={(scannerOps?.symbol_universe || []).length}</p>
+            </div>
+            <div className="space-y-2" data-testid="pipeline-operations-scanner-actions">
+              <div className="flex flex-wrap gap-2" data-testid="pipeline-operations-scanner-run-actions">
+                <Button disabled={!isSuperAdmin} onClick={() => openActionDialog("scanner_start", "scannerOps", reasonControl)} data-testid="pipeline-operations-scanner-start-button">Start</Button>
+                <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("scanner_stop", "scannerOps", reasonControl)} data-testid="pipeline-operations-scanner-stop-button">Stop</Button>
+                <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("scanner_trigger", "scannerOps", reasonControl)} data-testid="pipeline-operations-scanner-trigger-button">Run Scan Now</Button>
+              </div>
+
+              <div className="flex flex-wrap gap-2" data-testid="pipeline-operations-scanner-symbol-list-actions">
+                <Button variant="outline" onClick={() => openSymbolListEditor("whitelist")} data-testid="pipeline-operations-scanner-whitelist-edit-button">Edit Whitelist</Button>
+                <Button variant="outline" onClick={() => openSymbolListEditor("blacklist")} data-testid="pipeline-operations-scanner-blacklist-edit-button">Edit Blacklist</Button>
+              </div>
+
+              <Input value={bulkSymbolsInput} onChange={(e) => setBulkSymbolsInput(e.target.value)} data-testid="pipeline-operations-scanner-bulk-symbols-input" placeholder="BTCUSDT,ETHUSDT,..." />
+              <div className="flex flex-wrap gap-2" data-testid="pipeline-operations-scanner-bulk-actions">
+                <Button variant="outline" onClick={() => runUniverseBulkToggle(true)} data-testid="pipeline-operations-scanner-bulk-enable-button">Bulk Enable</Button>
+                <Button variant="outline" onClick={() => runUniverseBulkToggle(false)} data-testid="pipeline-operations-scanner-bulk-disable-button">Bulk Disable</Button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2" data-testid="pipeline-operations-scanner-filter-config-grid">
+                <Input value={String(universeFilterConfig.min_liquidity_usd ?? "")} onChange={(e) => setUniverseFilterConfig((prev) => ({ ...prev, min_liquidity_usd: e.target.value }))} data-testid="pipeline-operations-scanner-filter-liquidity-input" />
+                <Input value={String(universeFilterConfig.min_volume_24h_usd ?? "")} onChange={(e) => setUniverseFilterConfig((prev) => ({ ...prev, min_volume_24h_usd: e.target.value }))} data-testid="pipeline-operations-scanner-filter-volume-input" />
+                <Input value={String(universeFilterConfig.max_spread_bps ?? "")} onChange={(e) => setUniverseFilterConfig((prev) => ({ ...prev, max_spread_bps: e.target.value }))} data-testid="pipeline-operations-scanner-filter-spread-input" />
+              </div>
+              <Button variant="outline" onClick={() => openActionDialog("universe_filter_update", "scannerOps", reasonControl)} data-testid="pipeline-operations-scanner-filter-save-button">Save Filter Config</Button>
+              <ResultBadge result={panelResult.scannerOps} testId="pipeline-operations-scanner-result" />
+            </div>
+          </div>
+        )}
+
+        {opsTab === "risk" && (
+          <div className="mt-4 grid gap-3 md:grid-cols-2" data-testid="pipeline-operations-risk-tab-content">
+            <div className="space-y-2 text-xs" data-testid="pipeline-operations-risk-state">
+              <p data-testid="pipeline-operations-risk-portfolio-exposure">portfolio_exposure={riskOps?.portfolio_exposure ?? "-"}</p>
+              <p data-testid="pipeline-operations-risk-cluster-count">cluster_count={(riskOps?.cluster_exposure || []).length}</p>
+              <p data-testid="pipeline-operations-risk-symbol-count">symbol_count={(riskOps?.symbol_exposure || []).length}</p>
+              <p data-testid="pipeline-operations-risk-active-override-count">active_overrides={riskOverrides.length}</p>
+              <div className="max-h-20 overflow-auto" data-testid="pipeline-operations-risk-active-override-list">
+                {riskOverrides.slice(0, 6).map((item, idx) => (
+                  <p key={item.override_id} data-testid={`pipeline-operations-risk-active-override-${idx}`}>{item.override_type} · {item.scope} · ttl={item.ttl_remaining_seconds}s</p>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2" data-testid="pipeline-operations-risk-actions">
+              <div className="grid grid-cols-3 gap-2" data-testid="pipeline-operations-risk-limit-grid">
+                <Input value={riskLimitForm.max_total_exposure_pct} onChange={(e) => setRiskLimitForm((prev) => ({ ...prev, max_total_exposure_pct: e.target.value }))} data-testid="pipeline-operations-risk-total-limit-input" />
+                <Input value={riskLimitForm.max_symbol_exposure_pct} onChange={(e) => setRiskLimitForm((prev) => ({ ...prev, max_symbol_exposure_pct: e.target.value }))} data-testid="pipeline-operations-risk-symbol-limit-input" />
+                <Input value={riskLimitForm.max_cluster_exposure_pct} onChange={(e) => setRiskLimitForm((prev) => ({ ...prev, max_cluster_exposure_pct: e.target.value }))} data-testid="pipeline-operations-risk-cluster-limit-input" />
+              </div>
+              <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("risk_exposure_limit", "riskOps", reasonControl)} data-testid="pipeline-operations-risk-limit-update-button">Update Exposure Limit</Button>
+
+              <div className="grid grid-cols-3 gap-2" data-testid="pipeline-operations-risk-override-grid">
+                <Input value={riskOverrideForm.override_type} onChange={(e) => setRiskOverrideForm((prev) => ({ ...prev, override_type: e.target.value }))} data-testid="pipeline-operations-risk-override-type-input" />
+                <Input value={riskOverrideForm.scope} onChange={(e) => setRiskOverrideForm((prev) => ({ ...prev, scope: e.target.value }))} data-testid="pipeline-operations-risk-override-scope-input" />
+                <Input value={riskOverrideForm.ttl_minutes} onChange={(e) => setRiskOverrideForm((prev) => ({ ...prev, ttl_minutes: e.target.value }))} data-testid="pipeline-operations-risk-override-ttl-input" />
+              </div>
+              <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("risk_exposure_override", "riskOps", reasonControl)} data-testid="pipeline-operations-risk-override-apply-button">Override Risk</Button>
+              <ResultBadge result={panelResult.riskOps} testId="pipeline-operations-risk-result" />
+            </div>
+          </div>
+        )}
+
+        {opsTab === "slow" && (
+          <div className="mt-4 grid gap-3 md:grid-cols-2" data-testid="pipeline-operations-slow-tab-content">
+            <div className="space-y-2 text-xs" data-testid="pipeline-operations-slow-state">
+              <p data-testid="pipeline-operations-slow-disabled-count">disabled_strategies={(slowOps?.disabled_strategies || []).length}</p>
+              <p data-testid="pipeline-operations-slow-throttled-count">throttled_strategies={Object.keys(slowOps?.throttled_strategies || {}).length}</p>
+              <p data-testid="pipeline-operations-slow-paused-count">paused_symbols={(slowOps?.paused_symbols || []).length}</p>
+              <div className="max-h-24 overflow-auto" data-testid="pipeline-operations-slow-disabled-list">
+                {(slowOps?.disabled_strategies || []).slice(0, 8).map((item, idx) => (
+                  <p key={`${item}-${idx}`} data-testid={`pipeline-operations-slow-disabled-item-${idx}`}>{item}</p>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2" data-testid="pipeline-operations-slow-actions">
+              <Input value={slowActionForm.strategy_id} onChange={(e) => setSlowActionForm((prev) => ({ ...prev, strategy_id: e.target.value }))} data-testid="pipeline-operations-slow-strategy-id-input" />
+              <div className="flex flex-wrap gap-2" data-testid="pipeline-operations-slow-strategy-actions">
+                <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("strategy_disable", "slowOps", reasonControl, { strategyId: slowActionForm.strategy_id })} data-testid="pipeline-operations-slow-disable-button">Disable Strategy</Button>
+                <Input value={slowActionForm.throttle_profile} onChange={(e) => setSlowActionForm((prev) => ({ ...prev, throttle_profile: e.target.value }))} className="w-28" data-testid="pipeline-operations-slow-throttle-profile-input" />
+                <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("strategy_throttle", "slowOps", reasonControl, { strategyId: slowActionForm.strategy_id, throttleProfile: slowActionForm.throttle_profile })} data-testid="pipeline-operations-slow-throttle-button">Throttle</Button>
+              </div>
+
+              <div className="flex flex-wrap gap-2" data-testid="pipeline-operations-slow-symbol-actions">
+                <Input value={slowActionForm.symbol} onChange={(e) => setSlowActionForm((prev) => ({ ...prev, symbol: e.target.value.toUpperCase() }))} className="w-40" data-testid="pipeline-operations-slow-symbol-input" />
+                <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("symbol_pause", "slowOps", reasonControl, { symbol: slowActionForm.symbol })} data-testid="pipeline-operations-slow-symbol-pause-button">Pause Symbol</Button>
+              </div>
+              <ResultBadge result={panelResult.slowOps} testId="pipeline-operations-slow-result" />
+            </div>
+          </div>
+        )}
+      </article>
 
       <article className="rounded-xl border border-slate-700 bg-slate-900/90 p-4" data-testid="pipeline-operations-state-validation-panel">
         <h3 className="text-base font-semibold text-slate-100" data-testid="pipeline-operations-state-validation-title">State Validation Checklist</h3>
@@ -862,6 +1147,27 @@ export const PipelineOperationsPage = () => {
           resultNode={<ResultBadge result={panelResult.traceability} testId="pipeline-operations-traceability-result" />}
         />
       </section>
+
+      <Dialog open={symbolListModal.open} onOpenChange={(open) => setSymbolListModal((prev) => ({ ...prev, open }))}>
+        <DialogContent className="max-w-xl border border-emerald-700 bg-slate-950" data-testid="pipeline-operations-symbol-list-modal">
+          <DialogHeader>
+            <DialogTitle data-testid="pipeline-operations-symbol-list-modal-title">{symbolListModal.listType} edit</DialogTitle>
+            <DialogDescription data-testid="pipeline-operations-symbol-list-modal-description">
+              Virgül veya satır ile symbol girin (örn: BTCUSDT, ETHUSDT).
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={symbolListModal.symbolsText}
+            onChange={(e) => setSymbolListModal((prev) => ({ ...prev, symbolsText: e.target.value }))}
+            className="min-h-36"
+            data-testid="pipeline-operations-symbol-list-modal-textarea"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSymbolListModal((prev) => ({ ...prev, open: false }))} data-testid="pipeline-operations-symbol-list-modal-cancel-button">Vazgeç</Button>
+            <Button onClick={submitSymbolListEditor} data-testid="pipeline-operations-symbol-list-modal-save-button">Kaydet</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={actionDialog.open} onOpenChange={(open) => setActionDialog((prev) => ({ ...prev, open }))}>
         <DialogContent className="max-w-xl border border-amber-700 bg-slate-950" data-testid="pipeline-operations-action-dialog">
