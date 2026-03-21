@@ -1,5 +1,8 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-21 UI Update
+- ✅ Admin içerik yüzeylerinde koyu kutu temizliği tamamlandı (açık yeşil tema)
+
 ## 2026-03-21 Update (P1 Production Readiness Lock)
 - ✅ **P1 tamamlandı**
   - config single-source quote policy lock

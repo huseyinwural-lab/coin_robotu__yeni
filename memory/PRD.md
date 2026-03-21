@@ -1,3 +1,23 @@
+## 2026-03-21 — Admin Content Theme Cleanup (Açık Yeşil) ✅
+
+### Kullanıcı Talebi
+- Koyu/siyah panel kutuları kaldırıldı.
+- Tüm admin ekranlarında (dashboard/live/pipeline) panel-kart-input-button yüzeyleri açık yeşil (lime pastel) yapıldı.
+- Sidebar/navbar mevcut yapıda bırakıldı.
+
+### Uygulanan Değişiklik
+- `PanelLayout` içerik alanına `admin-light-panels` sınıfı eklendi.
+- `App.css` içinde admin içerik alanına özel override kuralları eklendi:
+  - `bg-slate*`, `bg-zinc*`, `bg-black*`, `bg-transparent` yüzeyler açık yeşile çevrildi.
+  - input/textarea/select/button yüzeyleri açık yeşil tonlarına sabitlendi.
+  - koyu border/text tonları yeşil uyumlu hale getirildi.
+
+### Doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_52.json`
+  - Frontend PASS (%100)
+  - tested pages: `/admin/dashboard`, `/admin/pipeline-operations`, `/admin/live-trading-dashboard`
+  - dark elements remaining: `0`
+
 ## 2026-03-21 — P1 Production Readiness Lock ✅
 
 ### Tamamlananlar

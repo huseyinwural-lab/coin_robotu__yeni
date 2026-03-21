@@ -1,6 +1,15 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-21
+### Iteration-52 — Admin Light Green Theme Cleanup
+- Admin içerik alanı için `admin-light-panels` tema sınıfı eklendi.
+- Koyu/siyah panel-kart-input-button yüzeyleri açık yeşil (lime pastel) tonlara çevrildi.
+- Sidebar/navbar bilerek korunarak yalnız içerik yüzeyleri dönüştürüldü.
+- Doğrulama:
+  - `/app/test_reports/iteration_52.json`
+  - Frontend PASS, dark elements remaining: 0
+
+## 2026-03-21
 ### Iteration-51 — Production Readiness Lock (P1)
 - Config single-source lock tamamlandı:
   - `/app/config/trading.json` -> `allowed_quote_assets`
