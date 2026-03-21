@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, Query, Response
+import hashlib
+import json
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
@@ -6,6 +10,7 @@ from deps import require_user
 from models import User
 from schemas import UserScannerAnomalyAuditRequest, UserScannerAnomalyAuditResponse
 from services.audit_service import create_audit_log
+from services.pipeline.cache_store import get_counter, get_json, incr_counter, set_json
 from services.scanner_runtime import get_runtime_snapshot, run_scanner_runtime
 from services.user_scanner_operations_service import (
     build_user_scanner_daily_report,
@@ -15,6 +20,61 @@ from services.user_scanner_operations_service import (
 
 
 router = APIRouter(prefix="/user/scanner/runtime", tags=["user_scanner_runtime"])
+
+ANOMALY_COOLDOWN_SECONDS = 60
+ANOMALY_DUPLICATE_WINDOW_SECONDS = 900
+ANOMALY_MIN_FAIL_RATIO = 0.10
+ANOMALY_MIN_TOTAL_REQUESTS = 5
+ANOMALY_BURST_LIMIT_PER_MINUTE = 6
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _safe_parse_iso(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def _anomaly_state_key(user_id: str) -> str:
+    return f"scanner:anomaly:audit:last:{user_id}"
+
+
+def _anomaly_suppressed_counter_key(user_id: str) -> str:
+    return f"scanner:anomaly:audit:suppressed:count:{user_id}"
+
+
+def _anomaly_burst_key(user_id: str, now: datetime) -> str:
+    return f"scanner:anomaly:audit:burst:{user_id}:{now.strftime('%Y%m%d%H%M')}"
+
+
+def _build_anomaly_payload_hash(payload: dict) -> str:
+    canonical = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _increase_suppressed_count(user_id: str) -> int:
+    key = _anomaly_suppressed_counter_key(user_id)
+    return int(incr_counter(redis_client, key, 1))
+
+
+def _read_suppressed_count(user_id: str) -> int:
+    key = _anomaly_suppressed_counter_key(user_id)
+    return int(get_counter(redis_client, key))
+
+
+def _maybe_set_key_expiry(key: str, ttl_seconds: int) -> None:
+    try:
+        if hasattr(redis_client, "expire"):
+            redis_client.expire(key, ttl_seconds)
+    except Exception:
+        return
 
 
 @router.post("/run")
@@ -87,14 +147,79 @@ def create_runtime_anomaly_event(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    details = {
+    if payload.failed_requests + payload.success_requests > payload.total_requests:
+        raise HTTPException(status_code=422, detail="failed_requests + success_requests toplam_requests değerini geçemez")
+
+    normalized_points = [point.model_dump() for point in payload.trend_points[:5]]
+    normalized_payload = {
         "source": payload.source,
-        "fail_ratio": payload.fail_ratio,
-        "total_requests": payload.total_requests,
-        "failed_requests": payload.failed_requests,
-        "success_requests": payload.success_requests,
-        "trend_window_minutes": payload.trend_window_minutes,
-        "trend_points": payload.trend_points,
+        "fail_ratio": round(float(payload.fail_ratio), 6),
+        "total_requests": int(payload.total_requests),
+        "failed_requests": int(payload.failed_requests),
+        "success_requests": int(payload.success_requests),
+        "trend_window_minutes": int(payload.trend_window_minutes),
+        "trend_points": normalized_points,
+    }
+    payload_hash = _build_anomaly_payload_hash(normalized_payload)
+
+    if payload.fail_ratio <= ANOMALY_MIN_FAIL_RATIO or payload.total_requests < ANOMALY_MIN_TOTAL_REQUESTS:
+        suppressed = _increase_suppressed_count(current_user.id)
+        return UserScannerAnomalyAuditResponse(
+            status="suppressed",
+            suppressed_count=suppressed,
+            suppress_reason="guardrail_threshold",
+            payload_hash=payload_hash,
+        )
+
+    now = _utc_now()
+    state_key = _anomaly_state_key(current_user.id)
+    state = get_json(redis_client, state_key) or {}
+    cooldown_until = _safe_parse_iso(str(state.get("cooldown_until") or ""))
+    duplicate_until = _safe_parse_iso(str(state.get("duplicate_until") or ""))
+    last_payload_hash = str(state.get("last_payload_hash") or "")
+
+    if cooldown_until and now < cooldown_until:
+        suppressed = _increase_suppressed_count(current_user.id)
+        return UserScannerAnomalyAuditResponse(
+            status="suppressed",
+            suppressed_count=suppressed,
+            suppress_reason="cooldown_active",
+            payload_hash=payload_hash,
+        )
+
+    if duplicate_until and now < duplicate_until and last_payload_hash == payload_hash:
+        suppressed = _increase_suppressed_count(current_user.id)
+        return UserScannerAnomalyAuditResponse(
+            status="suppressed",
+            suppressed_count=suppressed,
+            suppress_reason="duplicate_payload",
+            payload_hash=payload_hash,
+        )
+
+    burst_key = _anomaly_burst_key(current_user.id, now)
+    burst_count = int(incr_counter(redis_client, burst_key, 1))
+    _maybe_set_key_expiry(burst_key, 120)
+    if burst_count > ANOMALY_BURST_LIMIT_PER_MINUTE:
+        suppressed = _increase_suppressed_count(current_user.id)
+        return UserScannerAnomalyAuditResponse(
+            status="suppressed",
+            suppressed_count=suppressed,
+            suppress_reason="burst_limit",
+            payload_hash=payload_hash,
+        )
+
+    suppressed_count = _read_suppressed_count(current_user.id)
+    details = {
+        **normalized_payload,
+        "payload_hash": payload_hash,
+        "suppressed_count": suppressed_count,
+        "guardrails": {
+            "cooldown_seconds": ANOMALY_COOLDOWN_SECONDS,
+            "duplicate_window_seconds": ANOMALY_DUPLICATE_WINDOW_SECONDS,
+            "burst_limit_per_minute": ANOMALY_BURST_LIMIT_PER_MINUTE,
+            "min_fail_ratio": ANOMALY_MIN_FAIL_RATIO,
+            "min_total_requests": ANOMALY_MIN_TOTAL_REQUESTS,
+        },
     }
     audit_entry = create_audit_log(
         db,
@@ -106,8 +231,24 @@ def create_runtime_anomaly_event(
         actor_role=str(getattr(current_user, "role", "user") or "user").lower(),
         details=details,
     )
+
+    set_json(
+        redis_client,
+        state_key,
+        {
+            "last_logged_at": now.isoformat(),
+            "last_payload_hash": payload_hash,
+            "cooldown_until": (now + timedelta(seconds=ANOMALY_COOLDOWN_SECONDS)).isoformat(),
+            "duplicate_until": (now + timedelta(seconds=ANOMALY_DUPLICATE_WINDOW_SECONDS)).isoformat(),
+            "suppressed_count": suppressed_count,
+            "last_audit_log_id": audit_entry.id,
+        },
+    )
+
     return UserScannerAnomalyAuditResponse(
         status="logged",
         audit_log_id=audit_entry.id,
         logged_at=audit_entry.created_at,
+        suppressed_count=suppressed_count,
+        payload_hash=payload_hash,
     )

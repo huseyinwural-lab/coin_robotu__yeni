@@ -1641,20 +1641,31 @@ class UserScannerResultResponse(BaseModel):
     generated_at: datetime
 
 
+class UserScannerAnomalyTrendPoint(BaseModel):
+    label: str = Field(default="1m", min_length=1, max_length=16)
+    total: int = Field(default=0, ge=0, le=2000)
+    success: int = Field(default=0, ge=0, le=2000)
+    fail: int = Field(default=0, ge=0, le=2000)
+    success_ratio: float = Field(default=1, ge=0, le=1)
+
+
 class UserScannerAnomalyAuditRequest(BaseModel):
     source: str = Field(default="scanner_ui", min_length=3, max_length=60)
     fail_ratio: float = Field(default=0, ge=0, le=1)
-    total_requests: int = Field(default=0, ge=0)
-    failed_requests: int = Field(default=0, ge=0)
-    success_requests: int = Field(default=0, ge=0)
+    total_requests: int = Field(default=0, ge=0, le=2000)
+    failed_requests: int = Field(default=0, ge=0, le=2000)
+    success_requests: int = Field(default=0, ge=0, le=2000)
     trend_window_minutes: int = Field(default=5, ge=1, le=60)
-    trend_points: list[dict] = Field(default_factory=list)
+    trend_points: list[UserScannerAnomalyTrendPoint] = Field(default_factory=list, max_length=10)
 
 
 class UserScannerAnomalyAuditResponse(BaseModel):
     status: str
-    audit_log_id: str
-    logged_at: datetime
+    audit_log_id: str | None = None
+    logged_at: datetime | None = None
+    suppressed_count: int = 0
+    suppress_reason: str | None = None
+    payload_hash: str | None = None
 
 
 class UserSignalResponse(BaseModel):
