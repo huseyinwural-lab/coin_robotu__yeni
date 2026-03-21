@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from core.policy.quote_policy import ALLOWED_QUOTES
+from core.policy.quote_policy import allowed_quotes_list
 
 INVALID_QUOTE_ASSET_ERROR_CODE = "INVALID_QUOTE_ASSET"
-INVALID_QUOTE_ASSET_MESSAGE = "Quote asset must be USDT or USDC"
 
 _INVALID_QUOTE_ALIASES = {
     "invalid_quote_asset",
@@ -14,7 +13,16 @@ _INVALID_QUOTE_ALIASES = {
 
 
 def allowed_quote_assets() -> list[str]:
-    return sorted({str(item).upper() for item in ALLOWED_QUOTES})
+    return [str(item).upper() for item in allowed_quotes_list()]
+
+
+def invalid_quote_asset_message() -> str:
+    quotes = allowed_quote_assets()
+    if len(quotes) >= 2:
+        return f"Quote asset must be {quotes[0]} or {quotes[1]}"
+    if len(quotes) == 1:
+        return f"Quote asset must be {quotes[0]}"
+    return "Quote asset is not allowed"
 
 
 def is_invalid_quote_asset_code(code: str | None) -> bool:
@@ -36,7 +44,7 @@ def normalize_reason_code(code: str | None) -> str:
 def build_invalid_quote_asset_detail(symbol: str | None) -> dict:
     return {
         "error_code": INVALID_QUOTE_ASSET_ERROR_CODE,
-        "message": INVALID_QUOTE_ASSET_MESSAGE,
+        "message": invalid_quote_asset_message(),
         "state_snapshot": {
             "symbol": str(symbol or "").strip().upper(),
             "allowed_quote_assets": allowed_quote_assets(),

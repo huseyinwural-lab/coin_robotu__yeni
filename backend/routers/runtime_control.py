@@ -28,6 +28,7 @@ from runtime_control import (
 )
 from services.audit_service import create_audit_log
 from services.live_mode_service import release_gate_view
+from services.quote_asset_constraints import allowed_quote_assets
 
 router = APIRouter(prefix="/runtime", tags=["runtime_control"])
 
@@ -290,6 +291,12 @@ def runtime_pipeline_flush(payload: PipelineFlushRequest, current_admin: User = 
 def runtime_guard_telemetry(limit: int = Query(default=100, ge=1, le=500), current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _ = current_admin
     return get_guard_telemetry(db, limit=limit)
+
+
+@router.get("/quote-policy")
+def runtime_quote_policy(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return {"allowed_quote_assets": allowed_quote_assets()}
 
 
 @router.post("/gate/recheck")

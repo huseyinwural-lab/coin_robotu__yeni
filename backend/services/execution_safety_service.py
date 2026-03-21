@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from core.policy.quote_policy import extract_quote
 from models import AuditLog, ExecutionIntent, ExecutionMetric, LiveActivationConfig, PaperPosition, UserExecutionIntent
-from services.quote_asset_constraints import INVALID_QUOTE_ASSET_ERROR_CODE, INVALID_QUOTE_ASSET_MESSAGE
+from services.quote_asset_constraints import INVALID_QUOTE_ASSET_ERROR_CODE, invalid_quote_asset_message
 from services.audit_service import create_audit_log
 from services.observability_service import collect_observability_snapshot
 from services.system_alert_service import create_system_alert
@@ -252,7 +252,7 @@ def assert_execution_open_allowed(db: Session, *, proposed_notional: float, sour
     if normalized_symbol and extract_quote(normalized_symbol) is None:
         _raise_block(
             reason_code=REASON_INVALID_QUOTE_ASSET,
-            message=INVALID_QUOTE_ASSET_MESSAGE,
+            message=invalid_quote_asset_message(),
             source=source,
             proposed_notional=proposed,
             symbol=normalized_symbol,

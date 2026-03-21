@@ -44,9 +44,15 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.explainability_rules_service import build_screener_explain
+from services.quote_asset_constraints import allowed_quote_assets
 from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
 
 router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
+
+
+def _allowed_quote_notice() -> str:
+    quotes = ", ".join(allowed_quote_assets())
+    return f"İşlem için en az bir geçerli market seçmelisiniz. Allowed quote assets: {quotes}"
 
 
 @router.get("/signal-mode", response_model=UserSignalModeResponse)
@@ -260,11 +266,11 @@ def scanner_run(
 ):
     selected_symbols = payload.selected_symbols or []
     if len(selected_symbols) == 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="İşlem için en az bir geçerli USDT/USDC market seçmelisiniz.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_allowed_quote_notice())
 
     valid_symbols = filter_allowed_quote_symbols(selected_symbols)
     if len(valid_symbols) == 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="İşlem için en az bir geçerli USDT/USDC market seçmelisiniz.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_allowed_quote_notice())
 
     try:
         result = run_user_scanner(

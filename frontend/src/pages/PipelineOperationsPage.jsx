@@ -28,6 +28,16 @@ const ACTION_META = {
   policy_test_alert: { endpoint: "/runtime/alert-policy/test-alert", phrase: "SEND TEST ALERT", panelKey: "control" },
 };
 
+const extractErrorMeta = (error) => {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string") {
+    return { traceId: "-", message: detail };
+  }
+  const traceId = detail?.trace_id || error?.response?.data?.trace_id || "-";
+  const message = detail?.message || detail?.error_code || JSON.stringify(detail || {});
+  return { traceId, message };
+};
+
 const ResultBadge = ({ result, testId }) => {
   if (!result) {
     return <p className="text-xs text-slate-500" data-testid={`${testId}-empty`}>Henüz aksiyon sonucu yok.</p>;
@@ -35,6 +45,7 @@ const ResultBadge = ({ result, testId }) => {
 
   return (
     <div className="space-y-1 text-xs text-emerald-200" data-testid={`${testId}-payload`}>
+      <p className="font-semibold text-emerald-300" data-testid={`${testId}-last-action-result-label`}>last_action_result</p>
       <p data-testid={`${testId}-status`}>status={result.status || "-"}</p>
       <p data-testid={`${testId}-trace-id`}>trace_id={result.trace_id || "-"}</p>
       <p data-testid={`${testId}-message`}>message={result.message || "-"}</p>
@@ -69,8 +80,8 @@ const PanelShell = ({ title, subtitle, stateNode, reasonNode, actionNode, result
   </article>
 );
 
-const SummaryBar = ({ wsHealth, gateStatus, overridesActive, alertsHistory, testId }) => (
-  <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid={testId}>
+const SummaryBar = ({ wsHealth, gateStatus, overridesActive, alertsHistory, allowedQuoteAssets, testId }) => (
+  <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5" data-testid={testId}>
     <div className="rounded-lg border border-cyan-700/50 bg-cyan-950/20 p-3" data-testid={`${testId}-ws-card`}>
       <p className="text-xs text-cyan-300" data-testid={`${testId}-ws-label`}>WS Session</p>
       <p className="mt-1 text-sm font-semibold" data-testid={`${testId}-ws-value`}>{wsHealth?.state?.session_id || "-"}</p>
@@ -87,6 +98,10 @@ const SummaryBar = ({ wsHealth, gateStatus, overridesActive, alertsHistory, test
       <p className="text-xs text-violet-300" data-testid={`${testId}-alert-label`}>Open Alerts</p>
       <p className="mt-1 text-sm font-semibold" data-testid={`${testId}-alert-value`}>{alertsHistory.length}</p>
     </div>
+    <div className="rounded-lg border border-emerald-700/50 bg-emerald-950/20 p-3" data-testid={`${testId}-allowed-quotes-card`}>
+      <p className="text-xs text-emerald-300" data-testid={`${testId}-allowed-quotes-label`}>Allowed Quote Assets</p>
+      <p className="mt-1 text-sm font-semibold" data-testid={`${testId}-allowed-quotes-value`}>{(allowedQuoteAssets || []).join(", ") || "-"}</p>
+    </div>
   </section>
 );
 
@@ -101,6 +116,7 @@ export const PipelineOperationsPage = () => {
   const [wsHealth, setWsHealth] = useState(null);
   const [gateStatus, setGateStatus] = useState(null);
   const [guardTelemetry, setGuardTelemetry] = useState(null);
+  const [allowedQuoteAssets, setAllowedQuoteAssets] = useState([]);
   const [exchangeMonitoring, setExchangeMonitoring] = useState(null);
   const [hardeningAnalytics, setHardeningAnalytics] = useState([]);
   const [actionAudit, setActionAudit] = useState([]);
@@ -133,6 +149,13 @@ export const PipelineOperationsPage = () => {
   });
 
   const [bulkSelection, setBulkSelection] = useState([]);
+  const [stateValidation, setStateValidation] = useState({
+    wsReconnectSessionChanged: null,
+    overrideAffectsExecution: null,
+    gateUsesCiResult: null,
+    tradeBlockVisible: null,
+    lastCheckedAt: null,
+  });
   const [panelResult, setPanelResult] = useState({
     control: null,
     recovery: null,
@@ -165,6 +188,7 @@ export const PipelineOperationsPage = () => {
         alertsRes,
         policyRes,
         auditRes,
+        quotePolicyRes,
       ] = await Promise.all([
         apiClient.get("/runtime/ws/health"),
         apiClient.get("/runtime/gate/status"),
@@ -182,6 +206,7 @@ export const PipelineOperationsPage = () => {
         }),
         apiClient.get("/runtime/alert-policy"),
         apiClient.get("/runtime/action-audit", { params: { since_hours: 48, limit: 40 } }),
+        apiClient.get("/runtime/quote-policy"),
       ]);
 
       setWsHealth(wsRes.data || null);
@@ -189,6 +214,7 @@ export const PipelineOperationsPage = () => {
       setOverridesActive(activeRes.data?.items || []);
       setOverrideHistory(historyRes.data?.items || []);
       setGuardTelemetry(guardRes.data || null);
+      setAllowedQuoteAssets(quotePolicyRes.data?.allowed_quote_assets || guardRes.data?.allowed_quote_assets || []);
       setExchangeMonitoring(exchangeRes.data || null);
       setHardeningAnalytics(hardeningRes.data?.items || []);
       setAlertsHistory(alertsRes.data?.items || []);
@@ -204,9 +230,25 @@ export const PipelineOperationsPage = () => {
           permission_drift_critical_per_day: String(policy.permission_drift_critical_per_day ?? 5),
         });
       }
+
+      const guardTopReasons = guardRes.data?.top_reasons || [];
+      const hasInvalidQuoteBlock = guardTopReasons.some((item) => String(item?.reason || "").toUpperCase() === "INVALID_QUOTE_ASSET");
+      setStateValidation((prev) => ({
+        ...prev,
+        tradeBlockVisible: hasInvalidQuoteBlock,
+        lastCheckedAt: new Date().toISOString(),
+      }));
+
+      return {
+        wsHealth: wsRes.data || null,
+        gateStatus: gateRes.data || null,
+        overridesActive: activeRes.data?.items || [],
+        guardTelemetry: guardRes.data || null,
+      };
     } catch (error) {
       const detail = error?.response?.data?.detail;
       toast.error(typeof detail === "string" ? detail : "Pipeline operations verisi alınamadı");
+      return null;
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -227,6 +269,21 @@ export const PipelineOperationsPage = () => {
     });
   };
 
+  const setActionSuccess = (panelKey, payload, toastTitle) => {
+    const resultPayload = payload || null;
+    setPanelResult((prev) => ({ ...prev, [panelKey]: resultPayload }));
+    toast.success(`${toastTitle} | trace_id: ${resultPayload?.trace_id || "-"}`);
+  };
+
+  const setActionFailure = (panelKey, error, toastTitle) => {
+    const { traceId, message } = extractErrorMeta(error);
+    setPanelResult((prev) => ({
+      ...prev,
+      [panelKey]: { status: "error", trace_id: traceId, message },
+    }));
+    toast.error(`${toastTitle} | trace_id: ${traceId} | ${message}`);
+  };
+
   const submitDialogAction = async () => {
     const meta = ACTION_META[actionDialog.actionKey];
     if (!meta) return;
@@ -239,6 +296,7 @@ export const PipelineOperationsPage = () => {
       return;
     }
 
+    const previousWsSessionId = wsHealth?.state?.session_id || null;
     try {
       let response;
       if (actionDialog.actionKey === "service_restart") {
@@ -269,13 +327,24 @@ export const PipelineOperationsPage = () => {
         });
       }
 
-      setPanelResult((prev) => ({ ...prev, [actionDialog.panelKey]: response.data || null }));
-      toast.success("Aksiyon tamamlandı");
+      setActionSuccess(actionDialog.panelKey, response.data || null, "Aksiyon başarılı");
       setActionDialog((prev) => ({ ...prev, open: false }));
-      await load(false);
+      const latest = await load(false);
+
+      if (["ws_reconnect", "ws_new_session"].includes(actionDialog.actionKey)) {
+        const nextWsSessionId = latest?.wsHealth?.state?.session_id || null;
+        setStateValidation((prev) => ({
+          ...prev,
+          wsReconnectSessionChanged: Boolean(previousWsSessionId && nextWsSessionId && previousWsSessionId !== nextWsSessionId),
+        }));
+      }
+
+      if (actionDialog.actionKey === "gate_recheck") {
+        const hasCiScripts = Array.isArray(response.data?.scripts) && response.data.scripts.length > 0;
+        setStateValidation((prev) => ({ ...prev, gateUsesCiResult: hasCiScripts }));
+      }
     } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : JSON.stringify(detail || {}));
+      setActionFailure(actionDialog.panelKey, error, "Aksiyon başarısız");
     }
   };
 
@@ -289,16 +358,15 @@ export const PipelineOperationsPage = () => {
         lag_threshold_seconds: Number(lagThreshold || 60),
       });
       setHeartbeat(data || null);
-      setPanelResult((prev) => ({ ...prev, recovery: data || null }));
-      toast.success("Heartbeat kontrolü tamamlandı");
+      setActionSuccess("recovery", data || null, "Heartbeat kontrolü başarılı");
       await load(false);
     } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : JSON.stringify(detail || {}));
+      setActionFailure("recovery", error, "Heartbeat kontrolü başarısız");
     }
   };
 
   const runOverrideCreate = async () => {
+    const previousCount = overridesActive.length;
     try {
       const { data } = await apiClient.post("/runtime/override/create", {
         override_type: overrideForm.override_type,
@@ -307,27 +375,28 @@ export const PipelineOperationsPage = () => {
         reason: overrideForm.reason,
         confirmation_phrase: overrideForm.confirmation_phrase,
       });
-      setPanelResult((prev) => ({ ...prev, override: data || null }));
-      toast.success("Override oluşturuldu");
-      await load(false);
+      setActionSuccess("override", data || null, "Override oluşturma başarılı");
+      const latest = await load(false);
+      const currentCount = latest?.overridesActive?.length ?? previousCount;
+      setStateValidation((prev) => ({ ...prev, overrideAffectsExecution: currentCount !== previousCount }));
     } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : JSON.stringify(detail || {}));
+      setActionFailure("override", error, "Override oluşturma başarısız");
     }
   };
 
   const runOverrideCancel = async (overrideId) => {
+    const previousCount = overridesActive.length;
     try {
       const { data } = await apiClient.post(`/runtime/override/${overrideId}/cancel`, {
         reason: overrideForm.reason,
         confirmation_phrase: "CANCEL OVERRIDE",
       });
-      setPanelResult((prev) => ({ ...prev, override: data || null }));
-      toast.success("Override iptal edildi");
-      await load(false);
+      setActionSuccess("override", data || null, "Override iptali başarılı");
+      const latest = await load(false);
+      const currentCount = latest?.overridesActive?.length ?? previousCount;
+      setStateValidation((prev) => ({ ...prev, overrideAffectsExecution: currentCount !== previousCount }));
     } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : JSON.stringify(detail || {}));
+      setActionFailure("override", error, "Override iptali başarısız");
     }
   };
 
@@ -342,12 +411,10 @@ export const PipelineOperationsPage = () => {
         reason: reasonAlerts,
         mute_minutes: muteMinutes,
       });
-      setPanelResult((prev) => ({ ...prev, alerts: data || null }));
-      toast.success(`Alert ${action} tamamlandı`);
+      setActionSuccess("alerts", data || null, `Alert ${action} başarılı`);
       await load(false);
     } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : JSON.stringify(detail || {}));
+      setActionFailure("alerts", error, `Alert ${action} başarısız`);
     }
   };
 
@@ -368,17 +435,39 @@ export const PipelineOperationsPage = () => {
         mute_minutes: 30,
       });
       setBulkSelection([]);
-      setPanelResult((prev) => ({ ...prev, alerts: data || null }));
-      toast.success(`Bulk ${action} tamamlandı`);
+      setActionSuccess("alerts", data || null, `Bulk ${action} başarılı`);
       await load(false);
     } catch (error) {
-      const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : JSON.stringify(detail || {}));
+      setActionFailure("alerts", error, `Bulk ${action} başarısız`);
     }
   };
 
-  const topReasons = useMemo(() => (guardTelemetry?.top_reasons || []).slice(0, 6), [guardTelemetry]);
-  const blockedTrades = useMemo(() => (guardTelemetry?.blocked_trade_list || []).slice(0, 10), [guardTelemetry]);
+  const topReasons = useMemo(() => {
+    const rows = [...(guardTelemetry?.top_reasons || [])];
+    rows.sort((a, b) => {
+      const aInvalid = String(a?.reason || "").toUpperCase() === "INVALID_QUOTE_ASSET" ? 0 : 1;
+      const bInvalid = String(b?.reason || "").toUpperCase() === "INVALID_QUOTE_ASSET" ? 0 : 1;
+      if (aInvalid !== bInvalid) return aInvalid - bInvalid;
+      return Number(b?.count || 0) - Number(a?.count || 0);
+    });
+    return rows.slice(0, 6);
+  }, [guardTelemetry]);
+  const blockedTrades = useMemo(() => {
+    const rows = [...(guardTelemetry?.blocked_trade_list || [])];
+    rows.sort((a, b) => {
+      const aReason = (a.reason_codes || [a.reason || "UNKNOWN"])[0];
+      const bReason = (b.reason_codes || [b.reason || "UNKNOWN"])[0];
+      const aInvalid = String(aReason).toUpperCase() === "INVALID_QUOTE_ASSET" ? 0 : 1;
+      const bInvalid = String(bReason).toUpperCase() === "INVALID_QUOTE_ASSET" ? 0 : 1;
+      if (aInvalid !== bInvalid) return aInvalid - bInvalid;
+      return String(b.updated_at || "").localeCompare(String(a.updated_at || ""));
+    });
+    return rows.slice(0, 10);
+  }, [guardTelemetry]);
+  const invalidQuoteReasonCount = useMemo(
+    () => Number((guardTelemetry?.top_reasons || []).find((item) => String(item?.reason || "").toUpperCase() === "INVALID_QUOTE_ASSET")?.count || 0),
+    [guardTelemetry],
+  );
   const exchangeTrend = useMemo(() => (exchangeMonitoring?.trend || []).slice(-8), [exchangeMonitoring]);
   const auditSlice = useMemo(() => actionAudit.slice(0, 20), [actionAudit]);
 
@@ -405,8 +494,28 @@ export const PipelineOperationsPage = () => {
         gateStatus={gateStatus}
         overridesActive={overridesActive}
         alertsHistory={alertsHistory}
+        allowedQuoteAssets={allowedQuoteAssets}
         testId="pipeline-operations-summary-bar"
       />
+
+      <article className="rounded-xl border border-slate-700 bg-slate-900/90 p-4" data-testid="pipeline-operations-state-validation-panel">
+        <h3 className="text-base font-semibold text-slate-100" data-testid="pipeline-operations-state-validation-title">State Validation Checklist</h3>
+        <p className="text-xs text-slate-400" data-testid="pipeline-operations-state-validation-description">Dummy state yok: her kontrol canlı aksiyon/telemetry verisiyle doğrulanır.</p>
+        <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="pipeline-operations-state-validation-grid">
+          <p data-testid="pipeline-operations-state-validation-ws">
+            WS reconnect session değişimi: <span className="font-semibold">{stateValidation.wsReconnectSessionChanged === null ? "BEKLENİYOR" : stateValidation.wsReconnectSessionChanged ? "PASS" : "FAIL"}</span>
+          </p>
+          <p data-testid="pipeline-operations-state-validation-override">
+            Override state etkisi: <span className="font-semibold">{stateValidation.overrideAffectsExecution === null ? "BEKLENİYOR" : stateValidation.overrideAffectsExecution ? "PASS" : "FAIL"}</span>
+          </p>
+          <p data-testid="pipeline-operations-state-validation-gate">
+            Gate CI script sonucu: <span className="font-semibold">{stateValidation.gateUsesCiResult === null ? "BEKLENİYOR" : stateValidation.gateUsesCiResult ? "PASS" : "FAIL"}</span>
+          </p>
+          <p data-testid="pipeline-operations-state-validation-block">
+            Trade block guard listesine düşüş: <span className="font-semibold">{stateValidation.tradeBlockVisible === null ? "BEKLENİYOR" : stateValidation.tradeBlockVisible ? "PASS" : "FAIL"}</span>
+          </p>
+        </div>
+      </article>
 
       <section className="space-y-3" data-testid="pipeline-operations-control-section">
         <h2 className="text-base font-semibold uppercase tracking-wider text-cyan-300" data-testid="pipeline-operations-control-section-title">Control</h2>
@@ -556,6 +665,9 @@ export const PipelineOperationsPage = () => {
               <div className="space-y-1 text-xs text-slate-300" data-testid="pipeline-operations-guard-state">
                 <p data-testid="pipeline-operations-guard-state-blocked">blocked={(guardTelemetry?.blocked_trade_list || []).length}</p>
                 <p data-testid="pipeline-operations-guard-state-override-impact">override_impacted={(guardTelemetry?.override_impacted_trades || []).length}</p>
+                <p data-testid="pipeline-operations-guard-state-invalid-quote-badge">
+                  <span className="inline-flex rounded-full border border-red-500/70 bg-red-950 px-2 py-0.5 text-[11px] font-semibold text-red-200">INVALID_QUOTE_ASSET {invalidQuoteReasonCount}</span>
+                </p>
               </div>
             }
             reasonNode={<p className="text-xs text-slate-400" data-testid="pipeline-operations-guard-reason">Bu panel root-cause önceliklendirmesi için kullanılır.</p>}
@@ -563,13 +675,23 @@ export const PipelineOperationsPage = () => {
               <div className="space-y-2" data-testid="pipeline-operations-guard-actions-view">
                 <div className="max-h-20 space-y-1 overflow-auto" data-testid="pipeline-operations-guard-top-reasons-list">
                   {topReasons.map((item, idx) => (
-                    <p key={`${item.reason}-${idx}`} className="text-[11px] text-slate-300" data-testid={`pipeline-operations-guard-top-reason-${idx}`}>{item.reason}: {item.count}</p>
+                    <p
+                      key={`${item.reason}-${idx}`}
+                      className={`text-[11px] ${String(item.reason).toUpperCase() === "INVALID_QUOTE_ASSET" ? "font-semibold text-red-300" : "text-slate-300"}`}
+                      data-testid={`pipeline-operations-guard-top-reason-${idx}`}
+                    >
+                      {item.reason}: {item.count}
+                    </p>
                   ))}
                 </div>
                 <div className="max-h-24 space-y-1 overflow-auto" data-testid="pipeline-operations-guard-blocked-trades-list">
                   {blockedTrades.map((item, idx) => (
-                    <p key={`${item.id}-${idx}`} className="text-[11px] text-slate-300" data-testid={`pipeline-operations-guard-blocked-trade-${idx}`}>
-                      {item.symbol || "UNKNOWN"} → {(item.reason_codes || [item.reason || "UNKNOWN"])[0] || "UNKNOWN"}
+                    <p
+                      key={`${item.id}-${idx}`}
+                      className={`rounded px-2 py-1 text-[11px] ${(item.reason_codes || [item.reason || "UNKNOWN"])[0] === "INVALID_QUOTE_ASSET" ? "border border-red-500/60 bg-red-950/50 text-red-200" : "text-slate-300"}`}
+                      data-testid={`pipeline-operations-guard-blocked-trade-${idx}`}
+                    >
+                      {item.symbol || "UNKNOWN"} | {(item.reason_codes || [item.reason || "UNKNOWN"])[0] || "UNKNOWN"} | {item.updated_at || "-"}
                     </p>
                   ))}
                 </div>

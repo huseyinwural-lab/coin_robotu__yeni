@@ -3,7 +3,7 @@ from collections import Counter
 from datetime import datetime, timezone
 
 from models import AuditLog, UserExecutionIntent
-from services.quote_asset_constraints import normalize_reason_code
+from services.quote_asset_constraints import allowed_quote_assets, normalize_reason_code
 
 PIPELINE_QUEUE_KEYS = [
     "runtime:events:all",
@@ -127,4 +127,5 @@ def get_guard_telemetry(db, *, limit: int = 100) -> dict:
         "blocked_trade_list": blocked_trades,
         "top_reasons": [{"reason": key, "count": count} for key, count in reason_counter.most_common(12)],
         "override_impacted_trades": override_impacted,
+        "allowed_quote_assets": allowed_quote_assets(),
     }
