@@ -139,6 +139,7 @@ export const AdminDashboardPage = () => {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [actionCenterSummary, setActionCenterSummary] = useState(null);
   const [closeResult, setCloseResult] = useState(null);
+  const [latestAutoCloseAudit, setLatestAutoCloseAudit] = useState(null);
   const [killSwitchState, setKillSwitchState] = useState(null);
   const [incidentHistory, setIncidentHistory] = useState({ audit_events: [], recent_alerts: [] });
   const [criticalDialogState, setCriticalDialogState] = useState({
@@ -207,7 +208,7 @@ export const AdminDashboardPage = () => {
     setLoadError("");
 
     try {
-      const [summaryResponse, actionSummaryResponse, killSwitchResponse, incidentResponse, alertsResponse] = await Promise.all([
+      const [summaryResponse, actionSummaryResponse, killSwitchResponse, incidentResponse, alertsResponse, latestAutoCloseResponse] = await Promise.all([
         apiClient.get("/dashboard/summary"),
         apiClient.get("/admin/action-center/summary"),
         apiClient.get("/admin/kill-switch"),
@@ -222,6 +223,7 @@ export const AdminDashboardPage = () => {
             limit: 250,
           },
         }),
+        apiClient.get("/admin/action-center/close-next-actions/latest"),
       ]);
 
       const summaryPayload = summaryResponse?.data || null;
@@ -235,6 +237,7 @@ export const AdminDashboardPage = () => {
       setKillSwitchState(killSwitchResponse?.data || null);
       setIncidentHistory(incidentResponse?.data || { audit_events: [], recent_alerts: [] });
       setAlerts(alertsResponse?.data?.items || []);
+      setLatestAutoCloseAudit(latestAutoCloseResponse?.data?.found ? latestAutoCloseResponse?.data?.item : null);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Admin dashboard verisi yüklenemedi";
@@ -257,14 +260,43 @@ export const AdminDashboardPage = () => {
     return () => clearInterval(timer);
   }, [autoRefreshEnabled, loadDashboard]);
 
-  const openCriticalDialog = (actionKey) => {
-    const defaultReason = actionKey === "kill_on" ? "dashboard_kill_switch_activate" : "dashboard_manual_operation";
+  const navigateToAuditContext = ({ action = "", q = "", requestId = "", sessionId = "" } = {}) => {
+    const params = new URLSearchParams();
+    if (action) params.set("action", action);
+    if (q) params.set("q", q);
+    if (requestId) params.set("request_id", requestId);
+    if (sessionId) params.set("session_id", sessionId);
+    navigate(`/admin/audit-logs${params.toString() ? `?${params.toString()}` : ""}`);
+  };
+
+  const openCriticalDialog = (actionKey, options = {}) => {
+    const defaultReason = options?.reasonHint || (actionKey === "kill_on" ? "dashboard_kill_switch_activate" : "dashboard_manual_operation");
     setCriticalDialogState({
       open: true,
       actionKey,
       reason: defaultReason,
       phrase: "",
       restartTargets: { backend: true, frontend: true },
+    });
+  };
+
+  const executeSuggestedAction = (alert) => {
+    const actionKey = alert?.recommendation?.suggested_action?.action_key;
+    if (actionKey === "auto_close_run") {
+      openCriticalDialog("auto_close_run", { reasonHint: `${alert?.id || "alert"}_auto_close` });
+      return;
+    }
+    if (actionKey === "restart_services") {
+      openCriticalDialog("restart_services", { reasonHint: `${alert?.id || "alert"}_restart_services` });
+      return;
+    }
+    if (actionKey === "go_risk_orchestrator") {
+      navigate("/admin/risk-orchestrator");
+      return;
+    }
+    navigateToAuditContext({
+      action: "ACTION_CENTER",
+      q: String(alert?.root_cause_code || alert?.alert_type || "").trim(),
     });
   };
 
@@ -290,43 +322,48 @@ export const AdminDashboardPage = () => {
 
     try {
       if (criticalDialogState.actionKey === "kill_on") {
-        await apiClient.post("/admin/action-center/global-kill-switch/toggle", {
+        const { data } = await apiClient.post("/admin/action-center/global-kill-switch/toggle", {
           active: true,
           reason: criticalDialogState.reason,
           confirmation_phrase: criticalDialogState.phrase,
           requested_by: user?.email,
         });
+        setCloseResult(data || null);
       }
       if (criticalDialogState.actionKey === "kill_off") {
-        await apiClient.post("/admin/action-center/global-kill-switch/toggle", {
+        const { data } = await apiClient.post("/admin/action-center/global-kill-switch/toggle", {
           active: false,
           reason: criticalDialogState.reason,
           confirmation_phrase: criticalDialogState.phrase,
           requested_by: user?.email,
         });
+        setCloseResult(data || null);
       }
       if (criticalDialogState.actionKey === "restart_services") {
         const targets = [];
         if (criticalDialogState.restartTargets.backend) targets.push("backend");
         if (criticalDialogState.restartTargets.frontend) targets.push("frontend");
-        await apiClient.post("/admin/action-center/restart-services", {
+        const { data } = await apiClient.post("/admin/action-center/restart-services", {
           targets,
           reason: criticalDialogState.reason,
           confirmation_phrase: criticalDialogState.phrase,
         });
+        setCloseResult(data || null);
       }
       if (criticalDialogState.actionKey === "clear_all_alerts") {
-        await apiClient.post("/admin/action-center/alerts/clear-all", {
+        const { data } = await apiClient.post("/admin/action-center/alerts/clear-all", {
           status_filter: alertFilters.status_filter,
           reason: criticalDialogState.reason,
           confirmation_phrase: criticalDialogState.phrase,
         });
+        setCloseResult(data || null);
       }
       if (criticalDialogState.actionKey === "bulk_ack_alerts") {
-        await apiClient.post("/admin/action-center/alerts/bulk-ack", {
+        const { data } = await apiClient.post("/admin/action-center/alerts/bulk-ack", {
           ids: selectedAlertIds,
           reason: criticalDialogState.reason,
         });
+        setCloseResult(data || null);
         setSelectedAlertIds([]);
       }
       if (criticalDialogState.actionKey === "auto_close_run") {
@@ -531,11 +568,11 @@ export const AdminDashboardPage = () => {
                 key={item.key}
                 type="button"
                 onClick={() => openDrilldown(item)}
-                className="flex items-center justify-between border border-slate-700 px-2 py-2 text-left text-xs hover:border-slate-500"
+                className="flex cursor-pointer items-center justify-between border border-slate-700 px-2 py-2 text-left text-xs transition-colors hover:border-cyan-400"
                 data-testid={`admin-dashboard-action-center-drilldown-${item.key}`}
               >
-                <span>{item.label}</span>
-                <span data-testid={`admin-dashboard-action-center-value-${item.key}`}>
+                <span>{item.label} · drilldown</span>
+                <span className="font-semibold" data-testid={`admin-dashboard-action-center-value-${item.key}`}>
                   {String(actionCenterSummary?.[item.key] ?? "-")}
                 </span>
               </button>
@@ -555,9 +592,29 @@ export const AdminDashboardPage = () => {
               <p data-testid="admin-dashboard-action-center-result-rejected-approvals">rejected_approvals: {closeResult.rejected_approvals}</p>
               <p data-testid="admin-dashboard-action-center-result-retried">retried_intents: {closeResult.retried_intents}</p>
               <Button variant="outline" size="sm" onClick={() => setIsCloseResultOpen(true)} data-testid="admin-dashboard-auto-close-result-detail-button">Sonuç Detayı</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigateToAuditContext({ action: "ACTION_CENTER_CLOSE_NEXT_ACTIONS" })}
+                data-testid="admin-dashboard-auto-close-context-audit-link-button"
+              >
+                Context Audit
+              </Button>
             </div>
           ) : (
-            <p className="mt-2 text-xs text-slate-400" data-testid="admin-dashboard-action-center-result-empty">Henüz auto-close çalıştırılmadı.</p>
+            <div className="mt-2 space-y-2" data-testid="admin-dashboard-action-center-result-empty">
+              <p className="text-xs text-slate-400" data-testid="admin-dashboard-action-center-result-empty-text">Henüz auto-close çalıştırılmadı.</p>
+              {latestAutoCloseAudit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigateToAuditContext({ action: latestAutoCloseAudit.action || "ACTION_CENTER_CLOSE_NEXT_ACTIONS" })}
+                  data-testid="admin-dashboard-auto-close-last-log-button"
+                >
+                  Son Auto-Close Logunu Aç
+                </Button>
+              )}
+            </div>
           )}
         </article>
       </div>
@@ -574,6 +631,21 @@ export const AdminDashboardPage = () => {
               <p className="text-slate-400" data-testid={`admin-dashboard-incident-history-meta-${index}`}>
                 {item.created_at ? new Date(item.created_at).toLocaleString() : "-"} · {item.actor_role || "unknown"}
               </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() =>
+                  navigateToAuditContext({
+                    action: item.action,
+                    requestId: item?.details?.request_id,
+                    sessionId: item?.details?.session_id,
+                  })
+                }
+                data-testid={`admin-dashboard-incident-history-context-link-${index}`}
+              >
+                Bu Aksiyonun Logu
+              </Button>
             </article>
           ))}
           {(incidentHistory?.audit_events || []).length === 0 && (
@@ -666,8 +738,11 @@ export const AdminDashboardPage = () => {
           disabled={!isManagerRole || selectedAlertIds.length === 0}
           data-testid="admin-alerts-bulk-ack-button"
         >
-          Bulk Ack
+          Bulk ACK Flow ({selectedAlertIds.length})
         </Button>
+        <p className="text-xs text-slate-500" data-testid="admin-alerts-bulk-ack-flow-hint">
+          Flow: Select → Bulk ACK Flow → reason + phrase → Onayla
+        </p>
       </div>
 
       {filteredAlerts.length > 0 && (
@@ -712,10 +787,23 @@ export const AdminDashboardPage = () => {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => navigate("/admin/audit-logs")}
+                    onClick={() =>
+                      navigateToAuditContext({
+                        action: "ACTION_CENTER",
+                        q: String(alert.root_cause_code || alert.alert_type || "").trim(),
+                      })
+                    }
                     data-testid={`admin-alert-root-cause-link-${alert.id}`}
                   >
                     Root Cause / Çözüm
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-emerald-700 text-white hover:bg-emerald-800"
+                    onClick={() => executeSuggestedAction(alert)}
+                    data-testid={`admin-alert-suggested-action-${alert.id}`}
+                  >
+                    {alert?.recommendation?.suggested_action?.action_label || "Önerilen Aksiyon"}
                   </Button>
                 </div>
               </div>
@@ -738,12 +826,13 @@ export const AdminDashboardPage = () => {
           const threshold = kpiThreshold(item.key, currentValue);
           const borderClass = threshold.level === "critical" ? "border-red-600" : threshold.level === "warning" ? "border-amber-600" : "border-slate-700";
           const valueClass = threshold.level === "critical" ? "text-red-300" : threshold.level === "warning" ? "text-amber-300" : "text-slate-100";
+          const cardClass = threshold.level === "critical" ? "bg-red-950/40" : threshold.level === "warning" ? "bg-amber-950/20" : "bg-slate-900";
 
           return (
             <button
               key={item.key}
               type="button"
-              className={`border bg-slate-900 p-3 text-left ${borderClass}`}
+              className={`border p-3 text-left transition-colors hover:border-cyan-400 ${borderClass} ${cardClass}`}
               onClick={() => navigate(item.route)}
               data-testid={`admin-dashboard-kpi-card-${item.key}`}
             >
@@ -757,8 +846,18 @@ export const AdminDashboardPage = () => {
       </div>
 
       <div className="border border-red-500/50 bg-red-950/20 p-4" data-testid="admin-critical-actions-panel">
-        <p className="text-xs uppercase tracking-widest text-red-300" data-testid="admin-critical-actions-title">Kritik Kontrol Alanı</p>
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-critical-actions-header">
+          <p className="text-xs uppercase tracking-widest text-red-300" data-testid="admin-critical-actions-title">Kritik Kontrol Alanı</p>
+          <p className="text-xs text-red-200" data-testid="admin-critical-actions-role-lock-badge">
+            role-lock: {isManagerRole ? "UNLOCKED" : "LOCKED"}
+          </p>
+        </div>
         <p className="mt-2 text-xs text-red-200" data-testid="admin-critical-actions-double-confirm-visible">Double-confirm aktif: işlem için reason + phrase zorunlu.</p>
+        {!isManagerRole && (
+          <p className="mt-1 text-xs text-amber-300" data-testid="admin-critical-actions-rbac-warning">
+            Bu bölümde çalıştırma yetkisi yok. Sadece super_admin + admin aksiyon başlatabilir.
+          </p>
+        )}
         <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="admin-critical-actions-grid">
           <Button
             variant="outline"
@@ -796,6 +895,28 @@ export const AdminDashboardPage = () => {
             İşlem Logları (Kim / Ne Zaman)
           </Button>
         </div>
+        {(incidentHistory?.audit_events || []).length > 0 && (
+          <div className="mt-3 rounded border border-red-700/50 bg-black/20 p-2 text-xs" data-testid="admin-critical-actions-last-operation-panel">
+            <p className="font-semibold text-red-200" data-testid="admin-critical-actions-last-operation-title">Son Kritik Aksiyon</p>
+            <p data-testid="admin-critical-actions-last-operation-action">action: {incidentHistory.audit_events[0]?.action || "-"}</p>
+            <p data-testid="admin-critical-actions-last-operation-actor">actor_role: {incidentHistory.audit_events[0]?.actor_role || "-"}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() =>
+                navigateToAuditContext({
+                  action: incidentHistory.audit_events[0]?.action,
+                  requestId: incidentHistory.audit_events[0]?.details?.request_id,
+                  sessionId: incidentHistory.audit_events[0]?.details?.session_id,
+                })
+              }
+              data-testid="admin-critical-actions-last-operation-log-link"
+            >
+              Bu İşlemin Logu
+            </Button>
+          </div>
+        )}
       </div>
 
       <Dialog
@@ -916,6 +1037,27 @@ export const AdminDashboardPage = () => {
                 >
                   Audit Link
                 </Button>
+                <Button
+                  size="sm"
+                  className="bg-emerald-700 text-white hover:bg-emerald-800"
+                  onClick={() => executeSuggestedAction(alertDetail)}
+                  data-testid="admin-dashboard-alert-detail-suggested-action-button"
+                >
+                  {alertDetail?.recommendation?.suggested_action?.action_label || "Önerilen Aksiyonu Uygula"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    navigateToAuditContext({
+                      action: "ACTION_CENTER",
+                      q: String(alertDetail?.root_cause_code || alertDetail?.alert_type || "").trim(),
+                    })
+                  }
+                  data-testid="admin-dashboard-alert-detail-context-audit-button"
+                >
+                  Context Audit
+                </Button>
               </div>
             </div>
             <pre className="max-h-52 overflow-auto border border-slate-700 bg-black p-2 text-[11px]" data-testid="admin-dashboard-alert-detail-json">
@@ -935,7 +1077,13 @@ export const AdminDashboardPage = () => {
             {JSON.stringify(closeResult || {}, null, 2)}
           </pre>
           <DialogFooter>
-            <Button variant="outline" onClick={() => navigate("/admin/audit-logs")} data-testid="admin-dashboard-auto-close-result-audit-link-button">Audit Log'a Git</Button>
+            <Button
+              variant="outline"
+              onClick={() => navigateToAuditContext({ action: "ACTION_CENTER_CLOSE_NEXT_ACTIONS" })}
+              data-testid="admin-dashboard-auto-close-result-audit-link-button"
+            >
+              Auto-Close Context Audit
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

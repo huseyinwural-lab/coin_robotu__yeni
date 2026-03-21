@@ -79,23 +79,43 @@ def _build_alert_recommendation(alert_row: SystemAlert) -> dict:
             "title": "Intent timeout / queue sıkışması",
             "description": "Runtime Recovery ekranında timeout olmuş intent'leri inceleyip requeue edin.",
             "runbook_link": "/admin/runtime/recovery",
+            "suggested_action": {
+                "action_key": "auto_close_run",
+                "action_label": "Auto-Close Run Now",
+                "reason_hint": "timeout_alert_auto_close",
+            },
         }
     if "exchange" in root_code or "exchange" in alert_type:
         return {
             "title": "Exchange bağlantı problemi",
             "description": "Exchange health ve API izinlerini kontrol edin, ardından test order çalıştırın.",
             "runbook_link": "/admin/exchanges",
+            "suggested_action": {
+                "action_key": "restart_services",
+                "action_label": "Restart Services",
+                "reason_hint": "exchange_alert_service_restart",
+            },
         }
     if "risk" in alert_type:
         return {
             "title": "Risk policy ihlali",
             "description": "Risk orchestrator ve exposure limitlerini doğrulayıp anomalileri temizleyin.",
             "runbook_link": "/admin/risk-orchestrator",
+            "suggested_action": {
+                "action_key": "go_risk_orchestrator",
+                "action_label": "Risk Orchestrator Aç",
+                "reason_hint": "risk_alert_review",
+            },
         }
     return {
         "title": "Genel operasyon incelemesi",
         "description": "Audit log ve anomaly timeline üzerinden root cause zincirini takip edin.",
         "runbook_link": "/admin/anomaly-timeline",
+        "suggested_action": {
+            "action_key": "go_audit_logs",
+            "action_label": "Audit Logs Aç",
+            "reason_hint": "generic_alert_triage",
+        },
     }
 
 
@@ -234,7 +254,7 @@ def action_center_bulk_ack_alerts(
         acked_ids.append(row.id)
 
     db.commit()
-    create_audit_log(
+    audit_entry = create_audit_log(
         db,
         action="ACTION_CENTER_ALERTS_BULK_ACK",
         entity_type="system_alert",
@@ -249,7 +269,12 @@ def action_center_bulk_ack_alerts(
         },
     )
 
-    return {"status": "ok", "acked_count": len(acked_ids), "ids": acked_ids}
+    return {
+        "status": "ok",
+        "acked_count": len(acked_ids),
+        "ids": acked_ids,
+        "audit_log_id": audit_entry.id,
+    }
 
 
 @router.post("/alerts/clear-all")
@@ -286,7 +311,7 @@ def action_center_clear_all_alerts(
         acked_ids.append(row.id)
 
     db.commit()
-    create_audit_log(
+    audit_entry = create_audit_log(
         db,
         action="ACTION_CENTER_ALERTS_CLEAR_ALL",
         entity_type="system_alert",
@@ -301,7 +326,12 @@ def action_center_clear_all_alerts(
         },
     )
 
-    return {"status": "ok", "acked_count": len(acked_ids), "ids": acked_ids}
+    return {
+        "status": "ok",
+        "acked_count": len(acked_ids),
+        "ids": acked_ids,
+        "audit_log_id": audit_entry.id,
+    }
 
 
 @router.post("/global-kill-switch/toggle")
@@ -360,7 +390,7 @@ def action_center_toggle_global_kill_switch(
             ),
         )
 
-    create_audit_log(
+    audit_entry = create_audit_log(
         db,
         action="ACTION_CENTER_KILL_SWITCH_TOGGLE",
         entity_type="kill_switch",
@@ -385,6 +415,7 @@ def action_center_toggle_global_kill_switch(
         "reason_code": snapshot.get("reason_code"),
         "current_total_exposure": current.get("current_total_exposure"),
         "current_active_positions": current.get("current_active_positions"),
+        "audit_log_id": audit_entry.id,
     }
 
 
@@ -412,7 +443,7 @@ def action_center_restart_services(
     subprocess.Popen(["bash", "-lc", command], cwd="/app")
 
     operation_id = f"restart-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
-    create_audit_log(
+    audit_entry = create_audit_log(
         db,
         action="ACTION_CENTER_RESTART_SERVICES_REQUESTED",
         entity_type="system_service",
@@ -433,6 +464,7 @@ def action_center_restart_services(
         "operation_id": operation_id,
         "targets": targets,
         "restart_log": "/tmp/action_center_restart.log",
+        "audit_log_id": audit_entry.id,
     }
 
 
@@ -466,6 +498,23 @@ def action_center_incident_history(
         "audit_events": [_serialize_audit_row(row) for row in audit_rows],
         "recent_alerts": [_serialize_alert_row(row) for row in alert_rows],
     }
+
+
+@router.get("/close-next-actions/latest")
+def close_next_actions_latest(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    row = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "ACTION_CENTER_CLOSE_NEXT_ACTIONS")
+        .order_by(AuditLog.created_at.desc())
+        .first()
+    )
+    if row is None:
+        return {"found": False}
+    return {"found": True, "item": _serialize_audit_row(row)}
 
 
 @router.get("/summary")
@@ -583,7 +632,7 @@ def close_next_actions(payload: dict | None = None, current_admin: User = Depend
             control.disable_futures = False
 
     db.commit()
-    create_audit_log(
+    audit_entry = create_audit_log(
         db,
         action="ACTION_CENTER_CLOSE_NEXT_ACTIONS",
         entity_type="admin_action_center",
@@ -605,4 +654,5 @@ def close_next_actions(payload: dict | None = None, current_admin: User = Depend
         "rejected_approvals": rejected_approvals,
         "retried_intents": retried_intents,
         "clear_kill_switch": clear_kill_switch,
+        "audit_log_id": audit_entry.id,
     }

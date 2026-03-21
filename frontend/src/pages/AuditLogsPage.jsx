@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 
 export const AuditLogsPage = () => {
+  const location = useLocation();
   const { user } = useAuth();
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -24,6 +26,32 @@ export const AuditLogsPage = () => {
     request_id: "",
     session_id: "",
   });
+
+  useEffect(() => {
+    const search = new URLSearchParams(location.search || "");
+    const action = search.get("action") || "";
+    const q = search.get("q") || "";
+    const requestId = search.get("request_id") || "";
+    const sessionId = search.get("session_id") || "";
+    const severity = search.get("severity") || "all";
+
+    setFilters((prev) => ({
+      ...prev,
+      action,
+      q,
+      request_id: requestId,
+      session_id: sessionId,
+      severity: ["all", "info", "warning", "critical"].includes(severity) ? severity : "all",
+    }));
+
+    if (requestId || sessionId) {
+      setReplayFilters((prev) => ({
+        ...prev,
+        request_id: requestId || prev.request_id,
+        session_id: sessionId || prev.session_id,
+      }));
+    }
+  }, [location.search]);
 
   const buildFilterParams = useCallback(() => ({
     limit: 300,
