@@ -1,3 +1,34 @@
+## 2026-03-21 — FAZ D0-UI FIX Tamamlandı: Blokajı Çöz Remediation Flow ✅
+
+### Kullanıcı Onaylı Kapsam
+- Endpoint: `/api/admin/system/remediate-config`
+- Modal alanları: `DATABASE_URL`, `REDIS_URL`, `ADMIN_BOOTSTRAP_EMAIL`, `ADMIN_BOOTSTRAP_PASSWORD` (+ opsiyonel `JWT_SECRET`)
+- Kural: **NO UI BYPASS** (READY/PASS sadece backend doğrulamasıyla)
+
+### Backend (Tamamlandı)
+- Yeni endpointler:
+  - `GET /api/admin/system/remediate-config`
+  - `POST /api/admin/system/remediate-config`
+- `localhost / 127.0.0.1 / 0.0.0.0` URL reddi + alan bazlı validation error dönüşü
+- Runtime secure override saklama + script tabanlı yeniden doğrulama:
+  - `prod_env_resolution_report.sh`
+  - `prod_secret_readiness_check.sh`
+  - `preflight_prod_env_check.sh`
+  - `final_release_gate_report.sh`
+- Audit log aksiyonları eklendi:
+  - `PROD_CONFIG_SAVED`
+  - `PROD_PREFLIGHT_RUN`
+
+### Frontend (Tamamlandı)
+- Yeni ortak modal: `ProdConfigRemediationModal.jsx` ("Blokajı Çöz")
+- `AdminExecutionReadinessPage.jsx`: remediation panel + status/checks/reason_codes + modal entegrasyonu
+- `ExecutionPoliciesPage.jsx`: System Config remediation panel + modal entegrasyonu
+- `PanelLayout.jsx`: BLOCKED badge içinde doğrudan remediation CTA linki
+
+### Test Sonucu
+- Testing agent raporu: `/app/test_reports/iteration_39.json`
+- Sonuç: **Backend 22/22 PASS**, frontend akış doğrulandı, kritik/minor issue yok
+
 ## 2026-03-21 — FAZ D0 Production Deploy Blokaj Kapatma (Artifact-First) ✅/⛔
 
 Bu turda istenen 10 görev script + artifact üretimiyle çalıştırıldı.
