@@ -1,3 +1,28 @@
+## 2026-03-21 — Scanner liste yüklenme döngüsü düzeltmesi + yeni interval seçenekleri ✅
+
+### Bug Fix (User Scanner)
+- Dosya: `/app/frontend/src/components/SymbolSelectorPanel.jsx`
+- Sorun: `loadUniverse()` içinde non-manual modda `onSelectedSymbolsChange(next)` her response'ta koşulsuz çağrılıyordu.
+- Etki: Parent `selectedSymbols` her seferinde yeni array referansı aldığı için `useEffect(loadUniverse)` tekrar tetikleniyor, `Listele/Yükleniyor...` döngüsü oluşuyordu.
+- Düzeltme: `areSameSymbolSet(...)` guard eklendi; sembol seti gerçekten değişmedikçe state update yapılmıyor.
+
+### UX Değişikliği (Interval)
+- Dosya: `/app/frontend/src/pages/UserScannerPage.jsx`
+- `AUTO_SCAN_INTERVAL_SECONDS` varsayılanı `180` (3 dk) yapıldı.
+- Interval seçenekleri güncellendi:
+  - `3 dakika (180)`
+  - `5 dakika (300)`
+  - `15 dakika (900)`
+- Eski saniye bazlı seçenekler kaldırıldı (30/60/120).
+- `normalizeIntervalSeconds(...)` ile sadece izinli interval değerlerinin kaydedilmesi sağlandı.
+
+### Doğrulama
+- JS lint: temiz (`SymbolSelectorPanel.jsx`, `UserScannerPage.jsx`).
+- Frontend test agent sonucu: **PASS (6/6)**
+  - Scanner refresh butonu 20s gözlemde flicker yapmadı.
+  - Mode değişimlerinde yüklenme stabil tamamlandı.
+  - Her iki dropdown'da sadece 3/5/15 dakika seçenekleri doğrulandı.
+
 ## 2026-03-20 — FAZ C3 Canary Expansion (5 → 10 Symbol) ✅
 
 ### Uygulanan kapsam
