@@ -109,16 +109,87 @@ const buildTrendPoints = (events, windowMinutes = 5, nowTs = Date.now()) => {
     const bucketEvents = events.filter((item) => item.timestamp >= bucketStart && item.timestamp < bucketEnd);
     const total = bucketEvents.length;
     const success = bucketEvents.filter((item) => item.ok).length;
+    const failed = Math.max(total - success, 0);
     const successRatio = total > 0 ? success / total : 1;
     const minutesAgo = Math.max(1, normalizedWindowMinutes - (index * labelStep));
+
+    const endpointMap = bucketEvents.reduce((acc, item) => {
+      const endpoint = String(item.endpoint || "unknown_endpoint");
+      const current = acc.get(endpoint) || { endpoint, total: 0, success: 0, fail: 0 };
+      current.total += 1;
+      if (item.ok) {
+        current.success += 1;
+      } else {
+        current.fail += 1;
+      }
+      acc.set(endpoint, current);
+      return acc;
+    }, new Map());
+
+    const endpointBreakdown = Array.from(endpointMap.values())
+      .map((row) => ({
+        ...row,
+        successRatio: row.total > 0 ? row.success / row.total : 1,
+      }))
+      .sort((a, b) => {
+        if (b.fail !== a.fail) return b.fail - a.fail;
+        if (b.total !== a.total) return b.total - a.total;
+        return String(a.endpoint).localeCompare(String(b.endpoint));
+      });
+
     return {
       key: `m${index}`,
       label: `${minutesAgo}m`,
       total,
       success,
+      failed,
       successRatio,
+      endpoint_breakdown: endpointBreakdown,
+      most_impacted_endpoint: endpointBreakdown[0]?.endpoint || null,
     };
   });
+};
+
+const summarizeEndpointBreakdown = (events, { windowMs = 60_000, nowTs = Date.now() } = {}) => {
+  const threshold = nowTs - windowMs;
+  const scoped = events.filter((item) => Number(item.timestamp || 0) >= threshold);
+  const endpointMap = scoped.reduce((acc, item) => {
+    const endpoint = String(item.endpoint || "unknown_endpoint");
+    const current = acc.get(endpoint) || { endpoint, total: 0, success: 0, fail: 0 };
+    current.total += 1;
+    if (item.ok) {
+      current.success += 1;
+    } else {
+      current.fail += 1;
+    }
+    acc.set(endpoint, current);
+    return acc;
+  }, new Map());
+
+  const rows = Array.from(endpointMap.values())
+    .map((row) => ({
+      ...row,
+      successRatio: row.total > 0 ? row.success / row.total : 1,
+    }))
+    .sort((a, b) => {
+      if (b.fail !== a.fail) return b.fail - a.fail;
+      if (b.total !== a.total) return b.total - a.total;
+      return String(a.endpoint).localeCompare(String(b.endpoint));
+    });
+
+  const total = scoped.length;
+  const success = scoped.filter((item) => item.ok).length;
+  const failed = Math.max(total - success, 0);
+  const successRatio = total > 0 ? success / total : 1;
+
+  return {
+    rows,
+    total,
+    success,
+    failed,
+    successRatio,
+    mostImpactedEndpoint: rows[0]?.endpoint || null,
+  };
 };
 
 const deriveRequestHealth = (events) => {
@@ -189,6 +260,10 @@ export const UserScannerPage = () => {
   });
   const [selectedTrendWindowMinutes, setSelectedTrendWindowMinutes] = useState(5);
   const [requestTrend, setRequestTrend] = useState(() => buildTrendPoints([], 5));
+  const [requestEndpointBreakdown, setRequestEndpointBreakdown] = useState({
+    oneMinute: summarizeEndpointBreakdown([], { windowMs: 60_000 }),
+    fiveMinute: summarizeEndpointBreakdown([], { windowMs: 300_000 }),
+  });
   const [anomalyToastEnabled, setAnomalyToastEnabled] = useState(() => readScannerAlertPreference(SCANNER_ANOMALY_TOAST_PREF_KEY, true));
   const [anomalySoundEnabled, setAnomalySoundEnabled] = useState(() => readScannerAlertPreference(SCANNER_ANOMALY_SOUND_PREF_KEY, true));
   const [hoveredTrendPointKey, setHoveredTrendPointKey] = useState(null);
@@ -298,6 +373,8 @@ export const UserScannerPage = () => {
     return parsed.toLocaleString("tr-TR");
   };
 
+  const formatEndpointLabel = (value) => String(value || "unknown_endpoint").replaceAll("_", " ");
+
   useEffect(() => {
     minimalFiltersRef.current = minimalFilters;
   }, [minimalFilters]);
@@ -321,6 +398,7 @@ export const UserScannerPage = () => {
       ? settledResponses.map((item) => ({
         timestamp: now,
         ok: item?.status === "fulfilled",
+        endpoint: String(item?.endpoint || item?.meta?.endpoint || "unknown_endpoint"),
       }))
       : [];
     const merged = [...retained, ...incoming];
@@ -337,6 +415,10 @@ export const UserScannerPage = () => {
       updatedAt: new Date(now).toISOString(),
     });
     setRequestTrend(buildTrendPoints(mergedTrend, selectedTrendWindowRef.current, now));
+    setRequestEndpointBreakdown({
+      oneMinute: summarizeEndpointBreakdown(mergedTrend, { windowMs: 60_000, nowTs: now }),
+      fiveMinute: summarizeEndpointBreakdown(mergedTrend, { windowMs: 300_000, nowTs: now }),
+    });
   }, []);
 
   const playAnomalyAlertBeep = useCallback(() => {
@@ -582,44 +664,40 @@ export const UserScannerPage = () => {
       setIsLoading(true);
     }
     try {
-      const responses = await Promise.allSettled([
-        apiClient.get("/user/signal-mode"),
-        apiClient.get("/user/scanner"),
-        apiClient.get("/screener", {
-          params: {
-            limit: 80,
-            filters: JSON.stringify(compactMinimalFilters(minimalFiltersRef.current)),
-          },
-        }),
-        apiClient.get("/user/scanner/automation"),
-        apiClient.get("/user/scanner/automation-profiles"),
-        apiClient.get("/user/decision-cards", { params: { limit: 60 } }),
-        apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" } }),
-        apiClient.get("/user/scanner/runtime/snapshot"),
-        apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" } }),
-        apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" } }),
-      ]);
+      const requestDescriptors = [
+        { key: "signal_mode", request: apiClient.get("/user/signal-mode") },
+        { key: "scanner_overview", request: apiClient.get("/user/scanner") },
+        {
+          key: "scanner_results",
+          request: apiClient.get("/screener", {
+            params: {
+              limit: 80,
+              filters: JSON.stringify(compactMinimalFilters(minimalFiltersRef.current)),
+            },
+          }),
+        },
+        { key: "scanner_automation", request: apiClient.get("/user/scanner/automation") },
+        { key: "scanner_profiles", request: apiClient.get("/user/scanner/automation-profiles") },
+        { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 } }) },
+        { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" } }) },
+        { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot") },
+        { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" } }) },
+        { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" } }) },
+      ];
+      const responses = await Promise.allSettled(requestDescriptors.map((entry) => entry.request));
+      const responsesWithEndpointMeta = responses.map((entry, index) => ({
+        ...entry,
+        endpoint: requestDescriptors[index]?.key,
+      }));
 
-      updateRequestHealthWindow(responses);
+      updateRequestHealthWindow(responsesWithEndpointMeta);
 
       const failedIndexes = responses
         .map((item, index) => ({ item, index }))
         .filter(({ item }) => item.status === "rejected")
         .map(({ index }) => index);
 
-      const endpointByIndex = {
-        0: "signal_mode",
-        1: "scanner_overview",
-        2: "scanner_results",
-        3: "scanner_automation",
-        4: "scanner_profiles",
-        5: "decision_cards",
-        6: "symbol_selection",
-        7: "runtime_snapshot",
-        8: "live_readiness",
-        9: "daily_report",
-      };
-      const failedKeys = failedIndexes.map((index) => endpointByIndex[index]).filter(Boolean);
+      const failedKeys = failedIndexes.map((index) => requestDescriptors[index]?.key).filter(Boolean);
       setScannerLoadFailures(failedKeys);
       setScannerLoadDegraded(failedKeys.length > 0);
       if (failedKeys.length > 0 && !silent) {
@@ -1061,6 +1139,16 @@ export const UserScannerPage = () => {
             <p data-testid="user-scanner-request-health-trend-detail-values">
               total={trendDetailPoint.total}, ok={trendDetailPoint.success}, fail={trendDetailPoint.fail}, success={(trendDetailPoint.successRatio * 100).toFixed(1)}%
             </p>
+            <p data-testid="user-scanner-request-health-trend-detail-most-impacted-endpoint">
+              most impacted endpoint: <span className="font-semibold text-amber-300">{formatEndpointLabel(trendDetailPoint.most_impacted_endpoint || "n/a")}</span>
+            </p>
+            <div className="mt-1 grid gap-1" data-testid="user-scanner-request-health-trend-detail-endpoint-list">
+              {(trendDetailPoint.endpoint_breakdown || []).slice(0, 3).map((endpointRow, index) => (
+                <p key={`${trendDetailPoint.key}-endpoint-${endpointRow.endpoint}`} data-testid={`user-scanner-request-health-trend-detail-endpoint-item-${index}`}>
+                  {formatEndpointLabel(endpointRow.endpoint)} → ok/fail {endpointRow.success}/{endpointRow.fail}
+                </p>
+              ))}
+            </div>
           </div>
         )}
         <p
@@ -1071,6 +1159,40 @@ export const UserScannerPage = () => {
             ? `⚠️ Anomaly: son 1 dakikada fail oranı %${(latestFailRatio * 100).toFixed(1)} (>10)`
             : `✅ Anomaly yok: son 1 dakikada fail oranı %${(latestFailRatio * 100).toFixed(1)} (≤10)`}
         </p>
+        <section className="mt-2 grid gap-2 md:grid-cols-2" data-testid="user-scanner-request-health-endpoint-breakdown-card">
+          <div className="rounded border border-slate-700 bg-slate-950 p-2 text-xs text-slate-300" data-testid="user-scanner-request-health-endpoint-breakdown-1m-card">
+            <p className="font-semibold text-cyan-300" data-testid="user-scanner-request-health-endpoint-breakdown-1m-title">Son 1m Endpoint Katkı</p>
+            <p data-testid="user-scanner-request-health-endpoint-breakdown-1m-summary">
+              req={requestEndpointBreakdown.oneMinute.total}, ok/fail={requestEndpointBreakdown.oneMinute.success}/{requestEndpointBreakdown.oneMinute.failed}, success={(requestEndpointBreakdown.oneMinute.successRatio * 100).toFixed(1)}%
+            </p>
+            <p data-testid="user-scanner-request-health-endpoint-breakdown-1m-most-impacted">
+              most impacted: <span className="font-semibold text-amber-300">{formatEndpointLabel(requestEndpointBreakdown.oneMinute.mostImpactedEndpoint || "n/a")}</span>
+            </p>
+            <div className="mt-1 grid gap-1" data-testid="user-scanner-request-health-endpoint-breakdown-1m-list">
+              {requestEndpointBreakdown.oneMinute.rows.slice(0, 5).map((row, index) => (
+                <p key={`one-minute-row-${row.endpoint}`} data-testid={`user-scanner-request-health-endpoint-breakdown-1m-item-${index}`}>
+                  {formatEndpointLabel(row.endpoint)} → ok/fail {row.success}/{row.fail}
+                </p>
+              ))}
+            </div>
+          </div>
+          <div className="rounded border border-slate-700 bg-slate-950 p-2 text-xs text-slate-300" data-testid="user-scanner-request-health-endpoint-breakdown-5m-card">
+            <p className="font-semibold text-cyan-300" data-testid="user-scanner-request-health-endpoint-breakdown-5m-title">Son 5m Endpoint Katkı</p>
+            <p data-testid="user-scanner-request-health-endpoint-breakdown-5m-summary">
+              req={requestEndpointBreakdown.fiveMinute.total}, ok/fail={requestEndpointBreakdown.fiveMinute.success}/{requestEndpointBreakdown.fiveMinute.failed}, success={(requestEndpointBreakdown.fiveMinute.successRatio * 100).toFixed(1)}%
+            </p>
+            <p data-testid="user-scanner-request-health-endpoint-breakdown-5m-most-impacted">
+              most impacted: <span className="font-semibold text-amber-300">{formatEndpointLabel(requestEndpointBreakdown.fiveMinute.mostImpactedEndpoint || "n/a")}</span>
+            </p>
+            <div className="mt-1 grid gap-1" data-testid="user-scanner-request-health-endpoint-breakdown-5m-list">
+              {requestEndpointBreakdown.fiveMinute.rows.slice(0, 5).map((row, index) => (
+                <p key={`five-minute-row-${row.endpoint}`} data-testid={`user-scanner-request-health-endpoint-breakdown-5m-item-${index}`}>
+                  {formatEndpointLabel(row.endpoint)} → ok/fail {row.success}/{row.fail}
+                </p>
+              ))}
+            </div>
+          </div>
+        </section>
       </section>
 
       {scannerLoadDegraded && (
