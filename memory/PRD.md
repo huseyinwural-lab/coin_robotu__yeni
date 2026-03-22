@@ -1,3 +1,55 @@
+## 2026-03-22 — Allocation Phase 3.a + 3.b ✅ (Risk Binding + Drift Explainability)
+
+### Scope (onaylı)
+- Bu tur: **P3.a + P3.b**
+- Eşikler:
+  - Exposure warning: **%80**
+  - Drawdown warning: **%8**
+  - Drawdown enforce: **%12**
+- P3.c (rebalance suggestion motoru) tam implement **ertelendi**
+
+### P3.a — Risk Binding (tamamlandı)
+- Summary kontratına risk binding alanları eklendi:
+  - `total_exposure_ratio_pct`
+  - `exposure_warning_threshold_pct`
+  - `exposure_warning_state`
+  - `drawdown_threshold_pct`
+  - `drawdown_enforce_threshold_pct`
+  - `drawdown_candidates[]`
+- Drawdown kuralı:
+  - `%8+` için reduce adayı üretimi
+  - `%12+` için `enforced_required=true` işaretleme + kontrollü enforcement altyapısı
+- UI:
+  - Exposure line + warning görünürlüğü
+  - Drawdown candidate listesi
+  - `Önerilen Reduce’u Forma Uygula` butonu (yalnızca formu doldurur, auto-save yapmaz)
+
+### P3.b — Drift Explainability (tamamlandı)
+- Strategy row state alanına explainability eklendi:
+  - reason badge (`AUTO_DISABLED_BY_DRIFT`, `AUTO_THROTTLED_BY_DRIFT`, `MANUAL_STATE`)
+  - kısa inline açıklama
+  - tooltip: decay/quality/performance reason detail
+- Manual state update sonrası drift override görünürlüğü:
+  - API response: `is_drift_override=true`
+  - UI toast + banner
+- State history log reason alanları:
+  - `reason_code`
+  - `reason_detail`
+
+### Yeni / güncellenen kontratlar
+- `GET /api/admin/strategy-allocation`
+  - explainability + risk alanları eklendi
+- `GET /api/admin/strategy-allocation/summary`
+  - risk binding alanları eklendi
+- `GET /api/admin/strategy-allocation/state-history`
+  - reason code/detail alanları eklendi
+
+### Test
+- Test raporu: `/app/test_reports/iteration_69.json`
+  - Backend: **19/19 PASS**
+  - Frontend: **100% PASS**
+- Binance execution **MOCKED**
+
 ## 2026-03-22 — Allocation Panel: Phase 1 + Phase 2 ✅
 
 ### Sprint scope (onaylı)
