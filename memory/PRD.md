@@ -1,3 +1,38 @@
+## 2026-03-22 — Phase 5 ✅ + Confidence Band ✅
+
+### Scope (onaylı)
+- Phase 5 bu tur tamamlandı:
+  - reason note zorunluluğu (tüm write aksiyonları)
+  - role matrix (`super_admin full`, `admin request-only`, `ops read-only`)
+  - approval akışı (request -> pending -> super_admin approve/reject)
+- Aynı tur sonunda confidence band eklendi (rebalance preview satırı)
+
+### Phase 5 — Governance
+- **Reason note zorunlu**:
+  - create/update/delete/bulk/normalize/throttle endpointlerinde `reason_note` mecburi
+- **Role-based restriction**:
+  - `super_admin`: write immediate commit
+  - `admin`: write aksiyonları `pending_approval` olarak queue
+  - `ops`: read-only (write 403)
+- **Approval workflow**:
+  - `GET /api/admin/strategy-allocation/approval-requests`
+  - `POST /api/admin/strategy-allocation/approval-requests/{id}/approve`
+  - `POST /api/admin/strategy-allocation/approval-requests/{id}/reject`
+  - Approval istekleri preview ortamında memory store üzerinden tutuluyor
+
+### Confidence Band (helper layer)
+- Rebalance preview satırında strategy adının yanında küçük badge:
+  - `HIGH >= 75`
+  - `MED 50–74.99`
+  - `LOW < 50`
+- Not: badge yalnızca açıklayıcı katman; rebalance motoru değişmedi
+
+### Test
+- Test raporu: `/app/test_reports/iteration_71.json`
+  - Backend: **PASS** (95%, beklenti farkı kaynaklı düşük öncelik not)
+  - Frontend: **100% PASS**
+- Binance execution **MOCKED**
+
 ## 2026-03-22 — Allocation Phase 3.c ✅ (Rebalance Suggestion + 5g Tooltip Trend)
 
 ### Scope (onaylı)
