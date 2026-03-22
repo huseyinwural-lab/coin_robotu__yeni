@@ -1,3 +1,49 @@
+## 2026-03-22 — P2 Undo/Revert + Explainability Layer (Intelligence + Allocation) ✅
+
+### Kullanıcı kararları (uygulandı)
+- Kapsam: **iki modül birlikte** (Strategy Intelligence + Strategy Allocation)
+- Revert kuralı: **target bazlı son executed/approved aksiyon**
+- Güvenlik: **admin -> pending request**, **super_admin -> execute**
+
+### Backend tamamlananlar
+- Ortak governance request modelleri genişletildi (iki modülde de):
+  - `reverted_at`, `reverted_by`, `revert_reason`, `previous_state_snapshot`
+  - `explanation_summary`, `decision_factors`
+- Intelligence:
+  - Yeni endpoint: `POST /api/admin/decision-requests/{id}/revert`
+  - Revert guard: sadece executed + target bazlı latest request
+  - Admin pending revert request (`revert_apply`), super_admin doğrudan execute
+  - Explainability alanları decision request ve simulation akışına eklendi
+  - Simulation output: `reasoned_output`, `expected_outcome`
+- Allocation:
+  - Yeni endpoint: `POST /api/admin/strategy-allocation/approval-requests/{id}/revert`
+  - Revert guard: sadece approved + target bazlı latest request
+  - `previous_state_snapshot` üzerinden güvenli restore/revert uygulanıyor
+  - Source request `reverted` durumuna çekiliyor, revert metadata yazılıyor
+- Migration:
+  - `/app/backend/migrations/versions/20260322_0060_revert_explainability_columns.py`
+
+### Frontend tamamlananlar
+- Strategy Intelligence Governance Board:
+  - Inline `Why?` açıklaması
+  - Yeni `DecisionDetailPanel` (factors + expected outcome)
+  - Revert butonu + reason zorunlu confirm modal + impact preview
+- Strategy Allocation Approval Panel:
+  - `Why?` + `expected_outcome` görünürlüğü
+  - Approved kayıtlar için revert butonu
+  - `source_request_id` / `linked_revert_request_id` görünürlüğü
+
+### Test ve doğrulama
+- `testing_agent` raporu: `/app/test_reports/iteration_82.json`
+  - Backend: **13/13 PASS**
+  - Frontend: **PASS**
+- `auto_frontend_testing_agent`: **10/10 PASS**
+- Ek self-testler:
+  - Intelligence: latest-only revert guard (older request -> 409) doğrulandı
+  - Allocation: latest-only revert guard (older request -> 409) doğrulandı
+
+---
+
 ## 2026-03-22 — Strategy Allocation Checkpoint 2 (Snapshot Restore + Approval Visibility + Audit Export) ✅
 
 ### Kullanıcı seçimleri (uygulandı)
