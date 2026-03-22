@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -1021,49 +1021,43 @@ export const PipelineOperationsPage = () => {
             </div>
 
             <div className="grid gap-3 lg:grid-cols-3" data-testid="pipeline-operations-trend-charts-grid">
-              <div className="rounded border border-slate-700 p-2" data-testid="pipeline-operations-trend-latency-chart-wrap">
+              <div className="min-w-0 rounded border border-slate-700 p-2" data-testid="pipeline-operations-trend-latency-chart-wrap">
                 <p className="text-xs font-semibold">Execution Latency Trend</p>
-                <div className="h-40" data-testid="pipeline-operations-trend-latency-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={metricsHistory.latency_series || []}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="ts" hide />
-                      <YAxis />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="avg_ms" stroke="#16a34a" dot={false} />
-                      <Line type="monotone" dataKey="p95_ms" stroke="#ef4444" dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div className="h-40 min-w-0" data-testid="pipeline-operations-trend-latency-chart">
+                  <LineChart width={520} height={150} data={metricsHistory.latency_series || []}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="ts" hide />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="avg_ms" stroke="#16a34a" dot={false} />
+                    <Line type="monotone" dataKey="p95_ms" stroke="#ef4444" dot={false} />
+                  </LineChart>
                 </div>
               </div>
 
-              <div className="rounded border border-slate-700 p-2" data-testid="pipeline-operations-trend-pnl-chart-wrap">
+              <div className="min-w-0 rounded border border-slate-700 p-2" data-testid="pipeline-operations-trend-pnl-chart-wrap">
                 <p className="text-xs font-semibold">PnL Trend</p>
-                <div className="h-40" data-testid="pipeline-operations-trend-pnl-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={metricsHistory.pnl_series || []}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="ts" hide />
-                      <YAxis />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="sum" stroke="#2563eb" dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div className="h-40 min-w-0" data-testid="pipeline-operations-trend-pnl-chart">
+                  <LineChart width={520} height={150} data={metricsHistory.pnl_series || []}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="ts" hide />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="sum" stroke="#2563eb" dot={false} />
+                  </LineChart>
                 </div>
               </div>
 
-              <div className="rounded border border-slate-700 p-2" data-testid="pipeline-operations-trend-risk-veto-chart-wrap">
+              <div className="min-w-0 rounded border border-slate-700 p-2" data-testid="pipeline-operations-trend-risk-veto-chart-wrap">
                 <p className="text-xs font-semibold">Risk Veto Trend</p>
-                <div className="h-40" data-testid="pipeline-operations-trend-risk-veto-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={metricsHistory.risk_veto_series || []}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="ts" hide />
-                      <YAxis />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="count" stroke="#f59e0b" dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div className="h-40 min-w-0" data-testid="pipeline-operations-trend-risk-veto-chart">
+                  <LineChart width={520} height={150} data={metricsHistory.risk_veto_series || []}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="ts" hide />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="count" stroke="#f59e0b" dot={false} />
+                  </LineChart>
                 </div>
               </div>
             </div>
