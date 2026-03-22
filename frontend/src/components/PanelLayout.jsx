@@ -82,6 +82,11 @@ const adminOnlyItems = [
       { to: "/admin/risk-orchestrator", label: "Risk Engine", icon: ShieldAlert, testId: "nav-admin-risk-engine-link" },
       { to: "/admin/execution-queue", label: "Execution Monitor", icon: Wrench, testId: "nav-admin-execution-queue-link" },
       { to: "/admin/execution-readiness", label: "Execution Readiness", icon: Activity, testId: "nav-admin-execution-readiness-link" },
+      { to: "/admin/execution/states", label: "Execution States", icon: Activity, testId: "nav-admin-execution-states-control-link" },
+      { to: "/admin/execution/failures", label: "Execution Failures", icon: ShieldAlert, testId: "nav-admin-execution-failures-control-link" },
+      { to: "/admin/execution/idempotency", label: "Idempotency Control", icon: KeyRound, testId: "nav-admin-execution-idempotency-control-link" },
+      { to: "/admin/execution/trace", label: "Execution Trace", icon: FileText, testId: "nav-admin-execution-trace-control-link" },
+      { to: "/admin/execution/rebuild", label: "Execution Rebuild", icon: Settings2, testId: "nav-admin-execution-rebuild-control-link" },
     ],
   },
   {

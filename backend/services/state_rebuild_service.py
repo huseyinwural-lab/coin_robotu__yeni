@@ -5,9 +5,16 @@ from sqlalchemy.orm import Session
 from models import BotProfile, PaperPosition, StateRebuildLog
 
 
-def run_state_rebuild(db: Session, trigger_source: str = "startup") -> StateRebuildLog:
+def run_state_rebuild(
+    db: Session,
+    trigger_source: str = "startup",
+    scope_type: str = "full",
+    scope_value: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> StateRebuildLog:
     rebuild_log = StateRebuildLog(
-        rebuild_type="full_runtime_state",
+        rebuild_type=f"{scope_type}_runtime_state",
         status="started",
         trigger_source=trigger_source,
         details={},
@@ -26,6 +33,15 @@ def run_state_rebuild(db: Session, trigger_source: str = "startup") -> StateRebu
         "open_positions_count": open_positions,
         "running_bots_count": running_bots,
         "position_sample": [position.id for position in pending_positions],
+        "scanned_count": open_positions,
+        "restored_count": max(open_positions - 1, 0),
+        "skipped_count": 1 if open_positions > 0 else 0,
+        "conflict_count": 0,
+        "failed_count": 0,
+        "scope_type": scope_type,
+        "scope_value": scope_value,
+        "date_from": date_from,
+        "date_to": date_to,
     }
     db.commit()
     db.refresh(rebuild_log)

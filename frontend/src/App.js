@@ -34,6 +34,8 @@ import { BotProfilesPage } from "@/pages/BotProfilesPage";
 import { CorrelationMatrixPage } from "@/pages/CorrelationMatrixPage";
 import { ExecutionPoliciesPage } from "@/pages/ExecutionPoliciesPage";
 import { ExecutionStatesPage } from "@/pages/ExecutionStatesPage";
+import { ExecutionIdempotencyPage } from "@/pages/ExecutionIdempotencyPage";
+import { ExecutionTracePage } from "@/pages/ExecutionTracePage";
 import { ExposureGroupsPage } from "@/pages/ExposureGroupsPage";
 import { FailedEventsPage } from "@/pages/FailedEventsPage";
 import { HardeningChecklistPage } from "@/pages/HardeningChecklistPage";
@@ -185,6 +187,11 @@ function App() {
             <Route path="hardening-checklist" element={<HardeningChecklistPage />} />
             <Route path="failed-events" element={<FailedEventsPage />} />
             <Route path="state-rebuild" element={<StateRebuildLogsPage />} />
+            <Route path="execution/states" element={<ExecutionStatesPage />} />
+            <Route path="execution/failures" element={<FailedEventsPage />} />
+            <Route path="execution/idempotency" element={<ExecutionIdempotencyPage />} />
+            <Route path="execution/trace" element={<ExecutionTracePage />} />
+            <Route path="execution/rebuild" element={<StateRebuildLogsPage />} />
             <Route path="backtest-cards" element={<BacktestCardsPage />} />
             <Route path="monitoring" element={<MonitoringPage />} />
             <Route path="system-status" element={<MonitoringPage />} />
@@ -194,7 +201,8 @@ function App() {
             <Route path="strategy-allocation" element={<Navigate to="/admin/strategy/allocation" replace />} />
             <Route path="strategy-intelligence" element={<Navigate to="/admin/strategy/intelligence" replace />} />
             <Route path="canonical-strategy-registry" element={<Navigate to="/admin/strategy/canonical-registry" replace />} />
-            <Route path="execution-states" element={<Navigate to="/admin/strategy/execution-state-machine" replace />} />
+            <Route path="execution-states" element={<Navigate to="/admin/execution/states" replace />} />
+            <Route path="execution-failures" element={<Navigate to="/admin/execution/failures" replace />} />
             <Route path="strategy-observability" element={<Navigate to="/admin/strategy/observability" replace />} />
           </Route>
 

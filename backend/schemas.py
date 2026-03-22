@@ -312,6 +312,12 @@ class ExecutionEventResponse(BaseModel):
     quantity: float
     mock_price: float
     execution_status: str
+    source_type: str = "production"
+    environment: str = "production"
+    correlation_id: str = ""
+    triggered_by: str = "system"
+    parent_event_id: str | None = None
+    strategy_id: str | None = None
     response_payload: dict
     note: str
     created_at: datetime
@@ -480,6 +486,12 @@ class FailedEventResponse(BaseModel):
     entity_id: str
     payload: dict
     error_message: str
+    failure_class: str = "downstream_error"
+    dead_letter_reason: str | None = None
+    last_action_by: str | None = None
+    correlation_id: str | None = None
+    retry_reason: str | None = None
+    error_details: dict = Field(default_factory=dict)
     status: str
     retry_count: int
     max_retry: int
@@ -624,9 +636,90 @@ class ExecutionStateTransitionResponse(BaseModel):
     id: str
     execution_event_id: str
     state: str
+    from_state: str | None = None
+    to_state: str | None = None
     sequence: int
+    latency_ms: float | None = None
+    correlation_id: str | None = None
+    source_type: str = "production"
+    environment: str = "production"
+    is_manual: bool = False
     details: dict
     occurred_at: datetime
+
+
+class ExecutionStateControlQueryResponse(BaseModel):
+    rows: list[ExecutionStateTransitionResponse]
+    summary_counts: dict[str, int] = Field(default_factory=dict)
+    state_counters: dict[str, int] = Field(default_factory=dict)
+
+
+class ExecutionStateDetailResponse(BaseModel):
+    execution_event: ExecutionEventResponse
+    current_state: str
+    previous_state: str | None = None
+    full_state_path: list[str] = Field(default_factory=list)
+    transition_count: int = 0
+    dwell_time_seconds: float = 0
+    transitions: list[ExecutionStateTransitionResponse] = Field(default_factory=list)
+
+
+class ExecutionSimulationBatchRequest(BaseModel):
+    scenarios: list[dict] = Field(default_factory=list)
+
+
+class ExecutionSimulationBatchResponse(BaseModel):
+    status: str
+    total: int
+    created: int
+    records: list[dict] = Field(default_factory=list)
+
+
+class ExecutionManualActionRequest(BaseModel):
+    action_type: str
+    reason_note: str
+    correlation_id: str
+    confirmation_phrase: str | None = None
+    payload: dict = Field(default_factory=dict)
+
+
+class IdempotencyCollisionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    collision_id: str
+    intent_id: str | None = None
+    idempotency_key: str
+    original_request: dict = Field(default_factory=dict)
+    duplicate_request: dict = Field(default_factory=dict)
+    actor: str
+    correlation_id: str | None = None
+    status: str
+    resolution_action: str | None = None
+    resolution_note: str | None = None
+    resolved_by: str | None = None
+    resolved_at: datetime | None = None
+    created_at: datetime
+
+
+class IdempotencyCollisionResolveRequest(BaseModel):
+    action: str
+    reason_note: str
+    correlation_id: str
+
+
+class ExecutionTraceTimelineItemResponse(BaseModel):
+    stage: str
+    actor: str
+    payload: dict = Field(default_factory=dict)
+    created_at: datetime
+
+
+class ExecutionCorrelationTraceResponse(BaseModel):
+    correlation_id: str
+    chain: list[ExecutionTraceTimelineItemResponse] = Field(default_factory=list)
+    intents: list[dict] = Field(default_factory=list)
+    events: list[dict] = Field(default_factory=list)
+    failures: list[FailedEventResponse] = Field(default_factory=list)
 
 
 class HardeningSummaryResponse(BaseModel):

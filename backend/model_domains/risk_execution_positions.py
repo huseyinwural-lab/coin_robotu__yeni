@@ -148,7 +148,14 @@ class ExecutionStateTransition(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     execution_event_id: Mapped[str] = mapped_column(String, ForeignKey("execution_events.id"), index=True)
     state: Mapped[str] = mapped_column(String(30), index=True)
+    from_state: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    to_state: Mapped[str | None] = mapped_column(String(30), nullable=True)
     sequence: Mapped[int] = mapped_column(Integer)
+    latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    source_type: Mapped[str] = mapped_column(String(20), default="production", index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="production", index=True)
+    is_manual: Mapped[bool] = mapped_column(Boolean, default=False)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -545,4 +552,53 @@ class DecisionTraceCold(Base):
     artifact_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     lifecycle_summary: Mapped[dict] = mapped_column(JSON, default=dict)
     terminal_state: Mapped[str] = mapped_column(String(30), default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class IdempotencyCollision(Base):
+    __tablename__ = "idempotency_collisions"
+
+    collision_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    intent_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(160), index=True)
+    original_request: Mapped[dict] = mapped_column(JSON, default=dict)
+    duplicate_request: Mapped[dict] = mapped_column(JSON, default=dict)
+    actor: Mapped[str] = mapped_column(String(120), default="system")
+    correlation_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="open", index=True)
+    resolution_action: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ExecutionManualAction(Base):
+    __tablename__ = "execution_manual_actions"
+
+    action_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    execution_event_id: Mapped[str] = mapped_column(String(120), index=True)
+    correlation_id: Mapped[str] = mapped_column(String(120), index=True)
+    action_type: Mapped[str] = mapped_column(String(80), index=True)
+    requested_by: Mapped[str] = mapped_column(String(120), index=True)
+    requested_role: Mapped[str] = mapped_column(String(40), default="admin")
+    confirmation_phrase: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reason_note: Mapped[str] = mapped_column(Text, default="")
+    is_prod_guard_applied: Mapped[bool] = mapped_column(Boolean, default=False)
+    idempotency_checked: Mapped[bool] = mapped_column(Boolean, default=False)
+    replay_safe_checked: Mapped[bool] = mapped_column(Boolean, default=False)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ExecutionTraceIndex(Base):
+    __tablename__ = "execution_trace_index"
+
+    trace_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    correlation_id: Mapped[str] = mapped_column(String(120), index=True)
+    execution_event_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    intent_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    stage: Mapped[str] = mapped_column(String(80), index=True)
+    actor: Mapped[str] = mapped_column(String(120), default="system")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

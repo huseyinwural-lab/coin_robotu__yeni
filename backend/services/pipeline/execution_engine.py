@@ -117,6 +117,12 @@ def open_paper_position(
     execution_policy: dict,
     response_payload: dict,
     execution_context: dict | None = None,
+    source_type: str = "production",
+    environment: str = "production",
+    correlation_id: str | None = None,
+    triggered_by: str = "system",
+    parent_event_id: str | None = None,
+    is_manual: bool = False,
 ) -> dict:
     state_machine = _build_state_path(execution_policy, execution_context)
     state_path = state_machine["path"]
@@ -141,18 +147,32 @@ def open_paper_position(
         quantity=quantity,
         mock_price=market_price,
         execution_status=final_state,
+        source_type=source_type,
+        environment=environment,
+        correlation_id=str(correlation_id or ""),
+        triggered_by=triggered_by,
+        parent_event_id=parent_event_id,
+        strategy_id=str(response_payload.get("strategy_id") or "") or None,
         response_payload=enriched_payload,
         note="Paper trading execution",
     )
     db.add(execution_event)
     db.flush()
 
+    previous_state = None
     for index, state in enumerate(state_path):
         db.add(
             ExecutionStateTransition(
                 execution_event_id=execution_event.id,
                 state=state,
+                from_state=previous_state,
+                to_state=state,
                 sequence=index,
+                latency_ms=float((index + 1) * 120),
+                correlation_id=str(correlation_id or ""),
+                source_type=source_type,
+                environment=environment,
+                is_manual=is_manual,
                 details={
                     "symbol": symbol,
                     "side": direction,
@@ -162,6 +182,7 @@ def open_paper_position(
                 },
             )
         )
+        previous_state = state
 
     if final_state in {"cancelled", "failed", "rejected"}:
         db.commit()

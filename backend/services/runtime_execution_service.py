@@ -70,6 +70,12 @@ def _handle_runtime_failure(
         retry_count=retry_count,
         max_retry=max_retry,
         next_retry_at=next_retry_at,
+        failure_class=reason_code,
+        dead_letter_reason=reason_code if status == "quarantined" else None,
+        last_action_by="execution_worker",
+        correlation_id=str(envelope.get("correlation_id") or ""),
+        retry_reason=reason_code,
+        error_details={"metadata": envelope.get("metadata") or {}},
     )
 
 
