@@ -98,6 +98,26 @@ const buildSnapshotSummary = (snapshot) => {
   ].join(" · ");
 };
 
+const riskLevelColorClass = (level) => {
+  const normalized = String(level || "").toUpperCase();
+  if (normalized === "LOW") return "text-emerald-700";
+  if (normalized === "HIGH") return "text-red-700";
+  return "text-amber-700";
+};
+
+const buildDeterministicRiskPoints = (beforeRisk, afterRisk, totalPoints = 6) => {
+  const points = [];
+  const safeCount = Math.min(7, Math.max(5, totalPoints));
+  const delta = afterRisk - beforeRisk;
+  for (let idx = 0; idx < safeCount; idx += 1) {
+    const ratio = safeCount <= 1 ? 1 : idx / (safeCount - 1);
+    const linear = beforeRisk + (delta * ratio);
+    const wave = idx === 0 || idx === safeCount - 1 ? 0 : delta * 0.08 * Math.sin(Math.PI * ratio);
+    points.push(Number((linear + wave).toFixed(2)));
+  }
+  return points;
+};
+
 export const AdminFuturesStrategyControlGovernancePage = () => {
   const [activeTab, setActiveTab] = useState("strategy_governance");
   const [loading, setLoading] = useState(true);
@@ -1494,6 +1514,11 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                           <p className="text-xs" data-testid={`strategy-control-approval-item-recommendation-${index}`}>
                             recommendation={JSON.stringify(item?.decision_context?.recommendation || {})}
                           </p>
+                          <ApprovalRiskSparkline
+                            index={index}
+                            decisionContext={item?.decision_context || {}}
+                            fallbackRisk={item?.decision_context?.risk || {}}
+                          />
                           <p className="text-xs" data-testid={`strategy-control-approval-item-expire-${index}`}>expires_at={item.expires_at}</p>
                           {item.status === "pending" && (
                             <div className="mt-1 flex gap-2" data-testid={`strategy-control-approval-item-actions-${index}`}>
@@ -1695,6 +1720,68 @@ const InfoCard = ({ testId, title, lines = [], emptyText }) => (
     ))}
   </div>
 );
+
+const ApprovalRiskSparkline = ({ index, decisionContext, fallbackRisk }) => {
+  const beforeScoreRaw = decisionContext?.before_after_summary?.before?.risk_score;
+  const afterScoreRaw = decisionContext?.before_after_summary?.after?.risk_score;
+  const fallbackScore = fallbackRisk?.score;
+
+  const beforeScore = Number.isFinite(Number(beforeScoreRaw))
+    ? Number(beforeScoreRaw)
+    : Number.isFinite(Number(fallbackScore))
+      ? Number(fallbackScore)
+      : 0;
+  const afterScore = Number.isFinite(Number(afterScoreRaw))
+    ? Number(afterScoreRaw)
+    : Number.isFinite(Number(fallbackScore))
+      ? Number(fallbackScore)
+      : beforeScore;
+
+  const points = buildDeterministicRiskPoints(beforeScore, afterScore, 6);
+  const max = Math.max(...points, 100);
+  const min = Math.min(...points, 0);
+  const range = Math.max(1, max - min);
+  const width = 200;
+  const height = 52;
+
+  const toX = (idx) => (idx * (width / Math.max(1, points.length - 1))).toFixed(2);
+  const toY = (value) => (height - ((value - min) / range) * height).toFixed(2);
+  const polyline = points.map((value, idx) => `${toX(idx)},${toY(value)}`).join(" ");
+  const delta = Number((afterScore - beforeScore).toFixed(2));
+  const deltaLabel = `${delta >= 0 ? "+" : ""}${delta} risk`;
+  const deltaClass = delta < 0 ? "text-emerald-700" : delta > 0 ? "text-red-700" : "text-amber-700";
+  const riskLevel = String(decisionContext?.risk?.level || "MED").toUpperCase();
+
+  return (
+    <div className="mt-1 rounded border border-black/20 bg-white p-2" data-testid={`strategy-control-approval-item-risk-sparkline-${index}`}>
+      <div className="flex flex-wrap items-center gap-2" data-testid={`strategy-control-approval-item-risk-sparkline-head-${index}`}>
+        <p className="text-xs font-semibold" data-testid={`strategy-control-approval-item-risk-sparkline-title-${index}`}>Risk Mini Trend</p>
+        <p className={`text-xs font-semibold ${deltaClass}`} data-testid={`strategy-control-approval-item-risk-sparkline-delta-${index}`}>
+          Δ {deltaLabel}
+        </p>
+        <p className={`text-xs font-semibold ${riskLevelColorClass(riskLevel)}`} data-testid={`strategy-control-approval-item-risk-sparkline-level-${index}`}>
+          level={riskLevel}
+        </p>
+      </div>
+
+      <svg width={width} height={height} className="mt-1" data-testid={`strategy-control-approval-item-risk-sparkline-svg-${index}`}>
+        <polyline points={polyline} fill="none" stroke="#111" strokeWidth="2" data-testid={`strategy-control-approval-item-risk-sparkline-line-${index}`} />
+        <circle cx={toX(0)} cy={toY(points[0])} r="3" fill="#1f2937" data-testid={`strategy-control-approval-item-risk-sparkline-before-marker-${index}`} />
+        <circle
+          cx={toX(points.length - 1)}
+          cy={toY(points[points.length - 1])}
+          r="3"
+          fill={delta < 0 ? "#047857" : delta > 0 ? "#b91c1c" : "#b45309"}
+          data-testid={`strategy-control-approval-item-risk-sparkline-after-marker-${index}`}
+        />
+      </svg>
+
+      <p className="text-xs" data-testid={`strategy-control-approval-item-risk-sparkline-values-${index}`}>
+        before={beforeScore.toFixed(2)} → after={afterScore.toFixed(2)}
+      </p>
+    </div>
+  );
+};
 
 const BulkBreakdownSection = ({ bucketKey, rows = [] }) => {
   const labelMap = {
