@@ -1,3 +1,58 @@
+## 2026-03-22 — Strategy Intelligence Sprint 2 P0 Tamamlama ✅
+
+### Kullanıcı onayıyla kilit kararlar
+- P0 sırası: **önce backend endpointleri**, sonra frontend modülerizasyon
+- Execute adımı: **sadece super_admin** (approve ile ayrık)
+- Queue sıralama: **status -> severity_band -> risk_delta_score -> created_at**
+
+### Tamamlananlar — Backend
+- Decision approval state machine güçlendirildi:
+  - `POST /api/admin/decision-requests/conflict-resolve`
+  - `POST /api/admin/decision-requests/hedge-apply`
+  - `POST /api/admin/decision-requests/rebalance-change`
+  - `GET /api/admin/decision-requests`
+  - `POST /api/admin/decision-requests/{id}/approve`
+  - `POST /api/admin/decision-requests/{id}/reject`
+  - `POST /api/admin/decision-requests/{id}/execute`
+  - `GET /api/admin/decision-requests/{id}/preview`
+- Role guardlar netleştirildi:
+  - `admin`: request create
+  - `super_admin`: approve/reject/execute
+  - `super_admin` create -> 403
+- Simulation-first enforcement sıkılaştırıldı:
+  - `simulation_run_id` zorunlu
+  - impact summary ve preview token zorunlu akışa bağlandı
+- Risk-delta priority score eklendi ve severity band buna göre normalize edildi.
+- History replay foundation iyileştirildi:
+  - `GET /api/admin/simulation-runs/{run_id}/compare-current`
+  - simulation payload’a `user_id` bağlanarak karşılaştırma context’i güçlendirildi.
+
+### Tamamlananlar — Frontend (modüler refactor)
+- `AdminStrategyIntelligencePage.jsx` orchestration odaklı hale getirildi.
+- Yeni modüller eklendi:
+  - `RoleVisibilityPanel`
+  - `BatchSimulationPanel`
+  - `ConflictActionPanel`
+  - `HedgeActionPanel`
+  - `RebalanceActionPanel`
+  - `ApprovalQueuePanel`
+  - `SimulationHistoryPanel`
+- Queue aksiyonları canlı bağlandı:
+  - Preview / Approve / Reject / Execute
+  - approved-but-not-executed state görünürlüğü
+- data-testid kapsamı yeni interaktif elemanlarda tamamlandı.
+
+### Test sonuçları
+- Backend self-check: decision request create/approve/execute + compare akışı PASS
+- `deep_testing_backend_v2`: Governance flow PASS, endpoint erişimi doğrulandı
+- `auto_frontend_testing_agent`: Modüler paneller + queue + compare PASS
+- `testing_agent` raporu: `/app/test_reports/iteration_75.json`
+  - Backend: **100% (25/25 PASS)**
+  - Frontend: **100% (modüler panel ve role matrix PASS)**
+- Seed credential stabilizasyonu: `canary.requester@platform.local / CanaryRequester123!` login akışı tekrar 200 doğrulandı.
+
+---
+
 ## 2026-03-22 — Sidebar Menü Arama (Hızlı Sürüm) ✅
 
 ### Kullanıcı kararı
