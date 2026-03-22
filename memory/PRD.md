@@ -1,3 +1,27 @@
+## 2026-03-22 — Approval Sparkline Confidence Etiketi ✅
+
+### Kullanıcı talebi (bu tur)
+- Sadece approval sparkline bloğuna confidence etiketi eklenecek
+- Mapping:
+  - `>=80 -> high`
+  - `60-79 -> med`
+  - `<60 -> low`
+- Renk:
+  - high: 🟢 yeşil
+  - med: 🟡 amber
+  - low: 🔴 kırmızı
+- Ek API çağrısı yok; mevcut `decision_context` kullanılacak
+
+### Uygulananlar
+- `ApprovalRiskSparkline` içinde confidence etiketi eklendi:
+  - Aynı blokta: sparkline + delta + risk + confidence
+  - `decision_context.recommendation.confidence` üzerinden hesap
+  - `strategy-control-approval-item-risk-sparkline-confidence-{index}` data-testid eklendi
+
+### Test
+- Frontend lint PASS
+- Frontend test subagent PASS (mapping, blok bütünlüğü, no-extra-API doğrulandı)
+
 ## 2026-03-22 — Approval Risk Mini Sparkline (P1 Ek Kapanış) ✅
 
 ### Kullanıcı talebi (bu tur)
