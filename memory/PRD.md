@@ -1,3 +1,54 @@
+## 2026-03-22 — Strategy Allocation Checkpoint 2 (Snapshot Restore + Approval Visibility + Audit Export) ✅
+
+### Kullanıcı seçimleri (uygulandı)
+- Snapshot persistence: **DB kalıcı**
+- Restore revision kapsamı: **global revision map (set-level)**
+- Export metadata kaynağı: **manual input + auto fallback**
+
+### Backend tamamlananlar
+- Yeni kalıcı snapshot tablosu eklendi: `strategy_allocation_snapshots`
+- Yeni kalıcı approval tablosu eklendi: `strategy_allocation_approval_requests`
+- Yeni endpoint: `POST /api/admin/strategy-allocation/snapshots/{id}/restore`
+  - admin: `pending_approval`
+  - super_admin: doğrudan execute
+  - zorunlu: `reason_note`, `expected_revisions` (global)
+- Restore sırasında:
+  - snapshot allocation set’i geri yükleniyor
+  - drift/risk hesapları yeniden çalıştırılıyor
+  - yeni global revision context üretiliyor
+  - audit log yazılıyor
+  - etkilenen pending request’ler `requires_review + STALE` invalidation alıyor
+- Approval list endpoint kalıcı veriyle genişletildi:
+  - `request_type`, `action_type`, `target_type`, `target_id`, `requested_by`, `reason_note`, `status`, `stale_state`, `revision_context`, `created_at`
+- Export audit-grade tamamlandı:
+  - JSON: `audit_meta` bloğu
+  - CSV: metadata satırları
+  - Export aksiyonu audit log’a düşüyor (`strategy_allocation_export`)
+
+### Frontend tamamlananlar
+- Snapshot list metadata ile doluyor; her satırda restore aksiyonu var
+- Restore modal eklendi (reason input + confirm/cancel + role bazlı CTA)
+  - super_admin: `Restore Now`
+  - admin: `Restore Request`
+- Approval panelinde target/revision/stale görünürlüğü tamamlandı
+- Export alanına metadata context inputları eklendi (related_request_id, snapshot_id) + selected filter bilgisi gösterimi
+
+### Migrationlar
+- `/app/backend/migrations/versions/20260322_0058_strategy_allocation_snapshots_persistence.py`
+- `/app/backend/migrations/versions/20260322_0059_strategy_allocation_approval_requests_table.py`
+
+### Test doğrulaması
+- `testing_agent` raporu: `/app/test_reports/iteration_81.json`
+  - Backend: **100% (14/14 PASS)**
+  - Frontend: **PASS**
+- Ek self-test:
+  - super_admin snapshot create/restore PASS
+  - admin restore request + super_admin approve PASS
+  - restore sonrası pending request invalidation (`requires_review`, `STALE`) PASS
+  - export JSON/CSV metadata PASS
+
+---
+
 ## 2026-03-22 — Strategy Allocation Checkpoint 1 (Concurrency + Re-validation + Parity + UI) ✅
 
 ### Kapsam (kullanıcı onayıyla)
