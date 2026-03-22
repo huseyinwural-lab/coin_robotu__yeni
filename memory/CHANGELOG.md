@@ -1,6 +1,25 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-22
+### Iteration-59 — FAZ-2 Tur-2 Closure (Export/Bulk/Debug/UX)
+- Export job sistemi eklendi (DB tabanlı, async, audit-first, trace_id zincirli).
+- Export endpoint seti tamamlandı: create/list/get/download/retry.
+- Universe bulk import UX tamamlandı:
+  - CSV paste + upload
+  - preview + validation + partial apply
+  - errors CSV export
+- Debug policy sıkılaştırıldı:
+  - backend super_admin-only
+  - UI default hidden + production hide
+- Unified panel UX polish:
+  - auto-refresh interval selector (5/15/60)
+  - global error banner
+  - empty state reason metinleri
+- Test kanıtı:
+  - `/app/test_reports/iteration_59.json`
+  - Backend 23/23 PASS, Frontend PASS
+
+## 2026-03-22
 ### Iteration-58 — FAZ-2 Tur-1 Closure (Freshness/KPI/Trend)
 - Freshness/SLA katmanı eklendi: stale-list + SLA config + rescan-stale endpointleri.
 - KPI recommendation engine actionable hale getirildi: generate/apply/reject/postpone + active/history.

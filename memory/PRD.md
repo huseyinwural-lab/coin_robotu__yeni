@@ -1,3 +1,55 @@
+## 2026-03-22 — Faz-2 Tur-2 Tamamlandı ✅ (Export + Bulk UX + Debug Policy + UX Polish)
+
+### 1) Export / Data Access (Audit-First)
+- Yeni endpointler:
+  - `POST /api/admin/universe-monitor/export/job`
+  - `GET /api/admin/universe-monitor/export/jobs`
+  - `GET /api/admin/universe-monitor/export/job/{id}`
+  - `GET /api/admin/universe-monitor/export/job/{id}/download`
+  - `POST /api/admin/universe-monitor/export/job/{id}/retry`
+- DB modeli eklendi: `UniverseExportJob`
+  - `job_id`, `trace_id`, `status`, `params`, `result_url`, `created_by`, `created_at`, vb.
+- Async job lifecycle: `pending -> running -> done/failed`
+- CSV + JSON output üretimi
+- Her export aksiyonu audit log + trace_id zinciri ile izlenebilir
+
+### 2) Universe Bulk UX
+- Yeni endpointler:
+  - `POST /api/admin/universe-monitor/universe/symbols/bulk-import/preview`
+  - `POST /api/admin/universe-monitor/universe/symbols/bulk-import/apply`
+  - `GET /api/admin/universe-monitor/universe/symbols/bulk-import/{preview_id}/errors.csv`
+- Validation katmanı:
+  - `invalid_symbol`
+  - `duplicate`
+  - `blacklist_conflict`
+- Partial success summary:
+  - `processed_count`, `applied_count`, `rejected_count`, `reason_counts`
+- UI:
+  - CSV paste + dosya upload
+  - preview summary + invalid list
+  - `apply_all` / `apply_valid_only`
+  - error list export
+
+### 3) Debug Panel Policy
+- Backend debug endpoint super_admin seviyesine alındı.
+- Unified panelde debug bölümü:
+  - default hidden
+  - super_admin-only
+  - production’da gizli (`REACT_APP_ENV=production`)
+
+### 4) UX Polish
+- Unified panel geneli auto-refresh selector eklendi (`5s / 15s / 60s`)
+- Global API error banner eklendi
+- Empty state mesajları “No data yet + reason” standardına taşındı
+
+### Mimari Not
+- Trend + Export aynı kaynak mantığına bağlandı (`metrics/history` odaklı veri akışı).
+
+### Doğrulama
+- Test raporu: `/app/test_reports/iteration_59.json`
+  - Backend: **23/23 PASS**
+  - Frontend: **PASS**
+
 ## 2026-03-22 — Faz-2 Tur-1 Tamamlandı ✅ (Freshness + KPI + Trend)
 
 ### 1) Freshness / SLA

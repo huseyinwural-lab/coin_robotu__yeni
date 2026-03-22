@@ -1,5 +1,14 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-22 Update (Faz-2 Tam Kapanış)
+- ✅ Tur-1 tamamlandı: Freshness/SLA + KPI Recommendation + Trend/Analytics
+- ✅ Tur-2 tamamlandı: Export/Data Access + Universe Bulk UX + Debug policy + UX polish
+
+## Sonraki Adım (Production Readiness)
+1. Prod rollout planı + rollback stratejisi kilitleme
+2. Load/risk analizi (yük altında export + scanner + trend etkisi)
+3. SLO/SLA alarm eşikleri ve operasyon runbook revizyonu
+
 ## 2026-03-22 Update (Faz-2 Tur-1)
 - ✅ Tamamlandı:
   - Freshness / SLA
