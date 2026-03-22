@@ -1,3 +1,44 @@
+## 2026-03-22 — Strategy Allocation Checkpoint 1 (Concurrency + Re-validation + Parity + UI) ✅
+
+### Kapsam (kullanıcı onayıyla)
+- Stale yaklaşımı: **backend STALE + UI REQUIRES_REVIEW**
+- Revision alanı: **revision_id**
+- 409 UX: **otomatik refresh yok**, kullanıcıya **reload CTA**
+
+### Backend tamamlananlar
+- `StrategyAllocation` modeline audit/concurrency alanları eklendi:
+  - `revision_id`, `updated_by`, `change_reason`
+- Concurrency kontrolü aktif:
+  - Update/Bulk/Throttle/Delete/Normalize için `expected_revision` doğrulaması
+  - mismatch durumunda `409 REVISION_CONFLICT` (standart payload: code/message/conflicts)
+- Approval re-validation aktif:
+  - approve anında revizyon kontrolü tekrar yapılıyor
+  - stale request durumunda `status=requires_review`, `stale_state=STALE` ve execution bloklanıyor
+- Simulation parity aktif:
+  - what-if hesabı ortak projection fonksiyonuna taşındı
+  - aynı projection yaklaşımı pre-commit/bulk akışında da kullanılıyor
+- Alembic migration eklendi:
+  - `/app/backend/migrations/versions/20260322_0057_strategy_allocation_revision_audit.py`
+
+### Frontend tamamlananlar
+- `AdminStrategyAllocationPage.jsx` güncellendi:
+  - tüm kritik write çağrılarında `expected_revision` gönderimi
+  - `409` durumunda revision conflict banner + **“En güncel halini yükle”** CTA
+  - tabloda revision görünürlüğü (`revision_id`)
+  - what-if satır entegrasyonu güçlendirildi (weight delta + risk/return delta + preview warning)
+  - approval listesinde `REQUIRES_REVIEW` etiketi (STALE durumundan türetilmiş)
+
+### Test doğrulaması
+- `testing_agent`: `/app/test_reports/iteration_80.json`
+  - Backend: **100% (12/12 PASS)**
+  - Frontend: **100% PASS**
+- Ek self-test:
+  - login 200
+  - update wrong revision → 409 `REVISION_CONFLICT`
+  - what-if response projection alanları doğrulandı
+
+---
+
 ## 2026-03-22 — P1 Deterministic State/Effect + Lightweight Chart Tamamlandı ✅
 
 ### Kullanıcı karar seti uygulanması
