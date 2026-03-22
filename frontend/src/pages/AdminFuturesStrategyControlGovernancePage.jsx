@@ -68,6 +68,36 @@ const DRIFT_ENDPOINT_MAP = {
   retrain: "retrain",
 };
 
+const MONITOR_REFRESH_INTERVAL_MS = 8000;
+const MONITOR_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
+
+const toNumericValue = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const toSignedDelta = (value) => {
+  const normalized = toNumericValue(value, 0);
+  return `${normalized >= 0 ? "+" : ""}${normalized.toFixed(2)}`;
+};
+
+const classifyBulkResult = (row) => {
+  const status = String(row?.status || "").toLowerCase();
+  if (["success", "dry_run"].includes(status)) return "success";
+  if (status === "skipped") return "skipped";
+  return "failed";
+};
+
+const buildSnapshotSummary = (snapshot) => {
+  if (!snapshot) return "n/a";
+  return [
+    `control=${snapshot.control_state || "-"}`,
+    `lifecycle=${snapshot.lifecycle_state || "-"}`,
+    `throttle=${snapshot.throttle_level || "-"}`,
+    `rollout=${snapshot.rollout_mode || "-"}/${snapshot.rollout_percentage ?? "-"}%`,
+  ].join(" · ");
+};
+
 export const AdminFuturesStrategyControlGovernancePage = () => {
   const [activeTab, setActiveTab] = useState("strategy_governance");
   const [loading, setLoading] = useState(true);
@@ -93,6 +123,7 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
   const [bulkThrottleLevel, setBulkThrottleLevel] = useState("L1");
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkResult, setBulkResult] = useState(null);
+  const [bulkBreakdownExpanded, setBulkBreakdownExpanded] = useState(false);
 
   const [rolloutStrategyId, setRolloutStrategyId] = useState("");
   const [rolloutOperation, setRolloutOperation] = useState("rollout");
@@ -156,6 +187,21 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
   const [policySuggestionSummary, setPolicySuggestionSummary] = useState(null);
 
   const [lastActionResult, setLastActionResult] = useState(null);
+  const [postActionMonitor, setPostActionMonitor] = useState({
+    active: false,
+    phase: "idle",
+    actionType: "",
+    actionLabel: "",
+    strategyId: "",
+    traceId: "",
+    startedAt: null,
+    expiresAt: null,
+    baselineBefore: null,
+    baselineAfter: null,
+    currentSnapshot: null,
+    lastRefreshedAt: null,
+    message: "",
+  });
 
   const actionMeta = useMemo(() => ACTIONS.find((item) => item.key === actionModal.action) || null, [actionModal.action]);
   const strategies = useMemo(() => overviewPayload?.strategies || [], [overviewPayload]);
@@ -172,6 +218,36 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
   const disabledCount = strategies.filter((row) => row.lifecycle_state === "DISABLED").length;
   const throttledCount = strategies.filter((row) => row.throttle_level !== "NONE").length;
   const driftCount = strategies.reduce((acc, row) => acc + Number(row.drift_count || 0), 0);
+  const bulkResultRows = useMemo(() => {
+    if (!Array.isArray(bulkResult?.results)) return [];
+    return bulkResult.results;
+  }, [bulkResult]);
+  const bulkResultBuckets = useMemo(() => {
+    const buckets = { success: [], failed: [], skipped: [] };
+    bulkResultRows.forEach((row) => {
+      const bucket = classifyBulkResult(row);
+      buckets[bucket].push(row);
+    });
+    return buckets;
+  }, [bulkResultRows]);
+  const postActionBaseline = useMemo(
+    () => postActionMonitor?.baselineBefore || postActionMonitor?.baselineAfter || null,
+    [postActionMonitor?.baselineAfter, postActionMonitor?.baselineBefore],
+  );
+  const postActionDeltas = useMemo(() => {
+    const baseline = postActionBaseline || {};
+    const current = postActionMonitor?.currentSnapshot || {};
+    return {
+      health: toNumericValue(current?.health_score, 0) - toNumericValue(baseline?.health_score, 0),
+      error: toNumericValue(current?.error_rate_pct, 0) - toNumericValue(baseline?.error_rate_pct, 0),
+      risk: toNumericValue(current?.risk_score, 0) - toNumericValue(baseline?.risk_score, 0),
+    };
+  }, [postActionBaseline, postActionMonitor?.currentSnapshot]);
+  const postActionRemainingSeconds = useMemo(() => {
+    if (!postActionMonitor?.active || !postActionMonitor?.expiresAt) return 0;
+    const remainingMs = Math.max(0, Number(postActionMonitor.expiresAt) - Date.now());
+    return Math.floor(remainingMs / 1000);
+  }, [postActionMonitor?.active, postActionMonitor?.expiresAt, postActionMonitor?.lastRefreshedAt]);
 
   const loadOverview = useCallback(async () => {
     const response = await apiClient.get("/admin/futures/strategy-control/overview");
@@ -309,6 +385,75 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     }
   }, [driftAlerts, feedbackDriftAlertId, feedbackStrategyId]);
 
+  useEffect(() => {
+    if (bulkResult) {
+      setBulkBreakdownExpanded(false);
+    }
+  }, [bulkResult]);
+
+  const activatePostActionMonitor = useCallback(({ actionType, actionLabel, strategyId, result }) => {
+    const decisionContext = result?.decision_context || result?.approval_request?.decision_context || {};
+    const beforeSnapshot = result?.before_state || decisionContext?.before_after_summary?.before || null;
+    const afterSnapshot = result?.after_state || result?.state_snapshot || decisionContext?.before_after_summary?.after || null;
+    const targetStrategyId = String(
+      strategyId || result?.state_snapshot?.strategy_id || result?.approval_request?.strategy_id || "",
+    ).trim();
+    if (!targetStrategyId || !afterSnapshot) return;
+
+    const now = Date.now();
+    setPostActionMonitor({
+      active: true,
+      phase: "active",
+      actionType: actionType || "critical_action",
+      actionLabel: actionLabel || actionType || "critical_action",
+      strategyId: targetStrategyId,
+      traceId: result?.trace_id || "",
+      startedAt: now,
+      expiresAt: now + MONITOR_ACTIVE_WINDOW_MS,
+      baselineBefore: beforeSnapshot,
+      baselineAfter: afterSnapshot,
+      currentSnapshot: afterSnapshot,
+      lastRefreshedAt: now,
+      message: result?.message || "",
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!postActionMonitor?.active || !postActionMonitor?.strategyId) return;
+
+    const refreshMonitor = async () => {
+      const now = Date.now();
+      if (now >= Number(postActionMonitor.expiresAt || 0)) {
+        setPostActionMonitor((prev) => ({
+          ...prev,
+          active: false,
+          phase: "passive",
+          lastRefreshedAt: now,
+        }));
+        return;
+      }
+
+      try {
+        const overviewData = await loadOverview();
+        const liveRow = (overviewData?.strategies || []).find(
+          (row) => String(row?.strategy_id || "") === String(postActionMonitor.strategyId),
+        );
+        if (!liveRow) return;
+        setPostActionMonitor((prev) => ({
+          ...prev,
+          currentSnapshot: liveRow,
+          lastRefreshedAt: Date.now(),
+        }));
+      } catch (_error) {
+        // Monitor refresh best-effort
+      }
+    };
+
+    refreshMonitor();
+    const timer = window.setInterval(refreshMonitor, MONITOR_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [loadOverview, postActionMonitor?.active, postActionMonitor?.expiresAt, postActionMonitor?.strategyId]);
+
   const openDetail = async (strategyId) => {
     setDetailOpen(true);
     setDetailLoading(true);
@@ -415,6 +560,14 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       } else {
         toast.success(data?.message || "Aksiyon uygulandı");
       }
+      if (data?.status !== "rejected" && ["disable", "decommission"].includes(activeAction.key)) {
+        activatePostActionMonitor({
+          actionType: activeAction.key,
+          actionLabel: activeAction.label,
+          strategyId: strategy?.strategy_id,
+          result: data,
+        });
+      }
       await loadOverview();
       setActionModal({ open: false, action: null, strategy: null });
     } catch (error) {
@@ -515,6 +668,15 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       else if (data?.status === "auto_rollback") toast.error(data?.message || "Auto rollback tetiklendi");
       else toast.success(data?.message || "Rollout aksiyonu tamamlandı");
 
+      if (data?.status !== "rejected" && ["rollout", "rollback"].includes(rolloutOperation)) {
+        activatePostActionMonitor({
+          actionType: rolloutOperation,
+          actionLabel: `rollout_${rolloutOperation}`,
+          strategyId: rolloutStrategyId,
+          result: data,
+        });
+      }
+
       await loadOverview();
       await loadRolloutPrecheck();
     } catch (error) {
@@ -555,6 +717,51 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     toast.success(`Deep-link açıldı: ${targetTab}`);
   };
 
+  const openPolicyApplyHook = ({ source, ruleText = "", alert = null }) => {
+    const normalizedRule = String(ruleText || "").trim();
+    if (alert) {
+      const recommended = String(alert?.recommended_action?.type || "ACK").toUpperCase();
+      const actionMap = {
+        ACK: "ack",
+        MUTE: "mute",
+        DISABLE: "disable_strategy",
+        RETRAIN: "retrain",
+      };
+      const actionType = actionMap[recommended] || "ack";
+      openDriftActionModal(actionType, alert, {
+        reasonPrefill: `policy_apply_${source || "drift"}_${alert?.strategy_id || "strategy"} · ${normalizedRule || "policy_suggestion"}`,
+      });
+      return;
+    }
+
+    const targetStrategyId = feedbackStrategyId || rolloutStrategyId || strategies?.[0]?.strategy_id || "";
+    if (!targetStrategyId) {
+      toast.error("Policy Apply Hook için hedef strategy bulunamadı");
+      return;
+    }
+
+    const lowered = normalizedRule.toLowerCase();
+    let thresholdDelta = 0;
+    if (lowered.includes("strict")) thresholdDelta = -0.02;
+    if (lowered.includes("loose")) thresholdDelta = 0.02;
+
+    openDecisionModal({
+      mode: "threshold_placeholder",
+      actionType: "threshold_change",
+      strategyId: targetStrategyId,
+      title: "Policy Apply Hook",
+      confirmRequired: false,
+      confirmPlaceholder: "",
+      defaultReason: `policy_apply_${targetStrategyId} · ${normalizedRule || "rule_based_suggestion"}`,
+      params: {
+        threshold_delta: thresholdDelta,
+        target_strategy: targetStrategyId,
+        policy_rule: normalizedRule || "rule_based_suggestion",
+      },
+      payload: { source: source || "policy_panel" },
+    });
+  };
+
   const submitDriftAction = async (decisionInput = null) => {
     const action = decisionInput?.action;
     const alert = decisionInput?.alert;
@@ -593,6 +800,15 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       setLastActionResult(data || null);
       if (data?.status === "rejected") toast.error(data?.message || "Drift aksiyonu reddedildi");
       else toast.success(data?.message || "Drift aksiyonu uygulandı");
+
+      if (data?.status !== "rejected" && action === "disable_strategy") {
+        activatePostActionMonitor({
+          actionType: "drift_disable_strategy",
+          actionLabel: "drift_disable_strategy",
+          strategyId: alert?.strategy_id,
+          result: data,
+        });
+      }
 
       await Promise.all([loadDriftAlerts(), loadOverview()]);
     } catch (error) {
@@ -748,6 +964,17 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       });
       setLastActionResult(data || null);
       toast.success(data?.message || "Approval kararı kaydedildi");
+
+      const targetRequest = approvalRequests.find((item) => String(item?.request_id || "") === String(requestId));
+      if (decision === "approve" && data?.status !== "rejected") {
+        activatePostActionMonitor({
+          actionType: "approval_approve",
+          actionLabel: "approval_approve",
+          strategyId: data?.state_snapshot?.strategy_id || targetRequest?.strategy_id,
+          result: data,
+        });
+      }
+
       await Promise.all([loadApprovalRequests(), loadOverview(), loadRollbackSnapshots(feedbackStrategyId)]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Approval kararı başarısız");
@@ -940,7 +1167,29 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                   {bulkSubmitting ? "Bulk çalışıyor..." : "Bulk Action Uygula"}
                 </Button>
                 {bulkResult && (
-                  <p className="text-xs" data-testid="strategy-control-bulk-result-text">{bulkResult.message}</p>
+                  <div className="rounded border border-black/20 bg-orange-50 p-2" data-testid="strategy-control-bulk-result-breakdown-panel">
+                    <p className="text-xs" data-testid="strategy-control-bulk-result-text">{bulkResult.message}</p>
+                    <p className="text-xs" data-testid="strategy-control-bulk-result-summary">
+                      success={bulkResult?.state_snapshot?.success_count ?? 0} · failed={bulkResult?.state_snapshot?.rejected_count ?? 0} · skipped={bulkResult?.state_snapshot?.skipped_count ?? 0}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setBulkBreakdownExpanded((prev) => !prev)}
+                      className="mt-2"
+                      data-testid="strategy-control-bulk-breakdown-toggle-button"
+                    >
+                      {bulkBreakdownExpanded ? "Bulk Sonuç Detayını Gizle" : "Bulk Sonuç Detayını Aç"}
+                    </Button>
+
+                    {bulkBreakdownExpanded && (
+                      <div className="mt-2 space-y-2" data-testid="strategy-control-bulk-breakdown-expanded">
+                        <BulkBreakdownSection bucketKey="success" rows={bulkResultBuckets.success} />
+                        <BulkBreakdownSection bucketKey="failed" rows={bulkResultBuckets.failed} />
+                        <BulkBreakdownSection bucketKey="skipped" rows={bulkResultBuckets.skipped} />
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -1009,6 +1258,20 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                       >
                         Apply Recommended
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          openPolicyApplyHook({
+                            source: "drift_card",
+                            ruleText: alert?.recommended_action?.reason || "drift_policy_suggestion",
+                            alert,
+                          })
+                        }
+                        data-testid={`strategy-control-drift-apply-via-policy-button-${index}`}
+                      >
+                        Apply via Policy
+                      </Button>
                       <Button size="sm" variant="outline" onClick={() => openDriftDeepLink(alert)} data-testid={`strategy-control-drift-open-policy-button-${index}`}>Open Policy</Button>
                     </div>
                   </div>
@@ -1035,6 +1298,43 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                       <p className="text-xs" data-testid="strategy-control-audit-history-last-action-status">status={lastActionResult.status}</p>
                       <p className="text-xs" data-testid="strategy-control-audit-history-last-action-trace">trace_id={lastActionResult.trace_id}</p>
                       <p className="text-xs" data-testid="strategy-control-audit-history-last-action-message">message={lastActionResult.message}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-post-action-monitor-panel">
+                  <h3 className="text-base font-semibold" data-testid="strategy-control-post-action-monitor-title">Last Action Impact</h3>
+                  {!postActionMonitor?.strategyId && (
+                    <p className="mt-2 text-xs" data-testid="strategy-control-post-action-monitor-empty">
+                      No data yet: rollout/disable/rollback/drift-disable/approval-approve sonrası izleme burada görünür.
+                    </p>
+                  )}
+                  {postActionMonitor?.strategyId && (
+                    <div className="mt-2 rounded border border-black/20 bg-orange-50 p-3" data-testid="strategy-control-post-action-monitor-card">
+                      <p className="text-xs" data-testid="strategy-control-post-action-monitor-phase">
+                        phase={postActionMonitor.active ? "active" : "passive"} · remaining={postActionRemainingSeconds}s
+                      </p>
+                      <p className="text-xs" data-testid="strategy-control-post-action-monitor-action">
+                        action={postActionMonitor.actionLabel || postActionMonitor.actionType} · strategy={postActionMonitor.strategyId}
+                      </p>
+                      <p className="text-xs" data-testid="strategy-control-post-action-monitor-trace">trace_id={postActionMonitor.traceId || "-"}</p>
+                      <p className="text-xs" data-testid="strategy-control-post-action-monitor-refresh-at">
+                        refreshed_at={postActionMonitor?.lastRefreshedAt ? new Date(postActionMonitor.lastRefreshedAt).toISOString() : "-"}
+                      </p>
+                      <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="strategy-control-post-action-monitor-delta-grid">
+                        <p className="text-xs" data-testid="strategy-control-post-action-monitor-health-delta">health_delta={toSignedDelta(postActionDeltas.health)}</p>
+                        <p className="text-xs" data-testid="strategy-control-post-action-monitor-error-delta">error_delta={toSignedDelta(postActionDeltas.error)}</p>
+                        <p className="text-xs" data-testid="strategy-control-post-action-monitor-risk-delta">risk_delta={toSignedDelta(postActionDeltas.risk)}</p>
+                      </div>
+                      <p className="mt-2 text-xs" data-testid="strategy-control-post-action-monitor-before-summary">
+                        before={buildSnapshotSummary(postActionMonitor?.baselineBefore)}
+                      </p>
+                      <p className="text-xs" data-testid="strategy-control-post-action-monitor-after-summary">
+                        after_at_action={buildSnapshotSummary(postActionMonitor?.baselineAfter)}
+                      </p>
+                      <p className="text-xs" data-testid="strategy-control-post-action-monitor-current-summary">
+                        current={buildSnapshotSummary(postActionMonitor?.currentSnapshot)}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1216,6 +1516,25 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                       <p className="text-xs" data-testid="strategy-control-policy-suggestions-24h">taxonomy_24h={JSON.stringify(policySuggestionSummary.taxonomy_24h || {})}</p>
                       <p className="text-xs" data-testid="strategy-control-policy-suggestions-7d">taxonomy_7d={JSON.stringify(policySuggestionSummary.taxonomy_7d || {})}</p>
                       <p className="text-xs" data-testid="strategy-control-policy-suggestions-rules">rules={(policySuggestionSummary.rules || []).join(" | ") || "n/a"}</p>
+                      <div className="mt-2 space-y-2" data-testid="strategy-control-policy-suggestions-rules-list">
+                        {(policySuggestionSummary.rules || []).length === 0 && (
+                          <p className="text-xs" data-testid="strategy-control-policy-suggestions-rule-empty">No data yet: uygulanabilir rule bulunmuyor.</p>
+                        )}
+                        {(policySuggestionSummary.rules || []).map((rule, index) => (
+                          <div key={`${rule}-${index}`} className="rounded border border-black/20 bg-white p-2" data-testid={`strategy-control-policy-suggestions-rule-item-${index}`}>
+                            <p className="text-xs" data-testid={`strategy-control-policy-suggestions-rule-text-${index}`}>{rule}</p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="mt-1"
+                              onClick={() => openPolicyApplyHook({ source: "policy_panel", ruleText: rule })}
+                              data-testid={`strategy-control-policy-suggestions-apply-fix-button-${index}`}
+                            >
+                              Apply Fix
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1376,6 +1695,44 @@ const InfoCard = ({ testId, title, lines = [], emptyText }) => (
     ))}
   </div>
 );
+
+const BulkBreakdownSection = ({ bucketKey, rows = [] }) => {
+  const labelMap = {
+    success: "Success",
+    failed: "Failed",
+    skipped: "Skipped",
+  };
+
+  return (
+    <div className="rounded border border-black/20 bg-white p-2" data-testid={`strategy-control-bulk-breakdown-section-${bucketKey}`}>
+      <p className="text-xs font-semibold" data-testid={`strategy-control-bulk-breakdown-section-title-${bucketKey}`}>
+        {labelMap[bucketKey] || bucketKey} ({rows.length})
+      </p>
+      {rows.length === 0 && (
+        <p className="text-xs" data-testid={`strategy-control-bulk-breakdown-empty-${bucketKey}`}>
+          No data yet
+        </p>
+      )}
+      {rows.map((row, index) => (
+        <div
+          key={`${bucketKey}-${row?.strategy_id || index}-${index}`}
+          className={`mt-1 rounded border p-2 text-xs ${bucketKey === "failed" ? "border-red-500 bg-red-50 text-red-900" : "border-black/20 bg-orange-50"}`}
+          data-testid={`strategy-control-bulk-breakdown-row-${bucketKey}-${index}`}
+        >
+          <p data-testid={`strategy-control-bulk-breakdown-row-strategy-${bucketKey}-${index}`}>
+            strategy={row?.strategy_id || "-"} · status={row?.status || "-"}
+          </p>
+          <p data-testid={`strategy-control-bulk-breakdown-row-message-${bucketKey}-${index}`}>
+            message={row?.message || "-"}
+          </p>
+          <p data-testid={`strategy-control-bulk-breakdown-row-action-ref-${bucketKey}-${index}`}>
+            action_ref={row?.action_ref || row?.trace_id || "-"}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const StrategyTable = ({ rows, onOpenDetail, onRunAction, compact = false, selectedStrategyIds, onToggleStrategy }) => (
   <div className="border border-black/25 bg-orange-100" data-testid={compact ? "strategy-control-table-compact" : "strategy-control-table-full"}>

@@ -71,6 +71,14 @@ export const DecisionModal = ({
     }
   };
 
+  const targetSummary = [
+    params?.target_strategy ? `target_strategy=${params.target_strategy}` : null,
+    params?.alert_id ? `alert_id=${params.alert_id}` : null,
+    params?.snapshot_trace_id ? `snapshot_trace_id=${params.snapshot_trace_id}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="border border-black/40 bg-orange-50" data-testid="decision-modal-root">
@@ -79,6 +87,11 @@ export const DecisionModal = ({
           <DialogDescription data-testid="decision-modal-description">
             Action={actionType} · Strategy={strategyId}
           </DialogDescription>
+          {Boolean(targetSummary) && (
+            <p className="text-xs" data-testid="decision-modal-target-summary">
+              Target={targetSummary}
+            </p>
+          )}
         </DialogHeader>
 
         <Textarea

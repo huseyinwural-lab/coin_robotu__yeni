@@ -1958,22 +1958,46 @@ def strategy_bulk_action(
     results = []
     success_count = 0
     rejected_count = 0
+    skipped_count = 0
     for strategy_id in payload.strategy_ids:
-        result = _run_strategy_action(
-            action=action,
-            strategy_id=strategy_id,
-            payload=StrategyControlActionRequest(
-                reason=f"BULK::{payload.reason}",
-                confirm_phrase=None,
-                throttle_level=payload.throttle_level,
-                dry_run=payload.dry_run,
-            ),
-            current_admin=current_admin,
-            db=db,
-        )
-        results.append({"strategy_id": strategy_id, **result})
+        try:
+            result = _run_strategy_action(
+                action=action,
+                strategy_id=strategy_id,
+                payload=StrategyControlActionRequest(
+                    reason=f"BULK::{payload.reason}",
+                    confirm_phrase=None,
+                    throttle_level=payload.throttle_level,
+                    dry_run=payload.dry_run,
+                ),
+                current_admin=current_admin,
+                db=db,
+            )
+        except HTTPException as exc:
+            result = {
+                "status": "skipped",
+                "trace_id": f"strategy_bulk_skip_{uuid.uuid4().hex[:10]}",
+                "message": str(exc.detail or "strategy skipped"),
+                "state_snapshot": {"strategy_id": strategy_id},
+            }
+        except Exception:
+            result = {
+                "status": "skipped",
+                "trace_id": f"strategy_bulk_skip_{uuid.uuid4().hex[:10]}",
+                "message": "Beklenmeyen hata nedeniyle strategy skipped.",
+                "state_snapshot": {"strategy_id": strategy_id},
+            }
+
+        enriched_result = {
+            "strategy_id": strategy_id,
+            "action_ref": result.get("trace_id"),
+            **result,
+        }
+        results.append(enriched_result)
         if result.get("status") in {"success", "dry_run"}:
             success_count += 1
+        elif result.get("status") == "skipped":
+            skipped_count += 1
         else:
             rejected_count += 1
 
@@ -1994,6 +2018,7 @@ def strategy_bulk_action(
             "dry_run": payload.dry_run,
             "success_count": success_count,
             "rejected_count": rejected_count,
+            "skipped_count": skipped_count,
         },
     )
 
@@ -2002,12 +2027,17 @@ def strategy_bulk_action(
         "strategy_ids": payload.strategy_ids,
         "success_count": success_count,
         "rejected_count": rejected_count,
+        "skipped_count": skipped_count,
     }
-    status_value = "success" if success_count > 0 else "rejected"
+    status_value = "success" if (success_count > 0 and rejected_count == 0 and skipped_count == 0) else "partial"
+    if success_count == 0 and rejected_count > 0 and skipped_count == 0:
+        status_value = "rejected"
+    if success_count == 0 and rejected_count == 0 and skipped_count > 0:
+        status_value = "skipped"
     return _result_payload(
         status=status_value,
         trace_id=trace_id,
-        message=f"Bulk {action} tamamlandı: success={success_count}, rejected={rejected_count}",
+        message=f"Bulk {action} tamamlandı: success={success_count}, failed={rejected_count}, skipped={skipped_count}",
         state_snapshot=state_snapshot,
         extra={"results": results},
     )
