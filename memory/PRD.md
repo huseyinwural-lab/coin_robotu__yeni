@@ -1,3 +1,47 @@
+## 2026-03-22 — Futures Strategy Control + Governance System (Faz-2) ✅
+
+### Kullanıcı seçimi (bu iterasyon)
+- Kapsam: **Faz-2 (Rollout + Bulk + Rollback)**
+- Auto-rollback başlangıç eşiği: **health < 50** veya **error > %3**
+- Bulk aksiyon kapsamı: **yalnız pause/resume/throttle** (disable/decommission yok)
+- Rollback yaklaşımı: **tek-adım son aksiyondan rollback**
+
+### Backend Faz-2 implementasyonu
+- `/app/backend/routers/admin_futures_strategy_control.py` genişletildi:
+  - `GET /api/admin/futures/strategy/{id}/rollout-precheck`
+  - `POST /api/admin/futures/strategy/{id}/promote-shadow`
+  - `POST /api/admin/futures/strategy/{id}/rollout`
+  - `POST /api/admin/futures/strategy/{id}/rollback`
+  - `POST /api/admin/futures/strategy/bulk-action`
+- Rollout pre-check zorunlu kontrolleri eklendi:
+  - health, recent error, drift, checklist
+- Auto-rollback yanıt yapısı eklendi:
+  - `reason + thresholds + previous_state` dönüşü
+- Bulk güvenlik kuralı eklendi:
+  - pause/resume/throttle dışındaki aksiyonlar reject
+- Faz-2 aksiyonlarında da response kontratı korundu:
+  - `{status, trace_id, message, state_snapshot}`
+- Aksiyon geçmişi cache ile tutulup rollback tek-adım akışı aktifleştirildi.
+
+### Frontend Faz-2 implementasyonu
+- `/app/frontend/src/pages/AdminFuturesStrategyControlGovernancePage.jsx` güncellendi:
+  - **Rollout tabı** aktif: strategy select, operation select, canary % (10/25/50/100), pre-check tetikleme, promote/rollout/rollback
+  - **Bulk panel** aktif: strategy checkbox seçimi + action select (pause/resume/throttle) + reason + confirm
+  - Rollout sonucu ve auto-rollback nedeni/threshold görünürlüğü eklendi
+  - Strategy tablosuna rollout mode/percentage ve error% görünürlüğü eklendi
+
+### Test & doğrulama
+- Test raporu: `/app/test_reports/iteration_62.json`
+  - Backend: **100% (21 passed)**
+  - Frontend: **100% PASS**
+- Ek doğrulama:
+  - `auto_frontend_testing_agent` PASS
+  - `deep_testing_backend_v2` PASS
+
+### Faz-3 backlog (bilinçli ertelendi)
+- Drift Action Center aksiyonları: Ack/Mute/Disable/Retrain/Ignore
+- Linked root-cause context ve policy deep-link akışları
+
 ## 2026-03-22 — Futures Strategy Control + Governance System (Faz-1) ✅
 
 ### Kullanıcı kararı (sabit kapsam)
