@@ -111,6 +111,27 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
   const [driftSubmitting, setDriftSubmitting] = useState(false);
   const [driftResult, setDriftResult] = useState(null);
 
+  const [feedbackStrategyId, setFeedbackStrategyId] = useState("");
+  const [feedbackDriftAlertId, setFeedbackDriftAlertId] = useState("");
+  const [feedbackLabel, setFeedbackLabel] = useState("false_reject");
+  const [feedbackTaxonomy, setFeedbackTaxonomy] = useState("threshold_too_strict");
+  const [feedbackReason, setFeedbackReason] = useState("");
+  const [feedbackSampleLink, setFeedbackSampleLink] = useState("");
+  const [feedbackSliceSymbol, setFeedbackSliceSymbol] = useState("");
+  const [feedbackSliceWindow, setFeedbackSliceWindow] = useState("24h");
+  const [feedbackSliceSeverity, setFeedbackSliceSeverity] = useState("MEDIUM");
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackItems, setFeedbackItems] = useState([]);
+  const [feedbackVersion, setFeedbackVersion] = useState(0);
+
+  const [modelUpdateReason, setModelUpdateReason] = useState("");
+  const [modelUpdateSubmitting, setModelUpdateSubmitting] = useState(false);
+  const [modelUpdateStatus, setModelUpdateStatus] = useState(null);
+
+  const [exportFormat, setExportFormat] = useState("json");
+  const [exporting, setExporting] = useState(false);
+  const [exportSummary, setExportSummary] = useState(null);
+
   const [lastActionResult, setLastActionResult] = useState(null);
 
   const actionMeta = useMemo(() => ACTIONS.find((item) => item.key === actionModal.action) || null, [actionModal.action]);
@@ -131,6 +152,8 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     setOverviewPayload(data);
     const firstId = data?.strategies?.[0]?.strategy_id || "";
     setRolloutStrategyId((prev) => prev || firstId);
+    setFeedbackStrategyId((prev) => prev || firstId);
+    return data;
   }, []);
 
   const loadCapital = useCallback(async () => {
@@ -158,11 +181,35 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     }
   }, []);
 
+  const loadFeedbackForStrategy = useCallback(async (strategyId) => {
+    if (!strategyId) {
+      setFeedbackItems([]);
+      setFeedbackVersion(0);
+      return;
+    }
+    const { data } = await apiClient.get(`/admin/futures/strategy/${strategyId}/feedback`);
+    setFeedbackItems(data?.items || []);
+    setFeedbackVersion(data?.dataset_version || 0);
+  }, []);
+
+  const loadModelUpdateStatus = useCallback(async (strategyId) => {
+    if (!strategyId) {
+      setModelUpdateStatus(null);
+      return;
+    }
+    const { data } = await apiClient.get(`/admin/futures/strategy/${strategyId}/model-update-status`);
+    setModelUpdateStatus(data || null);
+  }, []);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
     try {
-      await Promise.all([loadOverview(), loadCapital(), loadDriftAlerts()]);
+      const [overviewData] = await Promise.all([loadOverview(), loadCapital(), loadDriftAlerts()]);
+      const selectedId = feedbackStrategyId || overviewData?.strategies?.[0]?.strategy_id || "";
+      if (selectedId) {
+        await Promise.all([loadFeedbackForStrategy(selectedId), loadModelUpdateStatus(selectedId)]);
+      }
     } catch (error) {
       const message = error?.response?.data?.detail || "Strategy Control verisi alınamadı";
       setErrorMessage(message);
@@ -170,11 +217,37 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     } finally {
       setLoading(false);
     }
-  }, [loadCapital, loadDriftAlerts, loadOverview]);
+  }, [feedbackStrategyId, loadCapital, loadDriftAlerts, loadFeedbackForStrategy, loadModelUpdateStatus, loadOverview]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    if (!feedbackStrategyId) return;
+    loadFeedbackForStrategy(feedbackStrategyId);
+    loadModelUpdateStatus(feedbackStrategyId);
+  }, [feedbackStrategyId, loadFeedbackForStrategy, loadModelUpdateStatus]);
+
+  useEffect(() => {
+    const status = modelUpdateStatus?.current_job?.status;
+    if (!feedbackStrategyId || !status || !["queued", "running"].includes(status)) return;
+    const timer = window.setInterval(() => {
+      loadModelUpdateStatus(feedbackStrategyId);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [feedbackStrategyId, loadModelUpdateStatus, modelUpdateStatus]);
+
+  useEffect(() => {
+    if (!feedbackStrategyId) return;
+    const matched = driftAlerts.find((item) => item.strategy_id === feedbackStrategyId);
+    const currentValid = driftAlerts.some(
+      (item) => item.strategy_id === feedbackStrategyId && item.alert_id === feedbackDriftAlertId,
+    );
+    if (!currentValid) {
+      setFeedbackDriftAlertId(matched?.alert_id || "");
+    }
+  }, [driftAlerts, feedbackDriftAlertId, feedbackStrategyId]);
 
   const openDetail = async (strategyId) => {
     setDetailOpen(true);
@@ -350,6 +423,8 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     if (strategyId) {
       setRolloutStrategyId(strategyId);
       setSelectedStrategyIds([strategyId]);
+      setFeedbackStrategyId(strategyId);
+      setFeedbackDriftAlertId(alert?.alert_id || "");
     }
     toast.success(`Deep-link açıldı: ${targetTab}`);
   };
@@ -394,6 +469,112 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       toast.error(error?.response?.data?.detail || "Drift aksiyonu başarısız");
     } finally {
       setDriftSubmitting(false);
+    }
+  };
+
+  const submitFeedbackLabel = async () => {
+    if (!feedbackStrategyId) {
+      toast.error("Feedback için strategy seçin");
+      return;
+    }
+    if (!feedbackDriftAlertId) {
+      toast.error("Feedback için drift context seçin");
+      return;
+    }
+    if (feedbackReason.trim().length < 3) {
+      toast.error("Feedback reason zorunlu");
+      return;
+    }
+
+    setFeedbackSubmitting(true);
+    try {
+      const { data } = await apiClient.post(`/admin/futures/strategy/${feedbackStrategyId}/feedback-label`, {
+        reason: feedbackReason.trim(),
+        drift_alert_id: feedbackDriftAlertId,
+        corrected_label: feedbackLabel,
+        reason_taxonomy: feedbackTaxonomy,
+        sample_link: feedbackSampleLink.trim() || null,
+        related_data_slice: {
+          symbol: feedbackSliceSymbol.trim() || null,
+          time_window: feedbackSliceWindow,
+          severity: feedbackSliceSeverity,
+        },
+        dry_run: false,
+      });
+      setLastActionResult(data || null);
+      toast.success(data?.message || "Feedback kaydedildi");
+      setFeedbackReason("");
+      setFeedbackSampleLink("");
+      await Promise.all([loadFeedbackForStrategy(feedbackStrategyId), loadOverview()]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Feedback kaydı başarısız");
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
+  const triggerModelUpdate = async () => {
+    if (!feedbackStrategyId) {
+      toast.error("Model update için strategy seçin");
+      return;
+    }
+    if (modelUpdateReason.trim().length < 3) {
+      toast.error("Model update reason zorunlu");
+      return;
+    }
+    setModelUpdateSubmitting(true);
+    try {
+      const { data } = await apiClient.post(`/admin/futures/strategy/${feedbackStrategyId}/trigger-model-update`, {
+        reason: modelUpdateReason.trim(),
+        dataset_version: Number(feedbackVersion || 0),
+        dry_run: false,
+      });
+      setLastActionResult(data || null);
+      toast.success(data?.message || "Model update queued");
+      await loadModelUpdateStatus(feedbackStrategyId);
+    } catch (error) {
+      const message = error?.response?.data?.message || error?.response?.data?.detail || "Model update tetiklenemedi";
+      toast.error(message);
+    } finally {
+      setModelUpdateSubmitting(false);
+    }
+  };
+
+  const exportTimeline = async () => {
+    if (!feedbackStrategyId) {
+      toast.error("Export için strategy seçin");
+      return;
+    }
+    setExporting(true);
+    try {
+      if (exportFormat === "json") {
+        const { data } = await apiClient.get(`/admin/futures/strategy/${feedbackStrategyId}/timeline-export`, { params: { format: "json" } });
+        setExportSummary(data?.state_snapshot || null);
+        const blob = new Blob([JSON.stringify(data?.items || [], null, 2)], { type: "application/json" });
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${feedbackStrategyId}_timeline.json`;
+        anchor.click();
+        window.URL.revokeObjectURL(url);
+      } else {
+        const response = await apiClient.get(`/admin/futures/strategy/${feedbackStrategyId}/timeline-export`, {
+          params: { format: "csv" },
+          responseType: "blob",
+        });
+        const url = window.URL.createObjectURL(response.data);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${feedbackStrategyId}_timeline.csv`;
+        anchor.click();
+        window.URL.revokeObjectURL(url);
+        setExportSummary({ strategy_id: feedbackStrategyId, format: "csv" });
+      }
+      toast.success("Timeline export hazırlandı");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Timeline export başarısız");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -605,16 +786,109 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
             </TabsContent>
 
             <TabsContent value="audit_history" data-testid="strategy-control-tab-audit-history">
-              <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-audit-history-panel">
-                <h3 className="text-base font-semibold" data-testid="strategy-control-audit-history-title">Last Action Result</h3>
-                {!lastActionResult && <p className="mt-2 text-sm" data-testid="strategy-control-audit-history-empty">No data yet: bu oturumda henüz aksiyon çalıştırılmadı.</p>}
-                {lastActionResult && (
-                  <div className="mt-2 rounded border border-black/20 bg-orange-50 p-3" data-testid="strategy-control-audit-history-last-action-card">
-                    <p className="text-xs" data-testid="strategy-control-audit-history-last-action-status">status={lastActionResult.status}</p>
-                    <p className="text-xs" data-testid="strategy-control-audit-history-last-action-trace">trace_id={lastActionResult.trace_id}</p>
-                    <p className="text-xs" data-testid="strategy-control-audit-history-last-action-message">message={lastActionResult.message}</p>
+              <div className="space-y-3" data-testid="strategy-control-audit-history-panel">
+                <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-audit-history-last-action-panel">
+                  <h3 className="text-base font-semibold" data-testid="strategy-control-audit-history-title">Last Action Result</h3>
+                  {!lastActionResult && <p className="mt-2 text-sm" data-testid="strategy-control-audit-history-empty">No data yet: bu oturumda henüz aksiyon çalıştırılmadı.</p>}
+                  {lastActionResult && (
+                    <div className="mt-2 rounded border border-black/20 bg-orange-50 p-3" data-testid="strategy-control-audit-history-last-action-card">
+                      <p className="text-xs" data-testid="strategy-control-audit-history-last-action-status">status={lastActionResult.status}</p>
+                      <p className="text-xs" data-testid="strategy-control-audit-history-last-action-trace">trace_id={lastActionResult.trace_id}</p>
+                      <p className="text-xs" data-testid="strategy-control-audit-history-last-action-message">message={lastActionResult.message}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-feedback-loop-panel">
+                  <h3 className="text-base font-semibold" data-testid="strategy-control-feedback-loop-title">Feedback Loop (False Allow/Reject Correction)</h3>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="strategy-control-feedback-loop-selectors-grid">
+                    <select className="h-10 rounded border border-black/40 bg-white px-3 text-sm" value={feedbackStrategyId} onChange={(e) => setFeedbackStrategyId(e.target.value)} data-testid="strategy-control-feedback-strategy-select">
+                      {strategies.map((row) => (
+                        <option key={row.strategy_id} value={row.strategy_id}>{row.strategy_id}</option>
+                      ))}
+                    </select>
+                    <select className="h-10 rounded border border-black/40 bg-white px-3 text-sm" value={feedbackDriftAlertId} onChange={(e) => setFeedbackDriftAlertId(e.target.value)} data-testid="strategy-control-feedback-drift-alert-select">
+                      {(driftAlerts.filter((item) => item.strategy_id === feedbackStrategyId)).map((item) => (
+                        <option key={item.alert_id} value={item.alert_id}>{item.alert_id}</option>
+                      ))}
+                    </select>
+                    <select className="h-10 rounded border border-black/40 bg-white px-3 text-sm" value={feedbackLabel} onChange={(e) => setFeedbackLabel(e.target.value)} data-testid="strategy-control-feedback-label-select">
+                      <option value="false_allow">false_allow</option>
+                      <option value="false_reject">false_reject</option>
+                      <option value="correct">correct</option>
+                    </select>
+                    <select className="h-10 rounded border border-black/40 bg-white px-3 text-sm" value={feedbackTaxonomy} onChange={(e) => setFeedbackTaxonomy(e.target.value)} data-testid="strategy-control-feedback-taxonomy-select">
+                      <option value="threshold_too_strict">threshold_too_strict</option>
+                      <option value="threshold_too_loose">threshold_too_loose</option>
+                      <option value="feature_drift">feature_drift</option>
+                      <option value="data_quality">data_quality</option>
+                    </select>
                   </div>
-                )}
+
+                  <Textarea value={feedbackReason} onChange={(e) => setFeedbackReason(e.target.value)} placeholder="Correction reason" className="mt-2 border-black/40" data-testid="strategy-control-feedback-reason-input" />
+                  <Input value={feedbackSampleLink} onChange={(e) => setFeedbackSampleLink(e.target.value)} placeholder="Sample link (opsiyonel)" className="mt-2 border-black/40" data-testid="strategy-control-feedback-sample-link-input" />
+
+                  <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="strategy-control-feedback-slice-grid">
+                    <Input value={feedbackSliceSymbol} onChange={(e) => setFeedbackSliceSymbol(e.target.value)} placeholder="Slice symbol" className="border-black/40" data-testid="strategy-control-feedback-slice-symbol-input" />
+                    <select className="h-10 rounded border border-black/40 bg-white px-3 text-sm" value={feedbackSliceWindow} onChange={(e) => setFeedbackSliceWindow(e.target.value)} data-testid="strategy-control-feedback-slice-window-select">
+                      <option value="1h">1h</option>
+                      <option value="24h">24h</option>
+                      <option value="7d">7d</option>
+                    </select>
+                    <select className="h-10 rounded border border-black/40 bg-white px-3 text-sm" value={feedbackSliceSeverity} onChange={(e) => setFeedbackSliceSeverity(e.target.value)} data-testid="strategy-control-feedback-slice-severity-select">
+                      <option value="LOW">LOW</option>
+                      <option value="MEDIUM">MEDIUM</option>
+                      <option value="HIGH">HIGH</option>
+                    </select>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="strategy-control-feedback-actions-row">
+                    <Button onClick={submitFeedbackLabel} disabled={feedbackSubmitting} className="border border-black bg-black text-orange-300" data-testid="strategy-control-feedback-submit-button">
+                      {feedbackSubmitting ? "Kaydediliyor..." : "Feedback Kaydet"}
+                    </Button>
+                    <p className="text-xs" data-testid="strategy-control-feedback-version-text">dataset_version={feedbackVersion}</p>
+                  </div>
+
+                  <div className="mt-2 rounded border border-black/20 bg-orange-50 p-2" data-testid="strategy-control-feedback-list-panel">
+                    <p className="text-xs font-semibold" data-testid="strategy-control-feedback-list-title">Feedback Log (immutable)</p>
+                    {feedbackItems.length === 0 && <p className="text-xs" data-testid="strategy-control-feedback-list-empty">No data yet: bu strategy için feedback yok.</p>}
+                    {feedbackItems.slice(0, 8).map((item, index) => (
+                      <p key={item.entry_id} className="text-xs" data-testid={`strategy-control-feedback-list-item-${index}`}>
+                        v{item.dataset_version} · {item.corrected_label} · taxonomy={item.reason_taxonomy} · drift={item.drift_alert_id}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-model-update-panel">
+                  <h3 className="text-base font-semibold" data-testid="strategy-control-model-update-title">Model Update Trigger</h3>
+                  <Input value={modelUpdateReason} onChange={(e) => setModelUpdateReason(e.target.value)} placeholder="Model update reason" className="mt-2 border-black/40" data-testid="strategy-control-model-update-reason-input" />
+                  <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="strategy-control-model-update-actions-row">
+                    <Button onClick={triggerModelUpdate} disabled={modelUpdateSubmitting} className="border border-black bg-black text-orange-300" data-testid="strategy-control-model-update-trigger-button">
+                      {modelUpdateSubmitting ? "Tetikleniyor..." : "Model Update Trigger"}
+                    </Button>
+                    <Button variant="outline" onClick={() => loadModelUpdateStatus(feedbackStrategyId)} data-testid="strategy-control-model-update-refresh-button">Status Yenile</Button>
+                  </div>
+                  <div className="mt-2 rounded border border-black/20 bg-orange-50 p-2" data-testid="strategy-control-model-update-status-card">
+                    <p className="text-xs" data-testid="strategy-control-model-update-status-current">current_status={modelUpdateStatus?.current_job?.status || "none"}</p>
+                    <p className="text-xs" data-testid="strategy-control-model-update-status-job-id">job_id={modelUpdateStatus?.current_job?.job_id || "-"}</p>
+                    <p className="text-xs" data-testid="strategy-control-model-update-status-history-count">history_count={(modelUpdateStatus?.history || []).length}</p>
+                  </div>
+                </div>
+
+                <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-export-panel">
+                  <h3 className="text-base font-semibold" data-testid="strategy-control-export-title">Timeline Export (Drift + Action + Feedback)</h3>
+                  <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="strategy-control-export-actions-row">
+                    <select className="h-10 rounded border border-black/40 bg-white px-3 text-sm" value={exportFormat} onChange={(e) => setExportFormat(e.target.value)} data-testid="strategy-control-export-format-select">
+                      <option value="json">JSON</option>
+                      <option value="csv">CSV</option>
+                    </select>
+                    <Button onClick={exportTimeline} disabled={exporting} className="border border-black bg-black text-orange-300" data-testid="strategy-control-export-download-button">
+                      {exporting ? "Hazırlanıyor..." : "Export İndir"}
+                    </Button>
+                  </div>
+                  {exportSummary && <p className="mt-2 text-xs" data-testid="strategy-control-export-summary-text">export_summary={JSON.stringify(exportSummary)}</p>}
+                </div>
               </div>
             </TabsContent>
           </Tabs>

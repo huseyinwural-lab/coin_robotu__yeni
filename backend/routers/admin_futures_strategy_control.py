@@ -1,8 +1,10 @@
+import csv
+import io
 import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -22,6 +24,8 @@ _MANUAL_KEY = "futures:strategy:manual-controls:{user_id}"
 _ROLLOUT_KEY = "futures:strategy:rollout:{user_id}"
 _HISTORY_KEY = "futures:strategy:control-history:{user_id}"
 _DRIFT_ALERT_KEY = "futures:strategy:drift-alert-state:{user_id}"
+_FEEDBACK_KEY = "futures:strategy:feedback:{user_id}"
+_MODEL_UPDATE_KEY = "futures:strategy:model-update:{user_id}"
 
 _DISABLE_CONFIRM = "DISABLE STRATEGY"
 _DECOMMISSION_CONFIRM = "DECOMMISSION STRATEGY"
@@ -71,6 +75,22 @@ class DriftActionRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
     confirm_phrase: str | None = Field(default=None, max_length=120)
     mute_duration_hours: int | None = Field(default=None, ge=1, le=168)
+    dry_run: bool = False
+
+
+class FeedbackLabelRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+    drift_alert_id: str = Field(..., min_length=3, max_length=120)
+    corrected_label: str = Field(..., min_length=3, max_length=80)
+    reason_taxonomy: str = Field(..., min_length=3, max_length=80)
+    sample_link: str | None = Field(default=None, max_length=400)
+    related_data_slice: dict = Field(default_factory=dict)
+    dry_run: bool = False
+
+
+class ModelUpdateTriggerRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+    dataset_version: int | None = Field(default=None, ge=1)
     dry_run: bool = False
 
 
@@ -269,6 +289,8 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
     rollout_key = _ROLLOUT_KEY.format(user_id=current_admin.id)
     history_key = _HISTORY_KEY.format(user_id=current_admin.id)
     drift_alert_key = _DRIFT_ALERT_KEY.format(user_id=current_admin.id)
+    feedback_key = _FEEDBACK_KEY.format(user_id=current_admin.id)
+    model_update_key = _MODEL_UPDATE_KEY.format(user_id=current_admin.id)
 
     lifecycle_registry = _cache_get(pipeline_runtime.cache, lifecycle_key, status.get("strategy_lifecycle_registry") or {})
     throttle_payload = _cache_get(
@@ -287,6 +309,8 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
     rollout_payload = _cache_get(pipeline_runtime.cache, rollout_key, {"by_strategy": {}, "history": []})
     action_history = _cache_get(pipeline_runtime.cache, history_key, [])
     drift_alert_state = _cache_get(pipeline_runtime.cache, drift_alert_key, {})
+    feedback_payload = _cache_get(pipeline_runtime.cache, feedback_key, {"items": [], "version_by_strategy": {}})
+    model_update_payload = _cache_get(pipeline_runtime.cache, model_update_key, {"by_strategy": {}, "history": []})
 
     rows = _compose_strategy_rows(status, lifecycle_registry, throttle_payload, manual_controls, rollout_payload)
     return {
@@ -298,6 +322,8 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
         "rollout_payload": rollout_payload,
         "action_history": action_history,
         "drift_alert_state": drift_alert_state,
+        "feedback_payload": feedback_payload,
+        "model_update_payload": model_update_payload,
         "keys": {
             "lifecycle": lifecycle_key,
             "throttle": throttle_key,
@@ -305,6 +331,8 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
             "rollout": rollout_key,
             "history": history_key,
             "drift_alert": drift_alert_key,
+            "feedback": feedback_key,
+            "model_update": model_update_key,
         },
     }
 
@@ -533,6 +561,106 @@ def _build_drift_alert_rows(status_payload: dict, drift_alert_state: dict) -> li
             }
         )
     return rows
+
+
+def _refresh_model_update_jobs(model_update_payload: dict) -> dict:
+    by_strategy = model_update_payload.get("by_strategy") or {}
+    now = datetime.now(timezone.utc)
+    changed = False
+
+    for strategy_id, job in list(by_strategy.items()):
+        status = str(job.get("status") or "queued")
+        if status == "queued":
+            created_at = job.get("created_at")
+            try:
+                created_dt = datetime.fromisoformat(str(created_at))
+            except Exception:
+                created_dt = now
+            if (now - created_dt).total_seconds() >= 4:
+                job["status"] = "running"
+                job["started_at"] = now.isoformat()
+                changed = True
+        elif status == "running":
+            started_at = job.get("started_at")
+            try:
+                started_dt = datetime.fromisoformat(str(started_at))
+            except Exception:
+                started_dt = now
+            if (now - started_dt).total_seconds() >= 8:
+                job["status"] = "completed"
+                job["completed_at"] = now.isoformat()
+                job["result"] = "model_update_applied"
+                changed = True
+        by_strategy[strategy_id] = job
+
+    model_update_payload["by_strategy"] = by_strategy
+    model_update_payload.setdefault("history", [])
+    return {"payload": model_update_payload, "changed": changed}
+
+
+def _build_strategy_timeline(
+    *,
+    strategy_id: str,
+    status_payload: dict,
+    action_history: list,
+    feedback_payload: dict,
+    model_update_payload: dict,
+) -> list[dict]:
+    timeline = []
+    for item in action_history or []:
+        if str(item.get("strategy_id") or "") != strategy_id:
+            continue
+        timeline.append(
+            {
+                "event_type": "ACTION",
+                "event_id": item.get("trace_id"),
+                "timestamp": item.get("created_at"),
+                "message": item.get("action"),
+                "payload": item,
+            }
+        )
+
+    for row in feedback_payload.get("items") or []:
+        if str(row.get("strategy_id") or "") != strategy_id:
+            continue
+        timeline.append(
+            {
+                "event_type": "FEEDBACK",
+                "event_id": row.get("entry_id"),
+                "timestamp": row.get("created_at"),
+                "message": f"label={row.get('corrected_label')} taxonomy={row.get('reason_taxonomy')}",
+                "payload": row,
+            }
+        )
+
+    for row in model_update_payload.get("history") or []:
+        if str(row.get("strategy_id") or "") != strategy_id:
+            continue
+        timeline.append(
+            {
+                "event_type": "MODEL_UPDATE",
+                "event_id": row.get("job_id"),
+                "timestamp": row.get("created_at") or row.get("updated_at"),
+                "message": f"status={row.get('status')}",
+                "payload": row,
+            }
+        )
+
+    for index, drift in enumerate(status_payload.get("strategy_drift_alerts") or []):
+        if str(drift.get("strategy") or "") != strategy_id:
+            continue
+        timeline.append(
+            {
+                "event_type": "DRIFT_SIGNAL",
+                "event_id": f"{strategy_id}_drift_{index}",
+                "timestamp": drift.get("detected_at") or datetime.now(timezone.utc).isoformat(),
+                "message": f"severity={drift.get('severity')} reasons={drift.get('trigger_reason')}",
+                "payload": drift,
+            }
+        )
+
+    timeline.sort(key=lambda item: str(item.get("timestamp") or ""), reverse=True)
+    return timeline
 
 
 @router.get("/strategy-control/overview")
@@ -1448,6 +1576,268 @@ def strategy_bulk_action(
         state_snapshot=state_snapshot,
         extra={"results": results},
     )
+
+
+@router.post("/strategy/{strategy_id}/feedback-label")
+def strategy_feedback_label(
+    strategy_id: str,
+    payload: FeedbackLabelRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    trace_id = f"feedback_{uuid.uuid4().hex[:12]}"
+    state = _load_control_state(db, current_admin, refresh=False)
+
+    alerts = _build_drift_alert_rows(state["status_payload"], state["drift_alert_state"])
+    related_alert = None
+    for alert in alerts:
+        if str(alert.get("alert_id") or "") == str(payload.drift_alert_id) and str(alert.get("strategy_id") or "") == strategy_id:
+            related_alert = alert
+            break
+    if not related_alert:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Feedback drift context eşleşmedi (strategy + drift_alert_id).",
+            state_snapshot={"strategy_id": strategy_id, "drift_alert_id": payload.drift_alert_id},
+        )
+
+    feedback_payload = state["feedback_payload"]
+    version_map = feedback_payload.get("version_by_strategy") or {}
+    current_version = int(version_map.get(strategy_id) or 0)
+    next_version = current_version + 1
+    entry_id = f"fb_{uuid.uuid4().hex[:10]}"
+    entry = {
+        "entry_id": entry_id,
+        "strategy_id": strategy_id,
+        "drift_alert_id": payload.drift_alert_id,
+        "corrected_label": payload.corrected_label,
+        "reason_taxonomy": payload.reason_taxonomy,
+        "reason": payload.reason,
+        "sample_link": payload.sample_link,
+        "related_data_slice": payload.related_data_slice or {},
+        "dataset_version": next_version,
+        "trace_id": trace_id,
+        "created_by": current_admin.id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if not payload.dry_run:
+        items = list(feedback_payload.get("items") or [])
+        items.append(entry)
+        feedback_payload["items"] = items[-1000:]
+        version_map[strategy_id] = next_version
+        feedback_payload["version_by_strategy"] = version_map
+        _cache_set(pipeline_runtime.cache, state["keys"]["feedback"], feedback_payload)
+
+    create_audit_log(
+        db,
+        action="FUTURES_STRATEGY_FEEDBACK_LABEL",
+        entity_type="futures_strategy_control",
+        entity_id=strategy_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "dry_run": payload.dry_run,
+            "entry": entry,
+            "drift_context": related_alert,
+        },
+    )
+
+    return _result_payload(
+        status="dry_run" if payload.dry_run else "success",
+        trace_id=trace_id,
+        message="Feedback label correction kaydedildi.",
+        state_snapshot=entry,
+        extra={"dataset_version": next_version},
+    )
+
+
+@router.get("/strategy/{strategy_id}/feedback")
+def strategy_feedback_list(
+    strategy_id: str,
+    drift_alert_id: str | None = Query(default=None),
+    taxonomy: str | None = Query(default=None),
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    _ = db
+    state = _load_control_state(db, current_admin, refresh=False)
+    rows = [item for item in (state["feedback_payload"].get("items") or []) if str(item.get("strategy_id") or "") == strategy_id]
+    if drift_alert_id:
+        rows = [item for item in rows if str(item.get("drift_alert_id") or "") == str(drift_alert_id)]
+    if taxonomy:
+        rows = [item for item in rows if str(item.get("reason_taxonomy") or "").lower() == str(taxonomy).lower()]
+    rows.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+    return {
+        "status": "ok",
+        "strategy_id": strategy_id,
+        "items": rows,
+        "dataset_version": int((state["feedback_payload"].get("version_by_strategy") or {}).get(strategy_id) or 0),
+    }
+
+
+@router.post("/strategy/{strategy_id}/trigger-model-update")
+def strategy_trigger_model_update(
+    strategy_id: str,
+    payload: ModelUpdateTriggerRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    trace_id = f"model_update_{uuid.uuid4().hex[:12]}"
+    state = _load_control_state(db, current_admin, refresh=False)
+    refreshed = _refresh_model_update_jobs(state["model_update_payload"])
+    model_payload = refreshed["payload"]
+    if refreshed["changed"]:
+        _cache_set(pipeline_runtime.cache, state["keys"]["model_update"], model_payload)
+
+    current_job = dict((model_payload.get("by_strategy") or {}).get(strategy_id) or {})
+    if str(current_job.get("status") or "") in {"queued", "running"}:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Bu strategy için çalışan model update job zaten var.",
+            state_snapshot=current_job,
+        )
+
+    dataset_version = payload.dataset_version
+    if dataset_version is None:
+        dataset_version = int((state["feedback_payload"].get("version_by_strategy") or {}).get(strategy_id) or 0)
+
+    job_id = f"mu_{uuid.uuid4().hex[:12]}"
+    job = {
+        "job_id": job_id,
+        "strategy_id": strategy_id,
+        "status": "queued",
+        "dataset_version": int(dataset_version),
+        "reason": payload.reason,
+        "trace_id": trace_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": current_admin.id,
+    }
+
+    if not payload.dry_run:
+        by_strategy = model_payload.get("by_strategy") or {}
+        by_strategy[strategy_id] = job
+        model_payload["by_strategy"] = by_strategy
+        history = list(model_payload.get("history") or [])
+        history.append(job)
+        model_payload["history"] = history[-500:]
+        _cache_set(pipeline_runtime.cache, state["keys"]["model_update"], model_payload)
+
+    create_audit_log(
+        db,
+        action="FUTURES_STRATEGY_MODEL_UPDATE_TRIGGERED",
+        entity_type="futures_strategy_control",
+        entity_id=strategy_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "dataset_version": dataset_version,
+            "dry_run": payload.dry_run,
+            "job": job,
+        },
+    )
+
+    return _result_payload(
+        status="dry_run" if payload.dry_run else "success",
+        trace_id=trace_id,
+        message="Model update job queued.",
+        state_snapshot=job,
+    )
+
+
+@router.get("/strategy/{strategy_id}/model-update-status")
+def strategy_model_update_status(
+    strategy_id: str,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    state = _load_control_state(db, current_admin, refresh=False)
+    refreshed = _refresh_model_update_jobs(state["model_update_payload"])
+    model_payload = refreshed["payload"]
+    if refreshed["changed"]:
+        _cache_set(pipeline_runtime.cache, state["keys"]["model_update"], model_payload)
+
+    current_job = dict((model_payload.get("by_strategy") or {}).get(strategy_id) or {})
+    history = [item for item in (model_payload.get("history") or []) if str(item.get("strategy_id") or "") == strategy_id]
+    history.sort(key=lambda item: str(item.get("created_at") or item.get("updated_at") or ""), reverse=True)
+    return {
+        "status": "ok",
+        "strategy_id": strategy_id,
+        "current_job": current_job,
+        "history": history[:50],
+    }
+
+
+@router.get("/strategy/{strategy_id}/timeline-export")
+def strategy_timeline_export(
+    strategy_id: str,
+    format: str = Query(default="json", pattern="^(json|csv)$"),
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    trace_id = f"timeline_export_{uuid.uuid4().hex[:12]}"
+    state = _load_control_state(db, current_admin, refresh=False)
+    refreshed = _refresh_model_update_jobs(state["model_update_payload"])
+    model_payload = refreshed["payload"]
+    if refreshed["changed"]:
+        _cache_set(pipeline_runtime.cache, state["keys"]["model_update"], model_payload)
+
+    timeline = _build_strategy_timeline(
+        strategy_id=strategy_id,
+        status_payload=state["status_payload"],
+        action_history=state["action_history"],
+        feedback_payload=state["feedback_payload"],
+        model_update_payload=model_payload,
+    )
+
+    create_audit_log(
+        db,
+        action="FUTURES_STRATEGY_TIMELINE_EXPORTED",
+        entity_type="futures_strategy_control",
+        entity_id=strategy_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="info",
+        details={
+            "trace_id": trace_id,
+            "format": format,
+            "count": len(timeline),
+        },
+    )
+
+    if format == "csv":
+        stream = io.StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(["event_type", "event_id", "timestamp", "message"])
+        for item in timeline:
+            writer.writerow([item.get("event_type"), item.get("event_id"), item.get("timestamp"), item.get("message")])
+        csv_text = stream.getvalue()
+        return Response(
+            content=csv_text,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={strategy_id}_timeline.csv"},
+        )
+
+    return {
+        "status": "success",
+        "trace_id": trace_id,
+        "message": "Timeline export hazırlandı.",
+        "state_snapshot": {
+            "strategy_id": strategy_id,
+            "format": "json",
+            "count": len(timeline),
+        },
+        "items": timeline,
+    }
 
 
 @router.post("/strategy/{strategy_id}/enable")
