@@ -178,6 +178,9 @@ export const SimulationHistoryPanel = ({
           <p className="text-xs text-slate-400" data-testid="strategy-intelligence-simulation-compare-var-delta">
             var_change_vs_history={compareResult.compare_summary?.var_change_vs_history ?? "-"}
           </p>
+          <p className="text-xs text-slate-400" data-testid="strategy-intelligence-simulation-compare-liquidity-delta">
+            liquidity_impact_change_vs_history={compareResult.compare_summary?.liquidity_impact_change_vs_history ?? "-"}
+          </p>
           <p className="text-xs text-slate-400" data-testid="strategy-intelligence-simulation-compare-adj-risk-delta">
             confidence_adjusted_risk_delta_vs_history={compareResult.compare_summary?.confidence_adjusted_risk_delta_vs_history ?? "-"}
           </p>
