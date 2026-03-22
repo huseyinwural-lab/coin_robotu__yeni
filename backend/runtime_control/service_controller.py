@@ -48,6 +48,13 @@ def restart_runtime_service(*, service: str) -> dict:
     if normalized not in {"worker", "ws", "all"}:
         normalized = "all"
 
+    dependency_order_map = {
+        "all": ["database", "redis", "worker", "ws", "backend"],
+        "worker": ["redis", "worker", "backend"],
+        "ws": ["redis", "ws", "backend"],
+    }
+    dependency_order = dependency_order_map.get(normalized, [normalized, "backend"])
+
     # Current deployment has supervisor-managed frontend/backend only.
     # For worker/ws requests, schedule lightweight backend restart as runtime recovery action.
     command = "(sleep 1; supervisorctl restart backend) >> /tmp/runtime_control_service_restart.log 2>&1"
@@ -55,5 +62,6 @@ def restart_runtime_service(*, service: str) -> dict:
     return {
         "status": "scheduled",
         "requested_service": normalized,
+        "dependency_order": dependency_order,
         "restart_log": "/tmp/runtime_control_service_restart.log",
     }

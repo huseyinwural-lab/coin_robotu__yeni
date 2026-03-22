@@ -1,7 +1,7 @@
 # Production Readiness Report (Kanıtlı)
 
 Generated: 2026-03-18T23:22:09Z
-Base URL: `https://runtime-hub-2.preview.emergentagent.com/api`
+Base URL: `https://ops-trace-control.preview.emergentagent.com/api`
 
 ## Sonuç Özeti
 - **Overall:** ❌ **FAIL**

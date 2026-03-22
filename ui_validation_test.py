@@ -13,7 +13,7 @@ import re
 
 def test_ui_validation():
     """Perform concise UI validation"""
-    url = "https://runtime-hub-2.preview.emergentagent.com"
+    url = "https://ops-trace-control.preview.emergentagent.com"
     
     try:
         # Get the landing page

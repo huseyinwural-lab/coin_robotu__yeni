@@ -132,6 +132,15 @@ def _collect_gate_details(db: Session) -> dict:
             report_payload = {}
     rules = _build_gate_rules()
     history = _cache_read_json("runtime:gate:history", [])
+    suggested_fixes = [
+        {
+            "rule_id": item.get("rule_id"),
+            "suggested_fix": item.get("suggested_fix"),
+            "run_fix_action": item.get("run_fix_action"),
+        }
+        for item in rules
+        if str(item.get("result") or "").upper() == "FAIL"
+    ]
     return {
         "status": gate.get("status"),
         "reason_codes": gate.get("reason_codes") or [],
@@ -140,6 +149,7 @@ def _collect_gate_details(db: Session) -> dict:
         "blocking_items": report_payload.get("blocking_items") or [],
         "final_decision": report_payload.get("final_decision"),
         "rules": rules,
+        "suggested_fixes": suggested_fixes,
         "history": history[-20:],
         "fix_redirect": "/admin/execution-policies",
     }
@@ -188,6 +198,8 @@ def _build_gate_rules() -> list[dict]:
                         "result": "FAIL" if status == "FAIL" else "PASS",
                         "message": message,
                         "fix_hint": f"{rule_id} değerini production ortam kaynağından güncelleyin",
+                        "suggested_fix": _map_gate_suggested_fix(rule_id=rule_id, message=message),
+                        "run_fix_action": _map_gate_run_fix_action(rule_id=rule_id, message=message),
                     }
                 )
         except Exception:
@@ -206,6 +218,8 @@ def _build_gate_rules() -> list[dict]:
                         "result": "FAIL" if status == "FAIL" else "PASS",
                         "message": str(row.get("detail") or rule_name),
                         "fix_hint": "Preflight kontrolünü düzeltip tekrar /runtime/gate/recheck çalıştırın",
+                        "suggested_fix": _map_gate_suggested_fix(rule_id=rule_name, message=str(row.get("detail") or rule_name)),
+                        "run_fix_action": _map_gate_run_fix_action(rule_id=rule_name, message=str(row.get("detail") or rule_name)),
                     }
                 )
         except Exception:
@@ -218,10 +232,30 @@ def _build_gate_rules() -> list[dict]:
                 "result": "FAIL",
                 "message": "Gate kural artefaktları bulunamadı",
                 "fix_hint": "CI scriptlerini çalıştırıp artefakt üretimini doğrulayın",
+                "suggested_fix": "Gate scriptlerini yeniden çalıştır",
+                "run_fix_action": "gate_recheck",
             }
         )
 
     return rules
+
+
+def _map_gate_suggested_fix(*, rule_id: str, message: str) -> str:
+    text = f"{rule_id} {message}".lower()
+    if "db" in text or "postgres" in text or "database" in text:
+        return "DB bağlantısını doğrula, gerekirse servis restart + gate re-check çalıştır"
+    if "redis" in text:
+        return "Redis bağlantısını doğrula, gerekirse reconnect + gate re-check çalıştır"
+    return "Fix hint adımlarını uygulayıp gate re-check çalıştır"
+
+
+def _map_gate_run_fix_action(*, rule_id: str, message: str) -> str:
+    text = f"{rule_id} {message}".lower()
+    if "db" in text or "postgres" in text or "database" in text:
+        return "db_restart_then_gate_recheck"
+    if "redis" in text:
+        return "redis_reconnect_then_gate_recheck"
+    return "gate_recheck"
 
 
 def _safe_ltrim(cache, key: str, start: int, end: int):
@@ -247,6 +281,7 @@ def _action_result(*, status: str, trace_id: str | None, message: str, state_sna
         "status": status,
         "trace_id": trace_id,
         "message": message,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "state_snapshot": state_snapshot or {},
     }
     payload.update(extra)
@@ -400,6 +435,32 @@ def runtime_state_validation(current_admin: User = Depends(require_admin), db: S
     guard = get_guard_telemetry(db, limit=100)
     guard_block_visible = len(guard.get("blocked_trade_list") or []) > 0
 
+    checks = {
+        "ws_session_changed": {
+            "value": ws_session_changed,
+            "status": "pass" if ws_session_changed else ("warning" if previous_session_id is None else "fail"),
+            "fix_action": "Fix WS",
+        },
+        "override_effect_applied": {
+            "value": override_effect_applied,
+            "status": "pass" if override_effect_applied else "warning",
+            "fix_action": "Re-sync Override",
+        },
+        "gate_source": {
+            "value": gate_source,
+            "status": "pass" if gate_source == "ci_script" else "fail",
+            "fix_action": "Run Gate Re-check",
+        },
+        "guard_block_visible": {
+            "value": guard_block_visible,
+            "status": "pass" if guard_block_visible else "warning",
+            "fix_action": "Rebuild Guard List",
+        },
+    }
+
+    any_fail = any(item["status"] == "fail" for item in checks.values())
+    any_warning = any(item["status"] == "warning" for item in checks.values())
+
     suggestions = {
         "ws_session_changed": None if ws_session_changed else "WS reconnect veya force-new-session aksiyonunu çalıştırın.",
         "override_effect_applied": None if override_effect_applied else "Test override oluşturup aktif override state değişimini doğrulayın.",
@@ -408,10 +469,12 @@ def runtime_state_validation(current_admin: User = Depends(require_admin), db: S
     }
 
     return {
+        "overall_status": "fail" if any_fail else ("warning" if any_warning else "pass"),
         "ws_session_changed": ws_session_changed,
         "override_effect_applied": override_effect_applied,
         "gate_source": gate_source,
         "guard_block_visible": guard_block_visible,
+        "checks": checks,
         "suggestions": suggestions,
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }

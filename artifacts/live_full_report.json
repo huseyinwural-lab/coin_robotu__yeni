@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "base_url": "https://runtime-hub-2.preview.emergentagent.com",
+  "base_url": "https://ops-trace-control.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",

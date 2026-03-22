@@ -198,6 +198,7 @@ def _action_result(*, trace_id: str, message: str, state_snapshot: dict, **extra
         "status": "success",
         "trace_id": trace_id,
         "message": message,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "state_snapshot": state_snapshot,
     }
     payload.update(extra)

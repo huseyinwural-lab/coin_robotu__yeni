@@ -1,137 +1,138 @@
-<analysis>**original_problem_statement**: The user is directing a strict, audit-focused stabilization and deployment of an algorithmic trading platform. The primary goals of this session were to run and validate Canary Phases (C2, C3, C4), resolve a UI infinite-loading bug on the Scanner page, build comprehensive observability dashboards (Anomaly timeline, MTTR/MTTD KPIs), and perform a strict deployment risk audit (FAZ D0). Following a  result due to  database configurations in production, the user requested a secure Remediation Flow (FAZ D0-UI FIX) to allow admins to safely correct production environment variables when the Release Gate is BLOCKED, without bypassing the gate itself.
+<analysis><problem_statement>
+The user wants to transform the application's Admin Dashboard from a passive monitoring screen into an actionable Unified Pipeline Operations Panel (Monitoring, Control, Recovery, Traceability). The strict architectural rule is the 4-element pattern: State (what is happening), Reason (why), Action (what to do), and Result (what happened). All backend control actions must strictly return . 
+Recently, the user mandated strict trading constraints (USDT/USDC only), consolidated all legacy monitoring pages into one single route, and requested operationalizing data via Freshness SLAs, KPI Recommendations, Trend Analytics, DB-backed Exports, and Bulk Universe Management. The very final request aims to fix Go-Blocker issues: making UI FAIL states directly actionable with suggested fixes, and persisting Action->Result tracking.
+</problem_statement>
 
-**User's preferred language**: Turkish (Türkçe).
+**User's preferred language**: Turkish (Türkçe)
 **INSTRUCT NEXT AGENT**: You MUST respond to the user in Turkish only.
 
-**what currently exists?**: 
-A full-stack algorithmic trading app (React + FastAPI + PostgreSQL). Canary rollout phases C1-C4 are completely validated and closed out. Extensive observability tools (Scanner sparklines, anomaly alerts, admin timeline, TTR tracking, operator dashboard) have been implemented and thoroughly tested. A strict Deployment Gate mechanism is active, which currently blocks production deployment () due to local DB/Redis URLs.
+**what currently exists?** 
+A robust algorithmic trading app (React + FastAPI + PostgreSQL). The Admin UI has been heavily consolidated. Legacy pages are deleted/redirected. The new  is the single source of truth, featuring inline Action Audit drawers, Trend/Analytics charts, KPI Recommendations, Freshness/SLA tracking, Rollout Orchestration (promote/demote/rollback), and Scanner Controls. The backend enforces a strict USDT/USDC quote asset policy and logs all actions immutably with s.
 
 **Last working item**:
-- **Last item agent was working**: Implementing the backend remediation endpoints and audit flow for FAZ D0-UI FIX. The agent had just applied updates to  to add  schemas and was about to implement the actual endpoint routes to handle saving config and re-triggering the gate checks safely.
-- **Status**: IN PROGRESS
-- **Agent Testing Done**: N
-- **Which testing method agent to use?**: Both. First use backend testing agent (or curl) to verify the remediation API handles validations (rejecting localhost), then frontend testing agent to verify the Blokajı Çöz modal and the Kaydet ve Yeniden Doğrula flow.
-- **User Testing Done**: N
+    - Last item agent was working: Implementing the GO-BLOCKER FIX task. This involves making  FAILs actionable (e.g., Fix WS button), adding Suggested Fix mapping for Gate BLOCKED states, persisting the Last Action Result in the UI using LocalStorage (max 5 items), and adding actionable buttons (unblock/ignore) to Guard and Exchange Monitoring panels.
+    - Status: IN PROGRESS
+    - Agent Testing Done: N
+    - Which testing method agent to use?: Both (Frontend screenshot to verify UI layout of new actionable buttons, and testing_agent to ensure the backend orchestration logic works).
+    - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  - Issue 1: FAZ D0-UI FIX — Blocked Release Gate Remediation Flow (P0)
-     - Attempted fixes: Agent updated backend schemas for the remediation request. The actual backend endpoint logic and frontend UI changes are yet to be written.
-     - Next debug checklist: 
-        1. Create backend endpoint to securely receive updated DB/Redis/Secret config, save it, run preflight, and return the new gate status. 
-        2. Modify the React frontend ( /  / ) to NOT completely lock the UI on . 
-        3. Add a Blokajı Çöz (Resolve Blockage) modal showing fail reasons.
-     - Why fix this issue and what will be achieved with the fix? Prevents a Bypass vulnerability. Allows operators to safely input real production DB URLs and resolve the deployment blocker organically.
+  Issue 1: Go-Blocker Fixes - Actionable States & Persistence (P0)
+     - Attempted fixes: The agent just applied patches to  and  to map error states to fix actions and orchestrate existing endpoints.
+     - Next debug checklist: Check  to ensure LocalStorage persistence for the last 5 actions is rendering correctly. Verify that clicking Fix WS or Rebuild Guard List properly triggers the backend and updates the UI result panel with a .
+     - Why fix this issue and what will be achieved with the fix? It completes the user's ultimate goal: The operator sees the problem, understands the cause, applies the fix, and takes out the data.
      - Status: IN PROGRESS
      - Is recurring issue? N
      - Should Test frontend/backend/both after fix? Both
      - Blocked on other issue: None
 
 **In progress Task List**:
-  - Task 1: Backend Config Remediation Endpoints
-     - Where to resume: Continue writing the backend endpoints that process the config updates (ensuring  is rejected) and write ,  to .
-     - What will be achieved with this? Backend foundation for the D0-UI FIX.
+  Task 1: Alert Center Lifecycle (P1)
+     - Where to resume:  and alert router.
+     - What will be achieved with this? Implementing open/ack/resolved states for alerts with severity filters.
      - Status: IN PROGRESS
-     - Should Test frontend/backend/both after fix? Backend
+     - Should Test frontend/backend/both after fix? Both
+     - Blocked on something: None
 
-  - Task 2: Frontend Blokajı Çöz Modal & Kaydet ve Yeniden Doğrula Flow
-     - Where to resume: Frontend React components dealing with the System Config / Release Gate display.
-     - What will be achieved with this? The operator can view why the gate failed (e.g., localhost DB) and input the correct secrets securely.
-     - Status: NOT STARTED
-     - Should Test frontend/backend/both after fix? Frontend
-     - Blocked on something: Task 1 (Backend endpoints)
-
-**Upcoming and Future Tasks**:
+**Upcoming and Future Tasks**
     Upcoming Tasks:
-    - P0: Validate FAZ D0-UI FIX completely. Ensure Live Enable is still disabled while BLOCKED, and READY only appears if the backend specifically returns PASS.
-    - P1: Once the gate is GO, prompt the user to execute the final Live Execution opening order.
+    - P1: Traceability Timeline UI: Link  natively to before/after effects visually in the UI so the operator can see a timeline of changes.
     
     Future Tasks:
-    - P2: Refactor duplicated C-phase bash scripts into common helper functions (Backlog).
+    - P2: Ops Playbook Mode: Automatically display runbook steps / suggestions during critical actions.
+    - P2: DB Self-Heal/Health-Guard: Prevent login issues by auto-checking Postgres availability and showing a precheck banner on the login screen.
 
-**Completed work in this session**:
-- FAZ C2, C3, C4 Canary Test execution and passing validation (DONE)
-- Scanner UI Infinite Loading Loop bug fix () (DONE)
-- CI performance comments enhancement (P1/P2: >90% warning, last 5 avg deviation) (DONE)
-- Schema validation for  via CI (DONE)
-- FAZ-1 to FAZ-5 Observability Suite (Sparklines, Anomaly Events, Admin Timeline, TTR color coding, Operator Dashboard with MTTR/MTTD) (DONE)
-- D0 Preflight & Release Gate bash scripts generation and evaluation (Produced  due to env vars) (DONE)
+**Completed work in this session**
+- Unified Pipeline Operations Panel consolidation & legacy route cleanup (DONE)
+- Quote Asset Constraint (USDT/USDC only) across execution, scanner, and guard (DONE)
+- Production Readiness Lock: Config lock, UI visibility, MOCK/LIVE mode (DONE)
+- Light Green Theme Override for Admin Panel (Dark mode removal) (DONE)
+- Action Audit Drawer integration (no page redirects, unified context) (DONE)
+- FAZ-1 Universe Monitor: Scanner Control, Rollout Orchestrator, Risk Exposure, Slow Strategy Control (DONE)
+- FAZ-2 TUR-1: Freshness/SLA detection, KPI Recommendations, Trend Analytics Charts (DONE)
+- FAZ-2 TUR-2: DB-backed async Export Job (CSV/JSON), Universe Bulk Import UX, Debug Panel isolation (DONE)
+- Database/Login Connection Fix (Resolved PostgreSQL down state) (DONE)
 
-**Earlier issues found/mentioned but not fixed**:
+**Earlier issues found/mentioned but not fixed**
 None.
 
-**Known issue recurrence from previous fork**:
-  - Issue recurrence in previous fork: Production Configuration Drift (Deployment failing due to relying on local  variables like  DBs instead of platform secrets).
-  - Recurrence count: 1 (Caught by D0 gate).
-  - Status: IN PROGRESS (Being actively fixed via D0-UI FIX).
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork: PostgreSQL connection refusal / 502 Bad Gateway during backend startup.
+  - Recurrence count: 3
+  - Status: RESOLVED
+  - Note: The testing environment sometimes drops the Postgres process. The agent had to use backend: stopped
+backend: started and start the DB service manually to restore . Keep this in mind if API calls suddenly fail with 502/Connection Refused.
 
-**Code Architecture**:
+**Code Architecture**
 
 
-**Key Technical Concepts**:
-- **Artifact-First Audit:** No task is complete unless a script outputs a JSON/log file proving success.
-- **NO Bypass Rule:** The Release Gate cannot be force unlocked by the UI. It must evaluate to GO organically based on valid configs.
-- **Observability Stack:** Strong emphasis on anomaly tracking, suppressed counts, Rate Limiting, and Time-to-Recover (TTR).
+**Key Technical Concepts**
+- **Action-Result Contract**: Every backend control action returns .
+- **Double-Confirm Enforcement**: All critical operations require a modal with a  text area and a  input.
+- **Audit-First**: Export jobs and bulk updates write to DB and generate audit logs instantly.
+- **Drawer over Redirects**: To maintain operational context, detailed logs (Audit) open in right-side drawers rather than navigating to a new page.
 
 **key DB schema**
-  - : heavily utilized now for anomaly tracking and soon for config editing history.
-  - : added in this session to manage warning/critical thresholds and auto-mute logic.
+  - : id, trace_id, status, params, result_url, created_at
+  -  / : For trend and freshness data.
 
 **changes in tech stack**
-  - No core stack changes. Added stricter Pydantic validations for production configs.
+  - None structurally, but heavy utilization of time-series data handling and DB-backed async jobs for exports.
 
 **All files of reference**
-  - : Contains the newly added config remediation schemas.
-  -  or equivalent where remediation endpoints go.
-  -  & : Target for the new Blokajı Çöz modal.
-  - : The source of truth for the deployment block.
+  -  (Currently actively modifying)
+  -  (Currently actively modifying)
+  - 
 
 **Areas that need refactoring**:
-- Canary bash scripts () have heavy boilerplate duplication. Noted in backlog for future cleanup.
+-  has grown to nearly 2000 lines. It handles state for Trend Charts, KPIs, Freshness, Scanner control, Rollouts, and Actions. It is functioning perfectly, but for future maintainability, splitting it into smaller components (e.g., , ) might be necessary.
 
 **key api endpoints**
-  -  (Added this session)
   - 
-  - (Upcoming)  (Or similar name you choose to implement the D0-UI FIX).
-
-**Critical Info for New Agent**:
-- **NO UI BYPASS**: The user strictly forbade adding an Unlock or READY toggle button for the release gate. You MUST build a secure remediation flow that allows the user to input proper  (rejecting ), saves it, and asks the backend to re-verify the preflight checks. 
-- You are in the middle of implementing this FAZ D0-UI FIX. Proceed directly to finishing the backend routes and the frontend React components for the Blokajı Çöz flow.
-- The user is Turkish, ALWAYS communicate in Turkish.
-
-**documents and test reports created in this job**:
-  -  & 
   - 
   - 
   - 
 
-**Last 10 User Messages and any pending HUMAN messages**:
-1. User: Requests FAZ-4 action layer (alert policies, smart mute, generic webhook).
-2. Agent: Implements backend & frontend for FAZ-4.
-3. User: Approves testing FAZ-4.
-4. Agent: Tests pass. Asks about FAZ-5 (Operator dashboard).
-5. User: Approves FAZ-5 list + TTR tooltips.
-6. Agent: Implements FAZ-5, hits a limit=1000 P0 bug, fixes it, tests pass.
-7. User: Asks for deployment risk report.
-8. Agent: Executes checks, reports NO_GO due to localhost DBs. Proposes plan.
-9. User: Orders D0-FIX (Fixing env endpoints/secrets). Agent tries bash but fails (missing secrets).
-10. User: Explicitly rejects standard bypass. Provides strict FAZ D0-UI FIX order: Create a Blokajı Çöz (Resolve Blockage) UI flow to safely input prod config and re-trigger gate checks safely. Agent started backend implementation but the turn ended. *(Pending Action: Finish backend routes and frontend modal for remediation)*.
+**Critical Info for New Agent**
+- The user is extremely specific about **UI/UX rules**:
+  1. Do NOT redirect away from the . Use Drawers/Modals.
+  2. Do NOT leave empty panels. Always show No data yet + reason.
+  3. Actions must NOT silently fail. Show exact success/reject counts (e.g., in Bulk Universe Import).
+  4. The current task (Go-Blocker Fix) requires orchestrating *existing* endpoints to fix FAIL states, not creating new ones. Click Run Fix -> Call existing WS/Guard endpoint -> show single result.
 
-**Project Health Check**:
-- Broken: None technically, but deployment is purposefully  via the Release Gate.
-- Mocked: Some binance mock configs exist, but prod requires real keys.
+**documents and test reports created in this job**
+  -  to  (Excellent track record of passing backend/frontend tests).
 
-**3rd Party Integrations**:
-- Binance Futures Testnet (API keys needed for prod verification).
+**Last 10 User Messages and any pending HUMAN messages** 
+1. User: Demanded FAZ-1 Universe Monitor (Scanner, Rollout, Risk, Slow Strategy).
+2. Agent: Implemented FAZ-1, ran tests.
+3. User: Demanded Action Audit page be moved INTO the Unified Panel as a Drawer.
+4. Agent: Implemented Drawer, deleted legacy audit route.
+5. User: Demanded FAZ-2 TUR-1 (Freshness/SLA, KPI Recommendation, Trend Analytics).
+6. Agent: Implemented FAZ-2 TUR-1, fixed chart width warning.
+7. User: Asked for a summary of changes and legacy cleanup.
+8. Agent: Provided summary.
+9. User: Demanded FAZ-2 TUR-2 (DB Export Job, Bulk UX validation, Debug Panel policy).
+10. Agent: Implemented FAZ-2 TUR-2, fixed login Postgres crash.
+11. User (Pending Context): Requested GO-BLOCKER FIX GÖREV EMRİ: Make State FAILs actionable, Gate blocked root-cause mapping, Action->Result LocalStorage persistence, and adding actions to monitoring panels. **Agent was in the middle of patching files for this exact request.**
 
-**Testing status**:
-  - Testing agent used after significant changes: YES (Heavily used for all frontend observability updates).
+**Project Health Check:**
+Broken: None (Login/Postgres was just fixed).
+Mocked: Binance execution mocked in MOCK mode.
+
+**3rd Party Integrations**
+- Binance Futures Testnet (API keys expected for PROD execution).
+
+**Testing status**
+  - Testing agent used after significant changes: YES (Heavy usage up to iteration 59).
   - Troubleshoot agent used after agent stuck in loop: NO.
-  - Test files created: None newly specified, mostly reliant on e2e test agent.
-  - Known regressions: None currently. LocalStorage persistence bug was found and fixed.
+  - Test files created/modified: Heavy modifications to .
+  - Known regressions: None currently.
 
-**Credentials to test flow**:
-- Admin:  / 
-- User:  / 
+**Credentials to test flow:**
+- URL: 
+- Super Admin:  / 
+- Ops User:  / (Role restricted account)
 
-**What agent forgot to execute**:
-The agent's context window ended right after patching . It still needs to write the backend router logic for the remediation flow and build the frontend React components for the Blokajı Çöz drawer/modal.</analysis>
+**What agent forgot to execute**
+The agent just applied the patches for the Go-Blocker Fix (actionable FAIL states, UI local storage persistence) but did not get a chance to run testing (Screenshot or ) or send the final  tool output to the user. The next agent must verify the patches applied correctly, test the UI, and present the finished task to the user.</analysis>

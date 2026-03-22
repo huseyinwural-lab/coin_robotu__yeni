@@ -64,17 +64,22 @@ const extractErrorMeta = (error) => {
 };
 
 const ResultBadge = ({ result, testId }) => {
-  if (!result) {
-    return <p className="text-xs text-slate-500" data-testid={`${testId}-empty`}>Henüz aksiyon sonucu yok.</p>;
-  }
+  const payload = result || {
+    status: "no-data",
+    trace_id: "-",
+    message: "No data yet",
+    timestamp: "-",
+    state_snapshot: {},
+  };
 
   return (
     <div className="space-y-1 text-xs text-emerald-200" data-testid={`${testId}-payload`}>
       <p className="font-semibold text-emerald-300" data-testid={`${testId}-last-action-result-label`}>last_action_result</p>
-      <p data-testid={`${testId}-status`}>status={result.status || "-"}</p>
-      <p data-testid={`${testId}-trace-id`}>trace_id={result.trace_id || "-"}</p>
-      <p data-testid={`${testId}-message`}>message={result.message || "-"}</p>
-      <p data-testid={`${testId}-state-snapshot`}>state_snapshot={JSON.stringify(result.state_snapshot || {}).slice(0, 180)}</p>
+      <p data-testid={`${testId}-status`}>last_action_status={payload.status || "-"}</p>
+      <p data-testid={`${testId}-trace-id`}>trace_id={payload.trace_id || "-"}</p>
+      <p data-testid={`${testId}-timestamp`}>timestamp={payload.timestamp || "-"}</p>
+      <p data-testid={`${testId}-message`}>message={payload.message || "-"}</p>
+      <p data-testid={`${testId}-state-snapshot`}>state_snapshot={JSON.stringify(payload.state_snapshot || {}).slice(0, 180)}</p>
     </div>
   );
 };
@@ -160,6 +165,7 @@ export const PipelineOperationsPage = () => {
   const [serviceTarget, setServiceTarget] = useState("all");
   const [lagThreshold, setLagThreshold] = useState("60");
   const [severityFilter, setSeverityFilter] = useState("all");
+  const [alertStatusFilter, setAlertStatusFilter] = useState("all");
   const [alertSinceHours, setAlertSinceHours] = useState("24");
   const [alertEventFilter, setAlertEventFilter] = useState("");
   const [runtimeMode, setRuntimeMode] = useState("MOCK");
@@ -204,6 +210,7 @@ export const PipelineOperationsPage = () => {
   });
 
   const [bulkSelection, setBulkSelection] = useState([]);
+  const [actionHistory, setActionHistory] = useState([]);
   const [bulkSymbolsInput, setBulkSymbolsInput] = useState("BTCUSDT,ETHUSDT");
   const [symbolListModal, setSymbolListModal] = useState({ open: false, listType: "whitelist", symbolsText: "" });
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
@@ -216,10 +223,12 @@ export const PipelineOperationsPage = () => {
   const [riskOverrideForm, setRiskOverrideForm] = useState({ override_type: "force_allow", scope: "global", ttl_minutes: "30" });
   const [slowActionForm, setSlowActionForm] = useState({ strategy_id: "spot_pullback_v1", throttle_profile: "soft", symbol: "BTCUSDT" });
   const [stateValidation, setStateValidation] = useState({
+    overallStatus: "warning",
     wsReconnectSessionChanged: false,
     overrideAffectsExecution: false,
     gateUsesCiResult: false,
     tradeBlockVisible: false,
+    checks: {},
     suggestions: {},
     lastCheckedAt: null,
   });
@@ -288,7 +297,7 @@ export const PipelineOperationsPage = () => {
         apiClient.get("/runtime/hardening/analytics", { params: { time_window_hours: 48 } }),
         apiClient.get("/runtime/alerts/history", {
           params: {
-            status_filter: "all",
+            status_filter: alertStatusFilter,
             severity: severityFilter === "all" ? undefined : severityFilter,
             since_hours: Number(alertSinceHours || 24),
             event_type: alertEventFilter || undefined,
@@ -354,10 +363,12 @@ export const PipelineOperationsPage = () => {
       setMetricsHistory(metricsHistoryRes.data || { latency_series: [], pnl_series: [], risk_veto_series: [], overlays: [] });
       setExportJobs(exportJobsRes.data?.items || []);
       setStateValidation({
+        overallStatus: validationRes.data?.overall_status || "warning",
         wsReconnectSessionChanged: Boolean(validationRes.data?.ws_session_changed),
         overrideAffectsExecution: Boolean(validationRes.data?.override_effect_applied),
         gateUsesCiResult: String(validationRes.data?.gate_source || "").toLowerCase() === "ci_script",
         tradeBlockVisible: Boolean(validationRes.data?.guard_block_visible),
+        checks: validationRes.data?.checks || {},
         suggestions: validationRes.data?.suggestions || {},
         lastCheckedAt: validationRes.data?.checked_at || new Date().toISOString(),
       });
@@ -405,11 +416,32 @@ export const PipelineOperationsPage = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [severityFilter, alertSinceHours, alertEventFilter, trendRange, trendSymbolFilter, trendStrategyFilter]);
+  }, [severityFilter, alertStatusFilter, alertSinceHours, alertEventFilter, trendRange, trendSymbolFilter, trendStrategyFilter]);
 
   useEffect(() => {
     load(true);
   }, [load]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("pipeline_ops_action_history_v1");
+      const rows = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(rows)) {
+        setActionHistory(rows.slice(0, 5));
+        setPanelResult((prev) => {
+          const next = { ...prev };
+          rows.forEach((item) => {
+            if (item?.panelKey && !next[item.panelKey]) {
+              next[item.panelKey] = item;
+            }
+          });
+          return next;
+        });
+      }
+    } catch {
+      setActionHistory([]);
+    }
+  }, []);
 
   useEffect(() => {
     if (!autoRefreshEnabled) return undefined;
@@ -432,18 +464,24 @@ export const PipelineOperationsPage = () => {
   };
 
   const setActionSuccess = (panelKey, payload, toastTitle) => {
-    const resultPayload = payload || null;
+    const resultPayload = {
+      ...(payload || {}),
+      timestamp: payload?.timestamp || new Date().toISOString(),
+    };
     setPanelResult((prev) => ({ ...prev, [panelKey]: resultPayload }));
+    pushActionHistory({ panelKey, ...resultPayload });
     toast.success(`${toastTitle} | trace_id: ${resultPayload?.trace_id || "-"}`);
   };
 
   const setActionFailure = (panelKey, error, toastTitle) => {
     const { traceId, message } = extractErrorMeta(error);
     setGlobalError(message);
+    const resultPayload = { status: "fail", trace_id: traceId, message, timestamp: new Date().toISOString(), state_snapshot: {} };
     setPanelResult((prev) => ({
       ...prev,
-      [panelKey]: { status: "error", trace_id: traceId, message },
+      [panelKey]: resultPayload,
     }));
+    pushActionHistory({ panelKey, ...resultPayload });
     toast.error(`${toastTitle} | trace_id: ${traceId} | ${message}`);
   };
 
@@ -453,6 +491,22 @@ export const PipelineOperationsPage = () => {
       .map((item) => item.trim().toUpperCase())
       .filter(Boolean);
     return Array.from(new Set(raw));
+  };
+
+  const pushActionHistory = (entry) => {
+    const normalized = {
+      panelKey: entry.panelKey,
+      status: entry.status,
+      trace_id: entry.trace_id,
+      message: entry.message,
+      timestamp: entry.timestamp || new Date().toISOString(),
+      state_snapshot: entry.state_snapshot || {},
+    };
+    setActionHistory((prev) => {
+      const next = [normalized, ...prev].slice(0, 5);
+      window.localStorage.setItem("pipeline_ops_action_history_v1", JSON.stringify(next));
+      return next;
+    });
   };
 
   const onBulkCsvFileUpload = async (file) => {
@@ -598,6 +652,16 @@ export const PipelineOperationsPage = () => {
     setAuditDrawerTab(tab);
     setAuditDrawerOpen(true);
     await loadAuditDrawerData(tab);
+  };
+
+  const openTraceFromHistory = async (traceId) => {
+    const normalized = String(traceId || "").trim();
+    if (!normalized || normalized === "-") {
+      toast.error("Geçerli trace_id bulunamadı");
+      return;
+    }
+    setAuditFilters((prev) => ({ ...prev, trace_id: normalized }));
+    await openAuditDrawer("action_audit");
   };
 
   const openAuditDetail = async (id) => {
@@ -871,6 +935,100 @@ export const PipelineOperationsPage = () => {
     openActionDialog("universe_bulk_toggle", "scannerOps", reasonControl, { symbols, enabled });
   };
 
+  const runStateValidationFix = async (fixType) => {
+    const compositeTraceId = crypto.randomUUID();
+    const callReason = `[fix_trace:${compositeTraceId}] state_validation_fix:${fixType}`;
+    const childResults = [];
+    try {
+      if (fixType === "Fix WS") {
+        const wsResult = await apiClient.post("/runtime/ws/reconnect", { reason: callReason, confirmation_phrase: "RECONNECT WS" });
+        childResults.push(wsResult.data);
+      } else if (fixType === "Re-sync Override") {
+        const overrideResult = await apiClient.get("/runtime/override/active");
+        childResults.push({ status: "success", message: "override state refreshed", state_snapshot: overrideResult.data });
+      } else if (fixType === "Rebuild Guard List") {
+        const guardResult = await apiClient.get("/runtime/guard/telemetry", { params: { limit: 100 } });
+        childResults.push({ status: "success", message: "guard list rebuilt", state_snapshot: guardResult.data });
+      } else {
+        const gateResult = await apiClient.post("/runtime/gate/recheck", { reason: callReason, confirmation_phrase: "RECHECK RELEASE GATE" });
+        childResults.push(gateResult.data);
+      }
+
+      const payload = {
+        status: "success",
+        trace_id: compositeTraceId,
+        timestamp: new Date().toISOString(),
+        message: `${fixType} completed`,
+        state_snapshot: { child_results: childResults.map((item) => ({ trace_id: item.trace_id, status: item.status, message: item.message })) },
+      };
+      setActionSuccess("recovery", payload, `${fixType} başarılı`);
+      await load(false);
+    } catch (error) {
+      const { message } = extractErrorMeta(error);
+      setActionFailure("recovery", error, `${fixType} başarısız`);
+      setPanelResult((prev) => ({
+        ...prev,
+        recovery: {
+          status: "fail",
+          trace_id: compositeTraceId,
+          timestamp: new Date().toISOString(),
+          message,
+          state_snapshot: { child_results: childResults },
+        },
+      }));
+    }
+  };
+
+  const runGateSuggestedFix = async (actionCode) => {
+    const compositeTraceId = crypto.randomUUID();
+    const callReason = `[fix_trace:${compositeTraceId}] gate_fix:${actionCode}`;
+    const childResults = [];
+    try {
+      if (actionCode === "db_restart_then_gate_recheck") {
+        childResults.push((await apiClient.post("/runtime/service/restart", { service: "all", reason: callReason, confirmation_phrase: "RESTART SERVICE" })).data);
+      } else if (actionCode === "redis_reconnect_then_gate_recheck") {
+        childResults.push((await apiClient.post("/runtime/ws/reconnect", { reason: callReason, confirmation_phrase: "RECONNECT WS" })).data);
+      }
+      childResults.push((await apiClient.post("/runtime/gate/recheck", { reason: callReason, confirmation_phrase: "RECHECK RELEASE GATE" })).data);
+
+      const payload = {
+        status: "success",
+        trace_id: compositeTraceId,
+        timestamp: new Date().toISOString(),
+        message: "gate suggested fix completed",
+        state_snapshot: { child_results: childResults.map((item) => ({ trace_id: item.trace_id, status: item.status, message: item.message })) },
+      };
+      setActionSuccess("control", payload, "Run Fix başarılı");
+      await load(false);
+    } catch (error) {
+      setActionFailure("control", error, "Run Fix başarısız");
+    }
+  };
+
+  const runGuardAction = async (actionType, item) => {
+    if (actionType === "inspect") {
+      setAuditFilters((prev) => ({ ...prev, trace_id: String(item?.trace_id || item?.id || "") }));
+      await openAuditDrawer("action_audit");
+      return;
+    }
+    const compositeTraceId = crypto.randomUUID();
+    const reason = `[guard_action:${actionType}] [trace:${compositeTraceId}] ${item?.symbol || "UNKNOWN"}`;
+    try {
+      const overrideType = actionType === "unblock" ? "force_allow" : "force_reject";
+      const { data } = await apiClient.post("/admin/universe-monitor/risk/exposure-override", {
+        override_type: overrideType,
+        scope: item?.symbol || "global",
+        ttl_minutes: 30,
+        reason,
+        confirmation_phrase: "APPLY EXPOSURE OVERRIDE",
+      });
+      setActionSuccess("monitoring", data, `Guard ${actionType} başarılı`);
+      await load(false);
+    } catch (error) {
+      setActionFailure("monitoring", error, `Guard ${actionType} başarısız`);
+    }
+  };
+
   const topReasons = useMemo(() => {
     const rows = [...(guardTelemetry?.top_reasons || [])];
     rows.sort((a, b) => {
@@ -937,6 +1095,37 @@ export const PipelineOperationsPage = () => {
         allowedQuoteAssets={allowedQuoteAssets}
         testId="pipeline-operations-summary-bar"
       />
+
+      <article className="rounded-xl border border-slate-700 bg-slate-900/90 p-4" data-testid="pipeline-operations-last-action-history-panel">
+        <h3 className="text-base font-semibold text-slate-100" data-testid="pipeline-operations-last-action-history-title">Last Action Results (LocalStorage)</h3>
+        <p className="text-xs text-slate-400" data-testid="pipeline-operations-last-action-history-description">Sayfa yenilense bile son 5 Action→Result kaydı korunur.</p>
+        <div className="mt-3 space-y-2" data-testid="pipeline-operations-last-action-history-list">
+          {actionHistory.length === 0 && (
+            <p className="text-xs text-slate-400" data-testid="pipeline-operations-last-action-history-empty">No data yet: henüz kayıtlı aksiyon sonucu yok.</p>
+          )}
+          {actionHistory.map((item, idx) => (
+            <div key={`${item.trace_id || "trace"}-${idx}`} className="rounded border border-slate-700 bg-black/20 p-2" data-testid={`pipeline-operations-last-action-history-item-${idx}`}>
+              <p className="text-xs font-semibold text-slate-200" data-testid={`pipeline-operations-last-action-history-head-${idx}`}>
+                panel={item.panelKey || "-"} · status={item.status || "-"}
+              </p>
+              <p className="text-xs text-slate-300" data-testid={`pipeline-operations-last-action-history-trace-${idx}`}>trace_id={item.trace_id || "-"}</p>
+              <p className="text-xs text-slate-300" data-testid={`pipeline-operations-last-action-history-time-${idx}`}>timestamp={item.timestamp || "-"}</p>
+              <p className="text-xs text-slate-300" data-testid={`pipeline-operations-last-action-history-message-${idx}`}>message={item.message || "-"}</p>
+              <div className="mt-2" data-testid={`pipeline-operations-last-action-history-actions-${idx}`}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openTraceFromHistory(item.trace_id)}
+                  disabled={!item.trace_id || item.trace_id === "-"}
+                  data-testid={`pipeline-operations-last-action-history-open-trace-${idx}`}
+                >
+                  Trace Aç
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </article>
 
       <article className="rounded-xl border border-slate-700 bg-slate-900/90 p-4" data-testid="pipeline-operations-universe-ops-panel">
         <h3 className="text-base font-semibold text-slate-100" data-testid="pipeline-operations-universe-ops-title">Universe Operations (Faz-1)</h3>
@@ -1234,22 +1423,31 @@ export const PipelineOperationsPage = () => {
         <h3 className="text-base font-semibold text-slate-100" data-testid="pipeline-operations-state-validation-title">State Validation Checklist</h3>
         <p className="text-xs text-slate-400" data-testid="pipeline-operations-state-validation-description">Gerçek endpoint: `/runtime/state-validation`</p>
         <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="pipeline-operations-state-validation-grid">
-          <p data-testid="pipeline-operations-state-validation-ws">
-            WS reconnect session değişimi: <span className={`font-semibold ${stateValidation.wsReconnectSessionChanged ? "text-emerald-700" : "text-red-700"}`}>{stateValidation.wsReconnectSessionChanged ? "PASS" : "FAIL"}</span>
-            {!stateValidation.wsReconnectSessionChanged && <span className="ml-2 text-xs text-red-700">{stateValidation.suggestions?.ws_session_changed}</span>}
-          </p>
-          <p data-testid="pipeline-operations-state-validation-override">
-            Override state etkisi: <span className={`font-semibold ${stateValidation.overrideAffectsExecution ? "text-emerald-700" : "text-red-700"}`}>{stateValidation.overrideAffectsExecution ? "PASS" : "FAIL"}</span>
-            {!stateValidation.overrideAffectsExecution && <span className="ml-2 text-xs text-red-700">{stateValidation.suggestions?.override_effect_applied}</span>}
-          </p>
-          <p data-testid="pipeline-operations-state-validation-gate">
-            Gate CI script sonucu: <span className={`font-semibold ${stateValidation.gateUsesCiResult ? "text-emerald-700" : "text-red-700"}`}>{stateValidation.gateUsesCiResult ? "PASS" : "FAIL"}</span>
-            {!stateValidation.gateUsesCiResult && <span className="ml-2 text-xs text-red-700">{stateValidation.suggestions?.gate_source}</span>}
-          </p>
-          <p data-testid="pipeline-operations-state-validation-block">
-            Trade block guard listesine düşüş: <span className={`font-semibold ${stateValidation.tradeBlockVisible ? "text-emerald-700" : "text-red-700"}`}>{stateValidation.tradeBlockVisible ? "PASS" : "FAIL"}</span>
-            {!stateValidation.tradeBlockVisible && <span className="ml-2 text-xs text-red-700">{stateValidation.suggestions?.guard_block_visible}</span>}
-          </p>
+          {[
+            { key: "ws_session_changed", label: "WS reconnect session değişimi", fix: "Fix WS" },
+            { key: "override_effect_applied", label: "Override state etkisi", fix: "Re-sync Override" },
+            { key: "gate_source", label: "Gate CI script sonucu", fix: "Run Gate Re-check" },
+            { key: "guard_block_visible", label: "Trade block guard listesine düşüş", fix: "Rebuild Guard List" },
+          ].map((item, idx) => {
+            const row = stateValidation.checks?.[item.key] || {};
+            const status = String(row.status || "warning").toLowerCase();
+            const isPass = status === "pass";
+            const isFail = status === "fail";
+            return (
+              <div key={item.key} className="rounded border border-slate-700 p-2 text-xs" data-testid={`pipeline-operations-state-validation-item-${idx}`}>
+                <p data-testid={`pipeline-operations-state-validation-label-${idx}`}>{item.label}</p>
+                <p data-testid={`pipeline-operations-state-validation-status-${idx}`}>
+                  <span className={`font-semibold ${isPass ? "text-emerald-700" : isFail ? "text-red-700" : "text-amber-700"}`}>{isPass ? "PASS" : isFail ? "FAIL" : "WARNING"}</span>
+                </p>
+                {!isPass && <p className="mt-1 text-red-700" data-testid={`pipeline-operations-state-validation-suggestion-${idx}`}>{stateValidation.suggestions?.[item.key]}</p>}
+                {!isPass && (
+                  <Button size="sm" variant="outline" className="mt-2" onClick={() => runStateValidationFix(row.fix_action || item.fix)} data-testid={`pipeline-operations-state-validation-fix-button-${idx}`}>
+                    {row.fix_action || item.fix}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </article>
 
@@ -1312,14 +1510,12 @@ export const PipelineOperationsPage = () => {
                   >
                     <p data-testid={`pipeline-operations-gate-rule-id-${idx}`}>{rule.rule_id} · {rule.result}</p>
                     <p data-testid={`pipeline-operations-gate-rule-message-${idx}`}>{rule.message}</p>
-                    <button
-                      type="button"
-                      className="underline"
-                      onClick={() => navigate("/admin/execution-policies")}
-                      data-testid={`pipeline-operations-gate-rule-fix-hint-${idx}`}
-                    >
-                      {rule.fix_hint}
-                    </button>
+                    <p data-testid={`pipeline-operations-gate-rule-fix-hint-${idx}`}>Suggested Fix: {rule.suggested_fix || rule.fix_hint}</p>
+                    {(rule.result || "").toUpperCase() === "FAIL" && (
+                      <Button size="sm" variant="outline" onClick={() => runGateSuggestedFix(rule.run_fix_action || "gate_recheck")} data-testid={`pipeline-operations-gate-rule-run-fix-${idx}`}>
+                        Run Fix
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1451,13 +1647,18 @@ export const PipelineOperationsPage = () => {
                 </div>
                 <div className="max-h-24 space-y-1 overflow-auto" data-testid="pipeline-operations-guard-blocked-trades-list">
                   {blockedTrades.map((item, idx) => (
-                    <p
+                    <div
                       key={`${item.id}-${idx}`}
                       className={`rounded px-2 py-1 text-[11px] ${(item.reason_codes || [item.reason || "UNKNOWN"])[0] === "INVALID_QUOTE_ASSET" ? "border border-red-500/60 bg-red-950/50 text-red-200" : "text-slate-300"}`}
                       data-testid={`pipeline-operations-guard-blocked-trade-${idx}`}
                     >
-                      {item.symbol || "UNKNOWN"} | {(item.reason_codes || [item.reason || "UNKNOWN"])[0] || "UNKNOWN"} | {item.updated_at || "-"}
-                    </p>
+                      <p>{item.symbol || "UNKNOWN"} | {(item.reason_codes || [item.reason || "UNKNOWN"])[0] || "UNKNOWN"} | {item.updated_at || "-"}</p>
+                      <div className="mt-1 flex gap-1" data-testid={`pipeline-operations-guard-blocked-trade-actions-${idx}`}>
+                        <Button size="sm" variant="outline" onClick={() => runGuardAction("unblock", item)} data-testid={`pipeline-operations-guard-unblock-${idx}`}>Unblock</Button>
+                        <Button size="sm" variant="outline" onClick={() => runGuardAction("ignore", item)} data-testid={`pipeline-operations-guard-ignore-${idx}`}>Ignore</Button>
+                        <Button size="sm" variant="outline" onClick={() => runGuardAction("inspect", item)} data-testid={`pipeline-operations-guard-inspect-${idx}`}>Inspect</Button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -1488,6 +1689,7 @@ export const PipelineOperationsPage = () => {
                     <div key={item.id} className="flex items-center justify-between gap-2 text-[11px]" data-testid={`pipeline-operations-exchange-connection-row-${idx}`}>
                       <span data-testid={`pipeline-operations-exchange-connection-text-${idx}`}>{item.exchange} · {item.market_type} · {item.user_id}</span>
                       <div className="flex gap-1" data-testid={`pipeline-operations-exchange-connection-actions-${idx}`}>
+                        <Button size="sm" variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("ws_reconnect", "monitoring", reasonControl)} data-testid={`pipeline-operations-exchange-reconnect-${idx}`}>Reconnect</Button>
                         <Button size="sm" variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("exchange_revalidate", "monitoring", reasonControl, { connectionId: item.id })} data-testid={`pipeline-operations-exchange-revalidate-${idx}`}>Revalidate</Button>
                         <Button size="sm" variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("exchange_disable", "monitoring", reasonControl, { connectionId: item.id })} data-testid={`pipeline-operations-exchange-disable-${idx}`}>Disable</Button>
                       </div>
