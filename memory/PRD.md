@@ -1,3 +1,37 @@
+## 2026-03-22 — Faz-5 P0 Kritik Kapanış + Stabilizasyon ✅
+
+### Kullanıcı onayı (bu iterasyon)
+- Sadece **P0 Faz-5 kapanışı** (P1/P2 yok)
+- Test kapsamı: **super_admin + admin approval zinciri**
+- Bu turda **UI refactor yok** (dosya bölme ertelendi)
+
+### Uygulanan stabilizasyonlar
+- Unified Decision Modal kapsamı genişletildi:
+  - Row action **disable** ve **decommission** artık modal + impact preview zorunlu akışta
+  - Rollout/Promote/Rollback ve Drift aksiyonları modal üzerinden devam ediyor
+- Backend zorunlulukları sıkılaştırıldı:
+  - `decommission` aksiyonu da preview token olmadan reject edilir hale getirildi
+  - Impact preview hesaplamasında `decommission` yüksek-etki aksiyon kümesine eklendi
+- Recommendation apply akışı:
+  - `Apply Recommended` doğrudan execute etmiyor
+  - Sadece **prefilled Decision Modal** açıyor
+- Approval görünürlüğü:
+  - Approval listesinde `decision_context` içindeki `preview + risk + recommendation` ayrı satırlarda görünür hale getirildi
+
+### Doğrulama / Test
+- Lint: 
+  - `AdminFuturesStrategyControlGovernancePage.jsx` ✅
+  - `admin_futures_strategy_control.py` ✅
+- Smoke test (UI açılış) ✅
+- Test Agent raporu: `/app/test_reports/iteration_66.json`
+  - Backend: **95% (19/20, 1 skip: rollback snapshot yokluğu)**
+  - Frontend: **100% PASS**
+  - P0 gereksinimleri: tamamı PASS
+
+### Açık backlog (değişmedi)
+- **P1:** Bulk Result Breakdown, Post-Action Monitor, Policy Apply Hook
+- **P2:** Dynamic Threshold Patching (gerçek backend patch), policy tuning auto-suggestions
+
 ## 2026-03-22 — Faz-4+ + Faz-5 Başlangıç ✅ (Rollback Approval + Rule-based Recommendation)
 
 ### Kullanıcı seçimi (bu iterasyon)
