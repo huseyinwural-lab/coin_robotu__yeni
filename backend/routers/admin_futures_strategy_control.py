@@ -27,6 +27,7 @@ _DRIFT_ALERT_KEY = "futures:strategy:drift-alert-state:global"
 _FEEDBACK_KEY = "futures:strategy:feedback:global"
 _MODEL_UPDATE_KEY = "futures:strategy:model-update:global"
 _APPROVAL_REQUEST_KEY = "futures:strategy:approval-requests:global"
+_IMPACT_PREVIEW_KEY = "futures:strategy:impact-preview:global"
 
 _DISABLE_CONFIRM = "DISABLE STRATEGY"
 _DECOMMISSION_CONFIRM = "DECOMMISSION STRATEGY"
@@ -47,6 +48,7 @@ class StrategyControlActionRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
     confirm_phrase: str | None = Field(default=None, max_length=120)
     throttle_level: str | None = Field(default=None, max_length=2)
+    preview_token: str | None = Field(default=None, max_length=120)
     dry_run: bool = False
 
 
@@ -54,12 +56,14 @@ class StrategyRolloutRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
     confirm_phrase: str | None = Field(default=None, max_length=120)
     rollout_percentage: int = Field(default=10, ge=1, le=100)
+    preview_token: str | None = Field(default=None, max_length=120)
     dry_run: bool = False
 
 
 class StrategyRollbackRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
     confirm_phrase: str | None = Field(default=None, max_length=120)
+    preview_token: str | None = Field(default=None, max_length=120)
     dry_run: bool = False
 
 
@@ -76,7 +80,13 @@ class DriftActionRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
     confirm_phrase: str | None = Field(default=None, max_length=120)
     mute_duration_hours: int | None = Field(default=None, ge=1, le=168)
+    preview_token: str | None = Field(default=None, max_length=120)
     dry_run: bool = False
+
+
+class ImpactPreviewRequest(BaseModel):
+    action_type: str = Field(..., min_length=3, max_length=80)
+    params: dict = Field(default_factory=dict)
 
 
 class FeedbackLabelRequest(BaseModel):
@@ -208,6 +218,7 @@ def _compose_strategy_rows(
     throttle_payload: dict,
     manual_controls: dict,
     rollout_payload: dict,
+    feedback_payload: dict,
 ) -> list[dict]:
     maps = _build_maps(status)
     metadata_map = maps["metadata_map"]
@@ -226,6 +237,7 @@ def _compose_strategy_rows(
     if not isinstance(rollout_map, dict):
         rollout_map = {}
 
+    feedback_items = feedback_payload.get("items") or []
     rows: list[dict] = []
     for strategy_id in (status.get("strategy_registry") or []):
         sid = str(strategy_id)
@@ -251,6 +263,27 @@ def _compose_strategy_rows(
         raw_error_rate = float(reject.get("reject_rate") or 0)
         error_rate_pct = raw_error_rate * 100 if raw_error_rate <= 1 else raw_error_rate
 
+        feedback_density_24h = _feedback_density(feedback_items, sid, within_hours=24)
+        severity_to_risk = {"NONE": 0, "LOW": 35, "MEDIUM": 65, "HIGH": 90}
+        drift_component = float(severity_to_risk.get(str(drift.get("severity") or "NONE").upper(), 0))
+        if float(health.get("strategy_pnl_rolling") or pnl.get("pnl_rolling") or 0) < 0:
+            pnl_component = 70.0
+        elif float(health.get("strategy_pnl_rolling") or pnl.get("pnl_rolling") or 0) < 1:
+            pnl_component = 45.0
+        else:
+            pnl_component = 20.0
+        reject_component = min(100.0, error_rate_pct * 10)
+        feedback_component = min(100.0, feedback_density_24h * 20)
+        error_component = min(100.0, error_rate_pct * 8)
+        risk_score = (
+            (drift_component * 0.30)
+            + (pnl_component * 0.25)
+            + (reject_component * 0.20)
+            + (feedback_component * 0.15)
+            + (error_component * 0.10)
+        )
+        risk_level = "LOW" if risk_score < 35 else ("MED" if risk_score < 65 else "HIGH")
+
         rows.append(
             {
                 "strategy_id": sid,
@@ -266,6 +299,16 @@ def _compose_strategy_rows(
                 "win_rate": float(health.get("strategy_win_rate_rolling") or 0),
                 "execution_quality": float(health.get("strategy_execution_quality") or 0),
                 "error_rate_pct": round(error_rate_pct, 4),
+                "risk_score": round(risk_score, 2),
+                "risk_level": risk_level,
+                "risk_breakdown": {
+                    "drift": round(drift_component, 2),
+                    "pnl_trend": round(pnl_component, 2),
+                    "reject_rate": round(reject_component, 2),
+                    "feedback_density": round(feedback_component, 2),
+                    "error_rate": round(error_component, 2),
+                    "feedback_density_24h": feedback_density_24h,
+                },
                 "drift_count": int(drift.get("count") or 0),
                 "drift_severity": drift.get("severity") or "NONE",
                 "drift_reasons": drift.get("reasons") or [],
@@ -302,6 +345,7 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
     feedback_key = _FEEDBACK_KEY.format(user_id=current_admin.id)
     model_update_key = _MODEL_UPDATE_KEY.format(user_id=current_admin.id)
     approval_key = _APPROVAL_REQUEST_KEY.format(user_id=current_admin.id)
+    impact_preview_key = _IMPACT_PREVIEW_KEY.format(user_id=current_admin.id)
 
     lifecycle_registry = _cache_get(pipeline_runtime.cache, lifecycle_key, status.get("strategy_lifecycle_registry") or {})
     throttle_payload = _cache_get(
@@ -323,8 +367,9 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
     feedback_payload = _cache_get(pipeline_runtime.cache, feedback_key, {"items": [], "version_by_strategy": {}})
     model_update_payload = _cache_get(pipeline_runtime.cache, model_update_key, {"by_strategy": {}, "history": []})
     approval_requests_payload = _cache_get(pipeline_runtime.cache, approval_key, {"items": []})
+    impact_preview_payload = _cache_get(pipeline_runtime.cache, impact_preview_key, {"tokens": {}})
 
-    rows = _compose_strategy_rows(status, lifecycle_registry, throttle_payload, manual_controls, rollout_payload)
+    rows = _compose_strategy_rows(status, lifecycle_registry, throttle_payload, manual_controls, rollout_payload, feedback_payload)
     return {
         "status_payload": status,
         "rows": rows,
@@ -337,6 +382,7 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
         "feedback_payload": feedback_payload,
         "model_update_payload": model_update_payload,
         "approval_requests_payload": approval_requests_payload,
+        "impact_preview_payload": impact_preview_payload,
         "keys": {
             "lifecycle": lifecycle_key,
             "throttle": throttle_key,
@@ -347,6 +393,7 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
             "feedback": feedback_key,
             "model_update": model_update_key,
             "approval_requests": approval_key,
+            "impact_preview": impact_preview_key,
         },
     }
 
@@ -776,6 +823,79 @@ def _build_policy_suggestions(feedback_items: list[dict]) -> dict:
     }
 
 
+def _build_impact_preview(*, action_type: str, params: dict, strategy_row: dict, feedback_items: list[dict]) -> dict:
+    action = str(action_type or "").lower()
+    reject_rate = float(strategy_row.get("error_rate_pct") or 0)
+    pnl = float(strategy_row.get("pnl_rolling") or 0)
+    risk_level = str(strategy_row.get("risk_level") or "LOW")
+    feedback_density = _feedback_density(feedback_items, str(strategy_row.get("strategy_id") or ""), within_hours=24)
+
+    base_reject_delta = 0.0
+    if action == "rollout":
+        target_pct = float((params or {}).get("rollout_percentage") or 10)
+        current_pct = float(strategy_row.get("rollout_percentage") or 0)
+        base_reject_delta = max(0.0, (target_pct - current_pct) * 0.08)
+    elif action in {"disable", "disable_strategy"}:
+        base_reject_delta = 15.0
+    elif action == "rollback":
+        base_reject_delta = -4.0
+    elif action == "threshold_change":
+        base_reject_delta = float((params or {}).get("threshold_delta") or 0) * 100
+
+    expected_reject_delta = round(base_reject_delta + (reject_rate * 0.12), 2)
+
+    pnl_volatility = abs(reject_rate) * 0.03
+    pnl_slope = -0.4 if pnl < 0 else 0.2
+    expected_pnl_impact = round((pnl_slope - pnl_volatility) * (1.8 if risk_level == "HIGH" else 1.0), 4)
+
+    confidence = 68 + min(20, feedback_density * 3)
+    if risk_level == "HIGH":
+        confidence -= 8
+    confidence = max(40, min(92, confidence))
+
+    return {
+        "expected_reject_delta": expected_reject_delta,
+        "expected_pnl_impact": expected_pnl_impact,
+        "risk_level": risk_level,
+        "confidence": confidence,
+        "based_on": ["recent_pnl", "drift", "feedback"],
+    }
+
+
+def _validate_preview_token(
+    *,
+    impact_preview_payload: dict,
+    strategy_id: str,
+    action_type: str,
+    preview_token: str,
+    consume: bool = True,
+) -> tuple[bool, str, dict, dict]:
+    tokens = impact_preview_payload.get("tokens") or {}
+    token_row = dict(tokens.get(preview_token) or {})
+    if not token_row:
+        return False, "Impact preview token bulunamadı.", {}, impact_preview_payload
+
+    try:
+        expires_at = datetime.fromisoformat(str(token_row.get("expires_at")))
+        if expires_at <= datetime.now(timezone.utc):
+            tokens.pop(preview_token, None)
+            impact_preview_payload["tokens"] = tokens
+            return False, "Impact preview token süresi doldu.", {}, impact_preview_payload
+    except Exception:
+        return False, "Impact preview token geçersiz.", {}, impact_preview_payload
+
+    if str(token_row.get("strategy_id") or "") != str(strategy_id):
+        return False, "Impact preview strategy eşleşmedi.", {}, impact_preview_payload
+    if str(token_row.get("action_type") or "") != str(action_type):
+        return False, "Impact preview action_type eşleşmedi.", {}, impact_preview_payload
+
+    if consume:
+        tokens.pop(preview_token, None)
+        impact_preview_payload["tokens"] = tokens
+
+    return True, "ok", token_row.get("preview") or {}, impact_preview_payload
+
+
 def _build_rollback_snapshots(action_history: list, strategy_id: str) -> list[dict]:
     snapshots = []
     for item in action_history or []:
@@ -932,6 +1052,50 @@ def strategy_rollout_precheck(
     }
 
 
+@router.post("/strategy/{strategy_id}/impact-preview")
+def strategy_impact_preview(
+    strategy_id: str,
+    payload: ImpactPreviewRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    trace_id = f"impact_preview_{uuid.uuid4().hex[:12]}"
+    state = _load_control_state(db, current_admin, refresh=False)
+    row = _find_row(state["rows"], strategy_id)
+    preview = _build_impact_preview(
+        action_type=payload.action_type,
+        params=payload.params or {},
+        strategy_row=row,
+        feedback_items=state["feedback_payload"].get("items") or [],
+    )
+
+    preview_token = f"ip_{uuid.uuid4().hex[:12]}"
+    impact_payload = state["impact_preview_payload"]
+    tokens = impact_payload.get("tokens") or {}
+    tokens[preview_token] = {
+        "strategy_id": strategy_id,
+        "action_type": str(payload.action_type),
+        "params": payload.params or {},
+        "preview": preview,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
+        "created_by": current_admin.id,
+    }
+    impact_payload["tokens"] = tokens
+    _cache_set(pipeline_runtime.cache, state["keys"]["impact_preview"], impact_payload)
+
+    return {
+        "status": "success",
+        "trace_id": trace_id,
+        "preview_token": preview_token,
+        "preview": preview,
+        "state_snapshot": {
+            "strategy_id": strategy_id,
+            "action_type": payload.action_type,
+        },
+    }
+
+
 @router.get("/strategy-control/drift-alerts")
 def strategy_control_drift_alerts(
     current_admin: User = Depends(require_super_admin),
@@ -1024,6 +1188,26 @@ def _run_drift_action(
         current_state["retrain_status"] = "queued"
         current_state["retrain_job_id"] = f"retrain_{uuid.uuid4().hex[:10]}"
     elif action == "disable_strategy":
+        preview_token = str(payload.preview_token or "").strip()
+        if not preview_token:
+            return _result_payload(
+                status="rejected",
+                trace_id=trace_id,
+                message="Drift disable için impact preview zorunlu.",
+                state_snapshot=alert,
+            )
+        ok, message, _preview, updated_payload = _validate_preview_token(
+            impact_preview_payload=state["impact_preview_payload"],
+            strategy_id=strategy_id,
+            action_type="disable_strategy",
+            preview_token=preview_token,
+            consume=not payload.dry_run,
+        )
+        if not ok:
+            return _result_payload(status="rejected", trace_id=trace_id, message=message, state_snapshot=alert)
+        if not payload.dry_run:
+            _cache_set(pipeline_runtime.cache, state["keys"]["impact_preview"], updated_payload)
+
         if payload.dry_run:
             linked_action_result = {
                 "status": "dry_run",
@@ -1054,6 +1238,7 @@ def _run_drift_action(
                 ),
                 current_admin=current_admin,
                 db=db,
+                skip_preview=True,
             )
             linked_action_result = {
                 "throttle": throttle_result,
@@ -1168,10 +1353,32 @@ def _run_strategy_action(
     payload: StrategyControlActionRequest,
     current_admin: User,
     db: Session,
+    skip_preview: bool = False,
 ):
     trace_id = f"strategy_ctrl_{uuid.uuid4().hex[:12]}"
     state = _load_control_state(db, current_admin, refresh=False)
     before_row = _find_row(state["rows"], strategy_id)
+
+    if action == "disable" and not skip_preview:
+        preview_token = str(payload.preview_token or "").strip()
+        if not preview_token:
+            return _result_payload(
+                status="rejected",
+                trace_id=trace_id,
+                message="Disable aksiyonu için impact preview zorunlu.",
+                state_snapshot=before_row,
+            )
+        ok, message, _preview, updated_payload = _validate_preview_token(
+            impact_preview_payload=state["impact_preview_payload"],
+            strategy_id=strategy_id,
+            action_type="disable",
+            preview_token=preview_token,
+            consume=not payload.dry_run,
+        )
+        if not ok:
+            return _result_payload(status="rejected", trace_id=trace_id, message=message, state_snapshot=before_row)
+        if not payload.dry_run:
+            _cache_set(pipeline_runtime.cache, state["keys"]["impact_preview"], updated_payload)
 
     is_valid, flow_message = _validate_disable_flow(action, before_row)
     if not is_valid:
@@ -1258,7 +1465,14 @@ def _run_strategy_action(
 
     _set_manual_state(manual_controls, strategy_id=strategy_id, control_state=next_control_state, reason=payload.reason, trace_id=trace_id)
 
-    after_rows = _compose_strategy_rows(state["status_payload"], lifecycle_registry, throttle_payload, manual_controls, rollout_payload)
+    after_rows = _compose_strategy_rows(
+        state["status_payload"],
+        lifecycle_registry,
+        throttle_payload,
+        manual_controls,
+        rollout_payload,
+        state["feedback_payload"],
+    )
     after_row = _find_row(after_rows, strategy_id)
     action_status = "dry_run" if payload.dry_run else "success"
 
@@ -1332,7 +1546,28 @@ def strategy_promote_shadow(
             state_snapshot={"strategy_id": strategy_id},
         )
 
+    preview_token = str(payload.preview_token or "").strip()
+    if not preview_token:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Promote shadow için impact preview zorunlu.",
+            state_snapshot={"strategy_id": strategy_id},
+        )
+
     state = _load_control_state(db, current_admin, refresh=False)
+    ok, message, _preview, updated_payload = _validate_preview_token(
+        impact_preview_payload=state["impact_preview_payload"],
+        strategy_id=strategy_id,
+        action_type="promote_shadow",
+        preview_token=preview_token,
+        consume=not payload.dry_run,
+    )
+    if not ok:
+        return _result_payload(status="rejected", trace_id=trace_id, message=message, state_snapshot={"strategy_id": strategy_id})
+    if not payload.dry_run:
+        _cache_set(pipeline_runtime.cache, state["keys"]["impact_preview"], updated_payload)
+
     before_row = _find_row(state["rows"], strategy_id)
     precheck = _build_rollout_precheck(before_row)
     if before_row.get("shadow_live_state") != "SHADOW":
@@ -1368,6 +1603,7 @@ def strategy_promote_shadow(
         state["throttle_payload"],
         state["manual_controls"],
         rollout_payload,
+        state["feedback_payload"],
     )
     after_row = _find_row(after_rows, strategy_id)
 
@@ -1442,7 +1678,28 @@ def strategy_rollout(
             state_snapshot={"strategy_id": strategy_id},
         )
 
+    preview_token = str(payload.preview_token or "").strip()
+    if not preview_token:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Rollout için impact preview zorunlu.",
+            state_snapshot={"strategy_id": strategy_id},
+        )
+
     state = _load_control_state(db, current_admin, refresh=False)
+    ok, message, _preview, updated_payload = _validate_preview_token(
+        impact_preview_payload=state["impact_preview_payload"],
+        strategy_id=strategy_id,
+        action_type="rollout",
+        preview_token=preview_token,
+        consume=not payload.dry_run,
+    )
+    if not ok:
+        return _result_payload(status="rejected", trace_id=trace_id, message=message, state_snapshot={"strategy_id": strategy_id})
+    if not payload.dry_run:
+        _cache_set(pipeline_runtime.cache, state["keys"]["impact_preview"], updated_payload)
+
     before_row = _find_row(state["rows"], strategy_id)
     precheck = _build_rollout_precheck(before_row)
     if precheck.get("status") != "pass":
@@ -1485,6 +1742,7 @@ def strategy_rollout(
         state["throttle_payload"],
         state["manual_controls"],
         rollout_payload,
+        state["feedback_payload"],
     )
     after_row = _find_row(after_rows, strategy_id)
 
@@ -1573,7 +1831,28 @@ def strategy_rollback_last_action(
             state_snapshot={"strategy_id": strategy_id},
         )
 
+    preview_token = str(payload.preview_token or "").strip()
+    if not preview_token:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Rollback için impact preview zorunlu.",
+            state_snapshot={"strategy_id": strategy_id},
+        )
+
     state = _load_control_state(db, current_admin, refresh=False)
+    ok, message, preview, updated_payload = _validate_preview_token(
+        impact_preview_payload=state["impact_preview_payload"],
+        strategy_id=strategy_id,
+        action_type="rollback",
+        preview_token=preview_token,
+        consume=not payload.dry_run,
+    )
+    if not ok:
+        return _result_payload(status="rejected", trace_id=trace_id, message=message, state_snapshot={"strategy_id": strategy_id})
+    if not payload.dry_run:
+        _cache_set(pipeline_runtime.cache, state["keys"]["impact_preview"], updated_payload)
+
     history = list(state["action_history"] or [])
     target_index = -1
     for idx in range(len(history) - 1, -1, -1):
@@ -1604,6 +1883,7 @@ def strategy_rollback_last_action(
         throttle_payload,
         manual_controls,
         rollout_payload,
+        state["feedback_payload"],
     )
     after_row = _find_row(after_rows, strategy_id)
 
@@ -1645,6 +1925,7 @@ def strategy_rollback_last_action(
             "after_state": after_row,
             "rolled_back_action": last_action.get("action"),
             "rolled_back_trace_id": last_action.get("trace_id"),
+            "preview": preview,
         },
     )
 
@@ -2041,6 +2322,7 @@ def strategy_rollback_request_create(
 ):
     trace_id = f"rollback_req_{uuid.uuid4().hex[:12]}"
     state = _load_control_state(db, current_admin, refresh=False)
+    strategy_row = _find_row(state["rows"], strategy_id)
     snapshots = _build_rollback_snapshots(state["action_history"], strategy_id)
     snapshot = next((item for item in snapshots if str(item.get("snapshot_trace_id") or "") == str(payload.snapshot_trace_id)), None)
     if not snapshot:
@@ -2053,6 +2335,33 @@ def strategy_rollback_request_create(
 
     request_id = f"apr_{uuid.uuid4().hex[:10]}"
     expires_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    preview = _build_impact_preview(
+        action_type="rollback",
+        params={"snapshot_trace_id": payload.snapshot_trace_id},
+        strategy_row=strategy_row,
+        feedback_items=state["feedback_payload"].get("items") or [],
+    )
+    drift_alerts = _build_drift_alert_rows(state["status_payload"], state["drift_alert_state"])
+    first_alert = next((item for item in drift_alerts if str(item.get("strategy_id") or "") == strategy_id), None)
+    recommendation = _build_recommended_action(
+        first_alert or {"strategy_id": strategy_id, "severity": strategy_row.get("drift_severity")},
+        strategy_row,
+        state["feedback_payload"].get("items") or [],
+    )
+    decision_context = {
+        "preview": preview,
+        "risk": {
+            "score": strategy_row.get("risk_score"),
+            "level": strategy_row.get("risk_level"),
+            "breakdown": strategy_row.get("risk_breakdown"),
+        },
+        "recommendation": recommendation,
+        "before_after_summary": {
+            "before": snapshot.get("before_state") or {},
+            "after": snapshot.get("after_state") or {},
+        },
+    }
+
     request_item = {
         "request_id": request_id,
         "strategy_id": strategy_id,
@@ -2065,6 +2374,7 @@ def strategy_rollback_request_create(
             "action_type": snapshot.get("action_type"),
             "diff_preview": snapshot.get("diff_preview") or {},
         },
+        "decision_context": decision_context,
         "expires_at": expires_at,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "trace_id": trace_id,
@@ -2100,6 +2410,7 @@ def strategy_rollback_request_create(
             "rollback_reference": f"rollback_ref:{payload.snapshot_trace_id}",
             "expires_at": expires_at,
             "preview": request_item.get("preview") or {},
+            "decision_context": decision_context,
         },
     )
 
@@ -2258,6 +2569,7 @@ def _decision_approval_request(
         throttle_payload,
         manual_controls,
         rollout_payload,
+        state["feedback_payload"],
     )
     after_row = _find_row(after_rows, strategy_id)
 
@@ -2282,7 +2594,7 @@ def _decision_approval_request(
         trace_id=trace_id,
         message="Rollback request onaylandı ve uygulandı.",
         state_snapshot=after_row,
-        extra={"approval_request": target},
+        extra={"approval_request": target, "decision_context": target.get("decision_context")},
     )
 
 

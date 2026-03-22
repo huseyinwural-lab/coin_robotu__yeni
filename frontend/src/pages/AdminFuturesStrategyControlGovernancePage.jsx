@@ -21,6 +21,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { DecisionModal } from "@/components/DecisionModal";
 import { apiClient } from "@/lib/api";
 
 const TAB_ITEMS = [
@@ -104,12 +105,21 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
 
   const [driftAlerts, setDriftAlerts] = useState([]);
   const [driftLoading, setDriftLoading] = useState(false);
-  const [driftActionModal, setDriftActionModal] = useState({ open: false, action: "", alert: null });
-  const [driftReason, setDriftReason] = useState("");
-  const [driftConfirm, setDriftConfirm] = useState("");
   const [driftMuteDuration, setDriftMuteDuration] = useState(1);
   const [driftSubmitting, setDriftSubmitting] = useState(false);
   const [driftResult, setDriftResult] = useState(null);
+  const [decisionModal, setDecisionModal] = useState({
+    open: false,
+    mode: "",
+    actionType: "",
+    strategyId: "",
+    title: "",
+    confirmRequired: false,
+    confirmPlaceholder: "",
+    params: {},
+    defaultReason: "",
+    payload: null,
+  });
 
   const [feedbackStrategyId, setFeedbackStrategyId] = useState("");
   const [feedbackDriftAlertId, setFeedbackDriftAlertId] = useState("");
@@ -152,6 +162,10 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
   const selectedRolloutStrategy = useMemo(
     () => strategies.find((item) => item.strategy_id === rolloutStrategyId) || null,
     [rolloutStrategyId, strategies],
+  );
+  const decisionRiskSnapshot = useMemo(
+    () => strategies.find((item) => item.strategy_id === decisionModal.strategyId) || null,
+    [decisionModal.strategyId, strategies],
   );
 
   const strategyCount = strategies.length;
@@ -317,6 +331,20 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
   };
 
   const openActionModal = (action, strategy) => {
+    if (action === "disable") {
+      openDecisionModal({
+        mode: "row_action_disable",
+        actionType: "disable",
+        strategyId: strategy?.strategy_id,
+        title: "Disable Decision",
+        confirmRequired: true,
+        confirmPlaceholder: "Onay ifadesi: DISABLE STRATEGY",
+        defaultReason: `manual_disable_${strategy?.strategy_id || "strategy"}`,
+        params: {},
+        payload: { action, strategy },
+      });
+      return;
+    }
     setActionModal({ open: true, action, strategy });
     setActionReason("");
     setActionConfirm("");
@@ -324,26 +352,58 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     setDryRun(false);
   };
 
-  const submitAction = async () => {
-    if (!actionModal.strategy || !actionMeta) return;
-    if (String(actionReason || "").trim().length < 3) {
+  const openDecisionModal = (config) => {
+    setDecisionModal({
+      open: true,
+      mode: config.mode || "",
+      actionType: config.actionType || "",
+      strategyId: config.strategyId || "",
+      title: config.title || "Decision",
+      confirmRequired: Boolean(config.confirmRequired),
+      confirmPlaceholder: config.confirmPlaceholder || "",
+      params: config.params || {},
+      defaultReason: config.defaultReason || "",
+      payload: config.payload || null,
+    });
+  };
+
+  const requestImpactPreview = async ({ actionType, strategyId, params }) => {
+    const { data } = await apiClient.post(`/admin/futures/strategy/${strategyId}/impact-preview`, {
+      action_type: actionType,
+      params: params || {},
+    });
+    return data || null;
+  };
+
+  const submitAction = async (decisionInput = null) => {
+    const strategy = decisionInput?.strategy || actionModal.strategy;
+    const actionKey = decisionInput?.action || actionMeta?.key;
+    const activeAction = ACTIONS.find((item) => item.key === actionKey) || null;
+    if (!strategy || !activeAction) return;
+
+    const reasonValue = String(decisionInput?.reason || actionReason || "").trim();
+    const confirmValue = String(decisionInput?.confirmPhrase || actionConfirm || "").trim();
+    const previewToken = String(decisionInput?.previewToken || "").trim();
+
+    if (reasonValue.length < 3) {
       toast.error("Reason zorunlu (min 3 karakter)");
       return;
     }
-    if (actionMeta.confirmPhrase && actionConfirm.trim().toUpperCase() !== actionMeta.confirmPhrase) {
-      toast.error(`Onay ifadesi eşleşmeli: ${actionMeta.confirmPhrase}`);
+    if (activeAction.confirmPhrase && confirmValue.toUpperCase() !== activeAction.confirmPhrase) {
+      toast.error(`Onay ifadesi eşleşmeli: ${activeAction.confirmPhrase}`);
       return;
     }
 
     setSubmitting(true);
     try {
       const body = {
-        reason: actionReason.trim(),
-        confirm_phrase: actionConfirm.trim() || null,
-        throttle_level: actionMeta.key === "throttle" ? throttleLevel : null,
+        reason: reasonValue,
+        confirm_phrase: confirmValue || null,
+        throttle_level: activeAction.key === "throttle" ? throttleLevel : null,
+        preview_token: previewToken || null,
         dry_run: dryRun,
       };
-      const { data } = await apiClient.post(`/admin/futures/strategy/${actionModal.strategy.strategy_id}/${actionMeta.key}`, body);
+      const { data } = await apiClient.post(`/admin/futures/strategy/${strategy.strategy_id}/${activeAction.key}`, body);
       setLastActionResult(data || null);
       if (data?.status === "rejected") {
         toast.error(data?.message || "Aksiyon reddedildi");
@@ -411,17 +471,21 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     }
   };
 
-  const submitRolloutOperation = async () => {
+  const submitRolloutOperation = async (decisionInput = null) => {
     if (!rolloutStrategyId) {
       toast.error("Rollout için strategy seçin");
       return;
     }
-    if (rolloutReason.trim().length < 3) {
+    const reasonValue = String(decisionInput?.reason || rolloutReason || "").trim();
+    const confirmValue = String(decisionInput?.confirmPhrase || rolloutConfirm || "").trim();
+    const previewToken = String(decisionInput?.previewToken || "").trim();
+
+    if (reasonValue.length < 3) {
       toast.error("Rollout reason zorunlu");
       return;
     }
     const expected = ROLLOUT_CONFIRM_MAP[rolloutOperation];
-    if (rolloutConfirm.trim().toUpperCase() !== expected) {
+    if (confirmValue.toUpperCase() !== expected) {
       toast.error(`Onay ifadesi eşleşmeli: ${expected}`);
       return;
     }
@@ -429,7 +493,7 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     setRolloutSubmitting(true);
     try {
       let url = "";
-      let body = { reason: rolloutReason.trim(), confirm_phrase: rolloutConfirm.trim(), dry_run: false };
+      let body = { reason: reasonValue, confirm_phrase: confirmValue, preview_token: previewToken || null, dry_run: false };
       if (rolloutOperation === "promote_shadow") {
         url = `/admin/futures/strategy/${rolloutStrategyId}/promote-shadow`;
       } else if (rolloutOperation === "rollout") {
@@ -456,10 +520,20 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
   };
 
   const openDriftActionModal = (action, alert) => {
-    setDriftActionModal({ open: true, action, alert });
-    setDriftReason("");
-    setDriftConfirm("");
-    setDriftMuteDuration(1);
+    openDecisionModal({
+      mode: "drift",
+      actionType: action,
+      strategyId: alert?.strategy_id,
+      title: `Drift Action · ${action}`,
+      confirmRequired: Boolean(DRIFT_CONFIRM_MAP[action]),
+      confirmPlaceholder: DRIFT_CONFIRM_MAP[action] ? `Onay ifadesi: ${DRIFT_CONFIRM_MAP[action]}` : "",
+      defaultReason: `drift_${action}_${alert?.strategy_id || "strategy"}`,
+      params: {
+        alert_id: alert?.alert_id,
+        mute_duration_hours: action === "mute" ? Number(driftMuteDuration) : null,
+      },
+      payload: { alert },
+    });
   };
 
   const openDriftDeepLink = (alert) => {
@@ -475,16 +549,20 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     toast.success(`Deep-link açıldı: ${targetTab}`);
   };
 
-  const submitDriftAction = async () => {
-    const action = driftActionModal.action;
-    const alert = driftActionModal.alert;
+  const submitDriftAction = async (decisionInput = null) => {
+    const action = decisionInput?.action;
+    const alert = decisionInput?.alert;
     if (!action || !alert) return;
-    if (driftReason.trim().length < 3) {
+    const reasonValue = String(decisionInput?.reason || "").trim();
+    const confirmValue = String(decisionInput?.confirmPhrase || "").trim();
+    const previewToken = String(decisionInput?.previewToken || "").trim();
+
+    if (reasonValue.length < 3) {
       toast.error("Drift aksiyonu için reason zorunlu");
       return;
     }
     const requiredConfirm = DRIFT_CONFIRM_MAP[action];
-    if (requiredConfirm && driftConfirm.trim().toUpperCase() !== requiredConfirm) {
+    if (requiredConfirm && confirmValue.toUpperCase() !== requiredConfirm) {
       toast.error(`Onay ifadesi eşleşmeli: ${requiredConfirm}`);
       return;
     }
@@ -497,9 +575,10 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       const { data } = await apiClient.post(
         `/admin/futures/drift-alert/${alert.alert_id}/${endpointSuffix}`,
         {
-          reason: driftReason.trim(),
-          confirm_phrase: driftConfirm.trim() || null,
+          reason: reasonValue,
+          confirm_phrase: confirmValue || null,
           mute_duration_hours: action === "mute" ? Number(driftMuteDuration) : null,
+          preview_token: previewToken || null,
           dry_run: false,
         },
       );
@@ -509,7 +588,6 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       if (data?.status === "rejected") toast.error(data?.message || "Drift aksiyonu reddedildi");
       else toast.success(data?.message || "Drift aksiyonu uygulandı");
 
-      setDriftActionModal({ open: false, action: "", alert: null });
       await Promise.all([loadDriftAlerts(), loadOverview()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Drift aksiyonu başarısız");
@@ -624,19 +702,20 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     }
   };
 
-  const submitRollbackRequest = async () => {
+  const submitRollbackRequest = async (decisionInput = null) => {
     if (!feedbackStrategyId || !selectedSnapshotTraceId) {
       toast.error("Rollback request için strategy ve snapshot seçin");
       return;
     }
-    if (rollbackRequestReason.trim().length < 3) {
+    const reasonValue = String(decisionInput?.reason || rollbackRequestReason || "").trim();
+    if (reasonValue.length < 3) {
       toast.error("Rollback request reason zorunlu");
       return;
     }
     setRollbackRequestSubmitting(true);
     try {
       const { data } = await apiClient.post(`/admin/futures/strategy/${feedbackStrategyId}/rollback-request`, {
-        reason: rollbackRequestReason.trim(),
+        reason: reasonValue,
         snapshot_trace_id: selectedSnapshotTraceId,
       });
       setLastActionResult(data || null);
@@ -758,8 +837,44 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
 
                 <Textarea value={rolloutReason} onChange={(e) => setRolloutReason(e.target.value)} placeholder="Rollout nedeni" className="border-black/40" data-testid="strategy-control-rollout-reason-input" />
                 <Input value={rolloutConfirm} onChange={(e) => setRolloutConfirm(e.target.value)} placeholder={`Onay ifadesi: ${ROLLOUT_CONFIRM_MAP[rolloutOperation]}`} className="border-black/40" data-testid="strategy-control-rollout-confirm-input" />
-                <Button onClick={submitRolloutOperation} disabled={rolloutSubmitting} className="border border-black bg-black text-orange-300" data-testid="strategy-control-rollout-submit-button">
+                <Button
+                  onClick={() =>
+                    openDecisionModal({
+                      mode: "rollout",
+                      actionType: rolloutOperation,
+                      strategyId: rolloutStrategyId,
+                      title: `Rollout Decision · ${rolloutOperation}`,
+                      confirmRequired: true,
+                      confirmPlaceholder: `Onay ifadesi: ${ROLLOUT_CONFIRM_MAP[rolloutOperation]}`,
+                      defaultReason: rolloutReason || `rollout_${rolloutOperation}_${rolloutStrategyId}`,
+                      params: {
+                        rollout_percentage: rolloutOperation === "rollout" ? Number(rolloutPercentage) : null,
+                        operation: rolloutOperation,
+                      },
+                    })
+                  }
+                  disabled={rolloutSubmitting}
+                  className="border border-black bg-black text-orange-300"
+                  data-testid="strategy-control-rollout-submit-button"
+                >
                   {rolloutSubmitting ? "Çalışıyor..." : "Rollout Aksiyonunu Uygula"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    openDecisionModal({
+                      mode: "threshold_placeholder",
+                      actionType: "threshold_change",
+                      strategyId: rolloutStrategyId,
+                      title: "Threshold Edit (Placeholder)",
+                      confirmRequired: false,
+                      defaultReason: `threshold_placeholder_${rolloutStrategyId}`,
+                      params: { threshold_delta: 0.0 },
+                    })
+                  }
+                  data-testid="strategy-control-threshold-placeholder-open-button"
+                >
+                  Threshold Edit (Placeholder)
                 </Button>
 
                 {selectedRolloutStrategy && (
@@ -865,6 +980,25 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                       <Button size="sm" variant="outline" onClick={() => openDriftActionModal("ignore", alert)} data-testid={`strategy-control-drift-ignore-button-${index}`}>Ignore</Button>
                       <Button size="sm" variant="outline" className="border-red-800 text-red-900" onClick={() => openDriftActionModal("disable_strategy", alert)} data-testid={`strategy-control-drift-disable-button-${index}`}>Disable Strategy</Button>
                       <Button size="sm" variant="outline" onClick={() => openDriftActionModal("retrain", alert)} data-testid={`strategy-control-drift-retrain-button-${index}`}>Retrain</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-black bg-black text-orange-300"
+                        onClick={() => {
+                          const recommended = String(alert?.recommended_action?.type || "ACK").toUpperCase();
+                          const actionMap = {
+                            ACK: "ack",
+                            MUTE: "mute",
+                            DISABLE: "disable_strategy",
+                            RETRAIN: "retrain",
+                          };
+                          const actionType = actionMap[recommended] || "ack";
+                          openDriftActionModal(actionType, alert);
+                        }}
+                        data-testid={`strategy-control-drift-apply-recommended-button-${index}`}
+                      >
+                        Apply Recommended
+                      </Button>
                       <Button size="sm" variant="outline" onClick={() => openDriftDeepLink(alert)} data-testid={`strategy-control-drift-open-policy-button-${index}`}>Open Policy</Button>
                     </div>
                   </div>
@@ -1006,7 +1140,22 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                     </div>
                   )}
                   <Textarea value={rollbackRequestReason} onChange={(e) => setRollbackRequestReason(e.target.value)} placeholder="Rollback request reason" className="mt-2 border-black/40" data-testid="strategy-control-rollback-request-reason-input" />
-                  <Button onClick={submitRollbackRequest} disabled={rollbackRequestSubmitting} className="mt-2 border border-black bg-black text-orange-300" data-testid="strategy-control-rollback-request-submit-button">
+                  <Button
+                    onClick={() =>
+                      openDecisionModal({
+                        mode: "rollback_request",
+                        actionType: "rollback",
+                        strategyId: feedbackStrategyId,
+                        title: "Rollback Request Decision",
+                        confirmRequired: false,
+                        defaultReason: rollbackRequestReason || `rollback_request_${feedbackStrategyId}`,
+                        params: { snapshot_trace_id: selectedSnapshotTraceId },
+                      })
+                    }
+                    disabled={rollbackRequestSubmitting}
+                    className="mt-2 border border-black bg-black text-orange-300"
+                    data-testid="strategy-control-rollback-request-submit-button"
+                  >
                     {rollbackRequestSubmitting ? "Oluşturuluyor..." : "Rollback Request Oluştur"}
                   </Button>
                 </div>
@@ -1024,6 +1173,9 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                             {item.request_id} · status={item.status} · strategy={item.strategy_id}
                           </p>
                           <p className="text-xs" data-testid={`strategy-control-approval-item-preview-${index}`}>preview={JSON.stringify(item.preview || {})}</p>
+                          <p className="text-xs" data-testid={`strategy-control-approval-item-decision-context-${index}`}>
+                            decision_context={JSON.stringify(item.decision_context || {})}
+                          </p>
                           <p className="text-xs" data-testid={`strategy-control-approval-item-expire-${index}`}>expires_at={item.expires_at}</p>
                           {item.status === "pending" && (
                             <div className="mt-1 flex gap-2" data-testid={`strategy-control-approval-item-actions-${index}`}>
@@ -1083,37 +1235,68 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={driftActionModal.open} onOpenChange={(open) => setDriftActionModal((prev) => ({ ...prev, open }))}>
-        <DialogContent className="border border-black/40 bg-orange-50" data-testid="strategy-control-drift-action-dialog">
-          <DialogHeader>
-            <DialogTitle data-testid="strategy-control-drift-action-dialog-title">Drift Action · {driftActionModal.action || "-"}</DialogTitle>
-            <DialogDescription data-testid="strategy-control-drift-action-dialog-description">
-              Drift aksiyonlarında reason + trace + state_snapshot + audit zorunludur.
-            </DialogDescription>
-          </DialogHeader>
-
-          <Textarea value={driftReason} onChange={(e) => setDriftReason(e.target.value)} placeholder="Drift aksiyon nedeni" className="border-black/40" data-testid="strategy-control-drift-action-dialog-reason-input" />
-
-          {driftActionModal.action === "mute" && (
-            <select value={driftMuteDuration} onChange={(e) => setDriftMuteDuration(Number(e.target.value))} className="h-10 rounded border border-black/40 bg-white px-3 text-sm" data-testid="strategy-control-drift-action-dialog-mute-duration-select">
+      <DecisionModal
+        open={decisionModal.open}
+        onOpenChange={(open) => setDecisionModal((prev) => ({ ...prev, open }))}
+        title={decisionModal.title}
+        actionType={decisionModal.actionType}
+        strategyId={decisionModal.strategyId}
+        defaultReason={decisionModal.defaultReason}
+        confirmPlaceholder={decisionModal.confirmPlaceholder}
+        confirmRequired={decisionModal.confirmRequired}
+        riskSnapshot={decisionRiskSnapshot}
+        params={decisionModal.params}
+        requirePreview={true}
+        showThresholdPlaceholder={decisionModal.actionType === "threshold_change"}
+        extraContent={
+          decisionModal.mode === "drift" && decisionModal.actionType === "mute" ? (
+            <select
+              value={driftMuteDuration}
+              onChange={(e) => setDriftMuteDuration(Number(e.target.value))}
+              className="h-10 rounded border border-black/40 bg-white px-3 text-sm"
+              data-testid="decision-modal-drift-mute-duration-select"
+            >
               <option value={1}>1h</option>
               <option value={24}>24h</option>
               <option value={168}>7d</option>
             </select>
-          )}
-
-          {DRIFT_CONFIRM_MAP[driftActionModal.action] && (
-            <Input value={driftConfirm} onChange={(e) => setDriftConfirm(e.target.value)} placeholder={`Onay ifadesi: ${DRIFT_CONFIRM_MAP[driftActionModal.action]}`} className="border-black/40" data-testid="strategy-control-drift-action-dialog-confirm-input" />
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDriftActionModal({ open: false, action: "", alert: null })} data-testid="strategy-control-drift-action-dialog-cancel-button">Vazgeç</Button>
-            <Button onClick={submitDriftAction} disabled={driftSubmitting} className="border border-black bg-black text-orange-300" data-testid="strategy-control-drift-action-dialog-submit-button">
-              {driftSubmitting ? "Uygulanıyor..." : "Drift Aksiyonunu Uygula"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          ) : null
+        }
+        onRequestPreview={requestImpactPreview}
+        onConfirm={async ({ reason, confirmPhrase, previewToken }) => {
+          if (decisionModal.mode === "rollout") {
+            await submitRolloutOperation({ reason, confirmPhrase, previewToken });
+            return;
+          }
+          if (decisionModal.mode === "drift") {
+            await submitDriftAction({
+              action: decisionModal.actionType,
+              alert: decisionModal.payload?.alert,
+              reason,
+              confirmPhrase,
+              previewToken,
+            });
+            return;
+          }
+          if (decisionModal.mode === "rollback_request") {
+            await submitRollbackRequest({ reason, previewToken });
+            return;
+          }
+          if (decisionModal.mode === "row_action_disable") {
+            await submitAction({
+              action: "disable",
+              strategy: decisionModal.payload?.strategy,
+              reason,
+              confirmPhrase,
+              previewToken,
+            });
+            return;
+          }
+          if (decisionModal.mode === "threshold_placeholder") {
+            toast.success("Threshold edit hook hazırlandı; gerçek patch sonraki turda açılacak.");
+          }
+        }}
+      />
 
       <Sheet open={detailOpen} onOpenChange={setDetailOpen}>
         <SheetContent side="right" className="w-[92vw] max-w-2xl overflow-y-auto border-l border-black bg-orange-50" data-testid="strategy-control-detail-drawer">
@@ -1180,6 +1363,7 @@ const StrategyTable = ({ rows, onOpenDetail, onRunAction, compact = false, selec
           <TableHead data-testid="strategy-control-table-head-shadow-live">Shadow/Live</TableHead>
           <TableHead data-testid="strategy-control-table-head-rollout">Rollout</TableHead>
           <TableHead data-testid="strategy-control-table-head-health">Health</TableHead>
+          <TableHead data-testid="strategy-control-table-head-risk">Risk</TableHead>
           <TableHead data-testid="strategy-control-table-head-error">Error%</TableHead>
           <TableHead data-testid="strategy-control-table-head-actions">Actions</TableHead>
         </TableRow>
@@ -1197,6 +1381,11 @@ const StrategyTable = ({ rows, onOpenDetail, onRunAction, compact = false, selec
             <TableCell data-testid={`strategy-control-table-shadow-live-${index}`}>{row.shadow_live_state}</TableCell>
             <TableCell data-testid={`strategy-control-table-rollout-${index}`}>{row.rollout_mode} / {row.rollout_percentage}%</TableCell>
             <TableCell data-testid={`strategy-control-table-health-${index}`}>{row.health_score}</TableCell>
+            <TableCell data-testid={`strategy-control-table-risk-${index}`}>
+              {row.risk_level === "LOW" && <span className="rounded bg-emerald-200 px-2 py-0.5 text-xs">🟢 LOW ({row.risk_score})</span>}
+              {row.risk_level === "MED" && <span className="rounded bg-amber-200 px-2 py-0.5 text-xs">🟡 MED ({row.risk_score})</span>}
+              {row.risk_level === "HIGH" && <span className="rounded bg-red-200 px-2 py-0.5 text-xs">🔴 HIGH ({row.risk_score})</span>}
+            </TableCell>
             <TableCell data-testid={`strategy-control-table-error-${index}`}>{row.error_rate_pct}</TableCell>
             <TableCell data-testid={`strategy-control-table-actions-${index}`}>
               <div className="flex flex-wrap gap-1">
@@ -1210,7 +1399,7 @@ const StrategyTable = ({ rows, onOpenDetail, onRunAction, compact = false, selec
         ))}
         {rows.length === 0 && (
           <TableRow data-testid="strategy-control-table-empty-row">
-            <TableCell colSpan={onToggleStrategy ? 8 : 7} className="text-center text-sm" data-testid="strategy-control-table-empty-text">No data yet: strategy kayıtları henüz oluşmadı veya geçici olarak alınamadı.</TableCell>
+            <TableCell colSpan={onToggleStrategy ? 9 : 8} className="text-center text-sm" data-testid="strategy-control-table-empty-text">No data yet: strategy kayıtları henüz oluşmadı veya geçici olarak alınamadı.</TableCell>
           </TableRow>
         )}
       </TableBody>

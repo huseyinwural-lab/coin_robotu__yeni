@@ -1,7 +1,7 @@
 {
   "ok": true,
   "mode": "quick",
-  "base_url": "https://ops-trace-control.preview.emergentagent.com",
+  "base_url": "https://unified-strategy-ops.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",

@@ -14,7 +14,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://ops-trace-control.preview.emergentagent.com"
+    BASE_URL = "https://unified-strategy-ops.preview.emergentagent.com"
 
 
 class TestAuthSetup:

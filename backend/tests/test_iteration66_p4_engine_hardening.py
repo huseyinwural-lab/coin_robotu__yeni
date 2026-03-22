@@ -8,7 +8,7 @@ import pytest
 import requests
 
 # Read BASE_URL from frontend/.env
-BASE_URL = "https://ops-trace-control.preview.emergentagent.com"
+BASE_URL = "https://unified-strategy-ops.preview.emergentagent.com"
 with open("/app/frontend/.env") as f:
     for line in f:
         if line.startswith("REACT_APP_BACKEND_URL"):
