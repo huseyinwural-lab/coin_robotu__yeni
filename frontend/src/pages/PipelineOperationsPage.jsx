@@ -509,6 +509,27 @@ export const PipelineOperationsPage = () => {
     });
   };
 
+  const postWithRetry = async (endpoint, payload, options = {}) => {
+    const maxAttempts = Number(options.maxAttempts || 1);
+    const retryDelayMs = Number(options.retryDelayMs || 1500);
+    const retryStatuses = options.retryStatuses || [502, 503, 504];
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await apiClient.post(endpoint, payload);
+      } catch (error) {
+        lastError = error;
+        const statusCode = Number(error?.response?.status || 0);
+        const shouldRetry = retryStatuses.includes(statusCode) && attempt < maxAttempts;
+        if (!shouldRetry) break;
+        await new Promise((resolve) => window.setTimeout(resolve, retryDelayMs));
+      }
+    }
+
+    throw lastError;
+  };
+
   const onBulkCsvFileUpload = async (file) => {
     if (!file) return;
     const text = await file.text();
@@ -950,7 +971,11 @@ export const PipelineOperationsPage = () => {
         const guardResult = await apiClient.get("/runtime/guard/telemetry", { params: { limit: 100 } });
         childResults.push({ status: "success", message: "guard list rebuilt", state_snapshot: guardResult.data });
       } else {
-        const gateResult = await apiClient.post("/runtime/gate/recheck", { reason: callReason, confirmation_phrase: "RECHECK RELEASE GATE" });
+        const gateResult = await postWithRetry(
+          "/runtime/gate/recheck",
+          { reason: callReason, confirmation_phrase: "RECHECK RELEASE GATE" },
+          { maxAttempts: 2, retryDelayMs: 1200 },
+        );
         childResults.push(gateResult.data);
       }
 
@@ -986,10 +1011,16 @@ export const PipelineOperationsPage = () => {
     try {
       if (actionCode === "db_restart_then_gate_recheck") {
         childResults.push((await apiClient.post("/runtime/service/restart", { service: "all", reason: callReason, confirmation_phrase: "RESTART SERVICE" })).data);
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
       } else if (actionCode === "redis_reconnect_then_gate_recheck") {
         childResults.push((await apiClient.post("/runtime/ws/reconnect", { reason: callReason, confirmation_phrase: "RECONNECT WS" })).data);
       }
-      childResults.push((await apiClient.post("/runtime/gate/recheck", { reason: callReason, confirmation_phrase: "RECHECK RELEASE GATE" })).data);
+      const gateResult = await postWithRetry(
+        "/runtime/gate/recheck",
+        { reason: callReason, confirmation_phrase: "RECHECK RELEASE GATE" },
+        { maxAttempts: actionCode === "db_restart_then_gate_recheck" ? 5 : 2, retryDelayMs: 1800 },
+      );
+      childResults.push(gateResult.data);
 
       const payload = {
         status: "success",
