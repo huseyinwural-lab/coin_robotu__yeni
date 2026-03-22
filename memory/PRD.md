@@ -1,3 +1,56 @@
+## 2026-03-22 — Futures Strategy Control + Governance System (Faz-3) ✅
+
+### Kullanıcı seçimi (bu iterasyon)
+- Kapsam: **Faz-3 Drift Action Center + Gate/Policy deep-link**
+- Ayrı route yok; mevcut tablara context’li yönlendirme
+- Impact Preview bu tur kapsam dışı (sonraki tur)
+
+### Backend Faz-3 implementasyonu
+- `/app/backend/routers/admin_futures_strategy_control.py` genişletildi:
+  - `GET /api/admin/futures/strategy-control/drift-alerts`
+  - `POST /api/admin/futures/drift-alert/{id}/ack`
+  - `POST /api/admin/futures/drift-alert/{id}/mute`
+  - `POST /api/admin/futures/drift-alert/{id}/ignore`
+  - `POST /api/admin/futures/drift-alert/{id}/disable-strategy`
+  - `POST /api/admin/futures/drift-alert/{id}/retrain`
+- Drift aksiyon kuralları:
+  - reason zorunlu
+  - ignore confirm: `IGNORE DRIFT ALERT`
+  - disable confirm: `DISABLE VIA DRIFT`
+  - mute duration kısıtı: **1h / 24h / 7d (168h)**
+- Disable Strategy drift aksiyonu hard-disable yapmıyor:
+  - **throttle -> pause -> disable** zinciriyle ilerliyor
+- Retrain aksiyonu ilk sürümde queued job olarak çalışıyor:
+  - `retrain_status=queued`, `retrain_job_id`
+- Deep-link payload eklendi:
+  - `target_tab + strategy_id + context_filter`
+- Drift aksiyonlarında response kontratı korundu:
+  - `{status, trace_id, message, state_snapshot}`
+
+### Frontend Faz-3 implementasyonu
+- `/app/frontend/src/pages/AdminFuturesStrategyControlGovernancePage.jsx` güncellendi:
+  - Drift Action Center tabı canlı aksiyon katmanına çevrildi
+  - Alert kartları + aksiyon butonları: Ack/Mute/Ignore/Disable Strategy/Retrain/Open Policy
+  - Drift action modal:
+    - reason input
+    - mute selector (1h/24h/7d)
+    - ignore/disable için confirm input
+  - Open Policy butonu ile mevcut tablara context’li geçiş:
+    - Strategy Governance veya Rollout
+
+### Test & doğrulama
+- Test raporu: `/app/test_reports/iteration_63.json`
+  - Backend: **100% (24 passed)**
+  - Frontend: **100% PASS**
+- Ek doğrulama:
+  - `auto_frontend_testing_agent` PASS
+  - `deep_testing_backend_v2` PASS
+
+### Faz-4 backlog
+- Feedback loop: false allow/reject correction
+- Model update trigger genişletme
+- Export zenginleştirme ve daha derin governance raporları
+
 ## 2026-03-22 — Futures Strategy Control + Governance System (Faz-2) ✅
 
 ### Kullanıcı seçimi (bu iterasyon)
