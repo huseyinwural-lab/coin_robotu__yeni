@@ -1,3 +1,25 @@
+## 2026-03-22 — Sidebar Menü Arama (Hızlı Sürüm) ✅
+
+### Kullanıcı kararı
+- Kapsam: **Sadece sol sidebar menüsü**
+- Eşleşme yoksa: **“Eşleşme bulunamadı”** satırı
+- Davranış: **Yazdıkça anlık filtreleme** (ek buton yok)
+
+### Uygulananlar
+- `PanelLayout.jsx` içinde sidebar arama input’u eklendi
+  - `data-testid="sidebar-search-input"`
+- Admin ve user sidebar menü öğeleri arama metnine göre filtreleniyor
+- Sonuç yoksa bilgi satırı gösteriliyor
+  - `data-testid="sidebar-search-no-results"`
+- Arama temizlenince menü tam listeye geri dönüyor
+
+### Test
+- Frontend lint PASS (`PanelLayout.jsx`)
+- Frontend test subagent PASS (11/11)
+  - allocation filtresi doğru
+  - no-match mesajı doğru
+  - temizleme sonrası menü geri geliyor
+
 ## 2026-03-22 — Phase 5 ✅ + Confidence Band ✅
 
 ### Scope (onaylı)
