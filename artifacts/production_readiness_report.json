@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-03-18T23:22:09Z",
-  "base_url": "https://approval-intel-1.preview.emergentagent.com/api",
+  "base_url": "https://audit-closure-dash.preview.emergentagent.com/api",
   "checks": {
     "postgres_persistence_backup": {
       "status": "FAIL",

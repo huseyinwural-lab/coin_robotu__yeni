@@ -1,134 +1,149 @@
-<analysis>**original_problem_statement**: The user wants to transform the Strategy Allocation and Strategy Intelligence screens from passive monitoring/config tools into actionable, approval-gated Strategy Control + Governance Systems (P0). This involves enforcing strict safety layers (e.g., allocation weight=1), risk bounds, simulation-first requirements, impact previews, and 2-step approval workflows (Requester -> Super Admin) for all critical actions (Overrides, Conflict Resolution, Hedge Application, Rebalance Configuration). 
+<analysis>**original_problem_statement**: The user wants to bring the Strategy Allocation Dashboard to Production Closure. This involves moving it from a basic config screen to a secure, traceable, approval-backed capital governance engine. The final scope includes Snapshot Restore, What-if table integration, Approval visibility, Approval re-validation (preventing stale requests), Simulation = Production parity, Concurrency control (), and Audit-grade exports.
 
 **User's preferred language**: Turkish (Türkçe)
 **INSTRUCT NEXT AGENT**: You MUST respond to the user in Turkish only.
 
-**what currently exists?**: A highly robust Algorithmic Trading Admin Platform. The  is fully complete (Faz 1-5). The  has been successfully rebuilt into a Risk-Aware Capital Allocation Engine featuring safety layers, drift explainability (reason tracking), rebalance suggestions, approval workflows, and what-if simulations (Phases 1-6 complete). The  has completed Sprint 1, introducing Simulation Guards, Active Override tracking, and Role-Based UI restrictions.
+**what currently exists?**: The  module is 100% complete with a unified Governance Board, Escalation Center, deterministic impact models, and sparkline charts. The  module currently has Phase 1-6 features (Safety validation, Strategy CRUD, Risk binding, Rebalance suggestions, Reason notes, basic approval flow, basic what-if/snapshot panel), but it lacks concurrency control, stale request prevention, true shared simulation engine parity, and a functional snapshot restore mechanism.
 
 **Last working item**:
-    - Last item agent was working: Implementing the Strategy Intelligence Approval Wiring (Sprint 2 start). The agent was tasked with connecting Conflict Resolve, Hedge Apply, and Rebalance Governance actions to a unified Approval-Gated State Machine. The agent began expanding  to include  and  but the session ended before router/frontend implementation.
+    - Last item agent was working: The agent was analyzing backend models (, ), routers (), and frontend () to begin **Checkpoint 1** of the Strategy Allocation Production Closure. Checkpoint 1 consists of: Concurrency Control (), Approval Re-validation, Simulation Parity, and What-if Table Integration.
     - Status: IN PROGRESS
     - Agent Testing Done: N
-    - Which testing method agent to use?: Both. Backend testing agent to verify new  endpoints. Frontend testing agent / Screenshot tool to verify the new modularized components in .
+    - Which testing method agent to use?: Both. Backend testing agent for new concurrency/re-validation logic, and Frontend testing agent / Screenshot tool for What-if table integration.
     - User Testing Done: N
 
-**All Pending/In progress Issue list**:
-  Issue 1: Connect Strategy Intelligence Actions to Approval Model (P0)
-     - Attempted fixes: Added base schemas for Decision Requests in . Has not yet implemented endpoints or UI.
-     - Next debug checklist: 
-       1. Implement backend endpoints (, , , , , , etc.) in  or a new dedicated router.
-       2. Modularize  into smaller components (, , , etc.) as instructed by the user.
-       3. Ensure Role-based access is maintained (admin: request, super_admin: approve/execute).
-     - Why fix this issue and what will be achieved with the fix? It completes the transformation of the Intelligence Page into a strict Governance Control Panel where actions cannot be executed silently without simulation, impact preview, and approval.
+**All Pending/In progress Issue list**: 
+  Issue 1: Concurrency Control for Strategy Allocation (P0)
+     - Attempted fixes: Agent viewed files to plan the DB schema update. No code written yet.
+     - Next debug checklist: Add  or  to  config in . Update  write endpoints to require and check . Return  on mismatch. Handle UI refresh on conflict.
+     - Why fix this issue and what will be achieved with the fix? Prevents silent overwrites when multiple users edit/approve simultaneously.
      - Status: IN PROGRESS
      - Is recurring issue? N
      - Should Test frontend/backend/both after fix? Both
      - Blocked on other issue: None
 
-**In progress Task List**:
-  Task 1: Risk-Delta Priority Score & History Replay Foundation
-     - Where to resume: Backend calculation for  within the new Approval Model endpoints. Addition of a single run replay + side-by-side compare UI foundation in the Intelligence Panel.
-     - What will be achieved with this? Allows sorting the new Approval Queue by criticality and provides operators with historical context for decisions.
+  Issue 2: Approval Re-validation (Prevent Stale Requests) (P0)
+     - Attempted fixes: Not started.
+     - Next debug checklist: In , update the  logic. Before committing an approved allocation, check if the  matches the one from when the request was created. If mismatched, mark as  or  and block execution.
+     - Why fix this issue and what will be achieved with the fix? Ensures conditions haven't changed between request creation and super_admin approval.
      - Status: NOT STARTED
+     - Is recurring issue? N
      - Should Test frontend/backend/both after fix? Both
-     - Blocked on something: Blocked pending the completion of Issue 1 (Approval Model wiring).
+     - Blocked on other issue: Issue 1 (Requires revision/versioning first).
 
-**Upcoming and Future Tasks**:
-    Upcoming Tasks:
-    - P1: Strategy Intelligence Sprint 2 Continuation: Add preset scenarios (high_volatility, liquidity_shock, conflict_heavy) to the simulation engine.
-    
-    Future Tasks:
-    - P2: Symbol + Strategy Matrix Batch Simulation (expanding batch capabilities).
-    - P2: List-based import/export/performance management for Strategy Intelligence.
-    - P2: Symbol selection filter depth (liquidity/risk band/exchange).
+  Issue 3: Simulation = Production Parity (P0)
+     - Attempted fixes: Not started.
+     - Next debug checklist: Extract risk/allocation calculation logic into a shared service function inside  so both the What-If simulation endpoint and the actual pre-commit validation endpoint use the exact same math.
+     - Why fix this issue and what will be achieved with the fix? Ensures simulation predictions exactly match reality.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? Backend
 
-**Completed work in this session**:
-- Faz-5 Strategy Control + Governance Closure (Unified Modal, Impact Preview strictness) (DONE)
-- Strategy Control P1: Bulk Result Breakdown, Post-Action Monitor, Policy Apply Hook (DONE)
-- Strategy Control UI Tweaks: Approval Risk Sparklines, Confidence Labels, Tooltips (DONE)
-- Allocation Panel Phase 1+2: Safety layer (weight=1), Strategy CRUD, Hard Limits (DONE)
-- Allocation Panel Phase 3a+b: Risk Binding (drawdown/exposure), Drift Explainability Logs (DONE)
-- Allocation Panel Phase 3c: Rebalance suggestions, 5g trend tooltip (DONE)
-- Allocation Panel Phase 5: Reason notes, Role-based restriction, Approval flow (DONE)
-- Allocation Panel Phase 6: Snapshot, JSON/CSV Export, What-if simulation (DONE)
-- General UI: Sidebar search, CORE Logs menu migration (DONE)
-- Strategy Intelligence Sprint 1: Simulation Guard, Active Overrides table, Revoke/Cancel, Reason/Expiry Enforcement (DONE)
+  Issue 4: What-if Table Integration (P0)
+     - Attempted fixes: Not started.
+     - Next debug checklist: Update . When a What-If simulation runs, propagate the results (current weight, suggested weight, delta weight, risk delta, return delta) into the actual strategy data table rows, not just the summary card. Add Simulation preview only warnings.
+     - Why fix this issue and what will be achieved with the fix? Contextualizes simulation impacts per strategy.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? Frontend
 
-**Earlier issues found/mentioned but not fixed**:
-None. Agent consistently resolved issues found during test iterations.
+**In progress Task List**:
+  Task 1: Database Schema Updates for Audit & Concurrency
+     - Where to resume: 
+     - What will be achieved with this? Adding , , and  fields to allow concurrency control and audit-grade restoring. User explicitly approved these DB updates.
+     - Status: IN PROGRESS
+     - Should Test frontend/backend/both after fix? Backend
+     - Blocked on something: None
 
-**Known issue recurrence from previous fork**:
+**Upcoming and Future Tasks**
+    Upcoming Tasks (Checkpoint 2 - DO NOT START UNTIL CHECKPOINT 1 IS DONE):
+    - P1: Snapshot Restore Workflow: Add functional restore button per snapshot. Requires double confirm, reason_note, and routes through the standard approval state machine. Restoring must invalidate stale requests.
+    - P1: Approval Visibility Completion: Populate real pending request data with Request Age formatting (<60m, <24h, >=24h) and target details.
+    - P1: Audit-Grade Export: Add metadata (, , ) to JSON/CSV exports. Add audit logging for the export action.
+    - P2: Edge-case Cleanup: Clarify logic for DISABLED strategies with non-zero weights, fix empty No data yet states in UI.
+
+**Completed work in this session**
+- Strategy Intelligence Core Backend (Decision request endpoints, priority queues) (DONE)
+- Strategy Intelligence UI Modularization (ApprovalQueuePanel, SimulationGuardPanel, etc.) (DONE)
+- Strategy Intelligence P1 (Preset Scenarios, SLA countdown, History replay filters) (DONE)
+- Strategy Intelligence Escalation Center (Active/Ack/Resolve tabs, role guards) (DONE)
+- Strategy Intelligence P0 Final Scope (Unified Governance Board, projected PNL/drawdown added to simulation engine) (DONE)
+- Strategy Intelligence P1 Final Scope (Deterministic fixed model for Conflict/Hedge/Rebalance execution effects, Sparkline charts) (DONE)
+
+**Earlier issues found/mentioned but not fixed**
+None. Agent resolved all testing feedback.
+
+**Known issue recurrence from previous fork**
   - Issue recurrence in previous fork: .
-  - Recurrence count: Ongoing (Expected in this preview environment).
-  - Status: RESOLVED (Fallback logic handles it gracefully, but be aware that in-memory states wipe on supervisor restart).
+  - Recurrence count: Ongoing.
+  - Status: RESOLVED (Graceful fallback handles it, but in-memory wipes on restart).
+  - Issue recurrence: Occasional PostgreSQL 502 Connection Refused.
+  - Recurrence count: 2
+  - Status: RESOLVED (Transient startup issue, retries succeed).
 
-**Code Architecture**:
+**Code Architecture**
 
 
-**Key Technical Concepts**:
-- **Approval-Gated Workflow**: All major state changes generate a Request.  can only request.  can approve/execute.
-- **Simulation Guard**: Apply buttons are disabled until a valid risk simulation object/token is generated and passed.
-- **Drift Override Explainability**: If a background drift monitor overrides a manual state, it sets  and logs an  reason to prevent user confusion.
+**Key Technical Concepts**
+- **Concurrency Control ()**: A mechanism to prevent silent data overwrites when multiple users edit simultaneously.
+- **Approval Re-validation**: A secondary check during the  step to ensure the underlying baseline data hasn't mutated since the request was created.
+- **Simulation/Production Parity**: A single source of truth for math/formulas so What-If previews precisely match actual pre-commit validations.
 
-**key DB schema**:
-  - : Holds limits, weights, capital parameters.
-  - : Holds audit trails for manual interventions.
-  -  (pending integration): Will track conflict/hedge/rebalance requests.
+**key DB schema**
+  - : Needs  and audit trace fields added.
+  - : Tracks request state, owner, ack status, payload.
 
-**changes in tech stack**:
-  - React components are being heavily modularized.  must be broken down into child components (, , etc.) rather than patched monolithically.
+**changes in tech stack**
+  - None.
 
-**All files of reference**:
-  -  (Modified last)
+**All files of reference**
+  - 
+  - 
   - 
   - 
   - 
 
 **Areas that need refactoring**:
-- : The user explicitly instructed: AdminStrategyIntelligencePage.jsx içinde yama yaparak büyütmeyin... dosya bölme şart. You must split this into smaller components.
+-  is getting very large (~1200 lines). If Checkpoint 1 & 2 add too much complexity, consider breaking out the What-If Table or Snapshot list into separate components, similar to what was done for Strategy Intelligence.
 
-**key api endpoints**:
+**key api endpoints**
   - 
+  -  (Needs revision ID added to payload requests)
   - 
-  - 
-  -  (To be created)
 
-**Critical Info for New Agent**:
-- You are midway through implementing the final user prompt: **Connecting Conflict / Hedge / Rebalance actions to the approval model.** 
-- DO NOT start building deep batch simulations or preset scenarios yet. The priority is establishing the  and  state machine inside the Strategy Intelligence Page.
-- Remember to strictly enforce Role Matrices:  (read-only),  (preview-only),  (request),  (approve/execute).
+**Critical Info for New Agent**
+- You are transitioning focus **AWAY** from Strategy Intelligence (which is 100% finished) and **TOWARDS** Strategy Allocation Dashboard.
+- The user explicitly agreed to split the Strategy Allocation closure into **2 Checkpoints**.
+- **DO NOT** attempt Snapshot Restore or Exports right now.
+- Your immediate job is **Checkpoint 1**: 1) Concurrency Control (add  to DB and endpoints), 2) Approval Re-validation (stale request prevention), 3) Simulation Parity (shared math engine), and 4) What-If Table Integration in the UI. 
+- User has explicitly approved modifying the database schemas to support proper audit trails and versioning. 
 
-**documents and test reports created in this job**:
-  -  through 
+**documents and test reports created in this job**
+  -  to 
 
-**Last 10 User Messages and any pending HUMAN messages**:
-1. User: Defined P3.a/b/c scope for Allocation.
-2. User: Confirmed 5g trend tooltip format.
-3. User: Confirmed Confidence band labels.
-4. User: Defined Phase 5 (Roles, Reason notes, Approvals) scope.
-5. User: Defined Phase 6 (Snapshots, What-if, Age badge) scope.
-6. User: Asked for a Sidebar search bar and to restore the Logs CORE menu.
-7. User: Evaluated the existing Strategy Intelligence page and provided a massive Görev Emri (Execution Order) to transform it into a simulation-first Decision Engine.
-8. User: Locked the scope to Sprint 1 + Impact Preview from Sprint 2.
-9. User (Pending Context): Locked the *current* scope to: Connect Conflict/Hedge/Rebalance actions to Approval Model. Add Risk-delta priority score. Setup history replay foundation. Agent began updating schemas but hasn't written the logic.
+**Last 10 User Messages and any pending HUMAN messages**
+1. User: Outlined P1 for Strategy Intelligence (Deterministic model, History chart).
+2. User: Confirmed implementation strategy for P1 (Inline cards + sparklines).
+3. User: Outlined FINAL GÖREV EMRİ (Final Execution Order) for the **Strategy Allocation Dashboard**. Listed 8 major missing pieces (Snapshot Restore, What-If table, Approval visibility, Re-validation, Parity, Concurrency, Exports, Edge cases).
+4. User (Pending Context): Agreed to split the execution into 2 Checkpoints. Checkpoint 1 = Concurrency, Approval Re-validation, Simulation Parity, What-If table integration. Approved DB schema changes for versioning. Requested Jira ticket summary *only after* implementation is done.
 
-**Project Health Check**:
-- Mocked: Binance Futures execution is mocked in MOCK mode.
-- Broken: None currently, but schemas are midway updated.
+**Project Health Check:**
+- Mocked: Binance Futures execution.
+- Broken: None.
 
-**3rd Party Integrations**:
-- Binance Futures Testnet (API keys expected for PROD execution).
+**3rd Party Integrations**
+- Binance Futures Testnet (requires User API Key).
 
-**Testing status**:
+**Testing status**
   - Testing agent used after significant changes: YES
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: Heavily updated backend tests for  through .
+  - Test files created: Heavily updated backend tests in iterations 75-79.
   - Known regressions: None.
 
-**Credentials to test flow**:
+**Credentials to test flow:**
 - Super Admin:  / 
-- Admin (Requester): 
-- Ops (Read-only): 
+- Admin (Requester):  / 
+- Ops (Read-only):  / 
 
-**What agent forgot to execute**:
-The agent successfully modified  to prepare for the Decision Approval Models but the session ran out of tokens/steps before creating the backend endpoints and refactoring the  into smaller components as explicitly requested by the user. Ensure the UI modularization is executed.</analysis>
+**What agent forgot to execute**
+The agent did not write any code for Checkpoint 1 yet; it only viewed the files to gather context. Start directly by updating the DB models for concurrency () and the Pydantic schemas, then move to the routers.</analysis>

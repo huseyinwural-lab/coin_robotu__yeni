@@ -15,7 +15,7 @@ import pytest
 import requests
 from pathlib import Path
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://approval-intel-1.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://audit-closure-dash.preview.emergentagent.com')
 
 
 @pytest.fixture(scope="module")

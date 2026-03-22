@@ -2,7 +2,7 @@
 """
 P1 Backend Validation Test
 Testing conflict/hedge/rebalance flows, deterministic model, compare upgrade, and queue hardening regression
-URL: https://approval-intel-1.preview.emergentagent.com
+URL: https://audit-closure-dash.preview.emergentagent.com
 """
 
 import requests
@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Test configuration
-BASE_URL = "https://approval-intel-1.preview.emergentagent.com"
+BASE_URL = "https://audit-closure-dash.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Test credentials

@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 # Configuration
-BASE_URL = "https://approval-intel-1.preview.emergentagent.com"
+BASE_URL = "https://audit-closure-dash.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Test credentials

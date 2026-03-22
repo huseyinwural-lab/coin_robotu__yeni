@@ -17,7 +17,7 @@ from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://approval-intel-1.preview.emergentagent.com"
+    BASE_URL = "https://audit-closure-dash.preview.emergentagent.com"
 
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
