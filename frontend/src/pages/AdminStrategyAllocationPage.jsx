@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiClient } from "@/lib/api";
 
 const WEIGHT_TOLERANCE = 0.0001;
@@ -52,6 +53,20 @@ const validateDraft = (draft) => {
   };
 };
 
+const stateReasonBadgeClass = (code) => {
+  const normalized = String(code || "").toUpperCase();
+  if (normalized === "AUTO_DISABLED_BY_DRIFT") return "border border-rose-500/60 bg-rose-950/50 text-rose-200";
+  if (normalized === "AUTO_THROTTLED_BY_DRIFT") return "border border-amber-500/60 bg-amber-950/50 text-amber-200";
+  return "border border-slate-700 bg-slate-950 text-slate-300";
+};
+
+const stateReasonInlineText = (row) => {
+  if (row?.is_drift_override) return "Manual change overridden by drift rule";
+  if (row?.state_reason_code === "AUTO_DISABLED_BY_DRIFT") return "Drift rule: auto disabled";
+  if (row?.state_reason_code === "AUTO_THROTTLED_BY_DRIFT") return "Drift rule: auto throttled";
+  return "Manual / stable";
+};
+
 export const AdminStrategyAllocationPage = () => {
   const [rows, setRows] = useState([]);
   const [drafts, setDrafts] = useState({});
@@ -72,6 +87,7 @@ export const AdminStrategyAllocationPage = () => {
   });
   const [isCreating, setIsCreating] = useState(false);
   const [globalActionError, setGlobalActionError] = useState("");
+  const [driftOverrideNotice, setDriftOverrideNotice] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
 
   const load = async () => {
@@ -193,7 +209,7 @@ export const AdminStrategyAllocationPage = () => {
     }
 
     try {
-      await apiClient.put(`/admin/strategy-allocation/${encodeURIComponent(strategyId)}`, {
+      const { data } = await apiClient.put(`/admin/strategy-allocation/${encodeURIComponent(strategyId)}`, {
         capital_weight: Number(draft.capital_weight),
         max_capital: Number(draft.max_capital),
         current_capital: Number(draft.current_capital),
@@ -202,6 +218,13 @@ export const AdminStrategyAllocationPage = () => {
         confirm_secondary: draft.confirm_secondary || undefined,
       });
       toast.success(`Allocation güncellendi: ${strategyId}`);
+      if (data?.is_drift_override) {
+        const notice = `Manual change overridden by drift rule (${data?.state_reason_code || "AUTO"})`;
+        setDriftOverrideNotice(notice);
+        toast.warning(notice);
+      } else {
+        setDriftOverrideNotice("");
+      }
       await load();
     } catch (error) {
       const message = error?.response?.data?.detail || "Allocation güncellenemedi";
@@ -308,6 +331,28 @@ export const AdminStrategyAllocationPage = () => {
     });
   };
 
+  const applyDrawdownSuggestionsToForm = () => {
+    const candidates = backendSummary?.drawdown_candidates || [];
+    if (candidates.length === 0) {
+      toast.info("Drawdown reduce önerisi bulunmuyor");
+      return;
+    }
+
+    setDrafts((prev) => {
+      const next = { ...prev };
+      candidates.forEach((candidate) => {
+        const strategyId = candidate.strategy_id;
+        if (!next[strategyId]) return;
+        next[strategyId] = {
+          ...next[strategyId],
+          current_capital: String(candidate.suggested_reduced_capital),
+        };
+      });
+      return next;
+    });
+    toast.success("Drawdown reduce önerileri forma uygulandı (otomatik kaydetme yok)");
+  };
+
   const submitBulkUpdate = async () => {
     if (selectedStrategyIds.length === 0) {
       toast.error("Bulk update için en az bir strategy seçin");
@@ -325,7 +370,7 @@ export const AdminStrategyAllocationPage = () => {
     setIsBulkSubmitting(true);
     setGlobalActionError("");
     try {
-      await apiClient.post("/admin/strategy-allocation/bulk-update", {
+      const { data } = await apiClient.post("/admin/strategy-allocation/bulk-update", {
         updates: selectedStrategyIds.map((strategyId) => {
           const draft = drafts[strategyId] || {};
           return {
@@ -341,6 +386,10 @@ export const AdminStrategyAllocationPage = () => {
         auto_normalize: bulkAutoNormalize,
       });
       toast.success(`Bulk update tamamlandı (${selectedStrategyIds.length} strategy)`);
+      const enforcedRows = data?.enforced_reduce_rows || [];
+      if (enforcedRows.length > 0) {
+        toast.warning(`Critical drawdown auto-reduce uygulandı (${enforcedRows.length} strategy)`);
+      }
       await load();
     } catch (error) {
       const message = error?.response?.data?.detail || "Bulk update başarısız";
@@ -389,6 +438,12 @@ export const AdminStrategyAllocationPage = () => {
       {globalActionError && (
         <div className="col-span-12 border border-rose-500/40 bg-rose-950/20 p-3 text-sm text-rose-200" data-testid="admin-strategy-allocation-action-error-alert">
           İşlem hatası: {globalActionError}
+        </div>
+      )}
+
+      {driftOverrideNotice && (
+        <div className="col-span-12 border border-amber-500/40 bg-amber-950/20 p-3 text-sm text-amber-100" data-testid="admin-strategy-allocation-drift-override-banner">
+          {driftOverrideNotice}
         </div>
       )}
 
@@ -444,9 +499,41 @@ export const AdminStrategyAllocationPage = () => {
         )}
 
         {backendSummary && (
-          <p className="mt-2 text-xs text-slate-400" data-testid="admin-strategy-allocation-backend-summary-text">
-            Backend snapshot → weight={backendSummary.total_weight} · used={backendSummary.used_capital} · available={backendSummary.available_capital} · over_allocated={backendSummary.over_allocated_count}
-          </p>
+          <div className="mt-2 space-y-2" data-testid="admin-strategy-allocation-risk-binding-panel">
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-allocation-backend-summary-text">
+              Backend snapshot → weight={backendSummary.total_weight} · used={backendSummary.used_capital} · available={backendSummary.available_capital} · over_allocated={backendSummary.over_allocated_count}
+            </p>
+            <p className="text-xs text-slate-300" data-testid="admin-strategy-allocation-risk-exposure-line">
+              Exposure={backendSummary.total_exposure_ratio_pct}% · warning threshold={backendSummary.exposure_warning_threshold_pct}%
+            </p>
+            {backendSummary.exposure_warning_state === "WARNING" && (
+              <div className="border border-amber-500/40 bg-amber-950/20 p-2 text-xs text-amber-100" data-testid="admin-strategy-allocation-risk-exposure-warning">
+                Exposure warning: used/total capital oranı {backendSummary.exposure_warning_threshold_pct}% üstünde.
+              </div>
+            )}
+
+            <div className="rounded border border-slate-800 bg-slate-950 p-2" data-testid="admin-strategy-allocation-drawdown-candidates-panel">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-slate-300" data-testid="admin-strategy-allocation-drawdown-candidates-title">
+                  Drawdown candidates (threshold {backendSummary.drawdown_threshold_pct}% / enforce {backendSummary.drawdown_enforce_threshold_pct}%)
+                </p>
+                <Button size="sm" variant="outline" onClick={applyDrawdownSuggestionsToForm} data-testid="admin-strategy-allocation-apply-drawdown-suggestion-button">
+                  Önerilen Reduce’u Forma Uygula
+                </Button>
+              </div>
+              <div className="mt-2 space-y-1" data-testid="admin-strategy-allocation-drawdown-candidates-list">
+                {(backendSummary.drawdown_candidates || []).length === 0 && (
+                  <p className="text-xs text-slate-500" data-testid="admin-strategy-allocation-drawdown-candidates-empty">No data yet</p>
+                )}
+                {(backendSummary.drawdown_candidates || []).map((candidate, index) => (
+                  <p key={`${candidate.strategy_id}-${index}`} className="text-xs text-slate-300" data-testid={`admin-strategy-allocation-drawdown-candidate-${index}`}>
+                    {candidate.strategy_id} · drawdown={candidate.drawdown_pct}% · suggested={candidate.suggested_reduced_capital}
+                    {candidate.enforced_required ? " · CRITICAL" : " · suggestion"}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -528,6 +615,8 @@ export const AdminStrategyAllocationPage = () => {
               <th className="px-3 py-2">Max Capital</th>
               <th className="px-3 py-2">Current Capital</th>
               <th className="px-3 py-2">State</th>
+              <th className="px-3 py-2">Exposure %</th>
+              <th className="px-3 py-2">Drawdown %</th>
               <th className="px-3 py-2">Confidence</th>
               <th className="px-3 py-2">Performance</th>
               <th className="px-3 py-2">Signal Decay</th>
@@ -560,7 +649,27 @@ export const AdminStrategyAllocationPage = () => {
                       <option value="THROTTLED">THROTTLED</option>
                       <option value="DISABLED">DISABLED</option>
                     </select>
+                    <div className="mt-1 flex flex-wrap items-center gap-1" data-testid={`admin-strategy-allocation-state-reason-row-${item.strategy_id}`}>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${stateReasonBadgeClass(item.state_reason_code)}`} data-testid={`admin-strategy-allocation-state-reason-badge-${item.strategy_id}`}>
+                        {item.state_reason_code || "MANUAL_STATE"}
+                      </span>
+                      <span className="text-[10px] text-slate-300" data-testid={`admin-strategy-allocation-state-reason-inline-${item.strategy_id}`}>
+                        {stateReasonInlineText(item)}
+                      </span>
+                      <TooltipProvider delayDuration={0}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help text-[10px] text-cyan-300" data-testid={`admin-strategy-allocation-state-reason-tooltip-trigger-${item.strategy_id}`}>why?</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[320px]" data-testid={`admin-strategy-allocation-state-reason-tooltip-${item.strategy_id}`}>
+                            <p>{item.state_reason_detail || "No reason"}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </td>
+                  <td className="px-3 py-2" data-testid={`admin-strategy-allocation-exposure-ratio-${item.strategy_id}`}>{item.exposure_ratio_pct}</td>
+                  <td className="px-3 py-2" data-testid={`admin-strategy-allocation-drawdown-pct-${item.strategy_id}`}>{item.drawdown_pct}</td>
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-confidence-${item.strategy_id}`}>{item.confidence_score}</td>
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-performance-${item.strategy_id}`}>{item.performance_score}</td>
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-signal-decay-${item.strategy_id}`}>{item.signal_decay}</td>
@@ -596,7 +705,7 @@ export const AdminStrategyAllocationPage = () => {
             })}
             {rows.length === 0 && (
               <tr className="border-t border-slate-800" data-testid="admin-strategy-allocation-empty-row">
-                <td colSpan={11} className="px-3 py-4 text-center text-sm text-slate-400" data-testid="admin-strategy-allocation-empty-text">Strategy allocation kaydı bulunamadı.</td>
+                <td colSpan={13} className="px-3 py-4 text-center text-sm text-slate-400" data-testid="admin-strategy-allocation-empty-text">Strategy allocation kaydı bulunamadı.</td>
               </tr>
             )}
           </tbody>
@@ -616,6 +725,9 @@ export const AdminStrategyAllocationPage = () => {
               </p>
               <p data-testid={`admin-strategy-allocation-state-history-item-transition-${index}`}>
                 {item.previous_state || "-"} → {item.new_state || "-"} · admin={item.admin_id}
+              </p>
+              <p data-testid={`admin-strategy-allocation-state-history-item-reason-${index}`}>
+                reason={item.reason_code || "-"} · detail={item.reason_detail || "-"}
               </p>
               <p data-testid={`admin-strategy-allocation-state-history-item-trace-${index}`}>trace={item.trace_id}</p>
             </div>

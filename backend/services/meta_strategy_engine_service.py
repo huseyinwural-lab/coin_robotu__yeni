@@ -20,6 +20,10 @@ def _safe_float(value, fallback: float = 0.0) -> float:
 ALLOWED_STATES = {"ACTIVE", "THROTTLED", "DISABLED"}
 DOUBLE_CONFIRM_PRIMARY = "CONFIRM"
 DOUBLE_CONFIRM_SECONDARY = "STATE CHANGE"
+EXPOSURE_WARNING_THRESHOLD_PCT = 80.0
+DRAWDOWN_WARNING_THRESHOLD_PCT = 8.0
+DRAWDOWN_ENFORCE_THRESHOLD_PCT = 12.0
+DRAWDOWN_REDUCE_RATIO = 0.15
 
 
 def _normalized_state(value: str | None, fallback: str = "ACTIVE") -> str:
@@ -54,6 +58,110 @@ def _assert_positive_numeric(field_name: str, value: float) -> float:
     return val
 
 
+def _compute_strategy_exposure_ratio_pct(row: StrategyAllocation) -> float:
+    max_capital = max(_safe_float(row.max_capital, 0), 0)
+    current_capital = max(_safe_float(row.current_capital, 0), 0)
+    if max_capital <= 0:
+        return 0.0
+    return round((current_capital / max_capital) * 100, 4)
+
+
+def _compute_strategy_drawdown_pct(row: StrategyAllocation) -> float:
+    realized_return = _safe_float(row.realized_return, 0)
+    if realized_return >= 0:
+        return 0.0
+    return round(abs(realized_return), 4)
+
+
+def _compute_suggested_reduced_capital(row: StrategyAllocation) -> float:
+    current_capital = max(_safe_float(row.current_capital, 0), 0)
+    suggested = current_capital * (1 - DRAWDOWN_REDUCE_RATIO)
+    return round(max(suggested, 0.0), 4)
+
+
+def _build_drift_reason(row: StrategyAllocation, *, requested_state: str | None = None) -> tuple[str, str, bool]:
+    state = _normalized_state(row.state)
+    metrics = {
+        "signal_decay": round(_safe_float(row.signal_decay, 0), 4),
+        "execution_quality_score": round(_safe_float(row.execution_quality_score, 0), 4),
+        "performance_score": round(_safe_float(row.performance_score, 0), 4),
+    }
+    severe = metrics["signal_decay"] >= 0.8 or metrics["execution_quality_score"] < 40
+    medium = (
+        metrics["signal_decay"] >= 0.55
+        or metrics["execution_quality_score"] < 60
+        or metrics["performance_score"] < 35
+    )
+
+    requested = _normalized_state(requested_state, state) if requested_state else None
+    if state == "DISABLED" and severe:
+        code = "AUTO_DISABLED_BY_DRIFT"
+    elif state == "THROTTLED" and medium:
+        code = "AUTO_THROTTLED_BY_DRIFT"
+    else:
+        code = "MANUAL_STATE"
+
+    detail = (
+        f"decay={metrics['signal_decay']} · quality={metrics['execution_quality_score']} · "
+        f"performance={metrics['performance_score']}"
+    )
+    is_override = requested is not None and requested != state and code.startswith("AUTO_")
+    return code, detail, is_override
+
+
+def _apply_critical_drawdown_reduce(rows: list[StrategyAllocation]) -> list[dict]:
+    enforced: list[dict] = []
+    for row in rows:
+        drawdown_pct = _compute_strategy_drawdown_pct(row)
+        if drawdown_pct < DRAWDOWN_ENFORCE_THRESHOLD_PCT:
+            continue
+        suggested = _compute_suggested_reduced_capital(row)
+        current = max(_safe_float(row.current_capital, 0), 0)
+        if current <= suggested:
+            continue
+        row.current_capital = suggested
+        row.updated_at = _now()
+        enforced.append(
+            {
+                "strategy_id": row.strategy_id,
+                "previous_current_capital": round(current, 4),
+                "new_current_capital": round(suggested, 4),
+                "drawdown_pct": drawdown_pct,
+                "reason_code": "AUTO_REDUCE_BY_DRAWDOWN",
+            }
+        )
+    return enforced
+
+
+def _serialize_strategy_allocation_row(row: StrategyAllocation, *, requested_state: str | None = None) -> dict:
+    code, detail, is_override = _build_drift_reason(row, requested_state=requested_state)
+    drawdown_pct = _compute_strategy_drawdown_pct(row)
+    suggested_capital = _compute_suggested_reduced_capital(row)
+    exposure_ratio_pct = _compute_strategy_exposure_ratio_pct(row)
+
+    return {
+        "strategy_id": row.strategy_id,
+        "capital_weight": round(_safe_float(row.capital_weight, 0), 8),
+        "max_capital": round(_safe_float(row.max_capital, 0), 4),
+        "current_capital": round(_safe_float(row.current_capital, 0), 4),
+        "confidence_score": round(_safe_float(row.confidence_score, 0), 4),
+        "performance_score": round(_safe_float(row.performance_score, 0), 4),
+        "state": _normalized_state(row.state),
+        "expected_return": round(_safe_float(row.expected_return, 0), 4),
+        "realized_return": round(_safe_float(row.realized_return, 0), 4),
+        "signal_decay": round(_safe_float(row.signal_decay, 0), 4),
+        "execution_quality_score": round(_safe_float(row.execution_quality_score, 0), 4),
+        "updated_at": row.updated_at,
+        "state_reason_code": code,
+        "state_reason_detail": detail,
+        "is_drift_override": is_override,
+        "drawdown_pct": drawdown_pct,
+        "exposure_ratio_pct": exposure_ratio_pct,
+        "suggested_reduced_capital": suggested_capital,
+        "is_auto_reduce_candidate": drawdown_pct >= DRAWDOWN_WARNING_THRESHOLD_PCT,
+    }
+
+
 def _collect_summary(rows: list[StrategyAllocation]) -> dict:
     total_weight = round(sum(_safe_float(row.capital_weight, 0) for row in rows), 6)
     total_capital = round(sum(_safe_float(row.max_capital, 0) for row in rows), 4)
@@ -74,6 +182,25 @@ def _collect_summary(rows: list[StrategyAllocation]) -> dict:
                 }
             )
 
+    total_exposure_ratio_pct = round((used_capital / total_capital) * 100, 4) if total_capital > 0 else 0.0
+    exposure_warning_state = "WARNING" if total_exposure_ratio_pct >= EXPOSURE_WARNING_THRESHOLD_PCT else "NORMAL"
+
+    drawdown_candidates = []
+    for row in rows:
+        drawdown_pct = _compute_strategy_drawdown_pct(row)
+        if drawdown_pct < DRAWDOWN_WARNING_THRESHOLD_PCT:
+            continue
+        drawdown_candidates.append(
+            {
+                "strategy_id": row.strategy_id,
+                "drawdown_pct": drawdown_pct,
+                "current_capital": round(_safe_float(row.current_capital, 0), 4),
+                "suggested_reduced_capital": _compute_suggested_reduced_capital(row),
+                "enforced_required": drawdown_pct >= DRAWDOWN_ENFORCE_THRESHOLD_PCT,
+                "reason_code": "AUTO_REDUCE_BY_DRAWDOWN" if drawdown_pct >= DRAWDOWN_ENFORCE_THRESHOLD_PCT else "SUGGESTED_REDUCE_BY_DRAWDOWN",
+            }
+        )
+
     return {
         "total_strategies": len(rows),
         "total_weight": total_weight,
@@ -83,6 +210,12 @@ def _collect_summary(rows: list[StrategyAllocation]) -> dict:
         "available_capital": available_capital,
         "over_allocated_count": len(over_allocated),
         "over_allocated_strategies": over_allocated,
+        "total_exposure_ratio_pct": total_exposure_ratio_pct,
+        "exposure_warning_threshold_pct": EXPOSURE_WARNING_THRESHOLD_PCT,
+        "exposure_warning_state": exposure_warning_state,
+        "drawdown_threshold_pct": DRAWDOWN_WARNING_THRESHOLD_PCT,
+        "drawdown_enforce_threshold_pct": DRAWDOWN_ENFORCE_THRESHOLD_PCT,
+        "drawdown_candidates": drawdown_candidates,
     }
 
 
@@ -301,8 +434,17 @@ def list_strategy_allocations(db: Session, limit: int = 200) -> list[StrategyAll
     return db.query(StrategyAllocation).order_by(StrategyAllocation.updated_at.desc()).limit(limit).all()
 
 
+def list_strategy_allocation_dashboard_rows(db: Session, limit: int = 200) -> list[dict]:
+    rows = list_strategy_allocations(db, limit=limit)
+    return [_serialize_strategy_allocation_row(row) for row in rows]
+
+
+def build_strategy_allocation_row_payload(row: StrategyAllocation, *, requested_state: str | None = None) -> dict:
+    return _serialize_strategy_allocation_row(row, requested_state=requested_state)
+
+
 def get_strategy_allocation_summary(db: Session) -> dict:
-    rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+    rows = list_strategy_allocations(db, limit=500)
     return _collect_summary(rows)
 
 
@@ -339,6 +481,7 @@ def create_strategy_allocation(db: Session, payload: dict) -> StrategyAllocation
     try:
         db.flush()
         all_rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+        _apply_critical_drawdown_reduce(all_rows)
         _ensure_capital_limit(all_rows)
         _ensure_weight_is_one(all_rows)
         db.commit()
@@ -401,6 +544,7 @@ def normalize_strategy_allocations(db: Session) -> dict:
 def update_strategy_allocation(db: Session, strategy_id: str, payload: dict) -> StrategyAllocation:
     row = get_existing_strategy_allocation(db, strategy_id)
     previous_state = _normalized_state(row.state)
+    requested_state = payload.get("state")
 
     if "capital_weight" in payload:
         row.capital_weight = _assert_non_negative_numeric("capital_weight", payload.get("capital_weight"))
@@ -421,7 +565,11 @@ def update_strategy_allocation(db: Session, strategy_id: str, payload: dict) -> 
 
     row.updated_at = _now()
     try:
+        if requested_state is not None and _normalized_state(requested_state, previous_state) == "ACTIVE":
+            recalculate_strategy_drift(db, row.strategy_id)
+
         rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+        _apply_critical_drawdown_reduce(rows)
         _ensure_capital_limit(rows)
         _ensure_weight_is_one(rows)
         db.commit()
@@ -442,6 +590,7 @@ def toggle_strategy_throttle(db: Session, strategy_id: str, payload: dict) -> St
     row.updated_at = _now()
     try:
         rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+        _apply_critical_drawdown_reduce(rows)
         _ensure_capital_limit(rows)
         _ensure_weight_is_one(rows)
         db.commit()
@@ -458,6 +607,7 @@ def bulk_update_strategy_allocations(db: Session, payload: dict) -> dict:
         raise ValueError("Bulk update için en az 1 strategy gerekli")
 
     updated_ids: list[str] = []
+    requested_state_map: dict[str, str] = {}
     for item in updates:
         strategy_id = _validate_non_empty_strategy_id(item.get("strategy_id"))
         row = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
@@ -478,6 +628,7 @@ def bulk_update_strategy_allocations(db: Session, payload: dict) -> dict:
             if _state_change_requires_double_confirm(prev_state, next_state):
                 _ensure_double_confirm(item)
             row.state = next_state
+            requested_state_map[strategy_id] = next_state
 
         if row.current_capital > row.max_capital:
             raise ValueError(f"current_capital max_capital değerini aşamaz ({strategy_id})")
@@ -488,7 +639,12 @@ def bulk_update_strategy_allocations(db: Session, payload: dict) -> dict:
         _apply_normalize(db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all())
 
     try:
+        for strategy_id, requested_state in requested_state_map.items():
+            if requested_state == "ACTIVE":
+                recalculate_strategy_drift(db, strategy_id)
+
         rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+        enforced = _apply_critical_drawdown_reduce(rows)
         _ensure_capital_limit(rows)
         _ensure_weight_is_one(rows)
         db.commit()
@@ -503,6 +659,7 @@ def bulk_update_strategy_allocations(db: Session, payload: dict) -> dict:
             "updated_count": len(updated_rows),
             "updated_rows": updated_rows,
             "summary": _collect_summary(rows),
+            "enforced_reduce_rows": enforced,
         }
     except Exception:
         db.rollback()

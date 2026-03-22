@@ -2564,6 +2564,13 @@ class StrategyAllocationResponse(BaseModel):
     signal_decay: float
     execution_quality_score: float
     updated_at: datetime
+    state_reason_code: str | None = None
+    state_reason_detail: str | None = None
+    is_drift_override: bool = False
+    drawdown_pct: float = 0
+    exposure_ratio_pct: float = 0
+    suggested_reduced_capital: float = 0
+    is_auto_reduce_candidate: bool = False
 
 
 class StrategyAllocationSummaryItem(BaseModel):
@@ -2571,6 +2578,15 @@ class StrategyAllocationSummaryItem(BaseModel):
     current_capital: float
     max_capital: float
     overflow: float
+
+
+class StrategyAllocationDrawdownCandidate(BaseModel):
+    strategy_id: str
+    drawdown_pct: float
+    current_capital: float
+    suggested_reduced_capital: float
+    enforced_required: bool
+    reason_code: str
 
 
 class StrategyAllocationSummaryResponse(BaseModel):
@@ -2582,6 +2598,12 @@ class StrategyAllocationSummaryResponse(BaseModel):
     available_capital: float
     over_allocated_count: int
     over_allocated_strategies: list[StrategyAllocationSummaryItem] = Field(default_factory=list)
+    total_exposure_ratio_pct: float = 0
+    exposure_warning_threshold_pct: float = 80
+    exposure_warning_state: str = "NORMAL"
+    drawdown_threshold_pct: float = 8
+    drawdown_enforce_threshold_pct: float = 12
+    drawdown_candidates: list[StrategyAllocationDrawdownCandidate] = Field(default_factory=list)
 
 
 class StrategyAllocationUpdateRequest(BaseModel):
@@ -2627,6 +2649,8 @@ class StrategyAllocationStateHistoryEntry(BaseModel):
     action_type: str
     previous_state: str | None = None
     new_state: str | None = None
+    reason_code: str | None = None
+    reason_detail: str | None = None
     admin_id: str
     timestamp: datetime
 

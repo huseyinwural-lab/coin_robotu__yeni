@@ -24,11 +24,12 @@ from schemas import (
     StrategyAllocationUpdateRequest,
 )
 from services.meta_strategy_engine_service import (
+    build_strategy_allocation_row_payload,
     bulk_update_strategy_allocations,
     create_strategy_allocation,
     delete_strategy_allocation,
     get_strategy_allocation_summary,
-    list_strategy_allocations,
+    list_strategy_allocation_dashboard_rows,
     normalize_strategy_allocations,
     toggle_strategy_throttle,
     update_strategy_allocation,
@@ -50,6 +51,8 @@ def _write_allocation_log(
     strategy_id: str,
     previous_state: str | None,
     new_state: str | None,
+    reason_code: str | None,
+    reason_detail: str | None,
     payload: dict,
 ) -> str:
     trace_id = f"alloc_trace_{uuid4().hex[:12]}"
@@ -62,6 +65,8 @@ def _write_allocation_log(
             "strategy_id": strategy_id,
             "previous_state": previous_state,
             "new_state": new_state,
+            "reason_code": reason_code,
+            "reason_detail": reason_detail,
             "details": payload,
         },
         timestamp=_now(),
@@ -187,7 +192,7 @@ def strategy_allocation_dashboard(
     db: Session = Depends(get_db),
 ):
     _ = current_user
-    rows = list_strategy_allocations(db)
+    rows = list_strategy_allocation_dashboard_rows(db)
     return [StrategyAllocationResponse.model_validate(row) for row in rows]
 
 
@@ -215,6 +220,8 @@ def strategy_allocation_normalize(
             strategy_id="*",
             previous_state=None,
             new_state=None,
+            reason_code="WEIGHT_NORMALIZED",
+            reason_detail="Toplam weight otomatik normalize edildi",
             payload=result,
         )
         return StrategyAllocationActionEnvelope(
@@ -243,9 +250,11 @@ def strategy_allocation_create(
             strategy_id=row.strategy_id,
             previous_state=None,
             new_state=row.state,
+            reason_code="MANUAL_CREATE",
+            reason_detail="Strategy allocation satırı manuel oluşturuldu",
             payload=payload.model_dump(),
         )
-        return StrategyAllocationResponse.model_validate(row)
+        return StrategyAllocationResponse.model_validate(build_strategy_allocation_row_payload(row))
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -267,6 +276,8 @@ def strategy_allocation_remove(
             strategy_id=strategy_id,
             previous_state=None,
             new_state=None,
+            reason_code="MANUAL_DELETE",
+            reason_detail="Strategy allocation satırı manuel silindi",
             payload=result,
         )
         return StrategyAllocationActionEnvelope(
@@ -295,10 +306,13 @@ def strategy_allocation_bulk_update(
             strategy_id="*",
             previous_state=None,
             new_state=None,
+            reason_code="MANUAL_BULK_UPDATE",
+            reason_detail="Bulk update ile birden fazla strategy güncellendi",
             payload={
                 "updated_count": result.get("updated_count", 0),
                 "updated_ids": [row.strategy_id for row in (result.get("updated_rows") or [])],
                 "auto_normalize": payload.auto_normalize,
+                "enforced_reduce_rows": result.get("enforced_reduce_rows") or [],
             },
         )
         return {
@@ -306,8 +320,12 @@ def strategy_allocation_bulk_update(
             "message": f"Bulk update tamamlandı ({result.get('updated_count', 0)} strategy)",
             "trace_id": trace_id,
             "updated_count": result.get("updated_count", 0),
-            "updated_rows": [StrategyAllocationResponse.model_validate(row).model_dump() for row in (result.get("updated_rows") or [])],
+            "updated_rows": [
+                StrategyAllocationResponse.model_validate(build_strategy_allocation_row_payload(row)).model_dump()
+                for row in (result.get("updated_rows") or [])
+            ],
             "summary": result.get("summary") or {},
+            "enforced_reduce_rows": result.get("enforced_reduce_rows") or [],
         }
     except ValueError as exc:
         db.rollback()
@@ -332,9 +350,11 @@ def strategy_allocation_throttle_toggle(
             strategy_id=strategy_id,
             previous_state=previous_state,
             new_state=row.state,
+            reason_code="MANUAL_THROTTLE_TOGGLE",
+            reason_detail="Throttle toggle endpointi ile state değiştirildi",
             payload=payload.model_dump(),
         )
-        return StrategyAllocationResponse.model_validate(row)
+        return StrategyAllocationResponse.model_validate(build_strategy_allocation_row_payload(row))
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -359,6 +379,7 @@ def strategy_allocation_state_history(
                     "strategy_allocation_delete",
                     "strategy_allocation_bulk_update",
                     "strategy_allocation_normalize",
+                    "strategy_allocation_drift_override",
                 ]
             )
         )
@@ -376,6 +397,8 @@ def strategy_allocation_state_history(
                 action_type=str(row.action_type),
                 previous_state=payload.get("previous_state"),
                 new_state=payload.get("new_state"),
+                reason_code=payload.get("reason_code"),
+                reason_detail=payload.get("reason_detail"),
                 admin_id=str(row.admin_id),
                 timestamp=row.timestamp,
             )
@@ -393,8 +416,10 @@ def strategy_allocation_update(
 ):
     existing = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
     previous_state = existing.state if existing else None
+    request_payload = payload.model_dump(exclude_none=True)
     try:
-        row = update_strategy_allocation(db, strategy_id, payload.model_dump(exclude_none=True))
+        row = update_strategy_allocation(db, strategy_id, request_payload)
+        row_payload = build_strategy_allocation_row_payload(row, requested_state=request_payload.get("state"))
         if previous_state and previous_state != row.state:
             _write_allocation_log(
                 db,
@@ -403,9 +428,24 @@ def strategy_allocation_update(
                 strategy_id=strategy_id,
                 previous_state=previous_state,
                 new_state=row.state,
-                payload=payload.model_dump(exclude_none=True),
+                reason_code=row_payload.get("state_reason_code"),
+                reason_detail=row_payload.get("state_reason_detail"),
+                payload=request_payload,
             )
-        return StrategyAllocationResponse.model_validate(row)
+        if row_payload.get("is_drift_override"):
+            _write_allocation_log(
+                db,
+                admin_id=current_user.id,
+                action_type="strategy_allocation_drift_override",
+                strategy_id=strategy_id,
+                previous_state=request_payload.get("state"),
+                new_state=row.state,
+                reason_code=row_payload.get("state_reason_code"),
+                reason_detail=row_payload.get("state_reason_detail"),
+                payload={"requested_state": request_payload.get("state"), "resolved_state": row.state},
+            )
+
+        return StrategyAllocationResponse.model_validate(row_payload)
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
