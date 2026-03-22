@@ -1,6 +1,13 @@
 # CHANGELOG — Algorithmic Trading Platform
 
 ## 2026-03-22
+### Hotfix — Admin Login Failure (PostgreSQL Down)
+- PostgreSQL yeniden kuruldu/başlatıldı.
+- `trader` rolü ve `trading_platform` DB oluşturuldu.
+- Backend restart sonrası admin login tekrar çalışır hale getirildi.
+- Hesaplar yeniden seed edildi (admin/ops/user).
+
+## 2026-03-22
 ### Iteration-59 — FAZ-2 Tur-2 Closure (Export/Bulk/Debug/UX)
 - Export job sistemi eklendi (DB tabanlı, async, audit-first, trace_id zincirli).
 - Export endpoint seti tamamlandı: create/list/get/download/retry.

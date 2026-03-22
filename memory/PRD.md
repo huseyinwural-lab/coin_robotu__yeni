@@ -1,3 +1,22 @@
+## 2026-03-22 — Hotfix: Admin Login Başarısızlığı (DB Down) ✅
+
+### Root Cause
+- Backend PostgreSQL bağlantısı yoktu (`connection refused`), bu yüzden login endpoint erişilemedi.
+
+### Uygulanan Çözüm
+- PostgreSQL yeniden kuruldu ve cluster başlatıldı.
+- `trader` rolü + `trading_platform` veritabanı oluşturuldu.
+- Backend restart edildi.
+- Test kullanıcıları tekrar seed edildi:
+  - `canary.admin@platform.local / CanaryAdmin123!`
+  - `canary.ops@platform.local / CanaryOps123!`
+  - `quote.user@platform.local / QuoteUser123!`
+
+### Doğrulama
+- `/api/health` -> 200 (local + preview)
+- `/api/auth/login` -> 200 (admin)
+- UI smoke: `/admin/login` -> pipeline panel erişimi başarılı
+
 ## 2026-03-22 — Faz-2 Tur-2 Tamamlandı ✅ (Export + Bulk UX + Debug Policy + UX Polish)
 
 ### 1) Export / Data Access (Audit-First)
