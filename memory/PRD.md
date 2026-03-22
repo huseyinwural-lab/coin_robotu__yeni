@@ -1,3 +1,63 @@
+## 2026-03-22 — Execution Control + Recovery System (P0 Sprint) ✅
+
+### Sprint kararları (uygulandı)
+- Kapsam: **P0 only**
+- Route yapısı: **ayrı sayfalar**
+  - `/admin/execution/states`
+  - `/admin/execution/failures`
+  - `/admin/execution/idempotency`
+  - `/admin/execution/trace`
+  - `/admin/execution/rebuild`
+- Manual intervention guardrail: **prod’da katı** (`confirmation phrase`, correlation zorunlu, audit)
+- Alert: **in-app only**
+
+### Backend (P0) tamamlananlar
+- Simulation safety layer:
+  - `source_type` / `environment` / `correlation_id` execution kayıtlarına eklendi
+  - tekli + batch simulation endpointleri
+  - simulation sonuçları kalıcı panel verisi olarak saklandı
+- State visibility & operability (P0 seviyesinde):
+  - `/execution-state-transitions/control` filtre/search
+  - `/execution-state-transitions/{event_id}/detail` (active/previous/path/dwell)
+- Failure & dead-letter management:
+  - failed events filtre/search
+  - dead-letter endpoint
+  - retry/resolve/reprocess + bulk retry/bulk resolve
+- Idempotency control:
+  - `idempotency_collisions` tablosu
+  - collision list + manual resolve aksiyonları
+- Manual intervention:
+  - force/cancel/reprocess endpoint
+  - prod guardrails + replay-safe duplicate guard + idempotency gate
+  - `execution_manual_actions` audit tablosu
+- Correlation trace:
+  - `execution_trace_index` tablosu
+  - correlation id ile chain/intents/events/failures endpointi
+- Rebuild maintenance (minimal P0):
+  - scoped rebuild (`full`, `partial`, `entity_scoped`, `symbol_scoped`, `date_range`)
+
+### Frontend (P0) tamamlananlar
+- Execution States: filtre/search, summary counters, detail drawer, simulate + batch simulate, manual intervention panel
+- Failures: filtre/search, dead-letter görünürlüğü, payload/error detail, bulk actionlar
+- Idempotency: collision list + resolve aksiyonları + detail panel
+- Trace: correlation sorgu + timeline
+- Rebuild: scoped trigger controls + log görünümü
+
+### Migrationlar
+- `/app/backend/migrations/versions/20260322_0061_execution_control_recovery_p0.py`
+
+### Test doğrulaması
+- `testing_agent`: `/app/test_reports/iteration_83.json`
+  - Backend: **100% (42/42 PASS)**
+  - Frontend: **5/5 route PASS**
+- `auto_frontend_testing_agent`: **ALL PASS (5 route)**
+
+### Not
+- Bu sprintte **Mongo/SQLite kullanılmadı**; execution control kapsamı PostgreSQL tabanlı ilerletildi.
+- Binance Futures execution **MOCKED**.
+
+---
+
 ## 2026-03-22 — P2 Undo/Revert + Explainability Layer (Intelligence + Allocation) ✅
 
 ### Kullanıcı kararları (uygulandı)
