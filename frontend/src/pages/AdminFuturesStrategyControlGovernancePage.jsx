@@ -21,6 +21,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DecisionModal } from "@/components/DecisionModal";
 import { apiClient } from "@/lib/api";
 
@@ -1775,12 +1776,28 @@ const ApprovalRiskSparkline = ({ index, decisionContext, fallbackRisk }) => {
         <p className={`text-xs font-semibold ${riskLevelColorClass(riskLevel)}`} data-testid={`strategy-control-approval-item-risk-sparkline-level-${index}`}>
           level={riskLevel}
         </p>
-        <p
-          className={`text-xs font-semibold ${confidenceColorClass(confidenceLabel)}`}
-          data-testid={`strategy-control-approval-item-risk-sparkline-confidence-${index}`}
-        >
-          confidence={confidenceEmoji} {confidenceLabel}{confidence !== null ? ` (${confidence}%)` : ""}
-        </p>
+        <TooltipProvider delayDuration={0}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <p
+                className={`text-xs font-semibold ${confidenceColorClass(confidenceLabel)}`}
+                data-testid={`strategy-control-approval-item-risk-sparkline-confidence-${index}`}
+              >
+                confidence={confidenceEmoji} {confidenceLabel}{confidence !== null ? ` (${confidence}%)` : ""}
+              </p>
+            </TooltipTrigger>
+            <TooltipContent
+              side="top"
+              className="max-w-[260px] bg-black text-orange-100"
+              data-testid={`strategy-control-approval-item-risk-sparkline-confidence-tooltip-${index}`}
+            >
+              <p>
+                Confidence: {confidence !== null ? `%${confidence}` : "n/a"} · Kaynak: recommendation.confidence
+              </p>
+              <p>≥80 high, 60–79 med, &lt;60 low</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       <svg width={width} height={height} className="mt-1" data-testid={`strategy-control-approval-item-risk-sparkline-svg-${index}`}>
