@@ -5,7 +5,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://unified-strategy-ops.preview.emergentagent.com")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://approval-intel-1.preview.emergentagent.com")
 
 ADMIN_EMAIL = "admin@platform.local"
 ADMIN_PASSWORD = "Admin12345!"

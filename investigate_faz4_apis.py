@@ -6,7 +6,7 @@ FAZ-4 Backend API Response Investigation
 import requests
 import json
 
-BASE_URL = "https://unified-strategy-ops.preview.emergentagent.com"
+BASE_URL = "https://approval-intel-1.preview.emergentagent.com"
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
 SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
 

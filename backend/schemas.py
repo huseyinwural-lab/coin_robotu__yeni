@@ -2508,6 +2508,14 @@ class DecisionApprovalRequestResponse(BaseModel):
     decided_at: datetime | None = None
     approved_by: str | None = None
     review_note: str | None = None
+    target_type: str | None = None
+    target_id: str | None = None
+    simulation_required: bool = True
+    simulation_present: bool = False
+    preview_token: str | None = None
+    risk_delta_score: float = 0
+    severity_band: str = "low"
+    impact_summary: dict = Field(default_factory=dict)
 
 
 class DecisionApprovalRequestsResponse(BaseModel):
@@ -2516,6 +2524,38 @@ class DecisionApprovalRequestsResponse(BaseModel):
 
 class DecisionApprovalActionRequest(BaseModel):
     reason_note: str = Field(min_length=8)
+
+
+class DecisionRequestCreateRequest(BaseModel):
+    target_type: str
+    target_id: str
+    reason_note: str = Field(min_length=8)
+    simulation_run_id: str | None = None
+    expires_at: datetime | None = None
+    impact_summary: dict = Field(default_factory=dict)
+    risk_delta_score: float | None = None
+
+
+class DecisionRequestExecuteRequest(BaseModel):
+    reason_note: str = Field(min_length=8)
+    preview_token: str
+
+
+class DecisionRequestPreviewResponse(BaseModel):
+    request_id: str
+    status: str
+    preview_token: str
+    risk_delta_score: float
+    severity_band: str
+    impact_summary: dict = Field(default_factory=dict)
+
+
+class SimulationCompareCurrentResponse(BaseModel):
+    run_id: str
+    status: str
+    before: dict = Field(default_factory=dict)
+    current: dict = Field(default_factory=dict)
+    compare_summary: dict = Field(default_factory=dict)
 
 
 class ManualOverrideSubmissionResponse(BaseModel):

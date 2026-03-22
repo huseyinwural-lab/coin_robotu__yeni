@@ -15,6 +15,9 @@ from models import DecisionApprovalRequest, SimulationRun, SimulationScenarioIte
 from schemas import (
     AdminStrategyIntelligenceResponse,
     DecisionApprovalActionRequest,
+    DecisionRequestCreateRequest,
+    DecisionRequestExecuteRequest,
+    DecisionRequestPreviewResponse,
     DecisionApprovalRequestsResponse,
     HedgeSuggestionResponse,
     ManualOverrideSubmissionResponse,
@@ -28,6 +31,7 @@ from schemas import (
     RiskBatchSimulationItem,
     RiskSimulationRequest,
     RiskSimulationResponse,
+    SimulationCompareCurrentResponse,
     SimulationHistoryItemResponse,
     SimulationHistoryResponse,
     StrategyConflictResponse,
@@ -243,6 +247,88 @@ def _resolve_valid_user_id(db: Session, user_id: str) -> str:
     return key
 
 
+def _severity_band(risk_delta_score: float) -> str:
+    score = abs(float(risk_delta_score or 0))
+    if score >= 0.25:
+        return "critical"
+    if score >= 0.1:
+        return "high"
+    if score >= 0.03:
+        return "medium"
+    return "low"
+
+
+def _build_decision_request_response(row: DecisionApprovalRequest) -> dict:
+    base = _serialize_approval_row(row)
+    payload = row.payload or {}
+    risk_delta_score = float(payload.get("risk_delta_score") or 0)
+    return {
+        **base,
+        "target_type": payload.get("target_type"),
+        "target_id": payload.get("target_id"),
+        "simulation_required": bool(payload.get("simulation_required", True)),
+        "simulation_present": bool(payload.get("simulation_run_id")),
+        "preview_token": payload.get("preview_token"),
+        "risk_delta_score": risk_delta_score,
+        "severity_band": payload.get("severity_band") or _severity_band(risk_delta_score),
+        "impact_summary": payload.get("impact_summary") or {},
+    }
+
+
+def _create_decision_request(
+    db: Session,
+    *,
+    request_type: str,
+    current_user: User,
+    payload: DecisionRequestCreateRequest,
+) -> DecisionApprovalRequest:
+    role = _role_name(current_user)
+    if role not in {"admin", "super_admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu rol request oluşturamaz")
+
+    simulation_run_id = payload.simulation_run_id
+    simulation_present = False
+    derived_risk_delta = float(payload.risk_delta_score or 0)
+    if simulation_run_id:
+        _ensure_intelligence_tables(db)
+        run = db.query(SimulationRun).filter(SimulationRun.run_id == simulation_run_id).first()
+        if not run:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="simulation_run_id bulunamadı")
+        simulation_present = True
+        run_out = run.output_payload or {}
+        if payload.risk_delta_score is None:
+            derived_risk_delta = float(run_out.get("risk_delta") or 0)
+
+    preview_token = f"preview_{uuid.uuid4().hex[:14]}"
+    request_payload = {
+        "target_type": payload.target_type,
+        "target_id": payload.target_id,
+        "simulation_required": True,
+        "simulation_run_id": simulation_run_id,
+        "simulation_present": simulation_present,
+        "preview_token": preview_token,
+        "risk_delta_score": derived_risk_delta,
+        "severity_band": _severity_band(derived_risk_delta),
+        "impact_summary": payload.impact_summary or {},
+    }
+
+    request_row = DecisionApprovalRequest(
+        request_id=f"req_{uuid.uuid4().hex[:12]}",
+        request_type=request_type,
+        status="pending",
+        requested_by=str(current_user.id),
+        requested_role=role,
+        reason_note=payload.reason_note,
+        simulation_run_id=simulation_run_id,
+        payload=request_payload,
+        expires_at=payload.expires_at or (datetime.now(timezone.utc) + timedelta(hours=24)),
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(request_row)
+    db.flush()
+    return request_row
+
+
 @router.get("/strategy-intelligence", response_model=AdminStrategyIntelligenceResponse)
 def strategy_intelligence_dashboard(
     current_user: User = Depends(require_admin),
@@ -425,6 +511,304 @@ def list_override_approval_requests(
         query = query.filter(DecisionApprovalRequest.status == status_filter)
     rows = query.order_by(desc(DecisionApprovalRequest.created_at)).limit(200).all()
     return DecisionApprovalRequestsResponse(items=[_serialize_approval_row(row) for row in rows])
+
+
+@router.post("/decision-requests/conflict-resolve", response_model=DecisionApprovalRequestResponse)
+def create_conflict_decision_request(
+    payload: DecisionRequestCreateRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ensure_intelligence_tables(db)
+    row = _create_decision_request(
+        db,
+        request_type="conflict_resolve",
+        current_user=current_user,
+        payload=payload,
+    )
+    db.commit()
+    return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
+
+@router.post("/decision-requests/hedge-apply", response_model=DecisionApprovalRequestResponse)
+def create_hedge_decision_request(
+    payload: DecisionRequestCreateRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ensure_intelligence_tables(db)
+    row = _create_decision_request(
+        db,
+        request_type="hedge_apply",
+        current_user=current_user,
+        payload=payload,
+    )
+    db.commit()
+    return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
+
+@router.post("/decision-requests/rebalance-change", response_model=DecisionApprovalRequestResponse)
+def create_rebalance_decision_request(
+    payload: DecisionRequestCreateRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ensure_intelligence_tables(db)
+    row = _create_decision_request(
+        db,
+        request_type="rebalance_change",
+        current_user=current_user,
+        payload=payload,
+    )
+    db.commit()
+    return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
+
+@router.get("/decision-requests", response_model=DecisionApprovalRequestsResponse)
+def list_decision_requests(
+    status_filter: str | None = None,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    _ensure_intelligence_tables(db)
+    query = db.query(DecisionApprovalRequest).filter(
+        DecisionApprovalRequest.request_type.in_(["conflict_resolve", "hedge_apply", "rebalance_change"])
+    )
+    if status_filter:
+        query = query.filter(DecisionApprovalRequest.status == status_filter)
+    rows = query.order_by(desc(DecisionApprovalRequest.created_at)).limit(300).all()
+    mapped = [_build_decision_request_response(row) for row in rows]
+
+    severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+    mapped.sort(
+        key=lambda item: (
+            0 if item.get("status") == "pending" else 1,
+            -severity_rank.get(str(item.get("severity_band") or "low"), 0),
+            -abs(float(item.get("risk_delta_score") or 0)),
+            str(item.get("created_at")),
+        )
+    )
+    return DecisionApprovalRequestsResponse(items=[DecisionApprovalRequestResponse(**item) for item in mapped])
+
+
+@router.post("/decision-requests/{request_id}/approve", response_model=DecisionApprovalRequestResponse)
+def approve_decision_request(
+    request_id: str,
+    payload: DecisionApprovalActionRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if _role_name(current_user) != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="approve sadece super_admin")
+    _ensure_intelligence_tables(db)
+    row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="request bulunamadı")
+    if row.status != "pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request pending değil")
+    if row.expires_at <= datetime.now(timezone.utc):
+        row.status = "expired"
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request expired")
+
+    row.status = "approved"
+    row.approved_by = str(current_user.id)
+    row.review_note = payload.reason_note
+    row.decided_at = datetime.now(timezone.utc)
+    db.commit()
+    return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
+
+@router.post("/decision-requests/{request_id}/reject", response_model=DecisionApprovalRequestResponse)
+def reject_decision_request(
+    request_id: str,
+    payload: DecisionApprovalActionRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if _role_name(current_user) != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="reject sadece super_admin")
+    _ensure_intelligence_tables(db)
+    row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="request bulunamadı")
+    if row.status != "pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request pending değil")
+
+    row.status = "rejected"
+    row.approved_by = str(current_user.id)
+    row.review_note = payload.reason_note
+    row.decided_at = datetime.now(timezone.utc)
+    db.commit()
+    return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
+
+@router.post("/decision-requests/{request_id}/execute", response_model=DecisionApprovalRequestResponse)
+def execute_decision_request(
+    request_id: str,
+    payload: DecisionRequestExecuteRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if _role_name(current_user) != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="execute sadece super_admin")
+    _ensure_intelligence_tables(db)
+    row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="request bulunamadı")
+    if row.status != "approved":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="execute için request approved olmalı")
+    if row.expires_at <= datetime.now(timezone.utc):
+        row.status = "expired"
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request expired")
+
+    request_payload = row.payload or {}
+    expected_token = str(request_payload.get("preview_token") or "")
+    if not expected_token or payload.preview_token != expected_token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="preview_token doğrulaması başarısız")
+
+    row.status = "executed"
+    row.approved_by = str(current_user.id)
+    row.review_note = payload.reason_note
+    row.decided_at = datetime.now(timezone.utc)
+
+    record_manual_override(
+        db,
+        admin_id=current_user.id,
+        action_type=f"decision_request_execute::{row.request_type}",
+        reason=row.reason_note,
+        scope="strategy_intelligence",
+        target_type=request_payload.get("target_type") or "unknown",
+        target_id=request_payload.get("target_id"),
+        simulation_id=row.simulation_run_id,
+        confirmation_id=payload.preview_token,
+        previous_state={},
+        next_state={},
+        impact_preview=request_payload.get("impact_summary") or {},
+        expires_at=row.expires_at,
+        actor_role=_role_name(current_user),
+        payload={"source": "decision_request_execute", "request_id": row.request_id},
+    )
+
+    db.commit()
+    return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
+
+@router.post("/decision-requests/{request_id}/revoke", response_model=DecisionApprovalRequestResponse)
+def revoke_decision_request(
+    request_id: str,
+    payload: DecisionApprovalActionRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if _role_name(current_user) != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="revoke sadece super_admin")
+    _ensure_intelligence_tables(db)
+    row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="request bulunamadı")
+    if row.status not in {"pending", "approved"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sadece pending/approved request revoke edilebilir")
+
+    row.status = "revoked"
+    row.approved_by = str(current_user.id)
+    row.review_note = payload.reason_note
+    row.decided_at = datetime.now(timezone.utc)
+    db.commit()
+    return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
+
+@router.get("/decision-requests/{request_id}/preview", response_model=DecisionRequestPreviewResponse)
+def preview_decision_request(
+    request_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    role = _role_name(current_user)
+    if role not in {"ops", "admin", "super_admin", "viewer"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="preview yetkisi yok")
+
+    _ensure_intelligence_tables(db)
+    row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="request bulunamadı")
+
+    payload = row.payload or {}
+    risk_delta_score = float(payload.get("risk_delta_score") or 0)
+    return DecisionRequestPreviewResponse(
+        request_id=row.request_id,
+        status=row.status,
+        preview_token=str(payload.get("preview_token") or ""),
+        risk_delta_score=risk_delta_score,
+        severity_band=payload.get("severity_band") or _severity_band(risk_delta_score),
+        impact_summary=payload.get("impact_summary") or {},
+    )
+
+
+@router.get("/simulation-runs/{run_id}/compare-current", response_model=SimulationCompareCurrentResponse)
+def compare_simulation_run_current(
+    run_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    _ensure_intelligence_tables(db)
+    run = db.query(SimulationRun).filter(SimulationRun.run_id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="simulation run bulunamadı")
+
+    input_payload = run.input_payload or {}
+    symbol = normalize_symbol(str(input_payload.get("symbol") or "BTCUSDT"), missing_error_code="symbol_required", invalid_error_code="invalid_quote_asset")
+    strategy_id = str(input_payload.get("strategy_binding") or input_payload.get("strategy_id") or "manual_execution")
+    side = str(input_payload.get("side") or "buy")
+    notional = float(input_payload.get("notional") or input_payload.get("position_size_value") or 0)
+    user_id = str(run.actor_id or "")
+
+    conflict_result = evaluate_conflict_warning(
+        db,
+        user_id=user_id,
+        strategy_id=strategy_id,
+        symbol=symbol,
+        signal_direction=side,
+        confidence_score=float(input_payload.get("signal_confidence") or 0.65),
+    )
+    rebalance_result = evaluate_capital_rebalance(db, user_id=user_id, apply_changes=False)
+    hedge_result = evaluate_hedge_suggestion(db, user_id=user_id, volatility=float(input_payload.get("volatility_pct") or 0))
+    risk_result = portfolio_risk_check(
+        db,
+        user_id=user_id,
+        execution_intent={"symbol": symbol, "notional": notional, "position_size": float(input_payload.get("size") or 0)},
+        strategy_context={"strategy_id": strategy_id},
+        market_state={"volatility_pct": float(input_payload.get("volatility_pct") or 0)},
+    )
+    current_output = simulate_risk_impact(
+        simulation_payload=input_payload,
+        conflict_result=conflict_result,
+        rebalance_result=rebalance_result,
+        hedge_result=hedge_result,
+        risk_payload=risk_result,
+    )
+
+    before_output = run.output_payload or {}
+    compare_summary = {
+        "risk_delta_vs_history": round(float(current_output.get("projected_risk_score") or 0) - float(before_output.get("projected_risk_score") or 0), 6),
+        "confidence_adjusted_risk_delta_vs_history": round(
+            float(current_output.get("confidence_adjusted_risk_score") or 0)
+            - float(before_output.get("confidence_adjusted_risk_score") or 0),
+            6,
+        ),
+        "decision_delta_vs_history": f"{before_output.get('projected_gate_decision')}->{current_output.get('projected_gate_decision')}",
+    }
+
+    return SimulationCompareCurrentResponse(
+        run_id=run.run_id,
+        status=run.status,
+        before=before_output,
+        current=current_output,
+        compare_summary=compare_summary,
+    )
 
 
 @router.post("/override-approval-requests/{request_id}/approve", response_model=ManualOverrideSubmissionResponse)

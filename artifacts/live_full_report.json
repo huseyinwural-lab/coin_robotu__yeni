@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "base_url": "https://unified-strategy-ops.preview.emergentagent.com",
+  "base_url": "https://approval-intel-1.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",

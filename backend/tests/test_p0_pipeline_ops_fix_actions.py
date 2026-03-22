@@ -13,7 +13,7 @@ import uuid
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://unified-strategy-ops.preview.emergentagent.com"
+    BASE_URL = "https://approval-intel-1.preview.emergentagent.com"
 
 # Test credentials
 ADMIN_EMAIL = "canary.admin@platform.local"

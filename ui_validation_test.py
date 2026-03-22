@@ -13,7 +13,7 @@ import re
 
 def test_ui_validation():
     """Perform concise UI validation"""
-    url = "https://unified-strategy-ops.preview.emergentagent.com"
+    url = "https://approval-intel-1.preview.emergentagent.com"
     
     try:
         # Get the landing page

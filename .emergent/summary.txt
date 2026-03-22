@@ -1,116 +1,134 @@
-<analysis>**original_problem_statement**: The user wants to transform the Futures Strategy Analytics screen from a passive monitoring tool into an actionable Strategy Control + Governance System (P0). This involves creating a unified panel for Strategy Lifecycle (Throttle/Pause/Disable), Rollouts, Bulk Actions, Drift Alert Actions, Feedback Loops, and Snapshot Rollbacks. The ultimate goal (Faz-5) is to build a Decision Execution Layer where every critical action requires an upfront Impact Preview (expected reject delta, PnL impact, risk level) and is executed through a Unified Decision Modal with a 2-step approval workflow for non-super admins.
+<analysis>**original_problem_statement**: The user wants to transform the Strategy Allocation and Strategy Intelligence screens from passive monitoring/config tools into actionable, approval-gated Strategy Control + Governance Systems (P0). This involves enforcing strict safety layers (e.g., allocation weight=1), risk bounds, simulation-first requirements, impact previews, and 2-step approval workflows (Requester -> Super Admin) for all critical actions (Overrides, Conflict Resolution, Hedge Application, Rebalance Configuration). 
 
 **User's preferred language**: Turkish (Türkçe)
 **INSTRUCT NEXT AGENT**: You MUST respond to the user in Turkish only.
 
-**what currently exists?**: A heavily consolidated, enterprise-grade algorithmic trading platform. The  serves as the single source of truth for all strategy operations. It successfully handles soft-disable flows (Throttle -> Pause -> Disable), shadow-to-live rollouts, drift actions (Ack/Mute/Disable/Retrain), and 2-step approval workflows (Requester -> Super Admin). The backend supports immutable audit logs, snapshot storage, simulated queued jobs for model updates, and timeline exports. 
+**what currently exists?**: A highly robust Algorithmic Trading Admin Platform. The  is fully complete (Faz 1-5). The  has been successfully rebuilt into a Risk-Aware Capital Allocation Engine featuring safety layers, drift explainability (reason tracking), rebalance suggestions, approval workflows, and what-if simulations (Phases 1-6 complete). The  has completed Sprint 1, introducing Simulation Guards, Active Override tracking, and Role-Based UI restrictions.
 
 **Last working item**:
-    - Last item agent was working: Implementing the Faz-5 Final: Decision Execution Layer. The agent was actively modifying  to add the  and  endpoints, and aggressively patching  to replace scattered confirmation modals with a single Unified Decision Modal.
+    - Last item agent was working: Implementing the Strategy Intelligence Approval Wiring (Sprint 2 start). The agent was tasked with connecting Conflict Resolve, Hedge Apply, and Rebalance Governance actions to a unified Approval-Gated State Machine. The agent began expanding  to include  and  but the session ended before router/frontend implementation.
     - Status: IN PROGRESS
-    - Agent Testing Done: N (Patched multiple files but stopped before linting or testing).
-    - Which testing method agent to use?: Both. The next agent MUST first run  and  to ensure the recent massive patch batch didn't break syntax. Then use  to visually confirm the Unified Decision Modal renders the Impact Preview, followed by  to validate backend contracts.
+    - Agent Testing Done: N
+    - Which testing method agent to use?: Both. Backend testing agent to verify new  endpoints. Frontend testing agent / Screenshot tool to verify the new modularized components in .
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  Issue 1: Complete Faz-5 Decision Execution Layer (Impact Preview & Unified Modal) (P0)
-     - Attempted fixes: The agent applied over 15+ patches to wire the frontend to the new backend  and  logic, routing all actions (rollout, drift, rollback, disable) through the .
+  Issue 1: Connect Strategy Intelligence Actions to Approval Model (P0)
+     - Attempted fixes: Added base schemas for Decision Requests in . Has not yet implemented endpoints or UI.
      - Next debug checklist: 
-       1. Run linters on  and .
-       2. Resolve any React state/syntax errors introduced. 
-       3. Test the UI: Click Apply Recommended on a Drift Alert or Disable on a strategy. Ensure the modal opens, fetches the , and successfully executes the action with a trace_id.
-     - Why fix this issue and what will be achieved with the fix? It fulfills the user's ultimate mandate: No critical action can be executed without an Impact Preview, and all actions must use the Unified Decision Modal.
+       1. Implement backend endpoints (, , , , , , etc.) in  or a new dedicated router.
+       2. Modularize  into smaller components (, , , etc.) as instructed by the user.
+       3. Ensure Role-based access is maintained (admin: request, super_admin: approve/execute).
+     - Why fix this issue and what will be achieved with the fix? It completes the transformation of the Intelligence Page into a strict Governance Control Panel where actions cannot be executed silently without simulation, impact preview, and approval.
      - Status: IN PROGRESS
      - Is recurring issue? N
      - Should Test frontend/backend/both after fix? Both
      - Blocked on other issue: None
 
 **In progress Task List**:
-  (All in-progress work is captured under Issue 1)
+  Task 1: Risk-Delta Priority Score & History Replay Foundation
+     - Where to resume: Backend calculation for  within the new Approval Model endpoints. Addition of a single run replay + side-by-side compare UI foundation in the Intelligence Panel.
+     - What will be achieved with this? Allows sorting the new Approval Queue by criticality and provides operators with historical context for decisions.
+     - Status: NOT STARTED
+     - Should Test frontend/backend/both after fix? Both
+     - Blocked on something: Blocked pending the completion of Issue 1 (Approval Model wiring).
 
 **Upcoming and Future Tasks**:
     Upcoming Tasks:
-    - P1: Faz-5 Secondary Requirements (Yellow Items): Implement Bulk Result Breakdown (expandable detailed list after bulk actions), Post-Action Monitor (show last 5 min snapshot/health change immediately after action), and Policy Apply Hook (Apply Fix under policy suggestion).
+    - P1: Strategy Intelligence Sprint 2 Continuation: Add preset scenarios (high_volatility, liquidity_shock, conflict_heavy) to the simulation engine.
     
     Future Tasks:
-    - P2: Dynamic Threshold Patching: Wire up the actual backend logic for threshold editing within the Unified Decision Modal (currently just a UI placeholder).
-    - P2: Policy Adjustment Suggestions: Auto-generate policy tuning suggestions based on aggregated feedback taxonomy.
+    - P2: Symbol + Strategy Matrix Batch Simulation (expanding batch capabilities).
+    - P2: List-based import/export/performance management for Strategy Intelligence.
+    - P2: Symbol selection filter depth (liquidity/risk band/exchange).
 
 **Completed work in this session**:
-- Faz-1: Strategy Control Foundation (Unified route, Action Menus, Soft-disable lifecycle) (DONE)
-- Faz-2: Rollout + Bulk + Rollback (Shadow->Live promotion, Bulk pause/resume, Single-step rollback) (DONE)
-- Faz-3: Drift Action Center (Ack/Mute/Ignore/Disable/Retrain, Context Deep-linking) (DONE)
-- Faz-4: Feedback Loop & Timeline Export (Label correction, Model update simulated queues, JSON/CSV exports) (DONE)
-- Faz-4+ / Faz-5 Start: Snapshot-list Rollback & 2-step Approval Workflow (Requester -> Super Admin) (DONE)
+- Faz-5 Strategy Control + Governance Closure (Unified Modal, Impact Preview strictness) (DONE)
+- Strategy Control P1: Bulk Result Breakdown, Post-Action Monitor, Policy Apply Hook (DONE)
+- Strategy Control UI Tweaks: Approval Risk Sparklines, Confidence Labels, Tooltips (DONE)
+- Allocation Panel Phase 1+2: Safety layer (weight=1), Strategy CRUD, Hard Limits (DONE)
+- Allocation Panel Phase 3a+b: Risk Binding (drawdown/exposure), Drift Explainability Logs (DONE)
+- Allocation Panel Phase 3c: Rebalance suggestions, 5g trend tooltip (DONE)
+- Allocation Panel Phase 5: Reason notes, Role-based restriction, Approval flow (DONE)
+- Allocation Panel Phase 6: Snapshot, JSON/CSV Export, What-if simulation (DONE)
+- General UI: Sidebar search, CORE Logs menu migration (DONE)
+- Strategy Intelligence Sprint 1: Simulation Guard, Active Overrides table, Revoke/Cancel, Reason/Expiry Enforcement (DONE)
 
 **Earlier issues found/mentioned but not fixed**:
-None.
+None. Agent consistently resolved issues found during test iterations.
 
 **Known issue recurrence from previous fork**:
-  - Issue recurrence in previous fork: PostgreSQL connection drops / 502 Bad Gateway during backend supervisor restarts.
-  - Recurrence count: 4
-  - Status: RESOLVED (Previous agent handled it by manually restarting backend/postgresql via bash when tests failed). Keep this in mind if API calls randomly return 502.
+  - Issue recurrence in previous fork: .
+  - Recurrence count: Ongoing (Expected in this preview environment).
+  - Status: RESOLVED (Fallback logic handles it gracefully, but be aware that in-memory states wipe on supervisor restart).
 
 **Code Architecture**:
 
 
 **Key Technical Concepts**:
-- **Impact Preview Contract**: The user demands that  is called before execution. Returns expected reject delta, PnL impact, risk level, and confidence.
-- **Unified Decision Modal**: Replaces scattered popups. It enforces Reason input, shows Impact Preview, Risk Score, and requires explicit Confirmation.
-- **Soft-Disable Flow**: Strategies cannot be hard-disabled immediately. Flow is .
-- **Approval Workflow Matrix**:  has immediate execution rights.  role generates a request (Approval workflow) that expires in 24h.
+- **Approval-Gated Workflow**: All major state changes generate a Request.  can only request.  can approve/execute.
+- **Simulation Guard**: Apply buttons are disabled until a valid risk simulation object/token is generated and passed.
+- **Drift Override Explainability**: If a background drift monitor overrides a manual state, it sets  and logs an  reason to prevent user confusion.
 
 **key DB schema**:
-  - : Logs all strategy control decisions immutably.
-  - Note: Many strategy state configs are stored via memory state/JSON files in the backend for this preview environment.
+  - : Holds limits, weights, capital parameters.
+  - : Holds audit trails for manual interventions.
+  -  (pending integration): Will track conflict/hedge/rebalance requests.
 
 **changes in tech stack**:
-  - None structurally, but extensive architectural consolidation of React views into one monolithic Governance page.
+  - React components are being heavily modularized.  must be broken down into child components (, , etc.) rather than patched monolithically.
 
 **All files of reference**:
-  -  (Currently mid-patch, highly critical)
-  -  (Currently mid-patch)
+  -  (Modified last)
+  - 
+  - 
   - 
 
 **Areas that need refactoring**:
--  is extremely large. While functional, future iterations should consider breaking the Unified Decision Modal, Drift Action Tab, and Rollout Tab into separate component files.
+- : The user explicitly instructed: AdminStrategyIntelligencePage.jsx içinde yama yaparak büyütmeyin... dosya bölme şart. You must split this into smaller components.
 
 **key api endpoints**:
   - 
   - 
   - 
+  -  (To be created)
 
 **Critical Info for New Agent**:
-- **DO NOT START NEW FEATURES YET.** You have inherited a workspace right in the middle of applying the Unified Decision Modal and Impact Preview logic.
-- Your immediate first step must be to run  and  to catch any broken syntax from the previous agent's unfinished patch sequence.
-- The user is extremely strict about the Impact Preview UI. Actions must be blocked if the preview fails to load.
+- You are midway through implementing the final user prompt: **Connecting Conflict / Hedge / Rebalance actions to the approval model.** 
+- DO NOT start building deep batch simulations or preset scenarios yet. The priority is establishing the  and  state machine inside the Strategy Intelligence Page.
+- Remember to strictly enforce Role Matrices:  (read-only),  (preview-only),  (request),  (approve/execute).
 
 **documents and test reports created in this job**:
-  -  through  (Records of flawless passes for Faz 1-4).
+  -  through 
 
 **Last 10 User Messages and any pending HUMAN messages**:
-1. User: Asked for Faz-1 Strategy Control.
-2. User: Chose scope for Faz-2 (Rollout/Bulk).
-3. User: Chose scope for Faz-3 (Drift Action Center).
-4. User: Chose scope for Faz-4 (Feedback Loop).
-5. User: Chose scope for Faz-4+ (Rollback/Approval workflow).
-6. User (Pending Context): Provided the FINAL GÖREV EMRİ for Faz-5: Decision Execution Layer. Demanded Impact Preview, Apply Recommended Action button, Risk Score, and Unified Decision Modal. The agent was currently implementing this exact request when the session ended.
+1. User: Defined P3.a/b/c scope for Allocation.
+2. User: Confirmed 5g trend tooltip format.
+3. User: Confirmed Confidence band labels.
+4. User: Defined Phase 5 (Roles, Reason notes, Approvals) scope.
+5. User: Defined Phase 6 (Snapshots, What-if, Age badge) scope.
+6. User: Asked for a Sidebar search bar and to restore the Logs CORE menu.
+7. User: Evaluated the existing Strategy Intelligence page and provided a massive Görev Emri (Execution Order) to transform it into a simulation-first Decision Engine.
+8. User: Locked the scope to Sprint 1 + Impact Preview from Sprint 2.
+9. User (Pending Context): Locked the *current* scope to: Connect Conflict/Hedge/Rebalance actions to Approval Model. Add Risk-delta priority score. Setup history replay foundation. Agent began updating schemas but hasn't written the logic.
 
 **Project Health Check**:
-- Broken: Potential syntax errors in Frontend/Backend due to mid-patch cutoff.
-- Mocked: Binance execution mocked in MOCK mode.
+- Mocked: Binance Futures execution is mocked in MOCK mode.
+- Broken: None currently, but schemas are midway updated.
 
 **3rd Party Integrations**:
 - Binance Futures Testnet (API keys expected for PROD execution).
 
 **Testing status**:
-  - Testing agent used after significant changes: YES (Heavily utilized for previous phases).
-  - Troubleshoot agent used after agent stuck in loop: NO.
-  - Test files created: 
-  - Known regressions: None, but Faz-5 logic is untested.
+  - Testing agent used after significant changes: YES
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: Heavily updated backend tests for  through .
+  - Known regressions: None.
 
 **Credentials to test flow**:
 - Super Admin:  / 
+- Admin (Requester): 
+- Ops (Read-only): 
 
 **What agent forgot to execute**:
-The agent applied roughly ~20 patches to the frontend and backend to implement the final Faz-5 Unified Decision Modal and Impact Preview, but stopped completely. It forgot to run linters, spin up the browser for smoke testing, utilize the , and send the final  summary to the user. The next agent must clean up and test this code.</analysis>
+The agent successfully modified  to prepare for the Decision Approval Models but the session ran out of tokens/steps before creating the backend endpoints and refactoring the  into smaller components as explicitly requested by the user. Ensure the UI modularization is executed.</analysis>
