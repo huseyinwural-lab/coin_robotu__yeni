@@ -3,9 +3,14 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 
 export const AdminUniverseMonitorPage = () => {
+  const { user } = useAuth();
+  const isSuperAdmin = String(user?.role || "") === "super_admin";
+  const isProductionEnv = String(process.env.REACT_APP_ENV || "").toLowerCase() === "production";
+  const canShowDebug = isSuperAdmin && !isProductionEnv;
   const [mode, setMode] = useState("ALL_MARKET_SYMBOLS");
   const [windowSize, setWindowSize] = useState("24h");
   const [loading, setLoading] = useState(true);
@@ -21,9 +26,8 @@ export const AdminUniverseMonitorPage = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [summaryRes, debugRes, trendRes, breakdownRes, heatmapRes, rolloutRes, fallbackEventsRes, runtimeSummaryRes] = await Promise.all([
+      const [summaryRes, trendRes, breakdownRes, heatmapRes, rolloutRes, fallbackEventsRes, runtimeSummaryRes] = await Promise.all([
         apiClient.get("/admin/universe-monitor", { params: { market_type: "spot", scanner_mode: mode, top_n: 200 } }),
-        apiClient.get("/debug/effective-universe", { params: { market_type: "spot", scanner_mode: mode, top_n: 200 } }),
         apiClient.get("/admin/universe-monitor/trends", { params: { window: windowSize } }),
         apiClient.get("/admin/universe-monitor/breakdown", { params: { window: windowSize } }),
         apiClient.get("/admin/universe-monitor/freshness-heatmap", { params: { window: windowSize } }),
@@ -31,6 +35,14 @@ export const AdminUniverseMonitorPage = () => {
         apiClient.get("/admin/universe-monitor/fallback-events", { params: { limit: 80 } }),
         apiClient.get("/admin/universe/runtime-summary", { params: { scanner_mode: mode, top_n: 200 } }),
       ]);
+      let debugRes = { data: null };
+      if (canShowDebug) {
+        try {
+          debugRes = await apiClient.get("/debug/effective-universe", { params: { market_type: "spot", scanner_mode: mode, top_n: 200 } });
+        } catch {
+          debugRes = { data: null };
+        }
+      }
       setSummary(summaryRes.data || null);
       setDebugPayload(debugRes.data || null);
       setTrend(trendRes.data || { points: [] });
@@ -46,7 +58,7 @@ export const AdminUniverseMonitorPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [mode, windowSize]);
+  }, [mode, windowSize, canShowDebug]);
 
   useEffect(() => {
     load();
@@ -340,17 +352,19 @@ export const AdminUniverseMonitorPage = () => {
         </div>
       </article>
 
-      <div className="grid gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-universe-monitor-debug-panel">
-        <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="admin-universe-monitor-debug-title">Debug Effective Universe</p>
-        <p className="text-xs" data-testid="admin-universe-monitor-debug-market-count">market_symbols_count: {debugPayload?.market_symbols_count ?? "-"}</p>
-        <p className="text-xs" data-testid="admin-universe-monitor-debug-after-blacklist">after_blacklist: {debugPayload?.after_blacklist ?? "-"}</p>
-        <p className="text-xs" data-testid="admin-universe-monitor-debug-after-scanner">after_scanner_mode: {debugPayload?.after_scanner_mode ?? "-"}</p>
-        <p className="text-xs" data-testid="admin-universe-monitor-debug-after-liquidity">after_liquidity_filter: {debugPayload?.after_liquidity_filter ?? "-"}</p>
-        <div className="max-h-52 overflow-auto rounded border border-slate-700 p-2" data-testid="admin-universe-monitor-debug-final-symbols-wrapper">
-          <p className="text-xs text-slate-400" data-testid="admin-universe-monitor-debug-final-symbols-label">final_symbols</p>
-          <p className="text-xs font-mono" data-testid="admin-universe-monitor-debug-final-symbols-value">{(debugPayload?.final_symbols || []).join(", ") || "-"}</p>
+      {canShowDebug && (
+        <div className="grid gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-universe-monitor-debug-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="admin-universe-monitor-debug-title">Debug Effective Universe</p>
+          <p className="text-xs" data-testid="admin-universe-monitor-debug-market-count">market_symbols_count: {debugPayload?.market_symbols_count ?? "-"}</p>
+          <p className="text-xs" data-testid="admin-universe-monitor-debug-after-blacklist">after_blacklist: {debugPayload?.after_blacklist ?? "-"}</p>
+          <p className="text-xs" data-testid="admin-universe-monitor-debug-after-scanner">after_scanner_mode: {debugPayload?.after_scanner_mode ?? "-"}</p>
+          <p className="text-xs" data-testid="admin-universe-monitor-debug-after-liquidity">after_liquidity_filter: {debugPayload?.after_liquidity_filter ?? "-"}</p>
+          <div className="max-h-52 overflow-auto rounded border border-slate-700 p-2" data-testid="admin-universe-monitor-debug-final-symbols-wrapper">
+            <p className="text-xs text-slate-400" data-testid="admin-universe-monitor-debug-final-symbols-label">final_symbols</p>
+            <p className="text-xs font-mono" data-testid="admin-universe-monitor-debug-final-symbols-value">{(debugPayload?.final_symbols || []).join(", ") || "-"}</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {loading && <p className="text-xs text-slate-400" data-testid="admin-universe-monitor-loading">Yükleniyor...</p>}
     </section>

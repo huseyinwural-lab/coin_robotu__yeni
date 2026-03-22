@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
-from deps import require_admin
+from deps import require_super_admin
 from models import User
 from services.pipeline.universe_engine import debug_effective_universe
 
@@ -18,7 +18,7 @@ def get_debug_effective_universe(
     scanner_mode: str = Query(default="ALL_MARKET_SYMBOLS"),
     selected_symbols: str = Query(default=""),
     top_n: int = Query(default=100, ge=1, le=1000),
-    current_admin: User = Depends(require_admin),
+    current_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
     _ = current_admin

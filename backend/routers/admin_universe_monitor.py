@@ -1,14 +1,19 @@
 import json
+import csv
+import io
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path as FilePath
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Path as FastAPIPath, Query, Response, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from db import get_db, redis_client
+from db import SessionLocal, engine, get_db, redis_client
 from deps import require_admin
-from models import AdminControl, AuditLog, ExecutionMetric, ScannerFallbackEvent, ScannerPerformanceSnapshot, User, UserRole, UserScannerResult
+from models import AdminControl, AuditLog, ExecutionMetric, ScannerFallbackEvent, ScannerPerformanceSnapshot, UniverseExportJob, User, UserRole, UserScannerResult
 from services.audit_service import create_audit_log
 from services.pipeline.cache_store import get_json, set_json
 from services.pipeline.universe_engine import debug_effective_universe
@@ -61,6 +66,12 @@ KPI_GENERATE_PHRASE = "GENERATE KPI RECOMMENDATION"
 KPI_APPLY_PHRASE = "APPLY RECOMMENDATION"
 KPI_REJECT_PHRASE = "REJECT RECOMMENDATION"
 KPI_POSTPONE_PHRASE = "POSTPONE RECOMMENDATION"
+EXPORT_JOB_PHRASE = "CREATE EXPORT JOB"
+BULK_IMPORT_PREVIEW_PHRASE = "PREVIEW BULK IMPORT"
+BULK_IMPORT_APPLY_PHRASE = "APPLY BULK IMPORT"
+
+EXPORT_STORAGE_DIR = FilePath("/app/backend/exports")
+BULK_IMPORT_PREVIEW_KEY = "universe:bulk_import:preview"
 
 
 class RuntimeActionRequest(BaseModel):
@@ -132,6 +143,23 @@ class RecommendationGenerateRequest(RuntimeActionRequest):
 
 class RecommendationDecisionRequest(RuntimeActionRequest):
     recommendation_id: str = Field(min_length=8, max_length=120)
+
+
+class ExportJobRequest(RuntimeActionRequest):
+    range: str = Field(default="24h", pattern="^(1h|24h|7d|30d)$")
+    output_format: str = Field(default="csv", pattern="^(csv|json)$")
+    metrics: list[str] = Field(default_factory=list)
+    symbol: str | None = None
+    strategy: str | None = None
+
+
+class BulkImportPreviewRequest(RuntimeActionRequest):
+    csv_text: str = Field(min_length=1)
+
+
+class BulkImportApplyRequest(RuntimeActionRequest):
+    preview_id: str = Field(min_length=8, max_length=120)
+    apply_mode: str = Field(default="apply_valid_only", pattern="^(apply_all|apply_valid_only)$")
 
 
 def _manager_required(current_admin: User) -> User:
@@ -382,6 +410,184 @@ def _kpi_history() -> list[dict]:
     return rows if isinstance(rows, list) else []
 
 
+def _ensure_export_job_table():
+    UniverseExportJob.__table__.create(bind=engine, checkfirst=True)
+
+
+def _resolve_range_to_since(range_value: str, now: datetime) -> datetime:
+    if range_value == "1h":
+        return now - timedelta(hours=1)
+    if range_value == "7d":
+        return now - timedelta(days=7)
+    if range_value == "30d":
+        return now - timedelta(days=30)
+    return now - timedelta(hours=24)
+
+
+def _build_export_rows(db: Session, *, params: dict) -> list[dict]:
+    range_value = str(params.get("range") or "24h")
+    symbol = str(params.get("symbol") or "").upper().strip() or None
+    strategy = str(params.get("strategy") or "").strip() or None
+    selected_metrics = {str(item).strip() for item in (params.get("metrics") or []) if str(item).strip()}
+
+    series_payload = metrics_history(
+        range=range_value,
+        symbol=symbol,
+        strategy=strategy,
+        current_admin=None,  # type: ignore[arg-type]
+        db=db,
+    )
+
+    latency_map = {item["ts"]: item for item in series_payload.get("latency_series") or []}
+    pnl_map = {item["ts"]: item for item in series_payload.get("pnl_series") or []}
+    veto_map = {item["ts"]: item for item in series_payload.get("risk_veto_series") or []}
+
+    ts_keys = sorted(set(latency_map.keys()) | set(pnl_map.keys()) | set(veto_map.keys()))
+    rows = []
+    for ts_key in ts_keys:
+        latency = latency_map.get(ts_key, {})
+        pnl = pnl_map.get(ts_key, {})
+        veto = veto_map.get(ts_key, {})
+        row = {
+            "ts": ts_key,
+            "latency_avg_ms": latency.get("avg_ms"),
+            "latency_p95_ms": latency.get("p95_ms"),
+            "latency_count": latency.get("count"),
+            "pnl_sum": pnl.get("sum"),
+            "pnl_avg": pnl.get("avg"),
+            "risk_veto_count": veto.get("count"),
+        }
+        if selected_metrics:
+            row = {k: v for k, v in row.items() if k == "ts" or k in selected_metrics}
+        rows.append(row)
+
+    overlays = series_payload.get("overlays") or []
+    for item in overlays[:300]:
+        rows.append(
+            {
+                "ts": item.get("ts"),
+                "overlay_event": item.get("event"),
+                "overlay_message": item.get("message"),
+            }
+        )
+
+    return rows
+
+
+def _write_export_file(*, job_id: str, output_format: str, rows: list[dict]) -> FilePath:
+    EXPORT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = ".json" if output_format == "json" else ".csv"
+    path = EXPORT_STORAGE_DIR / f"{job_id}{suffix}"
+
+    if output_format == "json":
+        path.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+        return path
+
+    headers = sorted({key for row in rows for key in row.keys()}) if rows else ["ts", "symbol", "strategy_type", "latency_ms"]
+    with path.open("w", encoding="utf-8", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=headers)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+    return path
+
+
+def _process_export_job_async(*, job_id: str):
+    _ensure_export_job_table()
+    db = SessionLocal()
+    try:
+        row = db.query(UniverseExportJob).filter(UniverseExportJob.job_id == job_id).first()
+        if row is None:
+            return
+        row.status = "running"
+        row.updated_at = datetime.now(timezone.utc)
+        db.commit()
+
+        export_rows = _build_export_rows(db, params=row.params or {})
+        output_format = str(row.result_format or "csv").lower()
+        result_path = _write_export_file(job_id=row.job_id, output_format=output_format, rows=export_rows)
+
+        row.status = "done"
+        row.result_row_count = len(export_rows)
+        row.result_url = f"/api/admin/universe-monitor/export/job/{row.job_id}/download"
+        row.updated_at = datetime.now(timezone.utc)
+        db.commit()
+
+        create_audit_log(
+            db,
+            action="UNIVERSE_EXPORT_JOB_DONE",
+            entity_type="export_job",
+            entity_id=row.job_id,
+            actor_user_id=row.created_by,
+            actor_role="admin",
+            severity="info",
+            details={"trace_id": row.trace_id, "result_url": row.result_url, "row_count": len(export_rows), "file_path": str(result_path)},
+        )
+    except Exception as exc:
+        db.rollback()
+        row = db.query(UniverseExportJob).filter(UniverseExportJob.job_id == job_id).first()
+        if row:
+            row.status = "failed"
+            row.error_message = str(exc)[:500]
+            row.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            create_audit_log(
+                db,
+                action="UNIVERSE_EXPORT_JOB_FAILED",
+                entity_type="export_job",
+                entity_id=row.job_id,
+                actor_user_id=row.created_by,
+                actor_role="admin",
+                severity="critical",
+                details={"trace_id": row.trace_id, "error": row.error_message},
+            )
+    finally:
+        db.close()
+
+
+def _parse_bulk_csv_symbols(csv_text: str) -> list[str]:
+    text = str(csv_text or "")
+    rows = []
+    for line in text.splitlines():
+        parts = [item.strip() for item in re.split(r"[,;\t ]+", line) if item.strip()]
+        rows.extend(parts)
+    return [str(item).upper().strip() for item in rows if str(item).strip()]
+
+
+def _build_bulk_preview(*, symbols: list[str], blacklist: set[str]) -> dict:
+    symbol_regex = re.compile(r"^[A-Z0-9]{5,20}$")
+    seen: set[str] = set()
+    valid_symbols: list[str] = []
+    errors: list[dict] = []
+
+    for symbol in symbols:
+        if not symbol_regex.match(symbol):
+            errors.append({"symbol": symbol, "reason": "invalid_symbol"})
+            continue
+        if symbol in seen:
+            errors.append({"symbol": symbol, "reason": "duplicate"})
+            continue
+        seen.add(symbol)
+        if symbol in blacklist:
+            errors.append({"symbol": symbol, "reason": "blacklist_conflict"})
+            continue
+        valid_symbols.append(symbol)
+
+    reason_counts: dict[str, int] = {}
+    for item in errors:
+        reason = item["reason"]
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    return {
+        "total_input": len(symbols),
+        "valid_count": len(valid_symbols),
+        "invalid_count": len(errors),
+        "reason_counts": reason_counts,
+        "valid_symbols": valid_symbols,
+        "invalid_items": errors,
+    }
+
+
 @router.get("")
 def admin_universe_monitor_summary(
     market_type: str = Query(default="spot", pattern="^(spot|futures)$"),
@@ -622,7 +828,7 @@ def scanner_symbol_lists(current_admin: User = Depends(require_admin), db: Sessi
 
 @router.post("/scanner/symbol-lists/{list_type}")
 def scanner_update_symbol_list(
-    list_type: str = Path(pattern="^(whitelist|blacklist)$"),
+    list_type: str = FastAPIPath(pattern="^(whitelist|blacklist)$"),
     payload: ScannerSymbolListUpdateRequest = Body(...),
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -814,6 +1020,313 @@ def universe_update_filter_config(payload: UniverseFilterConfigRequest, current_
         message="universe filter config updated",
         state_snapshot={"filter_config": config},
         audit_log_id=audit.id,
+    )
+
+
+@router.post("/export/job")
+def create_export_job(
+    payload: ExportJobRequest,
+    background_tasks: BackgroundTasks,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    manager = _manager_required(current_admin)
+    _require_phrase(payload.confirmation_phrase, EXPORT_JOB_PHRASE)
+    _ensure_export_job_table()
+
+    trace_id = str(uuid.uuid4())
+    job_id = str(uuid.uuid4())
+    row = UniverseExportJob(
+        job_id=job_id,
+        trace_id=trace_id,
+        status="pending",
+        params={
+            "range": payload.range,
+            "metrics": payload.metrics,
+            "symbol": payload.symbol,
+            "strategy": payload.strategy,
+        },
+        result_format=payload.output_format,
+        created_by=manager.id,
+    )
+    db.add(row)
+    db.commit()
+
+    audit = create_audit_log(
+        db,
+        action="UNIVERSE_EXPORT_JOB_CREATED",
+        entity_type="export_job",
+        entity_id=job_id,
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "params": row.params,
+            "output_format": payload.output_format,
+        },
+    )
+    background_tasks.add_task(_process_export_job_async, job_id=job_id)
+    return _action_result(
+        trace_id=trace_id,
+        message="export job queued",
+        state_snapshot={"job_id": job_id, "status": "pending", "output_format": payload.output_format},
+        job_id=job_id,
+        audit_log_id=audit.id,
+    )
+
+
+@router.get("/export/jobs")
+def list_export_jobs(
+    limit: int = Query(default=30, ge=1, le=200),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    _ensure_export_job_table()
+    rows = db.query(UniverseExportJob).order_by(UniverseExportJob.created_at.desc()).limit(limit).all()
+    return {
+        "count": len(rows),
+        "items": [
+            {
+                "job_id": row.job_id,
+                "trace_id": row.trace_id,
+                "status": row.status,
+                "params": row.params or {},
+                "result_url": row.result_url,
+                "result_format": row.result_format,
+                "result_row_count": row.result_row_count,
+                "error_message": row.error_message,
+                "created_by": row.created_by,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            }
+            for row in rows
+        ],
+    }
+
+
+@router.get("/export/job/{job_id}")
+def get_export_job(job_id: str, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    _ensure_export_job_table()
+    row = db.query(UniverseExportJob).filter(UniverseExportJob.job_id == job_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="export_job_not_found")
+    return {
+        "job_id": row.job_id,
+        "trace_id": row.trace_id,
+        "status": row.status,
+        "params": row.params or {},
+        "result_url": row.result_url,
+        "result_format": row.result_format,
+        "result_row_count": row.result_row_count,
+        "error_message": row.error_message,
+        "created_by": row.created_by,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+@router.get("/export/job/{job_id}/download")
+def download_export_job(job_id: str, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    _ensure_export_job_table()
+    row = db.query(UniverseExportJob).filter(UniverseExportJob.job_id == job_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="export_job_not_found")
+    if row.status != "done":
+        raise HTTPException(status_code=409, detail="export_job_not_ready")
+
+    ext = "json" if str(row.result_format).lower() == "json" else "csv"
+    file_path = EXPORT_STORAGE_DIR / f"{row.job_id}.{ext}"
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="export_file_not_found")
+
+    media_type = "application/json" if ext == "json" else "text/csv"
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_type,
+        filename=f"universe_export_{row.job_id}.{ext}",
+    )
+
+
+@router.post("/export/job/{job_id}/retry")
+def retry_export_job(
+    job_id: str,
+    payload: RuntimeActionRequest,
+    background_tasks: BackgroundTasks,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    manager = _manager_required(current_admin)
+    _require_phrase(payload.confirmation_phrase, EXPORT_JOB_PHRASE)
+    _ensure_export_job_table()
+    row = db.query(UniverseExportJob).filter(UniverseExportJob.job_id == job_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="export_job_not_found")
+
+    row.status = "pending"
+    row.error_message = None
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    audit = create_audit_log(
+        db,
+        action="UNIVERSE_EXPORT_JOB_RETRY",
+        entity_type="export_job",
+        entity_id=job_id,
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning",
+        details={"trace_id": row.trace_id, "reason": payload.reason},
+    )
+    background_tasks.add_task(_process_export_job_async, job_id=job_id)
+    return _action_result(
+        trace_id=row.trace_id,
+        message="export job retried",
+        state_snapshot={"job_id": job_id, "status": "pending"},
+        audit_log_id=audit.id,
+    )
+
+
+@router.post("/universe/symbols/bulk-import/preview")
+def universe_bulk_import_preview(payload: BulkImportPreviewRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    manager = _manager_required(current_admin)
+    _require_phrase(payload.confirmation_phrase, BULK_IMPORT_PREVIEW_PHRASE)
+
+    trace_id = str(uuid.uuid4())
+    symbols = _parse_bulk_csv_symbols(payload.csv_text)
+    row = _load_admin_control(db)
+    blacklist = set(_normalize_symbols(row.blacklist or []))
+    preview = _build_bulk_preview(symbols=symbols, blacklist=blacklist)
+    preview_id = str(uuid.uuid4())
+    preview_payload = {
+        "preview_id": preview_id,
+        "trace_id": trace_id,
+        "created_by": manager.id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "reason": payload.reason,
+        **preview,
+    }
+    _write_json_value(f"{BULK_IMPORT_PREVIEW_KEY}:{preview_id}", preview_payload)
+
+    audit = create_audit_log(
+        db,
+        action="UNIVERSE_BULK_IMPORT_PREVIEW",
+        entity_type="universe_bulk_import",
+        entity_id=preview_id,
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "total_input": preview_payload["total_input"],
+            "valid_count": preview_payload["valid_count"],
+            "invalid_count": preview_payload["invalid_count"],
+            "reason_counts": preview_payload["reason_counts"],
+        },
+    )
+    return _action_result(
+        trace_id=trace_id,
+        message="bulk import preview created",
+        state_snapshot={
+            "preview_id": preview_id,
+            "total_input": preview_payload["total_input"],
+            "valid_count": preview_payload["valid_count"],
+            "invalid_count": preview_payload["invalid_count"],
+        },
+        preview=preview_payload,
+        errors_csv_url=f"/api/admin/universe-monitor/universe/symbols/bulk-import/{preview_id}/errors.csv",
+        audit_log_id=audit.id,
+    )
+
+
+@router.post("/universe/symbols/bulk-import/apply")
+def universe_bulk_import_apply(payload: BulkImportApplyRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    manager = _manager_required(current_admin)
+    _require_phrase(payload.confirmation_phrase, BULK_IMPORT_APPLY_PHRASE)
+
+    trace_id = str(uuid.uuid4())
+    preview_payload = _read_json_value(f"{BULK_IMPORT_PREVIEW_KEY}:{payload.preview_id}", None)
+    if not isinstance(preview_payload, dict):
+        raise HTTPException(status_code=404, detail="bulk_import_preview_not_found")
+
+    valid_symbols = _normalize_symbols(preview_payload.get("valid_symbols") or [])
+    invalid_items = list(preview_payload.get("invalid_items") or [])
+    universe_payload = _read_json_value("control_layer:scanner_symbol_universe", {"symbols": []})
+    current_symbols = set(_normalize_symbols(universe_payload.get("symbols") or []))
+
+    applied_symbols = []
+    rejected_items = list(invalid_items)
+    for symbol in valid_symbols:
+        if symbol in current_symbols:
+            rejected_items.append({"symbol": symbol, "reason": "already_exists"})
+            continue
+        current_symbols.add(symbol)
+        applied_symbols.append(symbol)
+
+    _write_json_value("control_layer:scanner_symbol_universe", {"symbols": sorted(current_symbols)})
+
+    reason_counts: dict[str, int] = {}
+    for item in rejected_items:
+        reason = str(item.get("reason") or "unknown")
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+    summary = {
+        "preview_id": payload.preview_id,
+        "apply_mode": payload.apply_mode,
+        "processed_count": len(valid_symbols) + len(invalid_items),
+        "applied_count": len(applied_symbols),
+        "rejected_count": len(rejected_items),
+        "reason_counts": reason_counts,
+    }
+    preview_payload["last_apply_summary"] = summary
+    preview_payload["last_rejected_items"] = rejected_items
+    _write_json_value(f"{BULK_IMPORT_PREVIEW_KEY}:{payload.preview_id}", preview_payload)
+
+    audit = create_audit_log(
+        db,
+        action="UNIVERSE_BULK_IMPORT_APPLY",
+        entity_type="universe_bulk_import",
+        entity_id=payload.preview_id,
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning",
+        details={"trace_id": trace_id, "reason": payload.reason, **summary},
+    )
+    return _action_result(
+        trace_id=trace_id,
+        message="bulk import applied",
+        state_snapshot={"summary": summary, "universe_size": len(current_symbols)},
+        summary=summary,
+        rejected_items=rejected_items,
+        errors_csv_url=f"/api/admin/universe-monitor/universe/symbols/bulk-import/{payload.preview_id}/errors.csv",
+        audit_log_id=audit.id,
+    )
+
+
+@router.get("/universe/symbols/bulk-import/{preview_id}/errors.csv")
+def universe_bulk_import_errors_csv(preview_id: str, current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    preview_payload = _read_json_value(f"{BULK_IMPORT_PREVIEW_KEY}:{preview_id}", None)
+    if not isinstance(preview_payload, dict):
+        raise HTTPException(status_code=404, detail="bulk_import_preview_not_found")
+    items = list(preview_payload.get("invalid_items") or [])
+    items.extend(list(preview_payload.get("last_rejected_items") or []))
+
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=["symbol", "reason"])
+    writer.writeheader()
+    for item in items:
+        writer.writerow({"symbol": item.get("symbol"), "reason": item.get("reason")})
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=bulk_import_errors_{preview_id}.csv"},
     )
 
 

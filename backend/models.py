@@ -73,6 +73,7 @@ from model_domains.scanner_universe import (
     UserScannerResult,
     UserScannerSymbolSelection,
     UserSignalMode,
+    UniverseExportJob,
 )
 from model_domains.strategy_decision import (
     BotProfile,
@@ -107,6 +108,7 @@ __all__ = [
     "ScannerPerformanceSnapshot",
     "UniverseRolloutState",
     "ScannerFallbackEvent",
+    "UniverseExportJob",
     "BotProfile",
     "StrategyTemplate",
     "SignalEvent",

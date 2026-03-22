@@ -135,9 +135,13 @@ export const PipelineOperationsPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isSuperAdmin = String(user?.role || "") === "super_admin";
+  const isProductionEnv = String(process.env.REACT_APP_ENV || "").toLowerCase() === "production";
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [globalError, setGlobalError] = useState("");
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [autoRefreshIntervalSec, setAutoRefreshIntervalSec] = useState("15");
   const [opsTab, setOpsTab] = useState("rollout");
 
   const [wsHealth, setWsHealth] = useState(null);
@@ -175,6 +179,11 @@ export const PipelineOperationsPage = () => {
   const [trendSymbolFilter, setTrendSymbolFilter] = useState("");
   const [trendStrategyFilter, setTrendStrategyFilter] = useState("");
   const [metricsHistory, setMetricsHistory] = useState({ latency_series: [], pnl_series: [], risk_veto_series: [], overlays: [] });
+  const [exportModal, setExportModal] = useState({ open: false, range: "24h", output_format: "csv", metrics: "latency_avg_ms,pnl_sum,risk_veto_count", symbol: "", strategy: "" });
+  const [exportJobs, setExportJobs] = useState([]);
+  const [bulkImportModal, setBulkImportModal] = useState({ open: false, csvText: "", preview: null, applyMode: "apply_valid_only" });
+  const [debugPanelOpen, setDebugPanelOpen] = useState(false);
+  const [debugUniversePayload, setDebugUniversePayload] = useState(null);
 
   const [reasonControl, setReasonControl] = useState("pipeline_control_manual_action");
   const [reasonRecovery, setReasonRecovery] = useState("pipeline_recovery_manual_action");
@@ -268,6 +277,7 @@ export const PipelineOperationsPage = () => {
         kpiActiveRes,
         kpiHistoryRes,
         metricsHistoryRes,
+        exportJobsRes,
       ] = await Promise.all([
         apiClient.get("/runtime/ws/health"),
         apiClient.get("/runtime/gate/status"),
@@ -308,6 +318,7 @@ export const PipelineOperationsPage = () => {
             strategy: trendStrategyFilter || undefined,
           },
         }),
+        apiClient.get("/admin/universe-monitor/export/jobs", { params: { limit: 30 } }),
       ]);
 
       try {
@@ -341,6 +352,7 @@ export const PipelineOperationsPage = () => {
       setKpiActiveRecommendations(kpiActiveRes.data?.items || []);
       setKpiRecommendationHistory(kpiHistoryRes.data?.items || []);
       setMetricsHistory(metricsHistoryRes.data || { latency_series: [], pnl_series: [], risk_veto_series: [], overlays: [] });
+      setExportJobs(exportJobsRes.data?.items || []);
       setStateValidation({
         wsReconnectSessionChanged: Boolean(validationRes.data?.ws_session_changed),
         overrideAffectsExecution: Boolean(validationRes.data?.override_effect_applied),
@@ -368,6 +380,8 @@ export const PipelineOperationsPage = () => {
         max_cluster_exposure_pct: String(cfg.max_cluster_exposure_pct ?? prev.max_cluster_exposure_pct),
       }));
 
+      setGlobalError("");
+
       return {
         wsHealth: wsRes.data || null,
         gateStatus: gateRes.data || null,
@@ -383,7 +397,9 @@ export const PipelineOperationsPage = () => {
       };
     } catch (error) {
       const detail = error?.response?.data?.detail;
-      toast.error(typeof detail === "string" ? detail : "Pipeline operations verisi alınamadı");
+      const message = typeof detail === "string" ? detail : "Pipeline operations verisi alınamadı";
+      setGlobalError(message);
+      toast.error(message);
       return null;
     } finally {
       setLoading(false);
@@ -394,6 +410,15 @@ export const PipelineOperationsPage = () => {
   useEffect(() => {
     load(true);
   }, [load]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) return undefined;
+    const intervalMs = Math.max(Number(autoRefreshIntervalSec || 15), 5) * 1000;
+    const timer = window.setInterval(() => {
+      load(false);
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [autoRefreshEnabled, autoRefreshIntervalSec, load]);
 
   const openActionDialog = (actionKey, panelKey, reasonHint, context = {}) => {
     setActionDialog({
@@ -414,6 +439,7 @@ export const PipelineOperationsPage = () => {
 
   const setActionFailure = (panelKey, error, toastTitle) => {
     const { traceId, message } = extractErrorMeta(error);
+    setGlobalError(message);
     setPanelResult((prev) => ({
       ...prev,
       [panelKey]: { status: "error", trace_id: traceId, message },
@@ -427,6 +453,95 @@ export const PipelineOperationsPage = () => {
       .map((item) => item.trim().toUpperCase())
       .filter(Boolean);
     return Array.from(new Set(raw));
+  };
+
+  const onBulkCsvFileUpload = async (file) => {
+    if (!file) return;
+    const text = await file.text();
+    setBulkImportModal((prev) => ({ ...prev, csvText: text }));
+  };
+
+  const previewBulkImport = async () => {
+    if (!bulkImportModal.csvText.trim()) {
+      toast.error("CSV içeriği boş olamaz");
+      return;
+    }
+    try {
+      const { data } = await apiClient.post("/admin/universe-monitor/universe/symbols/bulk-import/preview", {
+        csv_text: bulkImportModal.csvText,
+        reason: reasonControl,
+        confirmation_phrase: "PREVIEW BULK IMPORT",
+      });
+      setBulkImportModal((prev) => ({ ...prev, preview: data.preview || null }));
+      setActionSuccess("scannerOps", data, "Bulk preview oluşturuldu");
+    } catch (error) {
+      setActionFailure("scannerOps", error, "Bulk preview başarısız");
+    }
+  };
+
+  const applyBulkImport = async () => {
+    const previewId = bulkImportModal.preview?.preview_id;
+    if (!previewId) {
+      toast.error("Önce preview oluşturun");
+      return;
+    }
+    try {
+      const { data } = await apiClient.post("/admin/universe-monitor/universe/symbols/bulk-import/apply", {
+        preview_id: previewId,
+        apply_mode: bulkImportModal.applyMode,
+        reason: reasonControl,
+        confirmation_phrase: "APPLY BULK IMPORT",
+      });
+      setActionSuccess("scannerOps", data, "Bulk apply tamamlandı");
+      await load(false);
+    } catch (error) {
+      setActionFailure("scannerOps", error, "Bulk apply başarısız");
+    }
+  };
+
+  const createExportJob = async () => {
+    try {
+      const metrics = parseSymbolsText(exportModal.metrics.replaceAll(",", " ")).map((item) => item.toLowerCase());
+      const { data } = await apiClient.post("/admin/universe-monitor/export/job", {
+        range: exportModal.range,
+        output_format: exportModal.output_format,
+        metrics,
+        symbol: exportModal.symbol || null,
+        strategy: exportModal.strategy || null,
+        reason: reasonControl,
+        confirmation_phrase: "CREATE EXPORT JOB",
+      });
+      setActionSuccess("trend", data, "Export job queued");
+      setExportModal((prev) => ({ ...prev, open: false }));
+      await load(false);
+    } catch (error) {
+      setActionFailure("trend", error, "Export job oluşturulamadı");
+    }
+  };
+
+  const retryExportJob = async (jobId) => {
+    try {
+      const { data } = await apiClient.post(`/admin/universe-monitor/export/job/${jobId}/retry`, {
+        reason: reasonControl,
+        confirmation_phrase: "CREATE EXPORT JOB",
+      });
+      setActionSuccess("trend", data, "Export retry queued");
+      await load(false);
+    } catch (error) {
+      setActionFailure("trend", error, "Export retry başarısız");
+    }
+  };
+
+  const loadDebugUniverse = async () => {
+    try {
+      const { data } = await apiClient.get("/debug/effective-universe", {
+        params: { market_type: "spot", scanner_mode: "ALL_MARKET_SYMBOLS", top_n: 120 },
+      });
+      setDebugUniversePayload(data || null);
+    } catch (error) {
+      const { message } = extractErrorMeta(error);
+      setDebugUniversePayload({ error: message });
+    }
   };
 
   const loadAuditDrawerData = async (tab = auditDrawerTab) => {
@@ -797,10 +912,22 @@ export const PipelineOperationsPage = () => {
           </div>
           <div className="flex flex-wrap gap-2" data-testid="pipeline-operations-header-actions">
             <Button variant="outline" onClick={() => navigate("/admin/live-trading-dashboard")} data-testid="pipeline-operations-open-live-dashboard-button">Live Dashboard</Button>
+            <select value={autoRefreshIntervalSec} onChange={(e) => setAutoRefreshIntervalSec(e.target.value)} className="h-9 rounded border border-slate-700 px-2 text-sm" data-testid="pipeline-operations-auto-refresh-interval-select">
+              <option value="5">5s</option>
+              <option value="15">15s</option>
+              <option value="60">60s</option>
+            </select>
+            <Button variant="outline" onClick={() => setAutoRefreshEnabled((prev) => !prev)} data-testid="pipeline-operations-auto-refresh-toggle-button">Auto-Refresh: {autoRefreshEnabled ? "ON" : "OFF"}</Button>
             <Button variant="outline" onClick={() => load(false)} data-testid="pipeline-operations-refresh-button">Yenile</Button>
           </div>
         </div>
       </header>
+
+      {globalError && (
+        <div className="rounded border border-red-700 bg-red-100 p-3 text-sm text-red-800" data-testid="pipeline-operations-global-error-banner">
+          API Error: {globalError}
+        </div>
+      )}
 
       <SummaryBar
         wsHealth={wsHealth}
@@ -861,6 +988,7 @@ export const PipelineOperationsPage = () => {
               <div className="flex flex-wrap gap-2" data-testid="pipeline-operations-scanner-symbol-list-actions">
                 <Button variant="outline" onClick={() => openSymbolListEditor("whitelist")} data-testid="pipeline-operations-scanner-whitelist-edit-button">Edit Whitelist</Button>
                 <Button variant="outline" onClick={() => openSymbolListEditor("blacklist")} data-testid="pipeline-operations-scanner-blacklist-edit-button">Edit Blacklist</Button>
+                <Button variant="outline" onClick={() => setBulkImportModal((prev) => ({ ...prev, open: true }))} data-testid="pipeline-operations-scanner-bulk-open-modal-button">Bulk Upload</Button>
               </div>
 
               <Input value={bulkSymbolsInput} onChange={(e) => setBulkSymbolsInput(e.target.value)} data-testid="pipeline-operations-scanner-bulk-symbols-input" placeholder="BTCUSDT,ETHUSDT,..." />
@@ -875,6 +1003,17 @@ export const PipelineOperationsPage = () => {
                 <Input value={String(universeFilterConfig.max_spread_bps ?? "")} onChange={(e) => setUniverseFilterConfig((prev) => ({ ...prev, max_spread_bps: e.target.value }))} data-testid="pipeline-operations-scanner-filter-spread-input" />
               </div>
               <Button variant="outline" onClick={() => openActionDialog("universe_filter_update", "scannerOps", reasonControl)} data-testid="pipeline-operations-scanner-filter-save-button">Save Filter Config</Button>
+
+              {!isProductionEnv && isSuperAdmin && (
+                <div className="rounded border border-amber-700 p-2" data-testid="pipeline-operations-debug-panel-wrap">
+                  <div className="flex gap-2" data-testid="pipeline-operations-debug-panel-actions">
+                    <Button variant="outline" onClick={() => setDebugPanelOpen((prev) => !prev)} data-testid="pipeline-operations-debug-panel-toggle-button">DEBUG EFFECTIVE UNIVERSE</Button>
+                    {debugPanelOpen && <Button variant="outline" onClick={loadDebugUniverse} data-testid="pipeline-operations-debug-panel-refresh-button">Debug Refresh</Button>}
+                  </div>
+                  {debugPanelOpen && <pre className="mt-2 max-h-28 overflow-auto text-[11px]" data-testid="pipeline-operations-debug-panel-json">{JSON.stringify(debugUniversePayload || {}, null, 2)}</pre>}
+                </div>
+              )}
+
               <ResultBadge result={panelResult.scannerOps} testId="pipeline-operations-scanner-result" />
             </div>
           </div>
@@ -1020,6 +1159,10 @@ export const PipelineOperationsPage = () => {
               <Button variant="outline" onClick={() => load(false)} data-testid="pipeline-operations-trend-refresh-button">Trend Yenile</Button>
             </div>
 
+            <div className="flex flex-wrap gap-2" data-testid="pipeline-operations-export-actions">
+              <Button variant="outline" onClick={() => setExportModal((prev) => ({ ...prev, open: true }))} data-testid="pipeline-operations-export-open-modal-button">Export</Button>
+            </div>
+
             <div className="grid gap-3 lg:grid-cols-3" data-testid="pipeline-operations-trend-charts-grid">
               <div className="min-w-0 rounded border border-slate-700 p-2" data-testid="pipeline-operations-trend-latency-chart-wrap">
                 <p className="text-xs font-semibold">Execution Latency Trend</p>
@@ -1068,6 +1211,21 @@ export const PipelineOperationsPage = () => {
               ))}
               {(!metricsHistory.overlays || metricsHistory.overlays.length === 0) && <p data-testid="pipeline-operations-trend-overlay-empty">No data yet: overlay event bulunamadı.</p>}
             </div>
+
+            <div className="max-h-32 overflow-auto text-xs" data-testid="pipeline-operations-export-job-list">
+              {exportJobs.map((job, idx) => (
+                <div key={job.job_id} className="mb-1 rounded border border-slate-700 p-2" data-testid={`pipeline-operations-export-job-item-${idx}`}>
+                  <p data-testid={`pipeline-operations-export-job-status-${idx}`}>{job.job_id} · {job.status} · trace={job.trace_id}</p>
+                  <p data-testid={`pipeline-operations-export-job-count-${idx}`}>rows={job.result_row_count || 0}</p>
+                  <div className="mt-1 flex gap-1" data-testid={`pipeline-operations-export-job-actions-${idx}`}>
+                    {job.result_url && <Button size="sm" variant="outline" onClick={() => window.open(`${process.env.REACT_APP_BACKEND_URL}${job.result_url}`, "_blank")} data-testid={`pipeline-operations-export-download-${idx}`}>Download</Button>}
+                    {(job.status === "failed" || job.status === "done") && <Button size="sm" variant="outline" onClick={() => retryExportJob(job.job_id)} data-testid={`pipeline-operations-export-retry-${idx}`}>Retry</Button>}
+                  </div>
+                </div>
+              ))}
+              {exportJobs.length === 0 && <p data-testid="pipeline-operations-export-job-empty">No data yet: export job bulunamadı.</p>}
+            </div>
+            <ResultBadge result={panelResult.trend} testId="pipeline-operations-trend-result" />
           </div>
         )}
       </article>
@@ -1505,6 +1663,68 @@ export const PipelineOperationsPage = () => {
           </div>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={exportModal.open} onOpenChange={(open) => setExportModal((prev) => ({ ...prev, open }))}>
+        <DialogContent className="max-w-xl border border-emerald-700 bg-slate-950" data-testid="pipeline-operations-export-modal">
+          <DialogHeader>
+            <DialogTitle data-testid="pipeline-operations-export-modal-title">Export Data</DialogTitle>
+            <DialogDescription data-testid="pipeline-operations-export-modal-description">Audit-first export job oluştur</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2" data-testid="pipeline-operations-export-modal-form">
+            <Input value={exportModal.range} onChange={(e) => setExportModal((prev) => ({ ...prev, range: e.target.value }))} data-testid="pipeline-operations-export-range-input" placeholder="range (1h/24h/7d/30d)" />
+            <Input value={exportModal.output_format} onChange={(e) => setExportModal((prev) => ({ ...prev, output_format: e.target.value }))} data-testid="pipeline-operations-export-format-input" placeholder="csv/json" />
+            <Input value={exportModal.metrics} onChange={(e) => setExportModal((prev) => ({ ...prev, metrics: e.target.value }))} data-testid="pipeline-operations-export-metrics-input" placeholder="latency_avg_ms,pnl_sum,risk_veto_count" />
+            <Input value={exportModal.symbol} onChange={(e) => setExportModal((prev) => ({ ...prev, symbol: e.target.value.toUpperCase() }))} data-testid="pipeline-operations-export-symbol-input" placeholder="symbol(optional)" />
+            <Input value={exportModal.strategy} onChange={(e) => setExportModal((prev) => ({ ...prev, strategy: e.target.value }))} data-testid="pipeline-operations-export-strategy-input" placeholder="strategy(optional)" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportModal((prev) => ({ ...prev, open: false }))} data-testid="pipeline-operations-export-cancel-button">Vazgeç</Button>
+            <Button onClick={createExportJob} data-testid="pipeline-operations-export-submit-button">Create Export Job</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkImportModal.open} onOpenChange={(open) => setBulkImportModal((prev) => ({ ...prev, open }))}>
+        <DialogContent className="max-w-2xl border border-emerald-700 bg-slate-950" data-testid="pipeline-operations-bulk-import-modal">
+          <DialogHeader>
+            <DialogTitle data-testid="pipeline-operations-bulk-import-modal-title">Bulk Symbol Import</DialogTitle>
+            <DialogDescription data-testid="pipeline-operations-bulk-import-modal-description">CSV paste/upload + validation preview</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2" data-testid="pipeline-operations-bulk-import-modal-form">
+            <input type="file" accept=".csv,text/csv" onChange={(e) => onBulkCsvFileUpload(e.target.files?.[0])} data-testid="pipeline-operations-bulk-import-file-input" />
+            <Textarea value={bulkImportModal.csvText} onChange={(e) => setBulkImportModal((prev) => ({ ...prev, csvText: e.target.value }))} className="min-h-32" data-testid="pipeline-operations-bulk-import-textarea" />
+            <div className="flex gap-2" data-testid="pipeline-operations-bulk-import-actions">
+              <Button variant="outline" onClick={previewBulkImport} data-testid="pipeline-operations-bulk-import-preview-button">Preview</Button>
+              <Input value={bulkImportModal.applyMode} onChange={(e) => setBulkImportModal((prev) => ({ ...prev, applyMode: e.target.value }))} className="w-48" data-testid="pipeline-operations-bulk-import-apply-mode-input" />
+              <Button variant="outline" onClick={applyBulkImport} data-testid="pipeline-operations-bulk-import-apply-button">Apply</Button>
+              {bulkImportModal.preview?.preview_id && (
+                <Button
+                  variant="outline"
+                  onClick={() => window.open(`${process.env.REACT_APP_BACKEND_URL}/api/admin/universe-monitor/universe/symbols/bulk-import/${bulkImportModal.preview.preview_id}/errors.csv`, "_blank")}
+                  data-testid="pipeline-operations-bulk-import-errors-export-button"
+                >
+                  Export Errors
+                </Button>
+              )}
+            </div>
+
+            {bulkImportModal.preview && (
+              <div className="rounded border border-slate-700 p-2 text-xs" data-testid="pipeline-operations-bulk-import-preview-summary">
+                <p data-testid="pipeline-operations-bulk-import-preview-counts">input={bulkImportModal.preview.total_input} valid={bulkImportModal.preview.valid_count} invalid={bulkImportModal.preview.invalid_count}</p>
+                <p data-testid="pipeline-operations-bulk-import-preview-reasons">reasons={JSON.stringify(bulkImportModal.preview.reason_counts || {})}</p>
+                <div className="mt-1 max-h-28 overflow-auto" data-testid="pipeline-operations-bulk-import-preview-invalid-list">
+                  {(bulkImportModal.preview.invalid_items || []).slice(0, 20).map((item, idx) => (
+                    <p key={`${item.symbol}-${idx}`} data-testid={`pipeline-operations-bulk-import-invalid-item-${idx}`}>{item.symbol} · {item.reason}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkImportModal((prev) => ({ ...prev, open: false }))} data-testid="pipeline-operations-bulk-import-close-button">Kapat</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={symbolListModal.open} onOpenChange={(open) => setSymbolListModal((prev) => ({ ...prev, open }))}>
         <DialogContent className="max-w-xl border border-emerald-700 bg-slate-950" data-testid="pipeline-operations-symbol-list-modal">
