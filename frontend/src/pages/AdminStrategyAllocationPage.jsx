@@ -82,6 +82,22 @@ const confidenceBandClass = (band) => {
   return "border border-amber-500/60 text-amber-300";
 };
 
+const formatRequestAge = (createdAt, nowMs) => {
+  const createdMs = new Date(createdAt).getTime();
+  if (!Number.isFinite(createdMs)) return "-";
+  const diffMs = Math.max(0, nowMs - createdMs);
+  const totalMinutes = Math.floor(diffMs / 60000);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+
+  const totalHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (totalHours < 24) return `${totalHours}h ${minutes}m`;
+
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return `${days}d ${hours}h`;
+};
+
 export const AdminStrategyAllocationPage = () => {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
@@ -109,6 +125,11 @@ export const AdminStrategyAllocationPage = () => {
   const [reasonNote, setReasonNote] = useState("");
   const [approvalReviewNote, setApprovalReviewNote] = useState("phase5_review");
   const [approvalRequests, setApprovalRequests] = useState([]);
+  const [snapshots, setSnapshots] = useState([]);
+  const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
+  const [isRunningWhatIf, setIsRunningWhatIf] = useState(false);
+  const [whatIfResult, setWhatIfResult] = useState(null);
+  const [requestAgeTick, setRequestAgeTick] = useState(Date.now());
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
 
   const role = String(user?.role || "");
@@ -120,11 +141,12 @@ export const AdminStrategyAllocationPage = () => {
     setLoadError("");
     setGlobalActionError("");
     try {
-      const [rowsResp, summaryResp, historyResp, approvalResp] = await Promise.all([
+      const [rowsResp, summaryResp, historyResp, approvalResp, snapshotsResp] = await Promise.all([
         apiClient.get("/admin/strategy-allocation"),
         apiClient.get("/admin/strategy-allocation/summary"),
         apiClient.get("/admin/strategy-allocation/state-history", { params: { limit: 40 } }),
         apiClient.get("/admin/strategy-allocation/approval-requests"),
+        apiClient.get("/admin/strategy-allocation/snapshots"),
       ]);
 
       const rowsData = rowsResp?.data || [];
@@ -132,6 +154,7 @@ export const AdminStrategyAllocationPage = () => {
       setBackendSummary(summaryResp?.data || null);
       setStateHistory(historyResp?.data?.rows || []);
       setApprovalRequests(approvalResp?.data?.rows || []);
+      setSnapshots(snapshotsResp?.data?.rows || []);
       const initialDrafts = {};
       rowsData.forEach((item) => {
         initialDrafts[item.strategy_id] = {
@@ -141,6 +164,7 @@ export const AdminStrategyAllocationPage = () => {
       setDrafts(initialDrafts);
       setSelectedStrategyIds((prev) => prev.filter((id) => rowsData.some((row) => row.strategy_id === id)));
       setRebalanceSuggestion(null);
+      setWhatIfResult(null);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Strategy allocation verisi yüklenemedi";
@@ -153,6 +177,11 @@ export const AdminStrategyAllocationPage = () => {
 
   useEffect(() => {
     load();
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setRequestAgeTick(Date.now()), 60000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const stateStats = useMemo(() => {
@@ -189,6 +218,13 @@ export const AdminStrategyAllocationPage = () => {
 
   const weightIsBalanced = Math.abs(capitalSnapshot.weightDelta) <= WEIGHT_TOLERANCE;
   const hasOverAllocation = capitalSnapshot.overAllocatedRows.length > 0;
+  const whatIfByStrategy = useMemo(() => {
+    const map = {};
+    (whatIfResult?.rows || []).forEach((row) => {
+      map[row.strategy_id] = row;
+    });
+    return map;
+  }, [whatIfResult]);
 
   const updateDraft = (strategyId, key, value) => {
     setGlobalActionError("");
@@ -493,6 +529,65 @@ export const AdminStrategyAllocationPage = () => {
     toast.success("Rebalance önerisi seçili strategy draft alanlarına uygulandı (save yok)");
   };
 
+  const createSnapshot = async () => {
+    if (isOpsReadOnly) {
+      toast.error("ops role read-only");
+      return;
+    }
+    const note = ensureReasonNote();
+    if (!note) return;
+
+    setIsCreatingSnapshot(true);
+    try {
+      const { data } = await apiClient.post("/admin/strategy-allocation/snapshots", { reason_note: note });
+      toast.success(data?.message || "Snapshot oluşturuldu");
+      await load();
+    } catch (error) {
+      const message = error?.response?.data?.detail || "Snapshot oluşturulamadı";
+      setGlobalActionError(message);
+      toast.error(message);
+    } finally {
+      setIsCreatingSnapshot(false);
+    }
+  };
+
+  const exportAllocation = async (format) => {
+    try {
+      const response = await apiClient.get(`/admin/strategy-allocation/export?format=${format}`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: format === "csv" ? "text/csv" : "application/json" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = format === "csv" ? "strategy_allocation_export.csv" : "strategy_allocation_export.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success(`${format.toUpperCase()} export hazır`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Export başarısız");
+    }
+  };
+
+  const runWhatIfSimulation = async () => {
+    setIsRunningWhatIf(true);
+    try {
+      const { data } = await apiClient.post("/admin/strategy-allocation/what-if-simulation", {
+        strategy_ids: selectedStrategyIds,
+      });
+      setWhatIfResult(data || null);
+      toast.success(data?.message || "What-if simulation hazır");
+    } catch (error) {
+      const message = error?.response?.data?.detail || "What-if simulation başarısız";
+      toast.error(message);
+      setGlobalActionError(message);
+    } finally {
+      setIsRunningWhatIf(false);
+    }
+  };
+
   const submitBulkUpdate = async () => {
     if (isOpsReadOnly) {
       toast.error("ops role read-only");
@@ -789,6 +884,57 @@ export const AdminStrategyAllocationPage = () => {
         )}
       </div>
 
+      <div className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-allocation-phase6-panel">
+        <h3 className="text-base font-semibold" data-testid="admin-strategy-allocation-phase6-title">Phase 6 · Snapshot + Export + What-if</h3>
+        <div className="mt-2 flex flex-wrap gap-2" data-testid="admin-strategy-allocation-phase6-actions">
+          <Button onClick={createSnapshot} disabled={isCreatingSnapshot || isOpsReadOnly} data-testid="admin-strategy-allocation-create-snapshot-button">
+            {isCreatingSnapshot ? "Snapshot alınıyor..." : "Snapshot Al"}
+          </Button>
+          <Button variant="outline" onClick={() => exportAllocation("json")} data-testid="admin-strategy-allocation-export-json-button">
+            JSON Export
+          </Button>
+          <Button variant="outline" onClick={() => exportAllocation("csv")} data-testid="admin-strategy-allocation-export-csv-button">
+            CSV Export
+          </Button>
+          <Button variant="outline" onClick={runWhatIfSimulation} disabled={isRunningWhatIf} data-testid="admin-strategy-allocation-run-whatif-button">
+            {isRunningWhatIf ? "What-if çalışıyor..." : "What-if Simulation"}
+          </Button>
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-2" data-testid="admin-strategy-allocation-phase6-grid">
+          <div className="rounded border border-slate-800 bg-slate-950 p-2" data-testid="admin-strategy-allocation-phase6-snapshot-list-panel">
+            <p className="text-xs text-slate-300" data-testid="admin-strategy-allocation-phase6-snapshot-list-title">Snapshots</p>
+            {(snapshots || []).length === 0 && (
+              <p className="mt-1 text-xs text-slate-500" data-testid="admin-strategy-allocation-phase6-snapshot-empty">No data yet</p>
+            )}
+            {(snapshots || []).slice(0, 5).map((snapshot, index) => (
+              <p key={`${snapshot.snapshot_id}-${index}`} className="mt-1 text-xs text-slate-300" data-testid={`admin-strategy-allocation-phase6-snapshot-item-${index}`}>
+                {snapshot.snapshot_id} · count={snapshot.strategy_count} · weight={snapshot.total_weight}
+              </p>
+            ))}
+          </div>
+
+          <div className="rounded border border-slate-800 bg-slate-950 p-2" data-testid="admin-strategy-allocation-phase6-whatif-preview-panel">
+            <p className="text-xs text-slate-300" data-testid="admin-strategy-allocation-phase6-whatif-preview-title">What-if Preview (read-only)</p>
+            {!whatIfResult && <p className="mt-1 text-xs text-slate-500" data-testid="admin-strategy-allocation-phase6-whatif-empty">No data yet</p>}
+            {whatIfResult && (
+              <div className="mt-1 space-y-1" data-testid="admin-strategy-allocation-phase6-whatif-meta">
+                <p className="text-xs" data-testid="admin-strategy-allocation-phase6-whatif-readonly">read_only={String(whatIfResult.read_only)}</p>
+                <p className="text-xs" data-testid="admin-strategy-allocation-phase6-whatif-return-delta">
+                  portfolio return Δ={whatIfResult.projected_portfolio_return_delta_pct}
+                </p>
+                <p className="text-xs" data-testid="admin-strategy-allocation-phase6-whatif-risk-delta">
+                  portfolio risk Δ={whatIfResult.projected_portfolio_risk_delta_pct}
+                </p>
+                <p className="text-xs" data-testid="admin-strategy-allocation-phase6-whatif-selection">
+                  selection_count={whatIfResult.selection_count}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-allocation-create-panel">
         <h3 className="text-base font-semibold" data-testid="admin-strategy-allocation-create-title">Strategy Ekle</h3>
         <div className="mt-2 grid gap-2 md:grid-cols-6" data-testid="admin-strategy-allocation-create-grid">
@@ -873,6 +1019,7 @@ export const AdminStrategyAllocationPage = () => {
               <th className="px-3 py-2">Performance</th>
               <th className="px-3 py-2">Signal Decay</th>
               <th className="px-3 py-2">Execution Quality</th>
+              <th className="px-3 py-2">What-if Compare</th>
               <th className="px-3 py-2">Action</th>
             </tr>
           </thead>
@@ -927,6 +1074,22 @@ export const AdminStrategyAllocationPage = () => {
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-performance-${item.strategy_id}`}>{item.performance_score}</td>
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-signal-decay-${item.strategy_id}`}>{item.signal_decay}</td>
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-execution-quality-${item.strategy_id}`}>{item.execution_quality_score}</td>
+                  <td className="px-3 py-2" data-testid={`admin-strategy-allocation-whatif-cell-${item.strategy_id}`}>
+                    {!whatIfByStrategy[item.strategy_id] && <span className="text-xs text-slate-500">No data yet</span>}
+                    {whatIfByStrategy[item.strategy_id] && (
+                      <div className="text-xs" data-testid={`admin-strategy-allocation-whatif-cell-content-${item.strategy_id}`}>
+                        <p data-testid={`admin-strategy-allocation-whatif-weight-${item.strategy_id}`}>
+                          w: {whatIfByStrategy[item.strategy_id].current_weight} → {whatIfByStrategy[item.strategy_id].suggested_weight}
+                        </p>
+                        <p data-testid={`admin-strategy-allocation-whatif-return-${item.strategy_id}`}>
+                          return Δ {whatIfByStrategy[item.strategy_id].projected_return_delta_pct}
+                        </p>
+                        <p data-testid={`admin-strategy-allocation-whatif-risk-${item.strategy_id}`}>
+                          risk Δ {whatIfByStrategy[item.strategy_id].projected_risk_delta_pct}
+                        </p>
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-2" data-testid={`admin-strategy-allocation-actions-${item.strategy_id}`}>
                       <Button variant="outline" onClick={() => saveStrategy(item.strategy_id)} disabled={rowErrors.length > 0 || isOpsReadOnly} data-testid={`admin-strategy-allocation-save-button-${item.strategy_id}`}>Kaydet</Button>
@@ -958,7 +1121,7 @@ export const AdminStrategyAllocationPage = () => {
             })}
             {rows.length === 0 && (
               <tr className="border-t border-slate-800" data-testid="admin-strategy-allocation-empty-row">
-                <td colSpan={13} className="px-3 py-4 text-center text-sm text-slate-400" data-testid="admin-strategy-allocation-empty-text">Strategy allocation kaydı bulunamadı.</td>
+                <td colSpan={14} className="px-3 py-4 text-center text-sm text-slate-400" data-testid="admin-strategy-allocation-empty-text">Strategy allocation kaydı bulunamadı.</td>
               </tr>
             )}
           </tbody>
@@ -985,6 +1148,9 @@ export const AdminStrategyAllocationPage = () => {
               </p>
               <p data-testid={`admin-strategy-allocation-approval-item-reason-${index}`}>
                 requested_by={item.requested_by} · reason={item.reason_note}
+                <span className="ml-2 rounded border border-slate-700 px-1 py-0.5 text-[10px]" data-testid={`admin-strategy-allocation-approval-item-age-${index}`}>
+                  {formatRequestAge(item.created_at, requestAgeTick)}
+                </span>
               </p>
               <p data-testid={`admin-strategy-allocation-approval-item-expiry-${index}`}>
                 expires_at={item.expires_at}

@@ -1,7 +1,10 @@
+import csv
+from io import StringIO
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -17,6 +20,10 @@ from schemas import (
     StrategyAllocationApprovalRequestsResponse,
     StrategyAllocationBulkUpdateRequest,
     StrategyAllocationCreateRequest,
+    StrategyAllocationSnapshotCreateResponse,
+    StrategyAllocationSnapshotsResponse,
+    StrategyAllocationWhatIfRequest,
+    StrategyAllocationWhatIfResponse,
     StrategyAllocationReasonNoteRequest,
     StrategyAllocationRebalanceSuggestRequest,
     StrategyAllocationRebalanceSuggestionResponse,
@@ -43,6 +50,7 @@ from services.portfolio_risk_service import list_risk_clusters, load_portfolio_r
 
 router = APIRouter(prefix="/admin", tags=["admin_phase9_meta"])
 _ALLOCATION_APPROVAL_REQUESTS: dict[str, dict] = {}
+_ALLOCATION_SNAPSHOTS: dict[str, dict] = {}
 
 
 def _now() -> datetime:
@@ -88,6 +96,82 @@ def _queue_allocation_approval_request(
     }
     _ALLOCATION_APPROVAL_REQUESTS[request_id] = row
     return row
+
+
+def _build_snapshot_payload(db: Session, *, created_by: str, reason_note: str) -> dict:
+    rows = list_strategy_allocation_dashboard_rows(db, limit=500)
+    summary = get_strategy_allocation_summary(db)
+    snapshot_id = f"alloc_snapshot_{uuid4().hex[:12]}"
+    payload = {
+        "snapshot_id": snapshot_id,
+        "created_at": _now(),
+        "created_by": created_by,
+        "reason_note": reason_note,
+        "strategy_count": len(rows),
+        "total_weight": float(summary.get("total_weight") or 0),
+        "total_capital": float(summary.get("total_capital") or 0),
+        "used_capital": float(summary.get("used_capital") or 0),
+        "summary": summary,
+        "rows": rows,
+    }
+    _ALLOCATION_SNAPSHOTS[snapshot_id] = payload
+    return payload
+
+
+def _build_what_if_payload(db: Session, strategy_ids: list[str] | None = None) -> dict:
+    suggestion = generate_rebalance_suggestions(db, strategy_ids=strategy_ids)
+    rows = suggestion.get("suggestions") or []
+    if not rows:
+        return {
+            "status": "empty",
+            "message": "What-if için veri bulunamadı",
+            "trace_id": suggestion.get("trace_id") or f"alloc_whatif_{uuid4().hex[:10]}",
+            "read_only": True,
+            "selection_count": int(suggestion.get("selection_count") or 0),
+            "projected_portfolio_return_delta_pct": 0.0,
+            "projected_portfolio_risk_delta_pct": 0.0,
+            "rows": [],
+        }
+
+    mapped_rows = []
+    total_return_delta = 0.0
+    total_risk_delta = 0.0
+    for row in rows:
+        delta = float(row.get("delta") or 0)
+        confidence = float(row.get("confidence") or 0)
+        performance_norm = float(row.get("performance_norm") or 0)
+        decay = float(row.get("decay") or 0)
+
+        projected_return_delta_pct = round(delta * (performance_norm * 40 + confidence * 20), 4)
+        projected_risk_delta_pct = round(delta * ((1 - confidence) * 25 + decay * 15), 4)
+
+        total_return_delta += projected_return_delta_pct
+        total_risk_delta += projected_risk_delta_pct
+
+        mapped_rows.append(
+            {
+                "strategy_id": row.get("strategy_id"),
+                "current_weight": float(row.get("current_weight") or 0),
+                "suggested_weight": float(row.get("suggested_weight") or 0),
+                "weight_delta": round(delta, 8),
+                "confidence": confidence,
+                "performance_norm": performance_norm,
+                "decay": decay,
+                "projected_return_delta_pct": projected_return_delta_pct,
+                "projected_risk_delta_pct": projected_risk_delta_pct,
+            }
+        )
+
+    return {
+        "status": "success",
+        "message": "What-if preview hazır (read-only)",
+        "trace_id": suggestion.get("trace_id") or f"alloc_whatif_{uuid4().hex[:10]}",
+        "read_only": True,
+        "selection_count": int(suggestion.get("selection_count") or 0),
+        "projected_portfolio_return_delta_pct": round(total_return_delta, 4),
+        "projected_portfolio_risk_delta_pct": round(total_risk_delta, 4),
+        "rows": mapped_rows,
+    }
 
 
 def _write_allocation_log(
@@ -151,6 +235,26 @@ def _execute_allocation_approval_request(
             message="Approval sonrası normalize tamamlandı",
             trace_id=str(result.get("trace_id") or request_row.get("request_id")),
             summary=StrategyAllocationSummaryResponse(**(result.get("summary") or {})),
+        )
+
+    if action_type == "snapshot_create":
+        snapshot = _build_snapshot_payload(db, created_by=str(current_user.id), reason_note=reason_note)
+        _write_allocation_log(
+            db,
+            admin_id=current_user.id,
+            action_type="strategy_allocation_snapshot_create",
+            strategy_id="*",
+            previous_state=None,
+            new_state=None,
+            reason_code="SNAPSHOT_CREATED",
+            reason_detail=reason_note,
+            payload={"snapshot_id": snapshot.get("snapshot_id"), "strategy_count": snapshot.get("strategy_count")},
+        )
+        return StrategyAllocationSnapshotCreateResponse(
+            status="success",
+            message="Approval sonrası snapshot oluşturuldu",
+            snapshot=snapshot,
+            trace_id=snapshot.get("snapshot_id"),
         )
 
     if action_type == "create":
@@ -380,6 +484,141 @@ def strategy_allocation_summary(
     _ = current_user
     summary = get_strategy_allocation_summary(db)
     return StrategyAllocationSummaryResponse(**summary)
+
+
+@router.post("/strategy-allocation/snapshots", response_model=StrategyAllocationSnapshotCreateResponse | StrategyAllocationActionEnvelope)
+def strategy_allocation_snapshot_create(
+    payload: StrategyAllocationReasonNoteRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    role = _role_name(current_user)
+    reason_note = _require_reason_note(payload.reason_note)
+    if role == "ops":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops role read-only")
+    if role == "admin":
+        request_row = _queue_allocation_approval_request(
+            action_type="snapshot_create",
+            current_user=current_user,
+            reason_note=reason_note,
+            payload={"body": payload.model_dump()},
+        )
+        return StrategyAllocationActionEnvelope(
+            status="pending_approval",
+            message=f"Snapshot isteği onaya gönderildi: {request_row['request_id']}",
+            trace_id=request_row["request_id"],
+            summary=None,
+        )
+
+    snapshot = _build_snapshot_payload(db, created_by=str(current_user.id), reason_note=reason_note)
+    _write_allocation_log(
+        db,
+        admin_id=current_user.id,
+        action_type="strategy_allocation_snapshot_create",
+        strategy_id="*",
+        previous_state=None,
+        new_state=None,
+        reason_code="SNAPSHOT_CREATED",
+        reason_detail=reason_note,
+        payload={"snapshot_id": snapshot.get("snapshot_id"), "strategy_count": snapshot.get("strategy_count")},
+    )
+    return StrategyAllocationSnapshotCreateResponse(
+        status="success",
+        message="Snapshot oluşturuldu",
+        snapshot=snapshot,
+        trace_id=snapshot.get("snapshot_id"),
+    )
+
+
+@router.get("/strategy-allocation/snapshots", response_model=StrategyAllocationSnapshotsResponse)
+def strategy_allocation_snapshots(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    _ = db
+    rows = sorted(_ALLOCATION_SNAPSHOTS.values(), key=lambda item: item.get("created_at"), reverse=True)
+    return StrategyAllocationSnapshotsResponse(rows=rows)
+
+
+@router.get("/strategy-allocation/export")
+def strategy_allocation_export(
+    format: str = "json",
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    rows = list_strategy_allocation_dashboard_rows(db, limit=500)
+    summary = get_strategy_allocation_summary(db)
+    export_payload = {
+        "exported_at": _now().isoformat(),
+        "summary": summary,
+        "rows": rows,
+    }
+
+    fmt = str(format or "json").lower()
+    if fmt == "json":
+        import json
+
+        return Response(
+            content=json.dumps(export_payload, default=str, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Content-Disposition": 'attachment; filename="strategy_allocation_export.json"'},
+        )
+
+    if fmt == "csv":
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "strategy_id",
+            "capital_weight",
+            "max_capital",
+            "current_capital",
+            "state",
+            "confidence_score",
+            "performance_score",
+            "signal_decay",
+            "execution_quality_score",
+            "exposure_ratio_pct",
+            "drawdown_pct",
+            "state_reason_code",
+        ])
+        for row in rows:
+            writer.writerow(
+                [
+                    row.get("strategy_id"),
+                    row.get("capital_weight"),
+                    row.get("max_capital"),
+                    row.get("current_capital"),
+                    row.get("state"),
+                    row.get("confidence_score"),
+                    row.get("performance_score"),
+                    row.get("signal_decay"),
+                    row.get("execution_quality_score"),
+                    row.get("exposure_ratio_pct"),
+                    row.get("drawdown_pct"),
+                    row.get("state_reason_code"),
+                ]
+            )
+
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="strategy_allocation_export.csv"'},
+        )
+
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="format should be json or csv")
+
+
+@router.post("/strategy-allocation/what-if-simulation", response_model=StrategyAllocationWhatIfResponse)
+def strategy_allocation_what_if_simulation(
+    payload: StrategyAllocationWhatIfRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    result = _build_what_if_payload(db, strategy_ids=payload.strategy_ids)
+    return StrategyAllocationWhatIfResponse(**result)
 
 
 @router.post("/strategy-allocation/normalize", response_model=StrategyAllocationActionEnvelope)
@@ -652,6 +891,7 @@ def strategy_allocation_state_history(
                     "strategy_allocation_bulk_update",
                     "strategy_allocation_normalize",
                     "strategy_allocation_drift_override",
+                    "strategy_allocation_snapshot_create",
                 ]
             )
         )

@@ -2700,6 +2700,55 @@ class StrategyAllocationRebalanceSuggestionResponse(BaseModel):
     suggestions: list[StrategyAllocationRebalanceSuggestionRow] = Field(default_factory=list)
 
 
+class StrategyAllocationSnapshotItem(BaseModel):
+    snapshot_id: str
+    created_at: datetime
+    created_by: str
+    reason_note: str
+    strategy_count: int
+    total_weight: float
+    total_capital: float
+    used_capital: float
+
+
+class StrategyAllocationSnapshotsResponse(BaseModel):
+    rows: list[StrategyAllocationSnapshotItem] = Field(default_factory=list)
+
+
+class StrategyAllocationSnapshotCreateResponse(BaseModel):
+    status: str
+    message: str
+    snapshot: StrategyAllocationSnapshotItem | None = None
+    trace_id: str
+
+
+class StrategyAllocationWhatIfRequest(BaseModel):
+    strategy_ids: list[str] = Field(default_factory=list)
+
+
+class StrategyAllocationWhatIfRow(BaseModel):
+    strategy_id: str
+    current_weight: float
+    suggested_weight: float
+    weight_delta: float
+    confidence: float
+    performance_norm: float
+    decay: float
+    projected_return_delta_pct: float
+    projected_risk_delta_pct: float
+
+
+class StrategyAllocationWhatIfResponse(BaseModel):
+    status: str
+    message: str
+    trace_id: str
+    read_only: bool = True
+    selection_count: int = 0
+    projected_portfolio_return_delta_pct: float = 0
+    projected_portfolio_risk_delta_pct: float = 0
+    rows: list[StrategyAllocationWhatIfRow] = Field(default_factory=list)
+
+
 class StrategyAllocationApprovalRequestItem(BaseModel):
     request_id: str
     action_type: str
