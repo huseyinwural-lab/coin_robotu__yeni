@@ -1,3 +1,26 @@
+## 2026-03-22 — Approval Risk Mini Sparkline (P1 Ek Kapanış) ✅
+
+### Kullanıcı talebi (bu tur)
+- Sadece approval satırına risk değişim sparkline eklenecek
+- Veri kaynağı: `decision_context.risk` + `before_after_summary` (ek API yok)
+- Görünüm: detaylı (çizgi + delta etiketi + risk level renk kodu)
+
+### Uygulananlar
+- Approval listesine `ApprovalRiskSparkline` bileşeni eklendi
+  - 5–7 nokta (deterministic, sentetik ara nokta)
+  - `before → after` net gösterim
+  - Delta etiketi: `+5 risk / -12 risk` formatı
+  - Delta renkleri:
+    - iyileşme (risk düşüşü): yeşil
+    - kötüleşme (risk artışı): kırmızı
+  - Risk level renkleri: LOW yeşil / MED amber / HIGH kırmızı
+- Ek API çağrısı eklenmedi (mevcut decision_context üzerinden üretim)
+
+### Test / Doğrulama
+- Frontend lint PASS
+- UI test subagent doğrulaması: sparkline implementasyonu PASS
+  - rapor: auto_frontend_testing_agent sonucu (Approval panel empty-state nedeniyle live data sınırlı; code-level doğrulama tamam)
+
 ## 2026-03-22 — P1 Tamamlandı ✅ (Bulk Breakdown + Post-Action Monitor + Policy Apply Hook)
 
 ### Kullanıcı önceliği (uygulanan sıra)
