@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
@@ -6,16 +7,32 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
-from models import PortfolioExposureSnapshot, User, UserExecutionIntent
+from models import ManualOverrideLog, PortfolioExposureSnapshot, StrategyAllocation, User, UserExecutionIntent
 from schemas import (
     PortfolioRiskLimitsResponse,
     PortfolioRiskLimitsUpdate,
     RiskClusterResponse,
     RiskClusterUpsertRequest,
+    StrategyAllocationActionEnvelope,
+    StrategyAllocationBulkUpdateRequest,
+    StrategyAllocationCreateRequest,
     StrategyAllocationResponse,
+    StrategyAllocationStateHistoryEntry,
+    StrategyAllocationStateHistoryResponse,
+    StrategyAllocationSummaryResponse,
+    StrategyAllocationThrottleToggleRequest,
     StrategyAllocationUpdateRequest,
 )
-from services.meta_strategy_engine_service import list_strategy_allocations, update_strategy_allocation
+from services.meta_strategy_engine_service import (
+    bulk_update_strategy_allocations,
+    create_strategy_allocation,
+    delete_strategy_allocation,
+    get_strategy_allocation_summary,
+    list_strategy_allocations,
+    normalize_strategy_allocations,
+    toggle_strategy_throttle,
+    update_strategy_allocation,
+)
 from services.portfolio_risk_service import list_risk_clusters, load_portfolio_risk_limits, save_portfolio_risk_limits, upsert_risk_cluster
 
 router = APIRouter(prefix="/admin", tags=["admin_phase9_meta"])
@@ -23,6 +40,35 @@ router = APIRouter(prefix="/admin", tags=["admin_phase9_meta"])
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _write_allocation_log(
+    db: Session,
+    *,
+    admin_id: str,
+    action_type: str,
+    strategy_id: str,
+    previous_state: str | None,
+    new_state: str | None,
+    payload: dict,
+) -> str:
+    trace_id = f"alloc_trace_{uuid4().hex[:12]}"
+    row = ManualOverrideLog(
+        override_id=trace_id,
+        admin_id=str(admin_id),
+        action_type=action_type,
+        reason=f"strategy_allocation::{action_type}",
+        payload={
+            "strategy_id": strategy_id,
+            "previous_state": previous_state,
+            "new_state": new_state,
+            "details": payload,
+        },
+        timestamp=_now(),
+    )
+    db.add(row)
+    db.commit()
+    return trace_id
 
 
 @router.get("/portfolio-risk/limits", response_model=PortfolioRiskLimitsResponse)
@@ -145,6 +191,199 @@ def strategy_allocation_dashboard(
     return [StrategyAllocationResponse.model_validate(row) for row in rows]
 
 
+@router.get("/strategy-allocation/summary", response_model=StrategyAllocationSummaryResponse)
+def strategy_allocation_summary(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    summary = get_strategy_allocation_summary(db)
+    return StrategyAllocationSummaryResponse(**summary)
+
+
+@router.post("/strategy-allocation/normalize", response_model=StrategyAllocationActionEnvelope)
+def strategy_allocation_normalize(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = normalize_strategy_allocations(db)
+        trace_id = _write_allocation_log(
+            db,
+            admin_id=current_user.id,
+            action_type="strategy_allocation_normalize",
+            strategy_id="*",
+            previous_state=None,
+            new_state=None,
+            payload=result,
+        )
+        return StrategyAllocationActionEnvelope(
+            status="success",
+            message="Weight normalize tamamlandı",
+            trace_id=trace_id,
+            summary=StrategyAllocationSummaryResponse(**(result.get("summary") or {})),
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/strategy-allocation", response_model=StrategyAllocationResponse)
+def strategy_allocation_create(
+    payload: StrategyAllocationCreateRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = create_strategy_allocation(db, payload.model_dump())
+        _write_allocation_log(
+            db,
+            admin_id=current_user.id,
+            action_type="strategy_allocation_create",
+            strategy_id=row.strategy_id,
+            previous_state=None,
+            new_state=row.state,
+            payload=payload.model_dump(),
+        )
+        return StrategyAllocationResponse.model_validate(row)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.delete("/strategy-allocation/{strategy_id}", response_model=StrategyAllocationActionEnvelope)
+def strategy_allocation_remove(
+    strategy_id: str,
+    auto_normalize: bool = True,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = delete_strategy_allocation(db, strategy_id, auto_normalize=auto_normalize)
+        trace_id = _write_allocation_log(
+            db,
+            admin_id=current_user.id,
+            action_type="strategy_allocation_delete",
+            strategy_id=strategy_id,
+            previous_state=None,
+            new_state=None,
+            payload=result,
+        )
+        return StrategyAllocationActionEnvelope(
+            status="success",
+            message=f"Strategy silindi: {strategy_id}",
+            trace_id=trace_id,
+            summary=StrategyAllocationSummaryResponse(**(result.get("summary") or {})),
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/strategy-allocation/bulk-update")
+def strategy_allocation_bulk_update(
+    payload: StrategyAllocationBulkUpdateRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = bulk_update_strategy_allocations(db, payload.model_dump())
+        trace_id = _write_allocation_log(
+            db,
+            admin_id=current_user.id,
+            action_type="strategy_allocation_bulk_update",
+            strategy_id="*",
+            previous_state=None,
+            new_state=None,
+            payload={
+                "updated_count": result.get("updated_count", 0),
+                "updated_ids": [row.strategy_id for row in (result.get("updated_rows") or [])],
+                "auto_normalize": payload.auto_normalize,
+            },
+        )
+        return {
+            "status": "success",
+            "message": f"Bulk update tamamlandı ({result.get('updated_count', 0)} strategy)",
+            "trace_id": trace_id,
+            "updated_count": result.get("updated_count", 0),
+            "updated_rows": [StrategyAllocationResponse.model_validate(row).model_dump() for row in (result.get("updated_rows") or [])],
+            "summary": result.get("summary") or {},
+        }
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/strategy-allocation/{strategy_id}/throttle-toggle", response_model=StrategyAllocationResponse)
+def strategy_allocation_throttle_toggle(
+    strategy_id: str,
+    payload: StrategyAllocationThrottleToggleRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    existing = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
+    previous_state = existing.state if existing else None
+    try:
+        row = toggle_strategy_throttle(db, strategy_id, payload.model_dump())
+        _write_allocation_log(
+            db,
+            admin_id=current_user.id,
+            action_type="strategy_allocation_throttle_toggle",
+            strategy_id=strategy_id,
+            previous_state=previous_state,
+            new_state=row.state,
+            payload=payload.model_dump(),
+        )
+        return StrategyAllocationResponse.model_validate(row)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/strategy-allocation/state-history", response_model=StrategyAllocationStateHistoryResponse)
+def strategy_allocation_state_history(
+    limit: int = 100,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    safe_limit = max(min(limit, 200), 1)
+    rows = (
+        db.query(ManualOverrideLog)
+        .filter(
+            ManualOverrideLog.action_type.in_(
+                [
+                    "strategy_allocation_state_change",
+                    "strategy_allocation_throttle_toggle",
+                    "strategy_allocation_create",
+                    "strategy_allocation_delete",
+                    "strategy_allocation_bulk_update",
+                    "strategy_allocation_normalize",
+                ]
+            )
+        )
+        .order_by(ManualOverrideLog.timestamp.desc())
+        .limit(safe_limit)
+        .all()
+    )
+    mapped = []
+    for row in rows:
+        payload = row.payload if isinstance(row.payload, dict) else {}
+        mapped.append(
+            StrategyAllocationStateHistoryEntry(
+                trace_id=row.override_id,
+                strategy_id=str(payload.get("strategy_id") or "*"),
+                action_type=str(row.action_type),
+                previous_state=payload.get("previous_state"),
+                new_state=payload.get("new_state"),
+                admin_id=str(row.admin_id),
+                timestamp=row.timestamp,
+            )
+        )
+
+    return StrategyAllocationStateHistoryResponse(rows=mapped)
+
+
 @router.put("/strategy-allocation/{strategy_id}", response_model=StrategyAllocationResponse)
 def strategy_allocation_update(
     strategy_id: str,
@@ -152,6 +391,21 @@ def strategy_allocation_update(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    _ = current_user
-    row = update_strategy_allocation(db, strategy_id, payload.model_dump(exclude_none=True))
-    return StrategyAllocationResponse.model_validate(row)
+    existing = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
+    previous_state = existing.state if existing else None
+    try:
+        row = update_strategy_allocation(db, strategy_id, payload.model_dump(exclude_none=True))
+        if previous_state and previous_state != row.state:
+            _write_allocation_log(
+                db,
+                admin_id=current_user.id,
+                action_type="strategy_allocation_state_change",
+                strategy_id=strategy_id,
+                previous_state=previous_state,
+                new_state=row.state,
+                payload=payload.model_dump(exclude_none=True),
+            )
+        return StrategyAllocationResponse.model_validate(row)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

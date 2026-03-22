@@ -2566,11 +2566,81 @@ class StrategyAllocationResponse(BaseModel):
     updated_at: datetime
 
 
+class StrategyAllocationSummaryItem(BaseModel):
+    strategy_id: str
+    current_capital: float
+    max_capital: float
+    overflow: float
+
+
+class StrategyAllocationSummaryResponse(BaseModel):
+    total_strategies: int
+    total_weight: float
+    weight_balance_delta: float
+    total_capital: float
+    used_capital: float
+    available_capital: float
+    over_allocated_count: int
+    over_allocated_strategies: list[StrategyAllocationSummaryItem] = Field(default_factory=list)
+
+
 class StrategyAllocationUpdateRequest(BaseModel):
-    capital_weight: float | None = Field(default=None, gt=0)
+    capital_weight: float | None = Field(default=None, ge=0, le=1)
     max_capital: float | None = Field(default=None, ge=0)
     current_capital: float | None = Field(default=None, ge=0)
     state: str | None = None
+    confirm_primary: str | None = None
+    confirm_secondary: str | None = None
+
+
+class StrategyAllocationCreateRequest(BaseModel):
+    strategy_id: str
+    capital_weight: float = Field(default=0, ge=0, le=1)
+    max_capital: float = Field(default=0, ge=0)
+    current_capital: float = Field(default=0, ge=0)
+    state: str = "ACTIVE"
+
+
+class StrategyAllocationBulkUpdateItem(BaseModel):
+    strategy_id: str
+    capital_weight: float | None = Field(default=None, ge=0, le=1)
+    max_capital: float | None = Field(default=None, ge=0)
+    current_capital: float | None = Field(default=None, ge=0)
+    state: str | None = None
+    confirm_primary: str | None = None
+    confirm_secondary: str | None = None
+
+
+class StrategyAllocationBulkUpdateRequest(BaseModel):
+    updates: list[StrategyAllocationBulkUpdateItem]
+    auto_normalize: bool = False
+
+
+class StrategyAllocationThrottleToggleRequest(BaseModel):
+    confirm_primary: str
+    confirm_secondary: str
+
+
+class StrategyAllocationStateHistoryEntry(BaseModel):
+    trace_id: str
+    strategy_id: str
+    action_type: str
+    previous_state: str | None = None
+    new_state: str | None = None
+    admin_id: str
+    timestamp: datetime
+
+
+class StrategyAllocationStateHistoryResponse(BaseModel):
+    rows: list[StrategyAllocationStateHistoryEntry] = Field(default_factory=list)
+
+
+class StrategyAllocationActionEnvelope(BaseModel):
+    status: str
+    message: str
+    trace_id: str
+    summary: StrategyAllocationSummaryResponse | None = None
+
 
 
 class CanonicalStrategyRegistryResponse(BaseModel):

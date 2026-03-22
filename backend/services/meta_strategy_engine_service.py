@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -16,8 +17,134 @@ def _safe_float(value, fallback: float = 0.0) -> float:
         return fallback
 
 
+ALLOWED_STATES = {"ACTIVE", "THROTTLED", "DISABLED"}
+DOUBLE_CONFIRM_PRIMARY = "CONFIRM"
+DOUBLE_CONFIRM_SECONDARY = "STATE CHANGE"
+
+
+def _normalized_state(value: str | None, fallback: str = "ACTIVE") -> str:
+    state = str(value or fallback).upper().strip()
+    return state if state in ALLOWED_STATES else fallback
+
+
+def _validate_non_empty_strategy_id(strategy_id: str) -> str:
+    key = str(strategy_id or "").strip()
+    if not key:
+        raise ValueError("strategy_id boş olamaz")
+    if len(key) > 80:
+        raise ValueError("strategy_id 80 karakterden uzun olamaz")
+    return key
+
+
+def _assert_non_negative_numeric(field_name: str, value: float) -> float:
+    val = _safe_float(value, float("nan"))
+    if val != val:  # NaN check
+        raise ValueError(f"{field_name} sayısal olmalı")
+    if val < 0:
+        raise ValueError(f"{field_name} negatif olamaz")
+    return val
+
+
+def _assert_positive_numeric(field_name: str, value: float) -> float:
+    val = _safe_float(value, float("nan"))
+    if val != val:
+        raise ValueError(f"{field_name} sayısal olmalı")
+    if val <= 0:
+        raise ValueError(f"{field_name} 0'dan büyük olmalı")
+    return val
+
+
+def _collect_summary(rows: list[StrategyAllocation]) -> dict:
+    total_weight = round(sum(_safe_float(row.capital_weight, 0) for row in rows), 6)
+    total_capital = round(sum(_safe_float(row.max_capital, 0) for row in rows), 4)
+    used_capital = round(sum(_safe_float(row.current_capital, 0) for row in rows), 4)
+    available_capital = round(max(total_capital - used_capital, 0.0), 4)
+
+    over_allocated = []
+    for row in rows:
+        current = _safe_float(row.current_capital, 0)
+        maximum = _safe_float(row.max_capital, 0)
+        if current > maximum:
+            over_allocated.append(
+                {
+                    "strategy_id": row.strategy_id,
+                    "current_capital": round(current, 4),
+                    "max_capital": round(maximum, 4),
+                    "overflow": round(current - maximum, 4),
+                }
+            )
+
+    return {
+        "total_strategies": len(rows),
+        "total_weight": total_weight,
+        "weight_balance_delta": round(total_weight - 1.0, 6),
+        "total_capital": total_capital,
+        "used_capital": used_capital,
+        "available_capital": available_capital,
+        "over_allocated_count": len(over_allocated),
+        "over_allocated_strategies": over_allocated,
+    }
+
+
+def _ensure_weight_is_one(rows: list[StrategyAllocation], *, tolerance: float = 0.0001) -> None:
+    summary = _collect_summary(rows)
+    if abs(summary["weight_balance_delta"]) > tolerance:
+        raise ValueError(
+            f"Toplam weight 1 olmalı. current_total={summary['total_weight']} delta={summary['weight_balance_delta']}"
+        )
+
+
+def _ensure_capital_limit(rows: list[StrategyAllocation]) -> None:
+    summary = _collect_summary(rows)
+    if summary["over_allocated_count"] > 0:
+        first = (summary["over_allocated_strategies"] or [])[0]
+        raise ValueError(
+            "Capital limit aşıldı: "
+            f"{first.get('strategy_id')} current={first.get('current_capital')} "
+            f"> max={first.get('max_capital')} overflow={first.get('overflow')}"
+        )
+
+
+def _apply_normalize(rows: list[StrategyAllocation]) -> None:
+    if not rows:
+        return
+    total_weight = sum(max(_safe_float(row.capital_weight, 0), 0) for row in rows)
+    if total_weight <= 0:
+        equal_weight = round(1 / len(rows), 8)
+        for row in rows:
+            row.capital_weight = equal_weight
+            row.updated_at = _now()
+        rows[-1].capital_weight = round(1 - sum(_safe_float(r.capital_weight, 0) for r in rows[:-1]), 8)
+        return
+
+    normalized_values = []
+    for row in rows:
+        normalized_values.append(max(_safe_float(row.capital_weight, 0), 0) / total_weight)
+
+    rounded_values = [round(value, 8) for value in normalized_values]
+    if rounded_values:
+        rounded_values[-1] = round(1 - sum(rounded_values[:-1]), 8)
+
+    for idx, row in enumerate(rows):
+        row.capital_weight = max(rounded_values[idx], 0)
+        row.updated_at = _now()
+
+
+def _state_change_requires_double_confirm(before_state: str, after_state: str) -> bool:
+    return _normalized_state(before_state) != _normalized_state(after_state)
+
+
+def _ensure_double_confirm(payload: dict) -> None:
+    primary = str(payload.get("confirm_primary") or "").strip().upper()
+    secondary = str(payload.get("confirm_secondary") or "").strip().upper()
+    if primary != DOUBLE_CONFIRM_PRIMARY or secondary != DOUBLE_CONFIRM_SECONDARY:
+        raise ValueError(
+            "State change için double confirm zorunlu (confirm_primary=CONFIRM, confirm_secondary=STATE CHANGE)"
+        )
+
+
 def get_or_create_strategy_allocation(db: Session, strategy_id: str) -> StrategyAllocation:
-    key = str(strategy_id or "unknown_strategy").strip() or "unknown_strategy"
+    key = _validate_non_empty_strategy_id(strategy_id)
     row = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == key).first()
     if row:
         return row
@@ -40,9 +167,17 @@ def get_or_create_strategy_allocation(db: Session, strategy_id: str) -> Strategy
     return row
 
 
+def get_existing_strategy_allocation(db: Session, strategy_id: str) -> StrategyAllocation:
+    key = _validate_non_empty_strategy_id(strategy_id)
+    row = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == key).first()
+    if not row:
+        raise ValueError(f"Strategy bulunamadı: {key}")
+    return row
+
+
 def recalculate_strategy_drift(db: Session, strategy_id: str) -> StrategyAllocation:
     row = get_or_create_strategy_allocation(db, strategy_id)
-    disabled_lock = str(row.state or "").upper() == "DISABLED"
+    manual_lock = str(row.state or "").upper() in {"DISABLED", "THROTTLED"}
     lookback_from = _now() - timedelta(days=7)
 
     exec_rows = (
@@ -79,7 +214,7 @@ def recalculate_strategy_drift(db: Session, strategy_id: str) -> StrategyAllocat
     row.realized_return = round(realized_return, 4)
     row.performance_score = round((row.realized_return / max(row.expected_return, 0.1)) * 100, 4)
 
-    if not disabled_lock:
+    if not manual_lock:
         if row.signal_decay >= 0.8 or row.execution_quality_score < 40:
             row.state = "DISABLED"
         elif row.signal_decay >= 0.55 or row.execution_quality_score < 60 or row.performance_score < 35:
@@ -166,21 +301,209 @@ def list_strategy_allocations(db: Session, limit: int = 200) -> list[StrategyAll
     return db.query(StrategyAllocation).order_by(StrategyAllocation.updated_at.desc()).limit(limit).all()
 
 
+def get_strategy_allocation_summary(db: Session) -> dict:
+    rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+    return _collect_summary(rows)
+
+
+def create_strategy_allocation(db: Session, payload: dict) -> StrategyAllocation:
+    strategy_id = _validate_non_empty_strategy_id(payload.get("strategy_id"))
+    exists = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
+    if exists:
+        raise ValueError(f"Strategy zaten mevcut: {strategy_id}")
+
+    capital_weight = _assert_non_negative_numeric("capital_weight", payload.get("capital_weight", 0.0))
+    if capital_weight > 1:
+        raise ValueError("capital_weight 1'i aşamaz")
+    max_capital = _assert_non_negative_numeric("max_capital", payload.get("max_capital", 0.0))
+    current_capital = _assert_non_negative_numeric("current_capital", payload.get("current_capital", 0.0))
+    if current_capital > max_capital:
+        raise ValueError("current_capital max_capital değerini aşamaz")
+
+    row = StrategyAllocation(
+        strategy_id=strategy_id,
+        capital_weight=capital_weight,
+        max_capital=max_capital,
+        current_capital=current_capital,
+        confidence_score=max(_safe_float(payload.get("confidence_score"), 0), 0),
+        performance_score=max(_safe_float(payload.get("performance_score"), 0), 0),
+        state=_normalized_state(payload.get("state"), "ACTIVE"),
+        expected_return=max(_safe_float(payload.get("expected_return"), 0), 0),
+        realized_return=_safe_float(payload.get("realized_return"), 0),
+        signal_decay=max(_safe_float(payload.get("signal_decay"), 0), 0),
+        execution_quality_score=max(_safe_float(payload.get("execution_quality_score"), 0), 0),
+        updated_at=_now(),
+    )
+    db.add(row)
+
+    try:
+        db.flush()
+        all_rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+        _ensure_capital_limit(all_rows)
+        _ensure_weight_is_one(all_rows)
+        db.commit()
+        db.refresh(row)
+        return row
+    except Exception:
+        db.rollback()
+        raise
+
+
+def delete_strategy_allocation(db: Session, strategy_id: str, *, auto_normalize: bool = False) -> dict:
+    key = _validate_non_empty_strategy_id(strategy_id)
+    row = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == key).first()
+    if not row:
+        raise ValueError(f"Strategy bulunamadı: {key}")
+
+    db.delete(row)
+    try:
+        db.flush()
+        remaining = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+        if remaining and auto_normalize:
+            _apply_normalize(remaining)
+        if remaining:
+            _ensure_capital_limit(remaining)
+            _ensure_weight_is_one(remaining)
+        summary = _collect_summary(remaining)
+        db.commit()
+        return {
+            "deleted_strategy_id": key,
+            "auto_normalized": bool(auto_normalize),
+            "summary": summary,
+            "trace_id": f"strategy_alloc_delete_{uuid4().hex[:10]}",
+        }
+    except Exception:
+        db.rollback()
+        raise
+
+
+def normalize_strategy_allocations(db: Session) -> dict:
+    rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+    if not rows:
+        raise ValueError("Normalize için strategy allocation satırı bulunamadı")
+
+    try:
+        _apply_normalize(rows)
+        _ensure_capital_limit(rows)
+        _ensure_weight_is_one(rows)
+        summary = _collect_summary(rows)
+        db.commit()
+        return {
+            "status": "normalized",
+            "trace_id": f"strategy_alloc_norm_{uuid4().hex[:10]}",
+            "summary": summary,
+        }
+    except Exception:
+        db.rollback()
+        raise
+
+
 def update_strategy_allocation(db: Session, strategy_id: str, payload: dict) -> StrategyAllocation:
-    row = get_or_create_strategy_allocation(db, strategy_id)
+    row = get_existing_strategy_allocation(db, strategy_id)
+    previous_state = _normalized_state(row.state)
 
     if "capital_weight" in payload:
-        row.capital_weight = max(_safe_float(payload.get("capital_weight"), row.capital_weight), 0.01)
+        row.capital_weight = _assert_non_negative_numeric("capital_weight", payload.get("capital_weight"))
+        if row.capital_weight > 1:
+            raise ValueError("capital_weight 1'i aşamaz")
     if "max_capital" in payload:
-        row.max_capital = max(_safe_float(payload.get("max_capital"), row.max_capital), 0)
+        row.max_capital = _assert_non_negative_numeric("max_capital", payload.get("max_capital"))
     if "current_capital" in payload:
-        row.current_capital = max(_safe_float(payload.get("current_capital"), row.current_capital), 0)
+        row.current_capital = _assert_non_negative_numeric("current_capital", payload.get("current_capital"))
     if "state" in payload:
-        state = str(payload.get("state") or row.state).upper()
-        if state in {"ACTIVE", "THROTTLED", "DISABLED"}:
-            row.state = state
+        state = _normalized_state(payload.get("state"), previous_state)
+        if _state_change_requires_double_confirm(previous_state, state):
+            _ensure_double_confirm(payload)
+        row.state = state
+
+    if row.current_capital > row.max_capital:
+        raise ValueError("current_capital max_capital değerini aşamaz")
 
     row.updated_at = _now()
-    db.commit()
-    db.refresh(row)
-    return row
+    try:
+        rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+        _ensure_capital_limit(rows)
+        _ensure_weight_is_one(rows)
+        db.commit()
+        db.refresh(row)
+        return row
+    except Exception:
+        db.rollback()
+        raise
+
+
+def toggle_strategy_throttle(db: Session, strategy_id: str, payload: dict) -> StrategyAllocation:
+    row = get_existing_strategy_allocation(db, strategy_id)
+    if _normalized_state(row.state) == "DISABLED":
+        raise ValueError("DISABLED strategy throttle toggle ile değiştirilemez")
+
+    _ensure_double_confirm(payload)
+    row.state = "ACTIVE" if _normalized_state(row.state) == "THROTTLED" else "THROTTLED"
+    row.updated_at = _now()
+    try:
+        rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+        _ensure_capital_limit(rows)
+        _ensure_weight_is_one(rows)
+        db.commit()
+        db.refresh(row)
+        return row
+    except Exception:
+        db.rollback()
+        raise
+
+
+def bulk_update_strategy_allocations(db: Session, payload: dict) -> dict:
+    updates = payload.get("updates") or []
+    if not updates:
+        raise ValueError("Bulk update için en az 1 strategy gerekli")
+
+    updated_ids: list[str] = []
+    for item in updates:
+        strategy_id = _validate_non_empty_strategy_id(item.get("strategy_id"))
+        row = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
+        if not row:
+            raise ValueError(f"Strategy bulunamadı: {strategy_id}")
+
+        prev_state = _normalized_state(row.state)
+        if "capital_weight" in item and item.get("capital_weight") is not None:
+            row.capital_weight = _assert_non_negative_numeric("capital_weight", item.get("capital_weight"))
+            if row.capital_weight > 1:
+                raise ValueError(f"capital_weight 1'i aşamaz ({strategy_id})")
+        if "max_capital" in item and item.get("max_capital") is not None:
+            row.max_capital = _assert_non_negative_numeric("max_capital", item.get("max_capital"))
+        if "current_capital" in item and item.get("current_capital") is not None:
+            row.current_capital = _assert_non_negative_numeric("current_capital", item.get("current_capital"))
+        if "state" in item and item.get("state"):
+            next_state = _normalized_state(item.get("state"), prev_state)
+            if _state_change_requires_double_confirm(prev_state, next_state):
+                _ensure_double_confirm(item)
+            row.state = next_state
+
+        if row.current_capital > row.max_capital:
+            raise ValueError(f"current_capital max_capital değerini aşamaz ({strategy_id})")
+        row.updated_at = _now()
+        updated_ids.append(strategy_id)
+
+    if payload.get("auto_normalize"):
+        _apply_normalize(db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all())
+
+    try:
+        rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+        _ensure_capital_limit(rows)
+        _ensure_weight_is_one(rows)
+        db.commit()
+        updated_rows = (
+            db.query(StrategyAllocation)
+            .filter(StrategyAllocation.strategy_id.in_(updated_ids))
+            .order_by(StrategyAllocation.strategy_id.asc())
+            .all()
+        )
+        return {
+            "trace_id": f"strategy_alloc_bulk_{uuid4().hex[:10]}",
+            "updated_count": len(updated_rows),
+            "updated_rows": updated_rows,
+            "summary": _collect_summary(rows),
+        }
+    except Exception:
+        db.rollback()
+        raise
