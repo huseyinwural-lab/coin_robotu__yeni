@@ -33,6 +33,7 @@ import { BacktestInsightsPage } from "@/pages/BacktestInsightsPage";
 import { BotProfilesPage } from "@/pages/BotProfilesPage";
 import { CorrelationMatrixPage } from "@/pages/CorrelationMatrixPage";
 import { ExecutionPoliciesPage } from "@/pages/ExecutionPoliciesPage";
+import { ExecutionAnalyticsPage } from "@/pages/ExecutionAnalyticsPage";
 import { ExecutionStatesPage } from "@/pages/ExecutionStatesPage";
 import { ExecutionIdempotencyPage } from "@/pages/ExecutionIdempotencyPage";
 import { ExecutionTracePage } from "@/pages/ExecutionTracePage";
@@ -188,6 +189,7 @@ function App() {
             <Route path="failed-events" element={<FailedEventsPage />} />
             <Route path="state-rebuild" element={<StateRebuildLogsPage />} />
             <Route path="execution/states" element={<ExecutionStatesPage />} />
+            <Route path="execution/analytics" element={<ExecutionAnalyticsPage />} />
             <Route path="execution/failures" element={<FailedEventsPage />} />
             <Route path="execution/idempotency" element={<ExecutionIdempotencyPage />} />
             <Route path="execution/trace" element={<ExecutionTracePage />} />

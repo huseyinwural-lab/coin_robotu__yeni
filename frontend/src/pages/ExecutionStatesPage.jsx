@@ -193,8 +193,10 @@ export const ExecutionStatesPage = () => {
         symbol: filters.symbol || null,
         strategy: filters.strategy || null,
         order_id: filters.order_id || null,
-        time_from: filters.time_from || null,
-        time_to: filters.time_to || null,
+        correlation_id: null,
+        execution_event_id: null,
+        time_from: null,
+        time_to: null,
       };
 
       if (exportScopeType === "correlation_id") {

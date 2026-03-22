@@ -1,0 +1,276 @@
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { apiClient } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { toast } from "sonner";
+
+const SOURCE_OPTIONS = ["all", "production", "paper", "simulation", "replay"];
+const STATUS_OPTIONS = ["all", "filled", "timeout", "rejected", "failed", "cancelled", "submitted", "pending"];
+const readFilter = (sp, key, fallback = "") => sp.get(key) || fallback;
+
+export const ExecutionAnalyticsPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [loading, setLoading] = useState(false);
+  const [refreshMs, setRefreshMs] = useState(10000);
+  const [summary, setSummary] = useState(null);
+  const [stateLatency, setStateLatency] = useState([]);
+  const [failureTrend, setFailureTrend] = useState([]);
+  const [failureClasses, setFailureClasses] = useState([]);
+
+  const filters = useMemo(
+    () => ({
+      search: readFilter(searchParams, "search"),
+      state: readFilter(searchParams, "state", "all"),
+      status: readFilter(searchParams, "status", "all"),
+      source_type: readFilter(searchParams, "source_type", "all"),
+      symbol: readFilter(searchParams, "symbol"),
+      strategy: readFilter(searchParams, "strategy"),
+      correlation_id: readFilter(searchParams, "correlation_id"),
+      order_id: readFilter(searchParams, "order_id"),
+      time_from: readFilter(searchParams, "time_from"),
+      time_to: readFilter(searchParams, "time_to"),
+      snapshot_at: readFilter(searchParams, "snapshot_at"),
+    }),
+    [searchParams],
+  );
+
+  const updateFilter = (key, value) => {
+    const next = new URLSearchParams(searchParams);
+    if (!value || value === "all") {
+      next.delete(key);
+    } else {
+      next.set(key, value);
+    }
+    setSearchParams(next, { replace: true });
+  };
+
+  const buildParams = () => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (!value || value === "all") return;
+      params.set(key, value);
+    });
+    return params.toString();
+  };
+
+  const loadAnalytics = async () => {
+    setLoading(true);
+    try {
+      const query = buildParams();
+      const [summaryRes, stateLatencyRes, failureRes] = await Promise.all([
+        apiClient.get(`/admin-phase3/execution-analytics/summary?${query}`),
+        apiClient.get(`/admin-phase3/execution-analytics/state-latency?${query}`),
+        apiClient.get(`/admin-phase3/execution-analytics/failure-trends?${query}`),
+      ]);
+      setSummary(summaryRes.data || null);
+      setStateLatency(stateLatencyRes.data?.rows || []);
+      setFailureTrend(failureRes.data?.daily_trend || []);
+      setFailureClasses(failureRes.data?.top_failure_classes || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Execution analytics yüklenemedi");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [searchParams]);
+
+  useEffect(() => {
+    const timer = setInterval(loadAnalytics, refreshMs);
+    return () => clearInterval(timer);
+  }, [refreshMs, searchParams]);
+
+  const totals = summary?.totals || {};
+  const timeoutMetrics = summary?.timeout_metrics || {};
+  const retryMetrics = summary?.retry_metrics || {};
+  const failureMetrics = summary?.failure_metrics || {};
+
+  return (
+    <section className="space-y-4" data-testid="execution-control-analytics-page">
+      <div className="grid gap-3 md:grid-cols-6" data-testid="execution-control-analytics-filters">
+        <div>
+          <Label>search</Label>
+          <Input value={filters.search} onChange={(e) => updateFilter("search", e.target.value)} data-testid="execution-control-analytics-search-input" />
+        </div>
+        <div>
+          <Label>state</Label>
+          <Select value={filters.state || "all"} onValueChange={(v) => updateFilter("state", v)}>
+            <SelectTrigger data-testid="execution-control-analytics-state-select"><SelectValue /></SelectTrigger>
+            <SelectContent>{["all", "created", "submitted", "acknowledged", "partially_filled", "timeout", "fallback_submitted", "filled", "rejected", "failed", "cancelled"].map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>status</Label>
+          <Select value={filters.status || "all"} onValueChange={(v) => updateFilter("status", v)}>
+            <SelectTrigger data-testid="execution-control-analytics-status-select"><SelectValue /></SelectTrigger>
+            <SelectContent>{STATUS_OPTIONS.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>source_type</Label>
+          <Select value={filters.source_type || "all"} onValueChange={(v) => updateFilter("source_type", v)}>
+            <SelectTrigger data-testid="execution-control-analytics-source-select"><SelectValue /></SelectTrigger>
+            <SelectContent>{SOURCE_OPTIONS.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label>symbol</Label>
+          <Input value={filters.symbol} onChange={(e) => updateFilter("symbol", e.target.value)} data-testid="execution-control-analytics-symbol-input" />
+        </div>
+        <div>
+          <Label>strategy</Label>
+          <Input value={filters.strategy} onChange={(e) => updateFilter("strategy", e.target.value)} data-testid="execution-control-analytics-strategy-input" />
+        </div>
+        <div>
+          <Label>correlation_id</Label>
+          <Input value={filters.correlation_id} onChange={(e) => updateFilter("correlation_id", e.target.value)} data-testid="execution-control-analytics-correlation-input" />
+        </div>
+        <div>
+          <Label>order_id</Label>
+          <Input value={filters.order_id} onChange={(e) => updateFilter("order_id", e.target.value)} data-testid="execution-control-analytics-order-id-input" />
+        </div>
+        <div>
+          <Label>time_from (ISO)</Label>
+          <Input value={filters.time_from} onChange={(e) => updateFilter("time_from", e.target.value)} placeholder="2026-03-22T00:00:00+00:00" data-testid="execution-control-analytics-time-from-input" />
+        </div>
+        <div>
+          <Label>time_to (ISO)</Label>
+          <Input value={filters.time_to} onChange={(e) => updateFilter("time_to", e.target.value)} placeholder="2026-03-22T23:59:59+00:00" data-testid="execution-control-analytics-time-to-input" />
+        </div>
+        <div>
+          <Label>snapshot_at (ISO)</Label>
+          <Input value={filters.snapshot_at} onChange={(e) => updateFilter("snapshot_at", e.target.value)} placeholder="2026-03-22T23:59:59+00:00" data-testid="execution-control-analytics-snapshot-input" />
+        </div>
+        <div>
+          <Label>refresh</Label>
+          <Select value={String(refreshMs)} onValueChange={(v) => setRefreshMs(Number(v))}>
+            <SelectTrigger data-testid="execution-control-analytics-refresh-select"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5000">5s</SelectItem>
+              <SelectItem value="10000">10s</SelectItem>
+              <SelectItem value="20000">20s</SelectItem>
+              <SelectItem value="30000">30s</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2" data-testid="execution-control-analytics-filter-actions">
+        <Button onClick={loadAnalytics} data-testid="execution-control-analytics-refresh-button">Yenile</Button>
+        <Button variant="outline" onClick={() => setSearchParams(new URLSearchParams(), { replace: true })} data-testid="execution-control-analytics-clear-filters-button">Temizle</Button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4" data-testid="execution-control-analytics-summary-grid">
+        <article className="border border-slate-800 bg-slate-900 p-3" data-testid="execution-control-analytics-total-transitions-card">
+          <p className="text-xs text-slate-400">total transitions</p>
+          <p className="text-lg font-semibold">{totals.transitions || 0}</p>
+        </article>
+        <article className="border border-slate-800 bg-slate-900 p-3" data-testid="execution-control-analytics-total-events-card">
+          <p className="text-xs text-slate-400">total events</p>
+          <p className="text-lg font-semibold">{totals.events || 0}</p>
+        </article>
+        <article className="border border-slate-800 bg-slate-900 p-3" data-testid="execution-control-analytics-timeout-rate-card">
+          <p className="text-xs text-slate-400">timeout rate</p>
+          <p className="text-lg font-semibold">{timeoutMetrics.timeout_rate || 0}</p>
+        </article>
+        <article className="border border-slate-800 bg-slate-900 p-3" data-testid="execution-control-analytics-failure-rate-card">
+          <p className="text-xs text-slate-400">failure rate</p>
+          <p className="text-lg font-semibold">{failureMetrics.failure_rate || 0}</p>
+        </article>
+      </div>
+
+      <div className="rounded border border-slate-700 bg-slate-950 p-3 text-xs" data-testid="execution-control-analytics-snapshot-meta">
+        <p data-testid="execution-control-analytics-snapshot-at">snapshot_at={summary?.snapshot_at || "-"}</p>
+        <p data-testid="execution-control-analytics-retry-metrics">retry_count={retryMetrics.retry_count || 0} · retry_success_ratio={retryMetrics.retry_success_ratio || 0} · fallback_usage_rate={retryMetrics.fallback_usage_rate || 0}</p>
+        <p data-testid="execution-control-analytics-failure-metrics">failed_or_rejected={failureMetrics.failed_or_rejected_count || 0} · dead_letter={failureMetrics.dead_letter_count || 0}</p>
+        <p data-testid="execution-control-analytics-loading-state">loading={loading ? "true" : "false"}</p>
+      </div>
+
+      <div className="overflow-x-auto border border-slate-800 bg-slate-900" data-testid="execution-control-analytics-state-latency-table-wrapper">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>state</TableHead>
+              <TableHead>count</TableHead>
+              <TableHead>avg_latency_ms</TableHead>
+              <TableHead>min_latency_ms</TableHead>
+              <TableHead>max_latency_ms</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {stateLatency.map((row) => (
+              <TableRow key={row.state} data-testid={`execution-control-analytics-state-latency-row-${row.state}`}>
+                <TableCell>{row.state}</TableCell>
+                <TableCell>{row.count}</TableCell>
+                <TableCell>{row.avg_latency_ms}</TableCell>
+                <TableCell>{row.min_latency_ms ?? "-"}</TableCell>
+                <TableCell>{row.max_latency_ms ?? "-"}</TableCell>
+              </TableRow>
+            ))}
+            {!stateLatency.length && (
+              <TableRow><TableCell colSpan={5}>Kayıt yok</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2" data-testid="execution-control-analytics-failure-section">
+        <div className="overflow-x-auto border border-slate-800 bg-slate-900" data-testid="execution-control-analytics-failure-trend-table-wrapper">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>date</TableHead>
+                <TableHead>total</TableHead>
+                <TableHead>dead_letter</TableHead>
+                <TableHead>resolved</TableHead>
+                <TableHead>open</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {failureTrend.map((row) => (
+                <TableRow key={row.date} data-testid={`execution-control-analytics-failure-trend-row-${row.date}`}>
+                  <TableCell>{row.date}</TableCell>
+                  <TableCell>{row.total_failures}</TableCell>
+                  <TableCell>{row.dead_letter_count}</TableCell>
+                  <TableCell>{row.resolved_count}</TableCell>
+                  <TableCell>{row.open_count}</TableCell>
+                </TableRow>
+              ))}
+              {!failureTrend.length && (
+                <TableRow><TableCell colSpan={5}>Kayıt yok</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="overflow-x-auto border border-slate-800 bg-slate-900" data-testid="execution-control-analytics-failure-classes-table-wrapper">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>failure_class</TableHead>
+                <TableHead>count</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {failureClasses.map((row) => (
+                <TableRow key={row.failure_class} data-testid={`execution-control-analytics-failure-class-row-${row.failure_class}`}>
+                  <TableCell>{row.failure_class}</TableCell>
+                  <TableCell>{row.count}</TableCell>
+                </TableRow>
+              ))}
+              {!failureClasses.length && (
+                <TableRow><TableCell colSpan={2}>Kayıt yok</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    </section>
+  );
+};

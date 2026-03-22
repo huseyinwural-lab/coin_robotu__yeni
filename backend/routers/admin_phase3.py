@@ -48,7 +48,6 @@ from schemas import (
     ExecutionStateDetailResponse,
     ExecutionAnalyticsSnapshotSummaryResponse,
     IncidentSnapshotExportRequest,
-    IncidentSnapshotExportResponse,
     ExecutionStateTransitionResponse,
     ExecutionPolicyUpdate,
     FailedEventResponse,
@@ -218,7 +217,10 @@ def _require_incident_export_scope(payload: IncidentSnapshotExportRequest) -> tu
     if active_scopes == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="correlation_id veya execution_event_id veya time range zorunlu")
     if active_scopes > 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tek scope kullanın: correlation_id veya execution_event_id veya time range")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Tek scope kullanın: correlation_id veya execution_event_id veya time range",
+        )
 
     if has_corr:
         return "correlation_id", {"correlation_id": str(payload.correlation_id).strip()}
@@ -779,23 +781,21 @@ def execution_state_detail(
     )
 
 
-@router.get("/execution-analytics", response_model=ExecutionAnalyticsSnapshotSummaryResponse)
-def execution_analytics_summary(
-    _: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-    state: str | None = Query(default=None),
-    source_type: str | None = Query(default=None),
-    symbol: str | None = Query(default=None),
-    strategy: str | None = Query(default=None),
-    status_value: str | None = Query(default=None, alias="status"),
-    status_filter: str | None = Query(default=None),
-    correlation_id: str | None = Query(default=None),
-    order_id: str | None = Query(default=None),
-    search: str | None = Query(default=None),
-    time_from: str | None = Query(default=None),
-    time_to: str | None = Query(default=None),
-    snapshot_at: str | None = Query(default=None),
-):
+def _resolve_execution_analytics_filters(
+    *,
+    state: str | None,
+    source_type: str | None,
+    symbol: str | None,
+    strategy: str | None,
+    status_value: str | None,
+    status_filter: str | None,
+    correlation_id: str | None,
+    order_id: str | None,
+    search: str | None,
+    time_from: str | None,
+    time_to: str | None,
+    snapshot_at: str | None,
+) -> dict:
     normalized_state = _normalize_enum(state, STATE_ENUM, "state")
     normalized_source = _normalize_enum(source_type, SOURCE_TYPE_ENUM, "source_type")
     normalized_status = _normalize_enum(status_value or status_filter, STATUS_ENUM, "status")
@@ -807,19 +807,64 @@ def execution_analytics_summary(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="time_from <= time_to olmalı")
 
     effective_snapshot = parsed_snapshot_at or parsed_time_to or datetime.now(timezone.utc).replace(microsecond=0)
+    return {
+        "state": normalized_state,
+        "source_type": normalized_source,
+        "symbol": symbol,
+        "strategy": strategy,
+        "status": normalized_status,
+        "correlation_id": correlation_id,
+        "order_id": order_id,
+        "search": search,
+        "time_from": parsed_time_from,
+        "time_to": effective_snapshot,
+        "snapshot_at": effective_snapshot,
+    }
+
+
+def _build_execution_analytics_summary(
+    db: Session,
+    *,
+    state: str | None,
+    source_type: str | None,
+    symbol: str | None,
+    strategy: str | None,
+    status_value: str | None,
+    status_filter: str | None,
+    correlation_id: str | None,
+    order_id: str | None,
+    search: str | None,
+    time_from: str | None,
+    time_to: str | None,
+    snapshot_at: str | None,
+) -> ExecutionAnalyticsSnapshotSummaryResponse:
+    filters_ctx = _resolve_execution_analytics_filters(
+        state=state,
+        source_type=source_type,
+        symbol=symbol,
+        strategy=strategy,
+        status_value=status_value,
+        status_filter=status_filter,
+        correlation_id=correlation_id,
+        order_id=order_id,
+        search=search,
+        time_from=time_from,
+        time_to=time_to,
+        snapshot_at=snapshot_at,
+    )
 
     query = _build_transition_query(
         db,
-        state=normalized_state,
-        source_type=normalized_source,
+        state=filters_ctx["state"],
+        source_type=filters_ctx["source_type"],
         symbol=symbol,
         strategy=strategy,
-        status_filter=normalized_status,
+        status_filter=filters_ctx["status"],
         correlation_id=str(correlation_id or "").strip() or None,
         order_id=str(order_id or "").strip() or None,
         search=search,
-        time_from=parsed_time_from,
-        time_to=effective_snapshot,
+        time_from=filters_ctx["time_from"],
+        time_to=filters_ctx["time_to"],
     )
 
     rows = query.all()
@@ -852,12 +897,12 @@ def execution_analytics_summary(
 
     failure_rows = (
         db.query(FailedEvent)
-        .filter(FailedEvent.created_at <= effective_snapshot)
+        .filter(FailedEvent.created_at <= filters_ctx["snapshot_at"])
         .order_by(FailedEvent.created_at.asc())
         .all()
     )
-    if parsed_time_from:
-        failure_rows = [row for row in failure_rows if row.created_at >= parsed_time_from]
+    if filters_ctx["time_from"]:
+        failure_rows = [row for row in failure_rows if row.created_at >= filters_ctx["time_from"]]
     if correlation_id:
         failure_rows = [row for row in failure_rows if str(row.correlation_id or "") == str(correlation_id)]
 
@@ -872,21 +917,21 @@ def execution_analytics_summary(
     retry_success_ratio = round(success_transitions / max(retry_count, 1), 4) if retry_count else 0.0
 
     applied_filters = {
-        "state": normalized_state,
-        "source_type": normalized_source,
+        "state": filters_ctx["state"],
+        "source_type": filters_ctx["source_type"],
         "symbol": symbol,
         "strategy": strategy,
-        "status": normalized_status,
+        "status": filters_ctx["status"],
         "correlation_id": correlation_id,
         "order_id": order_id,
         "search": search,
-        "time_from": parsed_time_from.isoformat() if parsed_time_from else None,
-        "time_to": effective_snapshot.isoformat(),
-        "snapshot_at": effective_snapshot.isoformat(),
+        "time_from": filters_ctx["time_from"].isoformat() if filters_ctx["time_from"] else None,
+        "time_to": filters_ctx["time_to"].isoformat(),
+        "snapshot_at": filters_ctx["snapshot_at"].isoformat(),
     }
 
     return ExecutionAnalyticsSnapshotSummaryResponse(
-        snapshot_at=effective_snapshot,
+        snapshot_at=filters_ctx["snapshot_at"],
         filters=applied_filters,
         totals={
             "transitions": total,
@@ -913,6 +958,290 @@ def execution_analytics_summary(
             for key, value in sorted(dead_letter_trend.items())
         ],
     )
+
+
+@router.get("/execution-analytics", response_model=ExecutionAnalyticsSnapshotSummaryResponse)
+def execution_analytics_summary_legacy(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    state: str | None = Query(default=None),
+    source_type: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    strategy: str | None = Query(default=None),
+    status_value: str | None = Query(default=None, alias="status"),
+    status_filter: str | None = Query(default=None),
+    correlation_id: str | None = Query(default=None),
+    order_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    time_from: str | None = Query(default=None),
+    time_to: str | None = Query(default=None),
+    snapshot_at: str | None = Query(default=None),
+):
+    return _build_execution_analytics_summary(
+        db,
+        state=state,
+        source_type=source_type,
+        symbol=symbol,
+        strategy=strategy,
+        status_value=status_value,
+        status_filter=status_filter,
+        correlation_id=correlation_id,
+        order_id=order_id,
+        search=search,
+        time_from=time_from,
+        time_to=time_to,
+        snapshot_at=snapshot_at,
+    )
+
+
+@router.get("/execution-analytics/summary", response_model=ExecutionAnalyticsSnapshotSummaryResponse)
+def execution_analytics_summary(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    state: str | None = Query(default=None),
+    source_type: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    strategy: str | None = Query(default=None),
+    status_value: str | None = Query(default=None, alias="status"),
+    status_filter: str | None = Query(default=None),
+    correlation_id: str | None = Query(default=None),
+    order_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    time_from: str | None = Query(default=None),
+    time_to: str | None = Query(default=None),
+    snapshot_at: str | None = Query(default=None),
+):
+    return _build_execution_analytics_summary(
+        db,
+        state=state,
+        source_type=source_type,
+        symbol=symbol,
+        strategy=strategy,
+        status_value=status_value,
+        status_filter=status_filter,
+        correlation_id=correlation_id,
+        order_id=order_id,
+        search=search,
+        time_from=time_from,
+        time_to=time_to,
+        snapshot_at=snapshot_at,
+    )
+
+
+@router.get("/execution-analytics/state-latency")
+def execution_analytics_state_latency(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    state: str | None = Query(default=None),
+    source_type: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    strategy: str | None = Query(default=None),
+    status_value: str | None = Query(default=None, alias="status"),
+    status_filter: str | None = Query(default=None),
+    correlation_id: str | None = Query(default=None),
+    order_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    time_from: str | None = Query(default=None),
+    time_to: str | None = Query(default=None),
+    snapshot_at: str | None = Query(default=None),
+):
+    filters_ctx = _resolve_execution_analytics_filters(
+        state=state,
+        source_type=source_type,
+        symbol=symbol,
+        strategy=strategy,
+        status_value=status_value,
+        status_filter=status_filter,
+        correlation_id=correlation_id,
+        order_id=order_id,
+        search=search,
+        time_from=time_from,
+        time_to=time_to,
+        snapshot_at=snapshot_at,
+    )
+
+    rows = _build_transition_query(
+        db,
+        state=filters_ctx["state"],
+        source_type=filters_ctx["source_type"],
+        symbol=filters_ctx["symbol"],
+        strategy=filters_ctx["strategy"],
+        status_filter=filters_ctx["status"],
+        correlation_id=str(filters_ctx["correlation_id"] or "").strip() or None,
+        order_id=str(filters_ctx["order_id"] or "").strip() or None,
+        search=filters_ctx["search"],
+        time_from=filters_ctx["time_from"],
+        time_to=filters_ctx["time_to"],
+    ).all()
+
+    stats: dict[str, dict] = {}
+    for row in rows:
+        if row.latency_ms is None:
+            continue
+        key = str(row.state or "unknown")
+        bucket = stats.setdefault(
+            key,
+            {"state": key, "count": 0, "total_latency_ms": 0.0, "min_latency_ms": None, "max_latency_ms": None},
+        )
+        latency_value = float(row.latency_ms)
+        bucket["count"] += 1
+        bucket["total_latency_ms"] += latency_value
+        bucket["min_latency_ms"] = latency_value if bucket["min_latency_ms"] is None else min(bucket["min_latency_ms"], latency_value)
+        bucket["max_latency_ms"] = latency_value if bucket["max_latency_ms"] is None else max(bucket["max_latency_ms"], latency_value)
+
+    result_rows: list[dict] = []
+    for item in sorted(stats.values(), key=lambda x: x["state"]):
+        count = max(item["count"], 1)
+        result_rows.append(
+            {
+                "state": item["state"],
+                "count": item["count"],
+                "avg_latency_ms": round(item["total_latency_ms"] / count, 4),
+                "min_latency_ms": item["min_latency_ms"],
+                "max_latency_ms": item["max_latency_ms"],
+            }
+        )
+
+    return {
+        "snapshot_at": filters_ctx["snapshot_at"],
+        "filters": {
+            "state": filters_ctx["state"],
+            "source_type": filters_ctx["source_type"],
+            "symbol": filters_ctx["symbol"],
+            "strategy": filters_ctx["strategy"],
+            "status": filters_ctx["status"],
+            "correlation_id": filters_ctx["correlation_id"],
+            "order_id": filters_ctx["order_id"],
+            "search": filters_ctx["search"],
+            "time_from": filters_ctx["time_from"].isoformat() if filters_ctx["time_from"] else None,
+            "time_to": filters_ctx["time_to"].isoformat(),
+            "snapshot_at": filters_ctx["snapshot_at"].isoformat(),
+        },
+        "totals": {
+            "transitions": len(rows),
+            "states": len(result_rows),
+        },
+        "rows": result_rows,
+    }
+
+
+@router.get("/execution-analytics/failure-trends")
+def execution_analytics_failure_trends(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    state: str | None = Query(default=None),
+    source_type: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    strategy: str | None = Query(default=None),
+    status_value: str | None = Query(default=None, alias="status"),
+    status_filter: str | None = Query(default=None),
+    correlation_id: str | None = Query(default=None),
+    order_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    time_from: str | None = Query(default=None),
+    time_to: str | None = Query(default=None),
+    snapshot_at: str | None = Query(default=None),
+):
+    filters_ctx = _resolve_execution_analytics_filters(
+        state=state,
+        source_type=source_type,
+        symbol=symbol,
+        strategy=strategy,
+        status_value=status_value,
+        status_filter=status_filter,
+        correlation_id=correlation_id,
+        order_id=order_id,
+        search=search,
+        time_from=time_from,
+        time_to=time_to,
+        snapshot_at=snapshot_at,
+    )
+
+    transition_rows = _build_transition_query(
+        db,
+        state=filters_ctx["state"],
+        source_type=filters_ctx["source_type"],
+        symbol=filters_ctx["symbol"],
+        strategy=filters_ctx["strategy"],
+        status_filter=filters_ctx["status"],
+        correlation_id=str(filters_ctx["correlation_id"] or "").strip() or None,
+        order_id=str(filters_ctx["order_id"] or "").strip() or None,
+        search=filters_ctx["search"],
+        time_from=filters_ctx["time_from"],
+        time_to=filters_ctx["time_to"],
+    ).all()
+    transition_correlations = {str(row.correlation_id) for row in transition_rows if str(row.correlation_id or "").strip()}
+    transition_filters_present = any(
+        [
+            filters_ctx["state"],
+            filters_ctx["source_type"],
+            filters_ctx["symbol"],
+            filters_ctx["strategy"],
+            filters_ctx["status"],
+            filters_ctx["order_id"],
+            filters_ctx["search"],
+        ]
+    )
+
+    failure_query = db.query(FailedEvent).filter(FailedEvent.created_at <= filters_ctx["snapshot_at"])
+    if filters_ctx["time_from"]:
+        failure_query = failure_query.filter(FailedEvent.created_at >= filters_ctx["time_from"])
+    if filters_ctx["correlation_id"]:
+        failure_query = failure_query.filter(FailedEvent.correlation_id == filters_ctx["correlation_id"])
+    elif transition_filters_present:
+        if transition_correlations:
+            failure_query = failure_query.filter(FailedEvent.correlation_id.in_(sorted(transition_correlations)))
+        else:
+            failure_query = failure_query.filter(FailedEvent.id == "")
+
+    failure_rows = failure_query.order_by(FailedEvent.created_at.asc()).all()
+
+    daily_counts: dict[str, dict] = {}
+    failure_class_counter: dict[str, int] = {}
+    for row in failure_rows:
+        day_key = row.created_at.date().isoformat()
+        daily = daily_counts.setdefault(
+            day_key,
+            {"date": day_key, "total_failures": 0, "dead_letter_count": 0, "resolved_count": 0, "open_count": 0},
+        )
+        daily["total_failures"] += 1
+        if row.status in {"dead", "quarantined"}:
+            daily["dead_letter_count"] += 1
+        if row.status in {"resolved", "closed"}:
+            daily["resolved_count"] += 1
+        else:
+            daily["open_count"] += 1
+        cls = str(row.failure_class or "unknown")
+        failure_class_counter[cls] = failure_class_counter.get(cls, 0) + 1
+
+    top_failure_classes = [
+        {"failure_class": key, "count": value}
+        for key, value in sorted(failure_class_counter.items(), key=lambda item: (-item[1], item[0]))[:10]
+    ]
+
+    return {
+        "snapshot_at": filters_ctx["snapshot_at"],
+        "filters": {
+            "state": filters_ctx["state"],
+            "source_type": filters_ctx["source_type"],
+            "symbol": filters_ctx["symbol"],
+            "strategy": filters_ctx["strategy"],
+            "status": filters_ctx["status"],
+            "correlation_id": filters_ctx["correlation_id"],
+            "order_id": filters_ctx["order_id"],
+            "search": filters_ctx["search"],
+            "time_from": filters_ctx["time_from"].isoformat() if filters_ctx["time_from"] else None,
+            "time_to": filters_ctx["time_to"].isoformat(),
+            "snapshot_at": filters_ctx["snapshot_at"].isoformat(),
+        },
+        "totals": {
+            "failures": len(failure_rows),
+            "dead_letter_total": sum(item["dead_letter_count"] for item in daily_counts.values()),
+            "resolved_total": sum(item["resolved_count"] for item in daily_counts.values()),
+        },
+        "daily_trend": [daily_counts[key] for key in sorted(daily_counts.keys())],
+        "top_failure_classes": top_failure_classes,
+    }
 
 
 @router.post("/execution-state-transitions/{execution_event_id}/manual-action")
@@ -1338,6 +1667,8 @@ def export_incident_snapshot_bundle(
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "actor": str(current_admin.id),
         "filter_scope": scope_type,
+        "selected_scope_priority": scope_type,
+        "scope_priority_order": ["correlation_id", "execution_event_id", "time_range"],
         "scope_identifiers": scope_payload,
         "row_counts": {
             "events": len(serialized_events),
@@ -1425,6 +1756,7 @@ def export_incident_snapshot_bundle(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Incident-Snapshot-Scope": scope_type,
+            "X-Incident-Snapshot-Scope-Selected": scope_type,
         },
     )
 
