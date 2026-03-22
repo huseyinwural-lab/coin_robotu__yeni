@@ -19,15 +19,47 @@ router = APIRouter(prefix="/admin/futures", tags=["admin_futures_strategy_contro
 _LIFECYCLE_KEY = "futures:strategy:lifecycle:{user_id}"
 _THROTTLE_KEY = "futures:strategy:throttle:{user_id}"
 _MANUAL_KEY = "futures:strategy:manual-controls:{user_id}"
+_ROLLOUT_KEY = "futures:strategy:rollout:{user_id}"
+_HISTORY_KEY = "futures:strategy:control-history:{user_id}"
 
 _DISABLE_CONFIRM = "DISABLE STRATEGY"
 _DECOMMISSION_CONFIRM = "DECOMMISSION STRATEGY"
+_ROLLBACK_CONFIRM = "ROLLBACK LAST ACTION"
+_ROLLOUT_CONFIRM = "APPLY ROLLOUT"
+_PROMOTE_CONFIRM = "PROMOTE SHADOW"
+
 _VALID_THROTTLE_LEVELS = ["L1", "L2", "L3"]
+_VALID_ROLLOUT_STEPS = [10, 25, 50, 100]
+
+_AUTO_ROLLBACK_HEALTH_THRESHOLD = 50.0
+_AUTO_ROLLBACK_ERROR_THRESHOLD = 3.0
 
 
 class StrategyControlActionRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
     confirm_phrase: str | None = Field(default=None, max_length=120)
+    throttle_level: str | None = Field(default=None, max_length=2)
+    dry_run: bool = False
+
+
+class StrategyRolloutRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+    confirm_phrase: str | None = Field(default=None, max_length=120)
+    rollout_percentage: int = Field(default=10, ge=1, le=100)
+    dry_run: bool = False
+
+
+class StrategyRollbackRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+    confirm_phrase: str | None = Field(default=None, max_length=120)
+    dry_run: bool = False
+
+
+class StrategyBulkActionRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+    confirm_phrase: str = Field(..., min_length=3, max_length=80)
+    strategy_ids: list[str] = Field(..., min_length=1)
+    action: str = Field(..., min_length=3, max_length=20)
     throttle_level: str | None = Field(default=None, max_length=2)
     dry_run: bool = False
 
@@ -47,13 +79,17 @@ def _safe_json(raw, default):
     return default
 
 
+def _deep_copy(payload):
+    return _safe_json(json.dumps(payload), payload)
+
+
 def _cache_get(cache, key: str, default):
     if not cache:
         return default
     return _safe_json(cache.get(key), default)
 
 
-def _cache_set(cache, key: str, payload: dict):
+def _cache_set(cache, key: str, payload):
     if not cache:
         return
     cache.set(key, json.dumps(payload))
@@ -75,6 +111,16 @@ def _build_maps(status: dict) -> dict:
         for item in (status.get("strategy_attribution") or [])
         if str(item.get("strategy") or "")
     }
+    reject_map = {
+        str(item.get("strategy") or ""): item
+        for item in (status.get("strategy_reject_rate") or [])
+        if str(item.get("strategy") or "")
+    }
+
+    checklist_rows = status.get("architecture_checklist_15") or []
+    checklist_passed = bool(checklist_rows) and all(bool(item.get("status")) for item in checklist_rows)
+    checklist_failed_items = [item.get("item") for item in checklist_rows if not bool(item.get("status"))]
+
     drift_map: dict[str, dict] = {}
     for row in (status.get("strategy_drift_alerts") or []):
         strategy_id = str(row.get("strategy") or "")
@@ -89,24 +135,56 @@ def _build_maps(status: dict) -> dict:
             }
             continue
         existing["count"] = int(existing.get("count", 0) + 1)
+
     return {
         "metadata_map": metadata_map,
         "health_map": health_map,
         "pnl_map": pnl_map,
+        "reject_map": reject_map,
         "drift_map": drift_map,
+        "checklist_passed": checklist_passed,
+        "checklist_failed_items": checklist_failed_items,
     }
 
 
-def _compose_strategy_rows(status: dict, lifecycle_registry: dict, throttle_payload: dict, manual_controls: dict) -> list[dict]:
+def _default_rollout_row(strategy_id: str, shadow_live_state: str) -> dict:
+    return {
+        "strategy_id": strategy_id,
+        "rollout_mode": "SHADOW" if shadow_live_state == "SHADOW" else "LIVE",
+        "rollout_percentage": 0 if shadow_live_state == "SHADOW" else 100,
+        "auto_rollback_enabled": True,
+        "auto_rollback_thresholds": {
+            "health_score_min": _AUTO_ROLLBACK_HEALTH_THRESHOLD,
+            "error_rate_max_pct": _AUTO_ROLLBACK_ERROR_THRESHOLD,
+        },
+        "last_rollout_at": None,
+        "last_rollout_reason": None,
+    }
+
+
+def _compose_strategy_rows(
+    status: dict,
+    lifecycle_registry: dict,
+    throttle_payload: dict,
+    manual_controls: dict,
+    rollout_payload: dict,
+) -> list[dict]:
     maps = _build_maps(status)
     metadata_map = maps["metadata_map"]
     health_map = maps["health_map"]
     pnl_map = maps["pnl_map"]
+    reject_map = maps["reject_map"]
     drift_map = maps["drift_map"]
+    checklist_passed = maps["checklist_passed"]
+    checklist_failed_items = maps["checklist_failed_items"]
 
     throttle_map = throttle_payload.get("by_strategy") if isinstance(throttle_payload, dict) else {}
     if not isinstance(throttle_map, dict):
         throttle_map = {}
+
+    rollout_map = rollout_payload.get("by_strategy") if isinstance(rollout_payload, dict) else {}
+    if not isinstance(rollout_map, dict):
+        rollout_map = {}
 
     rows: list[dict] = []
     for strategy_id in (status.get("strategy_registry") or []):
@@ -116,6 +194,7 @@ def _compose_strategy_rows(status: dict, lifecycle_registry: dict, throttle_payl
         manual = dict(manual_controls.get(sid) or {})
         health = dict(health_map.get(sid) or {})
         pnl = dict(pnl_map.get(sid) or {})
+        reject = dict(reject_map.get(sid) or {})
         drift = dict(drift_map.get(sid) or {})
         meta = dict(metadata_map.get(sid) or {})
 
@@ -127,6 +206,10 @@ def _compose_strategy_rows(status: dict, lifecycle_registry: dict, throttle_payl
 
         source_type = str(meta.get("source_type") or "strategy_engine")
         shadow_live_state = "SHADOW" if source_type == "legacy_formula" else "LIVE"
+        rollout = dict(rollout_map.get(sid) or _default_rollout_row(sid, shadow_live_state))
+
+        raw_error_rate = float(reject.get("reject_rate") or 0)
+        error_rate_pct = raw_error_rate * 100 if raw_error_rate <= 1 else raw_error_rate
 
         rows.append(
             {
@@ -142,9 +225,22 @@ def _compose_strategy_rows(status: dict, lifecycle_registry: dict, throttle_payl
                 "pnl_rolling": float(health.get("strategy_pnl_rolling") or pnl.get("pnl_rolling") or 0),
                 "win_rate": float(health.get("strategy_win_rate_rolling") or 0),
                 "execution_quality": float(health.get("strategy_execution_quality") or 0),
+                "error_rate_pct": round(error_rate_pct, 4),
                 "drift_count": int(drift.get("count") or 0),
                 "drift_severity": drift.get("severity") or "NONE",
                 "drift_reasons": drift.get("reasons") or [],
+                "checklist_passed": checklist_passed,
+                "checklist_failed_items": checklist_failed_items,
+                "rollout_mode": rollout.get("rollout_mode") or ("SHADOW" if shadow_live_state == "SHADOW" else "LIVE"),
+                "rollout_percentage": int(rollout.get("rollout_percentage") or (0 if shadow_live_state == "SHADOW" else 100)),
+                "auto_rollback_enabled": bool(rollout.get("auto_rollback_enabled", True)),
+                "auto_rollback_thresholds": rollout.get("auto_rollback_thresholds")
+                or {
+                    "health_score_min": _AUTO_ROLLBACK_HEALTH_THRESHOLD,
+                    "error_rate_max_pct": _AUTO_ROLLBACK_ERROR_THRESHOLD,
+                },
+                "last_rollout_at": rollout.get("last_rollout_at"),
+                "last_rollout_reason": rollout.get("last_rollout_reason"),
                 "last_transition_at": lifecycle.get("last_transition_at"),
                 "last_transition_reason": lifecycle.get("last_transition_reason") or "n/a",
                 "transition_history": lifecycle.get("transition_history") or [],
@@ -160,12 +256,10 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
     lifecycle_key = _LIFECYCLE_KEY.format(user_id=current_admin.id)
     throttle_key = _THROTTLE_KEY.format(user_id=current_admin.id)
     manual_key = _MANUAL_KEY.format(user_id=current_admin.id)
+    rollout_key = _ROLLOUT_KEY.format(user_id=current_admin.id)
+    history_key = _HISTORY_KEY.format(user_id=current_admin.id)
 
-    lifecycle_registry = _cache_get(
-        pipeline_runtime.cache,
-        lifecycle_key,
-        status.get("strategy_lifecycle_registry") or {},
-    )
+    lifecycle_registry = _cache_get(pipeline_runtime.cache, lifecycle_key, status.get("strategy_lifecycle_registry") or {})
     throttle_payload = _cache_get(
         pipeline_runtime.cache,
         throttle_key,
@@ -179,17 +273,24 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
         },
     )
     manual_controls = _cache_get(pipeline_runtime.cache, manual_key, {})
-    rows = _compose_strategy_rows(status, lifecycle_registry, throttle_payload, manual_controls)
+    rollout_payload = _cache_get(pipeline_runtime.cache, rollout_key, {"by_strategy": {}, "history": []})
+    action_history = _cache_get(pipeline_runtime.cache, history_key, [])
+
+    rows = _compose_strategy_rows(status, lifecycle_registry, throttle_payload, manual_controls, rollout_payload)
     return {
         "status_payload": status,
         "rows": rows,
         "lifecycle_registry": lifecycle_registry,
         "throttle_payload": throttle_payload,
         "manual_controls": manual_controls,
+        "rollout_payload": rollout_payload,
+        "action_history": action_history,
         "keys": {
             "lifecycle": lifecycle_key,
             "throttle": throttle_key,
             "manual": manual_key,
+            "rollout": rollout_key,
+            "history": history_key,
         },
     }
 
@@ -256,6 +357,50 @@ def _set_manual_state(manual_controls: dict, *, strategy_id: str, control_state:
     }
 
 
+def _set_rollout_state(
+    rollout_payload: dict,
+    *,
+    strategy_id: str,
+    mode: str,
+    percentage: int,
+    reason: str,
+):
+    now_iso = datetime.now(timezone.utc).isoformat()
+    by_strategy = rollout_payload.get("by_strategy") or {}
+    current = dict(by_strategy.get(strategy_id) or {})
+    by_strategy[strategy_id] = {
+        "strategy_id": strategy_id,
+        "rollout_mode": mode,
+        "rollout_percentage": int(percentage),
+        "auto_rollback_enabled": bool(current.get("auto_rollback_enabled", True)),
+        "auto_rollback_thresholds": current.get("auto_rollback_thresholds")
+        or {
+            "health_score_min": _AUTO_ROLLBACK_HEALTH_THRESHOLD,
+            "error_rate_max_pct": _AUTO_ROLLBACK_ERROR_THRESHOLD,
+        },
+        "last_rollout_at": now_iso,
+        "last_rollout_reason": reason,
+    }
+    rollout_payload["by_strategy"] = by_strategy
+    rollout_history = list(rollout_payload.get("history") or [])
+    rollout_history.append(
+        {
+            "strategy_id": strategy_id,
+            "mode": mode,
+            "rollout_percentage": int(percentage),
+            "reason": reason,
+            "at": now_iso,
+        }
+    )
+    rollout_payload["history"] = rollout_history[-200:]
+
+
+def _append_action_history(action_history: list, entry: dict) -> list:
+    history = list(action_history or [])
+    history.append(entry)
+    return history[-500:]
+
+
 def _validate_disable_flow(action: str, row: dict) -> tuple[bool, str]:
     state = str(row.get("control_state") or "ACTIVE").upper()
     if action == "disable" and state not in {"THROTTLED", "PAUSED", "DISABLED"}:
@@ -267,6 +412,52 @@ def _validate_disable_flow(action: str, row: dict) -> tuple[bool, str]:
     if action == "enable" and state == "DECOMMISSIONED":
         return False, "Decommission edilmiş strategy enable edilemez."
     return True, "ok"
+
+
+def _build_rollout_precheck(row: dict) -> dict:
+    health_score = float(row.get("health_score") or 0)
+    error_rate_pct = float(row.get("error_rate_pct") or 0)
+    drift_count = int(row.get("drift_count") or 0)
+    checklist_passed = bool(row.get("checklist_passed"))
+    failed_items = list(row.get("checklist_failed_items") or [])
+
+    checks = {
+        "health": {
+            "ok": health_score >= _AUTO_ROLLBACK_HEALTH_THRESHOLD,
+            "current": health_score,
+            "required_min": _AUTO_ROLLBACK_HEALTH_THRESHOLD,
+        },
+        "recent_error": {
+            "ok": error_rate_pct <= _AUTO_ROLLBACK_ERROR_THRESHOLD,
+            "current": error_rate_pct,
+            "max_allowed": _AUTO_ROLLBACK_ERROR_THRESHOLD,
+        },
+        "drift": {
+            "ok": drift_count == 0,
+            "current": drift_count,
+            "required": 0,
+        },
+        "checklist": {
+            "ok": checklist_passed,
+            "failed_items": failed_items,
+        },
+    }
+    passed = all(item.get("ok") for item in checks.values())
+    return {
+        "status": "pass" if passed else "fail",
+        "checks": checks,
+    }
+
+
+def _resolve_bulk_confirm_phrase(action: str) -> str:
+    action_upper = str(action or "").strip().upper()
+    if action_upper == "PAUSE":
+        return "BULK PAUSE"
+    if action_upper == "RESUME":
+        return "BULK RESUME"
+    if action_upper == "THROTTLE":
+        return "BULK THROTTLE"
+    return ""
 
 
 @router.get("/strategy-control/overview")
@@ -303,7 +494,15 @@ def strategy_control_overview(
             "drift_action_center",
             "audit_history",
         ],
-        "phase_scope": "phase_1_control_foundation",
+        "phase_scope": "phase_2_rollout_bulk_rollback",
+        "bulk_capabilities": ["pause", "resume", "throttle"],
+        "rollout_policy": {
+            "canary_steps": _VALID_ROLLOUT_STEPS,
+            "auto_rollback_thresholds": {
+                "health_score_min": _AUTO_ROLLBACK_HEALTH_THRESHOLD,
+                "error_rate_max_pct": _AUTO_ROLLBACK_ERROR_THRESHOLD,
+            },
+        },
         "strategies": rows,
     }
 
@@ -321,22 +520,24 @@ def strategy_control_detail(
         for item in ((payload["status_payload"].get("strategy_governance") or {}).get("governance_events") or [])
         if str(item.get("strategy") or "") == strategy_id
     ]
+    precheck = _build_rollout_precheck(row)
     return {
         "status": "ok",
         "strategy": row,
+        "rollout_precheck": precheck,
         "execution_history": {
             "items": [],
-            "reason": "Faz-1 kapsamında execution history aksiyonu henüz devrede değil.",
+            "reason": "Faz-2 kapsamında execution history aksiyonu henüz devrede değil.",
         },
         "trade_list": {
             "items": [],
-            "reason": "Faz-1 kapsamında trade list aksiyonu henüz devrede değil.",
+            "reason": "Faz-2 kapsamında trade list aksiyonu henüz devrede değil.",
         },
         "governance_events": governance_events,
         "transition_history": row.get("transition_history") or [],
         "export": {
             "enabled": False,
-            "reason": "Faz-2 backlog",
+            "reason": "Faz-3 backlog",
         },
     }
 
@@ -373,6 +574,22 @@ def strategy_control_audit_history(
     }
 
 
+@router.get("/strategy/{strategy_id}/rollout-precheck")
+def strategy_rollout_precheck(
+    strategy_id: str,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    state = _load_control_state(db, current_admin, refresh=False)
+    row = _find_row(state["rows"], strategy_id)
+    precheck = _build_rollout_precheck(row)
+    return {
+        "status": "ok",
+        "strategy_id": strategy_id,
+        "precheck": precheck,
+    }
+
+
 def _run_strategy_action(
     *,
     action: str,
@@ -387,12 +604,7 @@ def _run_strategy_action(
 
     is_valid, flow_message = _validate_disable_flow(action, before_row)
     if not is_valid:
-        return _result_payload(
-            status="rejected",
-            trace_id=trace_id,
-            message=flow_message,
-            state_snapshot=before_row,
-        )
+        return _result_payload(status="rejected", trace_id=trace_id, message=flow_message, state_snapshot=before_row)
 
     if action == "disable" and str(payload.confirm_phrase or "").strip().upper() != _DISABLE_CONFIRM:
         return _result_payload(
@@ -413,6 +625,12 @@ def _run_strategy_action(
     lifecycle_registry = state["lifecycle_registry"]
     throttle_payload = state["throttle_payload"]
     manual_controls = state["manual_controls"]
+    rollout_payload = state["rollout_payload"]
+
+    lifecycle_before = _deep_copy(lifecycle_registry)
+    throttle_before = _deep_copy(throttle_payload)
+    manual_before = _deep_copy(manual_controls)
+    rollout_before = _deep_copy(rollout_payload)
 
     action_upper = action.upper()
     next_control_state = "ACTIVE"
@@ -454,7 +672,12 @@ def _run_strategy_action(
         rollback_reference = f"rollback_ref:{trace_id}"
         message = f"{strategy_id} disable edildi"
     elif action == "decommission":
-        _set_lifecycle_state(lifecycle_registry, strategy_id=strategy_id, next_state="DISABLED", reason=f"MANUAL_DECOMMISSION:{payload.reason}")
+        _set_lifecycle_state(
+            lifecycle_registry,
+            strategy_id=strategy_id,
+            next_state="DISABLED",
+            reason=f"MANUAL_DECOMMISSION:{payload.reason}",
+        )
         _set_throttle_state(throttle_payload, strategy_id=strategy_id, level="L3")
         next_control_state = "DECOMMISSIONED"
         rollback_reference = f"rollback_ref:{trace_id}"
@@ -464,14 +687,31 @@ def _run_strategy_action(
 
     _set_manual_state(manual_controls, strategy_id=strategy_id, control_state=next_control_state, reason=payload.reason, trace_id=trace_id)
 
+    after_rows = _compose_strategy_rows(state["status_payload"], lifecycle_registry, throttle_payload, manual_controls, rollout_payload)
+    after_row = _find_row(after_rows, strategy_id)
+    action_status = "dry_run" if payload.dry_run else "success"
+
     if not payload.dry_run:
         _cache_set(pipeline_runtime.cache, state["keys"]["lifecycle"], lifecycle_registry)
         _cache_set(pipeline_runtime.cache, state["keys"]["throttle"], throttle_payload)
         _cache_set(pipeline_runtime.cache, state["keys"]["manual"], manual_controls)
 
-    after_rows = _compose_strategy_rows(state["status_payload"], lifecycle_registry, throttle_payload, manual_controls)
-    after_row = _find_row(after_rows, strategy_id)
-    action_status = "dry_run" if payload.dry_run else "success"
+        history = _append_action_history(
+            state["action_history"],
+            {
+                "trace_id": trace_id,
+                "action": action,
+                "strategy_id": strategy_id,
+                "before_row": before_row,
+                "after_row": after_row,
+                "lifecycle_before": lifecycle_before,
+                "throttle_before": throttle_before,
+                "manual_before": manual_before,
+                "rollout_before": rollout_before,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        _cache_set(pipeline_runtime.cache, state["keys"]["history"], history)
 
     create_audit_log(
         db,
@@ -502,6 +742,422 @@ def _run_strategy_action(
             "after_state": after_row,
             "rollback_reference": rollback_reference,
         },
+    )
+
+
+@router.post("/strategy/{strategy_id}/promote-shadow")
+def strategy_promote_shadow(
+    strategy_id: str,
+    payload: StrategyRolloutRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    trace_id = f"strategy_promote_{uuid.uuid4().hex[:12]}"
+    if str(payload.confirm_phrase or "").strip().upper() != _PROMOTE_CONFIRM:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message=f"Promote shadow için onay ifadesi zorunlu: {_PROMOTE_CONFIRM}",
+            state_snapshot={"strategy_id": strategy_id},
+        )
+
+    state = _load_control_state(db, current_admin, refresh=False)
+    before_row = _find_row(state["rows"], strategy_id)
+    precheck = _build_rollout_precheck(before_row)
+    if before_row.get("shadow_live_state") != "SHADOW":
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Promote shadow sadece SHADOW strategy için kullanılabilir.",
+            state_snapshot=before_row,
+            extra={"precheck": precheck},
+        )
+    if precheck.get("status") != "pass":
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Promote shadow pre-check başarısız.",
+            state_snapshot=before_row,
+            extra={"precheck": precheck},
+        )
+
+    rollout_payload = state["rollout_payload"]
+    rollout_before = _deep_copy(rollout_payload)
+    _set_rollout_state(
+        rollout_payload,
+        strategy_id=strategy_id,
+        mode="LIVE_CANARY",
+        percentage=10,
+        reason=f"PROMOTE_SHADOW:{payload.reason}",
+    )
+
+    after_rows = _compose_strategy_rows(
+        state["status_payload"],
+        state["lifecycle_registry"],
+        state["throttle_payload"],
+        state["manual_controls"],
+        rollout_payload,
+    )
+    after_row = _find_row(after_rows, strategy_id)
+
+    if not payload.dry_run:
+        _cache_set(pipeline_runtime.cache, state["keys"]["rollout"], rollout_payload)
+        history = _append_action_history(
+            state["action_history"],
+            {
+                "trace_id": trace_id,
+                "action": "promote_shadow",
+                "strategy_id": strategy_id,
+                "before_row": before_row,
+                "after_row": after_row,
+                "lifecycle_before": _deep_copy(state["lifecycle_registry"]),
+                "throttle_before": _deep_copy(state["throttle_payload"]),
+                "manual_before": _deep_copy(state["manual_controls"]),
+                "rollout_before": rollout_before,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        _cache_set(pipeline_runtime.cache, state["keys"]["history"], history)
+
+    create_audit_log(
+        db,
+        action="FUTURES_STRATEGY_PROMOTE_SHADOW",
+        entity_type="futures_strategy_control",
+        entity_id=strategy_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "confirm_phrase": payload.confirm_phrase,
+            "dry_run": payload.dry_run,
+            "precheck": precheck,
+            "before_state": before_row,
+            "after_state": after_row,
+        },
+    )
+
+    return _result_payload(
+        status="dry_run" if payload.dry_run else "success",
+        trace_id=trace_id,
+        message=f"{strategy_id} shadow→live canary %10 promote edildi",
+        state_snapshot=after_row,
+        extra={"precheck": precheck, "before_state": before_row, "after_state": after_row},
+    )
+
+
+@router.post("/strategy/{strategy_id}/rollout")
+def strategy_rollout(
+    strategy_id: str,
+    payload: StrategyRolloutRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    trace_id = f"strategy_rollout_{uuid.uuid4().hex[:12]}"
+    if str(payload.confirm_phrase or "").strip().upper() != _ROLLOUT_CONFIRM:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message=f"Rollout için onay ifadesi zorunlu: {_ROLLOUT_CONFIRM}",
+            state_snapshot={"strategy_id": strategy_id},
+        )
+
+    if int(payload.rollout_percentage) not in _VALID_ROLLOUT_STEPS:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message=f"Rollout yüzdesi sadece {_VALID_ROLLOUT_STEPS} olabilir.",
+            state_snapshot={"strategy_id": strategy_id},
+        )
+
+    state = _load_control_state(db, current_admin, refresh=False)
+    before_row = _find_row(state["rows"], strategy_id)
+    precheck = _build_rollout_precheck(before_row)
+    if precheck.get("status") != "pass":
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Rollout pre-check başarısız.",
+            state_snapshot=before_row,
+            extra={"precheck": precheck},
+        )
+
+    rollout_payload = state["rollout_payload"]
+    rollout_before = _deep_copy(rollout_payload)
+
+    requested = int(payload.rollout_percentage)
+    mode = "LIVE" if requested == 100 else "LIVE_CANARY"
+    _set_rollout_state(
+        rollout_payload,
+        strategy_id=strategy_id,
+        mode=mode,
+        percentage=requested,
+        reason=f"ROLLOUT_{requested}:{payload.reason}",
+    )
+
+    auto_rollback_triggered = False
+    auto_rollback_reason = []
+    if before_row.get("health_score", 0) < _AUTO_ROLLBACK_HEALTH_THRESHOLD:
+        auto_rollback_triggered = True
+        auto_rollback_reason.append(f"health<{_AUTO_ROLLBACK_HEALTH_THRESHOLD}")
+    if before_row.get("error_rate_pct", 0) > _AUTO_ROLLBACK_ERROR_THRESHOLD:
+        auto_rollback_triggered = True
+        auto_rollback_reason.append(f"error_rate>{_AUTO_ROLLBACK_ERROR_THRESHOLD}%")
+
+    if auto_rollback_triggered:
+        rollout_payload = rollout_before
+
+    after_rows = _compose_strategy_rows(
+        state["status_payload"],
+        state["lifecycle_registry"],
+        state["throttle_payload"],
+        state["manual_controls"],
+        rollout_payload,
+    )
+    after_row = _find_row(after_rows, strategy_id)
+
+    if not payload.dry_run:
+        _cache_set(pipeline_runtime.cache, state["keys"]["rollout"], rollout_payload)
+        history = _append_action_history(
+            state["action_history"],
+            {
+                "trace_id": trace_id,
+                "action": "rollout",
+                "strategy_id": strategy_id,
+                "before_row": before_row,
+                "after_row": after_row,
+                "lifecycle_before": _deep_copy(state["lifecycle_registry"]),
+                "throttle_before": _deep_copy(state["throttle_payload"]),
+                "manual_before": _deep_copy(state["manual_controls"]),
+                "rollout_before": rollout_before,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        _cache_set(pipeline_runtime.cache, state["keys"]["history"], history)
+
+    create_audit_log(
+        db,
+        action="FUTURES_STRATEGY_ROLLOUT_APPLIED",
+        entity_type="futures_strategy_control",
+        entity_id=strategy_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="critical" if auto_rollback_triggered else "warning",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "confirm_phrase": payload.confirm_phrase,
+            "dry_run": payload.dry_run,
+            "requested_rollout_percentage": requested,
+            "precheck": precheck,
+            "auto_rollback_triggered": auto_rollback_triggered,
+            "auto_rollback_reason": auto_rollback_reason,
+            "before_state": before_row,
+            "after_state": after_row,
+        },
+    )
+
+    status_value = "auto_rollback" if auto_rollback_triggered else ("dry_run" if payload.dry_run else "success")
+    message = (
+        f"Auto rollback tetiklendi: {'; '.join(auto_rollback_reason)}"
+        if auto_rollback_triggered
+        else f"Rollout %{requested} uygulandı"
+    )
+    return _result_payload(
+        status=status_value,
+        trace_id=trace_id,
+        message=message,
+        state_snapshot=after_row,
+        extra={
+            "precheck": precheck,
+            "before_state": before_row,
+            "after_state": after_row,
+            "auto_rollback": {
+                "triggered": auto_rollback_triggered,
+                "reason": auto_rollback_reason,
+                "thresholds": {
+                    "health_score_min": _AUTO_ROLLBACK_HEALTH_THRESHOLD,
+                    "error_rate_max_pct": _AUTO_ROLLBACK_ERROR_THRESHOLD,
+                },
+                "previous_state": before_row,
+            },
+        },
+    )
+
+
+@router.post("/strategy/{strategy_id}/rollback")
+def strategy_rollback_last_action(
+    strategy_id: str,
+    payload: StrategyRollbackRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    trace_id = f"strategy_rollback_{uuid.uuid4().hex[:12]}"
+    if str(payload.confirm_phrase or "").strip().upper() != _ROLLBACK_CONFIRM:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message=f"Rollback için onay ifadesi zorunlu: {_ROLLBACK_CONFIRM}",
+            state_snapshot={"strategy_id": strategy_id},
+        )
+
+    state = _load_control_state(db, current_admin, refresh=False)
+    history = list(state["action_history"] or [])
+    target_index = -1
+    for idx in range(len(history) - 1, -1, -1):
+        if str(history[idx].get("strategy_id") or "") == strategy_id:
+            target_index = idx
+            break
+
+    if target_index < 0:
+        row = _find_row(state["rows"], strategy_id)
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Rollback için önceki aksiyon bulunamadı.",
+            state_snapshot=row,
+        )
+
+    last_action = history[target_index]
+    before_row = _find_row(state["rows"], strategy_id)
+
+    lifecycle_registry = _deep_copy(last_action.get("lifecycle_before") or state["lifecycle_registry"])
+    throttle_payload = _deep_copy(last_action.get("throttle_before") or state["throttle_payload"])
+    manual_controls = _deep_copy(last_action.get("manual_before") or state["manual_controls"])
+    rollout_payload = _deep_copy(last_action.get("rollout_before") or state["rollout_payload"])
+
+    after_rows = _compose_strategy_rows(
+        state["status_payload"],
+        lifecycle_registry,
+        throttle_payload,
+        manual_controls,
+        rollout_payload,
+    )
+    after_row = _find_row(after_rows, strategy_id)
+
+    if not payload.dry_run:
+        _cache_set(pipeline_runtime.cache, state["keys"]["lifecycle"], lifecycle_registry)
+        _cache_set(pipeline_runtime.cache, state["keys"]["throttle"], throttle_payload)
+        _cache_set(pipeline_runtime.cache, state["keys"]["manual"], manual_controls)
+        _cache_set(pipeline_runtime.cache, state["keys"]["rollout"], rollout_payload)
+        del history[target_index]
+        _cache_set(pipeline_runtime.cache, state["keys"]["history"], history)
+
+    create_audit_log(
+        db,
+        action="FUTURES_STRATEGY_ROLLBACK_LAST_ACTION",
+        entity_type="futures_strategy_control",
+        entity_id=strategy_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="critical",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "confirm_phrase": payload.confirm_phrase,
+            "dry_run": payload.dry_run,
+            "rolled_back_action": last_action.get("action"),
+            "rolled_back_trace_id": last_action.get("trace_id"),
+            "before_state": before_row,
+            "after_state": after_row,
+        },
+    )
+
+    return _result_payload(
+        status="dry_run" if payload.dry_run else "success",
+        trace_id=trace_id,
+        message=f"Son aksiyon rollback edildi: {last_action.get('action')}",
+        state_snapshot=after_row,
+        extra={
+            "before_state": before_row,
+            "after_state": after_row,
+            "rolled_back_action": last_action.get("action"),
+            "rolled_back_trace_id": last_action.get("trace_id"),
+        },
+    )
+
+
+@router.post("/strategy/bulk-action")
+def strategy_bulk_action(
+    payload: StrategyBulkActionRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    trace_id = f"strategy_bulk_{uuid.uuid4().hex[:12]}"
+    action = str(payload.action or "").strip().lower()
+    if action not in {"pause", "resume", "throttle"}:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Bulk action sadece pause/resume/throttle destekler.",
+            state_snapshot={"strategy_ids": payload.strategy_ids},
+        )
+
+    expected_confirm = _resolve_bulk_confirm_phrase(action)
+    if str(payload.confirm_phrase or "").strip().upper() != expected_confirm:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message=f"Bulk action onayı zorunlu: {expected_confirm}",
+            state_snapshot={"strategy_ids": payload.strategy_ids, "action": action},
+        )
+
+    results = []
+    success_count = 0
+    rejected_count = 0
+    for strategy_id in payload.strategy_ids:
+        result = _run_strategy_action(
+            action=action,
+            strategy_id=strategy_id,
+            payload=StrategyControlActionRequest(
+                reason=f"BULK::{payload.reason}",
+                confirm_phrase=None,
+                throttle_level=payload.throttle_level,
+                dry_run=payload.dry_run,
+            ),
+            current_admin=current_admin,
+            db=db,
+        )
+        results.append({"strategy_id": strategy_id, **result})
+        if result.get("status") in {"success", "dry_run"}:
+            success_count += 1
+        else:
+            rejected_count += 1
+
+    create_audit_log(
+        db,
+        action="FUTURES_STRATEGY_BULK_ACTION",
+        entity_type="futures_strategy_control",
+        entity_id="bulk",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="critical" if rejected_count > 0 else "warning",
+        details={
+            "trace_id": trace_id,
+            "bulk_action": action,
+            "strategy_ids": payload.strategy_ids,
+            "reason": payload.reason,
+            "confirm_phrase": payload.confirm_phrase,
+            "dry_run": payload.dry_run,
+            "success_count": success_count,
+            "rejected_count": rejected_count,
+        },
+    )
+
+    state_snapshot = {
+        "bulk_action": action,
+        "strategy_ids": payload.strategy_ids,
+        "success_count": success_count,
+        "rejected_count": rejected_count,
+    }
+    status_value = "success" if success_count > 0 else "rejected"
+    return _result_payload(
+        status=status_value,
+        trace_id=trace_id,
+        message=f"Bulk {action} tamamlandı: success={success_count}, rejected={rejected_count}",
+        state_snapshot=state_snapshot,
+        extra={"results": results},
     )
 
 
