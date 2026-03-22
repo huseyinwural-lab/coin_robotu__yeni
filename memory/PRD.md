@@ -1,3 +1,49 @@
+## 2026-03-22 — Execution Control P1 Doğrulama + Kapanış ✅
+
+### Kullanıcı onayıyla uygulanan kapanış kuralları
+- Test sırası: **backend smoke → frontend smoke → incident export doğrulama → bug fix → tam regresyon**
+- Scope kuralı sabitlendi: **correlation_id > execution_event_id > time_range**
+- Aynı istekte birden fazla scope gönderimi: **422 validation error**
+
+### Backend tamamlananlar
+- Analytics endpoint seti tamamlandı:
+  - `GET /api/admin-phase3/execution-analytics/summary`
+  - `GET /api/admin-phase3/execution-analytics/state-latency`
+  - `GET /api/admin-phase3/execution-analytics/failure-trends`
+- Legacy uyumluluk korundu:
+  - `GET /api/admin-phase3/execution-analytics` (summary alias)
+- Incident scope validasyonu sıkılaştırıldı:
+  - Multi-scope durumunda `422`
+- Incident ZIP metadata genişletildi:
+  - `selected_scope_priority`
+  - `scope_priority_order`
+  - header: `X-Incident-Snapshot-Scope-Selected`
+
+### Frontend tamamlananlar
+- Yeni sayfa: `/admin/execution/analytics`
+  - Ortak filtre dili: `search, state, status, source_type, symbol, strategy, correlation_id, order_id, time_from, time_to, snapshot_at`
+  - Summary kartları + state latency tablosu + failure trend/class tabloları
+  - URL query param persistency (refresh sonrası korunur)
+- Route ve menü bağlandı:
+  - `App.js` içine analytics route eklendi
+  - `PanelLayout` RISK & EXECUTION grubuna `Execution Analytics` linki eklendi
+- Incident export UI düzeltmesi:
+  - Seçilmeyen scope alanları payload’da `null` gönderiliyor (multi-scope çakışması engellendi)
+
+### Test / doğrulama
+- Self smoke ve curl doğrulamaları PASS:
+  - summary / state-latency / failure-trends: 200
+  - incident export: ZIP + required files + empty deterministic case PASS
+  - multi-scope request: 422 PASS
+- Frontend smoke PASS:
+  - `/admin/execution/states` ve `/admin/execution/analytics` açılış + query persistency PASS
+- Testing agent raporu: `/app/test_reports/iteration_84.json`
+  - Backend: **100% (20/20 PASS)**
+  - Frontend: **PASS**
+
+### Not
+- Binance Futures execution **MOCKED**.
+
 ## 2026-03-22 — Execution Control + Recovery System (P0 Sprint) ✅
 
 ### Sprint kararları (uygulandı)
