@@ -1,3 +1,21 @@
+## 2026-03-22 — Confidence Tooltip (Approval Sparkline) ✅
+
+### Kullanıcı talebi
+- Sadece confidence etiketine kısa tooltip eklenecek (2–3 satır)
+- Delay olmadan hover’da anında görünür
+- Mevcut decision_context verisi kullanılacak, ek feature yok
+
+### Uygulananlar
+- Confidence etiketi `TooltipProvider delayDuration={0}` ile sarıldı
+- Tooltip içeriği:
+  - Confidence değeri + kaynak (`recommendation.confidence`)
+  - Eşik kuralı (`≥80 high, 60–79 med, <60 low`)
+- Sparkline + delta + risk + confidence aynı blokta tutuldu
+
+### Test
+- Frontend lint PASS
+- Frontend test subagent PASS (trigger/content/mapping/delay=0 doğrulandı)
+
 ## 2026-03-22 — Approval Sparkline Confidence Etiketi ✅
 
 ### Kullanıcı talebi (bu tur)
