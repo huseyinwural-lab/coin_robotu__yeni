@@ -1,3 +1,46 @@
+## 2026-03-22 — Faz-4+ + Faz-5 Başlangıç ✅ (Rollback Approval + Rule-based Recommendation)
+
+### Kullanıcı seçimi (bu iterasyon)
+- Faz-4+: Snapshot-list rollback + 2-adımlı approval workflow
+- Faz-5 başlangıç: deterministic recommended action katmanı
+- Permission matrix: super_admin full / admin request-only / ops read-only
+
+### Backend implementasyonu
+- `admin_futures_strategy_control.py` genişletildi:
+  - Rollback snapshot listesi: `GET /api/admin/futures/strategy/{id}/rollback-snapshots`
+  - Rollback request: `POST /api/admin/futures/strategy/{id}/rollback-request`
+  - Approval listesi: `GET /api/admin/futures/strategy/approval-requests`
+  - Approval kararları: `POST /api/admin/futures/strategy/approval-requests/{id}/approve|reject`
+  - Policy suggestions: `GET /api/admin/futures/strategy-control/policy-suggestions`
+- Approval workflow özellikleri:
+  - Request reason zorunlu + diff preview
+  - 24h expire (`expires_at` response dahil)
+  - Approve aşamasında rollback apply + rollback_reference + audit event
+- Recommended action (deterministic rules) drift-alert response’ına eklendi:
+  - output: type, confidence, reason, inputs
+  - input sinyalleri: severity, pnl trend, reject rate, feedback yoğunluğu
+- Policy adjustment summary eklendi:
+  - taxonomy 24h/7d aggregation
+  - rule-based öneri metinleri
+
+### Frontend implementasyonu
+- Drift Action Center kartlarına `Recommended=TYPE (%confidence) · reason` satırı eklendi.
+- Audit/History tabı genişletildi:
+  - Snapshot rollback paneli (liste + diff preview + request reason)
+  - Approval workflow paneli (pending list + approve/reject)
+  - Policy suggestions paneli (taxonomy_24h / taxonomy_7d / rules)
+
+### Test & doğrulama
+- Test raporu: `/app/test_reports/iteration_65.json` → Backend 22/22 PASS, Frontend PASS
+- Ek doğrulama:
+  - auto_frontend_testing_agent PASS
+  - deep_testing_backend_v2 PASS (minor expires_at notu patch ile kapatıldı)
+
+### Sonraki backlog
+- Impact preview kartı (rollout öncesi beklenen risk/reject etkisi)
+- Approval workflow genişletme (ops_lead adımı opsiyonel)
+- Recommendation katmanını rule-based’den hybrid score modele taşıma
+
 ## 2026-03-22 — Futures Strategy Control + Governance System (Faz-4) ✅
 
 ### Kullanıcı seçimi (bu iterasyon)

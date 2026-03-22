@@ -2096,7 +2096,11 @@ def strategy_rollback_request_create(
         trace_id=trace_id,
         message="Rollback request oluşturuldu, super_admin onayı bekleniyor.",
         state_snapshot=request_item,
-        extra={"rollback_reference": f"rollback_ref:{payload.snapshot_trace_id}"},
+        extra={
+            "rollback_reference": f"rollback_ref:{payload.snapshot_trace_id}",
+            "expires_at": expires_at,
+            "preview": request_item.get("preview") or {},
+        },
     )
 
 
