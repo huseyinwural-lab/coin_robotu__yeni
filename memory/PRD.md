@@ -1,3 +1,38 @@
+## 2026-03-22 — P0 GO-BLOCKER Kapanış ✅ (Actionable FAIL + Kalıcı Action→Result)
+
+### Tamamlanan P0 kapsamı
+- `PipelineOperationsPage.jsx` içinde **Last Action Results (LocalStorage)** paneli eklendi.
+  - `pipeline_ops_action_history_v1` anahtarından mount sırasında okunuyor.
+  - Yeni aksiyonlar en fazla **son 5 kayıt** olacak şekilde yazılıyor.
+  - Sayfa yenileme sonrası kayıtlar tekrar görünür kalıyor.
+- State Validation fix akışları operasyonel hale getirildi:
+  - `Fix WS`, `Re-sync Override`, `Run Gate Re-check`, `Rebuild Guard List`
+  - Aksiyon sonucu panelde `status / trace_id / message / state_snapshot` görünürlüğü korundu.
+- Gate FAIL satırlarında Suggested Fix + Run Fix davranışı aktif doğrulandı.
+- Guard aksiyon eşlemesi düzeltildi:
+  - `ignore` akışı artık backend pattern ile uyumlu `override_type=force_reject` kullanıyor.
+- Gate fix akışına geçici restart kaynaklı 502 durumları için frontend retry eklendi
+  - `runGateSuggestedFix` içinde gate re-check çağrısı retry ile güçlendirildi.
+
+### Doğrulama / Test kanıtı
+- UI smoke (Playwright screenshot tool):
+  - Login → Unified Pipeline Ops → fix tetikleme → refresh sonrası LocalStorage kayıt görünürlüğü **PASS**
+- Testing agent raporu: `/app/test_reports/iteration_60.json`
+  - Backend contract + frontend P0 akışları **PASS**
+  - P0 kabul kriterleri: localStorage persistence / trace_id visibility / actionable fix buttons / backend action contract = **PASS**
+- Ek doğrulama:
+  - `auto_frontend_testing_agent`: P0 kriterleri **PASS**
+  - `deep_testing_backend_v2`: 6/6 **PASS**
+
+### Ortam notu
+- PostgreSQL servisinin düşmesi nedeniyle backend geçici 502 verdi; servis geri ayağa kaldırıldı ve admin kullanıcıları seed edildi.
+
+### Kalan işler (öncelik)
+- P1: Alert Center lifecycle (open/ack/resolved + severity filtreleri)
+- P1: Traceability timeline (trace_id ile before/after etki çizgisi)
+- P2: Ops Playbook Mode
+- P2: DB Self-Heal / login precheck banner
+
 ## 2026-03-22 — Hotfix: Admin Login Başarısızlığı (DB Down) ✅
 
 ### Root Cause
