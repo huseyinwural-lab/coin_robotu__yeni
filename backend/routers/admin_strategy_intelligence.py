@@ -15,6 +15,7 @@ from models import DecisionApprovalRequest, SimulationRun, SimulationScenarioIte
 from schemas import (
     AdminStrategyIntelligenceResponse,
     DecisionApprovalActionRequest,
+    DecisionApprovalRequestResponse,
     DecisionRequestCreateRequest,
     DecisionRequestExecuteRequest,
     DecisionRequestPreviewResponse,
@@ -249,13 +250,34 @@ def _resolve_valid_user_id(db: Session, user_id: str) -> str:
 
 def _severity_band(risk_delta_score: float) -> str:
     score = abs(float(risk_delta_score or 0))
-    if score >= 0.25:
+    if score >= 0.6:
         return "critical"
-    if score >= 0.1:
+    if score >= 0.35:
         return "high"
-    if score >= 0.03:
+    if score >= 0.15:
         return "medium"
     return "low"
+
+
+def _compute_risk_delta_priority_score(*, simulation_output: dict | None, fallback_risk_delta: float | None = None) -> float:
+    output = simulation_output or {}
+    risk_delta = abs(float(output.get("risk_delta") if output.get("risk_delta") is not None else (fallback_risk_delta or 0)))
+    confidence_adjusted_risk = abs(
+        float(output.get("confidence_adjusted_risk_score") or output.get("projected_risk_score") or 0)
+    )
+    projected_drawdown = abs(float(output.get("projected_drawdown") or 0))
+    projected_liquidity = abs(float(output.get("projected_liquidity_impact") or 0))
+    decision_delta = str(output.get("decision_delta") or "UNCHANGED")
+    decision_shift_bonus = 0.04 if decision_delta != "UNCHANGED" else 0.0
+
+    score = (
+        (risk_delta * 0.5)
+        + (confidence_adjusted_risk * 0.25)
+        + (projected_drawdown * 0.15)
+        + (projected_liquidity * 0.1)
+        + decision_shift_bonus
+    )
+    return round(score, 6)
 
 
 def _build_decision_request_response(row: DecisionApprovalRequest) -> dict:
@@ -283,21 +305,39 @@ def _create_decision_request(
     payload: DecisionRequestCreateRequest,
 ) -> DecisionApprovalRequest:
     role = _role_name(current_user)
-    if role not in {"admin", "super_admin"}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu rol request oluşturamaz")
+    if role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="decision request sadece admin oluşturabilir")
 
     simulation_run_id = payload.simulation_run_id
-    simulation_present = False
-    derived_risk_delta = float(payload.risk_delta_score or 0)
-    if simulation_run_id:
-        _ensure_intelligence_tables(db)
-        run = db.query(SimulationRun).filter(SimulationRun.run_id == simulation_run_id).first()
-        if not run:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="simulation_run_id bulunamadı")
-        simulation_present = True
-        run_out = run.output_payload or {}
-        if payload.risk_delta_score is None:
-            derived_risk_delta = float(run_out.get("risk_delta") or 0)
+    if not simulation_run_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="simulation_run_id zorunlu")
+
+    _ensure_intelligence_tables(db)
+    run = db.query(SimulationRun).filter(SimulationRun.run_id == simulation_run_id).first()
+    if not run:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="simulation_run_id bulunamadı")
+
+    run_out = run.output_payload or {}
+    derived_risk_delta = (
+        float(payload.risk_delta_score)
+        if payload.risk_delta_score is not None
+        else _compute_risk_delta_priority_score(
+            simulation_output=run_out,
+            fallback_risk_delta=float(run_out.get("risk_delta") or 0),
+        )
+    )
+    impact_summary = payload.impact_summary or {
+        "projected_risk_score": float(run_out.get("projected_risk_score") or 0),
+        "projected_gate_decision": str(run_out.get("projected_gate_decision") or "ALLOW"),
+        "projected_pnl": float(run_out.get("projected_pnl") or 0),
+        "projected_drawdown": float(run_out.get("projected_drawdown") or 0),
+        "projected_exposure": float(run_out.get("projected_exposure") or 0),
+        "projected_var": float(run_out.get("projected_var") or 0),
+        "projected_liquidity_impact": float(run_out.get("projected_liquidity_impact") or 0),
+        "confidence_adjusted_risk_score": float(run_out.get("confidence_adjusted_risk_score") or 0),
+        "risk_delta": float(run_out.get("risk_delta") or 0),
+        "decision_delta": str(run_out.get("decision_delta") or "UNCHANGED"),
+    }
 
     preview_token = f"preview_{uuid.uuid4().hex[:14]}"
     request_payload = {
@@ -305,11 +345,11 @@ def _create_decision_request(
         "target_id": payload.target_id,
         "simulation_required": True,
         "simulation_run_id": simulation_run_id,
-        "simulation_present": simulation_present,
+        "simulation_present": True,
         "preview_token": preview_token,
         "risk_delta_score": derived_risk_delta,
         "severity_band": _severity_band(derived_risk_delta),
-        "impact_summary": payload.impact_summary or {},
+        "impact_summary": impact_summary,
     }
 
     request_row = DecisionApprovalRequest(
@@ -581,13 +621,27 @@ def list_decision_requests(
     mapped = [_build_decision_request_response(row) for row in rows]
 
     severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
-    mapped.sort(
-        key=lambda item: (
-            0 if item.get("status") == "pending" else 1,
+    status_rank = {
+        "pending": 0,
+        "approved": 1,
+        "rejected": 2,
+        "executed": 3,
+        "revoked": 4,
+        "expired": 5,
+    }
+
+    def _decision_sort_key(item: dict) -> tuple:
+        created_at = item.get("created_at")
+        created_ts = created_at.timestamp() if isinstance(created_at, datetime) else float("inf")
+        return (
+            status_rank.get(str(item.get("status") or ""), 99),
             -severity_rank.get(str(item.get("severity_band") or "low"), 0),
             -abs(float(item.get("risk_delta_score") or 0)),
-            str(item.get("created_at")),
+            created_ts,
         )
+
+    mapped.sort(
+        key=_decision_sort_key
     )
     return DecisionApprovalRequestsResponse(items=[DecisionApprovalRequestResponse(**item) for item in mapped])
 
@@ -764,7 +818,9 @@ def compare_simulation_run_current(
     strategy_id = str(input_payload.get("strategy_binding") or input_payload.get("strategy_id") or "manual_execution")
     side = str(input_payload.get("side") or "buy")
     notional = float(input_payload.get("notional") or input_payload.get("position_size_value") or 0)
-    user_id = str(run.actor_id or "")
+    user_id = str(input_payload.get("user_id") or run.actor_id or "")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="simulation run user context eksik")
 
     conflict_result = evaluate_conflict_warning(
         db,
@@ -919,7 +975,10 @@ def risk_simulation(
     db: Session = Depends(get_db),
 ):
     resolved_user_id = _resolve_valid_user_id(db, payload.user_id)
-    intent_payload = payload.intent_payload or {}
+    intent_payload = {
+        **(payload.intent_payload or {}),
+        "user_id": resolved_user_id,
+    }
     try:
         symbol = normalize_symbol(
             intent_payload.get("symbol"),
@@ -1046,6 +1105,7 @@ def risk_simulation_batch(
         intent_payload = {
             **(payload.intent_payload or {}),
             "symbol": valid_symbol,
+            "user_id": resolved_user_id,
         }
         side = str(intent_payload.get("side") or "buy")
         strategy_id = str(intent_payload.get("strategy_binding") or intent_payload.get("strategy_id") or "manual_execution")

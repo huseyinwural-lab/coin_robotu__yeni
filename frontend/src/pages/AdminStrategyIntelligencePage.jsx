@@ -4,10 +4,17 @@ import { toast } from "sonner";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { ActiveOverridesTable } from "@/components/strategy-intelligence/ActiveOverridesTable";
 import { ActionConfirmationModal } from "@/components/strategy-intelligence/ActionConfirmationModal";
+import { ApprovalQueuePanel } from "@/components/strategy-intelligence/ApprovalQueuePanel";
 import { AuditSummaryPanel } from "@/components/strategy-intelligence/AuditSummaryPanel";
+import { BatchSimulationPanel } from "@/components/strategy-intelligence/BatchSimulationPanel";
 import { BeforeAfterImpactCard } from "@/components/strategy-intelligence/BeforeAfterImpactCard";
+import { ConflictActionPanel } from "@/components/strategy-intelligence/ConflictActionPanel";
+import { HedgeActionPanel } from "@/components/strategy-intelligence/HedgeActionPanel";
 import { OverrideForm } from "@/components/strategy-intelligence/OverrideForm";
+import { RebalanceActionPanel } from "@/components/strategy-intelligence/RebalanceActionPanel";
+import { RoleVisibilityPanel } from "@/components/strategy-intelligence/RoleVisibilityPanel";
 import { SimulationGuardPanel } from "@/components/strategy-intelligence/SimulationGuardPanel";
+import { SimulationHistoryPanel } from "@/components/strategy-intelligence/SimulationHistoryPanel";
 import { StrategyIntelligencePageContainer } from "@/components/strategy-intelligence/StrategyIntelligencePageContainer";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
@@ -31,12 +38,14 @@ export const AdminStrategyIntelligencePage = () => {
   const role = String(user?.role || "");
   const canSimulate = ["super_admin", "admin", "ops", "viewer", "risk_manager", "operator"].includes(role);
   const canApplyOverride = ["super_admin", "admin"].includes(role);
+  const canRequestDecision = role === "admin";
+  const canApproveExecute = role === "super_admin";
 
   const [isLoading, setIsLoading] = useState(true);
   const [dashboard, setDashboard] = useState(null);
   const [manualOverrides, setManualOverrides] = useState([]);
   const [activeOverrides, setActiveOverrides] = useState([]);
-  const [approvalRequests, setApprovalRequests] = useState([]);
+  const [decisionRequests, setDecisionRequests] = useState([]);
   const [simulationHistory, setSimulationHistory] = useState([]);
   const [loadError, setLoadError] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
@@ -50,10 +59,14 @@ export const AdminStrategyIntelligencePage = () => {
   const [isRunningSimulation, setIsRunningSimulation] = useState(false);
   const [isRunningBatchSimulation, setIsRunningBatchSimulation] = useState(false);
   const [isApplyingOverride, setIsApplyingOverride] = useState(false);
-  const [isApprovingRequest, setIsApprovingRequest] = useState("");
+  const [isDecisionRequestingType, setIsDecisionRequestingType] = useState("");
+  const [decisionActionRequestId, setDecisionActionRequestId] = useState("");
   const [revokingId, setRevokingId] = useState("");
   const [batchResult, setBatchResult] = useState(null);
-  const [approvalReviewNote, setApprovalReviewNote] = useState("phase_next_step_review");
+  const [decisionReviewNote, setDecisionReviewNote] = useState("governance_review_note");
+  const [decisionPreviewById, setDecisionPreviewById] = useState({});
+  const [comparingRunId, setComparingRunId] = useState("");
+  const [simulationCompareResult, setSimulationCompareResult] = useState(null);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -71,17 +84,17 @@ export const AdminStrategyIntelligencePage = () => {
     setIsLoading(true);
     setLoadError("");
     try {
-      const [dashRes, overridesRes, activeRes, approvalsRes, historyRes] = await Promise.all([
+      const [dashRes, overridesRes, activeRes, decisionsRes, historyRes] = await Promise.all([
         apiClient.get("/admin/strategy-intelligence"),
         apiClient.get("/admin/manual-overrides"),
         apiClient.get("/admin/active-overrides"),
-        apiClient.get("/admin/override-approval-requests"),
+        apiClient.get("/admin/decision-requests"),
         apiClient.get("/admin/risk-simulation/history", { params: { limit: 40 } }),
       ]);
       setDashboard(dashRes.data || null);
       setManualOverrides(overridesRes.data || []);
       setActiveOverrides(activeRes.data || []);
-      setApprovalRequests(approvalsRes.data?.items || []);
+      setDecisionRequests(decisionsRes.data?.items || []);
       setSimulationHistory(historyRes.data?.items || []);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
@@ -98,7 +111,23 @@ export const AdminStrategyIntelligencePage = () => {
   }, [load]);
 
   const conflicts = useMemo(() => dashboard?.strategy_conflicts || [], [dashboard]);
+  const rebalanceEvents = useMemo(() => dashboard?.capital_rebalance_events || [], [dashboard]);
   const hedgeSuggestions = useMemo(() => dashboard?.hedge_suggestions || [], [dashboard]);
+  const impactSummary = useMemo(
+    () => ({
+      projected_risk_score: simulationResult?.projected_risk_score ?? 0,
+      projected_gate_decision: simulationResult?.projected_gate_decision ?? "ALLOW",
+      projected_pnl: simulationResult?.projected_pnl ?? 0,
+      projected_drawdown: simulationResult?.projected_drawdown ?? 0,
+      projected_exposure: simulationResult?.projected_exposure ?? 0,
+      projected_var: simulationResult?.projected_var ?? 0,
+      projected_liquidity_impact: simulationResult?.projected_liquidity_impact ?? 0,
+      confidence_adjusted_risk_score: simulationResult?.confidence_adjusted_risk_score ?? 0,
+      risk_delta: simulationResult?.risk_delta ?? 0,
+      decision_delta: simulationResult?.decision_delta ?? "UNCHANGED",
+    }),
+    [simulationResult]
+  );
 
   const submitSimulation = async () => {
     if (!simulationForm.user_id.trim()) {
@@ -122,6 +151,7 @@ export const AdminStrategyIntelligencePage = () => {
       const { data } = await apiClient.post("/admin/risk-simulation", payload);
       setSimulationResult(data || null);
       setBatchResult(null);
+      setSimulationCompareResult(null);
       toast.success("Simulation tamamlandı");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Simulation başarısız");
@@ -246,29 +276,171 @@ export const AdminStrategyIntelligencePage = () => {
     }
   };
 
-  const approveRequest = async (requestId, action) => {
-    if (role !== "super_admin") {
-      toast.error("Approval kararı sadece super_admin");
+  const createDecisionRequest = async ({ requestType, targetType, targetId, reasonNote, impactContext = {} }) => {
+    if (!canRequestDecision) {
+      toast.error("Decision request sadece admin oluşturabilir");
       return;
     }
-    const note = String(approvalReviewNote || "").trim();
+    if (!simulationResult?.simulation_id) {
+      toast.error("Decision request için önce simulation çalıştırın");
+      return;
+    }
+    if (String(reasonNote || "").trim().length < 8) {
+      toast.error("reason_note minimum 8 karakter olmalı");
+      return;
+    }
+
+    const endpointMap = {
+      conflict_resolve: "/admin/decision-requests/conflict-resolve",
+      hedge_apply: "/admin/decision-requests/hedge-apply",
+      rebalance_change: "/admin/decision-requests/rebalance-change",
+    };
+    const endpoint = endpointMap[requestType];
+    if (!endpoint) {
+      toast.error("Geçersiz decision request type");
+      return;
+    }
+
+    setIsDecisionRequestingType(requestType);
+    try {
+      const payload = {
+        target_type: targetType,
+        target_id: targetId,
+        reason_note: reasonNote,
+        simulation_run_id: simulationResult.simulation_id,
+        impact_summary: {
+          ...impactSummary,
+          ...impactContext,
+        },
+      };
+      const { data } = await apiClient.post(endpoint, payload);
+      toast.success(`Request oluşturuldu: ${data?.request_id || "-"}`);
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Decision request oluşturulamadı");
+    } finally {
+      setIsDecisionRequestingType("");
+    }
+  };
+
+  const previewDecisionRequest = async (requestId) => {
+    setDecisionActionRequestId(requestId);
+    try {
+      const { data } = await apiClient.get(`/admin/decision-requests/${requestId}/preview`);
+      setDecisionPreviewById((prev) => ({
+        ...prev,
+        [requestId]: data,
+      }));
+      toast.success("Preview token alındı");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Preview alınamadı");
+    } finally {
+      setDecisionActionRequestId("");
+    }
+  };
+
+  const approveDecisionRequest = async (requestId) => {
+    if (!canApproveExecute) {
+      toast.error("Approve sadece super_admin");
+      return;
+    }
+    const note = String(decisionReviewNote || "").trim();
     if (note.length < 8) {
       toast.error("review note minimum 8 karakter olmalı");
       return;
     }
 
-    setIsApprovingRequest(requestId);
+    setDecisionActionRequestId(requestId);
     try {
-      const endpoint = action === "approve" ? "approve" : "reject";
-      const { data } = await apiClient.post(`/admin/override-approval-requests/${requestId}/${endpoint}`, {
-        reason_note: note,
-      });
-      toast.success(data?.message || `Request ${action}`);
+      await apiClient.post(`/admin/decision-requests/${requestId}/approve`, { reason_note: note });
+      toast.success("Request onaylandı");
       await load();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Approval işlemi başarısız");
+      toast.error(error?.response?.data?.detail || "Approve başarısız");
     } finally {
-      setIsApprovingRequest("");
+      setDecisionActionRequestId("");
+    }
+  };
+
+  const rejectDecisionRequest = async (requestId) => {
+    if (!canApproveExecute) {
+      toast.error("Reject sadece super_admin");
+      return;
+    }
+    const note = String(decisionReviewNote || "").trim();
+    if (note.length < 8) {
+      toast.error("review note minimum 8 karakter olmalı");
+      return;
+    }
+
+    setDecisionActionRequestId(requestId);
+    try {
+      await apiClient.post(`/admin/decision-requests/${requestId}/reject`, { reason_note: note });
+      toast.success("Request reddedildi");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Reject başarısız");
+    } finally {
+      setDecisionActionRequestId("");
+    }
+  };
+
+  const executeDecisionRequest = async (requestRow) => {
+    if (!canApproveExecute) {
+      toast.error("Execute sadece super_admin");
+      return;
+    }
+    const note = String(decisionReviewNote || "").trim();
+    if (note.length < 8) {
+      toast.error("review note minimum 8 karakter olmalı");
+      return;
+    }
+
+    const requestId = requestRow?.request_id;
+    if (!requestId) {
+      toast.error("Geçersiz request");
+      return;
+    }
+
+    setDecisionActionRequestId(requestId);
+    try {
+      let previewToken = requestRow?.preview_token || decisionPreviewById?.[requestId]?.preview_token || "";
+      if (!previewToken) {
+        const previewRes = await apiClient.get(`/admin/decision-requests/${requestId}/preview`);
+        previewToken = String(previewRes?.data?.preview_token || "");
+        setDecisionPreviewById((prev) => ({
+          ...prev,
+          [requestId]: previewRes?.data,
+        }));
+      }
+      if (!previewToken) {
+        toast.error("Execute için preview_token alınamadı");
+        return;
+      }
+
+      await apiClient.post(`/admin/decision-requests/${requestId}/execute`, {
+        reason_note: note,
+        preview_token: previewToken,
+      });
+      toast.success("Request execute edildi");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Execute başarısız");
+    } finally {
+      setDecisionActionRequestId("");
+    }
+  };
+
+  const compareSimulationRun = async (runId) => {
+    setComparingRunId(runId);
+    try {
+      const { data } = await apiClient.get(`/admin/simulation-runs/${runId}/compare-current`);
+      setSimulationCompareResult(data || null);
+      toast.success("History replay compare hazır");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Compare başarısız");
+    } finally {
+      setComparingRunId("");
     }
   };
 
@@ -295,15 +467,12 @@ export const AdminStrategyIntelligencePage = () => {
       loadError={loadError}
       onRefresh={load}
     >
-      <div className="col-span-12 border border-slate-800 bg-slate-900 p-3" data-testid="strategy-intelligence-role-visibility-panel">
-        <p className="text-xs text-slate-300" data-testid="strategy-intelligence-role-visibility-text">
-          {canApplyOverride
-            ? role === "admin"
-              ? "admin: simulate + confirm + request (approval-gated)"
-              : "super_admin: simulate + confirm + apply/revoke + approve-execute"
-            : "ops/viewer: read-only + simulation; kritik aksiyonlar kapalı"}
-        </p>
-      </div>
+      <RoleVisibilityPanel
+        role={role}
+        canApplyOverride={canApplyOverride}
+        canRequestDecision={canRequestDecision}
+        canApproveExecute={canApproveExecute}
+      />
 
       <div className="col-span-12 lg:col-span-7 space-y-4" data-testid="strategy-intelligence-left-column">
         <SimulationGuardPanel
@@ -319,28 +488,12 @@ export const AdminStrategyIntelligencePage = () => {
           selectedSymbols={simulationSelectedSymbols}
           onSelectedSymbols={setSimulationSelectedSymbols}
         />
-        <div className="border border-slate-800 bg-slate-900 p-4" data-testid="strategy-intelligence-batch-simulation-panel">
-          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="strategy-intelligence-batch-simulation-title">Batch Simulation (selected symbols)</p>
-          <button
-            type="button"
-            onClick={submitBatchSimulation}
-            disabled={!canSimulate || isRunningBatchSimulation}
-            className="mt-2 rounded border border-black bg-black px-3 py-1 text-sm text-orange-300 disabled:opacity-50"
-            data-testid="strategy-intelligence-run-batch-simulation-button"
-          >
-            {isRunningBatchSimulation ? "Batch simulation..." : "Run Batch Simulation"}
-          </button>
-          {batchResult && (
-            <div className="mt-2 space-y-1 text-xs" data-testid="strategy-intelligence-batch-simulation-result">
-              <p data-testid="strategy-intelligence-batch-simulation-summary">summary={JSON.stringify(batchResult.summary || {})}</p>
-              {(batchResult.items || []).slice(0, 8).map((item, index) => (
-                <p key={`${item.simulation_id}-${index}`} data-testid={`strategy-intelligence-batch-simulation-item-${index}`}>
-                  {item.symbol} · risk={item.projected_risk_score} · adj_risk={item.confidence_adjusted_risk_score} · delta={item.risk_delta}
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
+        <BatchSimulationPanel
+          canSimulate={canSimulate}
+          isRunning={isRunningBatchSimulation}
+          batchResult={batchResult}
+          onRun={submitBatchSimulation}
+        />
         <BeforeAfterImpactCard simulationResult={simulationResult} />
       </div>
 
@@ -356,33 +509,26 @@ export const AdminStrategyIntelligencePage = () => {
         <AuditSummaryPanel manualOverrides={manualOverrides} activeOverrides={activeOverrides} />
       </div>
 
-      <div className="col-span-12 lg:col-span-6 border border-slate-800 bg-slate-900 p-4" data-testid="strategy-intelligence-conflicts-panel">
-        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="strategy-intelligence-conflicts-title">Strategy Conflicts</p>
-        <div className="mt-2 space-y-2" data-testid="strategy-intelligence-conflicts-list">
-          {conflicts.slice(0, 8).map((item, index) => (
-            <article key={`${item.winning_strategy}-${index}`} className="border border-slate-800 p-2" data-testid={`strategy-intelligence-conflict-item-${index}`}>
-              <p className="text-sm" data-testid={`strategy-intelligence-conflict-winner-${index}`}>winner: {item.winning_strategy || "-"}</p>
-              <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-conflict-loser-${index}`}>loser: {item.losing_strategy || "-"}</p>
-              <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-conflict-reason-${index}`}>reason: {item.resolution_reason}</p>
-            </article>
-          ))}
-          {conflicts.length === 0 && <p className="text-sm text-slate-400" data-testid="strategy-intelligence-conflicts-empty">Aktif strategy conflict bulunmuyor.</p>}
-        </div>
-      </div>
+      <ConflictActionPanel
+        conflicts={conflicts}
+        canRequestDecision={canRequestDecision}
+        isSubmitting={isDecisionRequestingType === "conflict_resolve"}
+        onRequest={createDecisionRequest}
+      />
 
-      <div className="col-span-12 lg:col-span-6 border border-slate-800 bg-slate-900 p-4" data-testid="strategy-intelligence-hedge-panel">
-        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="strategy-intelligence-hedge-title">Hedge Suggestions</p>
-        <div className="mt-2 space-y-2" data-testid="strategy-intelligence-hedge-list">
-          {hedgeSuggestions.slice(0, 8).map((item, index) => (
-            <article key={`${item.hedge_symbol || "none"}-${index}`} className="border border-slate-800 p-2" data-testid={`strategy-intelligence-hedge-item-${index}`}>
-              <p className="text-sm" data-testid={`strategy-intelligence-hedge-symbol-${index}`}>symbol: {item.hedge_symbol || "none"}</p>
-              <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-hedge-size-${index}`}>size: {item.hedge_size}</p>
-              <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-hedge-direction-${index}`}>direction: {item.hedge_direction || "-"}</p>
-            </article>
-          ))}
-          {hedgeSuggestions.length === 0 && <p className="text-sm text-slate-400" data-testid="strategy-intelligence-hedge-empty">Aktif hedge önerisi bulunmuyor.</p>}
-        </div>
-      </div>
+      <HedgeActionPanel
+        hedgeSuggestions={hedgeSuggestions}
+        canRequestDecision={canRequestDecision}
+        isSubmitting={isDecisionRequestingType === "hedge_apply"}
+        onRequest={createDecisionRequest}
+      />
+
+      <RebalanceActionPanel
+        rebalanceEvents={rebalanceEvents}
+        canRequestDecision={canRequestDecision}
+        isSubmitting={isDecisionRequestingType === "rebalance_change"}
+        onRequest={createDecisionRequest}
+      />
 
       <div className="col-span-12" data-testid="strategy-intelligence-active-overrides-wrapper">
         <ActiveOverridesTable
@@ -393,69 +539,25 @@ export const AdminStrategyIntelligencePage = () => {
         />
       </div>
 
-      <div className="col-span-12 lg:col-span-6 border border-slate-800 bg-slate-900 p-4" data-testid="strategy-intelligence-approval-requests-panel">
-        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="strategy-intelligence-approval-requests-title">Override Approval Requests</p>
-        <input
-          type="text"
-          className="mt-2 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-          value={approvalReviewNote}
-          onChange={(event) => setApprovalReviewNote(event.target.value)}
-          data-testid="strategy-intelligence-approval-review-note-input"
-        />
-        <div className="mt-2 space-y-2" data-testid="strategy-intelligence-approval-requests-list">
-          {approvalRequests.slice(0, 12).map((item, index) => (
-            <article key={item.request_id} className="border border-slate-800 p-2" data-testid={`strategy-intelligence-approval-request-item-${index}`}>
-              <p className="text-sm" data-testid={`strategy-intelligence-approval-request-main-${index}`}>
-                {item.request_id} · status={item.status} · requested_by={item.requested_by}
-              </p>
-              <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-approval-request-reason-${index}`}>{item.reason_note}</p>
-              {role === "super_admin" && item.status === "pending" && (
-                <div className="mt-2 flex gap-2" data-testid={`strategy-intelligence-approval-request-actions-${index}`}>
-                  <button
-                    type="button"
-                    onClick={() => approveRequest(item.request_id, "approve")}
-                    disabled={isApprovingRequest === item.request_id}
-                    className="rounded border border-emerald-600 px-2 py-1 text-xs text-emerald-300"
-                    data-testid={`strategy-intelligence-approval-request-approve-button-${index}`}
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => approveRequest(item.request_id, "reject")}
-                    disabled={isApprovingRequest === item.request_id}
-                    className="rounded border border-rose-600 px-2 py-1 text-xs text-rose-300"
-                    data-testid={`strategy-intelligence-approval-request-reject-button-${index}`}
-                  >
-                    Reject
-                  </button>
-                </div>
-              )}
-            </article>
-          ))}
-          {approvalRequests.length === 0 && <p className="text-sm text-slate-400" data-testid="strategy-intelligence-approval-requests-empty">No data yet</p>}
-        </div>
-      </div>
+      <ApprovalQueuePanel
+        items={decisionRequests}
+        role={role}
+        reviewNote={decisionReviewNote}
+        onReviewNoteChange={setDecisionReviewNote}
+        actionLoadingId={decisionActionRequestId}
+        onPreview={previewDecisionRequest}
+        onApprove={approveDecisionRequest}
+        onReject={rejectDecisionRequest}
+        onExecute={executeDecisionRequest}
+        previewById={decisionPreviewById}
+      />
 
-      <div className="col-span-12 lg:col-span-6 border border-slate-800 bg-slate-900 p-4" data-testid="strategy-intelligence-simulation-history-panel">
-        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="strategy-intelligence-simulation-history-title">Simulation History</p>
-        <div className="mt-2 space-y-2" data-testid="strategy-intelligence-simulation-history-list">
-          {simulationHistory.slice(0, 12).map((item, index) => (
-            <article key={item.run_id} className="border border-slate-800 p-2" data-testid={`strategy-intelligence-simulation-history-item-${index}`}>
-              <p className="text-sm" data-testid={`strategy-intelligence-simulation-history-main-${index}`}>
-                {item.run_id} · mode={item.request_mode} · status={item.status}
-              </p>
-              <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-simulation-history-symbols-${index}`}>
-                symbols={(item.symbols || []).join(", ") || "-"}
-              </p>
-              <p className="text-xs text-slate-500" data-testid={`strategy-intelligence-simulation-history-hash-${index}`}>
-                hash={item.summary_hash}
-              </p>
-            </article>
-          ))}
-          {simulationHistory.length === 0 && <p className="text-sm text-slate-400" data-testid="strategy-intelligence-simulation-history-empty">No data yet</p>}
-        </div>
-      </div>
+      <SimulationHistoryPanel
+        rows={simulationHistory}
+        comparingRunId={comparingRunId}
+        compareResult={simulationCompareResult}
+        onCompare={compareSimulationRun}
+      />
 
       <ActionConfirmationModal
         open={confirmOpen}
