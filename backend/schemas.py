@@ -2572,6 +2572,10 @@ class DecisionApprovalRequestResponse(BaseModel):
     risk_delta_score: float = 0
     severity_band: str = "low"
     impact_summary: dict = Field(default_factory=dict)
+    deterministic_effect_preview: dict = Field(default_factory=dict)
+    execution_effect: dict = Field(default_factory=dict)
+    state_change: str | None = None
+    recommendation_rank: int | None = None
     sla_countdown_seconds: int | None = None
     sla_state: str = "n/a"
     escalation_state: str = "none"

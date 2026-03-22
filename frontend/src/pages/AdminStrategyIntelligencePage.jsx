@@ -14,6 +14,7 @@ import { HedgeActionPanel } from "@/components/strategy-intelligence/HedgeAction
 import { MatrixBatchSimulationPanel } from "@/components/strategy-intelligence/MatrixBatchSimulationPanel";
 import { OverrideForm } from "@/components/strategy-intelligence/OverrideForm";
 import { PresetScenarioPanel } from "@/components/strategy-intelligence/PresetScenarioPanel";
+import { RecommendationStackPanel } from "@/components/strategy-intelligence/RecommendationStackPanel";
 import { RebalanceActionPanel } from "@/components/strategy-intelligence/RebalanceActionPanel";
 import { RoleVisibilityPanel } from "@/components/strategy-intelligence/RoleVisibilityPanel";
 import { SimulationGuardPanel } from "@/components/strategy-intelligence/SimulationGuardPanel";
@@ -1025,6 +1026,8 @@ export const AdminStrategyIntelligencePage = () => {
         escalationActionLoadingId={escalationActionId}
         onRefresh={load}
       />
+
+      <RecommendationStackPanel items={decisionRequests} />
 
       <MatrixBatchSimulationPanel
         canSimulate={canSimulate}

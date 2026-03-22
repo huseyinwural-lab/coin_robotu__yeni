@@ -176,8 +176,20 @@ export const GovernanceBoardPanel = ({
                     owner={item.assigned_to || "-"} · ack_by={item.ack_by || "-"} · ack_at={formatDate(item.ack_at)}
                   </p>
                   <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-governance-queue-severity-${index}`}>
-                    severity={item.severity_band} · risk_delta_score={item.risk_delta_score}
+                    severity={item.severity_band} · risk_delta_score={item.risk_delta_score} · recommendation_rank={item.recommendation_rank || "-"}
                   </p>
+
+                  <div className="mt-1 rounded border border-slate-800 bg-slate-950 p-2" data-testid={`strategy-intelligence-governance-queue-inline-impact-card-${index}`}>
+                    <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-governance-queue-inline-impact-state-${index}`}>
+                      state_change={(item.execution_effect?.state_change || item.state_change || item.deterministic_effect_preview?.state_change || "-")}
+                    </p>
+                    <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-governance-queue-inline-impact-risk-${index}`}>
+                      predicted_risk_reduction={item.deterministic_effect_preview?.predicted_risk_reduction ?? "-"} · realized_risk_drop={item.execution_effect?.realized_risk_drop ?? "-"}
+                    </p>
+                    <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-governance-queue-inline-impact-allocation-${index}`}>
+                      allocation_diff_bps={(item.execution_effect?.allocation_diff_bps ?? item.deterministic_effect_preview?.predicted_allocation_diff_bps) ?? "-"}
+                    </p>
+                  </div>
 
                   <div className="mt-2 flex flex-wrap gap-2" data-testid={`strategy-intelligence-governance-queue-actions-${index}`}>
                     <Button

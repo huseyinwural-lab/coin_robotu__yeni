@@ -512,10 +512,70 @@ def _compute_risk_delta_priority_score(*, simulation_output: dict | None, fallba
     return round(score, 6)
 
 
+def _request_type_weight(request_type: str) -> float:
+    normalized = str(request_type or "")
+    if normalized == "hedge_apply":
+        return 1.2
+    if normalized == "rebalance_change":
+        return 1.0
+    if normalized == "conflict_resolve":
+        return 0.9
+    return 0.7
+
+
+def _deterministic_effect_preview(*, request_type: str, risk_delta_score: float, impact_summary: dict) -> dict:
+    score = abs(float(risk_delta_score or 0))
+    base_risk_reduction = min(0.35, 0.04 + (score * 0.28))
+    if request_type == "hedge_apply":
+        risk_reduction = round(base_risk_reduction + 0.03, 6)
+        allocation_diff_bps = 0
+        state_change = "HEDGE_APPLIED"
+    elif request_type == "rebalance_change":
+        risk_reduction = round(base_risk_reduction * 0.65, 6)
+        allocation_diff_bps = round((score * 800), 2)
+        state_change = "ALLOCATION_REBALANCED"
+    else:
+        risk_reduction = round(base_risk_reduction * 0.85, 6)
+        allocation_diff_bps = round((score * 300), 2)
+        state_change = "CONFLICT_RESOLVED"
+
+    projected_risk = float(impact_summary.get("projected_risk_score") or 0)
+    projected_after = round(max(projected_risk - risk_reduction, 0), 6)
+    return {
+        "state_change": state_change,
+        "predicted_risk_reduction": risk_reduction,
+        "predicted_after_risk_score": projected_after,
+        "predicted_allocation_diff_bps": allocation_diff_bps,
+        "model_type": "deterministic_fixed_v1",
+    }
+
+
+def _recommendation_priority_score(*, status_value: str, sla_state: str, severity_band: str, request_type: str, risk_delta_score: float) -> float:
+    if status_value != "pending":
+        return 0
+    severity_weights = {"critical": 40, "high": 28, "medium": 16, "low": 8}
+    sla_bonus = {"breach": 30, "warning": 14, "healthy": 4, "n/a": 0}
+    return round(
+        severity_weights.get(str(severity_band or "low"), 0)
+        + sla_bonus.get(str(sla_state or "n/a"), 0)
+        + (abs(float(risk_delta_score or 0)) * 50)
+        + (_request_type_weight(request_type) * 5),
+        6,
+    )
+
+
 def _build_decision_request_response(row: DecisionApprovalRequest) -> dict:
     base = _serialize_approval_row(row)
     payload = row.payload or {}
     risk_delta_score = float(payload.get("risk_delta_score") or 0)
+    request_type = str(row.request_type or "")
+    impact_summary = payload.get("impact_summary") or {}
+    preview = payload.get("deterministic_effect_preview") or _deterministic_effect_preview(
+        request_type=request_type,
+        risk_delta_score=risk_delta_score,
+        impact_summary=impact_summary,
+    )
+    execution_effect = payload.get("execution_effect") or {}
     sla = _decision_sla_snapshot(created_at=row.created_at, request_status=row.status)
     return {
         **base,
@@ -526,7 +586,10 @@ def _build_decision_request_response(row: DecisionApprovalRequest) -> dict:
         "preview_token": payload.get("preview_token"),
         "risk_delta_score": risk_delta_score,
         "severity_band": payload.get("severity_band") or _severity_band(risk_delta_score),
-        "impact_summary": payload.get("impact_summary") or {},
+        "impact_summary": impact_summary,
+        "deterministic_effect_preview": preview,
+        "execution_effect": execution_effect,
+        "state_change": execution_effect.get("state_change") or preview.get("state_change"),
         "sla_countdown_seconds": sla.get("sla_countdown_seconds"),
         "sla_state": str(sla.get("sla_state") or "n/a"),
         "escalation_state": str(sla.get("escalation_state") or "none"),
@@ -580,6 +643,11 @@ def _create_decision_request(
     }
 
     preview_token = f"preview_{uuid.uuid4().hex[:14]}"
+    deterministic_effect_preview = _deterministic_effect_preview(
+        request_type=request_type,
+        risk_delta_score=derived_risk_delta,
+        impact_summary=impact_summary,
+    )
     request_payload = {
         "target_type": payload.target_type,
         "target_id": payload.target_id,
@@ -590,6 +658,7 @@ def _create_decision_request(
         "risk_delta_score": derived_risk_delta,
         "severity_band": _severity_band(derived_risk_delta),
         "impact_summary": impact_summary,
+        "deterministic_effect_preview": deterministic_effect_preview,
     }
 
     request_row = DecisionApprovalRequest(
@@ -913,6 +982,21 @@ def list_decision_requests(
     mapped.sort(
         key=_decision_sort_key
     )
+
+    pending_ranked = sorted(
+        [item for item in mapped if str(item.get("status")) == "pending"],
+        key=lambda item: -_recommendation_priority_score(
+            status_value=str(item.get("status") or ""),
+            sla_state=str(item.get("sla_state") or "n/a"),
+            severity_band=str(item.get("severity_band") or "low"),
+            request_type=str(item.get("request_type") or ""),
+            risk_delta_score=float(item.get("risk_delta_score") or 0),
+        ),
+    )
+    rank_map = {item.get("request_id"): index + 1 for index, item in enumerate(pending_ranked)}
+    for item in mapped:
+        item["recommendation_rank"] = rank_map.get(item.get("request_id"))
+
     return DecisionApprovalRequestsResponse(items=[DecisionApprovalRequestResponse(**item) for item in mapped])
 
 
@@ -1092,10 +1176,30 @@ def execute_decision_request(
         db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request expired")
 
-    request_payload = row.payload or {}
+    request_payload = {**(row.payload or {})}
     expected_token = str(request_payload.get("preview_token") or "")
     if not expected_token or payload.preview_token != expected_token:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="preview_token doğrulaması başarısız")
+
+    risk_delta_score = float(request_payload.get("risk_delta_score") or 0)
+    impact_summary = request_payload.get("impact_summary") or {}
+    deterministic_preview = request_payload.get("deterministic_effect_preview") or _deterministic_effect_preview(
+        request_type=row.request_type,
+        risk_delta_score=risk_delta_score,
+        impact_summary=impact_summary,
+    )
+    execution_effect = {
+        **deterministic_preview,
+        "executed_at": datetime.now(timezone.utc).isoformat(),
+        "executed_by": str(current_user.id),
+        "request_type": row.request_type,
+    }
+    if row.request_type == "hedge_apply":
+        execution_effect["realized_risk_drop"] = deterministic_preview.get("predicted_risk_reduction")
+    elif row.request_type == "rebalance_change":
+        execution_effect["allocation_diff_bps"] = deterministic_preview.get("predicted_allocation_diff_bps")
+    elif row.request_type == "conflict_resolve":
+        execution_effect["conflict_state"] = "resolved"
 
     row.status = "executed"
     row.approved_by = str(current_user.id)
@@ -1104,6 +1208,9 @@ def execute_decision_request(
     row.assigned_to = row.assigned_to or "super_admin"
     row.ack_by = row.ack_by or str(current_user.id)
     row.ack_at = row.ack_at or datetime.now(timezone.utc)
+    request_payload["execution_effect"] = execution_effect
+    request_payload["state_change"] = deterministic_preview.get("state_change")
+    row.payload = request_payload
 
     record_manual_override(
         db,

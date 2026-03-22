@@ -13,6 +13,27 @@ const metricValue = (payload, key) => {
   return value === null || value === undefined ? "-" : String(value);
 };
 
+const buildSparklinePath = (values, width = 180, height = 44) => {
+  if (!values.length) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  return values
+    .map((value, index) => {
+      const x = (index / Math.max(values.length - 1, 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+};
+
+const deltaBadgeClass = (value) => {
+  const numeric = Number(value || 0);
+  if (numeric > 0) return "text-rose-300 border-rose-600/60";
+  if (numeric < 0) return "text-emerald-300 border-emerald-600/60";
+  return "text-slate-300 border-slate-700";
+};
+
 export const SimulationHistoryPanel = ({
   rows = [],
   comparingRunId,
@@ -23,6 +44,12 @@ export const SimulationHistoryPanel = ({
   onApplyFilters = () => {},
   onResetFilters = () => {},
 }) => {
+  const riskSeries = rows
+    .map((item) => Number(item?.output_payload?.projected_risk_score ?? item?.output_payload?.confidence_adjusted_risk_score))
+    .filter((value) => Number.isFinite(value));
+  const sparklinePath = buildSparklinePath(riskSeries);
+  const riskSeriesDelta = riskSeries.length >= 2 ? Number((riskSeries[riskSeries.length - 1] - riskSeries[0]).toFixed(6)) : 0;
+
   return (
     <section className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="strategy-intelligence-simulation-history-panel">
       <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="strategy-intelligence-simulation-history-title">
@@ -90,6 +117,23 @@ export const SimulationHistoryPanel = ({
         </Button>
       </div>
 
+      <div className="mt-2 rounded border border-slate-800 bg-slate-950 p-2" data-testid="strategy-intelligence-history-sparkline-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-slate-400" data-testid="strategy-intelligence-history-sparkline-label">
+            projected_risk_score trend
+          </p>
+          <span
+            className={`rounded border px-2 py-0.5 text-xs ${deltaBadgeClass(riskSeriesDelta)}`}
+            data-testid="strategy-intelligence-history-sparkline-delta-badge"
+          >
+            Δ {riskSeriesDelta}
+          </span>
+        </div>
+        <svg width="180" height="44" viewBox="0 0 180 44" className="mt-1" data-testid="strategy-intelligence-history-sparkline-svg">
+          <path d={sparklinePath || ""} fill="none" stroke="#f97316" strokeWidth="2" />
+        </svg>
+      </div>
+
       {compareResult && (
         <div className="mt-2 rounded border border-slate-800 bg-slate-950 p-2" data-testid="strategy-intelligence-simulation-compare-panel">
           <p className="text-sm" data-testid="strategy-intelligence-simulation-compare-run-id">run_id={compareResult.run_id}</p>
@@ -127,6 +171,12 @@ export const SimulationHistoryPanel = ({
           </div>
           <p className="mt-2 text-xs text-slate-400" data-testid="strategy-intelligence-simulation-compare-risk-delta">
             risk_delta_vs_history={compareResult.compare_summary?.risk_delta_vs_history ?? "-"}
+          </p>
+          <p className="text-xs text-slate-400" data-testid="strategy-intelligence-simulation-compare-exposure-delta">
+            exposure_change_vs_history={compareResult.compare_summary?.exposure_change_vs_history ?? "-"}
+          </p>
+          <p className="text-xs text-slate-400" data-testid="strategy-intelligence-simulation-compare-var-delta">
+            var_change_vs_history={compareResult.compare_summary?.var_change_vs_history ?? "-"}
           </p>
           <p className="text-xs text-slate-400" data-testid="strategy-intelligence-simulation-compare-adj-risk-delta">
             confidence_adjusted_risk_delta_vs_history={compareResult.compare_summary?.confidence_adjusted_risk_delta_vs_history ?? "-"}
