@@ -20,6 +20,23 @@
   - no-match mesajı doğru
   - temizleme sonrası menü geri geliyor
 
+## 2026-03-22 — CORE menüsüne Logs öğesi geri eklendi ✅
+
+### Kullanıcı talebi
+- Eski yapıdaki `Logs` menüsü yeniden görünür olsun
+- Konum: `CORE` grup altında
+
+### Uygulananlar
+- Sidebar menüsünde CORE grubuna ayrı `Logs` öğesi eklendi
+  - Route: `/admin/audit-logs`
+  - Test id: `nav-admin-logs-link`
+
+### Test
+- Frontend lint PASS (`PanelLayout.jsx`)
+- Frontend test subagent PASS
+  - CORE altında Logs görünürlüğü doğrulandı
+  - Tıklayınca `/admin/audit-logs` sayfasına geçiş doğrulandı
+
 ## 2026-03-22 — Phase 6 ✅ (Snapshot + Export + What-if) + Request Age Badge ✅
 
 ### Scope (onaylı)
