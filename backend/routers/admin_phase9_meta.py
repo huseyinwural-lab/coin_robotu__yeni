@@ -37,6 +37,7 @@ from schemas import (
     StrategyAllocationWhatIfResponse,
     StrategyAllocationReasonNoteRequest,
     StrategyAllocationNormalizeRequest,
+    StrategyAllocationRevertRequest,
     StrategyAllocationRebalanceSuggestRequest,
     StrategyAllocationRebalanceSuggestionResponse,
     StrategyAllocationResponse,
@@ -235,8 +236,8 @@ def _map_decision_request_to_allocation_item(row: StrategyAllocationApprovalRequ
         "request_id": row.request_id,
         "request_type": row.request_type,
         "action_type": _extract_action_type_from_request(row),
-        "target_type": payload.get("target_type"),
-        "target_id": payload.get("target_id"),
+        "target_type": row.target_type or payload.get("target_type"),
+        "target_id": row.target_id or payload.get("target_id"),
         "status": row.status,
         "requested_by": str(row.requested_by),
         "requested_role": row.requested_role,
@@ -251,7 +252,63 @@ def _map_decision_request_to_allocation_item(row: StrategyAllocationApprovalRequ
         "stale_conflicts": stale_conflicts,
         "review_note": row.review_note,
         "reviewed_at": row.reviewed_at,
+        "explanation_summary": row.explanation_summary or "",
+        "decision_factors": row.decision_factors or {},
+        "previous_state_snapshot": row.previous_state_snapshot or {},
+        "source_request_id": row.source_request_id or payload.get("source_request_id"),
+        "linked_revert_request_id": row.linked_revert_request_id,
+        "reverted_at": row.reverted_at,
+        "reverted_by": row.reverted_by,
+        "revert_reason": row.revert_reason,
     }
+
+
+def _build_allocation_decision_factors(action_type: str, payload: dict, *, reason_note: str) -> dict:
+    body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
+    revision_context = payload.get("revision_context") if isinstance(payload.get("revision_context"), dict) else {}
+    expected_count = int(revision_context.get("expected_revision_count") or 0)
+    projected = payload.get("projection_preview") if isinstance(payload.get("projection_preview"), dict) else {}
+    projected_risk = float(projected.get("projected_portfolio_risk_delta_pct") or 0)
+    projected_return = float(projected.get("projected_portfolio_return_delta_pct") or 0)
+    strategy_count = len((body.get("updates") or [])) if action_type == "bulk_update" else (1 if payload.get("strategy_id") else 0)
+
+    why = {
+        "update": "Revision kontrollü strategy güncellemesi gerektiği için update önerildi",
+        "bulk_update": "Toplu dağılım güncellemesi ve risk dengelemesi için bulk_update önerildi",
+        "throttle_toggle": "Risk baskısı nedeniyle throttle state değişimi önerildi",
+        "snapshot_restore": "Snapshot rollback ihtiyacı nedeniyle restore önerildi",
+        "normalize": "Toplam weight dengesini korumak için normalize önerildi",
+        "revert_apply": "Yanlış/istenmeyen apply etkisini geri almak için revert önerildi",
+    }.get(action_type, "Governance güvenliği için aksiyon önerildi")
+
+    expected_outcome = {
+        "update": "Strategy state güncellenir ve revision güvenliği korunur",
+        "bulk_update": "Portföy dağılımı dengelenir, risk sapması azalır",
+        "throttle_toggle": "Execution baskısı kontrollü şekilde azaltılır/artırılır",
+        "snapshot_restore": "Allocation set güvenli bir önceki duruma döner",
+        "normalize": "Toplam weight=1 dengesine geri dönülür",
+        "revert_apply": "Önceki güvenli state geri yüklenir",
+    }.get(action_type, "Risk governance görünürlüğü artar")
+
+    return {
+        "volatility": abs(projected_risk),
+        "exposure": float(strategy_count),
+        "risk_score": abs(projected_risk),
+        "signal_confidence": 0.82,
+        "why_this_action": why,
+        "expected_outcome": expected_outcome,
+        "reason_note": reason_note,
+        "expected_revision_count": expected_count,
+        "projected_return_delta_pct": projected_return,
+        "projected_risk_delta_pct": projected_risk,
+    }
+
+
+def _build_allocation_explanation_summary(action_type: str, factors: dict) -> str:
+    return (
+        f"{action_type}: rev_count={int(factors.get('expected_revision_count') or 0)} "
+        f"risk={round(float(factors.get('risk_score') or 0), 4)}"
+    )
 
 
 def _build_global_revision_map(db: Session) -> dict[str, int]:
@@ -268,6 +325,7 @@ def _queue_allocation_approval_request(
     payload: dict,
     target_type: str,
     target_id: str,
+    source_request_id: str | None = None,
 ) -> dict:
     now = _now()
     request_id = f"alloc_req_{uuid4().hex[:12]}"
@@ -320,6 +378,8 @@ def _queue_allocation_approval_request(
         "target_id": target_id,
         "revision_context": revision_context,
     }
+    factors = _build_allocation_decision_factors(action_type, normalized_payload, reason_note=reason_note)
+    explanation_summary = _build_allocation_explanation_summary(action_type, factors)
 
     row = StrategyAllocationApprovalRequest(
         request_id=request_id,
@@ -333,6 +393,9 @@ def _queue_allocation_approval_request(
         reason_note=reason_note,
         revision_context=revision_context,
         payload=normalized_payload,
+        explanation_summary=explanation_summary,
+        decision_factors=factors,
+        source_request_id=source_request_id,
         expires_at=now + timedelta(hours=24),
         created_at=now,
     )
@@ -667,6 +730,100 @@ def _resolve_export_meta(
     }
 
 
+def _capture_allocation_state_snapshot(db: Session) -> dict:
+    rows = list_strategy_allocation_dashboard_rows(db, limit=500)
+    summary = get_strategy_allocation_summary(db)
+    rows_json_safe = json.loads(json.dumps(rows, default=str, ensure_ascii=False))
+    summary_json_safe = json.loads(json.dumps(summary, default=str, ensure_ascii=False))
+    return {
+        "captured_at": _now().isoformat(),
+        "rows": rows_json_safe,
+        "summary": summary_json_safe,
+        "revision_map": {str(item.get("strategy_id")): int(item.get("revision_id") or 1) for item in rows_json_safe},
+    }
+
+
+def _apply_allocation_state_snapshot(
+    db: Session,
+    *,
+    snapshot_state: dict,
+    actor_id: str,
+    reason_note: str,
+    source_request_id: str,
+) -> dict:
+    rows_payload = snapshot_state.get("rows") if isinstance(snapshot_state.get("rows"), list) else []
+    if not rows_payload:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="previous_state_snapshot boş")
+
+    current_rows = db.query(StrategyAllocation).all()
+    current_map = {str(item.strategy_id): item for item in current_rows}
+    snapshot_ids = {str(item.get("strategy_id")) for item in rows_payload if item.get("strategy_id")}
+    for strategy_id, row in current_map.items():
+        if strategy_id not in snapshot_ids:
+            db.delete(row)
+
+    base_revision = int(max([int(getattr(item, "revision_id", 1) or 1) for item in current_rows] + [1])) + 1
+    global_revision_id = max(base_revision, int(_now().timestamp()))
+
+    for row_payload in rows_payload:
+        strategy_id = str(row_payload.get("strategy_id") or "").strip()
+        if not strategy_id:
+            continue
+        row = current_map.get(strategy_id)
+        if not row:
+            row = StrategyAllocation(strategy_id=strategy_id)
+            db.add(row)
+
+        row.capital_weight = float(row_payload.get("capital_weight") or 0)
+        row.max_capital = float(row_payload.get("max_capital") or 0)
+        row.current_capital = float(row_payload.get("current_capital") or 0)
+        row.confidence_score = float(row_payload.get("confidence_score") or 0)
+        row.performance_score = float(row_payload.get("performance_score") or 0)
+        row.state = str(row_payload.get("state") or "ACTIVE")
+        row.expected_return = float(row_payload.get("expected_return") or 0)
+        row.realized_return = float(row_payload.get("realized_return") or 0)
+        row.signal_decay = float(row_payload.get("signal_decay") or 0)
+        row.execution_quality_score = float(row_payload.get("execution_quality_score") or 0)
+        row.revision_id = global_revision_id
+        row.updated_by = str(actor_id)
+        row.change_reason = f"revert_apply::{source_request_id}::{reason_note}"
+        row.updated_at = _now()
+
+    db.flush()
+    for strategy_id in snapshot_ids:
+        recalculate_strategy_drift(db, strategy_id)
+    db.commit()
+    return {
+        "summary": get_strategy_allocation_summary(db),
+        "global_revision_id": global_revision_id,
+    }
+
+
+def _validate_allocation_revert_eligibility(db: Session, source_row: StrategyAllocationApprovalRequest) -> None:
+    if source_row.status != "approved":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sadece approved/executed request revert edilebilir")
+    if source_row.reverted_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request zaten revert edilmiş")
+    if source_row.expires_at <= _now():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request expiry sonrası revert edilemez")
+
+    target_type = str(source_row.target_type or "").strip()
+    target_id = str(source_row.target_id or "").strip()
+    latest = (
+        db.query(StrategyAllocationApprovalRequest)
+        .filter(
+            StrategyAllocationApprovalRequest.target_type == target_type,
+            StrategyAllocationApprovalRequest.target_id == target_id,
+            StrategyAllocationApprovalRequest.status.in_(["approved", "reverted"]),
+            StrategyAllocationApprovalRequest.action_type != "revert_apply",
+        )
+        .order_by(StrategyAllocationApprovalRequest.reviewed_at.desc(), StrategyAllocationApprovalRequest.created_at.desc())
+        .first()
+    )
+    if not latest or latest.request_id != source_row.request_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Sadece aynı target için en son approved request revert edilebilir")
+
+
 def _write_allocation_log(
     db: Session,
     *,
@@ -709,6 +866,52 @@ def _execute_allocation_approval_request(
     action_type = str(request_row.get("action_type") or "")
     payload = request_row.get("payload") or {}
     reason_note = str(request_row.get("reason_note") or "approved_request")
+
+    if action_type == "revert_apply":
+        source_request_id = str(request_row.get("source_request_id") or payload.get("source_request_id") or "").strip()
+        if not source_request_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="source_request_id zorunlu")
+        source_row = db.query(StrategyAllocationApprovalRequest).filter(StrategyAllocationApprovalRequest.request_id == source_request_id).first()
+        if not source_row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Revert source request bulunamadı")
+
+        _validate_allocation_revert_eligibility(db, source_row)
+        snapshot_state = source_row.previous_state_snapshot if isinstance(source_row.previous_state_snapshot, dict) else {}
+        restore_result = _apply_allocation_state_snapshot(
+            db,
+            snapshot_state=snapshot_state,
+            actor_id=str(current_user.id),
+            reason_note=reason_note,
+            source_request_id=source_request_id,
+        )
+        source_row.status = "reverted"
+        source_row.reverted_at = _now()
+        source_row.reverted_by = str(current_user.id)
+        source_row.revert_reason = reason_note
+        source_row.linked_revert_request_id = str(request_row.get("request_id") or "")
+        db.add(source_row)
+        db.commit()
+        _write_allocation_log(
+            db,
+            admin_id=current_user.id,
+            action_type="strategy_allocation_revert_apply",
+            strategy_id=str(source_row.target_id or "*"),
+            previous_state="approved",
+            new_state="reverted",
+            reason_code="REVERT_APPLY",
+            reason_detail=reason_note,
+            payload={
+                "source_request_id": source_request_id,
+                "revert_request_id": request_row.get("request_id"),
+                "global_revision_id": restore_result.get("global_revision_id"),
+            },
+        )
+        return StrategyAllocationActionEnvelope(
+            status="success",
+            message=f"Revert tamamlandı: {source_request_id}",
+            trace_id=str(request_row.get("request_id") or source_request_id),
+            summary=StrategyAllocationSummaryResponse(**(restore_result.get("summary") or {})),
+        )
 
     if action_type == "normalize":
         result = normalize_strategy_allocations(
@@ -1684,6 +1887,7 @@ def strategy_allocation_state_history(
                     "strategy_allocation_snapshot_create",
                     "strategy_allocation_snapshot_restore",
                     "strategy_allocation_export",
+                    "strategy_allocation_revert_apply",
                 ]
             )
         )
@@ -1788,6 +1992,15 @@ def strategy_allocation_approval_approve(
             db.commit()
             _raise_revision_conflict(action_type=action_type, conflicts=conflicts, request_id=request_id)
 
+    if action_type != "revert_apply" and not (request_model.previous_state_snapshot or {}):
+        request_model.previous_state_snapshot = _capture_allocation_state_snapshot(db)
+    if not request_model.explanation_summary:
+        factors = _build_allocation_decision_factors(action_type, request_row.get("payload") or {}, reason_note=review_note)
+        request_model.decision_factors = factors
+        request_model.explanation_summary = _build_allocation_explanation_summary(action_type, factors)
+    db.add(request_model)
+    db.commit()
+
     result = _execute_allocation_approval_request(db=db, current_user=current_user, request_row=request_row)
     request_model.status = "approved"
     request_model.approved_by = str(current_user.id)
@@ -1836,6 +2049,101 @@ def strategy_allocation_approval_reject(
         trace_id=request_id,
         summary=None,
     )
+
+
+@router.post("/strategy-allocation/approval-requests/{request_id}/revert", response_model=StrategyAllocationActionEnvelope)
+def strategy_allocation_approval_revert(
+    request_id: str,
+    payload: StrategyAllocationRevertRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    role = _role_name(current_user)
+    reason_note = _require_reason_note(payload.reason_note)
+    if role == "ops":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops role read-only")
+
+    source_row = (
+        db.query(StrategyAllocationApprovalRequest)
+        .filter(
+            StrategyAllocationApprovalRequest.request_id == request_id,
+            StrategyAllocationApprovalRequest.request_type.like(f"{ALLOCATION_REQUEST_PREFIX}:%"),
+            StrategyAllocationApprovalRequest.action_type != "revert_apply",
+        )
+        .first()
+    )
+    if not source_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Revert source request bulunamadı")
+
+    _validate_allocation_revert_eligibility(db, source_row)
+    existing_pending = (
+        db.query(StrategyAllocationApprovalRequest)
+        .filter(
+            StrategyAllocationApprovalRequest.action_type == "revert_apply",
+            StrategyAllocationApprovalRequest.status == "pending",
+            StrategyAllocationApprovalRequest.source_request_id == source_row.request_id,
+        )
+        .first()
+    )
+    if existing_pending:
+        return StrategyAllocationActionEnvelope(
+            status="pending_approval",
+            message=f"Revert isteği zaten sırada: {existing_pending.request_id}",
+            trace_id=existing_pending.request_id,
+            summary=None,
+        )
+
+    preview_payload = {
+        "source_request_id": source_row.request_id,
+        "source_action_type": source_row.action_type,
+        "impact_preview": {
+            "before_summary": source_row.previous_state_snapshot.get("summary") if isinstance(source_row.previous_state_snapshot, dict) else {},
+            "current_summary": get_strategy_allocation_summary(db),
+        },
+    }
+
+    queued = _queue_allocation_approval_request(
+        db=db,
+        action_type="revert_apply",
+        current_user=current_user,
+        reason_note=reason_note,
+        payload=preview_payload,
+        target_type=source_row.target_type or "allocation_set",
+        target_id=source_row.target_id or source_row.request_id,
+        source_request_id=source_row.request_id,
+    )
+
+    if role == "admin":
+        source_row.linked_revert_request_id = queued["request_id"]
+        db.add(source_row)
+        db.commit()
+        return StrategyAllocationActionEnvelope(
+            status="pending_approval",
+            message=f"Revert isteği onaya gönderildi: {queued['request_id']}",
+            trace_id=queued["request_id"],
+            summary=None,
+        )
+
+    revert_request = (
+        db.query(StrategyAllocationApprovalRequest)
+        .filter(StrategyAllocationApprovalRequest.request_id == queued["request_id"])
+        .first()
+    )
+    if not revert_request:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="revert request oluşturulamadı")
+
+    result = _execute_allocation_approval_request(
+        db=db,
+        current_user=current_user,
+        request_row=_map_decision_request_to_allocation_item(revert_request),
+    )
+    revert_request.status = "approved"
+    revert_request.approved_by = str(current_user.id)
+    revert_request.review_note = reason_note
+    revert_request.reviewed_at = _now()
+    db.add(revert_request)
+    db.commit()
+    return result
 
 
 @router.put("/strategy-allocation/{strategy_id}", response_model=StrategyAllocationResponse | StrategyAllocationActionEnvelope)

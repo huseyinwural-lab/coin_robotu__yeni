@@ -667,6 +667,39 @@ export const AdminStrategyIntelligencePage = () => {
     }
   };
 
+  const revertDecisionRequest = async (requestRow, reasonInput) => {
+    if (!requestRow?.request_id) {
+      toast.error("Geçersiz request");
+      return;
+    }
+    if (!["admin", "super_admin"].includes(role)) {
+      toast.error("Revert için admin veya super_admin gerekli");
+      return;
+    }
+    const note = String(reasonInput || "").trim();
+    if (note.length < 8) {
+      toast.error("revert reason minimum 8 karakter olmalı");
+      return;
+    }
+
+    setDecisionActionRequestId(requestRow.request_id);
+    try {
+      const { data } = await apiClient.post(`/admin/decision-requests/${requestRow.request_id}/revert`, {
+        reason_note: note,
+      });
+      if (data?.status === "pending") {
+        toast.success("Revert isteği onaya gönderildi");
+      } else {
+        toast.success("Revert işlemi tamamlandı");
+      }
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Revert başarısız");
+    } finally {
+      setDecisionActionRequestId("");
+    }
+  };
+
   const compareSimulationRun = async (runId) => {
     setComparingRunId(runId);
     try {
@@ -1009,6 +1042,7 @@ export const AdminStrategyIntelligencePage = () => {
         onQueueApprove={approveDecisionRequest}
         onQueueReject={rejectDecisionRequest}
         onQueueExecute={executeDecisionRequest}
+        onQueueRevert={revertDecisionRequest}
         onQueueBulkAction={bulkQueueAction}
         queueActionLoadingId={decisionActionRequestId}
         previewById={decisionPreviewById}

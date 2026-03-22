@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DecisionDetailPanel } from "@/components/strategy-intelligence/DecisionDetailPanel";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -34,6 +35,7 @@ export const GovernanceBoardPanel = ({
   onQueueApprove,
   onQueueReject,
   onQueueExecute,
+  onQueueRevert,
   onQueueBulkAction,
   queueActionLoadingId,
   previewById,
@@ -52,6 +54,7 @@ export const GovernanceBoardPanel = ({
   onRefresh,
 }) => {
   const [boardTab, setBoardTab] = useState("queue");
+  const [revertModal, setRevertModal] = useState({ open: false, item: null, reason: "" });
   const isSuperAdmin = role === "super_admin";
   const canAck = ["admin", "super_admin"].includes(role);
 
@@ -155,6 +158,7 @@ export const GovernanceBoardPanel = ({
               const isSelected = selectedSet.has(item.request_id);
               const preview = previewById?.[item.request_id] || null;
               const rowClass = item.sla_state === "breach" ? "border-rose-600/70" : "border-slate-800";
+              const canRevertAction = ["admin", "super_admin"].includes(role) && item.status === "executed" && !item.reverted_at && item.request_type !== "revert_apply";
               return (
                 <article key={item.request_id} className={`border p-2 ${rowClass}`} data-testid={`strategy-intelligence-governance-queue-item-${index}`}>
                   <div className="flex flex-wrap items-center gap-2" data-testid={`strategy-intelligence-governance-queue-row-top-${index}`}>
@@ -178,6 +182,9 @@ export const GovernanceBoardPanel = ({
                   <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-governance-queue-severity-${index}`}>
                     severity={item.severity_band} · risk_delta_score={item.risk_delta_score} · recommendation_rank={item.recommendation_rank || "-"}
                   </p>
+                  <p className="text-xs text-cyan-200" data-testid={`strategy-intelligence-governance-queue-why-${index}`}>
+                    Why? {item.explanation_summary || item.decision_factors?.why_this_action || "-"}
+                  </p>
 
                   <div className="mt-1 rounded border border-slate-800 bg-slate-950 p-2" data-testid={`strategy-intelligence-governance-queue-inline-impact-card-${index}`}>
                     <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-governance-queue-inline-impact-state-${index}`}>
@@ -190,6 +197,8 @@ export const GovernanceBoardPanel = ({
                       allocation_diff_bps={(item.execution_effect?.allocation_diff_bps ?? item.deterministic_effect_preview?.predicted_allocation_diff_bps) ?? "-"}
                     </p>
                   </div>
+
+                  <DecisionDetailPanel item={item} index={index} />
 
                   <div className="mt-2 flex flex-wrap gap-2" data-testid={`strategy-intelligence-governance-queue-actions-${index}`}>
                     <Button
@@ -252,6 +261,23 @@ export const GovernanceBoardPanel = ({
                         Execute
                       </Button>
                     )}
+                    {canRevertAction && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={queueActionLoadingId === item.request_id}
+                        onClick={() =>
+                          setRevertModal({
+                            open: true,
+                            item,
+                            reason: `revert_${item.request_id}`,
+                          })
+                        }
+                        data-testid={`strategy-intelligence-governance-queue-revert-button-${index}`}
+                      >
+                        Revert
+                      </Button>
+                    )}
                   </div>
 
                   {preview && (
@@ -269,6 +295,45 @@ export const GovernanceBoardPanel = ({
               </p>
             )}
           </div>
+
+          {revertModal.open && (
+            <div className="rounded border border-amber-500/40 bg-amber-950/20 p-3" data-testid="strategy-intelligence-governance-revert-modal">
+              <p className="text-sm text-amber-200" data-testid="strategy-intelligence-governance-revert-modal-title">
+                Revert Confirmation
+              </p>
+              <p className="mt-1 text-xs text-slate-300" data-testid="strategy-intelligence-governance-revert-modal-impact-preview">
+                impact_preview: state_change={revertModal.item?.execution_effect?.state_change || revertModal.item?.state_change || "-"} ·
+                risk_drop={revertModal.item?.execution_effect?.realized_risk_drop ?? "-"}
+              </p>
+              <Input
+                className="mt-2"
+                value={revertModal.reason}
+                onChange={(event) => setRevertModal((prev) => ({ ...prev, reason: event.target.value }))}
+                placeholder="revert reason (zorunlu)"
+                data-testid="strategy-intelligence-governance-revert-modal-reason-input"
+              />
+              <div className="mt-2 flex gap-2" data-testid="strategy-intelligence-governance-revert-modal-actions">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    await onQueueRevert?.(revertModal.item, revertModal.reason);
+                    setRevertModal({ open: false, item: null, reason: "" });
+                  }}
+                  data-testid="strategy-intelligence-governance-revert-modal-confirm-button"
+                >
+                  {isSuperAdmin ? "Revert Now" : "Revert Request"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setRevertModal({ open: false, item: null, reason: "" })}
+                  data-testid="strategy-intelligence-governance-revert-modal-cancel-button"
+                >
+                  Vazgeç
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="mt-3 space-y-3" data-testid="strategy-intelligence-governance-escalation-view">

@@ -826,6 +826,39 @@ export const AdminStrategyAllocationPage = () => {
     }
   };
 
+  const revertApprovalRequest = async (item) => {
+    if (!item?.request_id) {
+      toast.error("Geçersiz request");
+      return;
+    }
+    if (isOpsReadOnly) {
+      toast.error("ops role read-only");
+      return;
+    }
+    const defaultReason = `revert_${item.request_id}`;
+    const input = window.prompt("Revert reason (min 8 karakter)", defaultReason);
+    if (input === null) return;
+    const reason = String(input || "").trim();
+    if (reason.length < 8) {
+      toast.error("revert reason minimum 8 karakter olmalı");
+      return;
+    }
+
+    try {
+      const { data } = await apiClient.post(`/admin/strategy-allocation/approval-requests/${item.request_id}/revert`, {
+        reason_note: reason,
+      });
+      if (String(data?.status || "").toLowerCase().includes("pending")) {
+        toast.success(data?.message || "Revert isteği onaya gönderildi");
+      } else {
+        toast.success(data?.message || "Revert tamamlandı");
+      }
+      await load();
+    } catch (error) {
+      toast.error(getApiDetailMessage(error, "Revert başarısız"));
+    }
+  };
+
   if (isLoading) {
     return <LoadingSkeleton rows={8} testId="admin-strategy-allocation-loading-skeleton" />;
   }
@@ -1368,9 +1401,25 @@ export const AdminStrategyAllocationPage = () => {
               <p data-testid={`admin-strategy-allocation-approval-item-target-${index}`}>
                 target={item.target_type || "-"}:{item.target_id || "-"} · revision_count={item.revision_context?.expected_revision_count || 0}
               </p>
+              <p className="text-[11px] text-cyan-200" data-testid={`admin-strategy-allocation-approval-item-why-${index}`}>
+                Why? {item.explanation_summary || item.decision_factors?.why_this_action || "-"}
+              </p>
+              <p className="text-[11px] text-slate-400" data-testid={`admin-strategy-allocation-approval-item-expected-${index}`}>
+                expected={item.decision_factors?.expected_outcome || "-"}
+              </p>
               <p data-testid={`admin-strategy-allocation-approval-item-expiry-${index}`}>
                 expires_at={item.expires_at}
               </p>
+              {item.source_request_id && (
+                <p className="text-[11px] text-amber-300" data-testid={`admin-strategy-allocation-approval-item-source-${index}`}>
+                  source_request_id={item.source_request_id}
+                </p>
+              )}
+              {item.linked_revert_request_id && (
+                <p className="text-[11px] text-emerald-300" data-testid={`admin-strategy-allocation-approval-item-revert-link-${index}`}>
+                  linked_revert_request_id={item.linked_revert_request_id}
+                </p>
+              )}
               {approvalStatusLabel(item) === "REQUIRES_REVIEW" && (
                 <p className="mt-1 text-[11px] text-amber-300" data-testid={`admin-strategy-allocation-approval-item-stale-${index}`}>
                   stale_state={item.stale_state || "STALE"} · conflicts={(item.stale_conflicts || []).length}
@@ -1383,6 +1432,13 @@ export const AdminStrategyAllocationPage = () => {
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => rejectRequest(item.request_id)} data-testid={`admin-strategy-allocation-approval-reject-button-${index}`}>
                     Reject
+                  </Button>
+                </div>
+              )}
+              {!isOpsReadOnly && item.status === "approved" && item.action_type !== "revert_apply" && !item.reverted_at && (
+                <div className="mt-1" data-testid={`admin-strategy-allocation-approval-item-revert-actions-${index}`}>
+                  <Button size="sm" variant="outline" onClick={() => revertApprovalRequest(item)} data-testid={`admin-strategy-allocation-approval-revert-button-${index}`}>
+                    {isSuperAdmin ? "Revert Now" : "Revert Request"}
                   </Button>
                 </div>
               )}

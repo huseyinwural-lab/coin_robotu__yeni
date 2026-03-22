@@ -29,6 +29,7 @@ from schemas import (
     DecisionRequestAckRequest,
     DecisionRequestAssignOwnerRequest,
     DecisionRequestExecuteRequest,
+    DecisionRequestRevertRequest,
     DecisionRequestPreviewResponse,
     DecisionApprovalRequestsResponse,
     HedgeSuggestionResponse,
@@ -177,6 +178,16 @@ def _ensure_intelligence_tables(db: Session) -> None:
         db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS assigned_to VARCHAR(120)"))
         db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS ack_by VARCHAR(120)"))
         db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS ack_at TIMESTAMPTZ"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS target_type VARCHAR(80)"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS target_id VARCHAR(160)"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS explanation_summary TEXT DEFAULT ''"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS decision_factors JSONB DEFAULT '{}'::jsonb"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS previous_state_snapshot JSONB DEFAULT '{}'::jsonb"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS source_request_id VARCHAR(120)"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS linked_revert_request_id VARCHAR(120)"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS reverted_at TIMESTAMPTZ"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS reverted_by VARCHAR(120)"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS revert_reason TEXT"))
 
 
 def _summary_hash(payload: dict) -> str:
@@ -360,7 +371,7 @@ def _sync_escalation_center(db: Session) -> None:
     pending_rows = (
         db.query(DecisionApprovalRequest)
         .filter(
-            DecisionApprovalRequest.request_type.in_(["conflict_resolve", "hedge_apply", "rebalance_change"]),
+            DecisionApprovalRequest.request_type.in_(["conflict_resolve", "hedge_apply", "rebalance_change", "manual_override_apply", "revert_apply"]),
             DecisionApprovalRequest.status == "pending",
         )
         .all()
@@ -440,6 +451,16 @@ def _serialize_approval_row(row: DecisionApprovalRequest) -> dict:
         "assigned_to": row.assigned_to,
         "ack_by": row.ack_by,
         "ack_at": row.ack_at,
+        "target_type": row.target_type,
+        "target_id": row.target_id,
+        "explanation_summary": row.explanation_summary or "",
+        "decision_factors": row.decision_factors or {},
+        "previous_state_snapshot": row.previous_state_snapshot or {},
+        "source_request_id": row.source_request_id,
+        "linked_revert_request_id": row.linked_revert_request_id,
+        "reverted_at": row.reverted_at,
+        "reverted_by": row.reverted_by,
+        "revert_reason": row.revert_reason,
     }
 
 
@@ -451,6 +472,11 @@ def _queue_approval_request(
     reason_note: str,
     simulation_run_id: str,
     payload: dict,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    explanation_summary: str = "",
+    decision_factors: dict | None = None,
+    source_request_id: str | None = None,
 ) -> DecisionApprovalRequest:
     _ensure_intelligence_tables(db)
     row = DecisionApprovalRequest(
@@ -462,6 +488,11 @@ def _queue_approval_request(
         reason_note=reason_note,
         simulation_run_id=simulation_run_id,
         payload=payload,
+        target_type=target_type,
+        target_id=target_id,
+        explanation_summary=explanation_summary,
+        decision_factors=decision_factors or {},
+        source_request_id=source_request_id,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
         created_at=datetime.now(timezone.utc),
     )
@@ -520,6 +551,10 @@ def _request_type_weight(request_type: str) -> float:
         return 1.0
     if normalized == "conflict_resolve":
         return 0.9
+    if normalized == "manual_override_apply":
+        return 1.1
+    if normalized == "revert_apply":
+        return 1.3
     return 0.7
 
 
@@ -548,6 +583,230 @@ def _deterministic_effect_preview(*, request_type: str, risk_delta_score: float,
         "predicted_allocation_diff_bps": allocation_diff_bps,
         "model_type": "deterministic_fixed_v1",
     }
+
+
+def _build_decision_factors(*, request_type: str, impact_summary: dict, simulation_output: dict | None = None) -> dict:
+    output = simulation_output or {}
+    volatility = _coerce_float(output.get("simulation_payload", {}).get("volatility_pct") or output.get("volatility_pct"), default=0)
+    exposure = _coerce_float(impact_summary.get("projected_exposure") or output.get("projected_exposure"), default=0)
+    risk_score = _coerce_float(impact_summary.get("projected_risk_score") or output.get("projected_risk_score"), default=0)
+    signal_confidence = _coerce_float(
+        output.get("simulation_payload", {}).get("signal_confidence")
+        or output.get("simulation_payload", {}).get("confidence_score")
+        or impact_summary.get("confidence_adjusted_risk_score"),
+        default=0.65,
+    )
+    if signal_confidence > 1:
+        signal_confidence = signal_confidence / 100
+
+    if request_type == "hedge_apply":
+        why = "Yüksek volatilite ve risk baskısı nedeniyle hedge önerildi"
+        expected = "Net risk düşer, drawdown baskısı hafifler"
+    elif request_type == "rebalance_change":
+        why = "Ağırlık dengesizliği ve performans farkı nedeniyle rebalance önerildi"
+        expected = "Sermaye dağılımı dengelenir, risk/ödül profili iyileşir"
+    elif request_type == "conflict_resolve":
+        why = "Strategy conflict tespit edildiği için resolve önerildi"
+        expected = "Çatışan sinyal etkisi azalır, karar netliği artar"
+    elif request_type == "manual_override_apply":
+        why = "Operasyonel risk kontrolü için manuel override uygulandı"
+        expected = "Kısa vadede kontrol artar, istenmeyen execution baskılanır"
+    else:
+        why = "Risk ve execution sinyalleri aksiyon gerektirdi"
+        expected = "Risk görünümü daha kontrollü hale gelir"
+
+    return {
+        "volatility": round(volatility, 6),
+        "exposure": round(exposure, 6),
+        "risk_score": round(risk_score, 6),
+        "signal_confidence": round(max(min(signal_confidence, 1), 0), 6),
+        "why_this_action": why,
+        "expected_outcome": expected,
+    }
+
+
+def _build_explanation_summary(*, request_type: str, factors: dict) -> str:
+    risk_score = _coerce_float(factors.get("risk_score"), default=0)
+    volatility = _coerce_float(factors.get("volatility"), default=0)
+    return f"{request_type}: vol={round(volatility, 2)} → risk={round(risk_score, 3)} → aksiyon önerildi"
+
+
+def _normalize_request_target(payload: dict, *, fallback_request_type: str) -> tuple[str, str]:
+    target_type = str(payload.get("target_type") or "").strip()
+    target_id = str(payload.get("target_id") or "").strip()
+    if target_type and target_id:
+        return target_type, target_id
+
+    if fallback_request_type == "manual_override_apply":
+        override_payload = payload.get("override_payload") if isinstance(payload.get("override_payload"), dict) else {}
+        return (
+            str(override_payload.get("target_type") or "user"),
+            str(override_payload.get("target_id") or override_payload.get("simulation_id") or "manual_override"),
+        )
+
+    return "unknown", str(payload.get("simulation_run_id") or payload.get("preview_token") or "global")
+
+
+def _latest_executed_request_for_target(db: Session, *, target_type: str, target_id: str, scope_request_types: list[str]) -> DecisionApprovalRequest | None:
+    return (
+        db.query(DecisionApprovalRequest)
+        .filter(
+            DecisionApprovalRequest.request_type.in_(scope_request_types),
+            DecisionApprovalRequest.target_type == target_type,
+            DecisionApprovalRequest.target_id == target_id,
+            DecisionApprovalRequest.status.in_(["executed", "reverted"]),
+        )
+        .order_by(desc(DecisionApprovalRequest.decided_at), desc(DecisionApprovalRequest.created_at))
+        .first()
+    )
+
+
+def _build_revert_effect_snapshot(row: DecisionApprovalRequest) -> dict:
+    payload = row.payload if isinstance(row.payload, dict) else {}
+    execution_effect = payload.get("execution_effect") if isinstance(payload.get("execution_effect"), dict) else {}
+    return {
+        "request_id": row.request_id,
+        "request_type": row.request_type,
+        "executed_state_change": execution_effect.get("state_change") or payload.get("state_change"),
+        "executed_impact": payload.get("impact_summary") or {},
+    }
+
+
+def _apply_revert_for_decision_request(
+    db: Session,
+    *,
+    source_row: DecisionApprovalRequest,
+    reverted_by: str,
+    revert_reason: str,
+) -> None:
+    payload = source_row.payload if isinstance(source_row.payload, dict) else {}
+    if source_row.request_type == "manual_override_apply":
+        override_id = str(
+            (payload.get("execution_effect") or {}).get("applied_override_id")
+            or (payload.get("override_payload") or {}).get("applied_override_id")
+            or ""
+        ).strip()
+        if override_id:
+            try:
+                revoke_manual_override(
+                    db,
+                    override_id=override_id,
+                    revoked_by=reverted_by,
+                    reason=revert_reason,
+                )
+            except ValueError:
+                pass
+
+    source_row.status = "reverted"
+    source_row.reverted_at = datetime.now(timezone.utc)
+    source_row.reverted_by = reverted_by
+    source_row.revert_reason = revert_reason
+    payload["revert_effect"] = {
+        "reverted_at": source_row.reverted_at.isoformat(),
+        "reverted_by": reverted_by,
+        "revert_reason": revert_reason,
+        "reverted_snapshot": source_row.previous_state_snapshot or {},
+    }
+    source_row.payload = payload
+
+
+def _ensure_revert_eligibility(db: Session, source_row: DecisionApprovalRequest) -> None:
+    allowed_types = {"conflict_resolve", "hedge_apply", "rebalance_change", "manual_override_apply"}
+    if source_row.request_type not in allowed_types:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bu request_type revert kapsamı dışında")
+    if source_row.status != "executed":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sadece executed request revert edilebilir")
+    if source_row.reverted_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request zaten revert edilmiş")
+    if source_row.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request expiry sonrası revert edilemez")
+
+    target_type = str(source_row.target_type or "").strip()
+    target_id = str(source_row.target_id or "").strip()
+    if not target_type or not target_id:
+        payload = source_row.payload if isinstance(source_row.payload, dict) else {}
+        inferred_type, inferred_id = _normalize_request_target(payload, fallback_request_type=source_row.request_type)
+        source_row.target_type = source_row.target_type or inferred_type
+        source_row.target_id = source_row.target_id or inferred_id
+        target_type = source_row.target_type
+        target_id = source_row.target_id
+
+    latest_row = _latest_executed_request_for_target(
+        db,
+        target_type=target_type,
+        target_id=target_id,
+        scope_request_types=list(allowed_types),
+    )
+    if not latest_row or latest_row.request_id != source_row.request_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Sadece aynı target için en son executed request revert edilebilir",
+        )
+
+
+def _execute_revert_request(
+    db: Session,
+    *,
+    revert_row: DecisionApprovalRequest,
+    actor_id: str,
+    reason_note: str,
+) -> DecisionApprovalRequest:
+    payload = revert_row.payload if isinstance(revert_row.payload, dict) else {}
+    source_request_id = str(revert_row.source_request_id or payload.get("source_request_id") or "").strip()
+    if not source_request_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="source_request_id eksik")
+
+    source_row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == source_request_id).first()
+    if not source_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="revert edilecek kaynak request bulunamadı")
+
+    _ensure_revert_eligibility(db, source_row)
+    _apply_revert_for_decision_request(
+        db,
+        source_row=source_row,
+        reverted_by=actor_id,
+        revert_reason=reason_note,
+    )
+
+    revert_row.status = "executed"
+    revert_row.approved_by = actor_id
+    revert_row.review_note = reason_note
+    revert_row.decided_at = datetime.now(timezone.utc)
+    revert_row.target_type = source_row.target_type
+    revert_row.target_id = source_row.target_id
+    revert_row.previous_state_snapshot = source_row.previous_state_snapshot or {}
+    revert_payload = payload
+    revert_payload["execution_effect"] = {
+        "state_change": "REVERTED",
+        "reverted_request_id": source_row.request_id,
+        "reverted_at": datetime.now(timezone.utc).isoformat(),
+    }
+    revert_row.payload = revert_payload
+
+    source_row.linked_revert_request_id = revert_row.request_id
+
+    record_manual_override(
+        db,
+        admin_id=actor_id,
+        action_type=f"decision_request_revert::{source_row.request_type}",
+        reason=reason_note,
+        scope="strategy_intelligence",
+        target_type=source_row.target_type or "unknown",
+        target_id=source_row.target_id,
+        simulation_id=source_row.simulation_run_id,
+        confirmation_id=revert_row.request_id,
+        previous_state=source_row.previous_state_snapshot or {},
+        next_state={},
+        impact_preview=_build_revert_effect_snapshot(source_row),
+        expires_at=source_row.expires_at,
+        actor_role="super_admin",
+        payload={
+            "source": "decision_request_revert",
+            "source_request_id": source_row.request_id,
+            "revert_request_id": revert_row.request_id,
+        },
+    )
+    return source_row
 
 
 def _recommendation_priority_score(*, status_value: str, sla_state: str, severity_band: str, request_type: str, risk_delta_score: float) -> float:
@@ -579,8 +838,8 @@ def _build_decision_request_response(row: DecisionApprovalRequest) -> dict:
     sla = _decision_sla_snapshot(created_at=row.created_at, request_status=row.status)
     return {
         **base,
-        "target_type": payload.get("target_type"),
-        "target_id": payload.get("target_id"),
+        "target_type": row.target_type or payload.get("target_type"),
+        "target_id": row.target_id or payload.get("target_id"),
         "simulation_required": bool(payload.get("simulation_required", True)),
         "simulation_present": bool(payload.get("simulation_run_id")),
         "preview_token": payload.get("preview_token"),
@@ -593,6 +852,14 @@ def _build_decision_request_response(row: DecisionApprovalRequest) -> dict:
         "sla_countdown_seconds": sla.get("sla_countdown_seconds"),
         "sla_state": str(sla.get("sla_state") or "n/a"),
         "escalation_state": str(sla.get("escalation_state") or "none"),
+        "explanation_summary": row.explanation_summary or payload.get("explanation_summary") or "",
+        "decision_factors": row.decision_factors or payload.get("decision_factors") or {},
+        "previous_state_snapshot": row.previous_state_snapshot or {},
+        "source_request_id": row.source_request_id,
+        "linked_revert_request_id": row.linked_revert_request_id,
+        "reverted_at": row.reverted_at,
+        "reverted_by": row.reverted_by,
+        "revert_reason": row.revert_reason,
     }
 
 
@@ -648,6 +915,12 @@ def _create_decision_request(
         risk_delta_score=derived_risk_delta,
         impact_summary=impact_summary,
     )
+    decision_factors = _build_decision_factors(
+        request_type=request_type,
+        impact_summary=impact_summary,
+        simulation_output=run_out,
+    )
+    explanation_summary = _build_explanation_summary(request_type=request_type, factors=decision_factors)
     request_payload = {
         "target_type": payload.target_type,
         "target_id": payload.target_id,
@@ -659,6 +932,8 @@ def _create_decision_request(
         "severity_band": _severity_band(derived_risk_delta),
         "impact_summary": impact_summary,
         "deterministic_effect_preview": deterministic_effect_preview,
+        "explanation_summary": explanation_summary,
+        "decision_factors": decision_factors,
     }
 
     request_row = DecisionApprovalRequest(
@@ -670,6 +945,11 @@ def _create_decision_request(
         reason_note=payload.reason_note,
         simulation_run_id=simulation_run_id,
         payload=request_payload,
+        target_type=payload.target_type,
+        target_id=payload.target_id,
+        explanation_summary=explanation_summary,
+        decision_factors=decision_factors,
+        previous_state_snapshot=run_out.get("before_state") or {},
         expires_at=payload.expires_at or (datetime.now(timezone.utc) + timedelta(hours=24)),
         created_at=datetime.now(timezone.utc),
         assigned_to="governance_unassigned",
@@ -753,6 +1033,13 @@ def create_manual_override(
         simulation_run.updated_at = datetime.now(timezone.utc)
 
     if role == "admin":
+        override_target_type = str(payload.target_type or "user")
+        override_target_id = str(payload.target_id or payload.simulation_id or payload.scope or "manual_override")
+        factors = _build_decision_factors(
+            request_type="manual_override_apply",
+            impact_summary=payload.impact_preview or simulation_entry.get("impact_preview") or {},
+            simulation_output={"simulation_payload": payload.payload or {}},
+        )
         request_row = _queue_approval_request(
             db,
             request_type="manual_override_apply",
@@ -763,6 +1050,10 @@ def create_manual_override(
                 "override_payload": payload.model_dump(),
                 "resolved_expiry": resolved_expiry.isoformat(),
             },
+            target_type=override_target_type,
+            target_id=override_target_id,
+            explanation_summary=_build_explanation_summary(request_type="manual_override_apply", factors=factors),
+            decision_factors=factors,
         )
         if simulation_run:
             simulation_run.status = "pending_approval"
@@ -943,7 +1234,7 @@ def list_decision_requests(
     _ = current_user
     _ensure_intelligence_tables(db)
     query = db.query(DecisionApprovalRequest).filter(
-        DecisionApprovalRequest.request_type.in_(["conflict_resolve", "hedge_apply", "rebalance_change"])
+        DecisionApprovalRequest.request_type.in_(["conflict_resolve", "hedge_apply", "rebalance_change", "manual_override_apply", "revert_apply"])
     )
     if status_filter:
         query = query.filter(DecisionApprovalRequest.status == status_filter)
@@ -956,6 +1247,7 @@ def list_decision_requests(
         "approved": 1,
         "rejected": 2,
         "executed": 3,
+        "reverted": 4,
         "revoked": 4,
         "expired": 5,
     }
@@ -1176,6 +1468,17 @@ def execute_decision_request(
         db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request expired")
 
+    if row.request_type == "revert_apply":
+        _execute_revert_request(
+            db,
+            revert_row=row,
+            actor_id=str(current_user.id),
+            reason_note=payload.reason_note,
+        )
+        db.commit()
+        db.refresh(row)
+        return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
     request_payload = {**(row.payload or {})}
     expected_token = str(request_payload.get("preview_token") or "")
     if not expected_token or payload.preview_token != expected_token:
@@ -1211,6 +1514,15 @@ def execute_decision_request(
     request_payload["execution_effect"] = execution_effect
     request_payload["state_change"] = deterministic_preview.get("state_change")
     row.payload = request_payload
+    row.target_type = row.target_type or str(request_payload.get("target_type") or "unknown")
+    row.target_id = row.target_id or str(request_payload.get("target_id") or row.simulation_run_id or row.request_id)
+    row.explanation_summary = row.explanation_summary or str(request_payload.get("explanation_summary") or "")
+    row.decision_factors = row.decision_factors or (request_payload.get("decision_factors") or {})
+
+    if not row.previous_state_snapshot:
+        run_row = db.query(SimulationRun).filter(SimulationRun.run_id == row.simulation_run_id).first() if row.simulation_run_id else None
+        run_output = run_row.output_payload if run_row and isinstance(run_row.output_payload, dict) else {}
+        row.previous_state_snapshot = run_output.get("before_state") or {}
 
     record_manual_override(
         db,
@@ -1232,6 +1544,120 @@ def execute_decision_request(
 
     db.commit()
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
+
+@router.post("/decision-requests/{request_id}/revert", response_model=DecisionApprovalRequestResponse)
+def revert_executed_decision_request(
+    request_id: str,
+    payload: DecisionRequestRevertRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    role = _role_name(current_user)
+    if role not in {"admin", "super_admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="revert sadece admin/super_admin")
+
+    _ensure_intelligence_tables(db)
+    source_row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+    if not source_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="request bulunamadı")
+
+    _ensure_revert_eligibility(db, source_row)
+    source_payload = source_row.payload if isinstance(source_row.payload, dict) else {}
+    target_type = str(source_row.target_type or source_payload.get("target_type") or "unknown")
+    target_id = str(source_row.target_id or source_payload.get("target_id") or source_row.request_id)
+    factors = source_row.decision_factors or _build_decision_factors(
+        request_type=source_row.request_type,
+        impact_summary=source_payload.get("impact_summary") or {},
+        simulation_output={},
+    )
+
+    if role == "admin":
+        existing_pending = (
+            db.query(DecisionApprovalRequest)
+            .filter(
+                DecisionApprovalRequest.request_type == "revert_apply",
+                DecisionApprovalRequest.status == "pending",
+                DecisionApprovalRequest.source_request_id == source_row.request_id,
+            )
+            .first()
+        )
+        if existing_pending:
+            return DecisionApprovalRequestResponse(**_build_decision_request_response(existing_pending))
+
+        request_payload = {
+            "source_request_id": source_row.request_id,
+            "target_type": target_type,
+            "target_id": target_id,
+            "impact_summary": _build_revert_effect_snapshot(source_row),
+            "preview_token": f"revert_preview_{uuid.uuid4().hex[:10]}",
+            "decision_factors": factors,
+            "explanation_summary": f"Revert requested: {source_row.request_type}",
+        }
+        revert_row = DecisionApprovalRequest(
+            request_id=f"req_{uuid.uuid4().hex[:12]}",
+            request_type="revert_apply",
+            status="pending",
+            requested_by=str(current_user.id),
+            requested_role=role,
+            reason_note=payload.reason_note,
+            simulation_run_id=source_row.simulation_run_id,
+            payload=request_payload,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+            created_at=datetime.now(timezone.utc),
+            source_request_id=source_row.request_id,
+            target_type=target_type,
+            target_id=target_id,
+            explanation_summary=f"Revert pending approval: {source_row.request_type}",
+            decision_factors=factors,
+            previous_state_snapshot=source_row.previous_state_snapshot or {},
+        )
+        db.add(revert_row)
+        source_row.linked_revert_request_id = revert_row.request_id
+        db.commit()
+        db.refresh(revert_row)
+        return DecisionApprovalRequestResponse(**_build_decision_request_response(revert_row))
+
+    revert_row = DecisionApprovalRequest(
+        request_id=f"req_{uuid.uuid4().hex[:12]}",
+        request_type="revert_apply",
+        status="approved",
+        requested_by=str(current_user.id),
+        requested_role=role,
+        reason_note=payload.reason_note,
+        simulation_run_id=source_row.simulation_run_id,
+        payload={
+            "source_request_id": source_row.request_id,
+            "target_type": target_type,
+            "target_id": target_id,
+            "impact_summary": _build_revert_effect_snapshot(source_row),
+            "preview_token": f"revert_preview_{uuid.uuid4().hex[:10]}",
+            "decision_factors": factors,
+            "explanation_summary": f"Revert executed: {source_row.request_type}",
+        },
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        created_at=datetime.now(timezone.utc),
+        source_request_id=source_row.request_id,
+        target_type=target_type,
+        target_id=target_id,
+        explanation_summary=f"Revert executed: {source_row.request_type}",
+        decision_factors=factors,
+        previous_state_snapshot=source_row.previous_state_snapshot or {},
+        approved_by=str(current_user.id),
+        decided_at=datetime.now(timezone.utc),
+    )
+    db.add(revert_row)
+    db.flush()
+
+    _execute_revert_request(
+        db,
+        revert_row=revert_row,
+        actor_id=str(current_user.id),
+        reason_note=payload.reason_note,
+    )
+    db.commit()
+    db.refresh(revert_row)
+    return DecisionApprovalRequestResponse(**_build_decision_request_response(revert_row))
 
 
 @router.post("/decision-requests/{request_id}/revoke", response_model=DecisionApprovalRequestResponse)
@@ -1549,10 +1975,28 @@ def approve_override_request(
         payload=override_payload.get("payload") or {},
     )
 
-    row.status = "approved"
+    request_payload["execution_effect"] = {
+        "state_change": "OVERRIDE_APPLIED",
+        "applied_override_id": applied_row.override_id,
+        "executed_at": datetime.now(timezone.utc).isoformat(),
+        "executed_by": str(current_user.id),
+    }
+    row.payload = request_payload
+    row.status = "executed"
     row.approved_by = str(current_user.id)
     row.review_note = payload.reason_note
     row.decided_at = datetime.now(timezone.utc)
+    row.target_type = row.target_type or str(override_payload.get("target_type") or "user")
+    row.target_id = row.target_id or str(override_payload.get("target_id") or row.simulation_run_id or row.request_id)
+    if not row.explanation_summary:
+        factors = _build_decision_factors(
+            request_type="manual_override_apply",
+            impact_summary=override_payload.get("impact_preview") or simulation_entry.get("impact_preview") or {},
+            simulation_output={"simulation_payload": override_payload.get("payload") or {}},
+        )
+        row.decision_factors = factors
+        row.explanation_summary = _build_explanation_summary(request_type="manual_override_apply", factors=factors)
+    row.previous_state_snapshot = row.previous_state_snapshot or (override_payload.get("previous_state") or simulation_entry.get("before_state") or {})
 
     run = db.query(SimulationRun).filter(SimulationRun.run_id == row.simulation_run_id).first()
     if run:
@@ -2079,6 +2523,15 @@ def import_strategy_intelligence_json(
                 reason_note=str(row.get("reason_note") or "imported_request"),
                 simulation_run_id=row.get("simulation_run_id"),
                 payload=row.get("payload") or {},
+                target_type=row.get("target_type"),
+                target_id=row.get("target_id"),
+                explanation_summary=str(row.get("explanation_summary") or ""),
+                decision_factors=row.get("decision_factors") or {},
+                previous_state_snapshot=row.get("previous_state_snapshot") or {},
+                source_request_id=row.get("source_request_id"),
+                linked_revert_request_id=row.get("linked_revert_request_id"),
+                reverted_by=row.get("reverted_by"),
+                revert_reason=row.get("revert_reason"),
                 expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
                 created_at=created_at,
                 approved_by=row.get("approved_by"),

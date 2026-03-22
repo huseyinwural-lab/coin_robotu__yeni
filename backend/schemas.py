@@ -2455,6 +2455,8 @@ class RiskSimulationResponse(BaseModel):
     decision_summary: dict = Field(default_factory=dict)
     risk_delta: float = 0
     decision_delta: str = "UNCHANGED"
+    reasoned_output: str = ""
+    expected_outcome: str = ""
 
 
 class RiskBatchSimulationRequest(BaseModel):
@@ -2579,6 +2581,14 @@ class DecisionApprovalRequestResponse(BaseModel):
     sla_countdown_seconds: int | None = None
     sla_state: str = "n/a"
     escalation_state: str = "none"
+    explanation_summary: str = ""
+    decision_factors: dict = Field(default_factory=dict)
+    previous_state_snapshot: dict = Field(default_factory=dict)
+    source_request_id: str | None = None
+    linked_revert_request_id: str | None = None
+    reverted_at: datetime | None = None
+    reverted_by: str | None = None
+    revert_reason: str | None = None
 
 
 class EscalationCenterItemResponse(BaseModel):
@@ -2670,6 +2680,10 @@ class DecisionRequestCreateRequest(BaseModel):
 class DecisionRequestExecuteRequest(BaseModel):
     reason_note: str = Field(min_length=8)
     preview_token: str
+
+
+class DecisionRequestRevertRequest(BaseModel):
+    reason_note: str = Field(min_length=8)
 
 
 class DecisionRequestPreviewResponse(BaseModel):
@@ -3035,6 +3049,10 @@ class StrategyAllocationSnapshotRestoreRequest(BaseModel):
     expected_revisions: dict[str, int] = Field(default_factory=dict)
 
 
+class StrategyAllocationRevertRequest(BaseModel):
+    reason_note: str
+
+
 class StrategyAllocationWhatIfRequest(BaseModel):
     strategy_ids: list[str] = Field(default_factory=list)
 
@@ -3082,6 +3100,14 @@ class StrategyAllocationApprovalRequestItem(BaseModel):
     stale_conflicts: list[dict] = Field(default_factory=list)
     review_note: str | None = None
     reviewed_at: datetime | None = None
+    explanation_summary: str = ""
+    decision_factors: dict = Field(default_factory=dict)
+    previous_state_snapshot: dict = Field(default_factory=dict)
+    source_request_id: str | None = None
+    linked_revert_request_id: str | None = None
+    reverted_at: datetime | None = None
+    reverted_by: str | None = None
+    revert_reason: str | None = None
 
 
 class StrategyAllocationApprovalRequestsResponse(BaseModel):

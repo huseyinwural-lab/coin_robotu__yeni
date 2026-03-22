@@ -20,6 +20,28 @@ def _safe_float(value, default: float = 0.0) -> float:
         return default
 
 
+def _reasoned_decision_text(*, conflict_result: dict, hedge_result: dict, rebalance_result: dict, risk_payload: dict) -> str:
+    if conflict_result.get("conflict_detected"):
+        return "Strategy conflict nedeniyle resolve önerildi"
+    if hedge_result.get("hedge_symbol"):
+        return "Risk yüksek olduğu için hedge önerildi"
+    notice = str(rebalance_result.get("allocation_adjustment_notice") or "").strip()
+    if notice:
+        return "Allocation drift nedeniyle rebalance önerildi"
+    decision = str(risk_payload.get("decision") or "ALLOW")
+    return f"Risk guard sonucu {decision} kararı üretildi"
+
+
+def _expected_outcome_text(*, risk_delta: float, exposure_change: float) -> str:
+    if risk_delta < 0:
+        return "Risk skorunda düşüş ve daha kontrollü exposure bekleniyor"
+    if risk_delta > 0:
+        return "Risk skorunda artış var; hedge/rebalance ile dengeleme gerekebilir"
+    if exposure_change != 0:
+        return "Risk sabit, exposure değişimi üzerinden pozisyon ayarı bekleniyor"
+    return "Anlamlı risk/exposure değişimi beklenmiyor"
+
+
 def calculate_confidence_adjusted_risk_score(simulation_payload: dict, projected_risk: float) -> float:
     volatility = max(_safe_float(simulation_payload.get("volatility_pct"), 0), 0)
     notional = max(_safe_float(simulation_payload.get("notional"), 0), 0)
@@ -482,6 +504,13 @@ def simulate_risk_impact(
         decision_delta = f"{before_state['gate_decision']}->{after_state['gate_decision']}"
 
     confidence_adjusted_risk_score = calculate_confidence_adjusted_risk_score(simulation_payload, projected_risk)
+    reasoned_output = _reasoned_decision_text(
+        conflict_result=conflict_result,
+        hedge_result=hedge_result,
+        rebalance_result=rebalance_result,
+        risk_payload=risk_payload,
+    )
+    expected_outcome = _expected_outcome_text(risk_delta=risk_delta, exposure_change=exposure_change)
 
     return {
         "simulation_id": f"sim_{uuid4().hex[:12]}",
@@ -512,7 +541,8 @@ def simulate_risk_impact(
             "hedge_required": bool(hedge_result.get("hedge_symbol")),
             "allocation_notice": rebalance_result.get("allocation_adjustment_notice"),
             "decision_delta": decision_delta,
-            "why": "risk guard + conflict/hedge/rebalance sinyalleri",
+            "why": reasoned_output,
+            "expected_outcome": expected_outcome,
             "what_changes": {
                 "exposure_change": exposure_change,
                 "var_change": var_change,
@@ -526,4 +556,6 @@ def simulate_risk_impact(
         },
         "risk_delta": risk_delta,
         "decision_delta": decision_delta,
+        "reasoned_output": reasoned_output,
+        "expected_outcome": expected_outcome,
     }
