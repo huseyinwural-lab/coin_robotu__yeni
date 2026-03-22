@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -425,6 +425,50 @@ class StrategyAllocation(Base):
     updated_by: Mapped[str] = mapped_column(String(120), default="system")
     change_reason: Mapped[str] = mapped_column(Text, default="manual_update")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class StrategyAllocationSnapshot(Base):
+    __tablename__ = "strategy_allocation_snapshots"
+
+    snapshot_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    reason_note: Mapped[str] = mapped_column(Text, default="")
+    strategy_count: Mapped[int] = mapped_column(Integer, default=0)
+    total_weight: Mapped[float] = mapped_column(Float, default=0)
+    total_capital: Mapped[float] = mapped_column(Float, default=0)
+    used_capital: Mapped[float] = mapped_column(Float, default=0)
+    summary_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    rows_payload: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    revision_map: Mapped[dict] = mapped_column(JSON, default=dict)
+    source_request_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    restored_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+
+
+class StrategyAllocationApprovalRequest(Base):
+    __tablename__ = "strategy_allocation_approval_requests"
+
+    request_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    request_type: Mapped[str] = mapped_column(String(100), default="strategy_allocation")
+    action_type: Mapped[str] = mapped_column(String(80), index=True)
+    target_type: Mapped[str] = mapped_column(String(80), default="unknown")
+    target_id: Mapped[str] = mapped_column(String(160), default="unknown")
+    status: Mapped[str] = mapped_column(String(40), default="pending", index=True)
+    requested_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    requested_role: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    reason_note: Mapped[str] = mapped_column(Text, default="")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    revision_context: Mapped[dict] = mapped_column(JSON, default=dict)
+    stale_state: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    stale_reason_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    stale_conflicts: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    rejected_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: utcnow() + timedelta(hours=24))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 class ExecutionIntent(Base):
     __tablename__ = "execution_intents"

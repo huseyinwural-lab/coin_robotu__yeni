@@ -3014,6 +3014,9 @@ class StrategyAllocationSnapshotItem(BaseModel):
     total_weight: float
     total_capital: float
     used_capital: float
+    source_request_id: str | None = None
+    restored_at: datetime | None = None
+    restored_by: str | None = None
 
 
 class StrategyAllocationSnapshotsResponse(BaseModel):
@@ -3025,6 +3028,11 @@ class StrategyAllocationSnapshotCreateResponse(BaseModel):
     message: str
     snapshot: StrategyAllocationSnapshotItem | None = None
     trace_id: str
+
+
+class StrategyAllocationSnapshotRestoreRequest(BaseModel):
+    reason_note: str
+    expected_revisions: dict[str, int] = Field(default_factory=dict)
 
 
 class StrategyAllocationWhatIfRequest(BaseModel):
@@ -3056,14 +3064,19 @@ class StrategyAllocationWhatIfResponse(BaseModel):
 
 class StrategyAllocationApprovalRequestItem(BaseModel):
     request_id: str
+    request_type: str | None = None
     action_type: str
+    target_type: str | None = None
+    target_id: str | None = None
     status: str
     requested_by: str
     requested_role: str | None = None
     reason_note: str
     created_at: datetime
+    requested_at: datetime | None = None
     expires_at: datetime
     payload: dict = Field(default_factory=dict)
+    revision_context: dict = Field(default_factory=dict)
     stale_state: str | None = None
     stale_reason_code: str | None = None
     stale_conflicts: list[dict] = Field(default_factory=list)

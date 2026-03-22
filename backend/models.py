@@ -60,6 +60,8 @@ from model_domains.risk_execution_positions import (
     SimulationRun,
     SimulationScenarioItem,
     StrategyAllocation,
+    StrategyAllocationApprovalRequest,
+    StrategyAllocationSnapshot,
     TestnetExecutionLog,
     UserExecutionIntent,
 )
@@ -144,6 +146,8 @@ __all__ = [
     "Position",
     "ManualOverrideLog",
     "StrategyAllocation",
+    "StrategyAllocationApprovalRequest",
+    "StrategyAllocationSnapshot",
     "ExecutionIntent",
     "ExecutionIntentEvent",
     "DecisionTraceHot",

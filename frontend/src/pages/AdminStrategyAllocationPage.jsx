@@ -154,11 +154,14 @@ export const AdminStrategyAllocationPage = () => {
   const [approvalRequests, setApprovalRequests] = useState([]);
   const [snapshots, setSnapshots] = useState([]);
   const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
+  const [restoreModal, setRestoreModal] = useState({ open: false, snapshot: null, reason: "", isSubmitting: false });
   const [isRunningWhatIf, setIsRunningWhatIf] = useState(false);
   const [whatIfResult, setWhatIfResult] = useState(null);
   const [requestAgeTick, setRequestAgeTick] = useState(Date.now());
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
   const [revisionConflict, setRevisionConflict] = useState(null);
+  const [exportRelatedRequestId, setExportRelatedRequestId] = useState("");
+  const [exportSnapshotId, setExportSnapshotId] = useState("");
 
   const role = String(user?.role || "");
   const isOpsReadOnly = role === "ops";
@@ -621,9 +624,66 @@ export const AdminStrategyAllocationPage = () => {
     }
   };
 
+  const openRestoreModal = (snapshot) => {
+    setRestoreModal({
+      open: true,
+      snapshot,
+      reason: String(reasonNote || "").trim() || `restore_${snapshot?.snapshot_id || "snapshot"}`,
+      isSubmitting: false,
+    });
+  };
+
+  const closeRestoreModal = () => {
+    if (restoreModal.isSubmitting) return;
+    setRestoreModal({ open: false, snapshot: null, reason: "", isSubmitting: false });
+  };
+
+  const submitSnapshotRestore = async () => {
+    if (isOpsReadOnly) {
+      toast.error("ops role read-only");
+      return;
+    }
+    const snapshotId = restoreModal?.snapshot?.snapshot_id;
+    if (!snapshotId) {
+      toast.error("snapshot_id bulunamadı");
+      return;
+    }
+
+    const note = String(restoreModal.reason || "").trim();
+    if (!note) {
+      toast.error("restore reason zorunlu");
+      return;
+    }
+
+    setRestoreModal((prev) => ({ ...prev, isSubmitting: true }));
+    try {
+      const { data } = await apiClient.post(`/admin/strategy-allocation/snapshots/${encodeURIComponent(snapshotId)}/restore`, {
+        reason_note: note,
+        expected_revisions: buildExpectedRevisionMap(),
+      });
+      toast.success(data?.message || `Restore tamamlandı: ${snapshotId}`);
+      setRestoreModal({ open: false, snapshot: null, reason: "", isSubmitting: false });
+      setRevisionConflict(null);
+      await load();
+    } catch (error) {
+      handleConflictError(error, "Snapshot restore başarısız");
+      setRestoreModal((prev) => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
   const exportAllocation = async (format) => {
     try {
-      const response = await apiClient.get(`/admin/strategy-allocation/export?format=${format}`, {
+      const params = new URLSearchParams();
+      params.set("format", format);
+      const note = String(reasonNote || "").trim();
+      if (note) params.set("reason_note", note);
+      const relatedRequestId = String(exportRelatedRequestId || "").trim();
+      if (relatedRequestId) params.set("related_request_id", relatedRequestId);
+      const snapshotId = String(exportSnapshotId || "").trim();
+      if (snapshotId) params.set("snapshot_id", snapshotId);
+      if (selectedStrategyIds.length > 0) params.set("selected_strategy_ids", selectedStrategyIds.join(","));
+
+      const response = await apiClient.get(`/admin/strategy-allocation/export?${params.toString()}`, {
         responseType: "blob",
       });
       const blob = new Blob([response.data], { type: format === "csv" ? "text/csv" : "application/json" });
@@ -635,7 +695,9 @@ export const AdminStrategyAllocationPage = () => {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      toast.success(`${format.toUpperCase()} export hazır`);
+      const filterText = selectedStrategyIds.length > 0 ? ` · filter=${selectedStrategyIds.length} strategy` : "";
+      const traceId = response?.headers?.["x-export-trace-id"];
+      toast.success(`${format.toUpperCase()} export hazır${filterText}${traceId ? ` · trace=${traceId}` : ""}`);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Export başarısız");
     }
@@ -987,6 +1049,24 @@ export const AdminStrategyAllocationPage = () => {
           </Button>
         </div>
 
+        <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="admin-strategy-allocation-export-metadata-input-grid">
+          <Input
+            placeholder="Export related_request_id (opsiyonel)"
+            value={exportRelatedRequestId}
+            onChange={(event) => setExportRelatedRequestId(event.target.value)}
+            data-testid="admin-strategy-allocation-export-related-request-input"
+          />
+          <Input
+            placeholder="Export snapshot_id (opsiyonel)"
+            value={exportSnapshotId}
+            onChange={(event) => setExportSnapshotId(event.target.value)}
+            data-testid="admin-strategy-allocation-export-snapshot-id-input"
+          />
+          <p className="text-xs text-slate-500" data-testid="admin-strategy-allocation-export-filter-note">
+            Export filtresi: {selectedStrategyIds.length > 0 ? `${selectedStrategyIds.length} strategy seçili` : "tümü"}
+          </p>
+        </div>
+
         <div className="mt-3 grid gap-3 md:grid-cols-2" data-testid="admin-strategy-allocation-phase6-grid">
           <div className="rounded border border-slate-800 bg-slate-950 p-2" data-testid="admin-strategy-allocation-phase6-snapshot-list-panel">
             <p className="text-xs text-slate-300" data-testid="admin-strategy-allocation-phase6-snapshot-list-title">Snapshots</p>
@@ -994,9 +1074,31 @@ export const AdminStrategyAllocationPage = () => {
               <p className="mt-1 text-xs text-slate-500" data-testid="admin-strategy-allocation-phase6-snapshot-empty">No data yet</p>
             )}
             {(snapshots || []).slice(0, 5).map((snapshot, index) => (
-              <p key={`${snapshot.snapshot_id}-${index}`} className="mt-1 text-xs text-slate-300" data-testid={`admin-strategy-allocation-phase6-snapshot-item-${index}`}>
-                {snapshot.snapshot_id} · count={snapshot.strategy_count} · weight={snapshot.total_weight}
-              </p>
+              <div key={`${snapshot.snapshot_id}-${index}`} className="mt-1 rounded border border-slate-800 bg-slate-900 p-2 text-xs" data-testid={`admin-strategy-allocation-phase6-snapshot-item-${index}`}>
+                <p data-testid={`admin-strategy-allocation-phase6-snapshot-item-id-${index}`}>{snapshot.snapshot_id}</p>
+                <p className="text-slate-400" data-testid={`admin-strategy-allocation-phase6-snapshot-item-metadata-${index}`}>
+                  {new Date(snapshot.created_at).toLocaleString()} · by={snapshot.created_by} · reason={snapshot.reason_note || "-"}
+                </p>
+                <p className="text-slate-400" data-testid={`admin-strategy-allocation-phase6-snapshot-item-stats-${index}`}>
+                  count={snapshot.strategy_count} · weight={snapshot.total_weight} · used={snapshot.used_capital}
+                </p>
+                <div className="mt-1 flex items-center gap-2" data-testid={`admin-strategy-allocation-phase6-snapshot-item-actions-${index}`}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openRestoreModal(snapshot)}
+                    disabled={isOpsReadOnly}
+                    data-testid={`admin-strategy-allocation-phase6-snapshot-restore-button-${index}`}
+                  >
+                    {isSuperAdmin ? "Restore Now" : "Restore Request"}
+                  </Button>
+                  {snapshot.restored_at && (
+                    <span className="text-[10px] text-emerald-300" data-testid={`admin-strategy-allocation-phase6-snapshot-restored-tag-${index}`}>
+                      restored_at={new Date(snapshot.restored_at).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
 
@@ -1252,7 +1354,7 @@ export const AdminStrategyAllocationPage = () => {
           {approvalRequests.map((item, index) => (
             <div key={`${item.request_id}-${index}`} className="rounded border border-slate-800 bg-slate-950 p-2 text-xs" data-testid={`admin-strategy-allocation-approval-item-${index}`}>
               <p data-testid={`admin-strategy-allocation-approval-item-main-${index}`}>
-                {item.request_id} · {item.action_type} ·
+                {item.request_id} · {item.action_type} ({item.request_type || "-"}) ·
                 <span className="ml-1 rounded border border-slate-700 px-1 py-0.5 text-[10px]" data-testid={`admin-strategy-allocation-approval-item-status-${index}`}>
                   {approvalStatusLabel(item)}
                 </span>
@@ -1262,6 +1364,9 @@ export const AdminStrategyAllocationPage = () => {
                 <span className="ml-2 rounded border border-slate-700 px-1 py-0.5 text-[10px]" data-testid={`admin-strategy-allocation-approval-item-age-${index}`}>
                   {formatRequestAge(item.created_at, requestAgeTick)}
                 </span>
+              </p>
+              <p data-testid={`admin-strategy-allocation-approval-item-target-${index}`}>
+                target={item.target_type || "-"}:{item.target_id || "-"} · revision_count={item.revision_context?.expected_revision_count || 0}
               </p>
               <p data-testid={`admin-strategy-allocation-approval-item-expiry-${index}`}>
                 expires_at={item.expires_at}
@@ -1285,6 +1390,46 @@ export const AdminStrategyAllocationPage = () => {
           ))}
         </div>
       </div>
+
+      {restoreModal.open && (
+        <div className="col-span-12 border border-cyan-500/40 bg-slate-950 p-4" data-testid="admin-strategy-allocation-restore-modal">
+          <p className="text-sm font-semibold text-cyan-200" data-testid="admin-strategy-allocation-restore-modal-title">
+            Snapshot Restore Confirm
+          </p>
+          <p className="mt-1 text-xs text-slate-300" data-testid="admin-strategy-allocation-restore-modal-snapshot-id">
+            snapshot_id={restoreModal.snapshot?.snapshot_id || "-"}
+          </p>
+          <p className="mt-1 text-xs text-slate-400" data-testid="admin-strategy-allocation-restore-modal-approval-info">
+            {isSuperAdmin
+              ? "super_admin: Restore Now (approve + execute)"
+              : "admin: Restore Request (approval kuyruğuna gider)"}
+          </p>
+          <Input
+            className="mt-2"
+            placeholder="Restore reason note"
+            value={restoreModal.reason}
+            onChange={(event) => setRestoreModal((prev) => ({ ...prev, reason: event.target.value }))}
+            data-testid="admin-strategy-allocation-restore-modal-reason-input"
+          />
+          <div className="mt-2 flex gap-2" data-testid="admin-strategy-allocation-restore-modal-actions">
+            <Button
+              onClick={submitSnapshotRestore}
+              disabled={restoreModal.isSubmitting || isOpsReadOnly}
+              data-testid="admin-strategy-allocation-restore-modal-confirm-button"
+            >
+              {restoreModal.isSubmitting ? "Restore çalışıyor..." : isSuperAdmin ? "Restore Now" : "Restore Request"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={closeRestoreModal}
+              disabled={restoreModal.isSubmitting}
+              data-testid="admin-strategy-allocation-restore-modal-cancel-button"
+            >
+              Vazgeç
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-allocation-state-history-panel">
         <h3 className="text-base font-semibold" data-testid="admin-strategy-allocation-state-history-title">State History Log</h3>
