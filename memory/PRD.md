@@ -1,3 +1,41 @@
+## 2026-03-22 — P1 Deterministic State/Effect + Lightweight Chart Tamamlandı ✅
+
+### Kullanıcı karar seti uygulanması
+- Sıra: **gerçek state/effect önce**, sonra chart
+- Etki modeli: **deterministic_fixed_v1** (sabit katsayı)
+- Chart: **sparkline + delta badge**
+- UI: **inline impact cards + recommendation stack**
+
+### Backend tamamlananlar
+- Decision request response genişletildi:
+  - `deterministic_effect_preview`
+  - `execution_effect`
+  - `state_change`
+  - `recommendation_rank`
+- Execute akışında gerçek state/effect üretimi:
+  - conflict: `CONFLICT_RESOLVED`
+  - hedge: `HEDGE_APPLIED` + `realized_risk_drop`
+  - rebalance: `ALLOCATION_REBALANCED` + `allocation_diff_bps`
+- Compare summary genişletildi:
+  - `exposure_change_vs_history`
+  - `var_change_vs_history`
+  - `liquidity_impact_change_vs_history`
+
+### Frontend tamamlananlar
+- Governance Board queue item’larında **inline impact card** eklendi
+- Yeni panel: **RecommendationStackPanel** (rank #1..n)
+- History panelde **sparkline + delta badge** eklendi
+- Compare panelde exposure/var/liquidity delta satırları eklendi
+
+### Test doğrulaması
+- `deep_testing_backend_v2`: PASS (12/12)
+- `auto_frontend_testing_agent`: PASS (P1 re-validation)
+- `testing_agent`: `/app/test_reports/iteration_79.json`
+  - Backend: **100% (16/16)**
+  - Frontend: **100%**
+
+---
+
 ## 2026-03-22 — FINAL P0 Kapanış (Governance Board + Hardening) ✅
 
 ### Uygulanan FINAL P0 kapsamı
