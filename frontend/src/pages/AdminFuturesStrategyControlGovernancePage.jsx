@@ -105,6 +105,13 @@ const riskLevelColorClass = (level) => {
   return "text-amber-700";
 };
 
+const confidenceColorClass = (confidenceLabel) => {
+  const normalized = String(confidenceLabel || "").toLowerCase();
+  if (normalized === "high") return "text-emerald-700";
+  if (normalized === "low") return "text-red-700";
+  return "text-amber-700";
+};
+
 const buildDeterministicRiskPoints = (beforeRisk, afterRisk, totalPoints = 6) => {
   const points = [];
   const safeCount = Math.min(7, Math.max(5, totalPoints));
@@ -1751,6 +1758,12 @@ const ApprovalRiskSparkline = ({ index, decisionContext, fallbackRisk }) => {
   const deltaLabel = `${delta >= 0 ? "+" : ""}${delta} risk`;
   const deltaClass = delta < 0 ? "text-emerald-700" : delta > 0 ? "text-red-700" : "text-amber-700";
   const riskLevel = String(decisionContext?.risk?.level || "MED").toUpperCase();
+  const rawConfidence = Number(decisionContext?.recommendation?.confidence);
+  const confidence = Number.isFinite(rawConfidence) ? rawConfidence : null;
+  let confidenceLabel = "med";
+  if (confidence !== null && confidence >= 80) confidenceLabel = "high";
+  if (confidence !== null && confidence < 60) confidenceLabel = "low";
+  const confidenceEmoji = confidenceLabel === "high" ? "🟢" : confidenceLabel === "low" ? "🔴" : "🟡";
 
   return (
     <div className="mt-1 rounded border border-black/20 bg-white p-2" data-testid={`strategy-control-approval-item-risk-sparkline-${index}`}>
@@ -1761,6 +1774,12 @@ const ApprovalRiskSparkline = ({ index, decisionContext, fallbackRisk }) => {
         </p>
         <p className={`text-xs font-semibold ${riskLevelColorClass(riskLevel)}`} data-testid={`strategy-control-approval-item-risk-sparkline-level-${index}`}>
           level={riskLevel}
+        </p>
+        <p
+          className={`text-xs font-semibold ${confidenceColorClass(confidenceLabel)}`}
+          data-testid={`strategy-control-approval-item-risk-sparkline-confidence-${index}`}
+        >
+          confidence={confidenceEmoji} {confidenceLabel}{confidence !== null ? ` (${confidence}%)` : ""}
         </p>
       </div>
 
