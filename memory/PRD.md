@@ -1,3 +1,43 @@
+## 2026-03-22 — FINAL P0 Kapanış (Governance Board + Hardening) ✅
+
+### Uygulanan FINAL P0 kapsamı
+1) **Simulation Output Engine**
+- Response alanları eklendi/aktif: `projected_pnl`, `projected_drawdown`, `exposure_change`, `var_change`, `liquidity_impact`, `decision_summary`
+- UI before/after panelinde renkli delta (↑ ↓) gösterimi aktif
+
+2) **Override System Complete**
+- Active override table güçlendirildi
+- Revoke akışı doğrulandı
+- Expiry countdown eklendi
+- Override impact preview görünürlüğü eklendi
+- Override → approval link alanı (`linked_approval_request_id`) görünür hale getirildi
+
+3) **Approval Queue Hardening**
+- Decision request owner/ack alanları eklendi:
+  - `assigned_to`, `ack_by`, `ack_at`
+- Execute akışı approved state’de korundu
+- Bulk approve/reject eklendi (**max 25** hard limit)
+- SLA breach auto-highlight korunup Governance Board’da görünür hale getirildi
+
+4) **Escalation Center Complete**
+- `assign-owner`, `ack`, `resolve` akışları tamamlandı
+- Ack ile ownership değişimi bağlandı
+- Resolve ile kapanış doğrulandı
+- Reason zorunluluğu backend+UI’de aktif
+- Queue bağlantısı (`linked_request_id`) görünür ve yönetilebilir
+
+### Mimari sonuç
+- Queue + Escalation tek panelde birleştirildi: **Governance Board**
+
+### Test sonucu
+- `deep_testing_backend_v2`: PASS (P0 endpoint ve role guard doğrulandı)
+- `auto_frontend_testing_agent`: PASS (Governance Board + UI akışları)
+- `testing_agent`: `/app/test_reports/iteration_78.json`
+  - Backend: **100% (43/43)**
+  - Frontend: **100%**
+
+---
+
 ## 2026-03-22 — Escalation Center + P2 Başlangıç Paket (Matrix/Portability/Depth Filters) ✅
 
 ### Scope kilidi (kullanıcı onayıyla)
