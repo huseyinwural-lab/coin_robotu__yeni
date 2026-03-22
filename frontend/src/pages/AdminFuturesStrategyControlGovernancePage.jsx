@@ -54,6 +54,19 @@ const ROLLOUT_CONFIRM_MAP = {
   rollback: "ROLLBACK LAST ACTION",
 };
 
+const DRIFT_CONFIRM_MAP = {
+  ignore: "IGNORE DRIFT ALERT",
+  disable_strategy: "DISABLE VIA DRIFT",
+};
+
+const DRIFT_ENDPOINT_MAP = {
+  ack: "ack",
+  mute: "mute",
+  ignore: "ignore",
+  disable_strategy: "disable-strategy",
+  retrain: "retrain",
+};
+
 export const AdminFuturesStrategyControlGovernancePage = () => {
   const [activeTab, setActiveTab] = useState("strategy_governance");
   const [loading, setLoading] = useState(true);
@@ -88,6 +101,15 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
   const [rolloutSubmitting, setRolloutSubmitting] = useState(false);
   const [rolloutPrecheck, setRolloutPrecheck] = useState(null);
   const [rolloutResult, setRolloutResult] = useState(null);
+
+  const [driftAlerts, setDriftAlerts] = useState([]);
+  const [driftLoading, setDriftLoading] = useState(false);
+  const [driftActionModal, setDriftActionModal] = useState({ open: false, action: "", alert: null });
+  const [driftReason, setDriftReason] = useState("");
+  const [driftConfirm, setDriftConfirm] = useState("");
+  const [driftMuteDuration, setDriftMuteDuration] = useState(1);
+  const [driftSubmitting, setDriftSubmitting] = useState(false);
+  const [driftResult, setDriftResult] = useState(null);
 
   const [lastActionResult, setLastActionResult] = useState(null);
 
@@ -126,11 +148,21 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     });
   }, []);
 
+  const loadDriftAlerts = useCallback(async () => {
+    setDriftLoading(true);
+    try {
+      const { data } = await apiClient.get("/admin/futures/strategy-control/drift-alerts");
+      setDriftAlerts(data?.items || []);
+    } finally {
+      setDriftLoading(false);
+    }
+  }, []);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
     try {
-      await Promise.all([loadOverview(), loadCapital()]);
+      await Promise.all([loadOverview(), loadCapital(), loadDriftAlerts()]);
     } catch (error) {
       const message = error?.response?.data?.detail || "Strategy Control verisi alınamadı";
       setErrorMessage(message);
@@ -138,7 +170,7 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     } finally {
       setLoading(false);
     }
-  }, [loadCapital, loadOverview]);
+  }, [loadCapital, loadDriftAlerts, loadOverview]);
 
   useEffect(() => {
     loadAll();
@@ -301,6 +333,67 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       toast.error(error?.response?.data?.detail || "Rollout aksiyonu başarısız");
     } finally {
       setRolloutSubmitting(false);
+    }
+  };
+
+  const openDriftActionModal = (action, alert) => {
+    setDriftActionModal({ open: true, action, alert });
+    setDriftReason("");
+    setDriftConfirm("");
+    setDriftMuteDuration(1);
+  };
+
+  const openDriftDeepLink = (alert) => {
+    const targetTab = alert?.deep_link?.target_tab || "strategy_governance";
+    const strategyId = alert?.strategy_id;
+    setActiveTab(targetTab);
+    if (strategyId) {
+      setRolloutStrategyId(strategyId);
+      setSelectedStrategyIds([strategyId]);
+    }
+    toast.success(`Deep-link açıldı: ${targetTab}`);
+  };
+
+  const submitDriftAction = async () => {
+    const action = driftActionModal.action;
+    const alert = driftActionModal.alert;
+    if (!action || !alert) return;
+    if (driftReason.trim().length < 3) {
+      toast.error("Drift aksiyonu için reason zorunlu");
+      return;
+    }
+    const requiredConfirm = DRIFT_CONFIRM_MAP[action];
+    if (requiredConfirm && driftConfirm.trim().toUpperCase() !== requiredConfirm) {
+      toast.error(`Onay ifadesi eşleşmeli: ${requiredConfirm}`);
+      return;
+    }
+
+    const endpointSuffix = DRIFT_ENDPOINT_MAP[action];
+    if (!endpointSuffix) return;
+
+    setDriftSubmitting(true);
+    try {
+      const { data } = await apiClient.post(
+        `/admin/futures/drift-alert/${alert.alert_id}/${endpointSuffix}`,
+        {
+          reason: driftReason.trim(),
+          confirm_phrase: driftConfirm.trim() || null,
+          mute_duration_hours: action === "mute" ? Number(driftMuteDuration) : null,
+          dry_run: false,
+        },
+      );
+
+      setDriftResult(data || null);
+      setLastActionResult(data || null);
+      if (data?.status === "rejected") toast.error(data?.message || "Drift aksiyonu reddedildi");
+      else toast.success(data?.message || "Drift aksiyonu uygulandı");
+
+      setDriftActionModal({ open: false, action: "", alert: null });
+      await Promise.all([loadDriftAlerts(), loadOverview()]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Drift aksiyonu başarısız");
+    } finally {
+      setDriftSubmitting(false);
     }
   };
 
@@ -476,9 +569,38 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
             </TabsContent>
 
             <TabsContent value="drift_action_center" data-testid="strategy-control-tab-drift-action-center">
-              <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-drift-action-center-panel">
+              <div className="space-y-3 border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-drift-action-center-panel">
                 <h3 className="text-base font-semibold" data-testid="strategy-control-drift-action-center-title">Drift Action Center</h3>
-                <p className="mt-1 text-xs" data-testid="strategy-control-drift-action-center-reason">Faz-3 backlog: Ack/Mute/Disable/Retrain/Ignore aksiyonları bu turda açılmadı.</p>
+                <p className="mt-1 text-xs" data-testid="strategy-control-drift-action-center-reason">Ack/Mute/Ignore/Disable/Retrain aksiyonları reason + trace + state_snapshot + audit ile aktiftir.</p>
+
+                {driftLoading && <p className="text-sm" data-testid="strategy-control-drift-loading">Drift alarmları yükleniyor...</p>}
+                {!driftLoading && driftAlerts.length === 0 && <p className="text-sm" data-testid="strategy-control-drift-empty">No data yet: aktif drift alarmı bulunmuyor.</p>}
+
+                {driftAlerts.map((alert, index) => (
+                  <div key={alert.alert_id} className="rounded border border-black/20 bg-orange-50 p-3" data-testid={`strategy-control-drift-alert-card-${index}`}>
+                    <p className="text-xs font-semibold" data-testid={`strategy-control-drift-alert-strategy-${index}`}>{alert.strategy_id}</p>
+                    <p className="text-xs" data-testid={`strategy-control-drift-alert-status-${index}`}>status={alert.status} severity={alert.severity}</p>
+                    <p className="text-xs" data-testid={`strategy-control-drift-alert-reasons-${index}`}>reasons={(alert.trigger_reason || []).join(",") || "n/a"}</p>
+                    <p className="text-xs" data-testid={`strategy-control-drift-alert-mute-${index}`}>muted_until={alert.muted_until || "-"}</p>
+                    <div className="mt-2 flex flex-wrap gap-2" data-testid={`strategy-control-drift-alert-actions-${index}`}>
+                      <Button size="sm" variant="outline" onClick={() => openDriftActionModal("ack", alert)} data-testid={`strategy-control-drift-ack-button-${index}`}>Ack</Button>
+                      <Button size="sm" variant="outline" onClick={() => openDriftActionModal("mute", alert)} data-testid={`strategy-control-drift-mute-button-${index}`}>Mute</Button>
+                      <Button size="sm" variant="outline" onClick={() => openDriftActionModal("ignore", alert)} data-testid={`strategy-control-drift-ignore-button-${index}`}>Ignore</Button>
+                      <Button size="sm" variant="outline" className="border-red-800 text-red-900" onClick={() => openDriftActionModal("disable_strategy", alert)} data-testid={`strategy-control-drift-disable-button-${index}`}>Disable Strategy</Button>
+                      <Button size="sm" variant="outline" onClick={() => openDriftActionModal("retrain", alert)} data-testid={`strategy-control-drift-retrain-button-${index}`}>Retrain</Button>
+                      <Button size="sm" variant="outline" onClick={() => openDriftDeepLink(alert)} data-testid={`strategy-control-drift-open-policy-button-${index}`}>Open Policy</Button>
+                    </div>
+                  </div>
+                ))}
+
+                {driftResult && (
+                  <div className="rounded border border-black/20 bg-orange-50 p-3" data-testid="strategy-control-drift-result-card">
+                    <p className="text-xs" data-testid="strategy-control-drift-result-status">status={driftResult.status}</p>
+                    <p className="text-xs" data-testid="strategy-control-drift-result-trace">trace_id={driftResult.trace_id}</p>
+                    <p className="text-xs" data-testid="strategy-control-drift-result-message">message={driftResult.message}</p>
+                    <p className="text-xs" data-testid="strategy-control-drift-result-deep-link">deep_link_tab={driftResult?.deep_link?.target_tab || "-"}</p>
+                  </div>
+                )}
               </div>
             </TabsContent>
 
@@ -522,6 +644,38 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
             <Button variant="outline" onClick={() => setActionModal({ open: false, action: null, strategy: null })} data-testid="strategy-control-action-dialog-cancel-button">Vazgeç</Button>
             <Button onClick={submitAction} disabled={submitting} className="border border-black bg-black text-orange-300" data-testid="strategy-control-action-dialog-submit-button">
               {submitting ? "Uygulanıyor..." : "Aksiyonu Uygula"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={driftActionModal.open} onOpenChange={(open) => setDriftActionModal((prev) => ({ ...prev, open }))}>
+        <DialogContent className="border border-black/40 bg-orange-50" data-testid="strategy-control-drift-action-dialog">
+          <DialogHeader>
+            <DialogTitle data-testid="strategy-control-drift-action-dialog-title">Drift Action · {driftActionModal.action || "-"}</DialogTitle>
+            <DialogDescription data-testid="strategy-control-drift-action-dialog-description">
+              Drift aksiyonlarında reason + trace + state_snapshot + audit zorunludur.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Textarea value={driftReason} onChange={(e) => setDriftReason(e.target.value)} placeholder="Drift aksiyon nedeni" className="border-black/40" data-testid="strategy-control-drift-action-dialog-reason-input" />
+
+          {driftActionModal.action === "mute" && (
+            <select value={driftMuteDuration} onChange={(e) => setDriftMuteDuration(Number(e.target.value))} className="h-10 rounded border border-black/40 bg-white px-3 text-sm" data-testid="strategy-control-drift-action-dialog-mute-duration-select">
+              <option value={1}>1h</option>
+              <option value={24}>24h</option>
+              <option value={168}>7d</option>
+            </select>
+          )}
+
+          {DRIFT_CONFIRM_MAP[driftActionModal.action] && (
+            <Input value={driftConfirm} onChange={(e) => setDriftConfirm(e.target.value)} placeholder={`Onay ifadesi: ${DRIFT_CONFIRM_MAP[driftActionModal.action]}`} className="border-black/40" data-testid="strategy-control-drift-action-dialog-confirm-input" />
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDriftActionModal({ open: false, action: "", alert: null })} data-testid="strategy-control-drift-action-dialog-cancel-button">Vazgeç</Button>
+            <Button onClick={submitDriftAction} disabled={driftSubmitting} className="border border-black bg-black text-orange-300" data-testid="strategy-control-drift-action-dialog-submit-button">
+              {driftSubmitting ? "Uygulanıyor..." : "Drift Aksiyonunu Uygula"}
             </Button>
           </DialogFooter>
         </DialogContent>

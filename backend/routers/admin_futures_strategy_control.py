@@ -21,12 +21,15 @@ _THROTTLE_KEY = "futures:strategy:throttle:{user_id}"
 _MANUAL_KEY = "futures:strategy:manual-controls:{user_id}"
 _ROLLOUT_KEY = "futures:strategy:rollout:{user_id}"
 _HISTORY_KEY = "futures:strategy:control-history:{user_id}"
+_DRIFT_ALERT_KEY = "futures:strategy:drift-alert-state:{user_id}"
 
 _DISABLE_CONFIRM = "DISABLE STRATEGY"
 _DECOMMISSION_CONFIRM = "DECOMMISSION STRATEGY"
 _ROLLBACK_CONFIRM = "ROLLBACK LAST ACTION"
 _ROLLOUT_CONFIRM = "APPLY ROLLOUT"
 _PROMOTE_CONFIRM = "PROMOTE SHADOW"
+_DRIFT_IGNORE_CONFIRM = "IGNORE DRIFT ALERT"
+_DRIFT_DISABLE_CONFIRM = "DISABLE VIA DRIFT"
 
 _VALID_THROTTLE_LEVELS = ["L1", "L2", "L3"]
 _VALID_ROLLOUT_STEPS = [10, 25, 50, 100]
@@ -61,6 +64,13 @@ class StrategyBulkActionRequest(BaseModel):
     strategy_ids: list[str] = Field(..., min_length=1)
     action: str = Field(..., min_length=3, max_length=20)
     throttle_level: str | None = Field(default=None, max_length=2)
+    dry_run: bool = False
+
+
+class DriftActionRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+    confirm_phrase: str | None = Field(default=None, max_length=120)
+    mute_duration_hours: int | None = Field(default=None, ge=1, le=168)
     dry_run: bool = False
 
 
@@ -258,6 +268,7 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
     manual_key = _MANUAL_KEY.format(user_id=current_admin.id)
     rollout_key = _ROLLOUT_KEY.format(user_id=current_admin.id)
     history_key = _HISTORY_KEY.format(user_id=current_admin.id)
+    drift_alert_key = _DRIFT_ALERT_KEY.format(user_id=current_admin.id)
 
     lifecycle_registry = _cache_get(pipeline_runtime.cache, lifecycle_key, status.get("strategy_lifecycle_registry") or {})
     throttle_payload = _cache_get(
@@ -275,6 +286,7 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
     manual_controls = _cache_get(pipeline_runtime.cache, manual_key, {})
     rollout_payload = _cache_get(pipeline_runtime.cache, rollout_key, {"by_strategy": {}, "history": []})
     action_history = _cache_get(pipeline_runtime.cache, history_key, [])
+    drift_alert_state = _cache_get(pipeline_runtime.cache, drift_alert_key, {})
 
     rows = _compose_strategy_rows(status, lifecycle_registry, throttle_payload, manual_controls, rollout_payload)
     return {
@@ -285,12 +297,14 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
         "manual_controls": manual_controls,
         "rollout_payload": rollout_payload,
         "action_history": action_history,
+        "drift_alert_state": drift_alert_state,
         "keys": {
             "lifecycle": lifecycle_key,
             "throttle": throttle_key,
             "manual": manual_key,
             "rollout": rollout_key,
             "history": history_key,
+            "drift_alert": drift_alert_key,
         },
     }
 
@@ -460,6 +474,67 @@ def _resolve_bulk_confirm_phrase(action: str) -> str:
     return ""
 
 
+def _build_drift_alert_rows(status_payload: dict, drift_alert_state: dict) -> list[dict]:
+    rows = []
+    now = datetime.now(timezone.utc)
+    for index, row in enumerate(status_payload.get("strategy_drift_alerts") or []):
+        strategy_id = str(row.get("strategy") or "")
+        if not strategy_id:
+            continue
+        alert_id = f"{strategy_id}::{index}"
+        state = dict(drift_alert_state.get(alert_id) or {})
+        muted_until = state.get("muted_until")
+        muted_active = False
+        if muted_until:
+            try:
+                muted_active = datetime.fromisoformat(str(muted_until)) > now
+            except Exception:
+                muted_active = False
+
+        action_status = "OPEN"
+        if state.get("ignored"):
+            action_status = "IGNORED"
+        elif muted_active:
+            action_status = "MUTED"
+        elif state.get("acked"):
+            action_status = "ACKED"
+
+        reasons = row.get("trigger_reason")
+        if not isinstance(reasons, list):
+            reasons = [str(reasons)] if reasons else []
+
+        target_tab = "strategy_governance"
+        if any("gate" in str(item).lower() for item in reasons):
+            target_tab = "rollout"
+
+        rows.append(
+            {
+                "alert_id": alert_id,
+                "strategy_id": strategy_id,
+                "severity": str(row.get("severity") or "LOW").upper(),
+                "metric": row.get("metric") or "drift",
+                "value": row.get("value"),
+                "trigger_reason": reasons,
+                "status": action_status,
+                "acked": bool(state.get("acked")),
+                "muted_until": muted_until,
+                "ignored": bool(state.get("ignored")),
+                "retrain_status": state.get("retrain_status") or "none",
+                "retrain_job_id": state.get("retrain_job_id"),
+                "last_action_trace_id": state.get("last_action_trace_id"),
+                "deep_link": {
+                    "target_tab": target_tab,
+                    "strategy_id": strategy_id,
+                    "context_filter": {
+                        "strategy_id": strategy_id,
+                        "severity": str(row.get("severity") or "LOW").upper(),
+                    },
+                },
+            }
+        )
+    return rows
+
+
 @router.get("/strategy-control/overview")
 def strategy_control_overview(
     refresh: bool = False,
@@ -588,6 +663,220 @@ def strategy_rollout_precheck(
         "strategy_id": strategy_id,
         "precheck": precheck,
     }
+
+
+@router.get("/strategy-control/drift-alerts")
+def strategy_control_drift_alerts(
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    state = _load_control_state(db, current_admin, refresh=False)
+    alerts = _build_drift_alert_rows(state["status_payload"], state["drift_alert_state"])
+    return {
+        "status": "ok",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "items": alerts,
+        "summary": {
+            "open": len([item for item in alerts if item.get("status") == "OPEN"]),
+            "acked": len([item for item in alerts if item.get("status") == "ACKED"]),
+            "muted": len([item for item in alerts if item.get("status") == "MUTED"]),
+            "ignored": len([item for item in alerts if item.get("status") == "IGNORED"]),
+        },
+    }
+
+
+def _find_alert(alerts: list[dict], alert_id: str) -> dict:
+    for item in alerts:
+        if str(item.get("alert_id") or "") == str(alert_id):
+            return item
+    raise HTTPException(status_code=404, detail="drift_alert_not_found")
+
+
+def _run_drift_action(
+    *,
+    action: str,
+    alert_id: str,
+    payload: DriftActionRequest,
+    current_admin: User,
+    db: Session,
+):
+    trace_id = f"drift_action_{uuid.uuid4().hex[:12]}"
+    state = _load_control_state(db, current_admin, refresh=False)
+    alerts = _build_drift_alert_rows(state["status_payload"], state["drift_alert_state"])
+    alert = _find_alert(alerts, alert_id)
+    strategy_id = str(alert.get("strategy_id") or "")
+
+    if action == "ignore" and str(payload.confirm_phrase or "").strip().upper() != _DRIFT_IGNORE_CONFIRM:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message=f"Ignore için onay ifadesi zorunlu: {_DRIFT_IGNORE_CONFIRM}",
+            state_snapshot=alert,
+        )
+
+    if action == "disable_strategy" and str(payload.confirm_phrase or "").strip().upper() != _DRIFT_DISABLE_CONFIRM:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message=f"Disable için onay ifadesi zorunlu: {_DRIFT_DISABLE_CONFIRM}",
+            state_snapshot=alert,
+        )
+
+    drift_alert_state = state["drift_alert_state"]
+    before_state = _deep_copy(dict(drift_alert_state.get(alert_id) or {}))
+    now_iso = datetime.now(timezone.utc).isoformat()
+    current_state = dict(before_state)
+    current_state.update({"last_action": action, "last_action_trace_id": trace_id, "updated_at": now_iso})
+
+    linked_action_result = None
+    if action == "ack":
+        current_state["acked"] = True
+    elif action == "mute":
+        duration_hours = int(payload.mute_duration_hours or 1)
+        if duration_hours not in {1, 24, 168}:
+            return _result_payload(
+                status="rejected",
+                trace_id=trace_id,
+                message="Mute süresi sadece 1h / 24h / 7d (168h) olabilir.",
+                state_snapshot=alert,
+            )
+        muted_until = datetime.now(timezone.utc).timestamp() + (duration_hours * 3600)
+        current_state["muted_until"] = datetime.fromtimestamp(muted_until, tz=timezone.utc).isoformat()
+    elif action == "ignore":
+        current_state["ignored"] = True
+    elif action == "retrain":
+        current_state["retrain_status"] = "queued"
+        current_state["retrain_job_id"] = f"retrain_{uuid.uuid4().hex[:10]}"
+    elif action == "disable_strategy":
+        if payload.dry_run:
+            linked_action_result = {
+                "status": "dry_run",
+                "message": "Dry-run: throttle->pause->disable zinciri yazılmadı.",
+            }
+        else:
+            throttle_result = _run_strategy_action(
+                action="throttle",
+                strategy_id=strategy_id,
+                payload=StrategyControlActionRequest(reason=f"DRIFT_DISABLE::{payload.reason}", throttle_level="L2", dry_run=False),
+                current_admin=current_admin,
+                db=db,
+            )
+            pause_result = _run_strategy_action(
+                action="pause",
+                strategy_id=strategy_id,
+                payload=StrategyControlActionRequest(reason=f"DRIFT_DISABLE::{payload.reason}", dry_run=False),
+                current_admin=current_admin,
+                db=db,
+            )
+            disable_result = _run_strategy_action(
+                action="disable",
+                strategy_id=strategy_id,
+                payload=StrategyControlActionRequest(
+                    reason=f"DRIFT_DISABLE::{payload.reason}",
+                    confirm_phrase=_DISABLE_CONFIRM,
+                    dry_run=False,
+                ),
+                current_admin=current_admin,
+                db=db,
+            )
+            linked_action_result = {
+                "throttle": throttle_result,
+                "pause": pause_result,
+                "disable": disable_result,
+            }
+            current_state["disabled_via_drift"] = True
+    else:
+        raise HTTPException(status_code=400, detail="unsupported_drift_action")
+
+    drift_alert_state[alert_id] = current_state
+    if not payload.dry_run:
+        _cache_set(pipeline_runtime.cache, state["keys"]["drift_alert"], drift_alert_state)
+
+    latest_alert = _find_alert(_build_drift_alert_rows(state["status_payload"], drift_alert_state), alert_id)
+    create_audit_log(
+        db,
+        action=f"FUTURES_STRATEGY_DRIFT_{action.upper()}",
+        entity_type="futures_strategy_control",
+        entity_id=alert_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="critical" if action == "disable_strategy" else "warning",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "confirm_phrase": payload.confirm_phrase,
+            "mute_duration_hours": payload.mute_duration_hours,
+            "dry_run": payload.dry_run,
+            "before_state": before_state,
+            "after_state": current_state,
+            "strategy_id": strategy_id,
+            "linked_action_result": linked_action_result,
+            "deep_link": latest_alert.get("deep_link"),
+        },
+    )
+
+    return _result_payload(
+        status="dry_run" if payload.dry_run else "success",
+        trace_id=trace_id,
+        message=f"Drift aksiyonu uygulandı: {action}",
+        state_snapshot=latest_alert,
+        extra={
+            "before_state": before_state,
+            "after_state": current_state,
+            "linked_action_result": linked_action_result,
+            "deep_link": latest_alert.get("deep_link"),
+        },
+    )
+
+
+@router.post("/drift-alert/{alert_id}/ack")
+def drift_alert_ack(
+    alert_id: str,
+    payload: DriftActionRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return _run_drift_action(action="ack", alert_id=alert_id, payload=payload, current_admin=current_admin, db=db)
+
+
+@router.post("/drift-alert/{alert_id}/mute")
+def drift_alert_mute(
+    alert_id: str,
+    payload: DriftActionRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return _run_drift_action(action="mute", alert_id=alert_id, payload=payload, current_admin=current_admin, db=db)
+
+
+@router.post("/drift-alert/{alert_id}/ignore")
+def drift_alert_ignore(
+    alert_id: str,
+    payload: DriftActionRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return _run_drift_action(action="ignore", alert_id=alert_id, payload=payload, current_admin=current_admin, db=db)
+
+
+@router.post("/drift-alert/{alert_id}/disable-strategy")
+def drift_alert_disable_strategy(
+    alert_id: str,
+    payload: DriftActionRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return _run_drift_action(action="disable_strategy", alert_id=alert_id, payload=payload, current_admin=current_admin, db=db)
+
+
+@router.post("/drift-alert/{alert_id}/retrain")
+def drift_alert_retrain(
+    alert_id: str,
+    payload: DriftActionRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return _run_drift_action(action="retrain", alert_id=alert_id, payload=payload, current_admin=current_admin, db=db)
 
 
 def _run_strategy_action(
