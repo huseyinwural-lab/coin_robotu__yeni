@@ -1,5 +1,24 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-22 Update (Faz-2 Tur-1)
+- ✅ Tamamlandı:
+  - Freshness / SLA
+  - KPI Recommendation
+  - Trend / Analytics
+
+## Faz-2 Tur-2 (Sıradaki)
+1. Export / Data Access
+   - DB tabanlı async export job
+   - CSV + JSON + API link generator
+2. Universe Bulk UX
+   - CSV paste/import + validation + preview + partial apply
+3. Debug policy
+   - Debug effective universe: super_admin-only + toggle + prod hide
+4. Hızlı kazanımlar
+   - Auto-refresh interval ayarı
+   - Global error state banner
+   - Empty state reason zenginleştirme
+
 ## 2026-03-21 Faz-1 Durum
 - ✅ Tamamlandı: Rollout Orchestrator, Scanner Control, Risk/Exposure, Slow Strategy/Symbol Control
 

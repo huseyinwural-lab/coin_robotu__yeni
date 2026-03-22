@@ -1,3 +1,53 @@
+## 2026-03-22 — Faz-2 Tur-1 Tamamlandı ✅ (Freshness + KPI + Trend)
+
+### 1) Freshness / SLA
+- Yeni endpointler:
+  - `GET /api/admin/universe-monitor/freshness/stale-list`
+  - `PUT /api/admin/universe-monitor/freshness/sla-config`
+  - `POST /api/admin/universe-monitor/scanner/rescan-stale`
+- Stale detection engine aktif:
+  - `entity_type`: symbol / strategy / scanner_cycle
+  - `last_update_ts`, `age_sec`, `severity` (warning/critical), `reason`
+- UI:
+  - Freshness tabında stale listesi, SLA ayarları, `Rescan All Stale` aksiyonu
+  - Heatmap/fallback boşsa “No data yet + reason” gösterimi
+
+### 2) KPI Recommendation (Actionable)
+- Yeni endpointler:
+  - `POST /api/admin/universe-monitor/recommendation/generate`
+  - `POST /api/admin/universe-monitor/recommendation/apply`
+  - `POST /api/admin/universe-monitor/recommendation/reject`
+  - `POST /api/admin/universe-monitor/recommendation/postpone`
+  - `GET /api/admin/universe-monitor/recommendation/history`
+  - `GET /api/admin/universe-monitor/recommendation/active`
+- Recommendation objesi alanları:
+  - `metric_source`, `problem`, `recommendation`, `expected_impact`, `confidence_score`, `created_at`
+- UI:
+  - KPI tabında Generate + Apply/Reject/Later + History görünürlüğü
+
+### 3) Trend / Analytics
+- Yeni endpoint:
+  - `GET /api/admin/universe-monitor/metrics/history?range=&symbol=&strategy=`
+- Desteklenen range:
+  - `1h`, `24h`, `7d`, `30d`
+- Dönen seriler:
+  - `latency_series`, `pnl_series`, `risk_veto_series`, `overlays`
+- UI:
+  - 3 line chart (Latency / PnL / Risk Veto)
+  - range + symbol + strategy filtreleri
+  - overlay event listesi (rollout/risk override/fallback)
+
+### Güvenlik ve Kontrat
+- Kritik aksiyonlar reason + confirmation phrase + audit standardına bağlı kaldı.
+- Action contract korunuyor: `{status: success, trace_id, message, state_snapshot}`.
+
+### Test Kanıtı
+- İlk test: `/app/test_reports/iteration_57.json` (PASS)
+- Retest: `/app/test_reports/iteration_58.json` (PASS)
+  - Backend: 18/18 PASS
+  - Frontend: PASS
+  - Trend chart console warning (`width/height -1`) FIXED
+
 ## 2026-03-21 — Action Audit Unified Drawer Entegrasyonu ✅
 
 ### Uygulanan Davranış

@@ -1,5 +1,17 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-22
+### Iteration-58 — FAZ-2 Tur-1 Closure (Freshness/KPI/Trend)
+- Freshness/SLA katmanı eklendi: stale-list + SLA config + rescan-stale endpointleri.
+- KPI recommendation engine actionable hale getirildi: generate/apply/reject/postpone + active/history.
+- Trend/Analytics endpointi eklendi: range + symbol/strategy drill-down + overlays.
+- Unified panel ops tabları genişletildi: Freshness/SLA, KPI Rec, Trend.
+- Empty state davranışları iyileştirildi (No data yet + reason).
+- Chart console warning (`width/height -1`) düzeltildi.
+- Test kanıtları:
+  - `/app/test_reports/iteration_57.json`
+  - `/app/test_reports/iteration_58.json`
+
 ## 2026-03-21
 ### Iteration-56 — Action Audit Unified Drawer
 - Traceability aksiyonları route değiştirmeden sağ drawer açacak şekilde güncellendi.
