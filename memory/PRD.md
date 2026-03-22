@@ -1,3 +1,53 @@
+## 2026-03-22 — Futures Strategy Control + Governance System (Faz-4) ✅
+
+### Kullanıcı seçimi (bu iterasyon)
+- Kapsam: **Feedback loop + model update lifecycle + export zenginleştirme**
+- Snapshot rollback/approval bu turda kapsam dışı
+- Önerilen aksiyon skoru bu turda kapsam dışı
+
+### Backend Faz-4 implementasyonu
+- `/app/backend/routers/admin_futures_strategy_control.py` genişletildi:
+  - `POST /api/admin/futures/strategy/{id}/feedback-label`
+  - `GET /api/admin/futures/strategy/{id}/feedback`
+  - `POST /api/admin/futures/strategy/{id}/trigger-model-update`
+  - `GET /api/admin/futures/strategy/{id}/model-update-status`
+  - `GET /api/admin/futures/strategy/{id}/timeline-export?format=json|csv`
+- Feedback loop kuralları:
+  - strategy + drift context doğrulaması zorunlu
+  - immutable append-only log
+  - strategy bazlı dataset version artışı
+  - related data slice (symbol/time_window/severity) alanları
+- Model update lifecycle:
+  - queued job simülasyonu
+  - concurrent job engelleme
+  - status polling: queued → running → completed
+- Timeline export:
+  - birleşik event seti: drift + action + feedback + model update
+  - minimum format: CSV + JSON
+- Faz-4 aksiyonlarında response kontratı korundu:
+  - `{status, trace_id, message, state_snapshot}`
+
+### Frontend Faz-4 implementasyonu
+- `/app/frontend/src/pages/AdminFuturesStrategyControlGovernancePage.jsx` Audit/History tabı genişletildi:
+  - Feedback Loop paneli (strategy/drift context, label+taksomoni, related data slice)
+  - Immutable feedback log (v1, v2, v3…)
+  - Model Update Trigger paneli + status polling kartı
+  - Timeline Export paneli (JSON/CSV download)
+
+### Test & doğrulama
+- Test raporu: `/app/test_reports/iteration_64.json`
+  - Backend: **100% (22 passed)**
+  - Frontend: **100% PASS**
+- Ek doğrulama:
+  - `auto_frontend_testing_agent` PASS
+  - `deep_testing_backend_v2` PASS
+
+### Sonraki backlog
+- Snapshot-list rollback genişletmesi
+- Approval workflow
+- Drift aksiyonları için önerilen aksiyon skoru (ACK/MUTE/DISABLE)
+- Rollout impact preview kartı
+
 ## 2026-03-22 — Futures Strategy Control + Governance System (Faz-3) ✅
 
 ### Kullanıcı seçimi (bu iterasyon)
