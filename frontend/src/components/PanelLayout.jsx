@@ -141,6 +141,7 @@ export const PanelLayout = () => {
   const [nowTick, setNowTick] = useState(Date.now());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarSearch, setSidebarSearch] = useState("");
   const [adminGroupOpen, setAdminGroupOpen] = useState(() =>
     Object.fromEntries(adminOnlyItems.map((group) => [group.id, group.defaultOpen])),
   );
@@ -196,6 +197,30 @@ export const PanelLayout = () => {
     const sec = Math.floor((ms % 60000) / 1000);
     return `expires in ${min}m ${sec}s`;
   }, [gateBadge, nowTick]);
+
+  const normalizedSearch = useMemo(() => sidebarSearch.trim().toLocaleLowerCase("tr-TR"), [sidebarSearch]);
+
+  const filteredAdminGroups = useMemo(() => {
+    if (!normalizedSearch) return adminOnlyItems;
+    return adminOnlyItems
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.label.toLocaleLowerCase("tr-TR").includes(normalizedSearch)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [normalizedSearch]);
+
+  const filteredUserNavItems = useMemo(() => {
+    if (!normalizedSearch) return navItems;
+    return navItems.filter((item) => item.label.toLocaleLowerCase("tr-TR").includes(normalizedSearch));
+  }, [navItems, normalizedSearch]);
+
+  const hasAnySidebarMatch = useMemo(() => {
+    if (isAdmin) {
+      return filteredAdminGroups.some((group) => (group.items || []).length > 0);
+    }
+    return filteredUserNavItems.length > 0;
+  }, [filteredAdminGroups, filteredUserNavItems, isAdmin]);
 
   const renderNavLink = (item) => {
     if (item.superAdminOnly && user?.role !== "super_admin") {
@@ -296,10 +321,27 @@ export const PanelLayout = () => {
           </div>
 
           <nav className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 pb-2" data-testid="sidebar-navigation" aria-label="Sidebar linkleri">
+            <div className="mb-2" data-testid="sidebar-search-wrapper">
+              <input
+                type="text"
+                value={sidebarSearch}
+                onChange={(event) => setSidebarSearch(event.target.value)}
+                placeholder="Menüde ara..."
+                className="w-full rounded border border-black/30 bg-white/70 px-2 py-1 text-xs text-black placeholder:text-slate-500"
+                data-testid="sidebar-search-input"
+              />
+            </div>
+
+            {!hasAnySidebarMatch && (
+              <p className="rounded border border-black/20 bg-black/5 px-2 py-2 text-xs text-black" data-testid="sidebar-search-no-results">
+                Eşleşme bulunamadı
+              </p>
+            )}
+
             {isAdmin ? (
               <div className="space-y-3" data-testid="admin-menu-groups">
-                {adminOnlyItems.map((group) => {
-                  const isOpen = adminGroupOpen[group.id] ?? group.defaultOpen;
+                {filteredAdminGroups.map((group) => {
+                  const isOpen = normalizedSearch ? true : (adminGroupOpen[group.id] ?? group.defaultOpen);
 
                   return (
                     <section key={group.id} className="rounded border border-black/30 bg-black/10 p-2" data-testid={`admin-menu-group-${group.id}`}>
@@ -325,7 +367,7 @@ export const PanelLayout = () => {
                 })}
               </div>
             ) : (
-              navItems.map(renderNavLink)
+              filteredUserNavItems.map(renderNavLink)
             )}
           </nav>
 
