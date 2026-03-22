@@ -1,3 +1,46 @@
+## 2026-03-22 — Strategy Intelligence P1 (Preset + Replay + SLA) Tamamlandı ✅
+
+### Scope Kilidi (kullanıcı onayı)
+- Dahil: **P1 + Approval Queue SLA**
+- Dahil: Preset modeli **hızlı + gelişmiş (Customize & Run)**
+- Dahil: History filtreleri: `run_id`, `status_filter`, `request_mode`, `severity_band`, `request_type`
+- Hariç: P2 başlangıcı (batch matrix genişletme, import/export, derin symbol filtreleme)
+
+### Backend tamamlananlar
+- Preset endpoint eklendi: `GET /api/admin/risk-simulation/presets`
+  - `high_volatility`, `liquidity_shock`, `conflict_heavy`
+- Simulation preset desteği eklendi:
+  - `POST /api/admin/risk-simulation` için `preset_scenario` + `preset_overrides`
+  - `POST /api/admin/risk-simulation/batch` için preset desteği
+- History replay filtreleri eklendi:
+  - `GET /api/admin/risk-simulation/history` parametreleri:
+    - `run_id`, `status_filter`, `request_mode`, `severity_band`, `request_type`
+  - History satırına decision metadata bağlandı (`decision_request_type`, `decision_severity_band`)
+- Queue SLA alanları eklendi:
+  - `sla_countdown_seconds`, `sla_state`, `escalation_state`
+- Queue sıralama kuralı güncellendi:
+  - `status` → pending içinde `sla_state(breach>warning>healthy)` → `severity_band` → `risk_delta_score` → `created_at`
+
+### Frontend tamamlananlar
+- Yeni panel: `PresetScenarioPanel`
+  - Preset seçimi
+  - `Run Preset`
+  - `Customize & Run` + override alanları
+- `SimulationHistoryPanel` geliştirildi:
+  - 5 filtre alanı + Apply/Reset
+  - side-by-side compare (before/current kolonları)
+- `ApprovalQueuePanel` geliştirildi:
+  - SLA badge, countdown (mm:ss), escalation state gösterimi
+
+### Test doğrulamaları
+- `deep_testing_backend_v2`: PASS (preset/filter/SLA/role guard)
+- `auto_frontend_testing_agent`: PASS (P1 UI akışları)
+- `testing_agent`: `/app/test_reports/iteration_76.json`
+  - Backend: **100% (22/22)**
+  - Frontend: **100% (P1 öğeleri doğrulandı)**
+
+---
+
 ## 2026-03-22 — Strategy Intelligence Sprint 2 P0 Tamamlama ✅
 
 ### Kullanıcı onayıyla kilit kararlar
