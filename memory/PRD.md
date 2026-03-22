@@ -1,3 +1,46 @@
+## 2026-03-22 — Allocation Panel: Phase 1 + Phase 2 ✅
+
+### Sprint scope (onaylı)
+- Phase 1 (kritik kontroller) + Phase 2 (strategy yönetimi)
+- Mevcut Allocation Panel üzerinde evrimsel geliştirme
+
+### Tamamlananlar — Phase 1
+- **Allocation Safety Layer**
+  - Weight toplamı `=1` zorunlu (backend enforce)
+  - UI real-time weight delta ve over-allocation uyarıları
+  - `Auto Normalize` (UI buton + backend endpoint)
+- **Capital Visibility & Limit**
+  - Total / Used / Available capital görünürlüğü
+  - Hard limit enforcement: `current_capital > max_capital` backend reject
+- **Input Validation Layer**
+  - Negatif/invalid değerler client+server tarafında engelleniyor
+  - Input min/max kısıtları eklendi
+
+### Tamamlananlar — Phase 2
+- **Strategy CRUD**
+  - Create endpoint + UI form
+  - Delete endpoint (+auto normalize opsiyonu)
+  - Bulk update endpoint + seçili satırdan toplu kaydetme
+- **State Management Control**
+  - State change için double confirm (`CONFIRM` + `STATE CHANGE`)
+  - Throttle toggle ayrı kontrol endpointi + UI butonu
+  - State history log endpointi ve paneli
+
+### Yeni API’ler
+- `GET /api/admin/strategy-allocation/summary`
+- `POST /api/admin/strategy-allocation/normalize`
+- `POST /api/admin/strategy-allocation`
+- `DELETE /api/admin/strategy-allocation/{strategy_id}`
+- `POST /api/admin/strategy-allocation/bulk-update`
+- `POST /api/admin/strategy-allocation/{strategy_id}/throttle-toggle`
+- `GET /api/admin/strategy-allocation/state-history`
+
+### Test sonucu
+- Test raporu: `/app/test_reports/iteration_68.json`
+  - Backend: **100% (8/8 PASS, 4 skip)**
+  - Frontend: **100% PASS**
+- Not: Binance execution **MOCKED**
+
 ## 2026-03-22 — Confidence Tooltip (Approval Sparkline) ✅
 
 ### Kullanıcı talebi
