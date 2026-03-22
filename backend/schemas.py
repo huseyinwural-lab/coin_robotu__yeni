@@ -2370,18 +2370,53 @@ class AdminStrategyIntelligenceResponse(BaseModel):
 
 
 class ManualOverrideRequest(BaseModel):
+    scope: str = "strategy_intelligence"
+    target_type: str = "user"
+    target_id: str | None = None
     action_type: str
-    reason: str
+    reason: str = Field(min_length=8)
+    simulation_id: str
+    expires_at: datetime | None = None
+    ttl_minutes: int | None = Field(default=None, ge=1, le=10080)
+    confirmation_id: str | None = None
+    previous_state: dict = Field(default_factory=dict)
+    next_state: dict = Field(default_factory=dict)
+    impact_preview: dict = Field(default_factory=dict)
     payload: dict = Field(default_factory=dict)
 
 
 class ManualOverrideResponse(BaseModel):
     override_id: str
     admin_id: str
+    actor_role: str | None = None
+    scope: str = "strategy_intelligence"
+    target_type: str = "user"
+    target_id: str | None = None
     action_type: str
     reason: str
+    simulation_id: str | None = None
+    confirmation_id: str | None = None
+    previous_state: dict = Field(default_factory=dict)
+    next_state: dict = Field(default_factory=dict)
+    impact_preview: dict = Field(default_factory=dict)
+    expires_at: datetime | None = None
+    current_status: str = "active"
+    revoked_at: datetime | None = None
+    revoked_by: str | None = None
     payload: dict
     timestamp: datetime
+
+
+class ManualOverrideRevokeRequest(BaseModel):
+    reason: str = Field(min_length=8)
+
+
+class ManualOverrideRevokeResponse(BaseModel):
+    override_id: str
+    status: str
+    revoked_at: datetime
+    revoked_by: str
+    message: str
 
 
 class RiskSimulationRequest(BaseModel):
@@ -2394,12 +2429,24 @@ class RiskSimulationRequest(BaseModel):
 
 class RiskSimulationResponse(BaseModel):
     simulated_at: datetime
+    simulation_id: str
+    dry_run: bool = True
     simulation_payload: dict
     strategy_conflict: dict
     allocation_adjustment: dict
     hedge_suggestion: dict
     projected_risk_score: float
     projected_gate_decision: str
+    projected_pnl: float = 0
+    projected_drawdown: float = 0
+    projected_exposure: float = 0
+    projected_var: float = 0
+    projected_liquidity_impact: float = 0
+    before_state: dict = Field(default_factory=dict)
+    after_state: dict = Field(default_factory=dict)
+    decision_summary: dict = Field(default_factory=dict)
+    risk_delta: float = 0
+    decision_delta: str = "UNCHANGED"
 
 
 class CommercialUsageLogItemResponse(BaseModel):

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -277,12 +278,38 @@ def record_manual_override(
     action_type: str,
     reason: str,
     payload: dict,
+    scope: str = "strategy_intelligence",
+    target_type: str = "user",
+    target_id: str | None = None,
+    simulation_id: str | None = None,
+    confirmation_id: str | None = None,
+    previous_state: dict | None = None,
+    next_state: dict | None = None,
+    impact_preview: dict | None = None,
+    expires_at: datetime | None = None,
+    actor_role: str | None = None,
 ) -> ManualOverrideLog:
+    merged_payload = {
+        **(payload or {}),
+        "scope": scope,
+        "target_type": target_type,
+        "target_id": target_id,
+        "simulation_id": simulation_id,
+        "confirmation_id": confirmation_id,
+        "previous_state": previous_state or {},
+        "next_state": next_state or {},
+        "impact_preview": impact_preview or {},
+        "expires_at": expires_at.isoformat() if expires_at else None,
+        "actor_role": actor_role,
+        "current_status": "active",
+        "revoked_at": None,
+        "revoked_by": None,
+    }
     row = ManualOverrideLog(
         admin_id=admin_id,
         action_type=str(action_type or "manual_override"),
         reason=str(reason or ""),
-        payload=payload or {},
+        payload=merged_payload,
         timestamp=_now(),
     )
     db.add(row)
@@ -292,6 +319,102 @@ def record_manual_override(
 
 def list_manual_overrides(db: Session, limit: int = 100) -> list[ManualOverrideLog]:
     return db.query(ManualOverrideLog).order_by(ManualOverrideLog.timestamp.desc()).limit(limit).all()
+
+
+def _parse_dt(value) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _ensure_dict(value) -> dict:
+    if isinstance(value, dict):
+        return value
+    if value is None:
+        return {}
+    return {"value": value}
+
+
+def normalize_manual_override_row(row: ManualOverrideLog) -> dict:
+    payload = row.payload if isinstance(row.payload, dict) else {"raw_payload": row.payload}
+    expires_at = _parse_dt(payload.get("expires_at"))
+    revoked_at = _parse_dt(payload.get("revoked_at"))
+    status = str(payload.get("current_status") or "active")
+    if revoked_at:
+        status = "revoked"
+    elif expires_at and expires_at <= _now():
+        status = "expired"
+
+    return {
+        "override_id": row.override_id,
+        "admin_id": row.admin_id,
+        "actor_role": payload.get("actor_role"),
+        "scope": payload.get("scope") or "unknown",
+        "target_type": payload.get("target_type") or "user",
+        "target_id": payload.get("target_id"),
+        "action_type": row.action_type,
+        "reason": row.reason,
+        "simulation_id": payload.get("simulation_id"),
+        "confirmation_id": payload.get("confirmation_id"),
+        "previous_state": _ensure_dict(payload.get("previous_state")),
+        "next_state": _ensure_dict(payload.get("next_state")),
+        "impact_preview": _ensure_dict(payload.get("impact_preview")),
+        "expires_at": expires_at,
+        "current_status": status,
+        "revoked_at": revoked_at,
+        "revoked_by": payload.get("revoked_by"),
+        "payload": payload,
+        "timestamp": row.timestamp,
+    }
+
+
+def list_active_manual_overrides(db: Session, limit: int = 100) -> list[dict]:
+    rows = list_manual_overrides(db, limit=limit)
+    normalized = [normalize_manual_override_row(row) for row in rows]
+    return [
+        row
+        for row in normalized
+        if row.get("current_status") == "active" and row.get("scope") == "strategy_intelligence"
+    ]
+
+
+def revoke_manual_override(
+    db: Session,
+    *,
+    override_id: str,
+    revoked_by: str,
+    reason: str,
+) -> dict:
+    from sqlalchemy.orm.attributes import flag_modified
+    
+    row = db.query(ManualOverrideLog).filter(ManualOverrideLog.override_id == override_id).first()
+    if not row:
+        raise ValueError(f"override bulunamadı: {override_id}")
+
+    payload = row.payload if isinstance(row.payload, dict) else {"raw_payload": row.payload}
+    if payload.get("revoked_at"):
+        raise ValueError("override zaten revoke edilmiş")
+
+    revoked_at = _now()
+    payload["revoked_at"] = revoked_at.isoformat()
+    payload["revoked_by"] = revoked_by
+    payload["revoke_reason"] = reason
+    payload["current_status"] = "revoked"
+    row.payload = payload
+    flag_modified(row, "payload")
+    db.flush()
+    return {
+        "override_id": override_id,
+        "status": "revoked",
+        "revoked_at": revoked_at,
+        "revoked_by": revoked_by,
+        "message": "override revoke edildi",
+    }
 
 
 def simulate_risk_impact(
@@ -308,7 +431,34 @@ def simulate_risk_impact(
     if hedge_result.get("risk_reduction_score"):
         projected_risk = max(0.0, projected_risk - (_safe_float(hedge_result.get("risk_reduction_score"), 0) * 0.2))
 
+    before_exposure = _safe_float(simulation_payload.get("position_size_value") or simulation_payload.get("notional"), 0)
+    after_exposure = max(before_exposure * (0.95 if hedge_result.get("hedge_symbol") else 1.03), 0)
+    projected_pnl = round((1 - projected_risk) * max(before_exposure, 1) * 0.015, 4)
+    projected_drawdown = round(projected_risk * 0.12, 6)
+    projected_var = round(projected_risk * max(after_exposure, 1) * 0.08, 4)
+    projected_liquidity_impact = round(min(1.0, (after_exposure / 100000.0)), 6)
+
+    before_state = {
+        "risk_score": round(_safe_float(risk_payload.get("base_risk_score") or risk_payload.get("risk_score"), projected_risk), 6),
+        "gate_decision": str(risk_payload.get("base_decision") or risk_payload.get("decision") or "ALLOW"),
+        "exposure": round(before_exposure, 4),
+        "pnl_estimate": round(max(before_exposure, 1) * 0.01, 4),
+    }
+    after_state = {
+        "risk_score": round(projected_risk, 6),
+        "gate_decision": str(risk_payload.get("decision") or "ALLOW"),
+        "exposure": round(after_exposure, 4),
+        "pnl_estimate": projected_pnl,
+    }
+
+    risk_delta = round(after_state["risk_score"] - before_state["risk_score"], 6)
+    decision_delta = "UNCHANGED"
+    if before_state["gate_decision"] != after_state["gate_decision"]:
+        decision_delta = f"{before_state['gate_decision']}->{after_state['gate_decision']}"
+
     return {
+        "simulation_id": f"sim_{uuid4().hex[:12]}",
+        "dry_run": True,
         "simulation_payload": simulation_payload,
         "strategy_conflict": conflict_result,
         "allocation_adjustment": {
@@ -319,4 +469,19 @@ def simulate_risk_impact(
         "hedge_suggestion": hedge_result,
         "projected_risk_score": round(projected_risk, 6),
         "projected_gate_decision": risk_payload.get("decision", "ALLOW"),
+        "projected_pnl": projected_pnl,
+        "projected_drawdown": projected_drawdown,
+        "projected_exposure": round(after_exposure, 4),
+        "projected_var": projected_var,
+        "projected_liquidity_impact": projected_liquidity_impact,
+        "before_state": before_state,
+        "after_state": after_state,
+        "decision_summary": {
+            "conflict_detected": bool(conflict_result.get("conflict_detected")),
+            "hedge_required": bool(hedge_result.get("hedge_symbol")),
+            "allocation_notice": rebalance_result.get("allocation_adjustment_notice"),
+            "decision_delta": decision_delta,
+        },
+        "risk_delta": risk_delta,
+        "decision_delta": decision_delta,
     }
