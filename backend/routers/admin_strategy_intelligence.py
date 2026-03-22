@@ -31,6 +31,8 @@ from schemas import (
     RiskBatchSimulationResponse,
     RiskBatchSimulationItem,
     RiskSimulationRequest,
+    RiskSimulationPresetItem,
+    RiskSimulationPresetsResponse,
     RiskSimulationResponse,
     SimulationCompareCurrentResponse,
     SimulationHistoryItemResponse,
@@ -54,6 +56,39 @@ from services.strategy_intelligence_service import (
 
 router = APIRouter(prefix="/admin", tags=["admin_strategy_intelligence"])
 _SIMULATION_REGISTRY: dict[str, dict] = {}
+
+SIMULATION_PRESET_DEFINITIONS = {
+    "high_volatility": {
+        "label": "High Volatility",
+        "description": "Volatiliteyi artırır, notional ve güven skorunu daha konservatif hale getirir.",
+        "defaults": {
+            "volatility_pct": 9.0,
+            "notional_scale": 0.75,
+            "signal_confidence": 0.58,
+            "position_size_scale": 0.8,
+        },
+    },
+    "liquidity_shock": {
+        "label": "Liquidity Shock",
+        "description": "Likidite baskısını artırır, boyutu küçültür, risk tamponunu yükseltir.",
+        "defaults": {
+            "volatility_pct": 6.5,
+            "notional_scale": 0.55,
+            "position_size_scale": 0.65,
+            "projected_liquidity_impact": 0.8,
+        },
+    },
+    "conflict_heavy": {
+        "label": "Conflict Heavy",
+        "description": "Çatışma olasılığı yüksek akış için güven skorunu düşürüp volatiliteyi yükseltir.",
+        "defaults": {
+            "volatility_pct": 7.0,
+            "notional_scale": 0.85,
+            "signal_confidence": 0.45,
+            "position_size_scale": 0.9,
+        },
+    },
+}
 
 
 def _role_name(user: User) -> str:
@@ -193,6 +228,85 @@ def _serialize_history_row(row: SimulationRun) -> dict:
     }
 
 
+def _coerce_float(value: object, *, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return float(default)
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _apply_simulation_preset(*, intent_payload: dict, preset_scenario: str | None, preset_overrides: dict | None) -> dict:
+    if not preset_scenario:
+        return dict(intent_payload)
+
+    preset = SIMULATION_PRESET_DEFINITIONS.get(str(preset_scenario))
+    if not preset:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz preset_scenario")
+
+    merged = {
+        **(preset.get("defaults") or {}),
+        **(preset_overrides or {}),
+    }
+    payload = dict(intent_payload)
+
+    base_notional = _coerce_float(payload.get("notional") or payload.get("position_size_value"), default=100)
+    base_position = _coerce_float(payload.get("position_size_value") or payload.get("notional"), default=base_notional)
+
+    if merged.get("volatility_pct") is not None:
+        payload["volatility_pct"] = _coerce_float(merged.get("volatility_pct"), default=3.0)
+    if merged.get("signal_confidence") is not None:
+        payload["signal_confidence"] = _coerce_float(merged.get("signal_confidence"), default=0.65)
+
+    notional_scale = _coerce_float(merged.get("notional_scale"), default=1.0)
+    position_scale = _coerce_float(merged.get("position_size_scale"), default=1.0)
+
+    payload["notional"] = round(_coerce_float(merged.get("notional"), default=base_notional * max(notional_scale, 0.05)), 8)
+    payload["position_size_value"] = round(
+        _coerce_float(merged.get("position_size_value"), default=base_position * max(position_scale, 0.05)),
+        8,
+    )
+    payload["preset_scenario"] = str(preset_scenario)
+    payload["preset_overrides"] = merged
+    return payload
+
+
+def _decision_sla_snapshot(*, created_at: datetime | None, request_status: str) -> dict:
+    if str(request_status) != "pending" or not isinstance(created_at, datetime):
+        return {
+            "sla_countdown_seconds": None,
+            "sla_state": "n/a",
+            "escalation_state": "none",
+        }
+
+    now = datetime.now(timezone.utc)
+    created_utc = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+    elapsed_seconds = int(max((now - created_utc).total_seconds(), 0))
+
+    sla_total_seconds = 60 * 60
+    warning_threshold = 15 * 60
+    remaining = sla_total_seconds - elapsed_seconds
+
+    if remaining <= 0:
+        return {
+            "sla_countdown_seconds": 0,
+            "sla_state": "breach",
+            "escalation_state": "escalated_super_admin",
+        }
+    if remaining <= warning_threshold:
+        return {
+            "sla_countdown_seconds": remaining,
+            "sla_state": "warning",
+            "escalation_state": "notify_ops",
+        }
+    return {
+        "sla_countdown_seconds": remaining,
+        "sla_state": "healthy",
+        "escalation_state": "none",
+    }
+
+
 def _serialize_approval_row(row: DecisionApprovalRequest) -> dict:
     return {
         "request_id": row.request_id,
@@ -284,6 +398,7 @@ def _build_decision_request_response(row: DecisionApprovalRequest) -> dict:
     base = _serialize_approval_row(row)
     payload = row.payload or {}
     risk_delta_score = float(payload.get("risk_delta_score") or 0)
+    sla = _decision_sla_snapshot(created_at=row.created_at, request_status=row.status)
     return {
         **base,
         "target_type": payload.get("target_type"),
@@ -294,6 +409,9 @@ def _build_decision_request_response(row: DecisionApprovalRequest) -> dict:
         "risk_delta_score": risk_delta_score,
         "severity_band": payload.get("severity_band") or _severity_band(risk_delta_score),
         "impact_summary": payload.get("impact_summary") or {},
+        "sla_countdown_seconds": sla.get("sla_countdown_seconds"),
+        "sla_state": str(sla.get("sla_state") or "n/a"),
+        "escalation_state": str(sla.get("escalation_state") or "none"),
     }
 
 
@@ -366,6 +484,9 @@ def _create_decision_request(
     )
     db.add(request_row)
     db.flush()
+
+    run.approval_request_id = request_row.request_id
+    run.updated_at = datetime.now(timezone.utc)
     return request_row
 
 
@@ -629,12 +750,21 @@ def list_decision_requests(
         "revoked": 4,
         "expired": 5,
     }
+    sla_rank = {
+        "breach": 0,
+        "warning": 1,
+        "healthy": 2,
+        "n/a": 9,
+    }
 
     def _decision_sort_key(item: dict) -> tuple:
         created_at = item.get("created_at")
         created_ts = created_at.timestamp() if isinstance(created_at, datetime) else float("inf")
+        item_status = str(item.get("status") or "")
+        item_sla = str(item.get("sla_state") or "n/a")
         return (
-            status_rank.get(str(item.get("status") or ""), 99),
+            status_rank.get(item_status, 99),
+            sla_rank.get(item_sla, 9) if item_status == "pending" else 9,
             -severity_rank.get(str(item.get("severity_band") or "low"), 0),
             -abs(float(item.get("risk_delta_score") or 0)),
             created_ts,
@@ -968,6 +1098,23 @@ def reject_override_request(
     )
 
 
+@router.get("/risk-simulation/presets", response_model=RiskSimulationPresetsResponse)
+def list_risk_simulation_presets(
+    current_user: User = Depends(require_admin),
+):
+    _ = current_user
+    items = [
+        RiskSimulationPresetItem(
+            preset_key=key,
+            label=str(config.get("label") or key),
+            description=str(config.get("description") or ""),
+            defaults=config.get("defaults") or {},
+        )
+        for key, config in SIMULATION_PRESET_DEFINITIONS.items()
+    ]
+    return RiskSimulationPresetsResponse(items=items)
+
+
 @router.post("/risk-simulation", response_model=RiskSimulationResponse)
 def risk_simulation(
     payload: RiskSimulationRequest,
@@ -975,10 +1122,14 @@ def risk_simulation(
     db: Session = Depends(get_db),
 ):
     resolved_user_id = _resolve_valid_user_id(db, payload.user_id)
-    intent_payload = {
-        **(payload.intent_payload or {}),
-        "user_id": resolved_user_id,
-    }
+    intent_payload = _apply_simulation_preset(
+        intent_payload={
+            **(payload.intent_payload or {}),
+            "user_id": resolved_user_id,
+        },
+        preset_scenario=payload.preset_scenario,
+        preset_overrides=payload.preset_overrides,
+    )
     try:
         symbol = normalize_symbol(
             intent_payload.get("symbol"),
@@ -1102,11 +1253,15 @@ def risk_simulation_batch(
         except InvalidSymbol:
             continue
 
-        intent_payload = {
-            **(payload.intent_payload or {}),
-            "symbol": valid_symbol,
-            "user_id": resolved_user_id,
-        }
+        intent_payload = _apply_simulation_preset(
+            intent_payload={
+                **(payload.intent_payload or {}),
+                "symbol": valid_symbol,
+                "user_id": resolved_user_id,
+            },
+            preset_scenario=payload.preset_scenario,
+            preset_overrides=payload.preset_overrides,
+        )
         side = str(intent_payload.get("side") or "buy")
         strategy_id = str(intent_payload.get("strategy_binding") or intent_payload.get("strategy_id") or "manual_execution")
         notional = float(intent_payload.get("notional") or intent_payload.get("position_size_value") or 0)
@@ -1179,11 +1334,62 @@ def risk_simulation_batch(
 @router.get("/risk-simulation/history", response_model=SimulationHistoryResponse)
 def risk_simulation_history(
     limit: int = 100,
+    run_id: str | None = None,
+    status_filter: str | None = None,
+    request_mode: str | None = None,
+    severity_band: str | None = None,
+    request_type: str | None = None,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     _ = current_user
     _ensure_intelligence_tables(db)
     safe_limit = max(min(limit, 200), 1)
-    rows = db.query(SimulationRun).filter(SimulationRun.scope == "strategy_intelligence").order_by(desc(SimulationRun.created_at)).limit(safe_limit).all()
-    return SimulationHistoryResponse(items=[SimulationHistoryItemResponse(**_serialize_history_row(row)) for row in rows])
+    query = db.query(SimulationRun).filter(SimulationRun.scope == "strategy_intelligence")
+    if run_id:
+        query = query.filter(SimulationRun.run_id.ilike(f"%{run_id.strip()}%"))
+    if status_filter:
+        query = query.filter(SimulationRun.status == str(status_filter).strip())
+    if request_mode:
+        query = query.filter(SimulationRun.request_mode == str(request_mode).strip())
+
+    rows = query.order_by(desc(SimulationRun.created_at)).limit(min(safe_limit * 5, 800)).all()
+    run_ids = [row.run_id for row in rows if row.run_id]
+
+    request_map: dict[str, dict] = {}
+    if run_ids:
+        request_rows = (
+            db.query(DecisionApprovalRequest)
+            .filter(DecisionApprovalRequest.simulation_run_id.in_(run_ids))
+            .order_by(desc(DecisionApprovalRequest.created_at))
+            .all()
+        )
+        for request_row in request_rows:
+            simulation_run_id = str(request_row.simulation_run_id or "")
+            if not simulation_run_id or simulation_run_id in request_map:
+                continue
+            payload = request_row.payload or {}
+            request_map[simulation_run_id] = {
+                "decision_request_type": request_row.request_type,
+                "decision_severity_band": str(payload.get("severity_band") or ""),
+            }
+
+    filtered_items: list[dict] = []
+    for row in rows:
+        base = _serialize_history_row(row)
+        decision_meta = request_map.get(str(row.run_id), {})
+        base.update({
+            "decision_request_type": decision_meta.get("decision_request_type"),
+            "decision_severity_band": decision_meta.get("decision_severity_band"),
+        })
+
+        if severity_band and str(base.get("decision_severity_band") or "") != str(severity_band).strip():
+            continue
+        if request_type and str(base.get("decision_request_type") or "") != str(request_type).strip():
+            continue
+
+        filtered_items.append(base)
+        if len(filtered_items) >= safe_limit:
+            break
+
+    return SimulationHistoryResponse(items=[SimulationHistoryItemResponse(**item) for item in filtered_items])

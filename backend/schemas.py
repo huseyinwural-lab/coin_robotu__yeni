@@ -2425,6 +2425,8 @@ class RiskSimulationRequest(BaseModel):
     apply_override: bool = False
     override_action_type: str | None = None
     override_reason: str | None = None
+    preset_scenario: str | None = None
+    preset_overrides: dict = Field(default_factory=dict)
 
 
 class RiskSimulationResponse(BaseModel):
@@ -2454,6 +2456,8 @@ class RiskBatchSimulationRequest(BaseModel):
     user_id: str
     symbols: list[str] = Field(default_factory=list)
     intent_payload: dict = Field(default_factory=dict)
+    preset_scenario: str | None = None
+    preset_overrides: dict = Field(default_factory=dict)
 
 
 class RiskBatchSimulationItem(BaseModel):
@@ -2474,6 +2478,17 @@ class RiskBatchSimulationResponse(BaseModel):
     items: list[RiskBatchSimulationItem] = Field(default_factory=list)
 
 
+class RiskSimulationPresetItem(BaseModel):
+    preset_key: str
+    label: str
+    description: str
+    defaults: dict = Field(default_factory=dict)
+
+
+class RiskSimulationPresetsResponse(BaseModel):
+    items: list[RiskSimulationPresetItem] = Field(default_factory=list)
+
+
 class SimulationHistoryItemResponse(BaseModel):
     run_id: str
     actor_id: str | None = None
@@ -2486,6 +2501,8 @@ class SimulationHistoryItemResponse(BaseModel):
     input_payload: dict = Field(default_factory=dict)
     output_payload: dict = Field(default_factory=dict)
     approval_request_id: str | None = None
+    decision_request_type: str | None = None
+    decision_severity_band: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -2516,6 +2533,9 @@ class DecisionApprovalRequestResponse(BaseModel):
     risk_delta_score: float = 0
     severity_band: str = "low"
     impact_summary: dict = Field(default_factory=dict)
+    sla_countdown_seconds: int | None = None
+    sla_state: str = "n/a"
+    escalation_state: str = "none"
 
 
 class DecisionApprovalRequestsResponse(BaseModel):

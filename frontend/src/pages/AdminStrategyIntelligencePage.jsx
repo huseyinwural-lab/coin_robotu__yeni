@@ -11,6 +11,7 @@ import { BeforeAfterImpactCard } from "@/components/strategy-intelligence/Before
 import { ConflictActionPanel } from "@/components/strategy-intelligence/ConflictActionPanel";
 import { HedgeActionPanel } from "@/components/strategy-intelligence/HedgeActionPanel";
 import { OverrideForm } from "@/components/strategy-intelligence/OverrideForm";
+import { PresetScenarioPanel } from "@/components/strategy-intelligence/PresetScenarioPanel";
 import { RebalanceActionPanel } from "@/components/strategy-intelligence/RebalanceActionPanel";
 import { RoleVisibilityPanel } from "@/components/strategy-intelligence/RoleVisibilityPanel";
 import { SimulationGuardPanel } from "@/components/strategy-intelligence/SimulationGuardPanel";
@@ -31,6 +32,14 @@ const DEFAULT_FORM = {
   override_target_id: "",
   override_ttl_minutes: "60",
   override_expires_at: "",
+};
+
+const DEFAULT_HISTORY_FILTERS = {
+  run_id: "",
+  status_filter: "",
+  request_mode: "",
+  severity_band: "",
+  request_type: "",
 };
 
 export const AdminStrategyIntelligencePage = () => {
@@ -67,6 +76,12 @@ export const AdminStrategyIntelligencePage = () => {
   const [decisionPreviewById, setDecisionPreviewById] = useState({});
   const [comparingRunId, setComparingRunId] = useState("");
   const [simulationCompareResult, setSimulationCompareResult] = useState(null);
+  const [presetOptions, setPresetOptions] = useState([]);
+  const [selectedPreset, setSelectedPreset] = useState("");
+  const [presetCustomizeOpen, setPresetCustomizeOpen] = useState(false);
+  const [presetOverrides, setPresetOverrides] = useState({});
+  const [historyFilters, setHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS);
+  const [appliedHistoryFilters, setAppliedHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -84,12 +99,20 @@ export const AdminStrategyIntelligencePage = () => {
     setIsLoading(true);
     setLoadError("");
     try {
+      const historyParams = {
+        limit: 40,
+        ...(appliedHistoryFilters.run_id ? { run_id: appliedHistoryFilters.run_id } : {}),
+        ...(appliedHistoryFilters.status_filter ? { status_filter: appliedHistoryFilters.status_filter } : {}),
+        ...(appliedHistoryFilters.request_mode ? { request_mode: appliedHistoryFilters.request_mode } : {}),
+        ...(appliedHistoryFilters.severity_band ? { severity_band: appliedHistoryFilters.severity_band } : {}),
+        ...(appliedHistoryFilters.request_type ? { request_type: appliedHistoryFilters.request_type } : {}),
+      };
       const [dashRes, overridesRes, activeRes, decisionsRes, historyRes] = await Promise.all([
         apiClient.get("/admin/strategy-intelligence"),
         apiClient.get("/admin/manual-overrides"),
         apiClient.get("/admin/active-overrides"),
         apiClient.get("/admin/decision-requests"),
-        apiClient.get("/admin/risk-simulation/history", { params: { limit: 40 } }),
+        apiClient.get("/admin/risk-simulation/history", { params: historyParams }),
       ]);
       setDashboard(dashRes.data || null);
       setManualOverrides(overridesRes.data || []);
@@ -104,11 +127,25 @@ export const AdminStrategyIntelligencePage = () => {
     } finally {
       setIsLoading(false);
     }
+  }, [appliedHistoryFilters]);
+
+  const loadPresets = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/admin/risk-simulation/presets");
+      setPresetOptions(data?.items || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Preset listesi alınamadı");
+      setPresetOptions([]);
+    }
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    loadPresets();
+  }, [loadPresets]);
 
   const conflicts = useMemo(() => dashboard?.strategy_conflicts || [], [dashboard]);
   const rebalanceEvents = useMemo(() => dashboard?.capital_rebalance_events || [], [dashboard]);
@@ -160,6 +197,63 @@ export const AdminStrategyIntelligencePage = () => {
     }
   };
 
+  const runPresetSimulation = async ({ customized }) => {
+    if (!canSimulate) {
+      toast.error("Bu rol preset simulation çalıştıramaz");
+      return;
+    }
+    if (!simulationForm.user_id.trim()) {
+      toast.error("Preset simulation için user_id zorunlu");
+      return;
+    }
+    if (!selectedPreset) {
+      toast.error("Önce preset seçin");
+      return;
+    }
+
+    const numericOverrides = Object.entries(presetOverrides || {}).reduce((acc, [key, value]) => {
+      if (value === "" || value === null || value === undefined) return acc;
+      const parsed = Number(value);
+      acc[key] = Number.isFinite(parsed) ? parsed : value;
+      return acc;
+    }, {});
+
+    setIsRunningSimulation(true);
+    try {
+      const payload = {
+        user_id: simulationForm.user_id,
+        intent_payload: {
+          symbol: simulationForm.symbol,
+          side: simulationForm.side,
+          notional: Number(simulationForm.notional),
+          strategy_binding: simulationForm.strategy_binding,
+          volatility_pct: Number(simulationForm.volatility_pct),
+          position_size_value: Number(simulationForm.notional),
+        },
+        apply_override: false,
+        preset_scenario: selectedPreset,
+        preset_overrides: customized ? numericOverrides : {},
+      };
+      const { data } = await apiClient.post("/admin/risk-simulation", payload);
+      setSimulationResult(data || null);
+      setBatchResult(null);
+      setSimulationCompareResult(null);
+      toast.success(customized ? "Preset (customize) simulation tamamlandı" : "Preset simulation tamamlandı");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Preset simulation başarısız");
+    } finally {
+      setIsRunningSimulation(false);
+    }
+  };
+
+  const updatePresetOverride = (key, value) => {
+    setPresetOverrides((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
   const submitBatchSimulation = async () => {
     if (!simulationForm.user_id.trim()) {
       toast.error("Batch simulation için user_id zorunlu");
@@ -173,6 +267,13 @@ export const AdminStrategyIntelligencePage = () => {
 
     setIsRunningBatchSimulation(true);
     try {
+      const numericOverrides = Object.entries(presetOverrides || {}).reduce((acc, [key, value]) => {
+        if (value === "" || value === null || value === undefined) return acc;
+        const parsed = Number(value);
+        acc[key] = Number.isFinite(parsed) ? parsed : value;
+        return acc;
+      }, {});
+
       const { data } = await apiClient.post("/admin/risk-simulation/batch", {
         user_id: simulationForm.user_id,
         symbols,
@@ -182,6 +283,8 @@ export const AdminStrategyIntelligencePage = () => {
           strategy_binding: simulationForm.strategy_binding,
           volatility_pct: Number(simulationForm.volatility_pct),
         },
+        preset_scenario: selectedPreset || null,
+        preset_overrides: selectedPreset ? numericOverrides : {},
       });
       setBatchResult(data || null);
       toast.success(`Batch simulation tamamlandı (${data?.total_symbols || symbols.length} symbol)`);
@@ -444,6 +547,22 @@ export const AdminStrategyIntelligencePage = () => {
     }
   };
 
+  const updateHistoryFilter = (key, value) => {
+    setHistoryFilters((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const applyHistoryFilters = () => {
+    setAppliedHistoryFilters({ ...historyFilters });
+  };
+
+  const resetHistoryFilters = () => {
+    setHistoryFilters(DEFAULT_HISTORY_FILTERS);
+    setAppliedHistoryFilters(DEFAULT_HISTORY_FILTERS);
+  };
+
   if (isLoading) {
     return <LoadingSkeleton rows={10} testId="strategy-intelligence-loading-skeleton" />;
   }
@@ -487,6 +606,22 @@ export const AdminStrategyIntelligencePage = () => {
           onSymbolMode={setSimulationSymbolMode}
           selectedSymbols={simulationSelectedSymbols}
           onSelectedSymbols={setSimulationSelectedSymbols}
+        />
+        <PresetScenarioPanel
+          canSimulate={canSimulate}
+          presets={presetOptions}
+          selectedPreset={selectedPreset}
+          onSelectPreset={(value) => {
+            setSelectedPreset(value);
+            setPresetOverrides({});
+          }}
+          isRunning={isRunningSimulation}
+          onRunPreset={() => runPresetSimulation({ customized: false })}
+          isCustomizeOpen={presetCustomizeOpen}
+          onToggleCustomize={() => setPresetCustomizeOpen((prev) => !prev)}
+          presetOverrides={presetOverrides}
+          onOverrideChange={updatePresetOverride}
+          onCustomizeRun={() => runPresetSimulation({ customized: true })}
         />
         <BatchSimulationPanel
           canSimulate={canSimulate}
@@ -557,6 +692,10 @@ export const AdminStrategyIntelligencePage = () => {
         comparingRunId={comparingRunId}
         compareResult={simulationCompareResult}
         onCompare={compareSimulationRun}
+        filters={historyFilters}
+        onFilterChange={updateHistoryFilter}
+        onApplyFilters={applyHistoryFilters}
+        onResetFilters={resetHistoryFilters}
       />
 
       <ActionConfirmationModal

@@ -8,10 +8,25 @@ const SEVERITY_CLASS = {
   low: "border-emerald-500/50 text-emerald-300",
 };
 
+const SLA_CLASS = {
+  breach: "border-rose-500/60 text-rose-300",
+  warning: "border-amber-500/60 text-amber-300",
+  healthy: "border-emerald-500/60 text-emerald-300",
+  "n/a": "border-slate-700 text-slate-400",
+};
+
 const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
+};
+
+const formatCountdown = (value) => {
+  if (value === null || value === undefined) return "-";
+  const total = Math.max(Number(value) || 0, 0);
+  const min = Math.floor(total / 60);
+  const sec = total % 60;
+  return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
 export const ApprovalQueuePanel = ({
@@ -45,8 +60,15 @@ export const ApprovalQueuePanel = ({
           const preview = previewById[item.request_id] || null;
           const severity = String(item.severity_band || "low");
           const badgeClass = SEVERITY_CLASS[severity] || SEVERITY_CLASS.low;
+          const slaState = String(item.sla_state || "n/a");
+          const slaClass = SLA_CLASS[slaState] || SLA_CLASS["n/a"];
+          const rowBorderClass = slaState === "breach" ? "border-rose-600/70" : "border-slate-800";
           return (
-            <article key={item.request_id} className="border border-slate-800 p-2" data-testid={`strategy-intelligence-approval-queue-item-${index}`}>
+            <article
+              key={item.request_id}
+              className={`border p-2 ${rowBorderClass}`}
+              data-testid={`strategy-intelligence-approval-queue-item-${index}`}
+            >
               <div className="flex flex-wrap items-center gap-2" data-testid={`strategy-intelligence-approval-queue-main-row-${index}`}>
                 <p className="text-sm" data-testid={`strategy-intelligence-approval-queue-main-${index}`}>
                   {item.request_id} · {item.request_type} · status={item.status}
@@ -60,6 +82,12 @@ export const ApprovalQueuePanel = ({
                 <span className="text-xs text-slate-400" data-testid={`strategy-intelligence-approval-queue-risk-score-${index}`}>
                   risk_delta_score={item.risk_delta_score ?? 0}
                 </span>
+                <span
+                  className={`rounded border px-2 py-0.5 text-xs ${slaClass}`}
+                  data-testid={`strategy-intelligence-approval-queue-sla-state-${index}`}
+                >
+                  sla_state={slaState}
+                </span>
               </div>
 
               <p className="text-xs text-slate-300" data-testid={`strategy-intelligence-approval-queue-target-${index}`}>
@@ -70,6 +98,9 @@ export const ApprovalQueuePanel = ({
               </p>
               <p className="text-xs text-slate-500" data-testid={`strategy-intelligence-approval-queue-created-at-${index}`}>
                 created_at={formatDate(item.created_at)}
+              </p>
+              <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-approval-queue-sla-countdown-${index}`}>
+                sla_countdown={formatCountdown(item.sla_countdown_seconds)} · escalation={item.escalation_state || "none"}
               </p>
 
               <div className="mt-2 flex flex-wrap gap-2" data-testid={`strategy-intelligence-approval-queue-actions-${index}`}>
