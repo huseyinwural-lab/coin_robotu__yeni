@@ -16,6 +16,8 @@ from schemas import (
     StrategyAllocationActionEnvelope,
     StrategyAllocationBulkUpdateRequest,
     StrategyAllocationCreateRequest,
+    StrategyAllocationRebalanceSuggestRequest,
+    StrategyAllocationRebalanceSuggestionResponse,
     StrategyAllocationResponse,
     StrategyAllocationStateHistoryEntry,
     StrategyAllocationStateHistoryResponse,
@@ -28,6 +30,7 @@ from services.meta_strategy_engine_service import (
     bulk_update_strategy_allocations,
     create_strategy_allocation,
     delete_strategy_allocation,
+    generate_rebalance_suggestions,
     get_strategy_allocation_summary,
     list_strategy_allocation_dashboard_rows,
     normalize_strategy_allocations,
@@ -254,7 +257,7 @@ def strategy_allocation_create(
             reason_detail="Strategy allocation satırı manuel oluşturuldu",
             payload=payload.model_dump(),
         )
-        return StrategyAllocationResponse.model_validate(build_strategy_allocation_row_payload(row))
+        return StrategyAllocationResponse.model_validate(build_strategy_allocation_row_payload(row, db=db))
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -321,7 +324,7 @@ def strategy_allocation_bulk_update(
             "trace_id": trace_id,
             "updated_count": result.get("updated_count", 0),
             "updated_rows": [
-                StrategyAllocationResponse.model_validate(build_strategy_allocation_row_payload(row)).model_dump()
+                StrategyAllocationResponse.model_validate(build_strategy_allocation_row_payload(row, db=db)).model_dump()
                 for row in (result.get("updated_rows") or [])
             ],
             "summary": result.get("summary") or {},
@@ -354,7 +357,7 @@ def strategy_allocation_throttle_toggle(
             reason_detail="Throttle toggle endpointi ile state değiştirildi",
             payload=payload.model_dump(),
         )
-        return StrategyAllocationResponse.model_validate(build_strategy_allocation_row_payload(row))
+        return StrategyAllocationResponse.model_validate(build_strategy_allocation_row_payload(row, db=db))
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -419,7 +422,7 @@ def strategy_allocation_update(
     request_payload = payload.model_dump(exclude_none=True)
     try:
         row = update_strategy_allocation(db, strategy_id, request_payload)
-        row_payload = build_strategy_allocation_row_payload(row, requested_state=request_payload.get("state"))
+        row_payload = build_strategy_allocation_row_payload(row, db=db, requested_state=request_payload.get("state"))
         if previous_state and previous_state != row.state:
             _write_allocation_log(
                 db,
@@ -449,3 +452,14 @@ def strategy_allocation_update(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/strategy-allocation/rebalance-suggestions", response_model=StrategyAllocationRebalanceSuggestionResponse)
+def strategy_allocation_rebalance_suggestions(
+    payload: StrategyAllocationRebalanceSuggestRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    result = generate_rebalance_suggestions(db, strategy_ids=payload.strategy_ids)
+    return StrategyAllocationRebalanceSuggestionResponse(**result)

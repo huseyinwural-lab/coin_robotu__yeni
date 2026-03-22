@@ -2571,6 +2571,8 @@ class StrategyAllocationResponse(BaseModel):
     exposure_ratio_pct: float = 0
     suggested_reduced_capital: float = 0
     is_auto_reduce_candidate: bool = False
+    trend_5d_line: str = "5g trend unavailable"
+    trend_5d_available: bool = False
 
 
 class StrategyAllocationSummaryItem(BaseModel):
@@ -2664,6 +2666,30 @@ class StrategyAllocationActionEnvelope(BaseModel):
     message: str
     trace_id: str
     summary: StrategyAllocationSummaryResponse | None = None
+
+
+class StrategyAllocationRebalanceSuggestRequest(BaseModel):
+    strategy_ids: list[str] = Field(default_factory=list)
+
+
+class StrategyAllocationRebalanceSuggestionRow(BaseModel):
+    strategy_id: str
+    current_weight: float
+    suggested_weight: float
+    delta: float
+    confidence: float
+    performance_norm: float
+    decay: float
+    score: float
+
+
+class StrategyAllocationRebalanceSuggestionResponse(BaseModel):
+    status: str
+    message: str
+    trace_id: str
+    selection_count: int = 0
+    applied_budget: float = 0
+    suggestions: list[StrategyAllocationRebalanceSuggestionRow] = Field(default_factory=list)
 
 
 

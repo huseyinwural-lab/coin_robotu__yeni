@@ -159,6 +159,127 @@ def _serialize_strategy_allocation_row(row: StrategyAllocation, *, requested_sta
         "exposure_ratio_pct": exposure_ratio_pct,
         "suggested_reduced_capital": suggested_capital,
         "is_auto_reduce_candidate": drawdown_pct >= DRAWDOWN_WARNING_THRESHOLD_PCT,
+        "trend_5d_line": "5g trend unavailable",
+        "trend_5d_available": False,
+    }
+
+
+def _compute_5d_trend_summary(db: Session, row: StrategyAllocation) -> tuple[str, bool]:
+    lookback_from = _now() - timedelta(days=5)
+    strategy_id = str(row.strategy_id)
+
+    exec_old = (
+        db.query(ExecutionMetric)
+        .filter(ExecutionMetric.strategy_type == strategy_id, ExecutionMetric.created_at >= lookback_from)
+        .order_by(ExecutionMetric.created_at.asc())
+        .first()
+    )
+    signal_old = (
+        db.query(SignalEvent)
+        .filter(SignalEvent.strategy_id == strategy_id, SignalEvent.generated_at >= lookback_from)
+        .order_by(SignalEvent.generated_at.asc())
+        .first()
+    )
+
+    if not exec_old and not signal_old:
+        return "5g trend unavailable", False
+
+    current_quality = _safe_float(row.execution_quality_score, 0)
+    old_quality = _safe_float(exec_old.execution_quality_score if exec_old else None, current_quality)
+    quality_delta = round(current_quality - old_quality, 1)
+
+    current_perf = _safe_float(row.performance_score, 0)
+    if exec_old or signal_old:
+        old_conf = _safe_float(signal_old.confidence if signal_old else None, _safe_float(row.confidence_score, 0))
+        old_expected = max(0.5, old_conf * 6)
+        old_realized = round((_safe_float(exec_old.execution_quality_score if exec_old else old_quality, 0) - 50) / 10, 4)
+        old_perf = round((old_realized / max(old_expected, 0.1)) * 100, 4)
+    else:
+        old_perf = current_perf
+    perf_delta = round(current_perf - old_perf, 1)
+
+    current_decay = _safe_float(row.signal_decay, 0)
+    old_decay = 1.0 if signal_old and str(signal_old.signal).lower() == "none" else 0.0
+    decay_delta = round(current_decay - old_decay, 1)
+
+    quality_arrow = "↑" if quality_delta >= 0 else "↓"
+    perf_arrow = "↑" if perf_delta >= 0 else "↓"
+    decay_arrow = "↑" if decay_delta >= 0 else "↓"
+
+    line = (
+        f"5g trend → quality {quality_arrow}{abs(quality_delta)}, "
+        f"perf {perf_arrow}{abs(perf_delta)}, "
+        f"decay {decay_arrow}{abs(decay_delta)}"
+    )
+    return line, True
+
+
+def _build_rebalance_suggestions(rows: list[StrategyAllocation], selected_ids: list[str] | None = None) -> dict:
+    if not rows:
+        return {
+            "status": "empty",
+            "message": "Suggestion için strategy bulunamadı",
+            "suggestions": [],
+            "selection_count": 0,
+            "trace_id": f"strategy_alloc_rebalance_{uuid4().hex[:10]}",
+        }
+
+    selected_set = {str(item).strip() for item in (selected_ids or []) if str(item).strip()}
+    target_rows = [row for row in rows if row.strategy_id in selected_set] if selected_set else list(rows)
+    if not target_rows:
+        target_rows = list(rows)
+
+    score_rows = []
+    for row in target_rows:
+        confidence = _safe_float(row.confidence_score, 0)
+        confidence_norm = max(min(confidence if confidence <= 1 else confidence / 100, 1), 0)
+        performance = _safe_float(row.performance_score, 0)
+        performance_norm = max(min((performance + 100) / 200, 1), 0)
+        decay_norm = max(min(_safe_float(row.signal_decay, 0), 1), 0)
+
+        score = (confidence_norm * 0.45) + (performance_norm * 0.4) + ((1 - decay_norm) * 0.15)
+        score_rows.append(
+            {
+                "strategy_id": row.strategy_id,
+                "current_weight": round(_safe_float(row.capital_weight, 0), 8),
+                "confidence": round(confidence_norm, 4),
+                "performance_norm": round(performance_norm, 4),
+                "decay": round(decay_norm, 4),
+                "score": max(score, 0.0001),
+            }
+        )
+
+    total_score = sum(item["score"] for item in score_rows)
+    current_budget = sum(item["current_weight"] for item in score_rows)
+    budget = current_budget if selected_set else 1.0
+    if budget <= 0:
+        budget = 1.0 if not selected_set else max(current_budget, 0.0001)
+
+    suggestions = []
+    for item in score_rows:
+        suggested_weight = round((item["score"] / total_score) * budget, 8)
+        suggestions.append(
+            {
+                **item,
+                "suggested_weight": suggested_weight,
+                "delta": round(suggested_weight - item["current_weight"], 8),
+            }
+        )
+
+    if suggestions:
+        suggestions[-1]["suggested_weight"] = round(
+            budget - sum(row["suggested_weight"] for row in suggestions[:-1]),
+            8,
+        )
+        suggestions[-1]["delta"] = round(suggestions[-1]["suggested_weight"] - suggestions[-1]["current_weight"], 8)
+
+    return {
+        "status": "success",
+        "message": "Rule-based rebalance suggestion hazır",
+        "suggestions": suggestions,
+        "selection_count": len(selected_set),
+        "applied_budget": round(budget, 8),
+        "trace_id": f"strategy_alloc_rebalance_{uuid4().hex[:10]}",
     }
 
 
@@ -436,11 +557,34 @@ def list_strategy_allocations(db: Session, limit: int = 200) -> list[StrategyAll
 
 def list_strategy_allocation_dashboard_rows(db: Session, limit: int = 200) -> list[dict]:
     rows = list_strategy_allocations(db, limit=limit)
-    return [_serialize_strategy_allocation_row(row) for row in rows]
+    payloads = []
+    for row in rows:
+        payload = _serialize_strategy_allocation_row(row)
+        trend_line, trend_available = _compute_5d_trend_summary(db, row)
+        payload["trend_5d_line"] = trend_line
+        payload["trend_5d_available"] = trend_available
+        payloads.append(payload)
+    return payloads
 
 
-def build_strategy_allocation_row_payload(row: StrategyAllocation, *, requested_state: str | None = None) -> dict:
-    return _serialize_strategy_allocation_row(row, requested_state=requested_state)
+def build_strategy_allocation_row_payload(
+    row: StrategyAllocation,
+    *,
+    db: Session | None = None,
+    requested_state: str | None = None,
+) -> dict:
+    payload = _serialize_strategy_allocation_row(row, requested_state=requested_state)
+    if db is None:
+        return payload
+    trend_line, trend_available = _compute_5d_trend_summary(db, row)
+    payload["trend_5d_line"] = trend_line
+    payload["trend_5d_available"] = trend_available
+    return payload
+
+
+def generate_rebalance_suggestions(db: Session, *, strategy_ids: list[str] | None = None) -> dict:
+    rows = list_strategy_allocations(db, limit=500)
+    return _build_rebalance_suggestions(rows, selected_ids=strategy_ids)
 
 
 def get_strategy_allocation_summary(db: Session) -> dict:

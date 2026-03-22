@@ -78,6 +78,8 @@ export const AdminStrategyAllocationPage = () => {
   const [isNormalizing, setIsNormalizing] = useState(false);
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
   const [bulkAutoNormalize, setBulkAutoNormalize] = useState(false);
+  const [isGeneratingRebalance, setIsGeneratingRebalance] = useState(false);
+  const [rebalanceSuggestion, setRebalanceSuggestion] = useState(null);
   const [createPayload, setCreatePayload] = useState({
     strategy_id: "",
     capital_weight: "0",
@@ -113,6 +115,7 @@ export const AdminStrategyAllocationPage = () => {
       });
       setDrafts(initialDrafts);
       setSelectedStrategyIds((prev) => prev.filter((id) => rowsData.some((row) => row.strategy_id === id)));
+      setRebalanceSuggestion(null);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Strategy allocation verisi yüklenemedi";
@@ -353,6 +356,49 @@ export const AdminStrategyAllocationPage = () => {
     toast.success("Drawdown reduce önerileri forma uygulandı (otomatik kaydetme yok)");
   };
 
+  const generateRebalanceSuggestion = async () => {
+    setIsGeneratingRebalance(true);
+    try {
+      const { data } = await apiClient.post("/admin/strategy-allocation/rebalance-suggestions", {
+        strategy_ids: selectedStrategyIds,
+      });
+      setRebalanceSuggestion(data || null);
+      toast.success(data?.message || "Rebalance önerisi hazır");
+    } catch (error) {
+      const message = error?.response?.data?.detail || "Rebalance önerisi üretilemedi";
+      toast.error(message);
+      setGlobalActionError(message);
+    } finally {
+      setIsGeneratingRebalance(false);
+    }
+  };
+
+  const applyRebalanceSuggestionToDraft = () => {
+    const suggestions = rebalanceSuggestion?.suggestions || [];
+    if (selectedStrategyIds.length === 0) {
+      toast.info("Önce strategy seçin. Seçim yoksa sadece önizleme gösterilir.");
+      return;
+    }
+    if (suggestions.length === 0) {
+      toast.info("Uygulanacak öneri bulunmuyor");
+      return;
+    }
+
+    const selectedSet = new Set(selectedStrategyIds);
+    setDrafts((prev) => {
+      const next = { ...prev };
+      suggestions.forEach((row) => {
+        if (!selectedSet.has(row.strategy_id) || !next[row.strategy_id]) return;
+        next[row.strategy_id] = {
+          ...next[row.strategy_id],
+          capital_weight: String(row.suggested_weight),
+        };
+      });
+      return next;
+    });
+    toast.success("Rebalance önerisi seçili strategy draft alanlarına uygulandı (save yok)");
+  };
+
   const submitBulkUpdate = async () => {
     if (selectedStrategyIds.length === 0) {
       toast.error("Bulk update için en az bir strategy seçin");
@@ -455,6 +501,17 @@ export const AdminStrategyAllocationPage = () => {
           <Button onClick={submitBulkUpdate} disabled={isBulkSubmitting || selectedStrategyIds.length === 0} data-testid="admin-strategy-allocation-bulk-save-button">
             {isBulkSubmitting ? "Bulk kaydediliyor..." : `Seçilenleri Toplu Kaydet (${selectedStrategyIds.length})`}
           </Button>
+          <Button onClick={generateRebalanceSuggestion} disabled={isGeneratingRebalance} data-testid="admin-strategy-allocation-generate-rebalance-button">
+            {isGeneratingRebalance ? "Öneri üretiliyor..." : "Rebalance Önerisi Üret"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={applyRebalanceSuggestionToDraft}
+            disabled={!rebalanceSuggestion || selectedStrategyIds.length === 0}
+            data-testid="admin-strategy-allocation-apply-rebalance-button"
+          >
+            Öneriyi Seçili Draft’a Uygula
+          </Button>
           <label className="inline-flex items-center gap-2 text-xs text-slate-300" data-testid="admin-strategy-allocation-bulk-auto-normalize-label">
             <input
               type="checkbox"
@@ -532,6 +589,27 @@ export const AdminStrategyAllocationPage = () => {
                   </p>
                 ))}
               </div>
+            </div>
+
+            <div className="rounded border border-slate-800 bg-slate-950 p-2" data-testid="admin-strategy-allocation-rebalance-preview-panel">
+              <p className="text-xs text-slate-300" data-testid="admin-strategy-allocation-rebalance-preview-title">
+                Rule-based Rebalance Suggestion (confidence/performance/decay)
+              </p>
+              {!rebalanceSuggestion && (
+                <p className="mt-1 text-xs text-slate-500" data-testid="admin-strategy-allocation-rebalance-preview-empty">No data yet</p>
+              )}
+              {rebalanceSuggestion && (
+                <div className="mt-1 space-y-1" data-testid="admin-strategy-allocation-rebalance-preview-list">
+                  <p className="text-xs text-slate-400" data-testid="admin-strategy-allocation-rebalance-preview-meta">
+                    trace={rebalanceSuggestion.trace_id} · selection_count={rebalanceSuggestion.selection_count} · budget={rebalanceSuggestion.applied_budget}
+                  </p>
+                  {(rebalanceSuggestion.suggestions || []).map((row, index) => (
+                    <p key={`${row.strategy_id}-${index}`} className="text-xs text-slate-300" data-testid={`admin-strategy-allocation-rebalance-preview-row-${index}`}>
+                      {row.strategy_id}: {row.current_weight} → {row.suggested_weight} (Δ {row.delta})
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -663,6 +741,7 @@ export const AdminStrategyAllocationPage = () => {
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[320px]" data-testid={`admin-strategy-allocation-state-reason-tooltip-${item.strategy_id}`}>
                             <p>{item.state_reason_detail || "No reason"}</p>
+                            <p className="mt-1">{item.trend_5d_line || "5g trend unavailable"}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
