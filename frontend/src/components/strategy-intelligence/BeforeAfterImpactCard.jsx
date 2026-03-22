@@ -36,6 +36,9 @@ export const BeforeAfterImpactCard = ({ simulationResult }) => {
         <p className="text-sm" data-testid="strategy-intelligence-impact-decision-delta">decision_delta: {simulationResult.decision_delta}</p>
         <p className="text-sm" data-testid="strategy-intelligence-impact-projected-pnl">projected_pnl: {simulationResult.projected_pnl}</p>
         <p className="text-sm" data-testid="strategy-intelligence-impact-projected-drawdown">projected_drawdown: {simulationResult.projected_drawdown}</p>
+        <p className="text-sm" data-testid="strategy-intelligence-impact-confidence-adjusted-risk">
+          confidence_adjusted_risk_score: {simulationResult.confidence_adjusted_risk_score}
+        </p>
       </div>
     </div>
   );

@@ -34,6 +34,7 @@ from model_domains.learning_recommendations import (
     UserLearningSimulationSuggestion,
 )
 from model_domains.risk_execution_positions import (
+    DecisionApprovalRequest,
     DecisionTraceCold,
     DecisionTraceHot,
     ExecutionCorrectionEvent,
@@ -55,6 +56,8 @@ from model_domains.risk_execution_positions import (
     RiskExposureGroup,
     RiskOrchestratorPolicy,
     RiskPolicy,
+    SimulationRun,
+    SimulationScenarioItem,
     StrategyAllocation,
     TestnetExecutionLog,
     UserExecutionIntent,
@@ -144,6 +147,9 @@ __all__ = [
     "ExecutionIntentEvent",
     "DecisionTraceHot",
     "DecisionTraceCold",
+    "SimulationRun",
+    "SimulationScenarioItem",
+    "DecisionApprovalRequest",
     "ReplayRun",
     "ReplayExecution",
     "ReplayEquityPoint",

@@ -2442,11 +2442,87 @@ class RiskSimulationResponse(BaseModel):
     projected_exposure: float = 0
     projected_var: float = 0
     projected_liquidity_impact: float = 0
+    confidence_adjusted_risk_score: float = 0
     before_state: dict = Field(default_factory=dict)
     after_state: dict = Field(default_factory=dict)
     decision_summary: dict = Field(default_factory=dict)
     risk_delta: float = 0
     decision_delta: str = "UNCHANGED"
+
+
+class RiskBatchSimulationRequest(BaseModel):
+    user_id: str
+    symbols: list[str] = Field(default_factory=list)
+    intent_payload: dict = Field(default_factory=dict)
+
+
+class RiskBatchSimulationItem(BaseModel):
+    simulation_id: str
+    symbol: str
+    projected_risk_score: float
+    projected_gate_decision: str
+    risk_delta: float
+    decision_delta: str
+    confidence_adjusted_risk_score: float
+
+
+class RiskBatchSimulationResponse(BaseModel):
+    batch_id: str
+    simulated_at: datetime
+    total_symbols: int
+    summary: dict = Field(default_factory=dict)
+    items: list[RiskBatchSimulationItem] = Field(default_factory=list)
+
+
+class SimulationHistoryItemResponse(BaseModel):
+    run_id: str
+    actor_id: str | None = None
+    actor_role: str | None = None
+    scope: str
+    status: str
+    request_mode: str = "single"
+    symbols: list[str] = Field(default_factory=list)
+    summary_hash: str | None = None
+    input_payload: dict = Field(default_factory=dict)
+    output_payload: dict = Field(default_factory=dict)
+    approval_request_id: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class SimulationHistoryResponse(BaseModel):
+    items: list[SimulationHistoryItemResponse] = Field(default_factory=list)
+
+
+class DecisionApprovalRequestResponse(BaseModel):
+    request_id: str
+    request_type: str
+    status: str
+    requested_by: str
+    requested_role: str
+    reason_note: str
+    simulation_run_id: str | None = None
+    payload: dict = Field(default_factory=dict)
+    expires_at: datetime
+    created_at: datetime
+    decided_at: datetime | None = None
+    approved_by: str | None = None
+    review_note: str | None = None
+
+
+class DecisionApprovalRequestsResponse(BaseModel):
+    items: list[DecisionApprovalRequestResponse] = Field(default_factory=list)
+
+
+class DecisionApprovalActionRequest(BaseModel):
+    reason_note: str = Field(min_length=8)
+
+
+class ManualOverrideSubmissionResponse(BaseModel):
+    status: str
+    message: str
+    request_id: str | None = None
+    override: ManualOverrideResponse | None = None
 
 
 class CommercialUsageLogItemResponse(BaseModel):

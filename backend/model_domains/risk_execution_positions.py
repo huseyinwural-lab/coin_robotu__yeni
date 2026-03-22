@@ -335,6 +335,56 @@ class ManualOverrideLog(Base):
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
+
+class SimulationRun(Base):
+    __tablename__ = "simulation_runs"
+
+    run_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    actor_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    actor_role: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    scope: Mapped[str] = mapped_column(String(60), default="strategy_intelligence", index=True)
+    status: Mapped[str] = mapped_column(String(30), default="preview", index=True)
+    request_mode: Mapped[str] = mapped_column(String(20), default="single")
+    symbols: Mapped[dict] = mapped_column(JSON, default=list)
+    summary_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    input_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    output_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    approval_request_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class SimulationScenarioItem(Base):
+    __tablename__ = "simulation_scenario_items"
+
+    scenario_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    run_id: Mapped[str] = mapped_column(String(120), ForeignKey("simulation_runs.run_id"), index=True)
+    symbol: Mapped[str] = mapped_column(String(30), index=True)
+    scenario_label: Mapped[str] = mapped_column(String(80), default="default")
+    input_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    output_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    risk_delta: Mapped[float] = mapped_column(Float, default=0)
+    decision_delta: Mapped[str] = mapped_column(String(40), default="UNCHANGED")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class DecisionApprovalRequest(Base):
+    __tablename__ = "decision_approval_requests"
+
+    request_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    request_type: Mapped[str] = mapped_column(String(80), index=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    requested_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    requested_role: Mapped[str] = mapped_column(String(40), default="admin")
+    reason_note: Mapped[str] = mapped_column(Text, default="")
+    simulation_run_id: Mapped[str | None] = mapped_column(String(120), ForeignKey("simulation_runs.run_id"), nullable=True, index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
 class StrategyAllocation(Base):
     __tablename__ = "strategy_allocations"
 

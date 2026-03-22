@@ -20,6 +20,20 @@ def _safe_float(value, default: float = 0.0) -> float:
         return default
 
 
+def calculate_confidence_adjusted_risk_score(simulation_payload: dict, projected_risk: float) -> float:
+    volatility = max(_safe_float(simulation_payload.get("volatility_pct"), 0), 0)
+    notional = max(_safe_float(simulation_payload.get("notional"), 0), 0)
+    confidence_hint = _safe_float(simulation_payload.get("confidence_score"), 0.65)
+    confidence = confidence_hint if confidence_hint <= 1 else confidence_hint / 100
+    confidence = min(max(confidence, 0.05), 0.95)
+
+    volatility_penalty = min(volatility / 100, 0.4)
+    notional_penalty = min(notional / 100000, 0.25)
+    adjusted_multiplier = 1 + volatility_penalty + notional_penalty - (confidence * 0.3)
+    adjusted = projected_risk * adjusted_multiplier
+    return round(min(max(adjusted, 0), 1.5), 6)
+
+
 def _build_strategy_stats(db: Session, strategy_ids: set[str]) -> dict:
     rows = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id.in_(list(strategy_ids))).all() if strategy_ids else []
     stats = {
@@ -456,6 +470,8 @@ def simulate_risk_impact(
     if before_state["gate_decision"] != after_state["gate_decision"]:
         decision_delta = f"{before_state['gate_decision']}->{after_state['gate_decision']}"
 
+    confidence_adjusted_risk_score = calculate_confidence_adjusted_risk_score(simulation_payload, projected_risk)
+
     return {
         "simulation_id": f"sim_{uuid4().hex[:12]}",
         "dry_run": True,
@@ -474,6 +490,7 @@ def simulate_risk_impact(
         "projected_exposure": round(after_exposure, 4),
         "projected_var": projected_var,
         "projected_liquidity_impact": projected_liquidity_impact,
+        "confidence_adjusted_risk_score": confidence_adjusted_risk_score,
         "before_state": before_state,
         "after_state": after_state,
         "decision_summary": {

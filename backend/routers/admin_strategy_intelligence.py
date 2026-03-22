@@ -1,23 +1,35 @@
 from datetime import datetime, timezone
 from datetime import timedelta
+import hashlib
+import json
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from core.policy.quote_policy import InvalidSymbol, normalize_symbol
 from db import get_db
 from deps import require_admin
-from models import User, UserRole
+from models import DecisionApprovalRequest, SimulationRun, SimulationScenarioItem, User, UserRole
 from schemas import (
     AdminStrategyIntelligenceResponse,
+    DecisionApprovalActionRequest,
+    DecisionApprovalRequestsResponse,
     HedgeSuggestionResponse,
+    ManualOverrideSubmissionResponse,
     ManualOverrideRequest,
     ManualOverrideRevokeRequest,
     ManualOverrideRevokeResponse,
     ManualOverrideResponse,
     RebalanceGovernanceSummaryResponse,
+    RiskBatchSimulationRequest,
+    RiskBatchSimulationResponse,
+    RiskBatchSimulationItem,
     RiskSimulationRequest,
     RiskSimulationResponse,
+    SimulationHistoryItemResponse,
+    SimulationHistoryResponse,
     StrategyConflictResponse,
     CapitalRebalanceEventResponse,
 )
@@ -66,8 +78,28 @@ def _resolve_expiry(*, expires_at: datetime | None, ttl_minutes: int | None) -> 
     return resolved
 
 
-def _require_simulation(simulation_id: str) -> dict:
+def _require_simulation(simulation_id: str, db: Session | None = None) -> dict:
     entry = _SIMULATION_REGISTRY.get(simulation_id)
+    if not entry and db is not None:
+        run = db.query(SimulationRun).filter(SimulationRun.run_id == simulation_id).first()
+        if run:
+            output_payload = run.output_payload or {}
+            entry = {
+                "created_at": run.created_at,
+                "expires_at": run.created_at + timedelta(hours=24),
+                "impact_preview": {
+                    "projected_risk_score": output_payload.get("projected_risk_score"),
+                    "projected_gate_decision": output_payload.get("projected_gate_decision"),
+                    "risk_delta": output_payload.get("risk_delta"),
+                    "decision_delta": output_payload.get("decision_delta"),
+                    "projected_pnl": output_payload.get("projected_pnl"),
+                    "projected_drawdown": output_payload.get("projected_drawdown"),
+                    "confidence_adjusted_risk_score": output_payload.get("confidence_adjusted_risk_score"),
+                },
+                "before_state": output_payload.get("before_state") or {},
+                "after_state": output_payload.get("after_state") or {},
+            }
+
     if not entry:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Apply öncesi geçerli simulation zorunlu")
 
@@ -76,6 +108,139 @@ def _require_simulation(simulation_id: str) -> dict:
         _SIMULATION_REGISTRY.pop(simulation_id, None)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Simulation süresi doldu, tekrar çalıştırın")
     return entry
+
+
+def _ensure_intelligence_tables(db: Session) -> None:
+    bind = db.get_bind()
+    SimulationRun.__table__.create(bind=bind, checkfirst=True)
+    SimulationScenarioItem.__table__.create(bind=bind, checkfirst=True)
+    DecisionApprovalRequest.__table__.create(bind=bind, checkfirst=True)
+
+
+def _summary_hash(payload: dict) -> str:
+    raw = json.dumps(payload, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def _persist_simulation_run(
+    db: Session,
+    *,
+    simulation: dict,
+    current_user: User,
+    symbols: list[str],
+    request_mode: str,
+    status_value: str = "preview",
+) -> SimulationRun:
+    _ensure_intelligence_tables(db)
+    run_id = str(simulation.get("simulation_id") or f"sim_{uuid.uuid4().hex[:12]}")
+
+    row = SimulationRun(
+        run_id=run_id,
+        actor_id=str(current_user.id),
+        actor_role=_role_name(current_user),
+        scope="strategy_intelligence",
+        status=status_value,
+        request_mode=request_mode,
+        symbols=symbols,
+        summary_hash=_summary_hash(simulation),
+        input_payload=simulation.get("simulation_payload") or {},
+        output_payload=simulation,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db.add(row)
+
+    scenario = SimulationScenarioItem(
+        run_id=run_id,
+        symbol=(symbols[0] if symbols else str((simulation.get("simulation_payload") or {}).get("symbol") or "UNKNOWN")),
+        scenario_label="default",
+        input_payload=simulation.get("simulation_payload") or {},
+        output_payload={
+            "projected_risk_score": simulation.get("projected_risk_score"),
+            "projected_gate_decision": simulation.get("projected_gate_decision"),
+            "risk_delta": simulation.get("risk_delta"),
+            "decision_delta": simulation.get("decision_delta"),
+            "confidence_adjusted_risk_score": simulation.get("confidence_adjusted_risk_score"),
+        },
+        risk_delta=float(simulation.get("risk_delta") or 0),
+        decision_delta=str(simulation.get("decision_delta") or "UNCHANGED"),
+    )
+    db.add(scenario)
+    db.flush()
+    return row
+
+
+def _serialize_history_row(row: SimulationRun) -> dict:
+    return {
+        "run_id": row.run_id,
+        "actor_id": row.actor_id,
+        "actor_role": row.actor_role,
+        "scope": row.scope,
+        "status": row.status,
+        "request_mode": row.request_mode,
+        "symbols": row.symbols or [],
+        "summary_hash": row.summary_hash,
+        "input_payload": row.input_payload or {},
+        "output_payload": row.output_payload or {},
+        "approval_request_id": row.approval_request_id,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+def _serialize_approval_row(row: DecisionApprovalRequest) -> dict:
+    return {
+        "request_id": row.request_id,
+        "request_type": row.request_type,
+        "status": row.status,
+        "requested_by": row.requested_by,
+        "requested_role": row.requested_role,
+        "reason_note": row.reason_note,
+        "simulation_run_id": row.simulation_run_id,
+        "payload": row.payload or {},
+        "expires_at": row.expires_at,
+        "created_at": row.created_at,
+        "decided_at": row.decided_at,
+        "approved_by": row.approved_by,
+        "review_note": row.review_note,
+    }
+
+
+def _queue_approval_request(
+    db: Session,
+    *,
+    request_type: str,
+    current_user: User,
+    reason_note: str,
+    simulation_run_id: str,
+    payload: dict,
+) -> DecisionApprovalRequest:
+    _ensure_intelligence_tables(db)
+    row = DecisionApprovalRequest(
+        request_id=f"req_{uuid.uuid4().hex[:12]}",
+        request_type=request_type,
+        status="pending",
+        requested_by=str(current_user.id),
+        requested_role=_role_name(current_user),
+        reason_note=reason_note,
+        simulation_run_id=simulation_run_id,
+        payload=payload,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def _resolve_valid_user_id(db: Session, user_id: str) -> str:
+    key = str(user_id or "").strip()
+    if not key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id zorunlu")
+    exists = db.query(User).filter(User.id == key).first()
+    if not exists:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçersiz user_id")
+    return key
 
 
 @router.get("/strategy-intelligence", response_model=AdminStrategyIntelligenceResponse)
@@ -128,7 +293,7 @@ def strategy_intelligence_dashboard(
     )
 
 
-@router.post("/manual-overrides", response_model=ManualOverrideResponse)
+@router.post("/manual-overrides", response_model=ManualOverrideSubmissionResponse)
 def create_manual_override(
     payload: ManualOverrideRequest,
     current_user: User = Depends(require_admin),
@@ -138,9 +303,38 @@ def create_manual_override(
     if len((payload.reason or "").strip()) < 12:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="reason minimum 12 karakter olmalı")
 
-    simulation_entry = _require_simulation(payload.simulation_id)
+    simulation_entry = _require_simulation(payload.simulation_id, db=db)
     resolved_expiry = _resolve_expiry(expires_at=payload.expires_at, ttl_minutes=payload.ttl_minutes)
     role = _role_name(current_user)
+
+    _ensure_intelligence_tables(db)
+
+    simulation_run = db.query(SimulationRun).filter(SimulationRun.run_id == payload.simulation_id).first()
+    if simulation_run:
+        simulation_run.updated_at = datetime.now(timezone.utc)
+
+    if role == "admin":
+        request_row = _queue_approval_request(
+            db,
+            request_type="manual_override_apply",
+            current_user=current_user,
+            reason_note=payload.reason,
+            simulation_run_id=payload.simulation_id,
+            payload={
+                "override_payload": payload.model_dump(),
+                "resolved_expiry": resolved_expiry.isoformat(),
+            },
+        )
+        if simulation_run:
+            simulation_run.status = "pending_approval"
+            simulation_run.approval_request_id = request_row.request_id
+        db.commit()
+        return ManualOverrideSubmissionResponse(
+            status="pending_approval",
+            message=f"Override isteği onaya gönderildi: {request_row.request_id}",
+            request_id=request_row.request_id,
+            override=None,
+        )
 
     row = record_manual_override(
         db,
@@ -159,9 +353,17 @@ def create_manual_override(
         actor_role=role,
         payload=payload.payload,
     )
+    if simulation_run:
+        simulation_run.status = "applied"
+        simulation_run.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
-    return ManualOverrideResponse(**normalize_manual_override_row(row))
+    return ManualOverrideSubmissionResponse(
+        status="applied",
+        message="Override başarıyla uygulandı",
+        request_id=None,
+        override=ManualOverrideResponse(**normalize_manual_override_row(row)),
+    )
 
 
 @router.get("/manual-overrides", response_model=list[ManualOverrideResponse])
@@ -210,12 +412,129 @@ def revoke_override(
     return ManualOverrideRevokeResponse(**result)
 
 
+@router.get("/override-approval-requests", response_model=DecisionApprovalRequestsResponse)
+def list_override_approval_requests(
+    status_filter: str | None = None,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    _ensure_intelligence_tables(db)
+    query = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_type == "manual_override_apply")
+    if status_filter:
+        query = query.filter(DecisionApprovalRequest.status == status_filter)
+    rows = query.order_by(desc(DecisionApprovalRequest.created_at)).limit(200).all()
+    return DecisionApprovalRequestsResponse(items=[_serialize_approval_row(row) for row in rows])
+
+
+@router.post("/override-approval-requests/{request_id}/approve", response_model=ManualOverrideSubmissionResponse)
+def approve_override_request(
+    request_id: str,
+    payload: DecisionApprovalActionRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if _role_name(current_user) != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="approve sadece super_admin")
+
+    _ensure_intelligence_tables(db)
+    row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="approval request bulunamadı")
+    if row.status != "pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request pending değil")
+    if row.expires_at <= datetime.now(timezone.utc):
+        row.status = "expired"
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="approval request expired")
+
+    request_payload = row.payload or {}
+    override_payload = request_payload.get("override_payload") or {}
+    resolved_expiry_raw = request_payload.get("resolved_expiry")
+    resolved_expiry = datetime.fromisoformat(str(resolved_expiry_raw).replace("Z", "+00:00")) if resolved_expiry_raw else datetime.now(timezone.utc) + timedelta(minutes=60)
+
+    simulation_entry = _require_simulation(str(override_payload.get("simulation_id") or ""), db=db)
+    applied_row = record_manual_override(
+        db,
+        admin_id=current_user.id,
+        action_type=str(override_payload.get("action_type") or "manual_override"),
+        reason=str(override_payload.get("reason") or row.reason_note),
+        scope=str(override_payload.get("scope") or "strategy_intelligence"),
+        target_type=str(override_payload.get("target_type") or "user"),
+        target_id=override_payload.get("target_id"),
+        simulation_id=str(override_payload.get("simulation_id") or row.simulation_run_id),
+        confirmation_id=override_payload.get("confirmation_id"),
+        previous_state=override_payload.get("previous_state") or simulation_entry.get("before_state") or {},
+        next_state=override_payload.get("next_state") or simulation_entry.get("after_state") or {},
+        impact_preview=override_payload.get("impact_preview") or simulation_entry.get("impact_preview") or {},
+        expires_at=resolved_expiry,
+        actor_role=_role_name(current_user),
+        payload=override_payload.get("payload") or {},
+    )
+
+    row.status = "approved"
+    row.approved_by = str(current_user.id)
+    row.review_note = payload.reason_note
+    row.decided_at = datetime.now(timezone.utc)
+
+    run = db.query(SimulationRun).filter(SimulationRun.run_id == row.simulation_run_id).first()
+    if run:
+        run.status = "applied"
+        run.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(applied_row)
+    return ManualOverrideSubmissionResponse(
+        status="approved_applied",
+        message="Override request onaylandı ve uygulandı",
+        request_id=row.request_id,
+        override=ManualOverrideResponse(**normalize_manual_override_row(applied_row)),
+    )
+
+
+@router.post("/override-approval-requests/{request_id}/reject", response_model=ManualOverrideSubmissionResponse)
+def reject_override_request(
+    request_id: str,
+    payload: DecisionApprovalActionRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if _role_name(current_user) != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="reject sadece super_admin")
+
+    _ensure_intelligence_tables(db)
+    row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="approval request bulunamadı")
+    if row.status != "pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request pending değil")
+
+    row.status = "rejected"
+    row.approved_by = str(current_user.id)
+    row.review_note = payload.reason_note
+    row.decided_at = datetime.now(timezone.utc)
+
+    run = db.query(SimulationRun).filter(SimulationRun.run_id == row.simulation_run_id).first()
+    if run:
+        run.status = "superseded"
+        run.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    return ManualOverrideSubmissionResponse(
+        status="rejected",
+        message="Override request reddedildi",
+        request_id=row.request_id,
+        override=None,
+    )
+
+
 @router.post("/risk-simulation", response_model=RiskSimulationResponse)
 def risk_simulation(
     payload: RiskSimulationRequest,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    resolved_user_id = _resolve_valid_user_id(db, payload.user_id)
     intent_payload = payload.intent_payload or {}
     try:
         symbol = normalize_symbol(
@@ -231,21 +550,21 @@ def risk_simulation(
 
     conflict_result = evaluate_conflict_warning(
         db,
-        user_id=payload.user_id,
+        user_id=resolved_user_id,
         strategy_id=strategy_id,
         symbol=symbol,
         signal_direction=side,
         confidence_score=float(intent_payload.get("signal_confidence") or 0.65),
     )
-    rebalance_result = evaluate_capital_rebalance(db, user_id=payload.user_id, apply_changes=False)
+    rebalance_result = evaluate_capital_rebalance(db, user_id=resolved_user_id, apply_changes=False)
     hedge_result = evaluate_hedge_suggestion(
         db,
-        user_id=payload.user_id,
+        user_id=resolved_user_id,
         volatility=float(intent_payload.get("volatility_pct") or 0),
     )
     risk_result = portfolio_risk_check(
         db,
-        user_id=payload.user_id,
+        user_id=resolved_user_id,
         execution_intent={"symbol": symbol, "notional": notional, "position_size": float(intent_payload.get("size") or 0)},
         strategy_context={"strategy_id": strategy_id},
         market_state={"volatility_pct": float(intent_payload.get("volatility_pct") or 0)},
@@ -268,6 +587,7 @@ def risk_simulation(
         "projected_exposure": float(simulation.get("projected_exposure") or 0),
         "projected_var": float(simulation.get("projected_var") or 0),
         "projected_liquidity_impact": float(simulation.get("projected_liquidity_impact") or 0),
+        "confidence_adjusted_risk_score": float(simulation.get("confidence_adjusted_risk_score") or 0),
         "risk_delta": float(simulation.get("risk_delta") or 0),
         "decision_delta": str(simulation.get("decision_delta") or "UNCHANGED"),
     }
@@ -281,29 +601,21 @@ def risk_simulation(
             "after_state": simulation.get("after_state") or {},
         }
 
+    _persist_simulation_run(
+        db,
+        simulation=simulation,
+        current_user=current_user,
+        symbols=[symbol],
+        request_mode="single",
+        status_value="preview",
+    )
+    db.commit()
+
     if payload.apply_override:
-        _require_override_write_access(current_user)
-        if not payload.override_reason or len(payload.override_reason.strip()) < 12:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="override_reason minimum 12 karakter olmalı")
-        simulation_entry = _require_simulation(simulation_id)
-        record_manual_override(
-            db,
-            admin_id=current_user.id,
-            action_type=payload.override_action_type or "risk_simulation_override",
-            reason=payload.override_reason or "manual_override_from_simulation",
-            scope="strategy_intelligence",
-            target_type="user",
-            target_id=payload.user_id,
-            simulation_id=simulation_id,
-            confirmation_id=f"confirm_{simulation_id}",
-            previous_state=simulation_entry.get("before_state") or {},
-            next_state=simulation_entry.get("after_state") or {},
-            impact_preview=simulation_entry.get("impact_preview") or {},
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=60),
-            actor_role=_role_name(current_user),
-            payload={"simulation": simulation, "target_user_id": payload.user_id, "source": "risk_simulation_apply_override"},
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="apply_override bu endpointte kapalı. Override için /admin/manual-overrides kullanın.",
         )
-        db.commit()
 
     return RiskSimulationResponse(
         simulated_at=datetime.now(timezone.utc),
@@ -320,9 +632,114 @@ def risk_simulation(
         projected_exposure=float(simulation.get("projected_exposure") or 0),
         projected_var=float(simulation.get("projected_var") or 0),
         projected_liquidity_impact=float(simulation.get("projected_liquidity_impact") or 0),
+        confidence_adjusted_risk_score=float(simulation.get("confidence_adjusted_risk_score") or 0),
         before_state=simulation.get("before_state") or {},
         after_state=simulation.get("after_state") or {},
         decision_summary=simulation.get("decision_summary") or {},
         risk_delta=float(simulation.get("risk_delta") or 0),
         decision_delta=str(simulation.get("decision_delta") or "UNCHANGED"),
     )
+
+
+@router.post("/risk-simulation/batch", response_model=RiskBatchSimulationResponse)
+def risk_simulation_batch(
+    payload: RiskBatchSimulationRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    resolved_user_id = _resolve_valid_user_id(db, payload.user_id)
+    symbols = [str(item or "").upper().strip() for item in (payload.symbols or []) if str(item or "").strip()]
+    if not symbols:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Batch simulation için en az 1 symbol gerekli")
+
+    items = []
+    for symbol in symbols:
+        try:
+            valid_symbol = normalize_symbol(symbol, missing_error_code="symbol_required", invalid_error_code="invalid_quote_asset")
+        except InvalidSymbol:
+            continue
+
+        intent_payload = {
+            **(payload.intent_payload or {}),
+            "symbol": valid_symbol,
+        }
+        side = str(intent_payload.get("side") or "buy")
+        strategy_id = str(intent_payload.get("strategy_binding") or intent_payload.get("strategy_id") or "manual_execution")
+        notional = float(intent_payload.get("notional") or intent_payload.get("position_size_value") or 0)
+
+        conflict_result = evaluate_conflict_warning(
+            db,
+            user_id=resolved_user_id,
+            strategy_id=strategy_id,
+            symbol=valid_symbol,
+            signal_direction=side,
+            confidence_score=float(intent_payload.get("signal_confidence") or 0.65),
+        )
+        rebalance_result = evaluate_capital_rebalance(db, user_id=resolved_user_id, apply_changes=False)
+        hedge_result = evaluate_hedge_suggestion(db, user_id=resolved_user_id, volatility=float(intent_payload.get("volatility_pct") or 0))
+        risk_result = portfolio_risk_check(
+            db,
+            user_id=resolved_user_id,
+            execution_intent={"symbol": valid_symbol, "notional": notional, "position_size": float(intent_payload.get("size") or 0)},
+            strategy_context={"strategy_id": strategy_id},
+            market_state={"volatility_pct": float(intent_payload.get("volatility_pct") or 0)},
+        )
+        simulation = simulate_risk_impact(
+            simulation_payload=intent_payload,
+            conflict_result=conflict_result,
+            rebalance_result=rebalance_result,
+            hedge_result=hedge_result,
+            risk_payload=risk_result,
+        )
+
+        _persist_simulation_run(
+            db,
+            simulation=simulation,
+            current_user=current_user,
+            symbols=[valid_symbol],
+            request_mode="batch",
+            status_value="preview",
+        )
+
+        items.append(
+            RiskBatchSimulationItem(
+                simulation_id=str(simulation.get("simulation_id")),
+                symbol=valid_symbol,
+                projected_risk_score=float(simulation.get("projected_risk_score") or 0),
+                projected_gate_decision=str(simulation.get("projected_gate_decision") or "ALLOW"),
+                risk_delta=float(simulation.get("risk_delta") or 0),
+                decision_delta=str(simulation.get("decision_delta") or "UNCHANGED"),
+                confidence_adjusted_risk_score=float(simulation.get("confidence_adjusted_risk_score") or 0),
+            )
+        )
+
+    db.commit()
+
+    if not items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçerli symbol bulunamadı")
+
+    avg_risk = sum(item.projected_risk_score for item in items) / max(len(items), 1)
+    avg_adj_risk = sum(item.confidence_adjusted_risk_score for item in items) / max(len(items), 1)
+    return RiskBatchSimulationResponse(
+        batch_id=f"batch_{uuid.uuid4().hex[:12]}",
+        simulated_at=datetime.now(timezone.utc),
+        total_symbols=len(items),
+        summary={
+            "avg_projected_risk_score": round(avg_risk, 6),
+            "avg_confidence_adjusted_risk_score": round(avg_adj_risk, 6),
+        },
+        items=items,
+    )
+
+
+@router.get("/risk-simulation/history", response_model=SimulationHistoryResponse)
+def risk_simulation_history(
+    limit: int = 100,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    _ensure_intelligence_tables(db)
+    safe_limit = max(min(limit, 200), 1)
+    rows = db.query(SimulationRun).filter(SimulationRun.scope == "strategy_intelligence").order_by(desc(SimulationRun.created_at)).limit(safe_limit).all()
+    return SimulationHistoryResponse(items=[SimulationHistoryItemResponse(**_serialize_history_row(row)) for row in rows])
