@@ -835,7 +835,7 @@ def _build_impact_preview(*, action_type: str, params: dict, strategy_row: dict,
         target_pct = float((params or {}).get("rollout_percentage") or 10)
         current_pct = float(strategy_row.get("rollout_percentage") or 0)
         base_reject_delta = max(0.0, (target_pct - current_pct) * 0.08)
-    elif action in {"disable", "disable_strategy"}:
+    elif action in {"disable", "disable_strategy", "decommission"}:
         base_reject_delta = 15.0
     elif action == "rollback":
         base_reject_delta = -4.0
@@ -1359,19 +1359,19 @@ def _run_strategy_action(
     state = _load_control_state(db, current_admin, refresh=False)
     before_row = _find_row(state["rows"], strategy_id)
 
-    if action == "disable" and not skip_preview:
+    if action in {"disable", "decommission"} and not skip_preview:
         preview_token = str(payload.preview_token or "").strip()
         if not preview_token:
             return _result_payload(
                 status="rejected",
                 trace_id=trace_id,
-                message="Disable aksiyonu için impact preview zorunlu.",
+                message=f"{action} aksiyonu için impact preview zorunlu.",
                 state_snapshot=before_row,
             )
         ok, message, _preview, updated_payload = _validate_preview_token(
             impact_preview_payload=state["impact_preview_payload"],
             strategy_id=strategy_id,
-            action_type="disable",
+            action_type=action,
             preview_token=preview_token,
             consume=not payload.dry_run,
         )

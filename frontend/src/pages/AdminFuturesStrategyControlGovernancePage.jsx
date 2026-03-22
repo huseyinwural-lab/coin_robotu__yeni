@@ -331,15 +331,20 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
   };
 
   const openActionModal = (action, strategy) => {
-    if (action === "disable") {
+    if (action === "disable" || action === "decommission") {
+      const isDisable = action === "disable";
       openDecisionModal({
-        mode: "row_action_disable",
-        actionType: "disable",
+        mode: isDisable ? "row_action_disable" : "row_action_decommission",
+        actionType: action,
         strategyId: strategy?.strategy_id,
-        title: "Disable Decision",
+        title: isDisable ? "Disable Decision" : "Decommission Decision",
         confirmRequired: true,
-        confirmPlaceholder: "Onay ifadesi: DISABLE STRATEGY",
-        defaultReason: `manual_disable_${strategy?.strategy_id || "strategy"}`,
+        confirmPlaceholder: isDisable
+          ? "Onay ifadesi: DISABLE STRATEGY"
+          : "Onay ifadesi: DECOMMISSION STRATEGY",
+        defaultReason: isDisable
+          ? `manual_disable_${strategy?.strategy_id || "strategy"}`
+          : `manual_decommission_${strategy?.strategy_id || "strategy"}`,
         params: {},
         payload: { action, strategy },
       });
@@ -519,7 +524,8 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     }
   };
 
-  const openDriftActionModal = (action, alert) => {
+  const openDriftActionModal = (action, alert, options = {}) => {
+    const reasonPrefill = String(options?.reasonPrefill || "").trim();
     openDecisionModal({
       mode: "drift",
       actionType: action,
@@ -527,7 +533,7 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       title: `Drift Action · ${action}`,
       confirmRequired: Boolean(DRIFT_CONFIRM_MAP[action]),
       confirmPlaceholder: DRIFT_CONFIRM_MAP[action] ? `Onay ifadesi: ${DRIFT_CONFIRM_MAP[action]}` : "",
-      defaultReason: `drift_${action}_${alert?.strategy_id || "strategy"}`,
+      defaultReason: reasonPrefill || `drift_${action}_${alert?.strategy_id || "strategy"}`,
       params: {
         alert_id: alert?.alert_id,
         mute_duration_hours: action === "mute" ? Number(driftMuteDuration) : null,
@@ -993,7 +999,11 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                             RETRAIN: "retrain",
                           };
                           const actionType = actionMap[recommended] || "ack";
-                          openDriftActionModal(actionType, alert);
+                          const recommendationReason = String(alert?.recommended_action?.reason || "").trim();
+                          const suggestedReason = recommendationReason
+                            ? `recommended_${recommended.toLowerCase()} · ${recommendationReason}`
+                            : `recommended_${recommended.toLowerCase()}_${alert?.strategy_id || "strategy"}`;
+                          openDriftActionModal(actionType, alert, { reasonPrefill: suggestedReason });
                         }}
                         data-testid={`strategy-control-drift-apply-recommended-button-${index}`}
                       >
@@ -1172,9 +1182,17 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                           <p className="text-xs" data-testid={`strategy-control-approval-item-head-${index}`}>
                             {item.request_id} · status={item.status} · strategy={item.strategy_id}
                           </p>
-                          <p className="text-xs" data-testid={`strategy-control-approval-item-preview-${index}`}>preview={JSON.stringify(item.preview || {})}</p>
-                          <p className="text-xs" data-testid={`strategy-control-approval-item-decision-context-${index}`}>
-                            decision_context={JSON.stringify(item.decision_context || {})}
+                          <p className="text-xs" data-testid={`strategy-control-approval-item-preview-${index}`}>
+                            preview={JSON.stringify(item.preview || {})}
+                          </p>
+                          <p className="text-xs" data-testid={`strategy-control-approval-item-impact-preview-${index}`}>
+                            impact_preview={JSON.stringify(item?.decision_context?.preview || {})}
+                          </p>
+                          <p className="text-xs" data-testid={`strategy-control-approval-item-risk-${index}`}>
+                            risk={JSON.stringify(item?.decision_context?.risk || {})}
+                          </p>
+                          <p className="text-xs" data-testid={`strategy-control-approval-item-recommendation-${index}`}>
+                            recommendation={JSON.stringify(item?.decision_context?.recommendation || {})}
                           </p>
                           <p className="text-xs" data-testid={`strategy-control-approval-item-expire-${index}`}>expires_at={item.expires_at}</p>
                           {item.status === "pending" && (
@@ -1285,6 +1303,16 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
           if (decisionModal.mode === "row_action_disable") {
             await submitAction({
               action: "disable",
+              strategy: decisionModal.payload?.strategy,
+              reason,
+              confirmPhrase,
+              previewToken,
+            });
+            return;
+          }
+          if (decisionModal.mode === "row_action_decommission") {
+            await submitAction({
+              action: "decommission",
               strategy: decisionModal.payload?.strategy,
               reason,
               confirmPhrase,
