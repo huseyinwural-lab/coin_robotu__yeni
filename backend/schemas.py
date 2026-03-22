@@ -722,6 +722,37 @@ class ExecutionCorrelationTraceResponse(BaseModel):
     failures: list[FailedEventResponse] = Field(default_factory=list)
 
 
+class ExecutionAnalyticsSnapshotSummaryResponse(BaseModel):
+    snapshot_at: datetime
+    filters: dict = Field(default_factory=dict)
+    totals: dict = Field(default_factory=dict)
+    latency_per_state: dict = Field(default_factory=dict)
+    timeout_metrics: dict = Field(default_factory=dict)
+    retry_metrics: dict = Field(default_factory=dict)
+    failure_metrics: dict = Field(default_factory=dict)
+    dead_letter_trend: list[dict] = Field(default_factory=list)
+
+
+class IncidentSnapshotExportRequest(BaseModel):
+    correlation_id: str | None = None
+    execution_event_id: str | None = None
+    time_from: str | None = None
+    time_to: str | None = None
+    search: str | None = None
+    state: str | None = None
+    status: str | None = None
+    source_type: str | None = None
+    symbol: str | None = None
+    strategy: str | None = None
+    order_id: str | None = None
+
+
+class IncidentSnapshotExportResponse(BaseModel):
+    status: str
+    filename: str
+    generated_at: datetime
+
+
 class HardeningSummaryResponse(BaseModel):
     websocket_reconnects_5m: int
     idempotency_keys_5m: int

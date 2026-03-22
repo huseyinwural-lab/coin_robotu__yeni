@@ -1,100 +1,71 @@
-<analysis>**original_problem_statement**: The user wants to bring the Strategy Allocation Dashboard to Production Closure. This involves moving it from a basic config screen to a secure, traceable, approval-backed capital governance engine. The final scope includes Snapshot Restore, What-if table integration, Approval visibility, Approval re-validation (preventing stale requests), Simulation = Production parity, Concurrency control (), and Audit-grade exports.
+<analysis>**original_problem_statement**: The user initially requested to bring the Strategy Allocation Dashboard to Production Closure (Checkpoints 1 & 2), including Concurrency Control, Snapshot Restore, and Undo/Revert/Explainability capabilities. After completing this, the focus shifted to transforming the Execution State Machine into an Execution Control + Recovery System. Currently, the task is implementing Execution Control P1: adding advanced state filters, a read-only state diagram, a dedicated Analytics route, and an Incident Snapshot export feature (generating a ZIP with JSON/CSV).
 
 **User's preferred language**: Turkish (Türkçe)
 **INSTRUCT NEXT AGENT**: You MUST respond to the user in Turkish only.
 
-**what currently exists?**: The  module is 100% complete with a unified Governance Board, Escalation Center, deterministic impact models, and sparkline charts. The  module currently has Phase 1-6 features (Safety validation, Strategy CRUD, Risk binding, Rebalance suggestions, Reason notes, basic approval flow, basic what-if/snapshot panel), but it lacks concurrency control, stale request prevention, true shared simulation engine parity, and a functional snapshot restore mechanism.
+**what currently exists?**: Strategy Intelligence, Strategy Allocation, and their corresponding Governance/Undo-Revert mechanics are fully operational. Execution Control P0 is complete (Simulation isolation, Idempotency tracking, Failed event recovery, Trace routing, Manual intervention guardrails). Execution Control P1 code has just been written (adding advanced URL filters, analytics aggregations, and the ZIP incident snapshot bundle), but testing and verification are pending.
 
 **Last working item**:
-    - Last item agent was working: The agent was analyzing backend models (, ), routers (), and frontend () to begin **Checkpoint 1** of the Strategy Allocation Production Closure. Checkpoint 1 consists of: Concurrency Control (), Approval Re-validation, Simulation Parity, and What-if Table Integration.
+    - Last item agent was working: Implementing Execution Control P1. The agent applied backend patches to  for advanced filtering, the  endpoints, and the  ZIP endpoint. Frontend patches were applied to , , and routing. 
     - Status: IN PROGRESS
-    - Agent Testing Done: N
-    - Which testing method agent to use?: Both. Backend testing agent for new concurrency/re-validation logic, and Frontend testing agent / Screenshot tool for What-if table integration.
+    - Agent Testing Done: N (For the newly applied P1 patches)
+    - Which testing method agent to use?: Both. Backend tests/curl for the zip download and analytics endpoints, and frontend testing agent / screenshot tool to verify the new Analytics route and States filter UI.
     - User Testing Done: N
 
 **All Pending/In progress Issue list**: 
-  Issue 1: Concurrency Control for Strategy Allocation (P0)
-     - Attempted fixes: Agent viewed files to plan the DB schema update. No code written yet.
-     - Next debug checklist: Add  or  to  config in . Update  write endpoints to require and check . Return  on mismatch. Handle UI refresh on conflict.
-     - Why fix this issue and what will be achieved with the fix? Prevents silent overwrites when multiple users edit/approve simultaneously.
-     - Status: IN PROGRESS
+  Issue 1: Test and Verify Execution Control P1 (P0)
+     - Attempted fixes: The code for the analytics route, state diagram UI, and ZIP export was patched, but no final tests have been run.
+     - Next debug checklist: Check backend logs. Run bash  against  and . Launch frontend screenshot tool on  and .
+     - Why fix this issue and what will be achieved with the fix? Validates the P1 delivery to ensure the operator dashboard is production-ready for incident reviews.
+     - Status: TESTING PENDING
      - Is recurring issue? N
      - Should Test frontend/backend/both after fix? Both
      - Blocked on other issue: None
 
-  Issue 2: Approval Re-validation (Prevent Stale Requests) (P0)
-     - Attempted fixes: Not started.
-     - Next debug checklist: In , update the  logic. Before committing an approved allocation, check if the  matches the one from when the request was created. If mismatched, mark as  or  and block execution.
-     - Why fix this issue and what will be achieved with the fix? Ensures conditions haven't changed between request creation and super_admin approval.
-     - Status: NOT STARTED
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Both
-     - Blocked on other issue: Issue 1 (Requires revision/versioning first).
-
-  Issue 3: Simulation = Production Parity (P0)
-     - Attempted fixes: Not started.
-     - Next debug checklist: Extract risk/allocation calculation logic into a shared service function inside  so both the What-If simulation endpoint and the actual pre-commit validation endpoint use the exact same math.
-     - Why fix this issue and what will be achieved with the fix? Ensures simulation predictions exactly match reality.
-     - Status: NOT STARTED
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Backend
-
-  Issue 4: What-if Table Integration (P0)
-     - Attempted fixes: Not started.
-     - Next debug checklist: Update . When a What-If simulation runs, propagate the results (current weight, suggested weight, delta weight, risk delta, return delta) into the actual strategy data table rows, not just the summary card. Add Simulation preview only warnings.
-     - Why fix this issue and what will be achieved with the fix? Contextualizes simulation impacts per strategy.
-     - Status: NOT STARTED
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Frontend
-
 **In progress Task List**:
-  Task 1: Database Schema Updates for Audit & Concurrency
-     - Where to resume: 
-     - What will be achieved with this? Adding , , and  fields to allow concurrency control and audit-grade restoring. User explicitly approved these DB updates.
-     - Status: IN PROGRESS
-     - Should Test frontend/backend/both after fix? Backend
+  Task 1: Incident Snapshot ZIP Export
+     - Where to resume: Verify  endpoint in . Ensure it correctly returns a ZIP file containing , , and the required CSVs (, , , , ).
+     - What will be achieved with this? Allows operators to download a deterministic snapshot of an execution incident for audit and post-mortem.
+     - Status: TESTING PENDING
+     - Should Test frontend/backend/both after fix? Both
      - Blocked on something: None
 
 **Upcoming and Future Tasks**
-    Upcoming Tasks (Checkpoint 2 - DO NOT START UNTIL CHECKPOINT 1 IS DONE):
-    - P1: Snapshot Restore Workflow: Add functional restore button per snapshot. Requires double confirm, reason_note, and routes through the standard approval state machine. Restoring must invalidate stale requests.
-    - P1: Approval Visibility Completion: Populate real pending request data with Request Age formatting (<60m, <24h, >=24h) and target details.
-    - P1: Audit-Grade Export: Add metadata (, , ) to JSON/CSV exports. Add audit logging for the export action.
-    - P2: Edge-case Cleanup: Clarify logic for DISABLED strategies with non-zero weights, fix empty No data yet states in UI.
+    Upcoming Tasks (P2 Execution System Enhancements):
+    - P2: Webhook alert integration for Execution failures.
+    - P2: Full dashboarding and advanced predictive trend analytics.
+    - P2: Role-based export policy enrichments.
+    - P2: Partial entity-scoped rebuild improvements.
 
 **Completed work in this session**
-- Strategy Intelligence Core Backend (Decision request endpoints, priority queues) (DONE)
-- Strategy Intelligence UI Modularization (ApprovalQueuePanel, SimulationGuardPanel, etc.) (DONE)
-- Strategy Intelligence P1 (Preset Scenarios, SLA countdown, History replay filters) (DONE)
-- Strategy Intelligence Escalation Center (Active/Ack/Resolve tabs, role guards) (DONE)
-- Strategy Intelligence P0 Final Scope (Unified Governance Board, projected PNL/drawdown added to simulation engine) (DONE)
-- Strategy Intelligence P1 Final Scope (Deterministic fixed model for Conflict/Hedge/Rebalance execution effects, Sparkline charts) (DONE)
+- Strategy Allocation Checkpoint 1: Concurrency , Re-validation, Simulation parity (DONE)
+- Strategy Allocation Checkpoint 2: Snapshot Restore, Approval Visibility, Audit-grade JSON/CSV Export (DONE)
+- P2 Undo/Revert + Explainability Layer for both Intelligence and Allocation modules (DONE)
+- Execution Control System P0: Simulation Isolation, Failed/Dead-letter Recovery, Idempotency Collision Panel, Trace Page, Manual Action Guardrails (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-None. Agent resolved all testing feedback.
+None.
 
 **Known issue recurrence from previous fork**
-  - Issue recurrence in previous fork: .
-  - Recurrence count: Ongoing.
-  - Status: RESOLVED (Graceful fallback handles it, but in-memory wipes on restart).
-  - Issue recurrence: Occasional PostgreSQL 502 Connection Refused.
-  - Recurrence count: 2
-  - Status: RESOLVED (Transient startup issue, retries succeed).
+  - Issue recurrence in previous fork: 
+  - Recurrence count: Multiple (Ongoing)
+  - Status: RESOLVED (Graceful fallback handles it, but in-memory wipes on restart. This is expected in the preview environment).
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Concurrency Control ()**: A mechanism to prevent silent data overwrites when multiple users edit simultaneously.
-- **Approval Re-validation**: A secondary check during the  step to ensure the underlying baseline data hasn't mutated since the request was created.
-- **Simulation/Production Parity**: A single source of truth for math/formulas so What-If previews precisely match actual pre-commit validations.
+- **Incident Snapshot Export**: Creating an on-the-fly ZIP bundle combining JSON metadata and CSV lists for incident post-mortems. MUST contain  with strict metadata.
+- **Idempotency Control**: Blocking duplicate manual interventions using  and collision logs to prevent double-ordering.
+- **Undo/Revert**: Target-based snapshot reverting of execution policies to prevent state drift.
 
 **key DB schema**
-  - : Needs  and audit trace fields added.
-  - : Tracks request state, owner, ack status, payload.
+  - : Tracks blocked replay attempts and duplicated manual requests.
+  - : Tracks dead-letters, retry budgets, and failure classifications.
+  -  / : Extended with  (production/simulation/paper) and .
 
 **changes in tech stack**
-  - None.
+  - None. (PostgreSQL strictly mandated. MongoDB/SQLite strictly forbidden).
 
 **All files of reference**
   - 
@@ -104,46 +75,48 @@ None. Agent resolved all testing feedback.
   - 
 
 **Areas that need refactoring**:
--  is getting very large (~1200 lines). If Checkpoint 1 & 2 add too much complexity, consider breaking out the What-If Table or Snapshot list into separate components, similar to what was done for Strategy Intelligence.
+-  has grown very large as it now handles Execution Queue, Readiness, States, Trace, Analytics, and Incident ZIP creation. Consider splitting into sub-routers (e.g., ) in future forks.
 
 **key api endpoints**
-  - 
-  -  (Needs revision ID added to payload requests)
-  - 
+  -  (Updated with advanced filters)
+  -  (Summary, state-latency, failure-trends)
+  -  (Generates ZIP)
 
 **Critical Info for New Agent**
-- You are transitioning focus **AWAY** from Strategy Intelligence (which is 100% finished) and **TOWARDS** Strategy Allocation Dashboard.
-- The user explicitly agreed to split the Strategy Allocation closure into **2 Checkpoints**.
-- **DO NOT** attempt Snapshot Restore or Exports right now.
-- Your immediate job is **Checkpoint 1**: 1) Concurrency Control (add  to DB and endpoints), 2) Approval Re-validation (stale request prevention), 3) Simulation Parity (shared math engine), and 4) What-If Table Integration in the UI. 
-- User has explicitly approved modifying the database schemas to support proper audit trails and versioning. 
+- **Strict User Rules for P1:** 
+  1.  filter contract MUST stay fixed (, , ).
+  2. Analytics accounts MUST act as deterministic snapshots, not real-time event-driven widgets. 
+  3. The State diagram must remain **read-only** (no direct interaction/clicks to mutate state).
+  4. Incident snapshot endpoint priorities:  >  > .
+  5. The  in the ZIP export MUST include export time, actor, filter scope, identifiers, and generated file list.
+- Testing is pending for the latest frontend/backend patches related to P1. Start immediately by validating the code with  and frontend smoke tests.
 
 **documents and test reports created in this job**
   -  to 
 
-**Last 10 User Messages and any pending HUMAN messages**
-1. User: Outlined P1 for Strategy Intelligence (Deterministic model, History chart).
-2. User: Confirmed implementation strategy for P1 (Inline cards + sparklines).
-3. User: Outlined FINAL GÖREV EMRİ (Final Execution Order) for the **Strategy Allocation Dashboard**. Listed 8 major missing pieces (Snapshot Restore, What-If table, Approval visibility, Re-validation, Parity, Concurrency, Exports, Edge cases).
-4. User (Pending Context): Agreed to split the execution into 2 Checkpoints. Checkpoint 1 = Concurrency, Approval Re-validation, Simulation Parity, What-If table integration. Approved DB schema changes for versioning. Requested Jira ticket summary *only after* implementation is done.
+**Last 10 User Messages and any pending HUMAN messages** 
+1. User: Confirmed Checkpoint 2 testing. Outlined P2: Undo/Revert + Explainability Layer.
+2. User: Confirmed P2 technical plan and scope.
+3. User: Outlined Execution State Machine -> Execution Control + Recovery System transition (Phases 1-9). Requested P0 only.
+4. User: Confirmed Execution P0 implementation plan and explicit guardrails.
+5. User: Approved Execution P0. Outlined Execution P1 (Advanced filters, state diagram, analytics route, Incident snapshot). Requested JSON+CSV zip for incident export.
+6. User (Pending Context): Approved the agent's short technical plan for P1. Defined 6 strict constraints (stable filter contract, deterministic analytics, read-only diagram, strict snapshot priorities, metadata in , shared filter language). Instructed to begin implementation. 
 
 **Project Health Check:**
 - Mocked: Binance Futures execution.
-- Broken: None.
+- Broken: None known, but P1 is completely untested.
 
 **3rd Party Integrations**
 - Binance Futures Testnet (requires User API Key).
 
 **Testing status**
-  - Testing agent used after significant changes: YES
+  - Testing agent used after significant changes: YES (up to P0 Execution Control)
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: Heavily updated backend tests in iterations 75-79.
+  - Test files created: Heavily updated backend tests in iterations 80-83.
   - Known regressions: None.
 
 **Credentials to test flow:**
 - Super Admin:  / 
-- Admin (Requester):  / 
-- Ops (Read-only):  / 
 
 **What agent forgot to execute**
-The agent did not write any code for Checkpoint 1 yet; it only viewed the files to gather context. Start directly by updating the DB models for concurrency () and the Pydantic schemas, then move to the routers.</analysis>
+The agent successfully applied the code patches for the Execution Control P1 phase (Analytics route, Advanced Filters, ZIP export) but ran out of context before it could run linting, test the backend endpoints, or verify the frontend UI via the testing agent. Start your session by testing these patched functionalities.</analysis>

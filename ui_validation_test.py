@@ -13,7 +13,7 @@ import re
 
 def test_ui_validation():
     """Perform concise UI validation"""
-    url = "https://audit-closure-dash.preview.emergentagent.com"
+    url = "https://execution-recovery.preview.emergentagent.com"
     
     try:
         # Get the landing page

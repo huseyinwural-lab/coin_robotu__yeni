@@ -2,10 +2,14 @@ import json
 import os
 import uuid
 import hashlib
+import csv
+import io
+import zipfile
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import Text, cast, or_
+from fastapi.responses import Response
+from sqlalchemy import Text, cast, func, or_
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -42,6 +46,9 @@ from schemas import (
     ExecutionSimulationBatchResponse,
     ExecutionStateControlQueryResponse,
     ExecutionStateDetailResponse,
+    ExecutionAnalyticsSnapshotSummaryResponse,
+    IncidentSnapshotExportRequest,
+    IncidentSnapshotExportResponse,
     ExecutionStateTransitionResponse,
     ExecutionPolicyUpdate,
     FailedEventResponse,
@@ -72,6 +79,159 @@ from services.state_rebuild_service import run_state_rebuild
 router = APIRouter(prefix="/admin-phase3", tags=["admin_phase3"])
 
 PROD_CONFIRMATION_PHRASE = "CONFIRM_PROD_MANUAL_ACTION"
+STATE_ENUM = {
+    "created",
+    "submitted",
+    "acknowledged",
+    "partially_filled",
+    "timeout",
+    "fallback_submitted",
+    "filled",
+    "rejected",
+    "failed",
+    "cancelled",
+}
+STATUS_ENUM = {"filled", "timeout", "rejected", "failed", "cancelled", "submitted", "pending"}
+SOURCE_TYPE_ENUM = {"production", "paper", "simulation", "replay"}
+
+
+def _normalize_enum(value: str | None, allowed: set[str], field_name: str) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return None
+    if normalized not in allowed:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} geçersiz: {normalized}")
+    return normalized
+
+
+def _parse_iso_datetime(value: str | None, field_name: str) -> datetime | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field_name} ISO format olmalı") from exc
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _extract_order_id_from_details(details: dict) -> str:
+    if not isinstance(details, dict):
+        return ""
+    for key in ["order_id", "external_order_id", "execution_order_id"]:
+        value = details.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _build_transition_query(
+    db: Session,
+    *,
+    state: str | None = None,
+    source_type: str | None = None,
+    symbol: str | None = None,
+    strategy: str | None = None,
+    status_filter: str | None = None,
+    correlation_id: str | None = None,
+    order_id: str | None = None,
+    search: str | None = None,
+    time_from: datetime | None = None,
+    time_to: datetime | None = None,
+):
+    query = db.query(ExecutionStateTransition).join(ExecutionEvent, ExecutionEvent.id == ExecutionStateTransition.execution_event_id)
+    if state:
+        query = query.filter(ExecutionStateTransition.state == state)
+    if source_type:
+        query = query.filter(ExecutionStateTransition.source_type == source_type)
+    if symbol:
+        query = query.filter(ExecutionEvent.symbol == symbol.upper())
+    if strategy:
+        query = query.filter(ExecutionEvent.strategy_id == strategy)
+    if status_filter:
+        query = query.filter(ExecutionEvent.execution_status == status_filter)
+    if correlation_id:
+        query = query.filter(ExecutionStateTransition.correlation_id == correlation_id)
+    if time_from:
+        query = query.filter(ExecutionStateTransition.occurred_at >= time_from)
+    if time_to:
+        query = query.filter(ExecutionStateTransition.occurred_at <= time_to)
+    if order_id:
+        query = query.filter(cast(ExecutionStateTransition.details, Text).ilike(f"%{order_id.strip()}%"))
+    if search:
+        token = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                ExecutionStateTransition.execution_event_id.ilike(token),
+                ExecutionStateTransition.correlation_id.ilike(token),
+                ExecutionEvent.symbol.ilike(token),
+                cast(ExecutionStateTransition.details, Text).ilike(token),
+                cast(ExecutionEvent.response_payload, Text).ilike(token),
+            )
+        )
+    return query
+
+
+def _serialize_failed_event_row(row: FailedEvent) -> dict:
+    return {
+        "id": row.id,
+        "event_type": row.event_type,
+        "entity_type": row.entity_type,
+        "entity_id": row.entity_id,
+        "status": row.status,
+        "failure_class": row.failure_class,
+        "error_message": row.error_message,
+        "correlation_id": row.correlation_id,
+        "retry_count": row.retry_count,
+        "max_retry": row.max_retry,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
+        "dead_letter_reason": row.dead_letter_reason,
+        "last_action_by": row.last_action_by,
+        "retry_reason": row.retry_reason,
+        "payload": row.payload or {},
+        "error_details": row.error_details or {},
+    }
+
+
+def _rows_to_csv_text(rows: list[dict], columns: list[str]) -> str:
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=columns)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({key: row.get(key) for key in columns})
+    return output.getvalue()
+
+
+def _require_incident_export_scope(payload: IncidentSnapshotExportRequest) -> tuple[str, dict]:
+    has_corr = bool(str(payload.correlation_id or "").strip())
+    has_event = bool(str(payload.execution_event_id or "").strip())
+    has_time = bool(str(payload.time_from or "").strip() or str(payload.time_to or "").strip())
+    active_scopes = int(has_corr) + int(has_event) + int(has_time)
+    if active_scopes == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="correlation_id veya execution_event_id veya time range zorunlu")
+    if active_scopes > 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tek scope kullanın: correlation_id veya execution_event_id veya time range")
+
+    if has_corr:
+        return "correlation_id", {"correlation_id": str(payload.correlation_id).strip()}
+    if has_event:
+        return "execution_event_id", {"execution_event_id": str(payload.execution_event_id).strip()}
+
+    time_from = _parse_iso_datetime(payload.time_from, "time_from")
+    time_to = _parse_iso_datetime(payload.time_to, "time_to")
+    if not time_from or not time_to:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="time range scope için time_from + time_to zorunlu")
+    if time_from > time_to:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="time_from <= time_to olmalı")
+    return "time_range", {"time_from": time_from.isoformat(), "time_to": time_to.isoformat()}
 
 
 def _is_prod_environment() -> bool:
@@ -544,37 +704,36 @@ def list_execution_state_transitions_control(
     source_type: str | None = Query(default=None),
     symbol: str | None = Query(default=None),
     strategy: str | None = Query(default=None),
+    status_value: str | None = Query(default=None, alias="status"),
     status_filter: str | None = Query(default=None),
+    correlation_id: str | None = Query(default=None),
+    order_id: str | None = Query(default=None),
     search: str | None = Query(default=None),
     time_from: str | None = Query(default=None),
     time_to: str | None = Query(default=None),
     limit: int = Query(default=300, ge=50, le=1000),
 ):
-    query = db.query(ExecutionStateTransition).join(ExecutionEvent, ExecutionEvent.id == ExecutionStateTransition.execution_event_id)
-    if state:
-        query = query.filter(ExecutionStateTransition.state == state)
-    if source_type:
-        query = query.filter(ExecutionStateTransition.source_type == source_type)
-    if symbol:
-        query = query.filter(ExecutionEvent.symbol == symbol.upper())
-    if strategy:
-        query = query.filter(ExecutionEvent.strategy_id == strategy)
-    if status_filter:
-        query = query.filter(ExecutionEvent.execution_status == status_filter)
-    if time_from:
-        query = query.filter(ExecutionStateTransition.occurred_at >= datetime.fromisoformat(time_from))
-    if time_to:
-        query = query.filter(ExecutionStateTransition.occurred_at <= datetime.fromisoformat(time_to))
-    if search:
-        token = f"%{search.strip()}%"
-        query = query.filter(
-            or_(
-                ExecutionStateTransition.execution_event_id.ilike(token),
-                ExecutionStateTransition.correlation_id.ilike(token),
-                ExecutionEvent.symbol.ilike(token),
-                cast(ExecutionStateTransition.details, Text).ilike(token),
-            )
-        )
+    normalized_state = _normalize_enum(state, STATE_ENUM, "state")
+    normalized_source = _normalize_enum(source_type, SOURCE_TYPE_ENUM, "source_type")
+    normalized_status = _normalize_enum(status_value or status_filter, STATUS_ENUM, "status")
+    parsed_time_from = _parse_iso_datetime(time_from, "time_from")
+    parsed_time_to = _parse_iso_datetime(time_to, "time_to")
+    if parsed_time_from and parsed_time_to and parsed_time_from > parsed_time_to:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="time_from <= time_to olmalı")
+
+    query = _build_transition_query(
+        db,
+        state=normalized_state,
+        source_type=normalized_source,
+        symbol=symbol,
+        strategy=strategy,
+        status_filter=normalized_status,
+        correlation_id=str(correlation_id or "").strip() or None,
+        order_id=str(order_id or "").strip() or None,
+        search=search,
+        time_from=parsed_time_from,
+        time_to=parsed_time_to,
+    )
 
     rows = query.order_by(ExecutionStateTransition.occurred_at.desc()).limit(limit).all()
     summary_counts: dict[str, int] = {}
@@ -617,6 +776,142 @@ def execution_state_detail(
         transition_count=len(transitions),
         dwell_time_seconds=dwell_time,
         transitions=[ExecutionStateTransitionResponse(**_serialize_transition(row)) for row in transitions],
+    )
+
+
+@router.get("/execution-analytics", response_model=ExecutionAnalyticsSnapshotSummaryResponse)
+def execution_analytics_summary(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    state: str | None = Query(default=None),
+    source_type: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    strategy: str | None = Query(default=None),
+    status_value: str | None = Query(default=None, alias="status"),
+    status_filter: str | None = Query(default=None),
+    correlation_id: str | None = Query(default=None),
+    order_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    time_from: str | None = Query(default=None),
+    time_to: str | None = Query(default=None),
+    snapshot_at: str | None = Query(default=None),
+):
+    normalized_state = _normalize_enum(state, STATE_ENUM, "state")
+    normalized_source = _normalize_enum(source_type, SOURCE_TYPE_ENUM, "source_type")
+    normalized_status = _normalize_enum(status_value or status_filter, STATUS_ENUM, "status")
+    parsed_time_from = _parse_iso_datetime(time_from, "time_from")
+    parsed_time_to = _parse_iso_datetime(time_to, "time_to")
+    parsed_snapshot_at = _parse_iso_datetime(snapshot_at, "snapshot_at")
+
+    if parsed_time_from and parsed_time_to and parsed_time_from > parsed_time_to:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="time_from <= time_to olmalı")
+
+    effective_snapshot = parsed_snapshot_at or parsed_time_to or datetime.now(timezone.utc).replace(microsecond=0)
+
+    query = _build_transition_query(
+        db,
+        state=normalized_state,
+        source_type=normalized_source,
+        symbol=symbol,
+        strategy=strategy,
+        status_filter=normalized_status,
+        correlation_id=str(correlation_id or "").strip() or None,
+        order_id=str(order_id or "").strip() or None,
+        search=search,
+        time_from=parsed_time_from,
+        time_to=effective_snapshot,
+    )
+
+    rows = query.all()
+    total = len(rows)
+    state_counter = _state_counter(rows)
+    latency_per_state: dict[str, float] = {}
+    latency_state_counts: dict[str, int] = {}
+    timeout_count = 0
+    retry_count = 0
+    fallback_count = 0
+    failed_count = 0
+
+    for row in rows:
+        state_name = str(row.state or "")
+        if row.latency_ms is not None:
+            latency_per_state[state_name] = latency_per_state.get(state_name, 0.0) + float(row.latency_ms)
+            latency_state_counts[state_name] = latency_state_counts.get(state_name, 0) + 1
+        if state_name == "timeout":
+            timeout_count += 1
+        if state_name.startswith("retry_"):
+            retry_count += 1
+        if state_name == "fallback_submitted":
+            fallback_count += 1
+        if state_name in {"failed", "rejected"}:
+            failed_count += 1
+
+    for state_name, total_latency in list(latency_per_state.items()):
+        count = max(latency_state_counts.get(state_name, 1), 1)
+        latency_per_state[state_name] = round(total_latency / count, 4)
+
+    failure_rows = (
+        db.query(FailedEvent)
+        .filter(FailedEvent.created_at <= effective_snapshot)
+        .order_by(FailedEvent.created_at.asc())
+        .all()
+    )
+    if parsed_time_from:
+        failure_rows = [row for row in failure_rows if row.created_at >= parsed_time_from]
+    if correlation_id:
+        failure_rows = [row for row in failure_rows if str(row.correlation_id or "") == str(correlation_id)]
+
+    dead_letter_trend: dict[str, int] = {}
+    for row in failure_rows:
+        if row.status not in {"dead", "quarantined"}:
+            continue
+        key = row.created_at.date().isoformat()
+        dead_letter_trend[key] = dead_letter_trend.get(key, 0) + 1
+
+    success_transitions = state_counter.get("filled", 0)
+    retry_success_ratio = round(success_transitions / max(retry_count, 1), 4) if retry_count else 0.0
+
+    applied_filters = {
+        "state": normalized_state,
+        "source_type": normalized_source,
+        "symbol": symbol,
+        "strategy": strategy,
+        "status": normalized_status,
+        "correlation_id": correlation_id,
+        "order_id": order_id,
+        "search": search,
+        "time_from": parsed_time_from.isoformat() if parsed_time_from else None,
+        "time_to": effective_snapshot.isoformat(),
+        "snapshot_at": effective_snapshot.isoformat(),
+    }
+
+    return ExecutionAnalyticsSnapshotSummaryResponse(
+        snapshot_at=effective_snapshot,
+        filters=applied_filters,
+        totals={
+            "transitions": total,
+            "events": len({row.execution_event_id for row in rows}),
+            "failures": len(failure_rows),
+        },
+        latency_per_state=latency_per_state,
+        timeout_metrics={
+            "timeout_count": timeout_count,
+            "timeout_rate": round(timeout_count / max(total, 1), 4),
+        },
+        retry_metrics={
+            "retry_count": retry_count,
+            "retry_success_ratio": retry_success_ratio,
+            "fallback_usage_rate": round(fallback_count / max(total, 1), 4),
+        },
+        failure_metrics={
+            "failed_or_rejected_count": failed_count,
+            "failure_rate": round(failed_count / max(total, 1), 4),
+            "dead_letter_count": len([row for row in failure_rows if row.status in {"dead", "quarantined"}]),
+        },
+        dead_letter_trend=[
+            {"date": key, "count": value}
+            for key, value in sorted(dead_letter_trend.items())
+        ],
     )
 
 
@@ -922,6 +1217,215 @@ def execution_trace_chain(
         ],
         events=[_serialize_execution_event(item) for item in event_rows],
         failures=[FailedEventResponse.model_validate(item) for item in failure_rows],
+    )
+
+
+@router.post("/incident-snapshots/export")
+def export_incident_snapshot_bundle(
+    payload: IncidentSnapshotExportRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    scope_type, scope_payload = _require_incident_export_scope(payload)
+
+    event_query = db.query(ExecutionEvent)
+    transition_query = db.query(ExecutionStateTransition)
+    failure_query = db.query(FailedEvent)
+    manual_query = db.query(ExecutionManualAction)
+    collision_query = db.query(IdempotencyCollision)
+    trace_query = db.query(ExecutionTraceIndex)
+
+    if scope_type == "correlation_id":
+        correlation_id = scope_payload["correlation_id"]
+        event_query = event_query.filter(ExecutionEvent.correlation_id == correlation_id)
+        transition_query = transition_query.filter(ExecutionStateTransition.correlation_id == correlation_id)
+        failure_query = failure_query.filter(FailedEvent.correlation_id == correlation_id)
+        manual_query = manual_query.filter(ExecutionManualAction.correlation_id == correlation_id)
+        collision_query = collision_query.filter(IdempotencyCollision.correlation_id == correlation_id)
+        trace_query = trace_query.filter(ExecutionTraceIndex.correlation_id == correlation_id)
+    elif scope_type == "execution_event_id":
+        event_id = scope_payload["execution_event_id"]
+        event_query = event_query.filter(ExecutionEvent.id == event_id)
+        transition_query = transition_query.filter(ExecutionStateTransition.execution_event_id == event_id)
+        manual_query = manual_query.filter(ExecutionManualAction.execution_event_id == event_id)
+        event_row = event_query.first()
+        if event_row and event_row.correlation_id:
+            failure_query = failure_query.filter(FailedEvent.correlation_id == event_row.correlation_id)
+            collision_query = collision_query.filter(IdempotencyCollision.correlation_id == event_row.correlation_id)
+            trace_query = trace_query.filter(ExecutionTraceIndex.correlation_id == event_row.correlation_id)
+        else:
+            failure_query = failure_query.filter(FailedEvent.id == "")
+            collision_query = collision_query.filter(IdempotencyCollision.collision_id == "")
+            trace_query = trace_query.filter(ExecutionTraceIndex.trace_id == "")
+    else:
+        time_from = _parse_iso_datetime(scope_payload.get("time_from"), "time_from")
+        time_to = _parse_iso_datetime(scope_payload.get("time_to"), "time_to")
+        event_query = event_query.filter(ExecutionEvent.created_at >= time_from, ExecutionEvent.created_at <= time_to)
+        transition_query = transition_query.filter(ExecutionStateTransition.occurred_at >= time_from, ExecutionStateTransition.occurred_at <= time_to)
+        failure_query = failure_query.filter(FailedEvent.created_at >= time_from, FailedEvent.created_at <= time_to)
+        manual_query = manual_query.filter(ExecutionManualAction.created_at >= time_from, ExecutionManualAction.created_at <= time_to)
+        collision_query = collision_query.filter(IdempotencyCollision.created_at >= time_from, IdempotencyCollision.created_at <= time_to)
+        trace_query = trace_query.filter(ExecutionTraceIndex.created_at >= time_from, ExecutionTraceIndex.created_at <= time_to)
+
+    event_rows = event_query.order_by(ExecutionEvent.created_at.asc()).all()
+    transition_rows = transition_query.order_by(ExecutionStateTransition.occurred_at.asc()).all()
+    failure_rows = failure_query.order_by(FailedEvent.created_at.asc()).all()
+    manual_rows = manual_query.order_by(ExecutionManualAction.created_at.asc()).all()
+    collision_rows = collision_query.order_by(IdempotencyCollision.created_at.asc()).all()
+    trace_rows = trace_query.order_by(ExecutionTraceIndex.created_at.asc()).all()
+
+    serialized_events = [_serialize_execution_event(row) for row in event_rows]
+    serialized_transitions = [_serialize_transition(row) for row in transition_rows]
+    serialized_failures = [_serialize_failed_event_row(row) for row in failure_rows]
+    serialized_manual = [
+        {
+            "action_id": row.action_id,
+            "execution_event_id": row.execution_event_id,
+            "correlation_id": row.correlation_id,
+            "action_type": row.action_type,
+            "requested_by": row.requested_by,
+            "requested_role": row.requested_role,
+            "reason_note": row.reason_note,
+            "is_prod_guard_applied": row.is_prod_guard_applied,
+            "idempotency_checked": row.idempotency_checked,
+            "replay_safe_checked": row.replay_safe_checked,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "details": row.details or {},
+        }
+        for row in manual_rows
+    ]
+    serialized_collisions = [
+        {
+            "collision_id": row.collision_id,
+            "intent_id": row.intent_id,
+            "idempotency_key": row.idempotency_key,
+            "actor": row.actor,
+            "correlation_id": row.correlation_id,
+            "status": row.status,
+            "resolution_action": row.resolution_action,
+            "resolution_note": row.resolution_note,
+            "resolved_by": row.resolved_by,
+            "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in collision_rows
+    ]
+    serialized_trace = [
+        {
+            "trace_id": row.trace_id,
+            "correlation_id": row.correlation_id,
+            "execution_event_id": row.execution_event_id,
+            "intent_id": row.intent_id,
+            "stage": row.stage,
+            "actor": row.actor,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "payload": row.payload or {},
+        }
+        for row in trace_rows
+    ]
+
+    generated_files = [
+        "summary.json",
+        "trace.json",
+        "events.csv",
+        "transitions.csv",
+        "failed_events.csv",
+        "manual_actions.csv",
+        "idempotency_collisions.csv",
+        "README.txt",
+    ]
+    metadata = {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "actor": str(current_admin.id),
+        "filter_scope": scope_type,
+        "scope_identifiers": scope_payload,
+        "row_counts": {
+            "events": len(serialized_events),
+            "transitions": len(serialized_transitions),
+            "failed_events": len(serialized_failures),
+            "manual_actions": len(serialized_manual),
+            "idempotency_collisions": len(serialized_collisions),
+            "trace": len(serialized_trace),
+        },
+        "generated_files": generated_files,
+    }
+    summary_json = {
+        **metadata,
+        "filters": {
+            "search": payload.search,
+            "state": payload.state,
+            "status": payload.status,
+            "source_type": payload.source_type,
+            "symbol": payload.symbol,
+            "strategy": payload.strategy,
+            "order_id": payload.order_id,
+            "time_from": payload.time_from,
+            "time_to": payload.time_to,
+        },
+    }
+
+    events_csv = _rows_to_csv_text(
+        serialized_events,
+        ["id", "symbol", "side", "execution_status", "source_type", "environment", "correlation_id", "strategy_id", "created_at"],
+    )
+    transitions_csv = _rows_to_csv_text(
+        serialized_transitions,
+        ["id", "execution_event_id", "state", "from_state", "to_state", "sequence", "latency_ms", "correlation_id", "source_type", "environment", "is_manual", "occurred_at"],
+    )
+    failed_csv = _rows_to_csv_text(
+        serialized_failures,
+        ["id", "event_type", "entity_type", "entity_id", "status", "failure_class", "correlation_id", "retry_count", "max_retry", "dead_letter_reason", "created_at", "updated_at"],
+    )
+    manual_csv = _rows_to_csv_text(
+        serialized_manual,
+        ["action_id", "execution_event_id", "correlation_id", "action_type", "requested_by", "requested_role", "reason_note", "is_prod_guard_applied", "idempotency_checked", "replay_safe_checked", "created_at"],
+    )
+    collisions_csv = _rows_to_csv_text(
+        serialized_collisions,
+        ["collision_id", "intent_id", "idempotency_key", "actor", "correlation_id", "status", "resolution_action", "resolved_by", "resolved_at", "created_at"],
+    )
+
+    readme_text = (
+        "Incident Snapshot Bundle\n"
+        "- summary.json: export metadata + filter scope\n"
+        "- trace.json: correlation trace timeline\n"
+        "- events.csv: execution events\n"
+        "- transitions.csv: state transitions\n"
+        "- failed_events.csv: failure and dead-letter rows\n"
+        "- manual_actions.csv: manual intervention records\n"
+        "- idempotency_collisions.csv: collision records\n"
+    )
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, mode="w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        bundle.writestr("summary.json", json.dumps(summary_json, ensure_ascii=False, indent=2))
+        bundle.writestr("trace.json", json.dumps(serialized_trace, ensure_ascii=False, indent=2))
+        bundle.writestr("events.csv", events_csv)
+        bundle.writestr("transitions.csv", transitions_csv)
+        bundle.writestr("failed_events.csv", failed_csv)
+        bundle.writestr("manual_actions.csv", manual_csv)
+        bundle.writestr("idempotency_collisions.csv", collisions_csv)
+        bundle.writestr("README.txt", readme_text)
+
+    filename = f"incident_snapshot_{scope_type}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.zip"
+    create_audit_log(
+        db,
+        action="incident_snapshot_export",
+        entity_type="execution_incident_snapshot",
+        entity_id=scope_payload.get("correlation_id") or scope_payload.get("execution_event_id") or "time_range",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details=summary_json,
+    )
+    db.commit()
+
+    return Response(
+        content=archive.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Incident-Snapshot-Scope": scope_type,
+        },
     )
 
 

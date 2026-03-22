@@ -2,7 +2,7 @@
 """
 FAZ-4 Backend Final Validation Test
 Testing Phase-4 backend endpoints for strategy feedback, model updates, and timeline export
-Base URL: https://audit-closure-dash.preview.emergentagent.com
+Base URL: https://execution-recovery.preview.emergentagent.com
 """
 
 import requests
@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://audit-closure-dash.preview.emergentagent.com"
+BASE_URL = "https://execution-recovery.preview.emergentagent.com"
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
 SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
 OPS_EMAIL = "canary.ops@platform.local"

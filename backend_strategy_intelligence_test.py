@@ -8,7 +8,7 @@ Tests the Strategy Intelligence governance flow with the following scenarios:
 3) Authorization controls
 4) Compare endpoint functionality
 
-URL: https://audit-closure-dash.preview.emergentagent.com
+URL: https://execution-recovery.preview.emergentagent.com
 """
 
 import json
@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 # Base URL from frontend/.env
-BASE_URL = "https://audit-closure-dash.preview.emergentagent.com"
+BASE_URL = "https://execution-recovery.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Test credentials

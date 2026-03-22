@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "base_url": "https://audit-closure-dash.preview.emergentagent.com",
+  "base_url": "https://execution-recovery.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",

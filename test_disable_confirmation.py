@@ -10,7 +10,7 @@ from datetime import datetime
 def test_disable_with_confirmation():
     """Test the disable action with proper confirmation phrase"""
     
-    BASE_URL = "https://audit-closure-dash.preview.emergentagent.com"
+    BASE_URL = "https://execution-recovery.preview.emergentagent.com"
     
     print("=" * 60)
     print("FAZ-1 DISABLE ACTION WITH CONFIRMATION TEST")

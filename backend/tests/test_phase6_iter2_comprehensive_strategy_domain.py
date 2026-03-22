@@ -22,7 +22,7 @@ import pytest
 import requests
 
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://audit-closure-dash.preview.emergentagent.com")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://execution-recovery.preview.emergentagent.com")
 
 
 @pytest.fixture(scope="module")

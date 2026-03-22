@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 P1 Backend Flow Validation - Risk Simulation and Decision Requests
-Target: https://audit-closure-dash.preview.emergentagent.com
+Target: https://execution-recovery.preview.emergentagent.com
 Tests: Risk simulation presets, history, decision requests, role guards
 """
 
@@ -40,7 +40,7 @@ def test_p1_risk_simulation_flows():
     Test P1 backend flows for risk simulation and decision requests
     """
     
-    BASE_URL = "https://audit-closure-dash.preview.emergentagent.com"
+    BASE_URL = "https://execution-recovery.preview.emergentagent.com"
     
     print("=" * 80)
     print("P1 BACKEND FLOW VALIDATION - RISK SIMULATION & DECISION REQUESTS")
