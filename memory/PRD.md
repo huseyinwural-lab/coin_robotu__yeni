@@ -1,3 +1,45 @@
+## 2026-03-22 — P1 Tamamlandı ✅ (Bulk Breakdown + Post-Action Monitor + Policy Apply Hook)
+
+### Kullanıcı önceliği (uygulanan sıra)
+1. Bulk Result Breakdown
+2. Post-Action Monitor
+3. Policy Apply Hook
+
+### Uygulanan P1 geliştirmeleri
+- **Bulk Result Breakdown** (Strategy Governance tabı, bulk panelinin hemen altı)
+  - Varsayılan durum: **collapsed**
+  - Expandable detay görünümü
+  - Strategy bazlı sonuç satırları
+  - `success / failed / skipped` ayrımı
+  - Her satırda: `strategy_id`, `status`, `message`, `action_ref(trace_id)`
+  - Failed satırlar kırmızı highlight
+- **Post-Action Monitor** (Audit/History tabı)
+  - Tek kart: `Last Action Impact`
+  - Kapsam: `rollout / disable / rollback / drift_disable / approval_approve`
+  - Auto refresh: **8s**
+  - Aktif izleme penceresi: **5 dk**, sonra passive
+  - Göstergeler: `health_delta`, `error_delta`, `risk_delta`
+  - Kısa özet: `before / after_at_action / current`
+- **Policy Apply Hook**
+  - Policy Suggestions panelinde her rule için `Apply Fix`
+  - Drift kartlarında `Apply via Policy`
+  - Her iki giriş de **prefilled Decision Modal** açar
+  - **Direct execute yok**, kullanıcı onayı akışı korunur
+
+### Backend kontrat güncellemesi
+- `POST /api/admin/futures/strategy/bulk-action`
+  - `state_snapshot` artık: `success_count`, `rejected_count`, `skipped_count`
+  - `results[]` satırlarında `action_ref` eklendi
+  - Skipped sınıfı için güvenli fallback davranışı eklendi
+
+### Doğrulama / Test
+- Lint: Frontend + Backend ✅
+- Self-check: API smoke ✅
+- Test raporu: `/app/test_reports/iteration_67.json`
+  - Backend: **100% (10/10 PASS)**
+  - Frontend: **100% PASS**
+  - P1 gereksinimleri: tamamı PASS
+
 ## 2026-03-22 — Faz-5 P0 Kritik Kapanış + Stabilizasyon ✅
 
 ### Kullanıcı onayı (bu iterasyon)
