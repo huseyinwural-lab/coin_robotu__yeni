@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
 from deps import require_admin
-from models import AdminControl, User, UserRole, UserScannerResult
+from models import AdminControl, AuditLog, ExecutionMetric, ScannerFallbackEvent, ScannerPerformanceSnapshot, User, UserRole, UserScannerResult
 from services.audit_service import create_audit_log
 from services.pipeline.cache_store import get_json, set_json
 from services.pipeline.universe_engine import debug_effective_universe
@@ -51,6 +51,16 @@ UNIVERSE_FILTER_CONFIG_KEY = "universe:filter:config"
 ROLLOUT_HISTORY_KEY = "universe:rollout:history"
 RISK_EXPOSURE_OVERRIDE_KEY = "universe:risk:exposure_overrides"
 SLOW_CONTROL_STATE_KEY = "universe:slow:control_state"
+SLA_CONFIG_KEY = "universe:freshness:sla_config"
+KPI_RECOMMENDATION_ACTIVE_KEY = "universe:kpi:recommendations:active"
+KPI_RECOMMENDATION_HISTORY_KEY = "universe:kpi:recommendations:history"
+
+SLA_UPDATE_PHRASE = "UPDATE SLA CONFIG"
+RESCAN_STALE_PHRASE = "RESCAN STALE"
+KPI_GENERATE_PHRASE = "GENERATE KPI RECOMMENDATION"
+KPI_APPLY_PHRASE = "APPLY RECOMMENDATION"
+KPI_REJECT_PHRASE = "REJECT RECOMMENDATION"
+KPI_POSTPONE_PHRASE = "POSTPONE RECOMMENDATION"
 
 
 class RuntimeActionRequest(BaseModel):
@@ -105,6 +115,23 @@ class StrategyThrottleRequest(RuntimeActionRequest):
 
 class SymbolPauseRequest(RuntimeActionRequest):
     pause: bool = True
+
+
+class FreshnessSlaConfigRequest(RuntimeActionRequest):
+    latency_threshold: float = Field(ge=0)
+    stale_threshold_sec: int = Field(ge=30, le=86400)
+
+
+class RescanStaleRequest(RuntimeActionRequest):
+    limit: int = Field(default=200, ge=1, le=2000)
+
+
+class RecommendationGenerateRequest(RuntimeActionRequest):
+    pass
+
+
+class RecommendationDecisionRequest(RuntimeActionRequest):
+    recommendation_id: str = Field(min_length=8, max_length=120)
 
 
 def _manager_required(current_admin: User) -> User:
@@ -253,6 +280,106 @@ def _rollout_transition(db: Session, *, row, next_stage: str, changed_by: str, c
             "change_reason": change_reason,
         }
     )
+
+
+def _default_sla_config() -> dict:
+    return {
+        "latency_threshold": 1200.0,
+        "stale_threshold_sec": 900,
+        "updated_at": None,
+        "updated_by": None,
+    }
+
+
+def _get_sla_config() -> dict:
+    return _read_json_value(SLA_CONFIG_KEY, _default_sla_config())
+
+
+def _derive_stale_entities(db: Session, *, stale_threshold_sec: int, limit: int = 500) -> list[dict]:
+    now = datetime.now(timezone.utc)
+    stale_items: list[dict] = []
+
+    symbol_rows = (
+        db.query(UserScannerResult.symbol, UserScannerResult.generated_at)
+        .order_by(UserScannerResult.generated_at.desc())
+        .limit(5000)
+        .all()
+    )
+    symbol_last_seen: dict[str, datetime] = {}
+    for symbol, generated_at in symbol_rows:
+        key = str(symbol or "").upper().strip()
+        if not key or key in symbol_last_seen or generated_at is None:
+            continue
+        symbol_last_seen[key] = generated_at
+
+    for symbol, last_seen in symbol_last_seen.items():
+        age = int((now - last_seen).total_seconds())
+        if age >= stale_threshold_sec:
+            stale_items.append(
+                {
+                    "entity_type": "symbol",
+                    "entity_id": symbol,
+                    "last_update_ts": last_seen.isoformat(),
+                    "age_sec": age,
+                    "severity": "critical" if age >= stale_threshold_sec * 2 else "warning",
+                    "reason": "symbol_scan_stale",
+                }
+            )
+
+    strategy_rows = (
+        db.query(ExecutionMetric.strategy_type, ExecutionMetric.created_at)
+        .order_by(ExecutionMetric.created_at.desc())
+        .limit(5000)
+        .all()
+    )
+    strategy_last_seen: dict[str, datetime] = {}
+    for strategy_type, created_at in strategy_rows:
+        key = str(strategy_type or "unknown").strip()
+        if key in strategy_last_seen or created_at is None:
+            continue
+        strategy_last_seen[key] = created_at
+
+    for strategy, last_seen in strategy_last_seen.items():
+        age = int((now - last_seen).total_seconds())
+        if age >= stale_threshold_sec:
+            stale_items.append(
+                {
+                    "entity_type": "strategy",
+                    "entity_id": strategy,
+                    "last_update_ts": last_seen.isoformat(),
+                    "age_sec": age,
+                    "severity": "critical" if age >= stale_threshold_sec * 2 else "warning",
+                    "reason": "strategy_execution_stale",
+                }
+            )
+
+    cycle_row = db.query(ScannerPerformanceSnapshot).order_by(ScannerPerformanceSnapshot.created_at.desc()).first()
+    if cycle_row and cycle_row.created_at:
+        age = int((now - cycle_row.created_at).total_seconds())
+        if age >= stale_threshold_sec:
+            stale_items.append(
+                {
+                    "entity_type": "scanner_cycle",
+                    "entity_id": str(cycle_row.run_id or cycle_row.stage or "latest_cycle"),
+                    "last_update_ts": cycle_row.created_at.isoformat(),
+                    "age_sec": age,
+                    "severity": "critical" if age >= stale_threshold_sec * 2 else "warning",
+                    "reason": "scanner_cycle_stale",
+                }
+            )
+
+    stale_items.sort(key=lambda item: (0 if item["severity"] == "critical" else 1, item["age_sec"]), reverse=True)
+    return stale_items[:limit]
+
+
+def _kpi_active_recommendations() -> list[dict]:
+    rows = _read_json_value(KPI_RECOMMENDATION_ACTIVE_KEY, [])
+    return rows if isinstance(rows, list) else []
+
+
+def _kpi_history() -> list[dict]:
+    rows = _read_json_value(KPI_RECOMMENDATION_HISTORY_KEY, [])
+    return rows if isinstance(rows, list) else []
 
 
 @router.get("")
@@ -690,6 +817,440 @@ def universe_update_filter_config(payload: UniverseFilterConfigRequest, current_
     )
 
 
+@router.get("/freshness/sla-config")
+def freshness_sla_config(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return _get_sla_config()
+
+
+@router.put("/freshness/sla-config")
+def freshness_update_sla_config(payload: FreshnessSlaConfigRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    manager = _manager_required(current_admin)
+    _require_phrase(payload.confirmation_phrase, SLA_UPDATE_PHRASE)
+
+    trace_id = str(uuid.uuid4())
+    config = {
+        "latency_threshold": float(payload.latency_threshold),
+        "stale_threshold_sec": int(payload.stale_threshold_sec),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": manager.id,
+    }
+    _write_json_value(SLA_CONFIG_KEY, config)
+
+    audit = create_audit_log(
+        db,
+        action="UNIVERSE_SLA_CONFIG_UPDATED",
+        entity_type="freshness_sla",
+        entity_id="global",
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning",
+        details={"trace_id": trace_id, "reason": payload.reason, "config": config},
+    )
+    return _action_result(
+        trace_id=trace_id,
+        message="freshness sla config updated",
+        state_snapshot={"sla_config": config},
+        audit_log_id=audit.id,
+    )
+
+
+@router.get("/freshness/stale-list")
+def freshness_stale_list(
+    limit: int = Query(default=300, ge=1, le=2000),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    config = _get_sla_config()
+    items = _derive_stale_entities(db, stale_threshold_sec=int(config.get("stale_threshold_sec") or 900), limit=limit)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "sla_config": config,
+        "count": len(items),
+        "items": items,
+        "reason_if_empty": "No stale entities detected in current window" if len(items) == 0 else None,
+    }
+
+
+@router.post("/scanner/rescan-stale")
+def scanner_rescan_stale(payload: RescanStaleRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    manager = _manager_required(current_admin)
+    _require_phrase(payload.confirmation_phrase, RESCAN_STALE_PHRASE)
+
+    trace_id = str(uuid.uuid4())
+    config = _get_sla_config()
+    stale_items = _derive_stale_entities(db, stale_threshold_sec=int(config.get("stale_threshold_sec") or 900), limit=payload.limit)
+    symbol_candidates = [item["entity_id"] for item in stale_items if item.get("entity_type") == "symbol"]
+    request_id = str(uuid.uuid4())
+    queue_entry = {
+        "request_id": request_id,
+        "requested_at": datetime.now(timezone.utc).isoformat(),
+        "requested_by": manager.id,
+        "reason": payload.reason,
+        "status": "queued",
+        "symbols": symbol_candidates,
+        "source": "rescan_stale",
+    }
+    queue_rows = _read_json_value("scanner:manual:queue", [])
+    if not isinstance(queue_rows, list):
+        queue_rows = []
+    queue_rows.append(queue_entry)
+    _write_json_value("scanner:manual:queue", queue_rows[-500:])
+
+    runtime = _scanner_runtime_state()
+    runtime["last_manual_trigger_status"] = "queued"
+    runtime["last_manual_trigger_request_id"] = request_id
+    _write_json_value(SCANNER_RUNTIME_STATE_KEY, runtime)
+
+    audit = create_audit_log(
+        db,
+        action="UNIVERSE_SCANNER_RESCAN_STALE",
+        entity_type="scanner",
+        entity_id="stale_rescan",
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning",
+        details={"trace_id": trace_id, "reason": payload.reason, "stale_count": len(stale_items), "symbol_count": len(symbol_candidates), "queue_id": request_id},
+    )
+    return _action_result(
+        trace_id=trace_id,
+        message="stale entities queued for rescan",
+        state_snapshot={"stale_count": len(stale_items), "symbol_rescan_count": len(symbol_candidates), "queue_id": request_id},
+        queue_id=request_id,
+        audit_log_id=audit.id,
+    )
+
+
+@router.post("/recommendation/generate")
+def recommendation_generate(payload: RecommendationGenerateRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    manager = _manager_required(current_admin)
+    _require_phrase(payload.confirmation_phrase, KPI_GENERATE_PHRASE)
+
+    trace_id = str(uuid.uuid4())
+    config = _get_sla_config()
+    stale_items = _derive_stale_entities(db, stale_threshold_sec=int(config.get("stale_threshold_sec") or 900), limit=300)
+    queue_state = _read_json_value("scanner:queue:state", {})
+    perf_latest = _read_json_value("scanner:perf:latest:global", {})
+    latency = float(perf_latest.get("cycle_duration_ms") or queue_state.get("cycle_latency_ms") or 0)
+
+    generated: list[dict] = []
+    if latency > float(config.get("latency_threshold") or 1200):
+        generated.append(
+            {
+                "id": str(uuid.uuid4()),
+                "metric_source": "scanner_latency",
+                "problem": f"Latency {latency:.2f}ms threshold üstünde",
+                "recommendation": "Rollout stage demote veya universe bulk disable ile yükü azalt",
+                "expected_impact": "latency düşüşü",
+                "confidence_score": 0.82,
+                "action_code": "rollout_demote",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "status": "pending",
+            }
+        )
+    if len(stale_items) > 0:
+        generated.append(
+            {
+                "id": str(uuid.uuid4()),
+                "metric_source": "stale_entities",
+                "problem": f"{len(stale_items)} stale entity tespit edildi",
+                "recommendation": "Rescan stale çalıştır ve stale thresholdu yeniden değerlendir",
+                "expected_impact": "daha taze veri",
+                "confidence_score": 0.88,
+                "action_code": "rescan_stale",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "status": "pending",
+            }
+        )
+    queue_depth = int(queue_state.get("depth") or 0)
+    if queue_depth > 500:
+        generated.append(
+            {
+                "id": str(uuid.uuid4()),
+                "metric_source": "queue_depth",
+                "problem": f"Queue depth yüksek ({queue_depth})",
+                "recommendation": "Slow strategy throttle uygula",
+                "expected_impact": "drop rate azalır",
+                "confidence_score": 0.75,
+                "action_code": "strategy_throttle",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "status": "pending",
+            }
+        )
+    if not generated:
+        generated.append(
+            {
+                "id": str(uuid.uuid4()),
+                "metric_source": "monitoring",
+                "problem": "Kritik anomaly tespit edilmedi",
+                "recommendation": "SLA değerlerini haftalık trend ile optimize et",
+                "expected_impact": "stabil operasyon",
+                "confidence_score": 0.6,
+                "action_code": "optimize_sla",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "status": "pending",
+            }
+        )
+
+    active = _kpi_active_recommendations()
+    existing_problems = {str(item.get("problem")) for item in active}
+    for rec in generated:
+        if rec["problem"] in existing_problems:
+            continue
+        active.append(rec)
+    _write_json_value(KPI_RECOMMENDATION_ACTIVE_KEY, active[-200:])
+
+    audit = create_audit_log(
+        db,
+        action="UNIVERSE_RECOMMENDATION_GENERATED",
+        entity_type="kpi_recommendation",
+        entity_id="batch",
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="info",
+        details={"trace_id": trace_id, "reason": payload.reason, "generated_count": len(generated)},
+    )
+    return _action_result(
+        trace_id=trace_id,
+        message="recommendations generated",
+        state_snapshot={"generated_count": len(generated), "active_count": len(active)},
+        items=generated,
+        audit_log_id=audit.id,
+    )
+
+
+@router.get("/recommendation/active")
+def recommendation_active(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    rows = _kpi_active_recommendations()
+    return {"count": len(rows), "items": rows}
+
+
+@router.get("/recommendation/history")
+def recommendation_history(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    rows = _kpi_history()
+    return {"count": len(rows), "items": rows[-300:]}
+
+
+def _recommendation_decision(*, decision: str, phrase: str, expected_phrase: str, payload: RecommendationDecisionRequest, current_admin: User, db: Session):
+    manager = _manager_required(current_admin)
+    _require_phrase(phrase, expected_phrase)
+    trace_id = str(uuid.uuid4())
+
+    active = _kpi_active_recommendations()
+    target = None
+    remaining = []
+    for item in active:
+        if str(item.get("id")) == payload.recommendation_id:
+            target = item
+            continue
+        remaining.append(item)
+    if target is None:
+        raise HTTPException(status_code=404, detail="recommendation_not_found")
+
+    effect = {}
+    if decision == "apply":
+        action_code = target.get("action_code")
+        if action_code == "rescan_stale":
+            stale = _derive_stale_entities(db, stale_threshold_sec=int(_get_sla_config().get("stale_threshold_sec") or 900), limit=100)
+            effect = {"rescan_candidate_count": len([item for item in stale if item.get("entity_type") == "symbol"])}
+        elif action_code == "optimize_sla":
+            cfg = _get_sla_config()
+            cfg["latency_threshold"] = float(cfg.get("latency_threshold") or 1200) * 1.1
+            cfg["updated_at"] = datetime.now(timezone.utc).isoformat()
+            cfg["updated_by"] = manager.id
+            _write_json_value(SLA_CONFIG_KEY, cfg)
+            effect = {"sla_config": cfg}
+        else:
+            effect = {"applied_action_code": action_code}
+
+    target["status"] = decision
+    target["decided_at"] = datetime.now(timezone.utc).isoformat()
+    target["decided_by"] = manager.id
+    target["decision_reason"] = payload.reason
+    target["effect"] = effect
+
+    history = _kpi_history()
+    history.append(target)
+    _write_json_value(KPI_RECOMMENDATION_HISTORY_KEY, history[-1000:])
+    _write_json_value(KPI_RECOMMENDATION_ACTIVE_KEY, remaining)
+
+    audit = create_audit_log(
+        db,
+        action=f"UNIVERSE_RECOMMENDATION_{decision.upper()}",
+        entity_type="kpi_recommendation",
+        entity_id=str(payload.recommendation_id),
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning" if decision == "reject" else "info",
+        details={"trace_id": trace_id, "reason": payload.reason, "decision": decision, "effect": effect},
+    )
+    return _action_result(
+        trace_id=trace_id,
+        message=f"recommendation {decision}",
+        state_snapshot={"recommendation": target, "active_count": len(remaining)},
+        audit_log_id=audit.id,
+    )
+
+
+@router.post("/recommendation/apply")
+def recommendation_apply(payload: RecommendationDecisionRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return _recommendation_decision(
+        decision="apply",
+        phrase=payload.confirmation_phrase,
+        expected_phrase=KPI_APPLY_PHRASE,
+        payload=payload,
+        current_admin=current_admin,
+        db=db,
+    )
+
+
+@router.post("/recommendation/reject")
+def recommendation_reject(payload: RecommendationDecisionRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return _recommendation_decision(
+        decision="reject",
+        phrase=payload.confirmation_phrase,
+        expected_phrase=KPI_REJECT_PHRASE,
+        payload=payload,
+        current_admin=current_admin,
+        db=db,
+    )
+
+
+@router.post("/recommendation/postpone")
+def recommendation_postpone(payload: RecommendationDecisionRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return _recommendation_decision(
+        decision="postpone",
+        phrase=payload.confirmation_phrase,
+        expected_phrase=KPI_POSTPONE_PHRASE,
+        payload=payload,
+        current_admin=current_admin,
+        db=db,
+    )
+
+
+@router.get("/metrics/history")
+def metrics_history(
+    range: str = Query(default="24h", pattern="^(1h|24h|7d|30d)$"),
+    symbol: str | None = Query(default=None),
+    strategy: str | None = Query(default=None),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    now = datetime.now(timezone.utc)
+    if range == "1h":
+        since = now - timedelta(hours=1)
+    elif range == "7d":
+        since = now - timedelta(days=7)
+    elif range == "30d":
+        since = now - timedelta(days=30)
+    else:
+        since = now - timedelta(hours=24)
+
+    query = db.query(ExecutionMetric).filter(ExecutionMetric.created_at >= since)
+    if symbol:
+        query = query.filter(ExecutionMetric.symbol == symbol.upper())
+    if strategy:
+        query = query.filter(ExecutionMetric.strategy_type == strategy)
+    rows = query.order_by(ExecutionMetric.created_at.asc()).limit(6000).all()
+
+    bucket_map: dict[str, dict] = {}
+    for row in rows:
+        ts = row.created_at or now
+        if range == "1h":
+            bucket = ts.replace(second=0, microsecond=0)
+        else:
+            bucket = ts.replace(minute=0, second=0, microsecond=0)
+        key = bucket.isoformat()
+        cell = bucket_map.setdefault(
+            key,
+            {
+                "ts": key,
+                "latencies": [],
+                "pnl_values": [],
+            },
+        )
+        if isinstance(row.execution_time_ms, (int, float)):
+            cell["latencies"].append(float(row.execution_time_ms))
+
+        pnl_value = 0.0
+        if isinstance(row.price_avg, (int, float)) and isinstance(row.mid_price, (int, float)) and isinstance(row.executed_qty, (int, float)):
+            direction = 1.0 if str(row.side or "BUY").upper() == "SELL" else -1.0
+            pnl_value = direction * (float(row.price_avg) - float(row.mid_price)) * float(row.executed_qty)
+        elif isinstance(row.execution_quality_score, (int, float)):
+            pnl_value = float(row.execution_quality_score)
+        cell["pnl_values"].append(pnl_value)
+
+    latency_series = []
+    pnl_series = []
+    for key in sorted(bucket_map.keys()):
+        latencies = sorted(bucket_map[key]["latencies"])
+        pnl_values = bucket_map[key]["pnl_values"]
+        p95 = latencies[int(max(len(latencies) - 1, 0) * 0.95)] if latencies else 0.0
+        avg = sum(latencies) / max(len(latencies), 1)
+        latency_series.append({"ts": key, "avg_ms": round(avg, 4), "p95_ms": round(p95, 4), "count": len(latencies)})
+        pnl_series.append({"ts": key, "sum": round(sum(pnl_values), 6), "avg": round(sum(pnl_values) / max(len(pnl_values), 1), 6)})
+
+    result_query = db.query(UserScannerResult).filter(UserScannerResult.generated_at >= since)
+    if symbol:
+        result_query = result_query.filter(UserScannerResult.symbol == symbol.upper())
+    result_rows = result_query.order_by(UserScannerResult.generated_at.asc()).limit(8000).all()
+    risk_veto_bucket: dict[str, int] = {}
+    for row in result_rows:
+        reasons = {str(item or "").lower() for item in (row.reason_codes or [])}
+        if "risk_limit_blocked" not in reasons and "risk_blocked" not in reasons and "max_positions_reached" not in reasons:
+            continue
+        ts = row.generated_at or now
+        bucket = ts.replace(second=0, microsecond=0) if range == "1h" else ts.replace(minute=0, second=0, microsecond=0)
+        key = bucket.isoformat()
+        risk_veto_bucket[key] = risk_veto_bucket.get(key, 0) + 1
+    risk_veto_series = [{"ts": key, "count": value} for key, value in sorted(risk_veto_bucket.items())]
+
+    overlay_rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.created_at >= since)
+        .order_by(AuditLog.created_at.desc())
+        .limit(300)
+        .all()
+    )
+    overlays = []
+    for row in overlay_rows:
+        action = str(row.action or "")
+        if "ROLLOUT" not in action and "OVERRIDE" not in action and "FALLBACK" not in action:
+            continue
+        overlays.append(
+            {
+                "ts": row.created_at.isoformat() if row.created_at else None,
+                "event": action,
+                "message": str((row.details or {}).get("reason") or (row.details or {}).get("message") or ""),
+            }
+        )
+
+    if len(latency_series) == 0 and len(pnl_series) == 0 and len(risk_veto_series) == 0:
+        perf_latest = _read_json_value("scanner:perf:latest:global", {})
+        queue_state = _read_json_value("scanner:queue:state", {})
+        fallback_ts = now.replace(second=0, microsecond=0).isoformat()
+        fallback_latency = float(perf_latest.get("cycle_duration_ms") or queue_state.get("cycle_latency_ms") or 0)
+        latency_series.append({"ts": fallback_ts, "avg_ms": fallback_latency, "p95_ms": fallback_latency, "count": int(perf_latest.get("symbols_evaluated") or 0)})
+        pnl_series.append({"ts": fallback_ts, "sum": float(perf_latest.get("execution_quality_score") or 0), "avg": float(perf_latest.get("execution_quality_score") or 0)})
+        risk_veto_series.append({"ts": fallback_ts, "count": 0})
+
+    return {
+        "range": range,
+        "symbol": symbol,
+        "strategy": strategy,
+        "generated_at": now.isoformat(),
+        "latency_series": latency_series,
+        "pnl_series": pnl_series,
+        "risk_veto_series": risk_veto_series,
+        "overlays": overlays[:100],
+        "reason_if_empty": None if len(rows) > 0 else "No data yet. Fallback snapshot gösteriliyor.",
+    }
+
+
 @router.get("/trends")
 def admin_universe_monitor_trends(
     window: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
@@ -742,9 +1303,27 @@ def admin_fallback_events(
     db: Session = Depends(get_db),
 ):
     _ = current_admin
+    items = list_fallback_events(db, limit=limit)
+    if len(items) == 0:
+        fallback_state = get_fallback_state(redis_client)
+        if fallback_state:
+            items = [
+                {
+                    "id": "derived-fallback-state",
+                    "event_type": "derived",
+                    "requested_mode": fallback_state.get("requested_mode"),
+                    "effective_mode": fallback_state.get("effective_mode"),
+                    "trigger_metric": fallback_state.get("last_trigger_metric"),
+                    "threshold_breach": fallback_state.get("last_threshold_breach") or {},
+                    "exit_reason": fallback_state.get("last_exit_reason"),
+                    "cycle_snapshot": fallback_state,
+                    "created_at": fallback_state.get("updated_at"),
+                }
+            ]
     return {
         "generated_at": datetime.now(timezone.utc),
-        "items": list_fallback_events(db, limit=limit),
+        "items": items,
+        "reason_if_empty": "No fallback events yet" if len(items) == 0 else None,
     }
 
 

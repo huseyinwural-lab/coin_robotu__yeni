@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,12 @@ const ACTION_META = {
   strategy_disable: { endpoint: "/admin/universe-monitor/strategy/{strategy_id}/disable", phrase: "DISABLE STRATEGY", panelKey: "slowOps" },
   strategy_throttle: { endpoint: "/admin/universe-monitor/strategy/{strategy_id}/throttle", phrase: "THROTTLE STRATEGY", panelKey: "slowOps" },
   symbol_pause: { endpoint: "/admin/universe-monitor/symbol/{symbol}/pause", phrase: "PAUSE SYMBOL", panelKey: "slowOps" },
+  freshness_sla_update: { endpoint: "/admin/universe-monitor/freshness/sla-config", phrase: "UPDATE SLA CONFIG", panelKey: "freshnessOps", method: "put" },
+  freshness_rescan_stale: { endpoint: "/admin/universe-monitor/scanner/rescan-stale", phrase: "RESCAN STALE", panelKey: "freshnessOps" },
+  kpi_generate: { endpoint: "/admin/universe-monitor/recommendation/generate", phrase: "GENERATE KPI RECOMMENDATION", panelKey: "kpiOps" },
+  kpi_apply: { endpoint: "/admin/universe-monitor/recommendation/apply", phrase: "APPLY RECOMMENDATION", panelKey: "kpiOps" },
+  kpi_reject: { endpoint: "/admin/universe-monitor/recommendation/reject", phrase: "REJECT RECOMMENDATION", panelKey: "kpiOps" },
+  kpi_postpone: { endpoint: "/admin/universe-monitor/recommendation/postpone", phrase: "POSTPONE RECOMMENDATION", panelKey: "kpiOps" },
 };
 
 const extractErrorMeta = (error) => {
@@ -158,6 +165,16 @@ export const PipelineOperationsPage = () => {
   const [riskOverrides, setRiskOverrides] = useState([]);
   const [slowOps, setSlowOps] = useState({ disabled_strategies: [], throttled_strategies: {}, paused_symbols: [] });
   const [universeFilterConfig, setUniverseFilterConfig] = useState({ min_liquidity_usd: 1000000, min_volume_24h_usd: 5000000, max_spread_bps: 40 });
+  const [freshnessSlaConfig, setFreshnessSlaConfig] = useState({ latency_threshold: 1200, stale_threshold_sec: 900 });
+  const [staleEntities, setStaleEntities] = useState([]);
+  const [freshnessHeatmap, setFreshnessHeatmap] = useState([]);
+  const [fallbackTimeline, setFallbackTimeline] = useState([]);
+  const [kpiActiveRecommendations, setKpiActiveRecommendations] = useState([]);
+  const [kpiRecommendationHistory, setKpiRecommendationHistory] = useState([]);
+  const [trendRange, setTrendRange] = useState("24h");
+  const [trendSymbolFilter, setTrendSymbolFilter] = useState("");
+  const [trendStrategyFilter, setTrendStrategyFilter] = useState("");
+  const [metricsHistory, setMetricsHistory] = useState({ latency_series: [], pnl_series: [], risk_veto_series: [], overlays: [] });
 
   const [reasonControl, setReasonControl] = useState("pipeline_control_manual_action");
   const [reasonRecovery, setReasonRecovery] = useState("pipeline_recovery_manual_action");
@@ -208,6 +225,8 @@ export const PipelineOperationsPage = () => {
     rolloutOps: null,
     riskOps: null,
     slowOps: null,
+    freshnessOps: null,
+    kpiOps: null,
   });
 
   const [actionDialog, setActionDialog] = useState({
@@ -242,6 +261,13 @@ export const PipelineOperationsPage = () => {
         exposureOverrideRes,
         slowControlRes,
         filterConfigRes,
+        freshnessSlaRes,
+        staleListRes,
+        heatmapRes,
+        fallbackRes,
+        kpiActiveRes,
+        kpiHistoryRes,
+        metricsHistoryRes,
       ] = await Promise.all([
         apiClient.get("/runtime/ws/health"),
         apiClient.get("/runtime/gate/status"),
@@ -269,6 +295,19 @@ export const PipelineOperationsPage = () => {
         apiClient.get("/admin/universe-monitor/risk/exposure-override/active"),
         apiClient.get("/admin/universe-monitor/slow-controls/status"),
         apiClient.get("/admin/universe-monitor/universe/filter-config"),
+        apiClient.get("/admin/universe-monitor/freshness/sla-config"),
+        apiClient.get("/admin/universe-monitor/freshness/stale-list", { params: { limit: 200 } }),
+        apiClient.get("/admin/universe-monitor/freshness-heatmap", { params: { window: "24h" } }),
+        apiClient.get("/admin/universe-monitor/fallback-events", { params: { limit: 40 } }),
+        apiClient.get("/admin/universe-monitor/recommendation/active"),
+        apiClient.get("/admin/universe-monitor/recommendation/history"),
+        apiClient.get("/admin/universe-monitor/metrics/history", {
+          params: {
+            range: trendRange,
+            symbol: trendSymbolFilter || undefined,
+            strategy: trendStrategyFilter || undefined,
+          },
+        }),
       ]);
 
       try {
@@ -295,6 +334,13 @@ export const PipelineOperationsPage = () => {
       setRiskOverrides(exposureOverrideRes.data?.items || []);
       setSlowOps(slowControlRes.data || { disabled_strategies: [], throttled_strategies: {}, paused_symbols: [] });
       setUniverseFilterConfig(filterConfigRes.data || { min_liquidity_usd: 1000000, min_volume_24h_usd: 5000000, max_spread_bps: 40 });
+      setFreshnessSlaConfig(freshnessSlaRes.data || { latency_threshold: 1200, stale_threshold_sec: 900 });
+      setStaleEntities(staleListRes.data?.items || []);
+      setFreshnessHeatmap(heatmapRes.data?.items || []);
+      setFallbackTimeline(fallbackRes.data?.items || []);
+      setKpiActiveRecommendations(kpiActiveRes.data?.items || []);
+      setKpiRecommendationHistory(kpiHistoryRes.data?.items || []);
+      setMetricsHistory(metricsHistoryRes.data || { latency_series: [], pnl_series: [], risk_veto_series: [], overlays: [] });
       setStateValidation({
         wsReconnectSessionChanged: Boolean(validationRes.data?.ws_session_changed),
         overrideAffectsExecution: Boolean(validationRes.data?.override_effect_applied),
@@ -332,6 +378,8 @@ export const PipelineOperationsPage = () => {
         rolloutOps: rolloutStateRes.data || null,
         riskOps: exposureRes.data || null,
         slowOps: slowControlRes.data || null,
+        freshnessOps: staleListRes.data || null,
+        kpiOps: kpiActiveRes.data || null,
       };
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -341,7 +389,7 @@ export const PipelineOperationsPage = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [severityFilter, alertSinceHours, alertEventFilter]);
+  }, [severityFilter, alertSinceHours, alertEventFilter, trendRange, trendSymbolFilter, trendStrategyFilter]);
 
   useEffect(() => {
     load(true);
@@ -469,6 +517,30 @@ export const PipelineOperationsPage = () => {
         });
       } else if (["scanner_start", "scanner_stop", "scanner_trigger", "rollout_promote", "rollout_demote", "rollout_rollback"].includes(actionDialog.actionKey)) {
         response = await apiClient.post(meta.endpoint, {
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      } else if (actionDialog.actionKey === "freshness_sla_update") {
+        response = await apiClient.put(meta.endpoint, {
+          latency_threshold: Number(freshnessSlaConfig.latency_threshold || 0),
+          stale_threshold_sec: Number(freshnessSlaConfig.stale_threshold_sec || 0),
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      } else if (actionDialog.actionKey === "freshness_rescan_stale") {
+        response = await apiClient.post(meta.endpoint, {
+          limit: Number(actionDialog.context?.limit || 200),
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      } else if (actionDialog.actionKey === "kpi_generate") {
+        response = await apiClient.post(meta.endpoint, {
+          reason: actionDialog.reason,
+          confirmation_phrase: actionDialog.phrase,
+        });
+      } else if (["kpi_apply", "kpi_reject", "kpi_postpone"].includes(actionDialog.actionKey)) {
+        response = await apiClient.post(meta.endpoint, {
+          recommendation_id: actionDialog.context?.recommendationId,
           reason: actionDialog.reason,
           confirmation_phrase: actionDialog.phrase,
         });
@@ -746,6 +818,9 @@ export const PipelineOperationsPage = () => {
           <Button variant={opsTab === "scanner" ? "default" : "outline"} onClick={() => setOpsTab("scanner")} data-testid="pipeline-operations-tab-scanner-button">Scanner</Button>
           <Button variant={opsTab === "risk" ? "default" : "outline"} onClick={() => setOpsTab("risk")} data-testid="pipeline-operations-tab-risk-button">Risk/Exposure</Button>
           <Button variant={opsTab === "slow" ? "default" : "outline"} onClick={() => setOpsTab("slow")} data-testid="pipeline-operations-tab-slow-button">Slow Control</Button>
+          <Button variant={opsTab === "freshness" ? "default" : "outline"} onClick={() => setOpsTab("freshness")} data-testid="pipeline-operations-tab-freshness-button">Freshness/SLA</Button>
+          <Button variant={opsTab === "kpi" ? "default" : "outline"} onClick={() => setOpsTab("kpi")} data-testid="pipeline-operations-tab-kpi-button">KPI Rec</Button>
+          <Button variant={opsTab === "trend" ? "default" : "outline"} onClick={() => setOpsTab("trend")} data-testid="pipeline-operations-tab-trend-button">Trend</Button>
         </div>
 
         {opsTab === "rollout" && (
@@ -862,6 +937,142 @@ export const PipelineOperationsPage = () => {
                 <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("symbol_pause", "slowOps", reasonControl, { symbol: slowActionForm.symbol })} data-testid="pipeline-operations-slow-symbol-pause-button">Pause Symbol</Button>
               </div>
               <ResultBadge result={panelResult.slowOps} testId="pipeline-operations-slow-result" />
+            </div>
+          </div>
+        )}
+
+        {opsTab === "freshness" && (
+          <div className="mt-4 grid gap-3 md:grid-cols-2" data-testid="pipeline-operations-freshness-tab-content">
+            <div className="space-y-2 text-xs" data-testid="pipeline-operations-freshness-state">
+              <p data-testid="pipeline-operations-freshness-stale-count">stale_count={staleEntities.length}</p>
+              <p data-testid="pipeline-operations-freshness-heatmap-count">heatmap_items={freshnessHeatmap.length}</p>
+              <p data-testid="pipeline-operations-freshness-fallback-count">fallback_events={fallbackTimeline.length}</p>
+              <div className="max-h-40 overflow-auto" data-testid="pipeline-operations-freshness-stale-list">
+                {staleEntities.slice(0, 20).map((item, idx) => (
+                  <p key={`${item.entity_type}-${item.entity_id}-${idx}`} className={item.severity === "critical" ? "text-red-700" : "text-amber-700"} data-testid={`pipeline-operations-freshness-stale-item-${idx}`}>
+                    {item.entity_type}:{item.entity_id} · age={item.age_sec}s · {item.severity}
+                  </p>
+                ))}
+                {staleEntities.length === 0 && <p data-testid="pipeline-operations-freshness-empty-state">No data yet: stale entity bulunmadı veya event akışı henüz oluşmadı.</p>}
+              </div>
+              <div className="max-h-28 overflow-auto" data-testid="pipeline-operations-freshness-fallback-timeline">
+                {fallbackTimeline.slice(0, 10).map((item, idx) => (
+                  <p key={`${item.id}-${idx}`} data-testid={`pipeline-operations-freshness-fallback-item-${idx}`}>{item.created_at || "-"} · {item.event_type || item.effective_mode || "fallback"}</p>
+                ))}
+              </div>
+              <div className="max-h-28 overflow-auto" data-testid="pipeline-operations-freshness-heatmap-list">
+                {freshnessHeatmap.slice(0, 12).map((item, idx) => (
+                  <p key={`${item.bucket}-${idx}`} data-testid={`pipeline-operations-freshness-heatmap-item-${idx}`}>{item.bucket || item.ts || "-"} · age={item.snapshot_age_avg_sec ?? "-"}s · stale={item.stale_block_count ?? 0}</p>
+                ))}
+                {freshnessHeatmap.length === 0 && <p data-testid="pipeline-operations-freshness-heatmap-empty">No data yet: heatmap için snapshot üretilmedi.</p>}
+              </div>
+            </div>
+            <div className="space-y-2" data-testid="pipeline-operations-freshness-actions">
+              <div className="grid grid-cols-2 gap-2" data-testid="pipeline-operations-freshness-sla-grid">
+                <Input value={String(freshnessSlaConfig.latency_threshold ?? "")} onChange={(e) => setFreshnessSlaConfig((prev) => ({ ...prev, latency_threshold: e.target.value }))} data-testid="pipeline-operations-freshness-latency-threshold-input" />
+                <Input value={String(freshnessSlaConfig.stale_threshold_sec ?? "")} onChange={(e) => setFreshnessSlaConfig((prev) => ({ ...prev, stale_threshold_sec: e.target.value }))} data-testid="pipeline-operations-freshness-stale-threshold-input" />
+              </div>
+              <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("freshness_sla_update", "freshnessOps", reasonControl)} data-testid="pipeline-operations-freshness-update-sla-button">Update SLA</Button>
+              <Button variant="outline" disabled={!isSuperAdmin} onClick={() => openActionDialog("freshness_rescan_stale", "freshnessOps", reasonControl, { limit: 300 })} data-testid="pipeline-operations-freshness-rescan-all-button">Rescan All Stale</Button>
+              <ResultBadge result={panelResult.freshnessOps} testId="pipeline-operations-freshness-result" />
+            </div>
+          </div>
+        )}
+
+        {opsTab === "kpi" && (
+          <div className="mt-4 grid gap-3 md:grid-cols-2" data-testid="pipeline-operations-kpi-tab-content">
+            <div className="space-y-2 text-xs" data-testid="pipeline-operations-kpi-state">
+              <p data-testid="pipeline-operations-kpi-active-count">active_recommendations={kpiActiveRecommendations.length}</p>
+              <p data-testid="pipeline-operations-kpi-history-count">history_count={kpiRecommendationHistory.length}</p>
+              <div className="max-h-40 overflow-auto" data-testid="pipeline-operations-kpi-active-list">
+                {kpiActiveRecommendations.map((item, idx) => (
+                  <div key={item.id} className="rounded border border-slate-700 p-2" data-testid={`pipeline-operations-kpi-active-item-${idx}`}>
+                    <p data-testid={`pipeline-operations-kpi-active-problem-${idx}`}>{item.problem}</p>
+                    <p data-testid={`pipeline-operations-kpi-active-impact-${idx}`}>{item.expected_impact} · conf={item.confidence_score}</p>
+                    <div className="mt-1 flex gap-1" data-testid={`pipeline-operations-kpi-active-actions-${idx}`}>
+                      <Button size="sm" variant="outline" onClick={() => openActionDialog("kpi_apply", "kpiOps", reasonControl, { recommendationId: item.id })} data-testid={`pipeline-operations-kpi-apply-${idx}`}>Apply</Button>
+                      <Button size="sm" variant="outline" onClick={() => openActionDialog("kpi_reject", "kpiOps", reasonControl, { recommendationId: item.id })} data-testid={`pipeline-operations-kpi-reject-${idx}`}>Reject</Button>
+                      <Button size="sm" variant="outline" onClick={() => openActionDialog("kpi_postpone", "kpiOps", reasonControl, { recommendationId: item.id })} data-testid={`pipeline-operations-kpi-postpone-${idx}`}>Later</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2" data-testid="pipeline-operations-kpi-actions">
+              <Button disabled={!isSuperAdmin} onClick={() => openActionDialog("kpi_generate", "kpiOps", reasonControl)} data-testid="pipeline-operations-kpi-generate-button">KPI Recommendation Üret</Button>
+              <div className="max-h-40 overflow-auto" data-testid="pipeline-operations-kpi-history-list">
+                {kpiRecommendationHistory.slice(-20).reverse().map((item, idx) => (
+                  <p key={`${item.id}-${idx}`} data-testid={`pipeline-operations-kpi-history-item-${idx}`}>{item.decided_at || item.created_at} · {item.status} · {item.problem}</p>
+                ))}
+                {kpiRecommendationHistory.length === 0 && <p data-testid="pipeline-operations-kpi-history-empty">No data yet: recommendation history oluşmadı.</p>}
+              </div>
+              <ResultBadge result={panelResult.kpiOps} testId="pipeline-operations-kpi-result" />
+            </div>
+          </div>
+        )}
+
+        {opsTab === "trend" && (
+          <div className="mt-4 space-y-3" data-testid="pipeline-operations-trend-tab-content">
+            <div className="grid gap-2 md:grid-cols-4" data-testid="pipeline-operations-trend-filter-grid">
+              <Input value={trendRange} onChange={(e) => setTrendRange(e.target.value)} data-testid="pipeline-operations-trend-range-input" placeholder="1h/24h/7d/30d" />
+              <Input value={trendSymbolFilter} onChange={(e) => setTrendSymbolFilter(e.target.value.toUpperCase())} data-testid="pipeline-operations-trend-symbol-input" placeholder="symbol" />
+              <Input value={trendStrategyFilter} onChange={(e) => setTrendStrategyFilter(e.target.value)} data-testid="pipeline-operations-trend-strategy-input" placeholder="strategy" />
+              <Button variant="outline" onClick={() => load(false)} data-testid="pipeline-operations-trend-refresh-button">Trend Yenile</Button>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-3" data-testid="pipeline-operations-trend-charts-grid">
+              <div className="rounded border border-slate-700 p-2" data-testid="pipeline-operations-trend-latency-chart-wrap">
+                <p className="text-xs font-semibold">Execution Latency Trend</p>
+                <div className="h-40" data-testid="pipeline-operations-trend-latency-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={metricsHistory.latency_series || []}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="ts" hide />
+                      <YAxis />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="avg_ms" stroke="#16a34a" dot={false} />
+                      <Line type="monotone" dataKey="p95_ms" stroke="#ef4444" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="rounded border border-slate-700 p-2" data-testid="pipeline-operations-trend-pnl-chart-wrap">
+                <p className="text-xs font-semibold">PnL Trend</p>
+                <div className="h-40" data-testid="pipeline-operations-trend-pnl-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={metricsHistory.pnl_series || []}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="ts" hide />
+                      <YAxis />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="sum" stroke="#2563eb" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="rounded border border-slate-700 p-2" data-testid="pipeline-operations-trend-risk-veto-chart-wrap">
+                <p className="text-xs font-semibold">Risk Veto Trend</p>
+                <div className="h-40" data-testid="pipeline-operations-trend-risk-veto-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={metricsHistory.risk_veto_series || []}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="ts" hide />
+                      <YAxis />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="count" stroke="#f59e0b" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            <div className="max-h-24 overflow-auto text-xs" data-testid="pipeline-operations-trend-overlays-list">
+              {(metricsHistory.overlays || []).slice(0, 15).map((item, idx) => (
+                <p key={`${item.ts}-${idx}`} data-testid={`pipeline-operations-trend-overlay-item-${idx}`}>{item.ts} · {item.event} · {item.message || "-"}</p>
+              ))}
+              {(!metricsHistory.overlays || metricsHistory.overlays.length === 0) && <p data-testid="pipeline-operations-trend-overlay-empty">No data yet: overlay event bulunamadı.</p>}
             </div>
           </div>
         )}
