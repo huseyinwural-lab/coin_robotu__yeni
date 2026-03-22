@@ -1,3 +1,39 @@
+## 2026-03-22 — Allocation Phase 3.c ✅ (Rebalance Suggestion + 5g Tooltip Trend)
+
+### Scope (onaylı)
+- P3.c bu turda tamamlandı
+- Drift tooltip içine 5g mini trend satırı eklendi
+- Rebalance **suggestion-only** (auto-save yok)
+
+### P3.c — Rebalance Suggestion (tamamlandı)
+- Yeni endpoint:
+  - `POST /api/admin/strategy-allocation/rebalance-suggestions`
+- Rule-based scoring girdileri:
+  - confidence
+  - performance
+  - signal_decay
+- Çıktı:
+  - `current_weight`, `suggested_weight`, `delta`, `score`
+  - `selection_count`, `applied_budget`, `trace_id`
+- Davranış:
+  - Seçim yoksa tüm stratejiler için preview üretir (draft’a yazmaz)
+  - Seçim varsa yalnız seçili stratejilere öneri üretir
+  - UI `Öneriyi Seçili Draft’a Uygula` butonu sadece draft weight alanlarını doldurur (**save yok**)
+
+### Drift tooltip 5g trend (tamamlandı)
+- State tooltip yapısı:
+  - 1. satır: mevcut reason detail
+  - 2. satır: `5g trend → quality ↑/↓X, perf ↑/↓X, decay ↑/↓X`
+- Veri yoksa:
+  - `5g trend unavailable`
+
+### Test
+- Test raporu: `/app/test_reports/iteration_70.json`
+  - Backend: **12/12 PASS**
+  - Frontend: **100% PASS**
+- P3.a+b regresyonları PASS
+- Binance execution **MOCKED**
+
 ## 2026-03-22 — Allocation Phase 3.a + 3.b ✅ (Risk Binding + Drift Explainability)
 
 ### Scope (onaylı)
