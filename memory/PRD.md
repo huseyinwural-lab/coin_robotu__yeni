@@ -1,3 +1,61 @@
+## 2026-03-22 — Futures Strategy Control + Governance System (Faz-1) ✅
+
+### Kullanıcı kararı (sabit kapsam)
+- Tek rota mimarisi: `Strategy Control + Governance System`
+- Bu iterasyon sadece **Faz-1 Control Foundation**
+- Kritik aksiyon yetkisi: **sadece super_admin**
+- Soft-disable güvenlik akışı: **throttle → pause → disable**
+
+### Implement edilen backend (Faz-1)
+- Yeni router: `/app/backend/routers/admin_futures_strategy_control.py`
+- Yeni endpointler:
+  - `GET /api/admin/futures/strategy-control/overview`
+  - `GET /api/admin/futures/strategy/{id}/detail`
+  - `GET /api/admin/futures/strategy/{id}/audit-history`
+  - `POST /api/admin/futures/strategy/{id}/enable`
+  - `POST /api/admin/futures/strategy/{id}/disable`
+  - `POST /api/admin/futures/strategy/{id}/pause`
+  - `POST /api/admin/futures/strategy/{id}/resume`
+  - `POST /api/admin/futures/strategy/{id}/throttle`
+  - `POST /api/admin/futures/strategy/{id}/decommission`
+- Aksiyon kontratı standardize edildi: `{status, trace_id, message, state_snapshot}`
+- Disable/Decommission için reason + confirm phrase zorunlu kılındı.
+- Before/after snapshot + rollback_reference audit detayına yazıldı.
+- Soft-disable akışı backend’de enforce edildi.
+- Super admin guard: `require_super_admin` zorunlu.
+
+### Implement edilen frontend (Faz-1)
+- Yeni sayfa: `/app/frontend/src/pages/AdminFuturesStrategyControlGovernancePage.jsx`
+- Tek rota: `/admin/futures/strategy-control`
+- Eski route’lar redirect edildi:
+  - `/admin/futures/strategy-analytics`
+  - `/admin/futures/strategy-governance`
+  - `/admin/futures/capital-governance`
+  -> `/admin/futures/strategy-control`
+- Strategy row action menu eklendi:
+  - Detail, Enable, Throttle, Pause, Resume, Disable, Decommission
+- Detail drawer eklendi (trade/execution Faz-1 placeholder reason ile).
+- Reason/confirm modal + dry-run checkbox eklendi.
+- Sol menü linki tek rota yaklaşımına güncellendi (Strategy Control).
+
+### Doğrulama / Test kanıtı
+- Test raporu: `/app/test_reports/iteration_61.json` → backend/frontend PASS
+- Ek doğrulama:
+  - `auto_frontend_testing_agent` PASS
+  - `deep_testing_backend_v2` PASS
+- Kritik kabul kriterleri PASS:
+  - super_admin-only
+  - reason/confirm enforcement
+  - soft-disable akışı
+  - audit kayıt üretimi
+  - eski rota redirect davranışı
+
+### Faz-2 backlog (kullanıcı talebine göre ertelendi)
+- Rollout/Shadow Control (canary %10→25→50→100 + health-gate auto rollback)
+- Bulk action
+- Rollback UI/flow
+- Drift action katmanı (Ack/Mute/Retrain/Ignore/Disable from alert)
+
 ## 2026-03-22 — P0 GO-BLOCKER Kapanış ✅ (Actionable FAIL + Kalıcı Action→Result)
 
 ### Tamamlanan P0 kapsamı
