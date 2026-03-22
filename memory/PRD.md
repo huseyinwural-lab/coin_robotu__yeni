@@ -20,6 +20,56 @@
   - no-match mesajı doğru
   - temizleme sonrası menü geri geliyor
 
+## 2026-03-22 — Strategy Intelligence: Sprint1 ✅ + Sprint2 Başlangıç ✅
+
+### Scope (kilitlenen kapsam)
+- Sprint 1 full (P0 güvenlik + kontrol)
+- Sprint 2’den yalnızca:
+  - before/after compare
+  - basic impact preview
+  - tekli simulation için risk delta / decision delta
+- Hariç: approval workflow, batch simulation, preset, simulation history
+
+### Backend tamamlananlar
+- `POST /api/admin/risk-simulation` genişletildi:
+  - `simulation_id`, `dry_run`, `before_state`, `after_state`
+  - `projected_pnl`, `projected_drawdown`, `projected_exposure`, `projected_var`, `projected_liquidity_impact`
+  - `risk_delta`, `decision_delta`, `decision_summary`
+- Simulation guard eklendi:
+  - Override create için `simulation_id` zorunlu
+  - Simülasyonun geçerlilik penceresi (registry) kontrolü
+- Override governance güçlendirildi:
+  - reason min-length guard
+  - expiry zorunluluğu (`expires_at` veya `ttl_minutes`)
+  - active override listesi endpointi
+  - revoke endpointi
+  - log normalize + status (active/expired/revoked)
+
+### Frontend tamamlananlar (modüler refactor)
+- Sayfa parçalandı:
+  - `StrategyIntelligencePageContainer`
+  - `SimulationGuardPanel`
+  - `BeforeAfterImpactCard`
+  - `OverrideForm`
+  - `ActionConfirmationModal`
+  - `ActiveOverridesTable`
+  - `AuditSummaryPanel`
+- Kritik akış:
+  - simulate → impact review → confirm → apply → audit
+- Guardlar:
+  - simulation olmadan apply yok
+  - reason/expiry olmadan apply yok
+  - role-based görünürlük (ops/viewer kritik aksiyon kapalı)
+- Feedback:
+  - loading/success/error toasts
+
+### Test
+- Test raporu: `/app/test_reports/iteration_73.json`
+  - Backend: **100% (14/14 PASS)**
+  - Frontend: **100% PASS**
+- Ek frontend smoke doğrulaması: auto_frontend_testing_agent PASS (5/5)
+- Binance execution **MOCKED**
+
 ## 2026-03-22 — CORE menüsüne Logs öğesi geri eklendi ✅
 
 ### Kullanıcı talebi
