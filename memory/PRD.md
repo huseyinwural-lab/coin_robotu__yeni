@@ -1,3 +1,41 @@
+## 2026-03-22 — Execution Control P1 Tutarlılık Düzeltmeleri (Kapanış Doğrulandı) ✅
+
+### Kapatılan kritik açıklar
+- Incident Snapshot Export filtre uygulaması derinleştirildi:
+  - `search, state, status, source_type, symbol, strategy, order_id`
+  - tüm sorgu setlerinde gerçek veri filtresi olarak uygulanıyor: `events, transitions, failed_events, manual_actions, idempotency_collisions, trace`.
+- Analytics semantiği hizalandı:
+  - `/execution-analytics/summary`, `/state-latency`, `/failure-trends` ortak filtre bağlamı ile çalışıyor.
+  - Eşitlik kuralı sağlandı: `summary.failures == failure-trends toplam_failures`.
+- Export hata gösterimi iyileştirildi:
+  - UI formatı: `Export hatası: <backend detail>`
+  - 400/422 hata mesajları kullanıcıya detail ile yansıyor.
+
+### Teknik çıktı
+- Backend’de ortak filtre yardımcıları eklendi:
+  - `_resolve_execution_analytics_filters`
+  - `_transition_rows_with_filters`
+  - `_failure_rows_with_filters`
+  - `_serialize_execution_filter_context`
+- Export metadata + içerik uyumu güçlendirildi:
+  - `selected_scope_priority`, `scope_priority_order`, `filters` alanları ile ZIP içeriği aynı scope’u temsil ediyor.
+- Frontend export çağrısı hata durumunda detail’i yakalayacak şekilde güncellendi.
+
+### Doğrulama (Regresyon)
+- Testing agent raporu: `/app/test_reports/iteration_85.json`
+  - Backend: **96% (25/26 PASS, 1 skipped)**
+  - Frontend: **100% PASS**
+- Doğrulanan başlıklar:
+  - Export filtre uygulaması (geniş filter set) PASS
+  - Scope varyasyonları + multi-scope `422` PASS
+  - Empty-data deterministic ZIP PASS
+  - Analytics semantic parity PASS
+  - URL filtre geri yükleme (states + analytics) PASS
+  - Export error format PASS
+
+### Not
+- Binance Futures execution **MOCKED**.
+
 ## 2026-03-22 — Execution Control P1 Doğrulama + Kapanış ✅
 
 ### Kullanıcı onayıyla uygulanan kapanış kuralları
