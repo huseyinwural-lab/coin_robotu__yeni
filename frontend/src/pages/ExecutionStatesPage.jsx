@@ -27,6 +27,7 @@ const DEFAULT_STATE_STEPS = [
 const readFilter = (sp, key, fallback = "") => sp.get(key) || fallback;
 
 export const ExecutionStatesPage = () => {
+  const backendUrl = String(process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
   const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState({});
@@ -183,6 +184,37 @@ export const ExecutionStatesPage = () => {
     }
   };
 
+  const resolveExportErrorMessage = async (error) => {
+    const fallback = "Export hatası: Incident snapshot export başarısız";
+    if (error?.message && String(error.message).startsWith("Export hatası:")) {
+      return String(error.message);
+    }
+    const directDetail = error?.response?.data?.detail;
+    if (directDetail) {
+      return `Export hatası: ${directDetail}`;
+    }
+
+    const blobLike = error?.response?.data;
+    if (blobLike && typeof blobLike.text === "function") {
+      try {
+        const rawText = await blobLike.text();
+        if (!rawText) return fallback;
+        try {
+          const parsed = JSON.parse(rawText);
+          const parsedDetail = parsed?.detail || parsed?.message;
+          if (parsedDetail) {
+            return `Export hatası: ${parsedDetail}`;
+          }
+        } catch {
+          return `Export hatası: ${rawText}`;
+        }
+      } catch {
+        return fallback;
+      }
+    }
+    return fallback;
+  };
+
   const exportIncidentSnapshot = async () => {
     try {
       const body = {
@@ -208,8 +240,43 @@ export const ExecutionStatesPage = () => {
         body.time_to = filters.time_to || null;
       }
 
-      const response = await apiClient.post("/admin-phase3/incident-snapshots/export", body, { responseType: "blob" });
-      const blob = new Blob([response.data], { type: "application/zip" });
+      const accessToken = window.localStorage.getItem("token");
+      const response = await fetch(`${backendUrl}/api/admin-phase3/incident-snapshots/export`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (response.status >= 400) {
+        let detail = "Incident snapshot export başarısız";
+        try {
+          await apiClient.post("/admin-phase3/incident-snapshots/export", body);
+        } catch (probeError) {
+          const probeDetail = probeError?.response?.data?.detail;
+          if (probeDetail) {
+            detail = probeDetail;
+          }
+        }
+
+        if (detail === "Incident snapshot export başarısız") {
+          const rawBuffer = await response.arrayBuffer();
+          const rawText = new TextDecoder("utf-8").decode(rawBuffer || new ArrayBuffer(0));
+          if (rawText) {
+            try {
+              const parsed = JSON.parse(rawText);
+              detail = parsed?.detail || parsed?.message || rawText;
+            } catch {
+              detail = rawText;
+            }
+          }
+        }
+        throw new Error(`Export hatası: ${detail}`);
+      }
+
+      const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -220,7 +287,8 @@ export const ExecutionStatesPage = () => {
       window.URL.revokeObjectURL(url);
       toast.success("Incident snapshot zip indirildi");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Incident snapshot export başarısız");
+      const message = await resolveExportErrorMessage(error);
+      toast.error(message);
     }
   };
 

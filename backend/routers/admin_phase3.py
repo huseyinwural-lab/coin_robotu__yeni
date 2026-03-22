@@ -170,6 +170,7 @@ def _build_transition_query(
                 ExecutionStateTransition.execution_event_id.ilike(token),
                 ExecutionStateTransition.correlation_id.ilike(token),
                 ExecutionEvent.symbol.ilike(token),
+                ExecutionEvent.strategy_id.ilike(token),
                 cast(ExecutionStateTransition.details, Text).ilike(token),
                 cast(ExecutionEvent.response_payload, Text).ilike(token),
             )
@@ -822,6 +823,115 @@ def _resolve_execution_analytics_filters(
     }
 
 
+def _requires_event_scope_filters(filters_ctx: dict) -> bool:
+    return any(
+        [
+            filters_ctx["state"],
+            filters_ctx["source_type"],
+            filters_ctx["symbol"],
+            filters_ctx["strategy"],
+            filters_ctx["status"],
+            filters_ctx["order_id"],
+        ]
+    )
+
+
+def _serialize_execution_filter_context(filters_ctx: dict) -> dict:
+    return {
+        "state": filters_ctx["state"],
+        "source_type": filters_ctx["source_type"],
+        "symbol": filters_ctx["symbol"],
+        "strategy": filters_ctx["strategy"],
+        "status": filters_ctx["status"],
+        "correlation_id": filters_ctx["correlation_id"],
+        "order_id": filters_ctx["order_id"],
+        "search": filters_ctx["search"],
+        "time_from": filters_ctx["time_from"].isoformat() if filters_ctx["time_from"] else None,
+        "time_to": filters_ctx["time_to"].isoformat(),
+        "snapshot_at": filters_ctx["snapshot_at"].isoformat(),
+    }
+
+
+def _transition_rows_with_filters(
+    db: Session,
+    filters_ctx: dict,
+    *,
+    scope_type: str | None = None,
+    scope_payload: dict | None = None,
+) -> list[ExecutionStateTransition]:
+    query = _build_transition_query(
+        db,
+        state=filters_ctx["state"],
+        source_type=filters_ctx["source_type"],
+        symbol=filters_ctx["symbol"],
+        strategy=filters_ctx["strategy"],
+        status_filter=filters_ctx["status"],
+        correlation_id=str(filters_ctx["correlation_id"] or "").strip() or None,
+        order_id=str(filters_ctx["order_id"] or "").strip() or None,
+        search=filters_ctx["search"],
+        time_from=filters_ctx["time_from"],
+        time_to=filters_ctx["time_to"],
+    )
+
+    if scope_type == "correlation_id":
+        query = query.filter(ExecutionStateTransition.correlation_id == scope_payload["correlation_id"])
+    elif scope_type == "execution_event_id":
+        query = query.filter(ExecutionStateTransition.execution_event_id == scope_payload["execution_event_id"])
+
+    return query.order_by(ExecutionStateTransition.occurred_at.asc()).all()
+
+
+def _failure_rows_with_filters(
+    db: Session,
+    filters_ctx: dict,
+    transition_rows: list[ExecutionStateTransition],
+    *,
+    scope_type: str | None = None,
+    scope_payload: dict | None = None,
+    extra_correlations: set[str] | None = None,
+) -> list[FailedEvent]:
+    transition_correlations = {
+        str(row.correlation_id) for row in transition_rows if str(row.correlation_id or "").strip()
+    }
+    scoped_correlations = set(transition_correlations)
+    if extra_correlations:
+        scoped_correlations.update({str(item) for item in extra_correlations if str(item or "").strip()})
+
+    failure_query = db.query(FailedEvent).filter(FailedEvent.created_at <= filters_ctx["time_to"])
+    if filters_ctx["time_from"]:
+        failure_query = failure_query.filter(FailedEvent.created_at >= filters_ctx["time_from"])
+
+    if scope_type == "correlation_id":
+        failure_query = failure_query.filter(FailedEvent.correlation_id == scope_payload["correlation_id"])
+    elif scope_type == "execution_event_id":
+        if scoped_correlations:
+            failure_query = failure_query.filter(FailedEvent.correlation_id.in_(sorted(scoped_correlations)))
+        else:
+            failure_query = failure_query.filter(FailedEvent.id == "")
+    elif filters_ctx["correlation_id"]:
+        failure_query = failure_query.filter(FailedEvent.correlation_id == filters_ctx["correlation_id"])
+
+    if _requires_event_scope_filters(filters_ctx) and not filters_ctx["correlation_id"] and scope_type not in {"correlation_id", "execution_event_id"}:
+        if scoped_correlations:
+            failure_query = failure_query.filter(FailedEvent.correlation_id.in_(sorted(scoped_correlations)))
+        else:
+            failure_query = failure_query.filter(FailedEvent.id == "")
+
+    if filters_ctx["search"]:
+        token = f"%{str(filters_ctx['search']).strip()}%"
+        failure_query = failure_query.filter(
+            or_(
+                FailedEvent.correlation_id.ilike(token),
+                FailedEvent.entity_id.ilike(token),
+                FailedEvent.error_message.ilike(token),
+                cast(FailedEvent.payload, Text).ilike(token),
+                cast(FailedEvent.error_details, Text).ilike(token),
+            )
+        )
+
+    return failure_query.order_by(FailedEvent.created_at.asc()).all()
+
+
 def _build_execution_analytics_summary(
     db: Session,
     *,
@@ -853,21 +963,7 @@ def _build_execution_analytics_summary(
         snapshot_at=snapshot_at,
     )
 
-    query = _build_transition_query(
-        db,
-        state=filters_ctx["state"],
-        source_type=filters_ctx["source_type"],
-        symbol=symbol,
-        strategy=strategy,
-        status_filter=filters_ctx["status"],
-        correlation_id=str(correlation_id or "").strip() or None,
-        order_id=str(order_id or "").strip() or None,
-        search=search,
-        time_from=filters_ctx["time_from"],
-        time_to=filters_ctx["time_to"],
-    )
-
-    rows = query.all()
+    rows = _transition_rows_with_filters(db, filters_ctx)
     total = len(rows)
     state_counter = _state_counter(rows)
     latency_per_state: dict[str, float] = {}
@@ -895,16 +991,7 @@ def _build_execution_analytics_summary(
         count = max(latency_state_counts.get(state_name, 1), 1)
         latency_per_state[state_name] = round(total_latency / count, 4)
 
-    failure_rows = (
-        db.query(FailedEvent)
-        .filter(FailedEvent.created_at <= filters_ctx["snapshot_at"])
-        .order_by(FailedEvent.created_at.asc())
-        .all()
-    )
-    if filters_ctx["time_from"]:
-        failure_rows = [row for row in failure_rows if row.created_at >= filters_ctx["time_from"]]
-    if correlation_id:
-        failure_rows = [row for row in failure_rows if str(row.correlation_id or "") == str(correlation_id)]
+    failure_rows = _failure_rows_with_filters(db, filters_ctx, rows)
 
     dead_letter_trend: dict[str, int] = {}
     for row in failure_rows:
@@ -916,19 +1003,7 @@ def _build_execution_analytics_summary(
     success_transitions = state_counter.get("filled", 0)
     retry_success_ratio = round(success_transitions / max(retry_count, 1), 4) if retry_count else 0.0
 
-    applied_filters = {
-        "state": filters_ctx["state"],
-        "source_type": filters_ctx["source_type"],
-        "symbol": symbol,
-        "strategy": strategy,
-        "status": filters_ctx["status"],
-        "correlation_id": correlation_id,
-        "order_id": order_id,
-        "search": search,
-        "time_from": filters_ctx["time_from"].isoformat() if filters_ctx["time_from"] else None,
-        "time_to": filters_ctx["time_to"].isoformat(),
-        "snapshot_at": filters_ctx["snapshot_at"].isoformat(),
-    }
+    applied_filters = _serialize_execution_filter_context(filters_ctx)
 
     return ExecutionAnalyticsSnapshotSummaryResponse(
         snapshot_at=filters_ctx["snapshot_at"],
@@ -1060,19 +1135,7 @@ def execution_analytics_state_latency(
         snapshot_at=snapshot_at,
     )
 
-    rows = _build_transition_query(
-        db,
-        state=filters_ctx["state"],
-        source_type=filters_ctx["source_type"],
-        symbol=filters_ctx["symbol"],
-        strategy=filters_ctx["strategy"],
-        status_filter=filters_ctx["status"],
-        correlation_id=str(filters_ctx["correlation_id"] or "").strip() or None,
-        order_id=str(filters_ctx["order_id"] or "").strip() or None,
-        search=filters_ctx["search"],
-        time_from=filters_ctx["time_from"],
-        time_to=filters_ctx["time_to"],
-    ).all()
+    rows = _transition_rows_with_filters(db, filters_ctx)
 
     stats: dict[str, dict] = {}
     for row in rows:
@@ -1104,19 +1167,7 @@ def execution_analytics_state_latency(
 
     return {
         "snapshot_at": filters_ctx["snapshot_at"],
-        "filters": {
-            "state": filters_ctx["state"],
-            "source_type": filters_ctx["source_type"],
-            "symbol": filters_ctx["symbol"],
-            "strategy": filters_ctx["strategy"],
-            "status": filters_ctx["status"],
-            "correlation_id": filters_ctx["correlation_id"],
-            "order_id": filters_ctx["order_id"],
-            "search": filters_ctx["search"],
-            "time_from": filters_ctx["time_from"].isoformat() if filters_ctx["time_from"] else None,
-            "time_to": filters_ctx["time_to"].isoformat(),
-            "snapshot_at": filters_ctx["snapshot_at"].isoformat(),
-        },
+        "filters": _serialize_execution_filter_context(filters_ctx),
         "totals": {
             "transitions": len(rows),
             "states": len(result_rows),
@@ -1157,44 +1208,8 @@ def execution_analytics_failure_trends(
         snapshot_at=snapshot_at,
     )
 
-    transition_rows = _build_transition_query(
-        db,
-        state=filters_ctx["state"],
-        source_type=filters_ctx["source_type"],
-        symbol=filters_ctx["symbol"],
-        strategy=filters_ctx["strategy"],
-        status_filter=filters_ctx["status"],
-        correlation_id=str(filters_ctx["correlation_id"] or "").strip() or None,
-        order_id=str(filters_ctx["order_id"] or "").strip() or None,
-        search=filters_ctx["search"],
-        time_from=filters_ctx["time_from"],
-        time_to=filters_ctx["time_to"],
-    ).all()
-    transition_correlations = {str(row.correlation_id) for row in transition_rows if str(row.correlation_id or "").strip()}
-    transition_filters_present = any(
-        [
-            filters_ctx["state"],
-            filters_ctx["source_type"],
-            filters_ctx["symbol"],
-            filters_ctx["strategy"],
-            filters_ctx["status"],
-            filters_ctx["order_id"],
-            filters_ctx["search"],
-        ]
-    )
-
-    failure_query = db.query(FailedEvent).filter(FailedEvent.created_at <= filters_ctx["snapshot_at"])
-    if filters_ctx["time_from"]:
-        failure_query = failure_query.filter(FailedEvent.created_at >= filters_ctx["time_from"])
-    if filters_ctx["correlation_id"]:
-        failure_query = failure_query.filter(FailedEvent.correlation_id == filters_ctx["correlation_id"])
-    elif transition_filters_present:
-        if transition_correlations:
-            failure_query = failure_query.filter(FailedEvent.correlation_id.in_(sorted(transition_correlations)))
-        else:
-            failure_query = failure_query.filter(FailedEvent.id == "")
-
-    failure_rows = failure_query.order_by(FailedEvent.created_at.asc()).all()
+    transition_rows = _transition_rows_with_filters(db, filters_ctx)
+    failure_rows = _failure_rows_with_filters(db, filters_ctx, transition_rows)
 
     daily_counts: dict[str, dict] = {}
     failure_class_counter: dict[str, int] = {}
@@ -1221,19 +1236,7 @@ def execution_analytics_failure_trends(
 
     return {
         "snapshot_at": filters_ctx["snapshot_at"],
-        "filters": {
-            "state": filters_ctx["state"],
-            "source_type": filters_ctx["source_type"],
-            "symbol": filters_ctx["symbol"],
-            "strategy": filters_ctx["strategy"],
-            "status": filters_ctx["status"],
-            "correlation_id": filters_ctx["correlation_id"],
-            "order_id": filters_ctx["order_id"],
-            "search": filters_ctx["search"],
-            "time_from": filters_ctx["time_from"].isoformat() if filters_ctx["time_from"] else None,
-            "time_to": filters_ctx["time_to"].isoformat(),
-            "snapshot_at": filters_ctx["snapshot_at"].isoformat(),
-        },
+        "filters": _serialize_execution_filter_context(filters_ctx),
         "totals": {
             "failures": len(failure_rows),
             "dead_letter_total": sum(item["dead_letter_count"] for item in daily_counts.values()),
@@ -1557,50 +1560,191 @@ def export_incident_snapshot_bundle(
 ):
     scope_type, scope_payload = _require_incident_export_scope(payload)
 
-    event_query = db.query(ExecutionEvent)
-    transition_query = db.query(ExecutionStateTransition)
-    failure_query = db.query(FailedEvent)
-    manual_query = db.query(ExecutionManualAction)
-    collision_query = db.query(IdempotencyCollision)
-    trace_query = db.query(ExecutionTraceIndex)
+    filters_ctx = _resolve_execution_analytics_filters(
+        state=payload.state,
+        source_type=payload.source_type,
+        symbol=payload.symbol,
+        strategy=payload.strategy,
+        status_value=payload.status,
+        status_filter=None,
+        correlation_id=payload.correlation_id,
+        order_id=payload.order_id,
+        search=payload.search,
+        time_from=payload.time_from,
+        time_to=payload.time_to,
+        snapshot_at=None,
+    )
 
+    transition_rows = _transition_rows_with_filters(
+        db,
+        filters_ctx,
+        scope_type=scope_type,
+        scope_payload=scope_payload,
+    )
+    transition_event_ids = {str(row.execution_event_id) for row in transition_rows if str(row.execution_event_id or "").strip()}
+    transition_correlations = {str(row.correlation_id) for row in transition_rows if str(row.correlation_id or "").strip()}
+
+    event_query = db.query(ExecutionEvent)
     if scope_type == "correlation_id":
-        correlation_id = scope_payload["correlation_id"]
-        event_query = event_query.filter(ExecutionEvent.correlation_id == correlation_id)
-        transition_query = transition_query.filter(ExecutionStateTransition.correlation_id == correlation_id)
-        failure_query = failure_query.filter(FailedEvent.correlation_id == correlation_id)
-        manual_query = manual_query.filter(ExecutionManualAction.correlation_id == correlation_id)
-        collision_query = collision_query.filter(IdempotencyCollision.correlation_id == correlation_id)
-        trace_query = trace_query.filter(ExecutionTraceIndex.correlation_id == correlation_id)
+        event_query = event_query.filter(ExecutionEvent.correlation_id == scope_payload["correlation_id"])
     elif scope_type == "execution_event_id":
-        event_id = scope_payload["execution_event_id"]
-        event_query = event_query.filter(ExecutionEvent.id == event_id)
-        transition_query = transition_query.filter(ExecutionStateTransition.execution_event_id == event_id)
-        manual_query = manual_query.filter(ExecutionManualAction.execution_event_id == event_id)
-        event_row = event_query.first()
-        if event_row and event_row.correlation_id:
-            failure_query = failure_query.filter(FailedEvent.correlation_id == event_row.correlation_id)
-            collision_query = collision_query.filter(IdempotencyCollision.correlation_id == event_row.correlation_id)
-            trace_query = trace_query.filter(ExecutionTraceIndex.correlation_id == event_row.correlation_id)
+        event_query = event_query.filter(ExecutionEvent.id == scope_payload["execution_event_id"])
+    elif filters_ctx["time_from"]:
+        event_query = event_query.filter(ExecutionEvent.created_at >= filters_ctx["time_from"])
+    event_query = event_query.filter(ExecutionEvent.created_at <= filters_ctx["time_to"])
+
+    if filters_ctx["source_type"]:
+        event_query = event_query.filter(ExecutionEvent.source_type == filters_ctx["source_type"])
+    if filters_ctx["symbol"]:
+        event_query = event_query.filter(ExecutionEvent.symbol == str(filters_ctx["symbol"]).upper())
+    if filters_ctx["strategy"]:
+        event_query = event_query.filter(ExecutionEvent.strategy_id == filters_ctx["strategy"])
+    if filters_ctx["status"]:
+        event_query = event_query.filter(ExecutionEvent.execution_status == filters_ctx["status"])
+    if filters_ctx["order_id"]:
+        token = f"%{str(filters_ctx['order_id']).strip()}%"
+        event_query = event_query.filter(cast(ExecutionEvent.response_payload, Text).ilike(token))
+    if filters_ctx["search"]:
+        token = f"%{str(filters_ctx['search']).strip()}%"
+        event_query = event_query.filter(
+            or_(
+                ExecutionEvent.id.ilike(token),
+                ExecutionEvent.correlation_id.ilike(token),
+                ExecutionEvent.symbol.ilike(token),
+                ExecutionEvent.strategy_id.ilike(token),
+                cast(ExecutionEvent.response_payload, Text).ilike(token),
+            )
+        )
+    if filters_ctx["state"]:
+        if transition_event_ids:
+            event_query = event_query.filter(ExecutionEvent.id.in_(sorted(transition_event_ids)))
         else:
-            failure_query = failure_query.filter(FailedEvent.id == "")
-            collision_query = collision_query.filter(IdempotencyCollision.collision_id == "")
-            trace_query = trace_query.filter(ExecutionTraceIndex.trace_id == "")
-    else:
-        time_from = _parse_iso_datetime(scope_payload.get("time_from"), "time_from")
-        time_to = _parse_iso_datetime(scope_payload.get("time_to"), "time_to")
-        event_query = event_query.filter(ExecutionEvent.created_at >= time_from, ExecutionEvent.created_at <= time_to)
-        transition_query = transition_query.filter(ExecutionStateTransition.occurred_at >= time_from, ExecutionStateTransition.occurred_at <= time_to)
-        failure_query = failure_query.filter(FailedEvent.created_at >= time_from, FailedEvent.created_at <= time_to)
-        manual_query = manual_query.filter(ExecutionManualAction.created_at >= time_from, ExecutionManualAction.created_at <= time_to)
-        collision_query = collision_query.filter(IdempotencyCollision.created_at >= time_from, IdempotencyCollision.created_at <= time_to)
-        trace_query = trace_query.filter(ExecutionTraceIndex.created_at >= time_from, ExecutionTraceIndex.created_at <= time_to)
+            event_query = event_query.filter(ExecutionEvent.id == "")
 
     event_rows = event_query.order_by(ExecutionEvent.created_at.asc()).all()
-    transition_rows = transition_query.order_by(ExecutionStateTransition.occurred_at.asc()).all()
-    failure_rows = failure_query.order_by(FailedEvent.created_at.asc()).all()
+    scoped_event_ids = set(transition_event_ids)
+    scoped_event_ids.update({str(row.id) for row in event_rows if str(row.id or "").strip()})
+    scoped_correlations = set(transition_correlations)
+    scoped_correlations.update({str(row.correlation_id) for row in event_rows if str(row.correlation_id or "").strip()})
+
+    failure_rows = _failure_rows_with_filters(
+        db,
+        filters_ctx,
+        transition_rows,
+        scope_type=scope_type,
+        scope_payload=scope_payload,
+        extra_correlations=scoped_correlations,
+    )
+
+    manual_query = db.query(ExecutionManualAction).filter(ExecutionManualAction.created_at <= filters_ctx["time_to"])
+    if scope_type == "correlation_id":
+        manual_query = manual_query.filter(ExecutionManualAction.correlation_id == scope_payload["correlation_id"])
+    elif scope_type == "execution_event_id":
+        manual_query = manual_query.filter(ExecutionManualAction.execution_event_id == scope_payload["execution_event_id"])
+    elif filters_ctx["time_from"]:
+        manual_query = manual_query.filter(ExecutionManualAction.created_at >= filters_ctx["time_from"])
+
+    if _requires_event_scope_filters(filters_ctx):
+        if scoped_event_ids:
+            manual_query = manual_query.filter(ExecutionManualAction.execution_event_id.in_(sorted(scoped_event_ids)))
+        elif scoped_correlations:
+            manual_query = manual_query.filter(ExecutionManualAction.correlation_id.in_(sorted(scoped_correlations)))
+        else:
+            manual_query = manual_query.filter(ExecutionManualAction.action_id == "")
+
+    if filters_ctx["search"]:
+        token = f"%{str(filters_ctx['search']).strip()}%"
+        manual_query = manual_query.filter(
+            or_(
+                ExecutionManualAction.execution_event_id.ilike(token),
+                ExecutionManualAction.correlation_id.ilike(token),
+                ExecutionManualAction.reason_note.ilike(token),
+                cast(ExecutionManualAction.details, Text).ilike(token),
+            )
+        )
+    if filters_ctx["order_id"]:
+        token = f"%{str(filters_ctx['order_id']).strip()}%"
+        manual_query = manual_query.filter(cast(ExecutionManualAction.details, Text).ilike(token))
+
     manual_rows = manual_query.order_by(ExecutionManualAction.created_at.asc()).all()
+
+    collision_query = db.query(IdempotencyCollision).filter(IdempotencyCollision.created_at <= filters_ctx["time_to"])
+    if scope_type == "correlation_id":
+        collision_query = collision_query.filter(IdempotencyCollision.correlation_id == scope_payload["correlation_id"])
+    elif scope_type == "execution_event_id":
+        if scoped_correlations:
+            collision_query = collision_query.filter(IdempotencyCollision.correlation_id.in_(sorted(scoped_correlations)))
+        else:
+            collision_query = collision_query.filter(IdempotencyCollision.collision_id == "")
+    elif filters_ctx["time_from"]:
+        collision_query = collision_query.filter(IdempotencyCollision.created_at >= filters_ctx["time_from"])
+
+    if _requires_event_scope_filters(filters_ctx) and scope_type not in {"correlation_id", "execution_event_id"}:
+        if scoped_correlations:
+            collision_query = collision_query.filter(IdempotencyCollision.correlation_id.in_(sorted(scoped_correlations)))
+        else:
+            collision_query = collision_query.filter(IdempotencyCollision.collision_id == "")
+
+    if filters_ctx["search"]:
+        token = f"%{str(filters_ctx['search']).strip()}%"
+        collision_query = collision_query.filter(
+            or_(
+                IdempotencyCollision.correlation_id.ilike(token),
+                IdempotencyCollision.intent_id.ilike(token),
+                IdempotencyCollision.idempotency_key.ilike(token),
+                cast(IdempotencyCollision.original_request, Text).ilike(token),
+                cast(IdempotencyCollision.duplicate_request, Text).ilike(token),
+            )
+        )
+    if filters_ctx["order_id"]:
+        token = f"%{str(filters_ctx['order_id']).strip()}%"
+        collision_query = collision_query.filter(
+            or_(
+                cast(IdempotencyCollision.original_request, Text).ilike(token),
+                cast(IdempotencyCollision.duplicate_request, Text).ilike(token),
+            )
+        )
+
     collision_rows = collision_query.order_by(IdempotencyCollision.created_at.asc()).all()
+
+    trace_query = db.query(ExecutionTraceIndex).filter(ExecutionTraceIndex.created_at <= filters_ctx["time_to"])
+    if scope_type == "correlation_id":
+        trace_query = trace_query.filter(ExecutionTraceIndex.correlation_id == scope_payload["correlation_id"])
+    elif scope_type == "execution_event_id":
+        trace_query = trace_query.filter(ExecutionTraceIndex.execution_event_id == scope_payload["execution_event_id"])
+    elif filters_ctx["time_from"]:
+        trace_query = trace_query.filter(ExecutionTraceIndex.created_at >= filters_ctx["time_from"])
+
+    if _requires_event_scope_filters(filters_ctx):
+        if scoped_event_ids and scoped_correlations:
+            trace_query = trace_query.filter(
+                or_(
+                    ExecutionTraceIndex.execution_event_id.in_(sorted(scoped_event_ids)),
+                    ExecutionTraceIndex.correlation_id.in_(sorted(scoped_correlations)),
+                )
+            )
+        elif scoped_event_ids:
+            trace_query = trace_query.filter(ExecutionTraceIndex.execution_event_id.in_(sorted(scoped_event_ids)))
+        elif scoped_correlations:
+            trace_query = trace_query.filter(ExecutionTraceIndex.correlation_id.in_(sorted(scoped_correlations)))
+        else:
+            trace_query = trace_query.filter(ExecutionTraceIndex.trace_id == "")
+
+    if filters_ctx["search"]:
+        token = f"%{str(filters_ctx['search']).strip()}%"
+        trace_query = trace_query.filter(
+            or_(
+                ExecutionTraceIndex.correlation_id.ilike(token),
+                ExecutionTraceIndex.execution_event_id.ilike(token),
+                ExecutionTraceIndex.intent_id.ilike(token),
+                ExecutionTraceIndex.stage.ilike(token),
+                cast(ExecutionTraceIndex.payload, Text).ilike(token),
+            )
+        )
+    if filters_ctx["order_id"]:
+        token = f"%{str(filters_ctx['order_id']).strip()}%"
+        trace_query = trace_query.filter(cast(ExecutionTraceIndex.payload, Text).ilike(token))
+
     trace_rows = trace_query.order_by(ExecutionTraceIndex.created_at.asc()).all()
 
     serialized_events = [_serialize_execution_event(row) for row in event_rows]
@@ -1682,17 +1826,7 @@ def export_incident_snapshot_bundle(
     }
     summary_json = {
         **metadata,
-        "filters": {
-            "search": payload.search,
-            "state": payload.state,
-            "status": payload.status,
-            "source_type": payload.source_type,
-            "symbol": payload.symbol,
-            "strategy": payload.strategy,
-            "order_id": payload.order_id,
-            "time_from": payload.time_from,
-            "time_to": payload.time_to,
-        },
+        "filters": _serialize_execution_filter_context(filters_ctx),
     }
 
     events_csv = _rows_to_csv_text(
