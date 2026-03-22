@@ -58,7 +58,7 @@ const adminOnlyItems = [
       { to: "/admin/live-trading-dashboard", label: "Live Trading Dashboard", icon: Activity, testId: "nav-admin-live-trading-dashboard-link" },
       { to: "/admin/system-status", label: "System Status", icon: Activity, testId: "nav-admin-system-status-link" },
       { to: "/admin/universe-monitor", label: "Scanner Monitor", icon: Gauge, testId: "nav-admin-scanner-monitor-link" },
-      { to: "/admin/futures/strategy-analytics", label: "Strategy Analytics", icon: BarChart3, testId: "nav-admin-strategy-analytics-link" },
+      { to: "/admin/futures/strategy-control", label: "Strategy Control", icon: BarChart3, testId: "nav-admin-strategy-control-link" },
     ],
   },
   {
@@ -116,7 +116,7 @@ const adminOnlyItems = [
       { to: "/admin/futures/risk-monitor", label: "futures/risk-monitor", icon: LineChart, testId: "nav-admin-advanced-futures-risk-monitor-link" },
       { to: "/admin/futures/liquidation-protection", label: "futures/liquidation-protection", icon: LineChart, testId: "nav-admin-advanced-futures-liquidation-protection-link" },
       { to: "/admin/futures/cluster-risk", label: "futures/cluster-risk", icon: LineChart, testId: "nav-admin-advanced-futures-cluster-risk-link" },
-      { to: "/admin/futures/capital-governance", label: "futures/capital-governance", icon: LineChart, testId: "nav-admin-advanced-futures-capital-governance-link" },
+      { to: "/admin/futures/strategy-control", label: "futures/strategy-control", icon: LineChart, testId: "nav-admin-advanced-futures-strategy-control-link" },
       { to: "/admin/futures/tail-risk", label: "futures/tail-risk", icon: LineChart, testId: "nav-admin-advanced-futures-tail-risk-link" },
       { to: "/admin/futures/live-readiness", label: "futures/live-readiness", icon: LineChart, testId: "nav-admin-advanced-futures-live-readiness-link" },
       { to: "/admin/futures/scaling-validation", label: "futures/scaling-validation", icon: LineChart, testId: "nav-admin-advanced-futures-scaling-validation-link" },

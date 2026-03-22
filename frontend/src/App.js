@@ -9,10 +9,8 @@ import { AdminLoginPage } from "@/pages/AdminLoginPage";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { AdminExchangesPage } from "@/pages/AdminExchangesPage";
 import { AdminFuturesRiskMonitorPage } from "@/pages/AdminFuturesRiskMonitorPage";
-import { AdminFuturesStrategyAnalyticsPage } from "@/pages/AdminFuturesStrategyAnalyticsPage";
-import { AdminFuturesStrategyGovernancePage } from "@/pages/AdminFuturesStrategyGovernancePage";
+import { AdminFuturesStrategyControlGovernancePage } from "@/pages/AdminFuturesStrategyControlGovernancePage";
 import { AdminFuturesClusterRiskPage } from "@/pages/AdminFuturesClusterRiskPage";
-import { AdminFuturesCapitalGovernancePage } from "@/pages/AdminFuturesCapitalGovernancePage";
 import { AdminFuturesTailRiskPage } from "@/pages/AdminFuturesTailRiskPage";
 import { AdminFuturesLiveReadinessPage } from "@/pages/AdminFuturesLiveReadinessPage";
 import { AdminFuturesScalingValidationPage } from "@/pages/AdminFuturesScalingValidationPage";
@@ -142,10 +140,11 @@ function App() {
             <Route path="strategy/observability" element={<AdminStrategyObservabilityPage />} />
             <Route path="futures/risk-monitor" element={<AdminFuturesRiskMonitorPage />} />
             <Route path="futures/liquidation-protection" element={<AdminFuturesRiskMonitorPage />} />
-            <Route path="futures/strategy-analytics" element={<AdminFuturesStrategyAnalyticsPage />} />
-            <Route path="futures/strategy-governance" element={<AdminFuturesStrategyGovernancePage />} />
+            <Route path="futures/strategy-control" element={<AdminFuturesStrategyControlGovernancePage />} />
+            <Route path="futures/strategy-analytics" element={<Navigate to="/admin/futures/strategy-control" replace />} />
+            <Route path="futures/strategy-governance" element={<Navigate to="/admin/futures/strategy-control" replace />} />
             <Route path="futures/cluster-risk" element={<AdminFuturesClusterRiskPage />} />
-            <Route path="futures/capital-governance" element={<AdminFuturesCapitalGovernancePage />} />
+            <Route path="futures/capital-governance" element={<Navigate to="/admin/futures/strategy-control" replace />} />
             <Route path="futures/tail-risk" element={<AdminFuturesTailRiskPage />} />
             <Route path="futures/live-readiness" element={<AdminFuturesLiveReadinessPage />} />
             <Route path="system-readiness" element={<AdminFuturesLiveReadinessPage />} />
