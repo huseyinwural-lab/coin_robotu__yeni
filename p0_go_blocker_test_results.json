@@ -1,0 +1,460 @@
+{
+  "target_url": "https://ops-trace-control.preview.emergentagent.com",
+  "test_time": "2026-03-22T08:53:15.352914",
+  "admin_credentials": "canary.admin@platform.local / CanaryAdmin123!",
+  "total_tests": 6,
+  "passed_tests": 6,
+  "failed_tests": 0,
+  "tests": {
+    "admin_login": {
+      "status": "PASS",
+      "code": 200,
+      "token_length": 244,
+      "has_access_token": true
+    },
+    "ws_reconnect": {
+      "status": "PASS",
+      "code": 200,
+      "response": {
+        "status": "success",
+        "trace_id": "77111a0e-3759-4332-8c58-1095b305dce1",
+        "message": "ws reconnect request accepted",
+        "timestamp": "2026-03-22T08:53:15.971280+00:00",
+        "state_snapshot": {
+          "ws_state": {
+            "session_id": "aa40e325-c927-406e-adfe-7c533214406e",
+            "reconnect_count": 3,
+            "last_reconnect_at": "2026-03-22T08:53:15.968947+00:00",
+            "last_reconnect_by": "41b28076-1704-4801-9a36-6baccd746bca",
+            "reconnect_reason": "P0 GO-BLOCKER validation test - websocket reconnection",
+            "status": "reconnecting"
+          }
+        },
+        "audit_log_id": "9d84094b-2bd0-480c-a98a-3d26c019f221"
+      },
+      "required_fields_present": true,
+      "fields_found": [
+        "status",
+        "trace_id",
+        "message",
+        "timestamp",
+        "state_snapshot",
+        "audit_log_id"
+      ]
+    },
+    "gate_recheck": {
+      "status": "PASS",
+      "code": 200,
+      "response": {
+        "status": "success",
+        "trace_id": "5cff156e-c76d-4a75-9d73-fab26a7d730d",
+        "message": "release gate recheck completed",
+        "timestamp": "2026-03-22T08:53:16.924948+00:00",
+        "state_snapshot": {
+          "gate": {
+            "status": "BLOCKED",
+            "reason_codes": [
+              "permission_check_fail"
+            ],
+            "reasons": [
+              "permission_check_fail",
+              "execution_quality_score_warning",
+              "kill_switch_not_tested",
+              "proof_pipeline_empty",
+              "live_mode_disabled"
+            ],
+            "metrics": {
+              "exchange_health": true,
+              "execution_quality_score": 70.0,
+              "permission_drift_alert": false,
+              "active_override": false,
+              "live_mode_enabled": false,
+              "clock_drift_seconds": 0.071959,
+              "worker_lag_seconds": 0.0,
+              "rate_limit_health": "ok",
+              "risk_orchestrator_enabled": true,
+              "kill_switch_tested": false,
+              "chain_integrity_broken": false,
+              "failed_event_backlog": 0
+            },
+            "blocking_items": [
+              {
+                "artifact": "prod_env_preflight",
+                "reason": "status=FAIL"
+              },
+              {
+                "artifact": "secret_readiness",
+                "reason": "status=FAIL"
+              }
+            ],
+            "final_decision": "NO_GO",
+            "rules": [
+              {
+                "rule_id": "DATABASE_URL",
+                "result": "FAIL",
+                "message": "DATABASE_URL localhost i\u00e7eriyor",
+                "fix_hint": "DATABASE_URL de\u011ferini production ortam kayna\u011f\u0131ndan g\u00fcncelleyin",
+                "suggested_fix": "DB ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse servis restart + gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "db_restart_then_gate_recheck"
+              },
+              {
+                "rule_id": "REDIS_URL",
+                "result": "FAIL",
+                "message": "REDIS_URL localhost i\u00e7eriyor",
+                "fix_hint": "REDIS_URL de\u011ferini production ortam kayna\u011f\u0131ndan g\u00fcncelleyin",
+                "suggested_fix": "Redis ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse reconnect + gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "redis_reconnect_then_gate_recheck"
+              },
+              {
+                "rule_id": "REACT_APP_BACKEND_URL",
+                "result": "PASS",
+                "message": "REACT_APP_BACKEND_URL resolved from frontend/.env",
+                "fix_hint": "REACT_APP_BACKEND_URL de\u011ferini production ortam kayna\u011f\u0131ndan g\u00fcncelleyin",
+                "suggested_fix": "Fix hint ad\u0131mlar\u0131n\u0131 uygulay\u0131p gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "gate_recheck"
+              },
+              {
+                "rule_id": "DATABASE_URL not empty",
+                "result": "PASS",
+                "message": "DATABASE_URL de\u011feri bo\u015f olamaz",
+                "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+                "suggested_fix": "DB ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse servis restart + gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "db_restart_then_gate_recheck"
+              },
+              {
+                "rule_id": "REDIS_URL not empty",
+                "result": "PASS",
+                "message": "REDIS_URL de\u011feri bo\u015f olamaz",
+                "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+                "suggested_fix": "Redis ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse reconnect + gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "redis_reconnect_then_gate_recheck"
+              },
+              {
+                "rule_id": "DATABASE_URL non-localhost",
+                "result": "FAIL",
+                "message": "DATABASE_URL localhost/127.0.0.1 i\u00e7ermemeli",
+                "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+                "suggested_fix": "DB ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse servis restart + gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "db_restart_then_gate_recheck"
+              },
+              {
+                "rule_id": "REDIS_URL non-localhost",
+                "result": "FAIL",
+                "message": "REDIS_URL localhost/127.0.0.1 i\u00e7ermemeli",
+                "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+                "suggested_fix": "Redis ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse reconnect + gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "redis_reconnect_then_gate_recheck"
+              },
+              {
+                "rule_id": "JWT_SECRET strong enough",
+                "result": "PASS",
+                "message": "JWT_SECRET min 32 karakter ve default/dev pattern i\u00e7ermemeli",
+                "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+                "suggested_fix": "Fix hint ad\u0131mlar\u0131n\u0131 uygulay\u0131p gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "gate_recheck"
+              },
+              {
+                "rule_id": "REACT_APP_BACKEND_URL production format",
+                "result": "PASS",
+                "message": "REACT_APP_BACKEND_URL https://domain format\u0131nda olmal\u0131",
+                "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+                "suggested_fix": "Fix hint ad\u0131mlar\u0131n\u0131 uygulay\u0131p gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "gate_recheck"
+              }
+            ],
+            "suggested_fixes": [
+              {
+                "rule_id": "DATABASE_URL",
+                "suggested_fix": "DB ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse servis restart + gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "db_restart_then_gate_recheck"
+              },
+              {
+                "rule_id": "REDIS_URL",
+                "suggested_fix": "Redis ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse reconnect + gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "redis_reconnect_then_gate_recheck"
+              },
+              {
+                "rule_id": "DATABASE_URL non-localhost",
+                "suggested_fix": "DB ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse servis restart + gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "db_restart_then_gate_recheck"
+              },
+              {
+                "rule_id": "REDIS_URL non-localhost",
+                "suggested_fix": "Redis ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse reconnect + gate re-check \u00e7al\u0131\u015ft\u0131r",
+                "run_fix_action": "redis_reconnect_then_gate_recheck"
+              }
+            ],
+            "history": [
+              {
+                "checked_at": "2026-03-22T08:51:55.911510+00:00",
+                "status": "BLOCKED",
+                "final_decision": "NO_GO",
+                "rules_count": 9
+              },
+              {
+                "checked_at": "2026-03-22T08:52:35.609597+00:00",
+                "status": "BLOCKED",
+                "final_decision": "NO_GO",
+                "rules_count": 9
+              }
+            ],
+            "fix_redirect": "/admin/execution-policies"
+          }
+        },
+        "gate": {
+          "status": "BLOCKED",
+          "reason_codes": [
+            "permission_check_fail"
+          ],
+          "reasons": [
+            "permission_check_fail",
+            "execution_quality_score_warning",
+            "kill_switch_not_tested",
+            "proof_pipeline_empty",
+            "live_mode_disabled"
+          ],
+          "metrics": {
+            "exchange_health": true,
+            "execution_quality_score": 70.0,
+            "permission_drift_alert": false,
+            "active_override": false,
+            "live_mode_enabled": false,
+            "clock_drift_seconds": 0.071959,
+            "worker_lag_seconds": 0.0,
+            "rate_limit_health": "ok",
+            "risk_orchestrator_enabled": true,
+            "kill_switch_tested": false,
+            "chain_integrity_broken": false,
+            "failed_event_backlog": 0
+          },
+          "blocking_items": [
+            {
+              "artifact": "prod_env_preflight",
+              "reason": "status=FAIL"
+            },
+            {
+              "artifact": "secret_readiness",
+              "reason": "status=FAIL"
+            }
+          ],
+          "final_decision": "NO_GO",
+          "rules": [
+            {
+              "rule_id": "DATABASE_URL",
+              "result": "FAIL",
+              "message": "DATABASE_URL localhost i\u00e7eriyor",
+              "fix_hint": "DATABASE_URL de\u011ferini production ortam kayna\u011f\u0131ndan g\u00fcncelleyin",
+              "suggested_fix": "DB ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse servis restart + gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "db_restart_then_gate_recheck"
+            },
+            {
+              "rule_id": "REDIS_URL",
+              "result": "FAIL",
+              "message": "REDIS_URL localhost i\u00e7eriyor",
+              "fix_hint": "REDIS_URL de\u011ferini production ortam kayna\u011f\u0131ndan g\u00fcncelleyin",
+              "suggested_fix": "Redis ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse reconnect + gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "redis_reconnect_then_gate_recheck"
+            },
+            {
+              "rule_id": "REACT_APP_BACKEND_URL",
+              "result": "PASS",
+              "message": "REACT_APP_BACKEND_URL resolved from frontend/.env",
+              "fix_hint": "REACT_APP_BACKEND_URL de\u011ferini production ortam kayna\u011f\u0131ndan g\u00fcncelleyin",
+              "suggested_fix": "Fix hint ad\u0131mlar\u0131n\u0131 uygulay\u0131p gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "gate_recheck"
+            },
+            {
+              "rule_id": "DATABASE_URL not empty",
+              "result": "PASS",
+              "message": "DATABASE_URL de\u011feri bo\u015f olamaz",
+              "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+              "suggested_fix": "DB ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse servis restart + gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "db_restart_then_gate_recheck"
+            },
+            {
+              "rule_id": "REDIS_URL not empty",
+              "result": "PASS",
+              "message": "REDIS_URL de\u011feri bo\u015f olamaz",
+              "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+              "suggested_fix": "Redis ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse reconnect + gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "redis_reconnect_then_gate_recheck"
+            },
+            {
+              "rule_id": "DATABASE_URL non-localhost",
+              "result": "FAIL",
+              "message": "DATABASE_URL localhost/127.0.0.1 i\u00e7ermemeli",
+              "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+              "suggested_fix": "DB ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse servis restart + gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "db_restart_then_gate_recheck"
+            },
+            {
+              "rule_id": "REDIS_URL non-localhost",
+              "result": "FAIL",
+              "message": "REDIS_URL localhost/127.0.0.1 i\u00e7ermemeli",
+              "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+              "suggested_fix": "Redis ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse reconnect + gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "redis_reconnect_then_gate_recheck"
+            },
+            {
+              "rule_id": "JWT_SECRET strong enough",
+              "result": "PASS",
+              "message": "JWT_SECRET min 32 karakter ve default/dev pattern i\u00e7ermemeli",
+              "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+              "suggested_fix": "Fix hint ad\u0131mlar\u0131n\u0131 uygulay\u0131p gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "gate_recheck"
+            },
+            {
+              "rule_id": "REACT_APP_BACKEND_URL production format",
+              "result": "PASS",
+              "message": "REACT_APP_BACKEND_URL https://domain format\u0131nda olmal\u0131",
+              "fix_hint": "Preflight kontrol\u00fcn\u00fc d\u00fczeltip tekrar /runtime/gate/recheck \u00e7al\u0131\u015ft\u0131r\u0131n",
+              "suggested_fix": "Fix hint ad\u0131mlar\u0131n\u0131 uygulay\u0131p gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "gate_recheck"
+            }
+          ],
+          "suggested_fixes": [
+            {
+              "rule_id": "DATABASE_URL",
+              "suggested_fix": "DB ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse servis restart + gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "db_restart_then_gate_recheck"
+            },
+            {
+              "rule_id": "REDIS_URL",
+              "suggested_fix": "Redis ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse reconnect + gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "redis_reconnect_then_gate_recheck"
+            },
+            {
+              "rule_id": "DATABASE_URL non-localhost",
+              "suggested_fix": "DB ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse servis restart + gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "db_restart_then_gate_recheck"
+            },
+            {
+              "rule_id": "REDIS_URL non-localhost",
+              "suggested_fix": "Redis ba\u011flant\u0131s\u0131n\u0131 do\u011frula, gerekirse reconnect + gate re-check \u00e7al\u0131\u015ft\u0131r",
+              "run_fix_action": "redis_reconnect_then_gate_recheck"
+            }
+          ],
+          "history": [
+            {
+              "checked_at": "2026-03-22T08:51:55.911510+00:00",
+              "status": "BLOCKED",
+              "final_decision": "NO_GO",
+              "rules_count": 9
+            },
+            {
+              "checked_at": "2026-03-22T08:52:35.609597+00:00",
+              "status": "BLOCKED",
+              "final_decision": "NO_GO",
+              "rules_count": 9
+            }
+          ],
+          "fix_redirect": "/admin/execution-policies"
+        },
+        "scripts": [
+          {
+            "script": "/app/scripts/prod_env_resolution_report.sh",
+            "returncode": 0
+          },
+          {
+            "script": "/app/scripts/prod_secret_readiness_check.sh",
+            "returncode": 1
+          },
+          {
+            "script": "/app/scripts/preflight_prod_env_check.sh",
+            "returncode": 1
+          },
+          {
+            "script": "/app/scripts/final_release_gate_report.sh",
+            "returncode": 1
+          }
+        ],
+        "audit_log_id": "182cc605-44d7-4d1a-b739-3fcd64021a92"
+      },
+      "required_fields_present": true,
+      "fields_found": [
+        "status",
+        "trace_id",
+        "message",
+        "timestamp",
+        "state_snapshot",
+        "gate",
+        "scripts",
+        "audit_log_id"
+      ]
+    },
+    "exposure_override": {
+      "status": "PASS",
+      "code": 200,
+      "response": {
+        "status": "success",
+        "trace_id": "ee913a53-7f74-4a31-b018-6ac8d337d5db",
+        "message": "exposure override created",
+        "timestamp": "2026-03-22T08:53:16.978860+00:00",
+        "state_snapshot": {
+          "override": {
+            "override_id": "d6135559-daac-4d7d-9e41-0a8d000a7cb1",
+            "override_type": "force_reject",
+            "scope": "BTCUSDT",
+            "reason": "P0 GO-BLOCKER validation test - exposure override",
+            "created_by": "41b28076-1704-4801-9a36-6baccd746bca",
+            "created_at": "2026-03-22T08:53:16.975931+00:00",
+            "expires_at": "2026-03-22T09:23:16.975931+00:00"
+          },
+          "active_overrides": 3
+        },
+        "audit_log_id": "6a671a4b-48b6-455a-aa03-0439ceba097f"
+      },
+      "required_fields_present": true,
+      "fields_found": [
+        "status",
+        "trace_id",
+        "message",
+        "timestamp",
+        "state_snapshot",
+        "audit_log_id"
+      ]
+    },
+    "state_validation": {
+      "status": "PASS",
+      "code": 200,
+      "checks_count": 4,
+      "fix_action_found": true,
+      "checks_with_fix_action": [
+        "ws_session_changed",
+        "override_effect_applied",
+        "gate_source",
+        "guard_block_visible"
+      ],
+      "sample_checks": {
+        "ws_session_changed": {
+          "value": false,
+          "status": "fail",
+          "fix_action": "Fix WS"
+        },
+        "override_effect_applied": {
+          "value": false,
+          "status": "warning",
+          "fix_action": "Re-sync Override"
+        },
+        "gate_source": {
+          "value": "ci_script",
+          "status": "pass",
+          "fix_action": "Run Gate Re-check"
+        }
+      }
+    },
+    "gate_status": {
+      "status": "PASS",
+      "code": 200,
+      "fail_rules_count": 4,
+      "rules_with_fix_fields": 4,
+      "rules_with_fix_indices": [
+        0,
+        1,
+        5,
+        6
+      ],
+      "sample_data": "Response too large"
+    }
+  }
+}
