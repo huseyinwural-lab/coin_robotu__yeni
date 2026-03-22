@@ -2403,6 +2403,8 @@ class ManualOverrideResponse(BaseModel):
     current_status: str = "active"
     revoked_at: datetime | None = None
     revoked_by: str | None = None
+    expiry_countdown_seconds: int | None = None
+    linked_approval_request_id: str | None = None
     payload: dict
     timestamp: datetime
 
@@ -2444,6 +2446,9 @@ class RiskSimulationResponse(BaseModel):
     projected_exposure: float = 0
     projected_var: float = 0
     projected_liquidity_impact: float = 0
+    exposure_change: float = 0
+    var_change: float = 0
+    liquidity_impact: float = 0
     confidence_adjusted_risk_score: float = 0
     before_state: dict = Field(default_factory=dict)
     after_state: dict = Field(default_factory=dict)
@@ -2556,6 +2561,9 @@ class DecisionApprovalRequestResponse(BaseModel):
     decided_at: datetime | None = None
     approved_by: str | None = None
     review_note: str | None = None
+    assigned_to: str | None = None
+    ack_by: str | None = None
+    ack_at: datetime | None = None
     target_type: str | None = None
     target_id: str | None = None
     simulation_required: bool = True
@@ -2601,6 +2609,11 @@ class EscalationResolveRequest(BaseModel):
     escalation_reason: str = Field(min_length=8)
 
 
+class EscalationAssignOwnerRequest(BaseModel):
+    current_owner: str = Field(min_length=2)
+    escalation_reason: str = Field(min_length=8)
+
+
 class StrategyIntelligenceImportRequest(BaseModel):
     decision_requests: list[dict] = Field(default_factory=list)
     simulation_runs: list[dict] = Field(default_factory=list)
@@ -2618,6 +2631,26 @@ class DecisionApprovalRequestsResponse(BaseModel):
 
 class DecisionApprovalActionRequest(BaseModel):
     reason_note: str = Field(min_length=8)
+
+
+class DecisionRequestAssignOwnerRequest(BaseModel):
+    assigned_to: str = Field(min_length=2)
+
+
+class DecisionRequestAckRequest(BaseModel):
+    reason_note: str = Field(min_length=8)
+
+
+class DecisionBulkActionRequest(BaseModel):
+    action: str
+    request_ids: list[str] = Field(default_factory=list)
+    reason_note: str = Field(min_length=8)
+
+
+class DecisionBulkActionResponse(BaseModel):
+    action: str
+    processed: int
+    updated_request_ids: list[str] = Field(default_factory=list)
 
 
 class DecisionRequestCreateRequest(BaseModel):

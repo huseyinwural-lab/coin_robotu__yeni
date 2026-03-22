@@ -7,7 +7,7 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 from sqlalchemy.orm import Session
 
 from core.policy.quote_policy import InvalidSymbol, normalize_symbol
@@ -17,12 +17,17 @@ from models import DecisionApprovalRequest, EscalationCenterItem, SimulationRun,
 from schemas import (
     AdminStrategyIntelligenceResponse,
     DecisionApprovalActionRequest,
+    DecisionBulkActionRequest,
+    DecisionBulkActionResponse,
     DecisionApprovalRequestResponse,
     EscalationAcknowledgeRequest,
+    EscalationAssignOwnerRequest,
     EscalationCenterItemResponse,
     EscalationCenterResponse,
     EscalationResolveRequest,
     DecisionRequestCreateRequest,
+    DecisionRequestAckRequest,
+    DecisionRequestAssignOwnerRequest,
     DecisionRequestExecuteRequest,
     DecisionRequestPreviewResponse,
     DecisionApprovalRequestsResponse,
@@ -167,6 +172,11 @@ def _ensure_intelligence_tables(db: Session) -> None:
     SimulationScenarioItem.__table__.create(bind=bind, checkfirst=True)
     DecisionApprovalRequest.__table__.create(bind=bind, checkfirst=True)
     EscalationCenterItem.__table__.create(bind=bind, checkfirst=True)
+
+    if bind.dialect.name == "postgresql":
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS assigned_to VARCHAR(120)"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS ack_by VARCHAR(120)"))
+        db.execute(text("ALTER TABLE decision_approval_requests ADD COLUMN IF NOT EXISTS ack_at TIMESTAMPTZ"))
 
 
 def _summary_hash(payload: dict) -> str:
@@ -373,6 +383,8 @@ def _sync_escalation_center(db: Session) -> None:
             existing.breach_age_seconds = _breach_age_seconds(request_row.created_at)
             existing.escalation_reason = existing.escalation_reason or "SLA breach tespit edildi"
             existing.linked_simulation_run_id = request_row.simulation_run_id
+            if request_row.assigned_to and existing.current_owner in {"", "unassigned", "governance_unassigned"}:
+                existing.current_owner = request_row.assigned_to
             existing.updated_at = datetime.now(timezone.utc)
             continue
 
@@ -384,7 +396,7 @@ def _sync_escalation_center(db: Session) -> None:
             escalation_level="L1",
             escalation_reason="SLA breach tespit edildi",
             breach_age_seconds=_breach_age_seconds(request_row.created_at),
-            current_owner="unassigned",
+            current_owner=str(request_row.assigned_to or "governance_unassigned"),
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
@@ -425,6 +437,9 @@ def _serialize_approval_row(row: DecisionApprovalRequest) -> dict:
         "decided_at": row.decided_at,
         "approved_by": row.approved_by,
         "review_note": row.review_note,
+        "assigned_to": row.assigned_to,
+        "ack_by": row.ack_by,
+        "ack_at": row.ack_at,
     }
 
 
@@ -555,9 +570,13 @@ def _create_decision_request(
         "projected_exposure": float(run_out.get("projected_exposure") or 0),
         "projected_var": float(run_out.get("projected_var") or 0),
         "projected_liquidity_impact": float(run_out.get("projected_liquidity_impact") or 0),
+        "exposure_change": float(run_out.get("exposure_change") or 0),
+        "var_change": float(run_out.get("var_change") or 0),
+        "liquidity_impact": float(run_out.get("liquidity_impact") or run_out.get("projected_liquidity_impact") or 0),
         "confidence_adjusted_risk_score": float(run_out.get("confidence_adjusted_risk_score") or 0),
         "risk_delta": float(run_out.get("risk_delta") or 0),
         "decision_delta": str(run_out.get("decision_delta") or "UNCHANGED"),
+        "decision_summary": run_out.get("decision_summary") or {},
     }
 
     preview_token = f"preview_{uuid.uuid4().hex[:14]}"
@@ -584,6 +603,7 @@ def _create_decision_request(
         payload=request_payload,
         expires_at=payload.expires_at or (datetime.now(timezone.utc) + timedelta(hours=24)),
         created_at=datetime.now(timezone.utc),
+        assigned_to="governance_unassigned",
     )
     db.add(request_row)
     db.flush()
@@ -701,7 +721,10 @@ def create_manual_override(
         impact_preview=payload.impact_preview or simulation_entry.get("impact_preview") or {},
         expires_at=resolved_expiry,
         actor_role=role,
-        payload=payload.payload,
+        payload={
+            **(payload.payload or {}),
+            "linked_approval_request_id": simulation_run.approval_request_id if simulation_run else None,
+        },
     )
     if simulation_run:
         simulation_run.status = "applied"
@@ -735,7 +758,21 @@ def get_active_overrides(
 ):
     _ = current_user
     rows = list_active_manual_overrides(db, limit=200)
-    return [ManualOverrideResponse(**row) for row in rows]
+    enriched_rows: list[dict] = []
+    for row in rows:
+        mutable = dict(row)
+        simulation_id = str(mutable.get("simulation_id") or "")
+        if not mutable.get("linked_approval_request_id") and simulation_id:
+            simulation_run = db.query(SimulationRun).filter(SimulationRun.run_id == simulation_id).first()
+            if simulation_run and simulation_run.approval_request_id:
+                mutable["linked_approval_request_id"] = simulation_run.approval_request_id
+
+        expires_at = mutable.get("expires_at")
+        if isinstance(expires_at, datetime) and mutable.get("current_status") == "active":
+            mutable["expiry_countdown_seconds"] = int(max((expires_at - datetime.now(timezone.utc)).total_seconds(), 0))
+        enriched_rows.append(mutable)
+
+    return [ManualOverrideResponse(**row) for row in enriched_rows]
 
 
 @router.post("/manual-overrides/{override_id}/revoke", response_model=ManualOverrideRevokeResponse)
@@ -879,6 +916,104 @@ def list_decision_requests(
     return DecisionApprovalRequestsResponse(items=[DecisionApprovalRequestResponse(**item) for item in mapped])
 
 
+@router.post("/decision-requests/{request_id}/assign-owner", response_model=DecisionApprovalRequestResponse)
+def assign_decision_request_owner(
+    request_id: str,
+    payload: DecisionRequestAssignOwnerRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    role = _role_name(current_user)
+    if role not in {"admin", "super_admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="owner assign sadece admin/super_admin")
+
+    _ensure_intelligence_tables(db)
+    row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="request bulunamadı")
+
+    row.assigned_to = payload.assigned_to.strip()
+    db.commit()
+    db.refresh(row)
+    return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
+
+@router.post("/decision-requests/{request_id}/ack", response_model=DecisionApprovalRequestResponse)
+def acknowledge_decision_request(
+    request_id: str,
+    payload: DecisionRequestAckRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    role = _role_name(current_user)
+    if role not in {"admin", "super_admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ack sadece admin/super_admin")
+
+    _ensure_intelligence_tables(db)
+    row = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="request bulunamadı")
+
+    row.ack_by = str(current_user.id)
+    row.ack_at = datetime.now(timezone.utc)
+    row.review_note = payload.reason_note
+    if not row.assigned_to or row.assigned_to == "governance_unassigned":
+        row.assigned_to = role
+
+    db.commit()
+    db.refresh(row)
+    return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
+
+
+@router.post("/decision-requests/bulk-action", response_model=DecisionBulkActionResponse)
+def bulk_decision_action(
+    payload: DecisionBulkActionRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if _role_name(current_user) != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="bulk action sadece super_admin")
+
+    normalized_action = str(payload.action or "").strip().lower()
+    if normalized_action not in {"approve", "reject"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="action approve/reject olmalı")
+
+    request_ids = [str(item or "").strip() for item in payload.request_ids if str(item or "").strip()]
+    unique_request_ids = list(dict.fromkeys(request_ids))
+    if len(unique_request_ids) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request_ids boş")
+    if len(unique_request_ids) > 25:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="bulk action max 25 kayıt")
+
+    _ensure_intelligence_tables(db)
+    rows = (
+        db.query(DecisionApprovalRequest)
+        .filter(DecisionApprovalRequest.request_id.in_(unique_request_ids))
+        .all()
+    )
+
+    updated_ids: list[str] = []
+    for row in rows:
+        if row.status != "pending":
+            continue
+        row.status = "approved" if normalized_action == "approve" else "rejected"
+        row.decided_at = datetime.now(timezone.utc)
+        row.approved_by = str(current_user.id)
+        row.review_note = payload.reason_note
+        if not row.assigned_to:
+            row.assigned_to = "super_admin"
+        row.ack_by = row.ack_by or str(current_user.id)
+        row.ack_at = row.ack_at or datetime.now(timezone.utc)
+        updated_ids.append(row.request_id)
+
+    db.commit()
+    return DecisionBulkActionResponse(
+        action=normalized_action,
+        processed=len(updated_ids),
+        updated_request_ids=updated_ids,
+    )
+
+
 @router.post("/decision-requests/{request_id}/approve", response_model=DecisionApprovalRequestResponse)
 def approve_decision_request(
     request_id: str,
@@ -903,6 +1038,9 @@ def approve_decision_request(
     row.approved_by = str(current_user.id)
     row.review_note = payload.reason_note
     row.decided_at = datetime.now(timezone.utc)
+    row.assigned_to = row.assigned_to or "super_admin"
+    row.ack_by = row.ack_by or str(current_user.id)
+    row.ack_at = row.ack_at or datetime.now(timezone.utc)
     db.commit()
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
 
@@ -927,6 +1065,9 @@ def reject_decision_request(
     row.approved_by = str(current_user.id)
     row.review_note = payload.reason_note
     row.decided_at = datetime.now(timezone.utc)
+    row.assigned_to = row.assigned_to or "super_admin"
+    row.ack_by = row.ack_by or str(current_user.id)
+    row.ack_at = row.ack_at or datetime.now(timezone.utc)
     db.commit()
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
 
@@ -960,6 +1101,9 @@ def execute_decision_request(
     row.approved_by = str(current_user.id)
     row.review_note = payload.reason_note
     row.decided_at = datetime.now(timezone.utc)
+    row.assigned_to = row.assigned_to or "super_admin"
+    row.ack_by = row.ack_by or str(current_user.id)
+    row.ack_at = row.ack_at or datetime.now(timezone.utc)
 
     record_manual_override(
         db,
@@ -1003,6 +1147,9 @@ def revoke_decision_request(
     row.approved_by = str(current_user.id)
     row.review_note = payload.reason_note
     row.decided_at = datetime.now(timezone.utc)
+    row.assigned_to = row.assigned_to or "super_admin"
+    row.ack_by = row.ack_by or str(current_user.id)
+    row.ack_at = row.ack_at or datetime.now(timezone.utc)
     db.commit()
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
 
@@ -1093,6 +1240,45 @@ def acknowledge_escalation_item(
     row.current_owner = str(payload.current_owner or current_user.id)
     row.escalation_reason = payload.escalation_reason
     row.updated_at = datetime.now(timezone.utc)
+
+    linked_request = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == row.linked_request_id).first()
+    if linked_request:
+        linked_request.assigned_to = row.current_owner
+        linked_request.ack_by = str(current_user.id)
+        linked_request.ack_at = datetime.now(timezone.utc)
+        linked_request.review_note = payload.escalation_reason
+
+    db.commit()
+    db.refresh(row)
+    return EscalationCenterItemResponse(**_serialize_escalation_item(row))
+
+
+@router.post("/escalation-center/{escalation_id}/assign-owner", response_model=EscalationCenterItemResponse)
+def assign_escalation_owner(
+    escalation_id: str,
+    payload: EscalationAssignOwnerRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    role = _role_name(current_user)
+    if role not in {"admin", "super_admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="owner assign sadece admin/super_admin")
+
+    _ensure_intelligence_tables(db)
+    row = db.query(EscalationCenterItem).filter(EscalationCenterItem.escalation_id == escalation_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="escalation bulunamadı")
+    if row.state == "resolved":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="resolved escalation owner assign edilemez")
+
+    row.current_owner = payload.current_owner.strip()
+    row.escalation_reason = payload.escalation_reason
+    row.updated_at = datetime.now(timezone.utc)
+
+    linked_request = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == row.linked_request_id).first()
+    if linked_request:
+        linked_request.assigned_to = payload.current_owner.strip()
+
     db.commit()
     db.refresh(row)
     return EscalationCenterItemResponse(**_serialize_escalation_item(row))
@@ -1119,6 +1305,12 @@ def resolve_escalation_item(
     row.current_owner = str(current_user.id)
     row.escalation_reason = payload.escalation_reason
     row.updated_at = datetime.now(timezone.utc)
+
+    linked_request = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == row.linked_request_id).first()
+    if linked_request and linked_request.status == "pending":
+        linked_request.review_note = payload.escalation_reason
+        linked_request.assigned_to = str(current_user.id)
+
     db.commit()
     db.refresh(row)
     return EscalationCenterItemResponse(**_serialize_escalation_item(row))
@@ -1176,6 +1368,21 @@ def compare_simulation_run_current(
         "confidence_adjusted_risk_delta_vs_history": round(
             float(current_output.get("confidence_adjusted_risk_score") or 0)
             - float(before_output.get("confidence_adjusted_risk_score") or 0),
+            6,
+        ),
+        "exposure_change_vs_history": round(
+            float(current_output.get("projected_exposure") or 0)
+            - float(before_output.get("projected_exposure") or 0),
+            6,
+        ),
+        "var_change_vs_history": round(
+            float(current_output.get("projected_var") or 0)
+            - float(before_output.get("projected_var") or 0),
+            6,
+        ),
+        "liquidity_impact_change_vs_history": round(
+            float(current_output.get("liquidity_impact") or current_output.get("projected_liquidity_impact") or 0)
+            - float(before_output.get("liquidity_impact") or before_output.get("projected_liquidity_impact") or 0),
             6,
         ),
         "decision_delta_vs_history": f"{before_output.get('projected_gate_decision')}->{current_output.get('projected_gate_decision')}",

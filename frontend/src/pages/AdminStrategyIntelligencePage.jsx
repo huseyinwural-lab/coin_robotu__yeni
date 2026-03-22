@@ -4,13 +4,12 @@ import { toast } from "sonner";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { ActiveOverridesTable } from "@/components/strategy-intelligence/ActiveOverridesTable";
 import { ActionConfirmationModal } from "@/components/strategy-intelligence/ActionConfirmationModal";
-import { ApprovalQueuePanel } from "@/components/strategy-intelligence/ApprovalQueuePanel";
 import { AuditSummaryPanel } from "@/components/strategy-intelligence/AuditSummaryPanel";
 import { BatchSimulationPanel } from "@/components/strategy-intelligence/BatchSimulationPanel";
 import { BeforeAfterImpactCard } from "@/components/strategy-intelligence/BeforeAfterImpactCard";
 import { ConflictActionPanel } from "@/components/strategy-intelligence/ConflictActionPanel";
 import { DataPortabilityPanel } from "@/components/strategy-intelligence/DataPortabilityPanel";
-import { EscalationCenterPanel } from "@/components/strategy-intelligence/EscalationCenterPanel";
+import { GovernanceBoardPanel } from "@/components/strategy-intelligence/GovernanceBoardPanel";
 import { HedgeActionPanel } from "@/components/strategy-intelligence/HedgeActionPanel";
 import { MatrixBatchSimulationPanel } from "@/components/strategy-intelligence/MatrixBatchSimulationPanel";
 import { OverrideForm } from "@/components/strategy-intelligence/OverrideForm";
@@ -76,6 +75,8 @@ export const AdminStrategyIntelligencePage = () => {
   const [revokingId, setRevokingId] = useState("");
   const [batchResult, setBatchResult] = useState(null);
   const [decisionReviewNote, setDecisionReviewNote] = useState("governance_review_note");
+  const [queueOwnerInput, setQueueOwnerInput] = useState("ops");
+  const [selectedQueueIds, setSelectedQueueIds] = useState([]);
   const [decisionPreviewById, setDecisionPreviewById] = useState({});
   const [comparingRunId, setComparingRunId] = useState("");
   const [simulationCompareResult, setSimulationCompareResult] = useState(null);
@@ -87,6 +88,7 @@ export const AdminStrategyIntelligencePage = () => {
   const [appliedHistoryFilters, setAppliedHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS);
   const [escalationCenterData, setEscalationCenterData] = useState({ active_breaches: [], acknowledged: [], resolved: [] });
   const [escalationTab, setEscalationTab] = useState("active");
+  const [escalationOwnerInput, setEscalationOwnerInput] = useState("ops");
   const [escalationAckReason, setEscalationAckReason] = useState("sla_breach_acknowledged");
   const [escalationResolveReason, setEscalationResolveReason] = useState("sla_breach_resolved");
   const [escalationActionId, setEscalationActionId] = useState("");
@@ -139,6 +141,7 @@ export const AdminStrategyIntelligencePage = () => {
       setManualOverrides(overridesRes.data || []);
       setActiveOverrides(activeRes.data || []);
       setDecisionRequests(decisionsRes.data?.items || []);
+      setSelectedQueueIds([]);
       setSimulationHistory(historyRes.data?.items || []);
       setEscalationCenterData(escalationRes.data || { active_breaches: [], acknowledged: [], resolved: [] });
       setLastUpdatedAt(new Date().toISOString());
@@ -181,9 +184,13 @@ export const AdminStrategyIntelligencePage = () => {
       projected_exposure: simulationResult?.projected_exposure ?? 0,
       projected_var: simulationResult?.projected_var ?? 0,
       projected_liquidity_impact: simulationResult?.projected_liquidity_impact ?? 0,
+      exposure_change: simulationResult?.exposure_change ?? 0,
+      var_change: simulationResult?.var_change ?? 0,
+      liquidity_impact: simulationResult?.liquidity_impact ?? 0,
       confidence_adjusted_risk_score: simulationResult?.confidence_adjusted_risk_score ?? 0,
       risk_delta: simulationResult?.risk_delta ?? 0,
       decision_delta: simulationResult?.decision_delta ?? "UNCHANGED",
+      decision_summary: simulationResult?.decision_summary ?? {},
     }),
     [simulationResult]
   );
@@ -401,6 +408,12 @@ export const AdminStrategyIntelligencePage = () => {
     }
   };
 
+  const openLinkedApprovalFromOverride = async (requestId) => {
+    if (!requestId) return;
+    setSelectedQueueIds([requestId]);
+    await previewDecisionRequest(requestId);
+  };
+
   const createDecisionRequest = async ({ requestType, targetType, targetId, reasonNote, impactContext = {} }) => {
     if (!canRequestDecision) {
       toast.error("Decision request sadece admin oluşturabilir");
@@ -459,6 +472,103 @@ export const AdminStrategyIntelligencePage = () => {
       toast.success("Preview token alındı");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Preview alınamadı");
+    } finally {
+      setDecisionActionRequestId("");
+    }
+  };
+
+  const toggleQueueSelection = (requestId) => {
+    setSelectedQueueIds((prev) => {
+      if (prev.includes(requestId)) return prev.filter((item) => item !== requestId);
+      return [...prev, requestId];
+    });
+  };
+
+  const toggleQueueSelectAll = () => {
+    if (selectedQueueIds.length === decisionRequests.length) {
+      setSelectedQueueIds([]);
+      return;
+    }
+    setSelectedQueueIds(decisionRequests.map((item) => item.request_id));
+  };
+
+  const assignQueueOwner = async (requestIds) => {
+    const owner = String(queueOwnerInput || "").trim();
+    if (owner.length < 2) {
+      toast.error("assigned_to minimum 2 karakter");
+      return;
+    }
+    const targetIds = (requestIds || []).filter(Boolean).slice(0, 25);
+    if (targetIds.length === 0) {
+      toast.error("Önce en az 1 kayıt seçin");
+      return;
+    }
+
+    setDecisionActionRequestId(targetIds[0]);
+    try {
+      await Promise.all(
+        targetIds.map((requestId) =>
+          apiClient.post(`/admin/decision-requests/${requestId}/assign-owner`, { assigned_to: owner })
+        )
+      );
+      toast.success(`Owner atandı (${targetIds.length} kayıt)`);
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Owner assign başarısız");
+    } finally {
+      setDecisionActionRequestId("");
+    }
+  };
+
+  const ackQueueRequest = async (requestId) => {
+    const note = String(decisionReviewNote || "").trim();
+    if (note.length < 8) {
+      toast.error("ack note minimum 8 karakter");
+      return;
+    }
+    setDecisionActionRequestId(requestId);
+    try {
+      await apiClient.post(`/admin/decision-requests/${requestId}/ack`, { reason_note: note });
+      toast.success("Request ack edildi");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Ack başarısız");
+    } finally {
+      setDecisionActionRequestId("");
+    }
+  };
+
+  const bulkQueueAction = async (action) => {
+    if (role !== "super_admin") {
+      toast.error("Bulk action sadece super_admin");
+      return;
+    }
+    if (selectedQueueIds.length === 0) {
+      toast.error("Bulk için kayıt seçin");
+      return;
+    }
+    if (selectedQueueIds.length > 25) {
+      toast.error("Bulk limit max 25");
+      return;
+    }
+
+    const note = String(decisionReviewNote || "").trim();
+    if (note.length < 8) {
+      toast.error("review note minimum 8 karakter");
+      return;
+    }
+
+    setDecisionActionRequestId(selectedQueueIds[0]);
+    try {
+      const { data } = await apiClient.post("/admin/decision-requests/bulk-action", {
+        action,
+        request_ids: selectedQueueIds,
+        reason_note: note,
+      });
+      toast.success(`Bulk ${action}: ${data?.processed || 0} kayıt`);
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bulk action başarısız");
     } finally {
       setDecisionActionRequestId("");
     }
@@ -642,16 +752,48 @@ export const AdminStrategyIntelligencePage = () => {
       toast.error("ack reason minimum 8 karakter");
       return;
     }
+    const owner = String(escalationOwnerInput || "").trim();
+    if (owner.length < 2) {
+      toast.error("current_owner minimum 2 karakter");
+      return;
+    }
     setEscalationActionId(item.escalation_id);
     try {
       await apiClient.post(`/admin/escalation-center/${item.escalation_id}/ack`, {
         escalation_reason: reason,
-        current_owner: role,
+        current_owner: owner,
       });
       toast.success("Escalation ack edildi");
       await load();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Escalation ack başarısız");
+    } finally {
+      setEscalationActionId("");
+    }
+  };
+
+  const assignEscalationOwner = async (item) => {
+    const owner = String(escalationOwnerInput || "").trim();
+    const reason = String(escalationAckReason || "").trim();
+    if (owner.length < 2) {
+      toast.error("current_owner minimum 2 karakter");
+      return;
+    }
+    if (reason.length < 8) {
+      toast.error("assign reason minimum 8 karakter");
+      return;
+    }
+
+    setEscalationActionId(item.escalation_id);
+    try {
+      await apiClient.post(`/admin/escalation-center/${item.escalation_id}/assign-owner`, {
+        current_owner: owner,
+        escalation_reason: reason,
+      });
+      toast.success("Escalation owner atandı");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Escalation owner assign başarısız");
     } finally {
       setEscalationActionId("");
     }
@@ -845,34 +987,42 @@ export const AdminStrategyIntelligencePage = () => {
           canRevoke={canApplyOverride}
           revokingId={revokingId}
           onRevoke={revokeOverride}
+          onOpenLinkedApproval={openLinkedApprovalFromOverride}
         />
       </div>
 
-      <ApprovalQueuePanel
-        items={decisionRequests}
+      <GovernanceBoardPanel
         role={role}
-        reviewNote={decisionReviewNote}
-        onReviewNoteChange={setDecisionReviewNote}
-        actionLoadingId={decisionActionRequestId}
-        onPreview={previewDecisionRequest}
-        onApprove={approveDecisionRequest}
-        onReject={rejectDecisionRequest}
-        onExecute={executeDecisionRequest}
+        queueItems={decisionRequests}
+        escalationData={escalationCenterData}
+        selectedQueueIds={selectedQueueIds}
+        onToggleQueueSelect={toggleQueueSelection}
+        onToggleQueueSelectAll={toggleQueueSelectAll}
+        queueReviewNote={decisionReviewNote}
+        onQueueReviewNoteChange={setDecisionReviewNote}
+        queueOwner={queueOwnerInput}
+        onQueueOwnerChange={setQueueOwnerInput}
+        onQueueAssignOwner={assignQueueOwner}
+        onQueueAck={ackQueueRequest}
+        onQueuePreview={previewDecisionRequest}
+        onQueueApprove={approveDecisionRequest}
+        onQueueReject={rejectDecisionRequest}
+        onQueueExecute={executeDecisionRequest}
+        onQueueBulkAction={bulkQueueAction}
+        queueActionLoadingId={decisionActionRequestId}
         previewById={decisionPreviewById}
-      />
-
-      <EscalationCenterPanel
-        role={role}
-        data={escalationCenterData}
-        activeTab={escalationTab}
-        onTabChange={setEscalationTab}
-        ackReason={escalationAckReason}
-        onAckReasonChange={setEscalationAckReason}
-        resolveReason={escalationResolveReason}
-        onResolveReasonChange={setEscalationResolveReason}
-        actionLoadingId={escalationActionId}
-        onAcknowledge={acknowledgeEscalation}
-        onResolve={resolveEscalation}
+        escalationTab={escalationTab}
+        onEscalationTabChange={setEscalationTab}
+        escalationOwner={escalationOwnerInput}
+        onEscalationOwnerChange={setEscalationOwnerInput}
+        escalationAckReason={escalationAckReason}
+        onEscalationAckReasonChange={setEscalationAckReason}
+        escalationResolveReason={escalationResolveReason}
+        onEscalationResolveReasonChange={setEscalationResolveReason}
+        onEscalationAssignOwner={assignEscalationOwner}
+        onEscalationAck={acknowledgeEscalation}
+        onEscalationResolve={resolveEscalation}
+        escalationActionLoadingId={escalationActionId}
         onRefresh={load}
       />
 

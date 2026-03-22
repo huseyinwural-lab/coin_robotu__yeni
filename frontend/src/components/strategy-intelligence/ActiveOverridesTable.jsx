@@ -1,6 +1,15 @@
 import { Button } from "@/components/ui/button";
 
-export const ActiveOverridesTable = ({ rows = [], canRevoke, revokingId, onRevoke }) => {
+const formatCountdown = (value) => {
+  if (value === null || value === undefined) return "-";
+  const total = Math.max(Number(value) || 0, 0);
+  const hour = Math.floor(total / 3600);
+  const min = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  return `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+};
+
+export const ActiveOverridesTable = ({ rows = [], canRevoke, revokingId, onRevoke, onOpenLinkedApproval }) => {
   return (
     <section className="border border-slate-800 bg-slate-900 p-4" data-testid="strategy-intelligence-active-overrides-panel">
       <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="strategy-intelligence-active-overrides-title">Active Overrides</p>
@@ -15,8 +24,17 @@ export const ActiveOverridesTable = ({ rows = [], canRevoke, revokingId, onRevok
             <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-active-override-expiry-${index}`}>
               expires_at={item.expires_at ? new Date(item.expires_at).toLocaleString() : "-"}
             </p>
+            <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-active-override-countdown-${index}`}>
+              expiry_countdown={formatCountdown(item.expiry_countdown_seconds)}
+            </p>
             <p className="text-xs text-slate-500" data-testid={`strategy-intelligence-active-override-status-${index}`}>
               status={item.current_status}
+            </p>
+            <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-active-override-impact-preview-${index}`}>
+              impact_preview: risk={item.impact_preview?.projected_risk_score ?? "-"} · pnl={item.impact_preview?.projected_pnl ?? "-"} · drawdown={item.impact_preview?.projected_drawdown ?? "-"}
+            </p>
+            <p className="text-xs text-slate-400" data-testid={`strategy-intelligence-active-override-linked-approval-${index}`}>
+              linked_approval_request_id={item.linked_approval_request_id || "-"}
             </p>
             <div className="mt-2" data-testid={`strategy-intelligence-active-override-actions-${index}`}>
               <Button
@@ -28,6 +46,17 @@ export const ActiveOverridesTable = ({ rows = [], canRevoke, revokingId, onRevok
               >
                 {revokingId === item.override_id ? "Revoke..." : "Revoke"}
               </Button>
+              {item.linked_approval_request_id && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-2"
+                  onClick={() => onOpenLinkedApproval?.(item.linked_approval_request_id)}
+                  data-testid={`strategy-intelligence-active-override-open-approval-button-${index}`}
+                >
+                  Open Approval
+                </Button>
+              )}
             </div>
           </article>
         ))}

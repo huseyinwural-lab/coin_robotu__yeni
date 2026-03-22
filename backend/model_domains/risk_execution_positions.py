@@ -384,6 +384,9 @@ class DecisionApprovalRequest(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assigned_to: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    ack_by: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class EscalationCenterItem(Base):

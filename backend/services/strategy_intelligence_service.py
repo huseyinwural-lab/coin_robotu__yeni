@@ -364,6 +364,10 @@ def normalize_manual_override_row(row: ManualOverrideLog) -> dict:
     elif expires_at and expires_at <= _now():
         status = "expired"
 
+    expiry_countdown_seconds = None
+    if expires_at and status == "active":
+        expiry_countdown_seconds = int(max((expires_at - _now()).total_seconds(), 0))
+
     return {
         "override_id": row.override_id,
         "admin_id": row.admin_id,
@@ -382,6 +386,8 @@ def normalize_manual_override_row(row: ManualOverrideLog) -> dict:
         "current_status": status,
         "revoked_at": revoked_at,
         "revoked_by": payload.get("revoked_by"),
+        "expiry_countdown_seconds": expiry_countdown_seconds,
+        "linked_approval_request_id": payload.get("linked_approval_request_id"),
         "payload": payload,
         "timestamp": row.timestamp,
     }
@@ -451,9 +457,11 @@ def simulate_risk_impact(
     projected_drawdown = round(projected_risk * 0.12, 6)
     projected_var = round(projected_risk * max(after_exposure, 1) * 0.08, 4)
     projected_liquidity_impact = round(min(1.0, (after_exposure / 100000.0)), 6)
+    base_risk_score = _safe_float(risk_payload.get("base_risk_score") or risk_payload.get("risk_score"), projected_risk)
+    before_var = round(base_risk_score * max(before_exposure, 1) * 0.08, 4)
 
     before_state = {
-        "risk_score": round(_safe_float(risk_payload.get("base_risk_score") or risk_payload.get("risk_score"), projected_risk), 6),
+        "risk_score": round(base_risk_score, 6),
         "gate_decision": str(risk_payload.get("base_decision") or risk_payload.get("decision") or "ALLOW"),
         "exposure": round(before_exposure, 4),
         "pnl_estimate": round(max(before_exposure, 1) * 0.01, 4),
@@ -466,6 +474,9 @@ def simulate_risk_impact(
     }
 
     risk_delta = round(after_state["risk_score"] - before_state["risk_score"], 6)
+    exposure_change = round(after_state["exposure"] - before_state["exposure"], 4)
+    var_change = round(projected_var - before_var, 4)
+    liquidity_impact = projected_liquidity_impact
     decision_delta = "UNCHANGED"
     if before_state["gate_decision"] != after_state["gate_decision"]:
         decision_delta = f"{before_state['gate_decision']}->{after_state['gate_decision']}"
@@ -490,6 +501,9 @@ def simulate_risk_impact(
         "projected_exposure": round(after_exposure, 4),
         "projected_var": projected_var,
         "projected_liquidity_impact": projected_liquidity_impact,
+        "exposure_change": exposure_change,
+        "var_change": var_change,
+        "liquidity_impact": liquidity_impact,
         "confidence_adjusted_risk_score": confidence_adjusted_risk_score,
         "before_state": before_state,
         "after_state": after_state,
@@ -498,6 +512,17 @@ def simulate_risk_impact(
             "hedge_required": bool(hedge_result.get("hedge_symbol")),
             "allocation_notice": rebalance_result.get("allocation_adjustment_notice"),
             "decision_delta": decision_delta,
+            "why": "risk guard + conflict/hedge/rebalance sinyalleri",
+            "what_changes": {
+                "exposure_change": exposure_change,
+                "var_change": var_change,
+                "liquidity_impact": liquidity_impact,
+            },
+            "risk_effect": {
+                "before_risk_score": before_state["risk_score"],
+                "after_risk_score": after_state["risk_score"],
+                "risk_delta": risk_delta,
+            },
         },
         "risk_delta": risk_delta,
         "decision_delta": decision_delta,
