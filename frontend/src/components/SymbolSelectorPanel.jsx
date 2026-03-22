@@ -59,6 +59,20 @@ const detectQuoteAsset = (symbol) => {
   return "UNKNOWN";
 };
 
+const liquidityBandFromVolume = (volume) => {
+  const numeric = Number(volume || 0);
+  if (numeric >= 50_000_000) return "high";
+  if (numeric >= 10_000_000) return "medium";
+  return "low";
+};
+
+const riskBandFromVolume = (volume) => {
+  const liquidityBand = liquidityBandFromVolume(volume);
+  if (liquidityBand === "high") return "low";
+  if (liquidityBand === "medium") return "medium";
+  return "high";
+};
+
 export const SymbolSelectorPanel = ({
   testIdPrefix,
   exchange = "binance",
@@ -81,6 +95,9 @@ export const SymbolSelectorPanel = ({
   const [watchlistName, setWatchlistName] = useState("");
   const [isDeletingWatchlist, setIsDeletingWatchlist] = useState(false);
   const [providerConfig, setProviderConfig] = useState(null);
+  const [liquidityBandFilter, setLiquidityBandFilter] = useState("all");
+  const [riskBandFilter, setRiskBandFilter] = useState("all");
+  const [exchangeFilter, setExchangeFilter] = useState("all");
 
   const normalizedSelectedSymbols = useMemo(() => normalizeSymbols(selectedSymbols), [selectedSymbols]);
   const normalizedMode = useMemo(() => normalizeModeValue(mode), [mode]);
@@ -98,6 +115,24 @@ export const SymbolSelectorPanel = ({
     }).filter((row) => Boolean(row.symbol)),
     [rows, source],
   );
+
+  const depthFilteredRows = useMemo(() => {
+    return normalizedRows.filter((row) => {
+      const liquidityBand = liquidityBandFromVolume(row.volume_24h);
+      const riskBand = riskBandFromVolume(row.volume_24h);
+      const rowExchange = String(row.exchange || "").toLowerCase();
+
+      if (exchangeFilter !== "all" && rowExchange !== exchangeFilter) return false;
+      if (liquidityBandFilter !== "all" && liquidityBand !== liquidityBandFilter) return false;
+      if (riskBandFilter !== "all" && riskBand !== riskBandFilter) return false;
+      return true;
+    });
+  }, [normalizedRows, exchangeFilter, liquidityBandFilter, riskBandFilter]);
+
+  const exchangeOptions = useMemo(() => {
+    const values = Array.from(new Set(normalizedRows.map((row) => String(row.exchange || "").toLowerCase()).filter(Boolean)));
+    return ["all", ...values];
+  }, [normalizedRows]);
 
   const loadProviderConfig = useCallback(async () => {
     try {
@@ -206,8 +241,8 @@ export const SymbolSelectorPanel = ({
   };
 
   const visibleSymbols = useMemo(
-    () => normalizedRows.filter((row) => !row.unsupported).map((row) => row.symbol),
-    [normalizedRows],
+    () => depthFilteredRows.filter((row) => !row.unsupported).map((row) => row.symbol),
+    [depthFilteredRows],
   );
 
   const allVisibleSelected = useMemo(
@@ -345,6 +380,52 @@ export const SymbolSelectorPanel = ({
         </div>
       </div>
 
+      <div className="grid gap-2 md:grid-cols-3" data-testid={`${testIdPrefix}-depth-filters-grid`}>
+        <label className="space-y-1" data-testid={`${testIdPrefix}-depth-liquidity-field`}>
+          <span className="text-xs text-slate-400">Liquidity Band</span>
+          <select
+            value={liquidityBandFilter}
+            onChange={(event) => setLiquidityBandFilter(event.target.value)}
+            className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-sm"
+            data-testid={`${testIdPrefix}-depth-liquidity-select`}
+          >
+            <option value="all">all</option>
+            <option value="high">high</option>
+            <option value="medium">medium</option>
+            <option value="low">low</option>
+          </select>
+        </label>
+
+        <label className="space-y-1" data-testid={`${testIdPrefix}-depth-risk-field`}>
+          <span className="text-xs text-slate-400">Risk Band</span>
+          <select
+            value={riskBandFilter}
+            onChange={(event) => setRiskBandFilter(event.target.value)}
+            className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-sm"
+            data-testid={`${testIdPrefix}-depth-risk-select`}
+          >
+            <option value="all">all</option>
+            <option value="high">high</option>
+            <option value="medium">medium</option>
+            <option value="low">low</option>
+          </select>
+        </label>
+
+        <label className="space-y-1" data-testid={`${testIdPrefix}-depth-exchange-field`}>
+          <span className="text-xs text-slate-400">Exchange</span>
+          <select
+            value={exchangeFilter}
+            onChange={(event) => setExchangeFilter(event.target.value)}
+            className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-sm"
+            data-testid={`${testIdPrefix}-depth-exchange-select`}
+          >
+            {exchangeOptions.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       <div className="grid gap-2 md:grid-cols-3" data-testid={`${testIdPrefix}-watchlist-grid`}>
         <label className="space-y-1" data-testid={`${testIdPrefix}-watchlist-select-field`}>
           <span className="text-xs text-slate-400">Kayıtlı Liste</span>
@@ -413,7 +494,7 @@ export const SymbolSelectorPanel = ({
             </tr>
           </thead>
           <tbody data-testid={`${testIdPrefix}-rows-body`}>
-            {normalizedRows.map((row, index) => {
+            {depthFilteredRows.map((row, index) => {
               const checked = normalizedSelectedSymbols.includes(row.symbol);
               return (
                 <tr

@@ -9,7 +9,10 @@ import { AuditSummaryPanel } from "@/components/strategy-intelligence/AuditSumma
 import { BatchSimulationPanel } from "@/components/strategy-intelligence/BatchSimulationPanel";
 import { BeforeAfterImpactCard } from "@/components/strategy-intelligence/BeforeAfterImpactCard";
 import { ConflictActionPanel } from "@/components/strategy-intelligence/ConflictActionPanel";
+import { DataPortabilityPanel } from "@/components/strategy-intelligence/DataPortabilityPanel";
+import { EscalationCenterPanel } from "@/components/strategy-intelligence/EscalationCenterPanel";
 import { HedgeActionPanel } from "@/components/strategy-intelligence/HedgeActionPanel";
+import { MatrixBatchSimulationPanel } from "@/components/strategy-intelligence/MatrixBatchSimulationPanel";
 import { OverrideForm } from "@/components/strategy-intelligence/OverrideForm";
 import { PresetScenarioPanel } from "@/components/strategy-intelligence/PresetScenarioPanel";
 import { RebalanceActionPanel } from "@/components/strategy-intelligence/RebalanceActionPanel";
@@ -82,6 +85,23 @@ export const AdminStrategyIntelligencePage = () => {
   const [presetOverrides, setPresetOverrides] = useState({});
   const [historyFilters, setHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS);
   const [appliedHistoryFilters, setAppliedHistoryFilters] = useState(DEFAULT_HISTORY_FILTERS);
+  const [escalationCenterData, setEscalationCenterData] = useState({ active_breaches: [], acknowledged: [], resolved: [] });
+  const [escalationTab, setEscalationTab] = useState("active");
+  const [escalationAckReason, setEscalationAckReason] = useState("sla_breach_acknowledged");
+  const [escalationResolveReason, setEscalationResolveReason] = useState("sla_breach_resolved");
+  const [escalationActionId, setEscalationActionId] = useState("");
+  const [matrixConfig, setMatrixConfig] = useState({
+    symbols_text: "BTCUSDT,ETHUSDT",
+    strategy_bindings_text: "spot_pullback_v1,trend_follow_v1",
+    side: "buy",
+    base_notional: "100",
+  });
+  const [isRunningMatrixBatch, setIsRunningMatrixBatch] = useState(false);
+  const [matrixBatchResult, setMatrixBatchResult] = useState(null);
+  const [exportDataset, setExportDataset] = useState("decision_requests");
+  const [isExportingData, setIsExportingData] = useState(false);
+  const [importJsonFile, setImportJsonFile] = useState(null);
+  const [isImportingData, setIsImportingData] = useState(false);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -107,18 +127,20 @@ export const AdminStrategyIntelligencePage = () => {
         ...(appliedHistoryFilters.severity_band ? { severity_band: appliedHistoryFilters.severity_band } : {}),
         ...(appliedHistoryFilters.request_type ? { request_type: appliedHistoryFilters.request_type } : {}),
       };
-      const [dashRes, overridesRes, activeRes, decisionsRes, historyRes] = await Promise.all([
+      const [dashRes, overridesRes, activeRes, decisionsRes, historyRes, escalationRes] = await Promise.all([
         apiClient.get("/admin/strategy-intelligence"),
         apiClient.get("/admin/manual-overrides"),
         apiClient.get("/admin/active-overrides"),
         apiClient.get("/admin/decision-requests"),
         apiClient.get("/admin/risk-simulation/history", { params: historyParams }),
+        apiClient.get("/admin/escalation-center"),
       ]);
       setDashboard(dashRes.data || null);
       setManualOverrides(overridesRes.data || []);
       setActiveOverrides(activeRes.data || []);
       setDecisionRequests(decisionsRes.data?.items || []);
       setSimulationHistory(historyRes.data?.items || []);
+      setEscalationCenterData(escalationRes.data || { active_breaches: [], acknowledged: [], resolved: [] });
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Strategy intelligence verisi yüklenemedi";
@@ -563,6 +585,158 @@ export const AdminStrategyIntelligencePage = () => {
     setAppliedHistoryFilters(DEFAULT_HISTORY_FILTERS);
   };
 
+  const updateMatrixConfig = (key, value) => {
+    setMatrixConfig((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const runMatrixBatchSimulation = async () => {
+    if (!simulationForm.user_id.trim()) {
+      toast.error("Matrix simulation için user_id zorunlu");
+      return;
+    }
+    const symbols = String(matrixConfig.symbols_text || "")
+      .split(",")
+      .map((item) => item.trim().toUpperCase())
+      .filter(Boolean);
+    const strategyBindings = String(matrixConfig.strategy_bindings_text || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (symbols.length === 0 || strategyBindings.length === 0) {
+      toast.error("symbols ve strategy listesi zorunlu");
+      return;
+    }
+
+    setIsRunningMatrixBatch(true);
+    try {
+      const { data } = await apiClient.post("/admin/risk-simulation/matrix-batch", {
+        user_id: simulationForm.user_id,
+        symbols,
+        strategy_bindings: strategyBindings,
+        side: matrixConfig.side,
+        base_notional: Number(matrixConfig.base_notional || 0),
+        volatility_pct: Number(simulationForm.volatility_pct || 0),
+        preset_scenario: selectedPreset || null,
+        preset_overrides: selectedPreset ? presetOverrides : {},
+      });
+      setMatrixBatchResult(data || null);
+      toast.success(`Matrix batch tamamlandı (${data?.total_runs || 0} kombinasyon)`);
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Matrix batch başarısız");
+    } finally {
+      setIsRunningMatrixBatch(false);
+    }
+  };
+
+  const acknowledgeEscalation = async (item) => {
+    if (!["admin", "super_admin"].includes(role)) {
+      toast.error("Ack sadece admin/super_admin");
+      return;
+    }
+    const reason = String(escalationAckReason || "").trim();
+    if (reason.length < 8) {
+      toast.error("ack reason minimum 8 karakter");
+      return;
+    }
+    setEscalationActionId(item.escalation_id);
+    try {
+      await apiClient.post(`/admin/escalation-center/${item.escalation_id}/ack`, {
+        escalation_reason: reason,
+        current_owner: role,
+      });
+      toast.success("Escalation ack edildi");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Escalation ack başarısız");
+    } finally {
+      setEscalationActionId("");
+    }
+  };
+
+  const resolveEscalation = async (item) => {
+    if (role !== "super_admin") {
+      toast.error("Resolve sadece super_admin");
+      return;
+    }
+    const reason = String(escalationResolveReason || "").trim();
+    if (reason.length < 8) {
+      toast.error("resolve reason minimum 8 karakter");
+      return;
+    }
+    setEscalationActionId(item.escalation_id);
+    try {
+      await apiClient.post(`/admin/escalation-center/${item.escalation_id}/resolve`, {
+        escalation_reason: reason,
+      });
+      toast.success("Escalation resolved");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Escalation resolve başarısız");
+    } finally {
+      setEscalationActionId("");
+    }
+  };
+
+  const exportStrategyIntelligenceData = async (format) => {
+    setIsExportingData(true);
+    try {
+      const response = await apiClient.get("/admin/strategy-intelligence/export", {
+        params: { export_format: format, dataset: exportDataset },
+        responseType: format === "csv" ? "text" : "json",
+      });
+
+      const payload = format === "csv" ? response.data : JSON.stringify(response.data, null, 2);
+      const mime = format === "csv" ? "text/csv;charset=utf-8;" : "application/json;charset=utf-8;";
+      const blob = new Blob([payload], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `strategy_intelligence_${exportDataset}.${format}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+      toast.success(`${format.toUpperCase()} export hazır`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Export başarısız");
+    } finally {
+      setIsExportingData(false);
+    }
+  };
+
+  const onImportJsonFileChange = (event) => {
+    const file = event?.target?.files?.[0] || null;
+    setImportJsonFile(file);
+  };
+
+  const importStrategyIntelligenceJson = async () => {
+    if (role !== "super_admin") {
+      toast.error("Import sadece super_admin");
+      return;
+    }
+    if (!importJsonFile) {
+      toast.error("Önce JSON dosyası seçin");
+      return;
+    }
+
+    setIsImportingData(true);
+    try {
+      const text = await importJsonFile.text();
+      const parsed = JSON.parse(text);
+      const { data } = await apiClient.post("/admin/strategy-intelligence/import-json", parsed);
+      toast.success(`Import tamam: simulation=${data?.imported_simulation_runs || 0}, decision=${data?.imported_decision_requests || 0}`);
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Import başarısız");
+    } finally {
+      setIsImportingData(false);
+    }
+  };
+
   if (isLoading) {
     return <LoadingSkeleton rows={10} testId="strategy-intelligence-loading-skeleton" />;
   }
@@ -685,6 +859,42 @@ export const AdminStrategyIntelligencePage = () => {
         onReject={rejectDecisionRequest}
         onExecute={executeDecisionRequest}
         previewById={decisionPreviewById}
+      />
+
+      <EscalationCenterPanel
+        role={role}
+        data={escalationCenterData}
+        activeTab={escalationTab}
+        onTabChange={setEscalationTab}
+        ackReason={escalationAckReason}
+        onAckReasonChange={setEscalationAckReason}
+        resolveReason={escalationResolveReason}
+        onResolveReasonChange={setEscalationResolveReason}
+        actionLoadingId={escalationActionId}
+        onAcknowledge={acknowledgeEscalation}
+        onResolve={resolveEscalation}
+        onRefresh={load}
+      />
+
+      <MatrixBatchSimulationPanel
+        canSimulate={canSimulate}
+        config={matrixConfig}
+        onConfigChange={updateMatrixConfig}
+        isRunning={isRunningMatrixBatch}
+        onRun={runMatrixBatchSimulation}
+        result={matrixBatchResult}
+      />
+
+      <DataPortabilityPanel
+        role={role}
+        exportDataset={exportDataset}
+        onExportDatasetChange={setExportDataset}
+        onExport={exportStrategyIntelligenceData}
+        onImportFileChange={onImportJsonFileChange}
+        onImportJson={importStrategyIntelligenceJson}
+        isExporting={isExportingData}
+        isImporting={isImportingData}
+        importFileName={importJsonFile?.name || ""}
       />
 
       <SimulationHistoryPanel

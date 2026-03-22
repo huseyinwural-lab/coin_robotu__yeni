@@ -385,6 +385,25 @@ class DecisionApprovalRequest(Base):
     approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+
+class EscalationCenterItem(Base):
+    __tablename__ = "escalation_center_items"
+
+    escalation_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    linked_request_id: Mapped[str] = mapped_column(String(120), ForeignKey("decision_approval_requests.request_id"), index=True)
+    linked_simulation_run_id: Mapped[str | None] = mapped_column(String(120), ForeignKey("simulation_runs.run_id"), nullable=True, index=True)
+    state: Mapped[str] = mapped_column(String(30), default="active", index=True)
+    escalation_level: Mapped[str] = mapped_column(String(20), default="L1")
+    escalation_reason: Mapped[str] = mapped_column(Text, default="")
+    breach_age_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    current_owner: Mapped[str] = mapped_column(String(120), default="unassigned", index=True)
+    ack_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
 class StrategyAllocation(Base):
     __tablename__ = "strategy_allocations"
 

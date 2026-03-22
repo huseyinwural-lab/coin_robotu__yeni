@@ -1,21 +1,27 @@
 from datetime import datetime, timezone
 from datetime import timedelta
+import csv
 import hashlib
+import io
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from core.policy.quote_policy import InvalidSymbol, normalize_symbol
 from db import get_db
 from deps import require_admin
-from models import DecisionApprovalRequest, SimulationRun, SimulationScenarioItem, User, UserRole
+from models import DecisionApprovalRequest, EscalationCenterItem, SimulationRun, SimulationScenarioItem, User, UserRole
 from schemas import (
     AdminStrategyIntelligenceResponse,
     DecisionApprovalActionRequest,
     DecisionApprovalRequestResponse,
+    EscalationAcknowledgeRequest,
+    EscalationCenterItemResponse,
+    EscalationCenterResponse,
+    EscalationResolveRequest,
     DecisionRequestCreateRequest,
     DecisionRequestExecuteRequest,
     DecisionRequestPreviewResponse,
@@ -30,6 +36,9 @@ from schemas import (
     RiskBatchSimulationRequest,
     RiskBatchSimulationResponse,
     RiskBatchSimulationItem,
+    RiskMatrixBatchSimulationItem,
+    RiskMatrixBatchSimulationRequest,
+    RiskMatrixBatchSimulationResponse,
     RiskSimulationRequest,
     RiskSimulationPresetItem,
     RiskSimulationPresetsResponse,
@@ -37,6 +46,8 @@ from schemas import (
     SimulationCompareCurrentResponse,
     SimulationHistoryItemResponse,
     SimulationHistoryResponse,
+    StrategyIntelligenceImportRequest,
+    StrategyIntelligenceImportResponse,
     StrategyConflictResponse,
     CapitalRebalanceEventResponse,
 )
@@ -155,6 +166,7 @@ def _ensure_intelligence_tables(db: Session) -> None:
     SimulationRun.__table__.create(bind=bind, checkfirst=True)
     SimulationScenarioItem.__table__.create(bind=bind, checkfirst=True)
     DecisionApprovalRequest.__table__.create(bind=bind, checkfirst=True)
+    EscalationCenterItem.__table__.create(bind=bind, checkfirst=True)
 
 
 def _summary_hash(payload: dict) -> str:
@@ -305,6 +317,97 @@ def _decision_sla_snapshot(*, created_at: datetime | None, request_status: str) 
         "sla_state": "healthy",
         "escalation_state": "none",
     }
+
+
+def _breach_age_seconds(created_at: datetime | None) -> int:
+    if not isinstance(created_at, datetime):
+        return 0
+    created_utc = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+    return int(max((datetime.now(timezone.utc) - created_utc).total_seconds(), 0))
+
+
+def _serialize_escalation_item(row: EscalationCenterItem) -> dict:
+    return {
+        "escalation_id": row.escalation_id,
+        "linked_request_id": row.linked_request_id,
+        "linked_simulation_run_id": row.linked_simulation_run_id,
+        "state": row.state,
+        "escalation_level": row.escalation_level,
+        "escalation_reason": row.escalation_reason,
+        "breach_age_seconds": int(row.breach_age_seconds or 0),
+        "current_owner": row.current_owner,
+        "ack_by": row.ack_by,
+        "ack_at": row.ack_at,
+        "resolved_by": row.resolved_by,
+        "resolved_at": row.resolved_at,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+def _sync_escalation_center(db: Session) -> None:
+    _ensure_intelligence_tables(db)
+    pending_rows = (
+        db.query(DecisionApprovalRequest)
+        .filter(
+            DecisionApprovalRequest.request_type.in_(["conflict_resolve", "hedge_apply", "rebalance_change"]),
+            DecisionApprovalRequest.status == "pending",
+        )
+        .all()
+    )
+
+    for request_row in pending_rows:
+        sla = _decision_sla_snapshot(created_at=request_row.created_at, request_status=request_row.status)
+        if str(sla.get("sla_state")) != "breach":
+            continue
+
+        existing = (
+            db.query(EscalationCenterItem)
+            .filter(EscalationCenterItem.linked_request_id == request_row.request_id)
+            .first()
+        )
+        if existing:
+            if existing.state == "resolved":
+                continue
+            existing.state = "acknowledged" if existing.ack_at else "active"
+            existing.breach_age_seconds = _breach_age_seconds(request_row.created_at)
+            existing.escalation_reason = existing.escalation_reason or "SLA breach tespit edildi"
+            existing.linked_simulation_run_id = request_row.simulation_run_id
+            existing.updated_at = datetime.now(timezone.utc)
+            continue
+
+        created = EscalationCenterItem(
+            escalation_id=f"esc_{uuid.uuid4().hex[:12]}",
+            linked_request_id=request_row.request_id,
+            linked_simulation_run_id=request_row.simulation_run_id,
+            state="active",
+            escalation_level="L1",
+            escalation_reason="SLA breach tespit edildi",
+            breach_age_seconds=_breach_age_seconds(request_row.created_at),
+            current_owner="unassigned",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        db.add(created)
+
+    unresolved_items = db.query(EscalationCenterItem).filter(EscalationCenterItem.state != "resolved").all()
+    for item in unresolved_items:
+        linked_request = (
+            db.query(DecisionApprovalRequest)
+            .filter(DecisionApprovalRequest.request_id == item.linked_request_id)
+            .first()
+        )
+        if not linked_request:
+            continue
+        if linked_request.status != "pending":
+            item.state = "resolved"
+            item.resolved_at = datetime.now(timezone.utc)
+            item.resolved_by = linked_request.approved_by
+            item.escalation_reason = item.escalation_reason or "linked request pending dışına çıktı"
+            item.updated_at = datetime.now(timezone.utc)
+            continue
+        item.breach_age_seconds = _breach_age_seconds(linked_request.created_at)
+        item.updated_at = datetime.now(timezone.utc)
 
 
 def _serialize_approval_row(row: DecisionApprovalRequest) -> dict:
@@ -931,6 +1034,96 @@ def preview_decision_request(
     )
 
 
+@router.get("/escalation-center", response_model=EscalationCenterResponse)
+def list_escalation_center(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    _ensure_intelligence_tables(db)
+    _sync_escalation_center(db)
+    db.commit()
+
+    rows = db.query(EscalationCenterItem).order_by(desc(EscalationCenterItem.created_at)).limit(500).all()
+
+    active: list[dict] = []
+    acknowledged: list[dict] = []
+    resolved: list[dict] = []
+    for row in rows:
+        serialized = _serialize_escalation_item(row)
+        state = str(row.state or "active")
+        if state == "resolved":
+            resolved.append(serialized)
+        elif state == "acknowledged":
+            acknowledged.append(serialized)
+        else:
+            active.append(serialized)
+
+    active.sort(key=lambda item: -int(item.get("breach_age_seconds") or 0))
+    acknowledged.sort(key=lambda item: -int(item.get("breach_age_seconds") or 0))
+    resolved.sort(key=lambda item: str(item.get("resolved_at") or ""), reverse=True)
+    return EscalationCenterResponse(
+        active_breaches=[EscalationCenterItemResponse(**item) for item in active],
+        acknowledged=[EscalationCenterItemResponse(**item) for item in acknowledged],
+        resolved=[EscalationCenterItemResponse(**item) for item in resolved],
+    )
+
+
+@router.post("/escalation-center/{escalation_id}/ack", response_model=EscalationCenterItemResponse)
+def acknowledge_escalation_item(
+    escalation_id: str,
+    payload: EscalationAcknowledgeRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    role = _role_name(current_user)
+    if role not in {"admin", "super_admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ack sadece admin/super_admin")
+
+    _ensure_intelligence_tables(db)
+    row = db.query(EscalationCenterItem).filter(EscalationCenterItem.escalation_id == escalation_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="escalation bulunamadı")
+    if row.state == "resolved":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="resolved escalation ack edilemez")
+
+    row.state = "acknowledged"
+    row.ack_by = str(current_user.id)
+    row.ack_at = datetime.now(timezone.utc)
+    row.current_owner = str(payload.current_owner or current_user.id)
+    row.escalation_reason = payload.escalation_reason
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return EscalationCenterItemResponse(**_serialize_escalation_item(row))
+
+
+@router.post("/escalation-center/{escalation_id}/resolve", response_model=EscalationCenterItemResponse)
+def resolve_escalation_item(
+    escalation_id: str,
+    payload: EscalationResolveRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if _role_name(current_user) != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="resolve sadece super_admin")
+
+    _ensure_intelligence_tables(db)
+    row = db.query(EscalationCenterItem).filter(EscalationCenterItem.escalation_id == escalation_id).first()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="escalation bulunamadı")
+
+    row.state = "resolved"
+    row.resolved_by = str(current_user.id)
+    row.resolved_at = datetime.now(timezone.utc)
+    row.current_owner = str(current_user.id)
+    row.escalation_reason = payload.escalation_reason
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return EscalationCenterItemResponse(**_serialize_escalation_item(row))
+
+
 @router.get("/simulation-runs/{run_id}/compare-current", response_model=SimulationCompareCurrentResponse)
 def compare_simulation_run_current(
     run_id: str,
@@ -1328,6 +1521,263 @@ def risk_simulation_batch(
             "avg_confidence_adjusted_risk_score": round(avg_adj_risk, 6),
         },
         items=items,
+    )
+
+
+@router.post("/risk-simulation/matrix-batch", response_model=RiskMatrixBatchSimulationResponse)
+def risk_simulation_matrix_batch(
+    payload: RiskMatrixBatchSimulationRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    resolved_user_id = _resolve_valid_user_id(db, payload.user_id)
+    symbols = [str(item or "").upper().strip() for item in (payload.symbols or []) if str(item or "").strip()]
+    strategies = [str(item or "").strip() for item in (payload.strategy_bindings or []) if str(item or "").strip()]
+    if not symbols or not strategies:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="symbols ve strategy_bindings zorunlu")
+
+    unique_symbols = list(dict.fromkeys(symbols))[:30]
+    unique_strategies = list(dict.fromkeys(strategies))[:20]
+    total_combinations = len(unique_symbols) * len(unique_strategies)
+    if total_combinations > 240:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="matrix batch için max 240 kombinasyon")
+
+    items: list[RiskMatrixBatchSimulationItem] = []
+    side = str(payload.side or "buy")
+    for symbol in unique_symbols:
+        try:
+            valid_symbol = normalize_symbol(symbol, missing_error_code="symbol_required", invalid_error_code="invalid_quote_asset")
+        except InvalidSymbol:
+            continue
+
+        for strategy_binding in unique_strategies:
+            base_payload = {
+                "symbol": valid_symbol,
+                "user_id": resolved_user_id,
+                "side": side,
+                "notional": float(payload.base_notional or 0),
+                "position_size_value": float(payload.base_notional or 0),
+                "strategy_binding": strategy_binding,
+                "volatility_pct": float(payload.volatility_pct or 0),
+            }
+            intent_payload = _apply_simulation_preset(
+                intent_payload=base_payload,
+                preset_scenario=payload.preset_scenario,
+                preset_overrides=payload.preset_overrides,
+            )
+            notional = float(intent_payload.get("notional") or intent_payload.get("position_size_value") or 0)
+
+            conflict_result = evaluate_conflict_warning(
+                db,
+                user_id=resolved_user_id,
+                strategy_id=strategy_binding,
+                symbol=valid_symbol,
+                signal_direction=side,
+                confidence_score=float(intent_payload.get("signal_confidence") or 0.65),
+            )
+            rebalance_result = evaluate_capital_rebalance(db, user_id=resolved_user_id, apply_changes=False)
+            hedge_result = evaluate_hedge_suggestion(db, user_id=resolved_user_id, volatility=float(intent_payload.get("volatility_pct") or 0))
+            risk_result = portfolio_risk_check(
+                db,
+                user_id=resolved_user_id,
+                execution_intent={"symbol": valid_symbol, "notional": notional, "position_size": float(intent_payload.get("size") or 0)},
+                strategy_context={"strategy_id": strategy_binding},
+                market_state={"volatility_pct": float(intent_payload.get("volatility_pct") or 0)},
+            )
+            simulation = simulate_risk_impact(
+                simulation_payload=intent_payload,
+                conflict_result=conflict_result,
+                rebalance_result=rebalance_result,
+                hedge_result=hedge_result,
+                risk_payload=risk_result,
+            )
+
+            _persist_simulation_run(
+                db,
+                simulation=simulation,
+                current_user=current_user,
+                symbols=[valid_symbol],
+                request_mode="matrix_batch",
+                status_value="preview",
+            )
+
+            risk_delta = float(simulation.get("risk_delta") or 0)
+            items.append(
+                RiskMatrixBatchSimulationItem(
+                    simulation_id=str(simulation.get("simulation_id") or ""),
+                    symbol=valid_symbol,
+                    strategy_binding=strategy_binding,
+                    projected_risk_score=float(simulation.get("projected_risk_score") or 0),
+                    confidence_adjusted_risk_score=float(simulation.get("confidence_adjusted_risk_score") or 0),
+                    projected_gate_decision=str(simulation.get("projected_gate_decision") or "ALLOW"),
+                    risk_delta=risk_delta,
+                    decision_delta=str(simulation.get("decision_delta") or "UNCHANGED"),
+                    severity_band=_severity_band(risk_delta),
+                )
+            )
+
+    db.commit()
+    if not items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Geçerli matrix kombinasyonu bulunamadı")
+
+    avg_risk = sum(item.projected_risk_score for item in items) / max(len(items), 1)
+    decision_counts: dict[str, int] = {}
+    for item in items:
+        decision_counts[item.projected_gate_decision] = decision_counts.get(item.projected_gate_decision, 0) + 1
+    return RiskMatrixBatchSimulationResponse(
+        matrix_id=f"matrix_{uuid.uuid4().hex[:12]}",
+        simulated_at=datetime.now(timezone.utc),
+        total_runs=len(items),
+        summary={
+            "avg_projected_risk_score": round(avg_risk, 6),
+            "decision_counts": decision_counts,
+        },
+        items=items,
+    )
+
+
+@router.get("/strategy-intelligence/export")
+def export_strategy_intelligence_data(
+    export_format: str = Query(default="json"),
+    dataset: str = Query(default="decision_requests"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    _ensure_intelligence_tables(db)
+    normalized_format = str(export_format or "json").lower().strip()
+    normalized_dataset = str(dataset or "decision_requests").lower().strip()
+    if normalized_dataset not in {"decision_requests", "simulation_history"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="dataset geçersiz")
+
+    if normalized_dataset == "decision_requests":
+        rows = db.query(DecisionApprovalRequest).order_by(desc(DecisionApprovalRequest.created_at)).limit(1000).all()
+        data = [_build_decision_request_response(row) for row in rows]
+    else:
+        rows = db.query(SimulationRun).filter(SimulationRun.scope == "strategy_intelligence").order_by(desc(SimulationRun.created_at)).limit(1000).all()
+        data = [_serialize_history_row(row) for row in rows]
+
+    if normalized_format == "json":
+        return {
+            "dataset": normalized_dataset,
+            "count": len(data),
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "items": data,
+        }
+
+    if normalized_format != "csv":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="export_format json/csv olmalı")
+
+    buffer = io.StringIO()
+    if not data:
+        buffer.write("id\n")
+    else:
+        headers = sorted({key for row in data for key in row.keys()})
+        writer = csv.DictWriter(buffer, fieldnames=headers)
+        writer.writeheader()
+        for row in data:
+            normalized_row = {
+                key: json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
+                for key, value in row.items()
+            }
+            writer.writerow(normalized_row)
+
+    file_name = f"strategy_intelligence_{normalized_dataset}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={file_name}"},
+    )
+
+
+@router.post("/strategy-intelligence/import-json", response_model=StrategyIntelligenceImportResponse)
+def import_strategy_intelligence_json(
+    payload: StrategyIntelligenceImportRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if _role_name(current_user) != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="import sadece super_admin")
+    _ensure_intelligence_tables(db)
+
+    imported_decision_requests = 0
+    imported_simulation_runs = 0
+    skipped_items = 0
+
+    for row in payload.simulation_runs:
+        run_id = str(row.get("run_id") or "").strip()
+        if not run_id:
+            skipped_items += 1
+            continue
+        exists = db.query(SimulationRun).filter(SimulationRun.run_id == run_id).first()
+        if exists:
+            skipped_items += 1
+            continue
+        created_at_raw = row.get("created_at")
+        created_at = datetime.now(timezone.utc)
+        if created_at_raw:
+            try:
+                created_at = datetime.fromisoformat(str(created_at_raw).replace("Z", "+00:00"))
+            except ValueError:
+                created_at = datetime.now(timezone.utc)
+        db.add(
+            SimulationRun(
+                run_id=run_id,
+                actor_id=str(row.get("actor_id") or current_user.id),
+                actor_role=str(row.get("actor_role") or _role_name(current_user)),
+                scope="strategy_intelligence",
+                status=str(row.get("status") or "preview"),
+                request_mode=str(row.get("request_mode") or "single"),
+                symbols=row.get("symbols") or [],
+                summary_hash=str(row.get("summary_hash") or _summary_hash(row)),
+                input_payload=row.get("input_payload") or {},
+                output_payload=row.get("output_payload") or {},
+                approval_request_id=row.get("approval_request_id"),
+                created_at=created_at,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        imported_simulation_runs += 1
+
+    for row in payload.decision_requests:
+        request_id = str(row.get("request_id") or "").strip()
+        if not request_id:
+            skipped_items += 1
+            continue
+        exists = db.query(DecisionApprovalRequest).filter(DecisionApprovalRequest.request_id == request_id).first()
+        if exists:
+            skipped_items += 1
+            continue
+        created_at_raw = row.get("created_at")
+        created_at = datetime.now(timezone.utc)
+        if created_at_raw:
+            try:
+                created_at = datetime.fromisoformat(str(created_at_raw).replace("Z", "+00:00"))
+            except ValueError:
+                created_at = datetime.now(timezone.utc)
+        db.add(
+            DecisionApprovalRequest(
+                request_id=request_id,
+                request_type=str(row.get("request_type") or "conflict_resolve"),
+                status=str(row.get("status") or "pending"),
+                requested_by=str(row.get("requested_by") or current_user.id),
+                requested_role=str(row.get("requested_role") or "admin"),
+                reason_note=str(row.get("reason_note") or "imported_request"),
+                simulation_run_id=row.get("simulation_run_id"),
+                payload=row.get("payload") or {},
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+                created_at=created_at,
+                approved_by=row.get("approved_by"),
+                review_note=row.get("review_note"),
+            )
+        )
+        imported_decision_requests += 1
+
+    db.commit()
+    return StrategyIntelligenceImportResponse(
+        imported_decision_requests=imported_decision_requests,
+        imported_simulation_runs=imported_simulation_runs,
+        skipped_items=skipped_items,
     )
 
 

@@ -35,6 +35,7 @@ from model_domains.learning_recommendations import (
 )
 from model_domains.risk_execution_positions import (
     DecisionApprovalRequest,
+    EscalationCenterItem,
     DecisionTraceCold,
     DecisionTraceHot,
     ExecutionCorrectionEvent,
@@ -150,6 +151,7 @@ __all__ = [
     "SimulationRun",
     "SimulationScenarioItem",
     "DecisionApprovalRequest",
+    "EscalationCenterItem",
     "ReplayRun",
     "ReplayExecution",
     "ReplayEquityPoint",

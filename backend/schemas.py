@@ -2478,6 +2478,37 @@ class RiskBatchSimulationResponse(BaseModel):
     items: list[RiskBatchSimulationItem] = Field(default_factory=list)
 
 
+class RiskMatrixBatchSimulationRequest(BaseModel):
+    user_id: str
+    symbols: list[str] = Field(default_factory=list)
+    strategy_bindings: list[str] = Field(default_factory=list)
+    side: str = "buy"
+    base_notional: float = 100
+    volatility_pct: float = 3
+    preset_scenario: str | None = None
+    preset_overrides: dict = Field(default_factory=dict)
+
+
+class RiskMatrixBatchSimulationItem(BaseModel):
+    simulation_id: str
+    symbol: str
+    strategy_binding: str
+    projected_risk_score: float
+    confidence_adjusted_risk_score: float
+    projected_gate_decision: str
+    risk_delta: float
+    decision_delta: str
+    severity_band: str = "low"
+
+
+class RiskMatrixBatchSimulationResponse(BaseModel):
+    matrix_id: str
+    simulated_at: datetime
+    total_runs: int
+    summary: dict = Field(default_factory=dict)
+    items: list[RiskMatrixBatchSimulationItem] = Field(default_factory=list)
+
+
 class RiskSimulationPresetItem(BaseModel):
     preset_key: str
     label: str
@@ -2536,6 +2567,49 @@ class DecisionApprovalRequestResponse(BaseModel):
     sla_countdown_seconds: int | None = None
     sla_state: str = "n/a"
     escalation_state: str = "none"
+
+
+class EscalationCenterItemResponse(BaseModel):
+    escalation_id: str
+    linked_request_id: str
+    linked_simulation_run_id: str | None = None
+    state: str = "active"
+    escalation_level: str = "L1"
+    escalation_reason: str
+    breach_age_seconds: int = 0
+    current_owner: str
+    ack_by: str | None = None
+    ack_at: datetime | None = None
+    resolved_by: str | None = None
+    resolved_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class EscalationCenterResponse(BaseModel):
+    active_breaches: list[EscalationCenterItemResponse] = Field(default_factory=list)
+    acknowledged: list[EscalationCenterItemResponse] = Field(default_factory=list)
+    resolved: list[EscalationCenterItemResponse] = Field(default_factory=list)
+
+
+class EscalationAcknowledgeRequest(BaseModel):
+    escalation_reason: str = Field(min_length=8)
+    current_owner: str | None = None
+
+
+class EscalationResolveRequest(BaseModel):
+    escalation_reason: str = Field(min_length=8)
+
+
+class StrategyIntelligenceImportRequest(BaseModel):
+    decision_requests: list[dict] = Field(default_factory=list)
+    simulation_runs: list[dict] = Field(default_factory=list)
+
+
+class StrategyIntelligenceImportResponse(BaseModel):
+    imported_decision_requests: int = 0
+    imported_simulation_runs: int = 0
+    skipped_items: int = 0
 
 
 class DecisionApprovalRequestsResponse(BaseModel):
