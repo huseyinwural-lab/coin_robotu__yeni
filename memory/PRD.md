@@ -20,6 +20,50 @@
   - no-match mesajı doğru
   - temizleme sonrası menü geri geliyor
 
+## 2026-03-22 — Strategy Intelligence: Approval-Gated State Machine + Sprint2 Core ✅
+
+### Scope (onaylı)
+- Öncelik: **Approval-gated state machine**
+- Aynı turda Sprint2 core:
+  - batch simulation (**selected symbols only**)
+  - confidence-adjusted risk score
+  - kalıcı simulation history (DB)
+
+### Tamamlananlar — Backend
+- Approval-gated akış eklendi:
+  - `POST /api/admin/manual-overrides`
+    - `admin` => `pending_approval`
+    - `super_admin` => doğrudan apply
+  - `GET /api/admin/override-approval-requests`
+  - `POST /api/admin/override-approval-requests/{id}/approve`
+  - `POST /api/admin/override-approval-requests/{id}/reject`
+- Kalıcı simulation history altyapısı eklendi (DB):
+  - `SimulationRun`
+  - `SimulationScenarioItem`
+  - `DecisionApprovalRequest`
+  - Endpoint: `GET /api/admin/risk-simulation/history`
+- Batch simulation (selected symbols):
+  - `POST /api/admin/risk-simulation/batch`
+- Single + batch response’a **confidence_adjusted_risk_score** eklendi
+
+### Tamamlananlar — Frontend
+- Strategy Intelligence panelinde yeni bloklar aktif:
+  - Approval Requests panel (super_admin approve/reject)
+  - Simulation History panel
+  - Batch Simulation panel
+- Role görünürlüğü güncellendi:
+  - super_admin: apply/revoke + approve/execute
+  - admin: request-only (approval-gated)
+  - ops/viewer: read-only + simulation
+- Before/After kartında confidence-adjusted risk görünürlüğü eklendi
+
+### Test
+- Test raporu: `/app/test_reports/iteration_74.json`
+  - Backend: **100% (16/16 PASS)**
+  - Frontend: **100% PASS**
+- Ek frontend smoke: auto_frontend_testing_agent PASS (4/4)
+- Binance execution **MOCKED**
+
 ## 2026-03-22 — Strategy Intelligence: Sprint1 ✅ + Sprint2 Başlangıç ✅
 
 ### Scope (kilitlenen kapsam)
