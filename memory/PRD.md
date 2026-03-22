@@ -20,6 +20,44 @@
   - no-match mesajı doğru
   - temizleme sonrası menü geri geliyor
 
+## 2026-03-22 — Phase 6 ✅ (Snapshot + Export + What-if) + Request Age Badge ✅
+
+### Scope (onaylı)
+- Phase 6 ana işleri:
+  - Snapshot
+  - JSON/CSV export
+  - What-if simulation (read-only)
+- Küçük ek iş:
+  - Approval listesinde request age etiketi
+
+### Phase 6 — Tamamlananlar
+- **Snapshot alma**
+  - `POST /api/admin/strategy-allocation/snapshots`
+  - `GET /api/admin/strategy-allocation/snapshots`
+  - Snapshot state freeze verisi (strategy count, total weight/capital, reason)
+- **Export**
+  - `GET /api/admin/strategy-allocation/export?format=json`
+  - `GET /api/admin/strategy-allocation/export?format=csv`
+- **What-if simulation**
+  - `POST /api/admin/strategy-allocation/what-if-simulation`
+  - read-only preview (DB commit yok)
+  - portfolio return/risk delta + strategy satır bazlı projected delta
+  - UI tabloda `What-if Compare` karşılaştırma sütunu
+
+### Request Age Badge (Approval)
+- Approval satırında `requested_by + reason` yanında age etiketi eklendi
+- Format:
+  - `< 60 dk` → `Xm`
+  - `< 24 saat` → `Xh Ym`
+  - `>= 24 saat` → `Xd Yh`
+
+### Test
+- Test raporu: `/app/test_reports/iteration_72.json`
+  - Backend: **100% (18/18 PASS)**
+  - Frontend: **100% PASS**
+- Regresyon: Phase 5 approval flow PASS
+- Binance execution **MOCKED**
+
 ## 2026-03-22 — Phase 5 ✅ + Confidence Band ✅
 
 ### Scope (onaylı)
