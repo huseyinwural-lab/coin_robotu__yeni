@@ -23,6 +23,7 @@ const formatMoney = (value) => {
 };
 
 const createDraftFromRow = (item) => ({
+  expected_revision: Number(item.revision_id || 1),
   capital_weight: String(item.capital_weight ?? "0"),
   max_capital: String(item.max_capital ?? "0"),
   current_capital: String(item.current_capital ?? "0"),
@@ -98,6 +99,32 @@ const formatRequestAge = (createdAt, nowMs) => {
   return `${days}d ${hours}h`;
 };
 
+const getApiDetailMessage = (error, fallbackMessage) => {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (detail && typeof detail === "object") return detail.message || fallbackMessage;
+  return fallbackMessage;
+};
+
+const getRevisionConflictDetail = (error) => {
+  if (error?.response?.status !== 409) return null;
+  const detail = error?.response?.data?.detail;
+  if (detail && typeof detail === "object") return detail;
+  return {
+    code: "REVISION_CONFLICT",
+    message: typeof detail === "string" ? detail : "Veri güncel değil. Lütfen en güncel halini yükleyin.",
+    conflicts: [],
+  };
+};
+
+const approvalStatusLabel = (item) => {
+  const status = String(item?.status || "").toLowerCase();
+  if (status === "requires_review" || String(item?.stale_state || "").toUpperCase() === "STALE") {
+    return "REQUIRES_REVIEW";
+  }
+  return String(item?.status || "-").toUpperCase();
+};
+
 export const AdminStrategyAllocationPage = () => {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
@@ -131,15 +158,49 @@ export const AdminStrategyAllocationPage = () => {
   const [whatIfResult, setWhatIfResult] = useState(null);
   const [requestAgeTick, setRequestAgeTick] = useState(Date.now());
   const [lastUpdatedAt, setLastUpdatedAt] = useState("");
+  const [revisionConflict, setRevisionConflict] = useState(null);
 
   const role = String(user?.role || "");
   const isOpsReadOnly = role === "ops";
   const isSuperAdmin = role === "super_admin";
 
+  const buildExpectedRevisionMap = () => {
+    const map = {};
+    rows.forEach((row) => {
+      const draft = drafts[row.strategy_id] || {};
+      map[row.strategy_id] = Number(draft.expected_revision || row.revision_id || 1);
+    });
+    return map;
+  };
+
+  const showRevisionConflict = (detail) => {
+    const message = detail?.message || "Veri güncel değil. Lütfen en güncel halini yükleyin.";
+    setRevisionConflict({
+      message,
+      conflicts: Array.isArray(detail?.conflicts) ? detail.conflicts : [],
+      action_type: detail?.action_type || "unknown",
+    });
+    setGlobalActionError(message);
+    toast.error(message);
+  };
+
+  const handleConflictError = (error, fallbackMessage) => {
+    const conflictDetail = getRevisionConflictDetail(error);
+    if (conflictDetail) {
+      showRevisionConflict(conflictDetail);
+      return true;
+    }
+    const message = getApiDetailMessage(error, fallbackMessage);
+    setGlobalActionError(message);
+    toast.error(message);
+    return false;
+  };
+
   const load = async () => {
     setIsLoading(true);
     setLoadError("");
     setGlobalActionError("");
+    setRevisionConflict(null);
     try {
       const [rowsResp, summaryResp, historyResp, approvalResp, snapshotsResp] = await Promise.all([
         apiClient.get("/admin/strategy-allocation"),
@@ -228,6 +289,7 @@ export const AdminStrategyAllocationPage = () => {
 
   const updateDraft = (strategyId, key, value) => {
     setGlobalActionError("");
+    setRevisionConflict(null);
     setDrafts((prev) => ({
       ...prev,
       [strategyId]: {
@@ -282,6 +344,7 @@ export const AdminStrategyAllocationPage = () => {
     if (!note) return;
 
     const draft = drafts[strategyId] || {};
+    const sourceRow = rows.find((row) => row.strategy_id === strategyId);
     const rowErrors = getRowErrors(strategyId);
     if (rowErrors.length > 0) {
       const firstError = rowErrors[0] || "Form geçersiz";
@@ -292,6 +355,7 @@ export const AdminStrategyAllocationPage = () => {
 
     try {
       const { data } = await apiClient.put(`/admin/strategy-allocation/${encodeURIComponent(strategyId)}`, {
+        expected_revision: Number(draft.expected_revision || sourceRow?.revision_id || 1),
         capital_weight: Number(draft.capital_weight),
         max_capital: Number(draft.max_capital),
         current_capital: Number(draft.current_capital),
@@ -306,6 +370,7 @@ export const AdminStrategyAllocationPage = () => {
         return;
       }
       toast.success(`Allocation güncellendi: ${strategyId}`);
+      setRevisionConflict(null);
       if (data?.is_drift_override) {
         const notice = `Manual change overridden by drift rule (${data?.state_reason_code || "AUTO"})`;
         setDriftOverrideNotice(notice);
@@ -315,9 +380,7 @@ export const AdminStrategyAllocationPage = () => {
       }
       await load();
     } catch (error) {
-      const message = error?.response?.data?.detail || "Allocation güncellenemedi";
-      setGlobalActionError(message);
-      toast.error(message);
+      handleConflictError(error, "Allocation güncellenemedi");
     }
   };
 
@@ -332,13 +395,15 @@ export const AdminStrategyAllocationPage = () => {
     setIsNormalizing(true);
     setGlobalActionError("");
     try {
-      const { data } = await apiClient.post("/admin/strategy-allocation/normalize", { reason_note: note });
+      const { data } = await apiClient.post("/admin/strategy-allocation/normalize", {
+        reason_note: note,
+        expected_revisions: buildExpectedRevisionMap(),
+      });
       toast.success(data?.message || "Weight normalize tamamlandı");
+      setRevisionConflict(null);
       await load();
     } catch (error) {
-      const message = error?.response?.data?.detail || "Normalize işlemi başarısız";
-      setGlobalActionError(message);
-      toast.error(message);
+      handleConflictError(error, "Normalize işlemi başarısız");
     } finally {
       setIsNormalizing(false);
     }
@@ -405,10 +470,13 @@ export const AdminStrategyAllocationPage = () => {
     const ok = window.confirm(`${strategyId} silinsin mi? (auto-normalize açık)`);
     if (!ok) return;
 
+    const sourceRow = rows.find((row) => row.strategy_id === strategyId);
+    const expectedRevision = Number(drafts[strategyId]?.expected_revision || sourceRow?.revision_id || 1);
+
     setGlobalActionError("");
     try {
       const { data } = await apiClient.delete(`/admin/strategy-allocation/${encodeURIComponent(strategyId)}`, {
-        params: { auto_normalize: true, reason_note: note },
+        params: { auto_normalize: true, reason_note: note, expected_revision: expectedRevision },
       });
       if (data?.status === "pending_approval") {
         toast.success(data?.message || `Delete onaya gönderildi: ${strategyId}`);
@@ -416,11 +484,10 @@ export const AdminStrategyAllocationPage = () => {
         return;
       }
       toast.success(`Strategy silindi: ${strategyId}`);
+      setRevisionConflict(null);
       await load();
     } catch (error) {
-      const message = error?.response?.data?.detail || "Strategy silinemedi";
-      setGlobalActionError(message);
-      toast.error(message);
+      handleConflictError(error, "Strategy silinemedi");
     }
   };
 
@@ -437,8 +504,12 @@ export const AdminStrategyAllocationPage = () => {
     const second = window.confirm("İkinci onay: state değişimi uygulanacak. Devam?");
     if (!second) return;
 
+    const sourceRow = rows.find((row) => row.strategy_id === strategyId);
+    const expectedRevision = Number(drafts[strategyId]?.expected_revision || sourceRow?.revision_id || 1);
+
     try {
       const { data } = await apiClient.post(`/admin/strategy-allocation/${encodeURIComponent(strategyId)}/throttle-toggle`, {
+        expected_revision: expectedRevision,
         confirm_primary: DOUBLE_CONFIRM_PRIMARY,
         confirm_secondary: DOUBLE_CONFIRM_SECONDARY,
         reason_note: note,
@@ -449,11 +520,10 @@ export const AdminStrategyAllocationPage = () => {
         return;
       }
       toast.success(`Throttle toggle tamamlandı: ${strategyId}`);
+      setRevisionConflict(null);
       await load();
     } catch (error) {
-      const message = error?.response?.data?.detail || "Throttle toggle başarısız";
-      setGlobalActionError(message);
-      toast.error(message);
+      handleConflictError(error, "Throttle toggle başarısız");
     }
   };
 
@@ -615,8 +685,10 @@ export const AdminStrategyAllocationPage = () => {
       const { data } = await apiClient.post("/admin/strategy-allocation/bulk-update", {
         updates: selectedStrategyIds.map((strategyId) => {
           const draft = drafts[strategyId] || {};
+          const sourceRow = rows.find((row) => row.strategy_id === strategyId);
           return {
             strategy_id: strategyId,
+            expected_revision: Number(draft.expected_revision || sourceRow?.revision_id || 1),
             capital_weight: Number(draft.capital_weight),
             max_capital: Number(draft.max_capital),
             current_capital: Number(draft.current_capital),
@@ -634,15 +706,14 @@ export const AdminStrategyAllocationPage = () => {
         return;
       }
       toast.success(`Bulk update tamamlandı (${selectedStrategyIds.length} strategy)`);
+      setRevisionConflict(null);
       const enforcedRows = data?.enforced_reduce_rows || [];
       if (enforcedRows.length > 0) {
         toast.warning(`Critical drawdown auto-reduce uygulandı (${enforcedRows.length} strategy)`);
       }
       await load();
     } catch (error) {
-      const message = error?.response?.data?.detail || "Bulk update başarısız";
-      setGlobalActionError(message);
-      toast.error(message);
+      handleConflictError(error, "Bulk update başarısız");
     } finally {
       setIsBulkSubmitting(false);
     }
@@ -664,9 +735,10 @@ export const AdminStrategyAllocationPage = () => {
         reason_note: reviewNote,
       });
       toast.success(data?.message || `Request approved: ${requestId}`);
+      setRevisionConflict(null);
       await load();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Approval approve başarısız");
+      handleConflictError(error, "Approval approve başarısız");
     }
   };
 
@@ -688,7 +760,7 @@ export const AdminStrategyAllocationPage = () => {
       toast.success(data?.message || `Request rejected: ${requestId}`);
       await load();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Approval reject başarısız");
+      toast.error(getApiDetailMessage(error, "Approval reject başarısız"));
     }
   };
 
@@ -730,6 +802,20 @@ export const AdminStrategyAllocationPage = () => {
       {globalActionError && (
         <div className="col-span-12 border border-rose-500/40 bg-rose-950/20 p-3 text-sm text-rose-200" data-testid="admin-strategy-allocation-action-error-alert">
           İşlem hatası: {globalActionError}
+        </div>
+      )}
+
+      {revisionConflict && (
+        <div className="col-span-12 border border-amber-500/40 bg-amber-950/20 p-3 text-sm text-amber-100" data-testid="admin-strategy-allocation-revision-conflict-banner">
+          <p data-testid="admin-strategy-allocation-revision-conflict-message">{revisionConflict.message}</p>
+          {(revisionConflict.conflicts || []).slice(0, 3).map((conflict, index) => (
+            <p key={`${conflict.strategy_id || "unknown"}-${index}`} className="mt-1 text-xs text-amber-200" data-testid={`admin-strategy-allocation-revision-conflict-item-${index}`}>
+              {conflict.strategy_id || "unknown"}: beklenen={String(conflict.expected_revision)} · güncel={String(conflict.current_revision)}
+            </p>
+          ))}
+          <Button className="mt-2" variant="outline" onClick={load} data-testid="admin-strategy-allocation-revision-conflict-reload-button">
+            En güncel halini yükle
+          </Button>
         </div>
       )}
 
@@ -1003,6 +1089,12 @@ export const AdminStrategyAllocationPage = () => {
         </article>
       </div>
 
+      {whatIfResult && (
+        <div className="col-span-12 border border-cyan-500/40 bg-cyan-950/20 p-3 text-sm text-cyan-100" data-testid="admin-strategy-allocation-whatif-preview-warning-banner">
+          Simulation preview only: Bu değerler tabloya yansıtılan önizlemedir, otomatik commit yapılmaz.
+        </div>
+      )}
+
       <div className="col-span-12 overflow-x-auto border border-slate-800 bg-slate-900" data-testid="admin-strategy-allocation-table-wrapper">
         <table className="min-w-full text-sm" data-testid="admin-strategy-allocation-table">
           <thead className="bg-slate-800 text-left" data-testid="admin-strategy-allocation-table-head">
@@ -1019,7 +1111,7 @@ export const AdminStrategyAllocationPage = () => {
               <th className="px-3 py-2">Performance</th>
               <th className="px-3 py-2">Signal Decay</th>
               <th className="px-3 py-2">Execution Quality</th>
-              <th className="px-3 py-2">What-if Compare</th>
+              <th className="px-3 py-2">What-if Compare (Preview)</th>
               <th className="px-3 py-2">Action</th>
             </tr>
           </thead>
@@ -1028,8 +1120,13 @@ export const AdminStrategyAllocationPage = () => {
               const draft = drafts[item.strategy_id] || {};
               const rowErrors = getRowErrors(item.strategy_id);
               const stateChanged = isStateChanged(item.strategy_id);
+              const simulationRow = whatIfByStrategy[item.strategy_id];
               return (
-                <tr key={item.strategy_id} className="border-t border-slate-800" data-testid={`admin-strategy-allocation-row-${item.strategy_id}`}>
+                <tr
+                  key={item.strategy_id}
+                  className={`border-t border-slate-800 ${simulationRow ? "bg-cyan-950/10" : ""}`}
+                  data-testid={`admin-strategy-allocation-row-${item.strategy_id}`}
+                >
                   <td className="px-3 py-2">
                     <input
                       type="checkbox"
@@ -1038,7 +1135,12 @@ export const AdminStrategyAllocationPage = () => {
                       data-testid={`admin-strategy-allocation-row-select-checkbox-${item.strategy_id}`}
                     />
                   </td>
-                  <td className="px-3 py-2" data-testid={`admin-strategy-allocation-strategy-${item.strategy_id}`}>{item.strategy_id}</td>
+                  <td className="px-3 py-2" data-testid={`admin-strategy-allocation-strategy-${item.strategy_id}`}>
+                    <p>{item.strategy_id}</p>
+                    <p className="text-[10px] text-slate-500" data-testid={`admin-strategy-allocation-revision-${item.strategy_id}`}>
+                      revision={item.revision_id}
+                    </p>
+                  </td>
                   <td className="px-3 py-2"><Input value={draft.capital_weight ?? ""} type="number" min="0" max="1" step="0.0001" onChange={(event) => updateDraft(item.strategy_id, "capital_weight", event.target.value)} data-testid={`admin-strategy-allocation-weight-input-${item.strategy_id}`} /></td>
                   <td className="px-3 py-2"><Input value={draft.max_capital ?? ""} type="number" min="0" step="0.01" onChange={(event) => updateDraft(item.strategy_id, "max_capital", event.target.value)} data-testid={`admin-strategy-allocation-max-capital-input-${item.strategy_id}`} /></td>
                   <td className="px-3 py-2"><Input value={draft.current_capital ?? ""} type="number" min="0" step="0.01" onChange={(event) => updateDraft(item.strategy_id, "current_capital", event.target.value)} data-testid={`admin-strategy-allocation-current-capital-input-${item.strategy_id}`} /></td>
@@ -1075,17 +1177,23 @@ export const AdminStrategyAllocationPage = () => {
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-signal-decay-${item.strategy_id}`}>{item.signal_decay}</td>
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-execution-quality-${item.strategy_id}`}>{item.execution_quality_score}</td>
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-whatif-cell-${item.strategy_id}`}>
-                    {!whatIfByStrategy[item.strategy_id] && <span className="text-xs text-slate-500">No data yet</span>}
-                    {whatIfByStrategy[item.strategy_id] && (
+                    {!simulationRow && <span className="text-xs text-slate-500">No data yet</span>}
+                    {simulationRow && (
                       <div className="text-xs" data-testid={`admin-strategy-allocation-whatif-cell-content-${item.strategy_id}`}>
                         <p data-testid={`admin-strategy-allocation-whatif-weight-${item.strategy_id}`}>
-                          w: {whatIfByStrategy[item.strategy_id].current_weight} → {whatIfByStrategy[item.strategy_id].suggested_weight}
+                          w: {simulationRow.current_weight} → {simulationRow.suggested_weight}
+                        </p>
+                        <p data-testid={`admin-strategy-allocation-whatif-weight-delta-${item.strategy_id}`}>
+                          weight Δ {simulationRow.weight_delta}
                         </p>
                         <p data-testid={`admin-strategy-allocation-whatif-return-${item.strategy_id}`}>
-                          return Δ {whatIfByStrategy[item.strategy_id].projected_return_delta_pct}
+                          return Δ {simulationRow.projected_return_delta_pct}
                         </p>
                         <p data-testid={`admin-strategy-allocation-whatif-risk-${item.strategy_id}`}>
-                          risk Δ {whatIfByStrategy[item.strategy_id].projected_risk_delta_pct}
+                          risk Δ {simulationRow.projected_risk_delta_pct}
+                        </p>
+                        <p className="text-[10px] text-cyan-200" data-testid={`admin-strategy-allocation-whatif-preview-note-${item.strategy_id}`}>
+                          preview_only=true
                         </p>
                       </div>
                     )}
@@ -1144,10 +1252,13 @@ export const AdminStrategyAllocationPage = () => {
           {approvalRequests.map((item, index) => (
             <div key={`${item.request_id}-${index}`} className="rounded border border-slate-800 bg-slate-950 p-2 text-xs" data-testid={`admin-strategy-allocation-approval-item-${index}`}>
               <p data-testid={`admin-strategy-allocation-approval-item-main-${index}`}>
-                {item.request_id} · {item.action_type} · status={item.status}
+                {item.request_id} · {item.action_type} ·
+                <span className="ml-1 rounded border border-slate-700 px-1 py-0.5 text-[10px]" data-testid={`admin-strategy-allocation-approval-item-status-${index}`}>
+                  {approvalStatusLabel(item)}
+                </span>
               </p>
               <p data-testid={`admin-strategy-allocation-approval-item-reason-${index}`}>
-                requested_by={item.requested_by} · reason={item.reason_note}
+                requested_by={item.requested_by} ({item.requested_role || "-"}) · reason={item.reason_note}
                 <span className="ml-2 rounded border border-slate-700 px-1 py-0.5 text-[10px]" data-testid={`admin-strategy-allocation-approval-item-age-${index}`}>
                   {formatRequestAge(item.created_at, requestAgeTick)}
                 </span>
@@ -1155,6 +1266,11 @@ export const AdminStrategyAllocationPage = () => {
               <p data-testid={`admin-strategy-allocation-approval-item-expiry-${index}`}>
                 expires_at={item.expires_at}
               </p>
+              {approvalStatusLabel(item) === "REQUIRES_REVIEW" && (
+                <p className="mt-1 text-[11px] text-amber-300" data-testid={`admin-strategy-allocation-approval-item-stale-${index}`}>
+                  stale_state={item.stale_state || "STALE"} · conflicts={(item.stale_conflicts || []).length}
+                </p>
+              )}
               {isSuperAdmin && item.status === "pending" && (
                 <div className="mt-1 flex gap-2" data-testid={`admin-strategy-allocation-approval-item-actions-${index}`}>
                   <Button size="sm" variant="outline" onClick={() => approveRequest(item.request_id)} data-testid={`admin-strategy-allocation-approval-approve-button-${index}`}>

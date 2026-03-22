@@ -25,6 +25,7 @@ from schemas import (
     StrategyAllocationWhatIfRequest,
     StrategyAllocationWhatIfResponse,
     StrategyAllocationReasonNoteRequest,
+    StrategyAllocationNormalizeRequest,
     StrategyAllocationRebalanceSuggestRequest,
     StrategyAllocationRebalanceSuggestionResponse,
     StrategyAllocationResponse,
@@ -36,6 +37,8 @@ from schemas import (
 )
 from services.meta_strategy_engine_service import (
     build_strategy_allocation_row_payload,
+    build_projection_from_rebalance_suggestions,
+    build_projection_from_rows,
     bulk_update_strategy_allocations,
     create_strategy_allocation,
     delete_strategy_allocation,
@@ -69,6 +72,139 @@ def _require_reason_note(reason_note: str | None) -> str:
     if not note:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="reason_note zorunlu")
     return note
+
+
+def _coerce_expected_revision(value, *, field_name: str = "expected_revision") -> int:
+    try:
+        revision = int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{field_name} sayısal ve >= 1 olmalı",
+        ) from exc
+    if revision < 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} >= 1 olmalı")
+    return revision
+
+
+def _build_revision_conflict_payload(*, action_type: str, conflicts: list[dict], request_id: str | None = None) -> dict:
+    payload = {
+        "code": "REVISION_CONFLICT",
+        "message": "Veri başka bir işlem tarafından güncellendi. Lütfen en güncel halini yükleyin.",
+        "action_type": action_type,
+        "conflicts": conflicts,
+    }
+    if request_id:
+        payload["request_id"] = request_id
+    return payload
+
+
+def _validate_revision_expectations(db: Session, expectations: dict[str, int], *, action_type: str) -> list[dict]:
+    if not expectations:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="expected_revision zorunlu")
+
+    strategy_ids = list(expectations.keys())
+    rows = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id.in_(strategy_ids)).all()
+    row_map = {str(item.strategy_id): item for item in rows}
+
+    conflicts: list[dict] = []
+    for strategy_id, expected_revision in expectations.items():
+        row = row_map.get(strategy_id)
+        if not row:
+            conflicts.append(
+                {
+                    "strategy_id": strategy_id,
+                    "expected_revision": int(expected_revision),
+                    "current_revision": None,
+                    "reason": "MISSING_TARGET",
+                }
+            )
+            continue
+        current_revision = int(getattr(row, "revision_id", 1) or 1)
+        if current_revision != int(expected_revision):
+            conflicts.append(
+                {
+                    "strategy_id": strategy_id,
+                    "expected_revision": int(expected_revision),
+                    "current_revision": current_revision,
+                    "reason": "REVISION_MISMATCH",
+                    "action_type": action_type,
+                }
+            )
+    return conflicts
+
+
+def _raise_revision_conflict(*, action_type: str, conflicts: list[dict], request_id: str | None = None) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=_build_revision_conflict_payload(action_type=action_type, conflicts=conflicts, request_id=request_id),
+    )
+
+
+def _extract_revision_expectations_for_request(action_type: str, payload: dict) -> dict[str, int]:
+    body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
+    expectations: dict[str, int] = {}
+
+    if action_type == "update":
+        strategy_id = str(payload.get("strategy_id") or "").strip()
+        expected_revision = body.get("expected_revision")
+        if strategy_id and expected_revision is not None:
+            expectations[strategy_id] = _coerce_expected_revision(expected_revision, field_name="expected_revision")
+        return expectations
+
+    if action_type == "delete":
+        strategy_id = str(payload.get("strategy_id") or "").strip()
+        expected_revision = payload.get("expected_revision")
+        if strategy_id and expected_revision is not None:
+            expectations[strategy_id] = _coerce_expected_revision(expected_revision, field_name="expected_revision")
+        return expectations
+
+    if action_type == "throttle_toggle":
+        strategy_id = str(payload.get("strategy_id") or "").strip()
+        expected_revision = body.get("expected_revision")
+        if strategy_id and expected_revision is not None:
+            expectations[strategy_id] = _coerce_expected_revision(expected_revision, field_name="expected_revision")
+        return expectations
+
+    if action_type == "bulk_update":
+        updates = body.get("updates") or []
+        for item in updates:
+            if not isinstance(item, dict):
+                continue
+            strategy_id = str(item.get("strategy_id") or "").strip()
+            if not strategy_id:
+                continue
+            if item.get("expected_revision") is None:
+                continue
+            expectations[strategy_id] = _coerce_expected_revision(
+                item.get("expected_revision"),
+                field_name=f"expected_revision[{strategy_id}]",
+            )
+        return expectations
+
+    if action_type == "normalize":
+        expected_revisions = body.get("expected_revisions") or {}
+        if not expected_revisions:
+            return expectations
+        if not isinstance(expected_revisions, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="expected_revisions map olmalı")
+        for strategy_id, revision in expected_revisions.items():
+            key = str(strategy_id or "").strip()
+            if not key:
+                continue
+            expectations[key] = _coerce_expected_revision(revision, field_name=f"expected_revisions[{key}]")
+        return expectations
+
+    return expectations
+
+
+def _mark_request_requires_review(request_row: dict, *, review_note: str, conflicts: list[dict]) -> None:
+    request_row["status"] = "requires_review"
+    request_row["stale_state"] = "STALE"
+    request_row["stale_reason_code"] = "REVISION_MISMATCH"
+    request_row["stale_conflicts"] = conflicts
+    request_row["review_note"] = review_note
+    request_row["reviewed_at"] = _now()
 
 
 def _queue_allocation_approval_request(
@@ -132,35 +268,7 @@ def _build_what_if_payload(db: Session, strategy_ids: list[str] | None = None) -
             "projected_portfolio_risk_delta_pct": 0.0,
             "rows": [],
         }
-
-    mapped_rows = []
-    total_return_delta = 0.0
-    total_risk_delta = 0.0
-    for row in rows:
-        delta = float(row.get("delta") or 0)
-        confidence = float(row.get("confidence") or 0)
-        performance_norm = float(row.get("performance_norm") or 0)
-        decay = float(row.get("decay") or 0)
-
-        projected_return_delta_pct = round(delta * (performance_norm * 40 + confidence * 20), 4)
-        projected_risk_delta_pct = round(delta * ((1 - confidence) * 25 + decay * 15), 4)
-
-        total_return_delta += projected_return_delta_pct
-        total_risk_delta += projected_risk_delta_pct
-
-        mapped_rows.append(
-            {
-                "strategy_id": row.get("strategy_id"),
-                "current_weight": float(row.get("current_weight") or 0),
-                "suggested_weight": float(row.get("suggested_weight") or 0),
-                "weight_delta": round(delta, 8),
-                "confidence": confidence,
-                "performance_norm": performance_norm,
-                "decay": decay,
-                "projected_return_delta_pct": projected_return_delta_pct,
-                "projected_risk_delta_pct": projected_risk_delta_pct,
-            }
-        )
+    projection = build_projection_from_rebalance_suggestions(rows)
 
     return {
         "status": "success",
@@ -168,9 +276,9 @@ def _build_what_if_payload(db: Session, strategy_ids: list[str] | None = None) -
         "trace_id": suggestion.get("trace_id") or f"alloc_whatif_{uuid4().hex[:10]}",
         "read_only": True,
         "selection_count": int(suggestion.get("selection_count") or 0),
-        "projected_portfolio_return_delta_pct": round(total_return_delta, 4),
-        "projected_portfolio_risk_delta_pct": round(total_risk_delta, 4),
-        "rows": mapped_rows,
+        "projected_portfolio_return_delta_pct": projection.get("projected_portfolio_return_delta_pct", 0),
+        "projected_portfolio_risk_delta_pct": projection.get("projected_portfolio_risk_delta_pct", 0),
+        "rows": projection.get("rows") or [],
     }
 
 
@@ -218,7 +326,11 @@ def _execute_allocation_approval_request(
     reason_note = str(request_row.get("reason_note") or "approved_request")
 
     if action_type == "normalize":
-        result = normalize_strategy_allocations(db)
+        result = normalize_strategy_allocations(
+            db,
+            actor_id=str(current_user.id),
+            change_reason=f"approval::{reason_note}",
+        )
         _write_allocation_log(
             db,
             admin_id=current_user.id,
@@ -258,7 +370,12 @@ def _execute_allocation_approval_request(
         )
 
     if action_type == "create":
-        row = create_strategy_allocation(db, payload.get("body") or {})
+        row = create_strategy_allocation(
+            db,
+            payload.get("body") or {},
+            actor_id=str(current_user.id),
+            change_reason=f"approval::{reason_note}",
+        )
         _write_allocation_log(
             db,
             admin_id=current_user.id,
@@ -275,7 +392,13 @@ def _execute_allocation_approval_request(
     if action_type == "update":
         strategy_id = str(payload.get("strategy_id") or "")
         body = payload.get("body") or {}
-        row = update_strategy_allocation(db, strategy_id, body)
+        row = update_strategy_allocation(
+            db,
+            strategy_id,
+            body,
+            actor_id=str(current_user.id),
+            change_reason=f"approval::{reason_note}",
+        )
         row_payload = build_strategy_allocation_row_payload(row, db=db, requested_state=body.get("state"))
         _write_allocation_log(
             db,
@@ -286,13 +409,22 @@ def _execute_allocation_approval_request(
             new_state=row.state,
             reason_code=row_payload.get("state_reason_code"),
             reason_detail=reason_note,
-            payload=body,
+            payload={
+                **body,
+                "projection_preview": payload.get("projection_preview") or {},
+            },
         )
         return StrategyAllocationResponse.model_validate(row_payload)
 
     if action_type == "delete":
         strategy_id = str(payload.get("strategy_id") or "")
-        result = delete_strategy_allocation(db, strategy_id, auto_normalize=bool(payload.get("auto_normalize", True)))
+        result = delete_strategy_allocation(
+            db,
+            strategy_id,
+            auto_normalize=bool(payload.get("auto_normalize", True)),
+            actor_id=str(current_user.id),
+            change_reason=f"approval::{reason_note}",
+        )
         _write_allocation_log(
             db,
             admin_id=current_user.id,
@@ -312,7 +444,12 @@ def _execute_allocation_approval_request(
         )
 
     if action_type == "bulk_update":
-        result = bulk_update_strategy_allocations(db, payload.get("body") or {})
+        result = bulk_update_strategy_allocations(
+            db,
+            payload.get("body") or {},
+            actor_id=str(current_user.id),
+            change_reason=f"approval::{reason_note}",
+        )
         _write_allocation_log(
             db,
             admin_id=current_user.id,
@@ -339,7 +476,13 @@ def _execute_allocation_approval_request(
 
     if action_type == "throttle_toggle":
         strategy_id = str(payload.get("strategy_id") or "")
-        row = toggle_strategy_throttle(db, strategy_id, payload.get("body") or {})
+        row = toggle_strategy_throttle(
+            db,
+            strategy_id,
+            payload.get("body") or {},
+            actor_id=str(current_user.id),
+            change_reason=f"approval::{reason_note}",
+        )
         _write_allocation_log(
             db,
             admin_id=current_user.id,
@@ -623,12 +766,49 @@ def strategy_allocation_what_if_simulation(
 
 @router.post("/strategy-allocation/normalize", response_model=StrategyAllocationActionEnvelope)
 def strategy_allocation_normalize(
-    payload: StrategyAllocationReasonNoteRequest,
+    payload: StrategyAllocationNormalizeRequest,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     role = _role_name(current_user)
     reason_note = _require_reason_note(payload.reason_note)
+    expected_revisions = {str(k): _coerce_expected_revision(v, field_name=f"expected_revisions[{k}]") for k, v in (payload.expected_revisions or {}).items()}
+    if not expected_revisions:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="expected_revisions zorunlu")
+
+    current_ids = {
+        str(getattr(item, "strategy_id", item[0]))
+        for item in db.query(StrategyAllocation.strategy_id).all()
+    }
+    expected_ids = set(expected_revisions.keys())
+    scope_conflicts: list[dict] = []
+    for strategy_id in sorted(current_ids - expected_ids):
+        scope_conflicts.append(
+            {
+                "strategy_id": strategy_id,
+                "expected_revision": None,
+                "current_revision": "known",
+                "reason": "MISSING_EXPECTATION",
+                "action_type": "normalize",
+            }
+        )
+    for strategy_id in sorted(expected_ids - current_ids):
+        scope_conflicts.append(
+            {
+                "strategy_id": strategy_id,
+                "expected_revision": expected_revisions.get(strategy_id),
+                "current_revision": None,
+                "reason": "UNKNOWN_STRATEGY",
+                "action_type": "normalize",
+            }
+        )
+    if scope_conflicts:
+        _raise_revision_conflict(action_type="normalize", conflicts=scope_conflicts)
+
+    conflicts = _validate_revision_expectations(db, expected_revisions, action_type="normalize")
+    if conflicts:
+        _raise_revision_conflict(action_type="normalize", conflicts=conflicts)
+
     if role == "ops":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops role read-only")
     if role == "admin":
@@ -646,7 +826,11 @@ def strategy_allocation_normalize(
         )
 
     try:
-        result = normalize_strategy_allocations(db)
+        result = normalize_strategy_allocations(
+            db,
+            actor_id=str(current_user.id),
+            change_reason=reason_note,
+        )
         trace_id = _write_allocation_log(
             db,
             admin_id=current_user.id,
@@ -694,7 +878,12 @@ def strategy_allocation_create(
         )
 
     try:
-        row = create_strategy_allocation(db, payload.model_dump())
+        row = create_strategy_allocation(
+            db,
+            payload.model_dump(),
+            actor_id=str(current_user.id),
+            change_reason=reason_note,
+        )
         _write_allocation_log(
             db,
             admin_id=current_user.id,
@@ -717,11 +906,32 @@ def strategy_allocation_remove(
     strategy_id: str,
     auto_normalize: bool = True,
     reason_note: str = "",
+    expected_revision: int = 0,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     role = _role_name(current_user)
     note = _require_reason_note(reason_note)
+    revision = _coerce_expected_revision(expected_revision)
+
+    existing = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Strategy bulunamadı: {strategy_id}")
+
+    current_revision = int(getattr(existing, "revision_id", 1) or 1)
+    if revision != current_revision:
+        _raise_revision_conflict(
+            action_type="delete",
+            conflicts=[
+                {
+                    "strategy_id": strategy_id,
+                    "expected_revision": revision,
+                    "current_revision": current_revision,
+                    "reason": "REVISION_MISMATCH",
+                }
+            ],
+        )
+
     if role == "ops":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops role read-only")
     if role == "admin":
@@ -729,7 +939,12 @@ def strategy_allocation_remove(
             action_type="delete",
             current_user=current_user,
             reason_note=note,
-            payload={"strategy_id": strategy_id, "auto_normalize": auto_normalize},
+            payload={
+                "strategy_id": strategy_id,
+                "auto_normalize": auto_normalize,
+                "expected_revision": revision,
+                "previous_state": existing.state,
+            },
         )
         return StrategyAllocationActionEnvelope(
             status="pending_approval",
@@ -739,7 +954,13 @@ def strategy_allocation_remove(
         )
 
     try:
-        result = delete_strategy_allocation(db, strategy_id, auto_normalize=auto_normalize)
+        result = delete_strategy_allocation(
+            db,
+            strategy_id,
+            auto_normalize=auto_normalize,
+            actor_id=str(current_user.id),
+            change_reason=note,
+        )
         trace_id = _write_allocation_log(
             db,
             admin_id=current_user.id,
@@ -772,12 +993,29 @@ def strategy_allocation_bulk_update(
     reason_note = _require_reason_note(payload.reason_note)
     if role == "ops":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops role read-only")
+
+    expectations = {
+        str(item.strategy_id): _coerce_expected_revision(item.expected_revision, field_name=f"expected_revision[{item.strategy_id}]")
+        for item in payload.updates
+    }
+    conflicts = _validate_revision_expectations(db, expectations, action_type="bulk_update")
+    if conflicts:
+        _raise_revision_conflict(action_type="bulk_update", conflicts=conflicts)
+
+    selected_rows = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id.in_(list(expectations.keys()))).all()
+    target_weight_map: dict[str, float] = {}
+    for item in payload.updates:
+        if item.capital_weight is None:
+            continue
+        target_weight_map[str(item.strategy_id)] = float(item.capital_weight)
+    projection_preview = build_projection_from_rows(selected_rows, target_weights=target_weight_map)
+
     if role == "admin":
         request_row = _queue_allocation_approval_request(
             action_type="bulk_update",
             current_user=current_user,
             reason_note=reason_note,
-            payload={"body": payload.model_dump()},
+            payload={"body": payload.model_dump(), "projection_preview": projection_preview},
         )
         return {
             "status": "pending_approval",
@@ -790,7 +1028,12 @@ def strategy_allocation_bulk_update(
         }
 
     try:
-        result = bulk_update_strategy_allocations(db, payload.model_dump())
+        result = bulk_update_strategy_allocations(
+            db,
+            payload.model_dump(),
+            actor_id=str(current_user.id),
+            change_reason=reason_note,
+        )
         trace_id = _write_allocation_log(
             db,
             admin_id=current_user.id,
@@ -805,6 +1048,7 @@ def strategy_allocation_bulk_update(
                 "updated_ids": [row.strategy_id for row in (result.get("updated_rows") or [])],
                 "auto_normalize": payload.auto_normalize,
                 "enforced_reduce_rows": result.get("enforced_reduce_rows") or [],
+                "projection_preview": result.get("projection_preview") or projection_preview,
             },
         )
         return {
@@ -837,6 +1081,24 @@ def strategy_allocation_throttle_toggle(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops role read-only")
 
     existing = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Strategy bulunamadı: {strategy_id}")
+
+    expected_revision = _coerce_expected_revision(payload.expected_revision)
+    current_revision = int(getattr(existing, "revision_id", 1) or 1)
+    if expected_revision != current_revision:
+        _raise_revision_conflict(
+            action_type="throttle_toggle",
+            conflicts=[
+                {
+                    "strategy_id": strategy_id,
+                    "expected_revision": expected_revision,
+                    "current_revision": current_revision,
+                    "reason": "REVISION_MISMATCH",
+                }
+            ],
+        )
+
     previous_state = existing.state if existing else None
     if role == "admin":
         request_row = _queue_allocation_approval_request(
@@ -853,7 +1115,13 @@ def strategy_allocation_throttle_toggle(
         )
 
     try:
-        row = toggle_strategy_throttle(db, strategy_id, payload.model_dump())
+        row = toggle_strategy_throttle(
+            db,
+            strategy_id,
+            payload.model_dump(),
+            actor_id=str(current_user.id),
+            change_reason=reason_note,
+        )
         _write_allocation_log(
             db,
             admin_id=current_user.id,
@@ -952,9 +1220,18 @@ def strategy_allocation_approval_approve(
         request_row["status"] = "expired"
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="approval request expired")
 
+    review_note = _require_reason_note(payload.reason_note)
+    action_type = str(request_row.get("action_type") or "")
+    revision_expectations = _extract_revision_expectations_for_request(action_type, request_row.get("payload") or {})
+    if revision_expectations:
+        conflicts = _validate_revision_expectations(db, revision_expectations, action_type=action_type)
+        if conflicts:
+            _mark_request_requires_review(request_row, review_note=review_note, conflicts=conflicts)
+            _raise_revision_conflict(action_type=action_type, conflicts=conflicts, request_id=request_id)
+
     request_row["status"] = "approved"
     request_row["approved_by"] = str(current_user.id)
-    request_row["review_note"] = _require_reason_note(payload.reason_note)
+    request_row["review_note"] = review_note
     request_row["reviewed_at"] = _now()
     return _execute_allocation_approval_request(db=db, current_user=current_user, request_row=request_row)
 
@@ -1001,8 +1278,35 @@ def strategy_allocation_update(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops role read-only")
 
     existing = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
-    previous_state = existing.state if existing else None
+    if not existing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Strategy bulunamadı: {strategy_id}")
+
+    expected_revision = _coerce_expected_revision(payload.expected_revision)
+    current_revision = int(getattr(existing, "revision_id", 1) or 1)
+    if expected_revision != current_revision:
+        _raise_revision_conflict(
+            action_type="update",
+            conflicts=[
+                {
+                    "strategy_id": strategy_id,
+                    "expected_revision": expected_revision,
+                    "current_revision": current_revision,
+                    "reason": "REVISION_MISMATCH",
+                }
+            ],
+        )
+
+    previous_state = existing.state
     request_payload = payload.model_dump(exclude_none=True)
+    request_payload_for_queue = dict(request_payload)
+    request_payload.pop("expected_revision", None)
+    projection_preview = build_projection_from_rows(
+        [existing],
+        target_weights={strategy_id: float(request_payload.get("capital_weight"))}
+        if request_payload.get("capital_weight") is not None
+        else {},
+    )
+
     if role == "admin":
         request_row = _queue_allocation_approval_request(
             action_type="update",
@@ -1011,7 +1315,8 @@ def strategy_allocation_update(
             payload={
                 "strategy_id": strategy_id,
                 "previous_state": previous_state,
-                "body": request_payload,
+                "body": request_payload_for_queue,
+                "projection_preview": projection_preview,
             },
         )
         return StrategyAllocationActionEnvelope(
@@ -1022,7 +1327,13 @@ def strategy_allocation_update(
         )
 
     try:
-        row = update_strategy_allocation(db, strategy_id, request_payload)
+        row = update_strategy_allocation(
+            db,
+            strategy_id,
+            request_payload,
+            actor_id=str(current_user.id),
+            change_reason=reason_note,
+        )
         row_payload = build_strategy_allocation_row_payload(row, db=db, requested_state=request_payload.get("state"))
         if previous_state and previous_state != row.state:
             _write_allocation_log(
@@ -1034,7 +1345,10 @@ def strategy_allocation_update(
                 new_state=row.state,
                 reason_code=row_payload.get("state_reason_code"),
                 reason_detail=reason_note,
-                payload=request_payload,
+                payload={
+                    **request_payload,
+                    "projection_preview": projection_preview,
+                },
             )
         if row_payload.get("is_drift_override"):
             _write_allocation_log(

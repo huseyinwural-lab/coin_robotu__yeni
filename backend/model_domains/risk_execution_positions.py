@@ -421,6 +421,9 @@ class StrategyAllocation(Base):
     realized_return: Mapped[float] = mapped_column(Float, default=0)
     signal_decay: Mapped[float] = mapped_column(Float, default=0)
     execution_quality_score: Mapped[float] = mapped_column(Float, default=0)
+    revision_id: Mapped[int] = mapped_column(Integer, default=1)
+    updated_by: Mapped[str] = mapped_column(String(120), default="system")
+    change_reason: Mapped[str] = mapped_column(Text, default="manual_update")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class ExecutionIntent(Base):

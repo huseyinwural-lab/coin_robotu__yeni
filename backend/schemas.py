@@ -2857,6 +2857,9 @@ class StrategyAllocationResponse(BaseModel):
     realized_return: float
     signal_decay: float
     execution_quality_score: float
+    revision_id: int = 1
+    updated_by: str | None = None
+    change_reason: str | None = None
     updated_at: datetime
     state_reason_code: str | None = None
     state_reason_detail: str | None = None
@@ -2903,6 +2906,7 @@ class StrategyAllocationSummaryResponse(BaseModel):
 
 
 class StrategyAllocationUpdateRequest(BaseModel):
+    expected_revision: int = Field(ge=1)
     capital_weight: float | None = Field(default=None, ge=0, le=1)
     max_capital: float | None = Field(default=None, ge=0)
     current_capital: float | None = Field(default=None, ge=0)
@@ -2923,6 +2927,7 @@ class StrategyAllocationCreateRequest(BaseModel):
 
 class StrategyAllocationBulkUpdateItem(BaseModel):
     strategy_id: str
+    expected_revision: int = Field(ge=1)
     capital_weight: float | None = Field(default=None, ge=0, le=1)
     max_capital: float | None = Field(default=None, ge=0)
     current_capital: float | None = Field(default=None, ge=0)
@@ -2938,6 +2943,7 @@ class StrategyAllocationBulkUpdateRequest(BaseModel):
 
 
 class StrategyAllocationThrottleToggleRequest(BaseModel):
+    expected_revision: int = Field(ge=1)
     confirm_primary: str
     confirm_secondary: str
     reason_note: str | None = None
@@ -2945,6 +2951,11 @@ class StrategyAllocationThrottleToggleRequest(BaseModel):
 
 class StrategyAllocationReasonNoteRequest(BaseModel):
     reason_note: str
+
+
+class StrategyAllocationNormalizeRequest(BaseModel):
+    reason_note: str
+    expected_revisions: dict[str, int] = Field(default_factory=dict)
 
 
 class StrategyAllocationStateHistoryEntry(BaseModel):
@@ -3048,10 +3059,16 @@ class StrategyAllocationApprovalRequestItem(BaseModel):
     action_type: str
     status: str
     requested_by: str
+    requested_role: str | None = None
     reason_note: str
     created_at: datetime
     expires_at: datetime
     payload: dict = Field(default_factory=dict)
+    stale_state: str | None = None
+    stale_reason_code: str | None = None
+    stale_conflicts: list[dict] = Field(default_factory=list)
+    review_note: str | None = None
+    reviewed_at: datetime | None = None
 
 
 class StrategyAllocationApprovalRequestsResponse(BaseModel):

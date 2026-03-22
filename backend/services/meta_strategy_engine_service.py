@@ -26,6 +26,118 @@ DRAWDOWN_ENFORCE_THRESHOLD_PCT = 12.0
 DRAWDOWN_REDUCE_RATIO = 0.15
 
 
+def _normalize_confidence_for_projection(value: float) -> float:
+    raw = _safe_float(value, 0)
+    if raw > 1:
+        raw = raw / 100
+    return max(min(raw, 1), 0)
+
+
+def _normalize_performance_for_projection(value: float) -> float:
+    raw = _safe_float(value, 0)
+    normalized = (raw + 100) / 200
+    return max(min(normalized, 1), 0)
+
+
+def _normalize_decay_for_projection(value: float) -> float:
+    return max(min(_safe_float(value, 0), 1), 0)
+
+
+def _compute_weight_projection_metrics(
+    *,
+    strategy_id: str,
+    current_weight: float,
+    suggested_weight: float,
+    confidence: float,
+    performance_norm: float,
+    decay: float,
+) -> dict:
+    delta = round(_safe_float(suggested_weight, 0) - _safe_float(current_weight, 0), 8)
+    projected_return_delta_pct = round(delta * (_safe_float(performance_norm, 0) * 40 + _safe_float(confidence, 0) * 20), 4)
+    projected_risk_delta_pct = round(delta * ((1 - _safe_float(confidence, 0)) * 25 + _safe_float(decay, 0) * 15), 4)
+    return {
+        "strategy_id": str(strategy_id),
+        "current_weight": round(_safe_float(current_weight, 0), 8),
+        "suggested_weight": round(_safe_float(suggested_weight, 0), 8),
+        "weight_delta": delta,
+        "confidence": round(_safe_float(confidence, 0), 4),
+        "performance_norm": round(_safe_float(performance_norm, 0), 4),
+        "decay": round(_safe_float(decay, 0), 4),
+        "projected_return_delta_pct": projected_return_delta_pct,
+        "projected_risk_delta_pct": projected_risk_delta_pct,
+    }
+
+
+def build_projection_from_rebalance_suggestions(suggestions: list[dict]) -> dict:
+    rows: list[dict] = []
+    total_return_delta = 0.0
+    total_risk_delta = 0.0
+    for item in suggestions:
+        row = _compute_weight_projection_metrics(
+            strategy_id=str(item.get("strategy_id") or "unknown_strategy"),
+            current_weight=_safe_float(item.get("current_weight"), 0),
+            suggested_weight=_safe_float(item.get("suggested_weight"), 0),
+            confidence=_normalize_confidence_for_projection(item.get("confidence")),
+            performance_norm=max(min(_safe_float(item.get("performance_norm"), 0), 1), 0),
+            decay=_normalize_decay_for_projection(item.get("decay")),
+        )
+        rows.append(row)
+        total_return_delta += row["projected_return_delta_pct"]
+        total_risk_delta += row["projected_risk_delta_pct"]
+
+    return {
+        "rows": rows,
+        "projected_portfolio_return_delta_pct": round(total_return_delta, 4),
+        "projected_portfolio_risk_delta_pct": round(total_risk_delta, 4),
+    }
+
+
+def build_projection_from_rows(rows: list[StrategyAllocation], target_weights: dict[str, float] | None = None) -> dict:
+    planned_weights = target_weights or {}
+    payload_rows: list[dict] = []
+    total_return_delta = 0.0
+    total_risk_delta = 0.0
+
+    for row in rows:
+        strategy_id = str(row.strategy_id)
+        current_weight = _safe_float(row.capital_weight, 0)
+        suggested_weight = _safe_float(planned_weights.get(strategy_id), current_weight)
+        projection_row = _compute_weight_projection_metrics(
+            strategy_id=strategy_id,
+            current_weight=current_weight,
+            suggested_weight=suggested_weight,
+            confidence=_normalize_confidence_for_projection(row.confidence_score),
+            performance_norm=_normalize_performance_for_projection(row.performance_score),
+            decay=_normalize_decay_for_projection(row.signal_decay),
+        )
+        payload_rows.append(projection_row)
+        total_return_delta += projection_row["projected_return_delta_pct"]
+        total_risk_delta += projection_row["projected_risk_delta_pct"]
+
+    return {
+        "rows": payload_rows,
+        "projected_portfolio_return_delta_pct": round(total_return_delta, 4),
+        "projected_portfolio_risk_delta_pct": round(total_risk_delta, 4),
+    }
+
+
+def _apply_revision_metadata(
+    row: StrategyAllocation,
+    *,
+    actor_id: str | None,
+    change_reason: str | None,
+    is_new: bool = False,
+) -> None:
+    if is_new:
+        row.revision_id = 1
+    else:
+        current_revision = int(_safe_float(getattr(row, "revision_id", 1), 1))
+        row.revision_id = max(current_revision, 1) + 1
+    row.updated_by = str(actor_id or "system")
+    row.change_reason = str(change_reason or "manual_update").strip() or "manual_update"
+    row.updated_at = _now()
+
+
 def _normalized_state(value: str | None, fallback: str = "ACTIVE") -> str:
     state = str(value or fallback).upper().strip()
     return state if state in ALLOWED_STATES else fallback
@@ -151,6 +263,9 @@ def _serialize_strategy_allocation_row(row: StrategyAllocation, *, requested_sta
         "realized_return": round(_safe_float(row.realized_return, 0), 4),
         "signal_decay": round(_safe_float(row.signal_decay, 0), 4),
         "execution_quality_score": round(_safe_float(row.execution_quality_score, 0), 4),
+        "revision_id": int(_safe_float(getattr(row, "revision_id", 1), 1)),
+        "updated_by": str(getattr(row, "updated_by", "system") or "system"),
+        "change_reason": str(getattr(row, "change_reason", "") or ""),
         "updated_at": row.updated_at,
         "state_reason_code": code,
         "state_reason_detail": detail,
@@ -415,6 +530,9 @@ def get_or_create_strategy_allocation(db: Session, strategy_id: str) -> Strategy
         realized_return=0,
         signal_decay=0,
         execution_quality_score=75,
+        revision_id=1,
+        updated_by="system",
+        change_reason="system_auto_create",
     )
     db.add(row)
     db.flush()
@@ -592,7 +710,13 @@ def get_strategy_allocation_summary(db: Session) -> dict:
     return _collect_summary(rows)
 
 
-def create_strategy_allocation(db: Session, payload: dict) -> StrategyAllocation:
+def create_strategy_allocation(
+    db: Session,
+    payload: dict,
+    *,
+    actor_id: str | None = None,
+    change_reason: str | None = None,
+) -> StrategyAllocation:
     strategy_id = _validate_non_empty_strategy_id(payload.get("strategy_id"))
     exists = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
     if exists:
@@ -618,6 +742,9 @@ def create_strategy_allocation(db: Session, payload: dict) -> StrategyAllocation
         realized_return=_safe_float(payload.get("realized_return"), 0),
         signal_decay=max(_safe_float(payload.get("signal_decay"), 0), 0),
         execution_quality_score=max(_safe_float(payload.get("execution_quality_score"), 0), 0),
+        revision_id=1,
+        updated_by=str(actor_id or "system"),
+        change_reason=str(change_reason or "manual_create"),
         updated_at=_now(),
     )
     db.add(row)
@@ -636,7 +763,14 @@ def create_strategy_allocation(db: Session, payload: dict) -> StrategyAllocation
         raise
 
 
-def delete_strategy_allocation(db: Session, strategy_id: str, *, auto_normalize: bool = False) -> dict:
+def delete_strategy_allocation(
+    db: Session,
+    strategy_id: str,
+    *,
+    auto_normalize: bool = False,
+    actor_id: str | None = None,
+    change_reason: str | None = None,
+) -> dict:
     key = _validate_non_empty_strategy_id(strategy_id)
     row = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == key).first()
     if not row:
@@ -648,6 +782,12 @@ def delete_strategy_allocation(db: Session, strategy_id: str, *, auto_normalize:
         remaining = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
         if remaining and auto_normalize:
             _apply_normalize(remaining)
+            for item in remaining:
+                _apply_revision_metadata(
+                    item,
+                    actor_id=actor_id,
+                    change_reason=change_reason or "delete_auto_normalize",
+                )
         if remaining:
             _ensure_capital_limit(remaining)
             _ensure_weight_is_one(remaining)
@@ -664,13 +804,24 @@ def delete_strategy_allocation(db: Session, strategy_id: str, *, auto_normalize:
         raise
 
 
-def normalize_strategy_allocations(db: Session) -> dict:
+def normalize_strategy_allocations(
+    db: Session,
+    *,
+    actor_id: str | None = None,
+    change_reason: str | None = None,
+) -> dict:
     rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
     if not rows:
         raise ValueError("Normalize için strategy allocation satırı bulunamadı")
 
     try:
         _apply_normalize(rows)
+        for row in rows:
+            _apply_revision_metadata(
+                row,
+                actor_id=actor_id,
+                change_reason=change_reason or "normalize_weights",
+            )
         _ensure_capital_limit(rows)
         _ensure_weight_is_one(rows)
         summary = _collect_summary(rows)
@@ -685,7 +836,14 @@ def normalize_strategy_allocations(db: Session) -> dict:
         raise
 
 
-def update_strategy_allocation(db: Session, strategy_id: str, payload: dict) -> StrategyAllocation:
+def update_strategy_allocation(
+    db: Session,
+    strategy_id: str,
+    payload: dict,
+    *,
+    actor_id: str | None = None,
+    change_reason: str | None = None,
+) -> StrategyAllocation:
     row = get_existing_strategy_allocation(db, strategy_id)
     previous_state = _normalized_state(row.state)
     requested_state = payload.get("state")
@@ -707,7 +865,6 @@ def update_strategy_allocation(db: Session, strategy_id: str, payload: dict) -> 
     if row.current_capital > row.max_capital:
         raise ValueError("current_capital max_capital değerini aşamaz")
 
-    row.updated_at = _now()
     try:
         if requested_state is not None and _normalized_state(requested_state, previous_state) == "ACTIVE":
             recalculate_strategy_drift(db, row.strategy_id)
@@ -716,6 +873,11 @@ def update_strategy_allocation(db: Session, strategy_id: str, payload: dict) -> 
         _apply_critical_drawdown_reduce(rows)
         _ensure_capital_limit(rows)
         _ensure_weight_is_one(rows)
+        _apply_revision_metadata(
+            row,
+            actor_id=actor_id,
+            change_reason=change_reason or "update_allocation",
+        )
         db.commit()
         db.refresh(row)
         return row
@@ -724,19 +886,30 @@ def update_strategy_allocation(db: Session, strategy_id: str, payload: dict) -> 
         raise
 
 
-def toggle_strategy_throttle(db: Session, strategy_id: str, payload: dict) -> StrategyAllocation:
+def toggle_strategy_throttle(
+    db: Session,
+    strategy_id: str,
+    payload: dict,
+    *,
+    actor_id: str | None = None,
+    change_reason: str | None = None,
+) -> StrategyAllocation:
     row = get_existing_strategy_allocation(db, strategy_id)
     if _normalized_state(row.state) == "DISABLED":
         raise ValueError("DISABLED strategy throttle toggle ile değiştirilemez")
 
     _ensure_double_confirm(payload)
     row.state = "ACTIVE" if _normalized_state(row.state) == "THROTTLED" else "THROTTLED"
-    row.updated_at = _now()
     try:
         rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
         _apply_critical_drawdown_reduce(rows)
         _ensure_capital_limit(rows)
         _ensure_weight_is_one(rows)
+        _apply_revision_metadata(
+            row,
+            actor_id=actor_id,
+            change_reason=change_reason or "toggle_throttle",
+        )
         db.commit()
         db.refresh(row)
         return row
@@ -745,13 +918,21 @@ def toggle_strategy_throttle(db: Session, strategy_id: str, payload: dict) -> St
         raise
 
 
-def bulk_update_strategy_allocations(db: Session, payload: dict) -> dict:
+def bulk_update_strategy_allocations(
+    db: Session,
+    payload: dict,
+    *,
+    actor_id: str | None = None,
+    change_reason: str | None = None,
+) -> dict:
     updates = payload.get("updates") or []
     if not updates:
         raise ValueError("Bulk update için en az 1 strategy gerekli")
 
     updated_ids: list[str] = []
     requested_state_map: dict[str, str] = {}
+    target_weight_map: dict[str, float] = {}
+    touched_rows_by_id: dict[str, StrategyAllocation] = {}
     for item in updates:
         strategy_id = _validate_non_empty_strategy_id(item.get("strategy_id"))
         row = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
@@ -763,6 +944,7 @@ def bulk_update_strategy_allocations(db: Session, payload: dict) -> dict:
             row.capital_weight = _assert_non_negative_numeric("capital_weight", item.get("capital_weight"))
             if row.capital_weight > 1:
                 raise ValueError(f"capital_weight 1'i aşamaz ({strategy_id})")
+            target_weight_map[strategy_id] = _safe_float(row.capital_weight, 0)
         if "max_capital" in item and item.get("max_capital") is not None:
             row.max_capital = _assert_non_negative_numeric("max_capital", item.get("max_capital"))
         if "current_capital" in item and item.get("current_capital") is not None:
@@ -776,11 +958,15 @@ def bulk_update_strategy_allocations(db: Session, payload: dict) -> dict:
 
         if row.current_capital > row.max_capital:
             raise ValueError(f"current_capital max_capital değerini aşamaz ({strategy_id})")
-        row.updated_at = _now()
         updated_ids.append(strategy_id)
+        touched_rows_by_id[strategy_id] = row
 
     if payload.get("auto_normalize"):
-        _apply_normalize(db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all())
+        all_rows_for_normalize = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
+        _apply_normalize(all_rows_for_normalize)
+        for item in all_rows_for_normalize:
+            touched_rows_by_id[item.strategy_id] = item
+            target_weight_map[item.strategy_id] = _safe_float(item.capital_weight, 0)
 
     try:
         for strategy_id, requested_state in requested_state_map.items():
@@ -791,6 +977,14 @@ def bulk_update_strategy_allocations(db: Session, payload: dict) -> dict:
         enforced = _apply_critical_drawdown_reduce(rows)
         _ensure_capital_limit(rows)
         _ensure_weight_is_one(rows)
+        for item in touched_rows_by_id.values():
+            _apply_revision_metadata(
+                item,
+                actor_id=actor_id,
+                change_reason=change_reason or "bulk_update_allocation",
+            )
+
+        projection_preview = build_projection_from_rows(rows, target_weights=target_weight_map)
         db.commit()
         updated_rows = (
             db.query(StrategyAllocation)
@@ -804,6 +998,7 @@ def bulk_update_strategy_allocations(db: Session, payload: dict) -> dict:
             "updated_rows": updated_rows,
             "summary": _collect_summary(rows),
             "enforced_reduce_rows": enforced,
+            "projection_preview": projection_preview,
         }
     except Exception:
         db.rollback()
