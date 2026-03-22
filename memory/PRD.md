@@ -1,3 +1,46 @@
+## 2026-03-22 — Escalation Center + P2 Başlangıç Paket (Matrix/Portability/Depth Filters) ✅
+
+### Scope kilidi (kullanıcı onayıyla)
+- Öncelik sırası: **Escalation Center → Matrix Batch → Import/Export → Symbol depth filters**
+- Ack workflow: **admin + super_admin ack**, ops view-only, execute yetkisi ayrı
+- Escalation zorunlu alanları: `breach_age`, `ack_by`, `ack_at`, `escalation_level`, `escalation_reason`, `linked_request_id`, `current_owner`
+- UI sekmeleri: **Active Breaches / Acknowledged / Resolved**
+
+### Backend tamamlananlar
+- Yeni model + API: **Escalation Center**
+  - `GET /api/admin/escalation-center`
+  - `POST /api/admin/escalation-center/{id}/ack`
+  - `POST /api/admin/escalation-center/{id}/resolve`
+  - SLA breach tabanlı otomatik escalation sync eklendi
+- Yeni API: **Symbol + Strategy Matrix Batch**
+  - `POST /api/admin/risk-simulation/matrix-batch`
+- Yeni API: **Import / Export**
+  - `GET /api/admin/strategy-intelligence/export?export_format=json|csv&dataset=decision_requests|simulation_history`
+  - `POST /api/admin/strategy-intelligence/import-json` (super_admin)
+
+### Frontend tamamlananlar
+- Yeni panel: `EscalationCenterPanel` (3 sekme + ack/resolve aksiyonları)
+- Yeni panel: `MatrixBatchSimulationPanel`
+- Yeni panel: `DataPortabilityPanel` (Export JSON/CSV + Import JSON)
+- Symbol selector derin filtreler:
+  - `LiquidityBand`
+  - `RiskBand`
+  - `Exchange`
+
+### Test doğrulamaları
+- `deep_testing_backend_v2`: P2+Escalation backend PASS (14/14)
+- `auto_frontend_testing_agent`: yeni sprint UI PASS (9/9)
+- `testing_agent`: `/app/test_reports/iteration_77.json`
+  - Backend PASS, frontend PASS
+  - Not: ack/resolve otomasyon testleri boş state nedeniyle skip olmuştu
+- Ek self-test ile skip kapanışı:
+  - admin ack = 200
+  - ops ack = 403
+  - admin resolve = 403
+  - super_admin resolve = 200
+
+---
+
 ## 2026-03-22 — Strategy Intelligence P1 (Preset + Replay + SLA) Tamamlandı ✅
 
 ### Scope Kilidi (kullanıcı onayı)
