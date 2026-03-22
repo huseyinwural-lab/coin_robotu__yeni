@@ -132,6 +132,19 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
   const [exporting, setExporting] = useState(false);
   const [exportSummary, setExportSummary] = useState(null);
 
+  const [rollbackSnapshots, setRollbackSnapshots] = useState([]);
+  const [rollbackSnapshotsLoading, setRollbackSnapshotsLoading] = useState(false);
+  const [selectedSnapshotTraceId, setSelectedSnapshotTraceId] = useState("");
+  const [rollbackRequestReason, setRollbackRequestReason] = useState("");
+  const [rollbackRequestSubmitting, setRollbackRequestSubmitting] = useState(false);
+
+  const [approvalRequests, setApprovalRequests] = useState([]);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [approvalDecisionReason, setApprovalDecisionReason] = useState("");
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false);
+
+  const [policySuggestionSummary, setPolicySuggestionSummary] = useState(null);
+
   const [lastActionResult, setLastActionResult] = useState(null);
 
   const actionMeta = useMemo(() => ACTIONS.find((item) => item.key === actionModal.action) || null, [actionModal.action]);
@@ -201,14 +214,46 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     setModelUpdateStatus(data || null);
   }, []);
 
+  const loadRollbackSnapshots = useCallback(async (strategyId) => {
+    if (!strategyId) {
+      setRollbackSnapshots([]);
+      return;
+    }
+    setRollbackSnapshotsLoading(true);
+    try {
+      const { data } = await apiClient.get(`/admin/futures/strategy/${strategyId}/rollback-snapshots`);
+      const items = data?.items || [];
+      setRollbackSnapshots(items);
+      setSelectedSnapshotTraceId((prev) => prev || items[0]?.snapshot_trace_id || "");
+    } finally {
+      setRollbackSnapshotsLoading(false);
+    }
+  }, []);
+
+  const loadApprovalRequests = useCallback(async () => {
+    setApprovalLoading(true);
+    try {
+      const { data } = await apiClient.get("/admin/futures/strategy/approval-requests");
+      setApprovalRequests(data?.items || []);
+    } finally {
+      setApprovalLoading(false);
+    }
+  }, []);
+
+  const loadPolicySuggestions = useCallback(async () => {
+    const { data } = await apiClient.get("/admin/futures/strategy-control/policy-suggestions");
+    setPolicySuggestionSummary(data?.summary || null);
+  }, []);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     setErrorMessage("");
     try {
       const [overviewData] = await Promise.all([loadOverview(), loadCapital(), loadDriftAlerts()]);
       const selectedId = feedbackStrategyId || overviewData?.strategies?.[0]?.strategy_id || "";
+      await Promise.all([loadApprovalRequests(), loadPolicySuggestions()]);
       if (selectedId) {
-        await Promise.all([loadFeedbackForStrategy(selectedId), loadModelUpdateStatus(selectedId)]);
+        await Promise.all([loadFeedbackForStrategy(selectedId), loadModelUpdateStatus(selectedId), loadRollbackSnapshots(selectedId)]);
       }
     } catch (error) {
       const message = error?.response?.data?.detail || "Strategy Control verisi alınamadı";
@@ -217,7 +262,7 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     } finally {
       setLoading(false);
     }
-  }, [feedbackStrategyId, loadCapital, loadDriftAlerts, loadFeedbackForStrategy, loadModelUpdateStatus, loadOverview]);
+  }, [feedbackStrategyId, loadApprovalRequests, loadCapital, loadDriftAlerts, loadFeedbackForStrategy, loadModelUpdateStatus, loadOverview, loadPolicySuggestions, loadRollbackSnapshots]);
 
   useEffect(() => {
     loadAll();
@@ -227,7 +272,8 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     if (!feedbackStrategyId) return;
     loadFeedbackForStrategy(feedbackStrategyId);
     loadModelUpdateStatus(feedbackStrategyId);
-  }, [feedbackStrategyId, loadFeedbackForStrategy, loadModelUpdateStatus]);
+    loadRollbackSnapshots(feedbackStrategyId);
+  }, [feedbackStrategyId, loadFeedbackForStrategy, loadModelUpdateStatus, loadRollbackSnapshots]);
 
   useEffect(() => {
     const status = modelUpdateStatus?.current_job?.status;
@@ -505,7 +551,7 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       toast.success(data?.message || "Feedback kaydedildi");
       setFeedbackReason("");
       setFeedbackSampleLink("");
-      await Promise.all([loadFeedbackForStrategy(feedbackStrategyId), loadOverview()]);
+      await Promise.all([loadFeedbackForStrategy(feedbackStrategyId), loadOverview(), loadPolicySuggestions()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Feedback kaydı başarısız");
     } finally {
@@ -575,6 +621,53 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
       toast.error(error?.response?.data?.detail || "Timeline export başarısız");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const submitRollbackRequest = async () => {
+    if (!feedbackStrategyId || !selectedSnapshotTraceId) {
+      toast.error("Rollback request için strategy ve snapshot seçin");
+      return;
+    }
+    if (rollbackRequestReason.trim().length < 3) {
+      toast.error("Rollback request reason zorunlu");
+      return;
+    }
+    setRollbackRequestSubmitting(true);
+    try {
+      const { data } = await apiClient.post(`/admin/futures/strategy/${feedbackStrategyId}/rollback-request`, {
+        reason: rollbackRequestReason.trim(),
+        snapshot_trace_id: selectedSnapshotTraceId,
+      });
+      setLastActionResult(data || null);
+      toast.success(data?.message || "Rollback request oluşturuldu");
+      setRollbackRequestReason("");
+      await loadApprovalRequests();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Rollback request başarısız");
+    } finally {
+      setRollbackRequestSubmitting(false);
+    }
+  };
+
+  const submitApprovalDecision = async (requestId, decision) => {
+    if (approvalDecisionReason.trim().length < 3) {
+      toast.error("Approval decision reason zorunlu");
+      return;
+    }
+    setApprovalSubmitting(true);
+    try {
+      const endpoint = decision === "approve" ? "approve" : "reject";
+      const { data } = await apiClient.post(`/admin/futures/strategy/approval-requests/${requestId}/${endpoint}`, {
+        reason: approvalDecisionReason.trim(),
+      });
+      setLastActionResult(data || null);
+      toast.success(data?.message || "Approval kararı kaydedildi");
+      await Promise.all([loadApprovalRequests(), loadOverview(), loadRollbackSnapshots(feedbackStrategyId)]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Approval kararı başarısız");
+    } finally {
+      setApprovalSubmitting(false);
     }
   };
 
@@ -762,6 +855,9 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                     <p className="text-xs font-semibold" data-testid={`strategy-control-drift-alert-strategy-${index}`}>{alert.strategy_id}</p>
                     <p className="text-xs" data-testid={`strategy-control-drift-alert-status-${index}`}>status={alert.status} severity={alert.severity}</p>
                     <p className="text-xs" data-testid={`strategy-control-drift-alert-reasons-${index}`}>reasons={(alert.trigger_reason || []).join(",") || "n/a"}</p>
+                    <p className="text-xs font-semibold" data-testid={`strategy-control-drift-alert-recommended-${index}`}>
+                      Recommended={alert?.recommended_action?.type || "ACK"} ({alert?.recommended_action?.confidence || 0}%) · {alert?.recommended_action?.reason || "n/a"}
+                    </p>
                     <p className="text-xs" data-testid={`strategy-control-drift-alert-mute-${index}`}>muted_until={alert.muted_until || "-"}</p>
                     <div className="mt-2 flex flex-wrap gap-2" data-testid={`strategy-control-drift-alert-actions-${index}`}>
                       <Button size="sm" variant="outline" onClick={() => openDriftActionModal("ack", alert)} data-testid={`strategy-control-drift-ack-button-${index}`}>Ack</Button>
@@ -888,6 +984,70 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
                     </Button>
                   </div>
                   {exportSummary && <p className="mt-2 text-xs" data-testid="strategy-control-export-summary-text">export_summary={JSON.stringify(exportSummary)}</p>}
+                </div>
+
+                <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-rollback-snapshot-panel">
+                  <h3 className="text-base font-semibold" data-testid="strategy-control-rollback-snapshot-title">Snapshot Rollback (Request Mode)</h3>
+                  <p className="text-xs" data-testid="strategy-control-rollback-snapshot-note">Tek strategy scope, bulk rollback yok. Request 24h içinde expire olur.</p>
+                  {rollbackSnapshotsLoading && <p className="text-xs" data-testid="strategy-control-rollback-snapshot-loading">Snapshotlar yükleniyor...</p>}
+                  {!rollbackSnapshotsLoading && rollbackSnapshots.length === 0 && <p className="text-xs" data-testid="strategy-control-rollback-snapshot-empty">No data yet: rollback snapshot bulunmuyor.</p>}
+                  {!rollbackSnapshotsLoading && rollbackSnapshots.length > 0 && (
+                    <div className="mt-2 space-y-1" data-testid="strategy-control-rollback-snapshot-list">
+                      {rollbackSnapshots.slice(0, 8).map((item, index) => (
+                        <label key={item.snapshot_trace_id} className="flex items-start gap-2 text-xs" data-testid={`strategy-control-rollback-snapshot-item-${index}`}>
+                          <input type="radio" name="rollback_snapshot" value={item.snapshot_trace_id} checked={selectedSnapshotTraceId === item.snapshot_trace_id} onChange={(e) => setSelectedSnapshotTraceId(e.target.value)} data-testid={`strategy-control-rollback-snapshot-radio-${index}`} />
+                          <span>
+                            {item.timestamp} · {item.action_type} · trace={item.snapshot_trace_id}
+                            <br />
+                            diff={JSON.stringify(item.diff_preview)}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <Textarea value={rollbackRequestReason} onChange={(e) => setRollbackRequestReason(e.target.value)} placeholder="Rollback request reason" className="mt-2 border-black/40" data-testid="strategy-control-rollback-request-reason-input" />
+                  <Button onClick={submitRollbackRequest} disabled={rollbackRequestSubmitting} className="mt-2 border border-black bg-black text-orange-300" data-testid="strategy-control-rollback-request-submit-button">
+                    {rollbackRequestSubmitting ? "Oluşturuluyor..." : "Rollback Request Oluştur"}
+                  </Button>
+                </div>
+
+                <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-approval-workflow-panel">
+                  <h3 className="text-base font-semibold" data-testid="strategy-control-approval-workflow-title">Approval Workflow (requester → super_admin)</h3>
+                  <Input value={approvalDecisionReason} onChange={(e) => setApprovalDecisionReason(e.target.value)} placeholder="Approval decision reason" className="mt-2 border-black/40" data-testid="strategy-control-approval-decision-reason-input" />
+                  {approvalLoading && <p className="text-xs" data-testid="strategy-control-approval-loading">Approval requestler yükleniyor...</p>}
+                  {!approvalLoading && approvalRequests.length === 0 && <p className="text-xs" data-testid="strategy-control-approval-empty">No data yet: approval request yok.</p>}
+                  {!approvalLoading && approvalRequests.length > 0 && (
+                    <div className="mt-2 space-y-2" data-testid="strategy-control-approval-list">
+                      {approvalRequests.slice(0, 12).map((item, index) => (
+                        <div key={item.request_id} className="rounded border border-black/20 bg-orange-50 p-2" data-testid={`strategy-control-approval-item-${index}`}>
+                          <p className="text-xs" data-testid={`strategy-control-approval-item-head-${index}`}>
+                            {item.request_id} · status={item.status} · strategy={item.strategy_id}
+                          </p>
+                          <p className="text-xs" data-testid={`strategy-control-approval-item-preview-${index}`}>preview={JSON.stringify(item.preview || {})}</p>
+                          <p className="text-xs" data-testid={`strategy-control-approval-item-expire-${index}`}>expires_at={item.expires_at}</p>
+                          {item.status === "pending" && (
+                            <div className="mt-1 flex gap-2" data-testid={`strategy-control-approval-item-actions-${index}`}>
+                              <Button size="sm" onClick={() => submitApprovalDecision(item.request_id, "approve")} disabled={approvalSubmitting} data-testid={`strategy-control-approval-approve-button-${index}`}>Approve</Button>
+                              <Button size="sm" variant="outline" onClick={() => submitApprovalDecision(item.request_id, "reject")} disabled={approvalSubmitting} data-testid={`strategy-control-approval-reject-button-${index}`}>Reject</Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border border-black/25 bg-orange-100 p-4" data-testid="strategy-control-policy-suggestions-panel">
+                  <h3 className="text-base font-semibold" data-testid="strategy-control-policy-suggestions-title">Policy Adjustment Suggestions (rule-based)</h3>
+                  <Button variant="outline" onClick={loadPolicySuggestions} data-testid="strategy-control-policy-suggestions-refresh-button">Önerileri Yenile</Button>
+                  {!policySuggestionSummary && <p className="mt-2 text-xs" data-testid="strategy-control-policy-suggestions-empty">No data yet: feedback pattern özeti hazır değil.</p>}
+                  {policySuggestionSummary && (
+                    <div className="mt-2 rounded border border-black/20 bg-orange-50 p-2" data-testid="strategy-control-policy-suggestions-summary-card">
+                      <p className="text-xs" data-testid="strategy-control-policy-suggestions-24h">taxonomy_24h={JSON.stringify(policySuggestionSummary.taxonomy_24h || {})}</p>
+                      <p className="text-xs" data-testid="strategy-control-policy-suggestions-7d">taxonomy_7d={JSON.stringify(policySuggestionSummary.taxonomy_7d || {})}</p>
+                      <p className="text-xs" data-testid="strategy-control-policy-suggestions-rules">rules={(policySuggestionSummary.rules || []).join(" | ") || "n/a"}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </TabsContent>

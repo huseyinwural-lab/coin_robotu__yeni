@@ -2,7 +2,7 @@ import csv
 import io
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from core.strategies.governance.strategy_throttle_engine import LEVEL_CONFIG
 from db import get_db
-from deps import require_super_admin
+from deps import require_admin, require_super_admin
 from models import AuditLog, User
 from services.audit_service import create_audit_log
 from services.futures_strategy_service import get_futures_strategy_status
@@ -18,14 +18,15 @@ from services.pipeline.runtime import pipeline_runtime
 
 router = APIRouter(prefix="/admin/futures", tags=["admin_futures_strategy_control"])
 
-_LIFECYCLE_KEY = "futures:strategy:lifecycle:{user_id}"
-_THROTTLE_KEY = "futures:strategy:throttle:{user_id}"
-_MANUAL_KEY = "futures:strategy:manual-controls:{user_id}"
-_ROLLOUT_KEY = "futures:strategy:rollout:{user_id}"
-_HISTORY_KEY = "futures:strategy:control-history:{user_id}"
-_DRIFT_ALERT_KEY = "futures:strategy:drift-alert-state:{user_id}"
-_FEEDBACK_KEY = "futures:strategy:feedback:{user_id}"
-_MODEL_UPDATE_KEY = "futures:strategy:model-update:{user_id}"
+_LIFECYCLE_KEY = "futures:strategy:lifecycle:global"
+_THROTTLE_KEY = "futures:strategy:throttle:global"
+_MANUAL_KEY = "futures:strategy:manual-controls:global"
+_ROLLOUT_KEY = "futures:strategy:rollout:global"
+_HISTORY_KEY = "futures:strategy:control-history:global"
+_DRIFT_ALERT_KEY = "futures:strategy:drift-alert-state:global"
+_FEEDBACK_KEY = "futures:strategy:feedback:global"
+_MODEL_UPDATE_KEY = "futures:strategy:model-update:global"
+_APPROVAL_REQUEST_KEY = "futures:strategy:approval-requests:global"
 
 _DISABLE_CONFIRM = "DISABLE STRATEGY"
 _DECOMMISSION_CONFIRM = "DECOMMISSION STRATEGY"
@@ -92,6 +93,15 @@ class ModelUpdateTriggerRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
     dataset_version: int | None = Field(default=None, ge=1)
     dry_run: bool = False
+
+
+class RollbackRequestCreateRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
+    snapshot_trace_id: str = Field(..., min_length=4, max_length=120)
+
+
+class ApprovalDecisionRequest(BaseModel):
+    reason: str = Field(..., min_length=3, max_length=500)
 
 
 def _safe_json(raw, default):
@@ -291,6 +301,7 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
     drift_alert_key = _DRIFT_ALERT_KEY.format(user_id=current_admin.id)
     feedback_key = _FEEDBACK_KEY.format(user_id=current_admin.id)
     model_update_key = _MODEL_UPDATE_KEY.format(user_id=current_admin.id)
+    approval_key = _APPROVAL_REQUEST_KEY.format(user_id=current_admin.id)
 
     lifecycle_registry = _cache_get(pipeline_runtime.cache, lifecycle_key, status.get("strategy_lifecycle_registry") or {})
     throttle_payload = _cache_get(
@@ -311,6 +322,7 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
     drift_alert_state = _cache_get(pipeline_runtime.cache, drift_alert_key, {})
     feedback_payload = _cache_get(pipeline_runtime.cache, feedback_key, {"items": [], "version_by_strategy": {}})
     model_update_payload = _cache_get(pipeline_runtime.cache, model_update_key, {"by_strategy": {}, "history": []})
+    approval_requests_payload = _cache_get(pipeline_runtime.cache, approval_key, {"items": []})
 
     rows = _compose_strategy_rows(status, lifecycle_registry, throttle_payload, manual_controls, rollout_payload)
     return {
@@ -324,6 +336,7 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
         "drift_alert_state": drift_alert_state,
         "feedback_payload": feedback_payload,
         "model_update_payload": model_update_payload,
+        "approval_requests_payload": approval_requests_payload,
         "keys": {
             "lifecycle": lifecycle_key,
             "throttle": throttle_key,
@@ -333,6 +346,7 @@ def _load_control_state(db: Session, current_admin: User, refresh: bool = False)
             "drift_alert": drift_alert_key,
             "feedback": feedback_key,
             "model_update": model_update_key,
+            "approval_requests": approval_key,
         },
     }
 
@@ -663,6 +677,126 @@ def _build_strategy_timeline(
     return timeline
 
 
+def _compute_diff_preview(before_state: dict, after_state: dict) -> dict:
+    changed = {}
+    keys = set((before_state or {}).keys()) | set((after_state or {}).keys())
+    for key in keys:
+        before_val = (before_state or {}).get(key)
+        after_val = (after_state or {}).get(key)
+        if before_val != after_val:
+            changed[key] = {"before": before_val, "after": after_val}
+    return changed
+
+
+def _feedback_density(feedback_items: list[dict], strategy_id: str, within_hours: int) -> int:
+    now = datetime.now(timezone.utc)
+    count = 0
+    for item in feedback_items or []:
+        if str(item.get("strategy_id") or "") != strategy_id:
+            continue
+        created_at = item.get("created_at")
+        try:
+            created_dt = datetime.fromisoformat(str(created_at))
+        except Exception:
+            continue
+        if (now - created_dt).total_seconds() <= within_hours * 3600:
+            count += 1
+    return count
+
+
+def _build_recommended_action(alert: dict, strategy_row: dict | None, feedback_items: list[dict]) -> dict:
+    severity = str(alert.get("severity") or "LOW").upper()
+    strategy_id = str(alert.get("strategy_id") or "")
+    pnl = float((strategy_row or {}).get("pnl_rolling") or 0)
+    reject_rate = float((strategy_row or {}).get("error_rate_pct") or 0)
+    feedback_intensity = _feedback_density(feedback_items, strategy_id, within_hours=24)
+
+    recommendation = "ACK"
+    confidence = 55
+    reason = "Düşük risk: temel onayla takip önerisi"
+
+    if severity == "HIGH" and (reject_rate > 3 or pnl < 0):
+        recommendation = "DISABLE"
+        confidence = 87
+        reason = "Yüksek drift + performans bozulması: geçici disable zinciri önerilir"
+    elif severity in {"MEDIUM", "HIGH"} and feedback_intensity >= 3:
+        recommendation = "RETRAIN"
+        confidence = 78
+        reason = "Feedback yoğunluğu yükseldi: retrain kuyruğu önerilir"
+    elif severity in {"LOW", "MEDIUM"} and reject_rate <= 3:
+        recommendation = "MUTE"
+        confidence = 64
+        reason = "Düşük/orta risk: kısa süreli mute ile gürültü azaltılabilir"
+
+    return {
+        "type": recommendation,
+        "confidence": confidence,
+        "reason": reason,
+        "inputs": {
+            "severity": severity,
+            "pnl_rolling": pnl,
+            "reject_rate_pct": reject_rate,
+            "feedback_density_24h": feedback_intensity,
+        },
+    }
+
+
+def _build_policy_suggestions(feedback_items: list[dict]) -> dict:
+    now = datetime.now(timezone.utc)
+    taxonomy_24h = {}
+    taxonomy_7d = {}
+
+    for item in feedback_items or []:
+        taxonomy = str(item.get("reason_taxonomy") or "unknown")
+        created_at = item.get("created_at")
+        try:
+            created_dt = datetime.fromisoformat(str(created_at))
+        except Exception:
+            continue
+        age_seconds = (now - created_dt).total_seconds()
+        if age_seconds <= 24 * 3600:
+            taxonomy_24h[taxonomy] = int(taxonomy_24h.get(taxonomy, 0) + 1)
+        if age_seconds <= 7 * 24 * 3600:
+            taxonomy_7d[taxonomy] = int(taxonomy_7d.get(taxonomy, 0) + 1)
+
+    rules = []
+    if taxonomy_7d.get("threshold_too_strict", 0) >= 2:
+        rules.append("threshold too strict → loosen öner")
+    if taxonomy_7d.get("threshold_too_loose", 0) >= 2:
+        rules.append("threshold too loose → tighten öner")
+    if taxonomy_7d.get("feature_drift", 0) >= 2:
+        rules.append("feature drift → retrain öner")
+    if taxonomy_7d.get("data_quality", 0) >= 2:
+        rules.append("data quality → source validation artır")
+
+    return {
+        "taxonomy_24h": taxonomy_24h,
+        "taxonomy_7d": taxonomy_7d,
+        "rules": rules,
+    }
+
+
+def _build_rollback_snapshots(action_history: list, strategy_id: str) -> list[dict]:
+    snapshots = []
+    for item in action_history or []:
+        if str(item.get("strategy_id") or "") != strategy_id:
+            continue
+        snapshots.append(
+            {
+                "snapshot_trace_id": item.get("trace_id"),
+                "timestamp": item.get("created_at"),
+                "actor": "system_or_admin",
+                "action_type": item.get("action"),
+                "before_state": item.get("before_row") or {},
+                "after_state": item.get("after_row") or {},
+                "diff_preview": _compute_diff_preview(item.get("before_row") or {}, item.get("after_row") or {}),
+                "rollback_scope": "single_strategy",
+            }
+        )
+    snapshots.sort(key=lambda row: str(row.get("timestamp") or ""), reverse=True)
+    return snapshots
+
+
 @router.get("/strategy-control/overview")
 def strategy_control_overview(
     refresh: bool = False,
@@ -705,6 +839,11 @@ def strategy_control_overview(
                 "health_score_min": _AUTO_ROLLBACK_HEALTH_THRESHOLD,
                 "error_rate_max_pct": _AUTO_ROLLBACK_ERROR_THRESHOLD,
             },
+        },
+        "permission_matrix": {
+            "super_admin": "full",
+            "admin": "request_only",
+            "ops": "read_only",
         },
         "strategies": rows,
     }
@@ -800,6 +939,15 @@ def strategy_control_drift_alerts(
 ):
     state = _load_control_state(db, current_admin, refresh=False)
     alerts = _build_drift_alert_rows(state["status_payload"], state["drift_alert_state"])
+    strategy_map = {str(row.get("strategy_id") or ""): row for row in state["rows"]}
+    feedback_items = state["feedback_payload"].get("items") or []
+    alerts = [
+        {
+            **item,
+            "recommended_action": _build_recommended_action(item, strategy_map.get(str(item.get("strategy_id") or "")), feedback_items),
+        }
+        for item in alerts
+    ]
     return {
         "status": "ok",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -921,6 +1069,12 @@ def _run_drift_action(
         _cache_set(pipeline_runtime.cache, state["keys"]["drift_alert"], drift_alert_state)
 
     latest_alert = _find_alert(_build_drift_alert_rows(state["status_payload"], drift_alert_state), alert_id)
+    strategy_map = {str(row.get("strategy_id") or ""): row for row in state["rows"]}
+    latest_alert["recommended_action"] = _build_recommended_action(
+        latest_alert,
+        strategy_map.get(str(latest_alert.get("strategy_id") or "")),
+        state["feedback_payload"].get("items") or [],
+    )
     create_audit_log(
         db,
         action=f"FUTURES_STRATEGY_DRIFT_{action.upper()}",
@@ -1838,6 +1992,326 @@ def strategy_timeline_export(
         },
         "items": timeline,
     }
+
+
+@router.get("/strategy-control/policy-suggestions")
+def strategy_policy_suggestions(
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    state = _load_control_state(db, current_admin, refresh=False)
+    summary = _build_policy_suggestions(state["feedback_payload"].get("items") or [])
+    return {
+        "status": "ok",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "state_snapshot": {
+            "rules_count": len(summary.get("rules") or []),
+        },
+        "summary": summary,
+    }
+
+
+@router.get("/strategy/{strategy_id}/rollback-snapshots")
+def strategy_rollback_snapshots(
+    strategy_id: str,
+    limit: int = Query(default=30, ge=1, le=200),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    state = _load_control_state(db, current_admin, refresh=False)
+    snapshots = _build_rollback_snapshots(state["action_history"], strategy_id)
+    return {
+        "status": "ok",
+        "strategy_id": strategy_id,
+        "items": snapshots[:limit],
+        "permission_matrix": {
+            "super_admin": "full",
+            "admin": "request_only",
+            "ops": "read_only",
+        },
+    }
+
+
+@router.post("/strategy/{strategy_id}/rollback-request")
+def strategy_rollback_request_create(
+    strategy_id: str,
+    payload: RollbackRequestCreateRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    trace_id = f"rollback_req_{uuid.uuid4().hex[:12]}"
+    state = _load_control_state(db, current_admin, refresh=False)
+    snapshots = _build_rollback_snapshots(state["action_history"], strategy_id)
+    snapshot = next((item for item in snapshots if str(item.get("snapshot_trace_id") or "") == str(payload.snapshot_trace_id)), None)
+    if not snapshot:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Snapshot bulunamadı.",
+            state_snapshot={"strategy_id": strategy_id, "snapshot_trace_id": payload.snapshot_trace_id},
+        )
+
+    request_id = f"apr_{uuid.uuid4().hex[:10]}"
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    request_item = {
+        "request_id": request_id,
+        "strategy_id": strategy_id,
+        "snapshot_trace_id": payload.snapshot_trace_id,
+        "status": "pending",
+        "requested_by": current_admin.id,
+        "requested_role": current_admin.role.value,
+        "reason": payload.reason,
+        "preview": {
+            "action_type": snapshot.get("action_type"),
+            "diff_preview": snapshot.get("diff_preview") or {},
+        },
+        "expires_at": expires_at,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "trace_id": trace_id,
+    }
+
+    approvals = state["approval_requests_payload"]
+    items = list(approvals.get("items") or [])
+    items.append(request_item)
+    approvals["items"] = items[-500:]
+    _cache_set(pipeline_runtime.cache, state["keys"]["approval_requests"], approvals)
+
+    create_audit_log(
+        db,
+        action="FUTURES_STRATEGY_ROLLBACK_REQUEST_CREATED",
+        entity_type="futures_strategy_control",
+        entity_id=request_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "request": request_item,
+        },
+    )
+
+    return _result_payload(
+        status="success",
+        trace_id=trace_id,
+        message="Rollback request oluşturuldu, super_admin onayı bekleniyor.",
+        state_snapshot=request_item,
+        extra={"rollback_reference": f"rollback_ref:{payload.snapshot_trace_id}"},
+    )
+
+
+@router.get("/strategy/approval-requests")
+def strategy_approval_requests(
+    status: str | None = Query(default=None),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    state = _load_control_state(db, current_admin, refresh=False)
+    all_items = list(state["approval_requests_payload"].get("items") or [])
+    now = datetime.now(timezone.utc)
+
+    for item in all_items:
+        if item.get("status") == "pending":
+            try:
+                expires = datetime.fromisoformat(str(item.get("expires_at")))
+                if expires <= now:
+                    item["status"] = "expired"
+            except Exception:
+                pass
+
+    items = list(all_items)
+    if status:
+        items = [item for item in items if str(item.get("status") or "") == status]
+
+    if current_admin.role.value != "super_admin":
+        items = [item for item in items if str(item.get("requested_by") or "") == current_admin.id]
+
+    items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+    _cache_set(pipeline_runtime.cache, state["keys"]["approval_requests"], {"items": all_items})
+    return {
+        "status": "ok",
+        "items": items,
+        "permission_matrix": {
+            "super_admin": "full",
+            "admin": "request_only",
+            "ops": "read_only",
+        },
+    }
+
+
+def _decision_approval_request(
+    *,
+    request_id: str,
+    decision: str,
+    payload: ApprovalDecisionRequest,
+    current_admin: User,
+    db: Session,
+):
+    trace_id = f"approval_decision_{uuid.uuid4().hex[:12]}"
+    state = _load_control_state(db, current_admin, refresh=False)
+    approvals = state["approval_requests_payload"]
+    items = list(approvals.get("items") or [])
+
+    target = None
+    target_index = -1
+    for index, item in enumerate(items):
+        if str(item.get("request_id") or "") == str(request_id):
+            target = item
+            target_index = index
+            break
+    if not target:
+        raise HTTPException(status_code=404, detail="approval_request_not_found")
+
+    if str(target.get("status") or "") != "pending":
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Request pending değil.",
+            state_snapshot=target,
+        )
+
+    try:
+        expires = datetime.fromisoformat(str(target.get("expires_at")))
+        if expires <= datetime.now(timezone.utc):
+            target["status"] = "expired"
+            items[target_index] = target
+            approvals["items"] = items
+            _cache_set(pipeline_runtime.cache, state["keys"]["approval_requests"], approvals)
+            return _result_payload(
+                status="rejected",
+                trace_id=trace_id,
+                message="Request süresi doldu (expired).",
+                state_snapshot=target,
+            )
+    except Exception:
+        pass
+
+    if decision == "reject":
+        target["status"] = "rejected"
+        target["decision_reason"] = payload.reason
+        target["decided_by"] = current_admin.id
+        target["decided_at"] = datetime.now(timezone.utc).isoformat()
+        target["decision_trace_id"] = trace_id
+        items[target_index] = target
+        approvals["items"] = items
+        _cache_set(pipeline_runtime.cache, state["keys"]["approval_requests"], approvals)
+
+        create_audit_log(
+            db,
+            action="FUTURES_STRATEGY_ROLLBACK_REQUEST_REJECTED",
+            entity_type="futures_strategy_control",
+            entity_id=request_id,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            severity="warning",
+            details={"trace_id": trace_id, "reason": payload.reason, "request": target},
+        )
+        return _result_payload(
+            status="success",
+            trace_id=trace_id,
+            message="Rollback request reddedildi.",
+            state_snapshot=target,
+        )
+
+    strategy_id = str(target.get("strategy_id") or "")
+    snapshot_trace = str(target.get("snapshot_trace_id") or "")
+    snapshot_source = None
+    for history_item in state["action_history"]:
+        if str(history_item.get("strategy_id") or "") == strategy_id and str(history_item.get("trace_id") or "") == snapshot_trace:
+            snapshot_source = history_item
+            break
+    if not snapshot_source:
+        return _result_payload(
+            status="rejected",
+            trace_id=trace_id,
+            message="Rollback snapshot kaynağı bulunamadı.",
+            state_snapshot=target,
+        )
+
+    lifecycle_registry = _deep_copy(snapshot_source.get("lifecycle_before") or state["lifecycle_registry"])
+    throttle_payload = _deep_copy(snapshot_source.get("throttle_before") or state["throttle_payload"])
+    manual_controls = _deep_copy(snapshot_source.get("manual_before") or state["manual_controls"])
+    rollout_payload = _deep_copy(snapshot_source.get("rollout_before") or state["rollout_payload"])
+
+    _cache_set(pipeline_runtime.cache, state["keys"]["lifecycle"], lifecycle_registry)
+    _cache_set(pipeline_runtime.cache, state["keys"]["throttle"], throttle_payload)
+    _cache_set(pipeline_runtime.cache, state["keys"]["manual"], manual_controls)
+    _cache_set(pipeline_runtime.cache, state["keys"]["rollout"], rollout_payload)
+
+    target["status"] = "approved"
+    target["decision_reason"] = payload.reason
+    target["decided_by"] = current_admin.id
+    target["decided_at"] = datetime.now(timezone.utc).isoformat()
+    target["decision_trace_id"] = trace_id
+    target["rollback_reference"] = f"rollback_ref:{snapshot_trace}"
+    items[target_index] = target
+    approvals["items"] = items
+    _cache_set(pipeline_runtime.cache, state["keys"]["approval_requests"], approvals)
+
+    after_rows = _compose_strategy_rows(
+        state["status_payload"],
+        lifecycle_registry,
+        throttle_payload,
+        manual_controls,
+        rollout_payload,
+    )
+    after_row = _find_row(after_rows, strategy_id)
+
+    create_audit_log(
+        db,
+        action="FUTURES_STRATEGY_ROLLBACK_APPROVED_AND_APPLIED",
+        entity_type="futures_strategy_control",
+        entity_id=request_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="critical",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "request": target,
+            "after_state": after_row,
+        },
+    )
+
+    return _result_payload(
+        status="success",
+        trace_id=trace_id,
+        message="Rollback request onaylandı ve uygulandı.",
+        state_snapshot=after_row,
+        extra={"approval_request": target},
+    )
+
+
+@router.post("/strategy/approval-requests/{request_id}/approve")
+def strategy_approval_request_approve(
+    request_id: str,
+    payload: ApprovalDecisionRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return _decision_approval_request(
+        request_id=request_id,
+        decision="approve",
+        payload=payload,
+        current_admin=current_admin,
+        db=db,
+    )
+
+
+@router.post("/strategy/approval-requests/{request_id}/reject")
+def strategy_approval_request_reject(
+    request_id: str,
+    payload: ApprovalDecisionRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return _decision_approval_request(
+        request_id=request_id,
+        decision="reject",
+        payload=payload,
+        current_admin=current_admin,
+        db=db,
+    )
 
 
 @router.post("/strategy/{strategy_id}/enable")
