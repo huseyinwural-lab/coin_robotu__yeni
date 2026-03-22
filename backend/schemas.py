@@ -2613,6 +2613,7 @@ class StrategyAllocationUpdateRequest(BaseModel):
     max_capital: float | None = Field(default=None, ge=0)
     current_capital: float | None = Field(default=None, ge=0)
     state: str | None = None
+    reason_note: str | None = None
     confirm_primary: str | None = None
     confirm_secondary: str | None = None
 
@@ -2623,6 +2624,7 @@ class StrategyAllocationCreateRequest(BaseModel):
     max_capital: float = Field(default=0, ge=0)
     current_capital: float = Field(default=0, ge=0)
     state: str = "ACTIVE"
+    reason_note: str | None = None
 
 
 class StrategyAllocationBulkUpdateItem(BaseModel):
@@ -2638,11 +2640,17 @@ class StrategyAllocationBulkUpdateItem(BaseModel):
 class StrategyAllocationBulkUpdateRequest(BaseModel):
     updates: list[StrategyAllocationBulkUpdateItem]
     auto_normalize: bool = False
+    reason_note: str | None = None
 
 
 class StrategyAllocationThrottleToggleRequest(BaseModel):
     confirm_primary: str
     confirm_secondary: str
+    reason_note: str | None = None
+
+
+class StrategyAllocationReasonNoteRequest(BaseModel):
+    reason_note: str
 
 
 class StrategyAllocationStateHistoryEntry(BaseModel):
@@ -2690,6 +2698,21 @@ class StrategyAllocationRebalanceSuggestionResponse(BaseModel):
     selection_count: int = 0
     applied_budget: float = 0
     suggestions: list[StrategyAllocationRebalanceSuggestionRow] = Field(default_factory=list)
+
+
+class StrategyAllocationApprovalRequestItem(BaseModel):
+    request_id: str
+    action_type: str
+    status: str
+    requested_by: str
+    reason_note: str
+    created_at: datetime
+    expires_at: datetime
+    payload: dict = Field(default_factory=dict)
+
+
+class StrategyAllocationApprovalRequestsResponse(BaseModel):
+    rows: list[StrategyAllocationApprovalRequestItem] = Field(default_factory=list)
 
 
 
