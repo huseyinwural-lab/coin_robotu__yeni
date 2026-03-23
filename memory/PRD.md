@@ -1,3 +1,41 @@
+## 2026-03-23 — Final Hardening / Determinism / Production Readiness Closure ✅
+
+### Kullanıcı seçimleri (onaylanan)
+- Expired geçiş: **A** → `expired -> force_apply` izinli (sadece force path)
+- Quorum/weights: **A** → `super_admin=2, admin=1, ops=1, threshold=3`
+- Requester seed: **B** → yeni deterministic requester seed hesabı
+- Test organizasyonu: **B** → domain’e göre ayrı closure test dosyaları
+
+### Kapanışta yapılan kritik sertleştirmeler
+- **State machine explicit hale getirildi**
+  - Allowed transitions kod seviyesinde netleştirildi: `pending->assigned`, `assigned->approved/rejected/expired`, `expired->approved(force path)`, `approved/rejected` immutable.
+  - Invalid transition’lar hard reject (409) verir hale getirildi.
+  - State log zorunlulaştırıldı (`context_payload.state_log`).
+- **Determinism/Concurrency**
+  - Approval akışlarında row-level lock ve transition guard’ları pekiştirildi.
+  - Duplicate/finalize tekrarları deterministik conflict ile kapanıyor.
+- **Requester flow tamamlandı**
+  - Apply endpoint admin rolüne açıldı (`require_admin`) ve requester→approval zinciri doğrulandı.
+- **Predictive risk stabilizasyonu**
+  - Heuristic normalizasyonu eklendi (`breach/queue/volatility` normalize) + açıklanabilir breakdown.
+- **Cache & auto-refresh telemetry**
+  - Queue/dashboard cache hit ratio, stale count, avg refresh latency metrikleri eklendi.
+  - Control Tower’da cache health + queue drift indicator gösterimi eklendi.
+- **Reject→Action minimum kapanış**
+  - Insight rule → policy field mapping ve UI aksiyonu (`review this parameter`) eklendi.
+
+### Test kapanışı (Skip=0)
+- Closure paketinde toplam **27/27 PASS** (skip=0):
+  - `test_risk_orchestrator_p0_p1_p2.py` → 19/19 PASS
+  - `test_ro_closure_requester_flow.py` → 3/3 PASS
+  - `test_ro_closure_quorum_state_machine.py` → 3/3 PASS
+  - `test_ro_closure_predictive_cache_chaos.py` → 2/2 PASS
+- Test raporu: `/app/test_reports/iteration_108.json`
+
+### Notlar
+- Force-apply expired path’te 409 `stale_simulation_requires_resimulate` davranışı (policy değişmişse) beklenen ve deterministik guard olarak doğrulandı.
+- Slack Webhook ve Binance entegrasyonları **MOCKED** kalmaya devam ediyor.
+
 ## 2026-03-23 — P0→P1→P2 Tek Geçiş Sertleştirme (Bu Fork) ✅
 
 ### Bu iterasyonda tamamlananlar
