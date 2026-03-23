@@ -63,6 +63,7 @@ export const AdminExecutionQueuePage = () => {
   const [readAckState, setReadAckState] = useState({});
   const [manualEditPatch, setManualEditPatch] = useState({});
   const [manualEditReason, setManualEditReason] = useState("");
+  const [executeArmed, setExecuteArmed] = useState(false);
 
   const [selectedBulkIds, setSelectedBulkIds] = useState([]);
   const [bulkReason, setBulkReason] = useState("");
@@ -206,6 +207,7 @@ export const AdminExecutionQueuePage = () => {
     setOverrideEnabled(false);
     setManualEditPatch({});
     setManualEditReason("");
+    setExecuteArmed(false);
     await loadIntentDetail(intentId);
   };
 
@@ -215,6 +217,7 @@ export const AdminExecutionQueuePage = () => {
     setSelectedHistory([]);
     setDecisionReason("");
     setOverrideEnabled(false);
+    setExecuteArmed(false);
   };
 
   const updateReadAckState = (nextPatch) => {
@@ -252,6 +255,13 @@ export const AdminExecutionQueuePage = () => {
 
   const executeApprovedIntent = async () => {
     if (!selectedIntentId) return;
+    if (!executeArmed) {
+      toast.error("Execute için önce güvenlik kilidini açın");
+      return;
+    }
+    const confirmed = window.confirm("Bu intent FINAL EXECUTE edilecek. Devam etmek istediğinize emin misiniz?");
+    if (!confirmed) return;
+
     setDecisionLoading(true);
     try {
       await apiClient.post(`/admin/execution-queue/${selectedIntentId}/execute`, {
@@ -819,6 +829,15 @@ export const AdminExecutionQueuePage = () => {
                 />
                 Execute confirmation (high-risk için zorunlu)
               </label>
+              <label className="flex items-center gap-2 text-xs text-amber-200" data-testid="execution-intent-decision-execute-arm-label">
+                <input
+                  type="checkbox"
+                  checked={executeArmed}
+                  onChange={(event) => setExecuteArmed(event.target.checked)}
+                  data-testid="execution-intent-decision-execute-arm-checkbox"
+                />
+                Execute safety lock (accidental click koruması)
+              </label>
               <label className="flex items-center gap-2 text-xs text-amber-200" data-testid="execution-intent-decision-override-label">
                 <input
                   type="checkbox"
@@ -856,6 +875,7 @@ export const AdminExecutionQueuePage = () => {
                   decisionLoading
                   || decisionReason.trim().length < 3
                   || selectedRow?.status !== "APPROVED"
+                  || !executeArmed
                   || (selectedDetail?.risk_payload?.is_high_risk && !currentReadAck.highRiskConfirm)
                 }
                 data-testid="execution-intent-execute-button"

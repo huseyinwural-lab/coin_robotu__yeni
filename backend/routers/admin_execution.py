@@ -403,7 +403,7 @@ def approve_intent(
                 current_user.id,
                 execution_reason=f"legacy_flow:{decision_reason}",
                 execute_confirmation=True,
-                detail_version=payload.detail_version,
+                detail_version=resolve_intent_detail_version(row),
             )
             create_audit_log(
                 db,
