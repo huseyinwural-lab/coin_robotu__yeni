@@ -1,3 +1,57 @@
+## 2026-03-23 — Approval Orchestration + Escalation + Decision Intelligence Layer ✅
+
+### Uygulanan kapsam (tek bağlı pipeline)
+- **Approval Queue Engine** tamamlandı:
+  - State: `pending`, `assigned`, `approved`, `rejected`, `expired`
+  - Scope/sıralama: `my`, `unassigned`, `all`, `critical_first`
+  - SLA alanları: `created_at`, `expires_at`, `assigned_to`, `requested_by`, `sla_remaining_seconds`, `sla_stage`
+  - Assignment: manual + **hybrid auto-assign** (role-based + round-robin benzeri düşük yük seçimi)
+- **CRITICAL Escalation Pipeline** tamamlandı:
+  - 5 dk warning escalation
+  - 8 dk critical escalation
+  - 10 dk expiry + forced auto-reject
+  - Queue sweep endpointi ile operasyonel tetikleme
+- **Forced Resolution** tamamlandı:
+  - SLA breach default davranış: **AUTO-REJECT** (`FORCED_AUTO_REJECT_SLA_BREACH` trace)
+  - `force apply` yalnızca super_admin endpointi ile (`FORCE_OVERRIDE_APPLY`)
+- **Decision Intelligence Layer** tamamlandı:
+  - before/after diff
+  - risk score breakdown
+  - why blocked/allowed açıklaması
+  - similar pattern listesi
+- **Reject → Insight → Action** tamamlandı:
+  - 3+ tetik / 30dk kuralına göre öneri üretimi (`policy_too_strict`, `symbol_risk_anomaly`, vb.)
+- **Approval Abuse / Bottleneck Guard** tamamlandı:
+  - kişi başı pending limit
+  - stuck approval detector + alert
+  - throughput metriği (son 1 saat)
+- **Notification Standardizasyonu** tamamlandı (event alert düzeyinde):
+  - `approval_requested`, `approval_expiring`, `approval_expired`, `critical_block`, `force_override`
+  - standard payload: `request_id`, `risk_score`, `classification`, `actor`, `reason`, `link_to_ui`
+- **Operational Dashboard (Control Tower)** tamamlandı (tek sayfada sekme):
+  - active pending approvals
+  - critical queue
+  - reject spike (1 saat)
+  - override usage
+  - risk score distribution
+  - approval throughput
+
+### Teknik değişiklikler
+- Yeni migration: `20260323_0067_approval_orchestration_columns.py`
+- Approval modeli genişletildi: priority, assignment/escalation/expiry/activity alanları
+- Yeni API yüzeyi:
+  - `GET /policy/queue`
+  - `POST /policy/queue/sweep`
+  - `POST /policy/queue/{approval_id}/assign`
+  - `POST /policy/queue/{approval_id}/force-apply`
+  - `GET /policy/decision-intelligence/{trace_id}`
+  - `GET /rejects/insights`
+  - `GET /operations/dashboard`
+
+### Test özeti
+- Testing Agent `iteration_105`: backend **17/17 pass** (2 skip data yok), frontend tab/queue/intelligence/control-tower doğrulamaları pass.
+- Ek not: testing agentin eklediği integration test dosyaları CI kırmaması için env-gated (`skipif`) hale getirildi.
+
 ## 2026-03-23 — Pre-Apply Risk Gate + Multi-Stage Approval + Operational Hardening ✅
 
 ### Uygulanan ana geliştirmeler

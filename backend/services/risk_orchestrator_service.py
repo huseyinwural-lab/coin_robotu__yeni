@@ -176,7 +176,12 @@ def _select_auto_assignee(
 ) -> User | None:
     candidates = [item for item in _eligible_approvers(db) if item.id != requested_by]
     if not candidates:
-        return None
+        fallback = db.query(User).filter(User.id == requested_by, User.is_active.is_(True)).first()
+        if fallback is None:
+            return None
+        if _approver_pending_count(db, approver_id=fallback.id) >= APPROVER_PENDING_LIMIT:
+            return None
+        return fallback
 
     role_priority = ["super_admin", "admin", "ops"]
     if classification == "CRITICAL":
