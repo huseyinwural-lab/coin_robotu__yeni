@@ -9,6 +9,13 @@ export const AdminExecutionReadinessPage = () => {
   const [gate, setGate] = useState(null);
   const [readiness, setReadiness] = useState(null);
   const [ops, setOps] = useState(null);
+  const [checkHistory, setCheckHistory] = useState(null);
+  const [compareData, setCompareData] = useState(null);
+  const [overrideAnalytics, setOverrideAnalytics] = useState(null);
+  const [timelineData, setTimelineData] = useState(null);
+  const [historyFilterCheckKey, setHistoryFilterCheckKey] = useState("ALL");
+  const [historyFilterStatus, setHistoryFilterStatus] = useState("ALL");
+  const [timelineFilter, setTimelineFilter] = useState({ checks: true, overrides: true, mode: true, deploy: true });
   const [stateReasonCode, setStateReasonCode] = useState("MANUAL_RISK_ACCEPTANCE");
   const [stateReasonText, setStateReasonText] = useState("Pre-deploy kontroller tamamlandı.");
   const [overrideOpen, setOverrideOpen] = useState(false);
@@ -40,14 +47,30 @@ export const AdminExecutionReadinessPage = () => {
   const load = useCallback(async (refreshChecks = false) => {
     setLoading(true);
     try {
-      const [{ data: gateData }, { data: readinessData }, { data: opsData }] = await Promise.all([
+      const [
+        { data: gateData },
+        { data: readinessData },
+        { data: opsData },
+        { data: historyData },
+        { data: comparePayload },
+        { data: analyticsPayload },
+        { data: timelinePayload },
+      ] = await Promise.all([
         apiClient.get(`/phase4/admin/production-gate?refresh_checks=${refreshChecks ? "true" : "false"}`),
         apiClient.get("/admin/execution-readiness"),
         apiClient.get("/phase4/admin/production-gate/ops-overview"),
+        apiClient.get("/phase4/admin/production-gate/checks/history?limit=300"),
+        apiClient.get("/phase4/admin/production-gate/checks/compare?limit=300"),
+        apiClient.get("/phase4/admin/production-gate/override-analytics"),
+        apiClient.get("/phase4/admin/production-gate/timeline?limit=400"),
       ]);
       setGate(gateData);
       setReadiness(readinessData);
       setOps(opsData);
+      setCheckHistory(historyData);
+      setCompareData(comparePayload);
+      setOverrideAnalytics(analyticsPayload);
+      setTimelineData(timelinePayload);
 
       const nextFailCount = Number(opsData?.active_fail_count || 0);
       if (nextFailCount > previousFailCountRef.current) {
@@ -210,6 +233,52 @@ export const AdminExecutionReadinessPage = () => {
 
   const failCodesText = useMemo(() => (ops?.active_fail_codes || []).join(", "), [ops?.active_fail_codes]);
 
+  const filteredHistoryItems = useMemo(() => {
+    const rows = checkHistory?.items || [];
+    return rows.filter((row) => {
+      if (historyFilterCheckKey !== "ALL" && row.check_key !== historyFilterCheckKey) return false;
+      if (historyFilterStatus !== "ALL" && row.status !== historyFilterStatus) return false;
+      return true;
+    });
+  }, [checkHistory?.items, historyFilterCheckKey, historyFilterStatus]);
+
+  const historyCheckKeys = useMemo(() => {
+    const keys = new Set((checkHistory?.items || []).map((item) => item.check_key));
+    return ["ALL", ...Array.from(keys)];
+  }, [checkHistory?.items]);
+
+  const filteredTimelineItems = useMemo(() => {
+    const rows = timelineData?.items || [];
+    return rows.filter((item) => {
+      if (item.category === "checks" && !timelineFilter.checks) return false;
+      if (item.category === "overrides" && !timelineFilter.overrides) return false;
+      if (item.category === "mode" && !timelineFilter.mode) return false;
+      if (item.category === "deploy" && !timelineFilter.deploy) return false;
+      return true;
+    });
+  }, [timelineData?.items, timelineFilter]);
+
+  const reasonDistribution = useMemo(() => overrideAnalytics?.reason_distribution || {}, [overrideAnalytics?.reason_distribution]);
+
+  const reasonPieStyle = useMemo(() => {
+    const entries = Object.entries(reasonDistribution);
+    const total = entries.reduce((sum, [, count]) => sum + Number(count || 0), 0);
+    if (total <= 0) {
+      return { background: "conic-gradient(#334155 0deg 360deg)" };
+    }
+    const palette = ["#f59e0b", "#ef4444", "#22c55e", "#38bdf8", "#a78bfa", "#fb7185", "#2dd4bf"];
+    let current = 0;
+    const segments = entries.map(([, count], index) => {
+      const share = (Number(count || 0) / total) * 360;
+      const next = current + share;
+      const color = palette[index % palette.length];
+      const segment = `${color} ${current}deg ${next}deg`;
+      current = next;
+      return segment;
+    });
+    return { background: `conic-gradient(${segments.join(",")})` };
+  }, [reasonDistribution]);
+
   return (
     <section className="space-y-6" data-testid="admin-production-gate-page">
       <header className="rounded-xl border border-slate-700 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800 p-5" data-testid="admin-production-gate-header">
@@ -217,6 +286,9 @@ export const AdminExecutionReadinessPage = () => {
           <div data-testid="admin-production-gate-header-left">
             <h1 className="text-4xl font-black tracking-tight text-amber-300" data-testid="admin-production-gate-title">Production Gate Control Panel</h1>
             <p className="mt-2 text-sm text-slate-300" data-testid="admin-production-gate-subtitle">Deploy ve LIVE aktivasyonu sadece GO / GO_WITH_OVERRIDE ile açılır.</p>
+            <p className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${gate?.risk_level === "HIGH" ? "bg-red-900 text-red-100" : gate?.risk_level === "MEDIUM" ? "bg-amber-900 text-amber-100" : "bg-emerald-900 text-emerald-100"}`} data-testid="admin-production-gate-risk-badge">
+              risk: {gate?.risk_level || "LOW"} ({gate?.risk_score ?? 0})
+            </p>
           </div>
           <div className="flex flex-wrap gap-2" data-testid="admin-production-gate-header-actions">
             <Button variant="outline" onClick={() => load(true)} disabled={loading || actionLoading} data-testid="admin-production-gate-refresh-button">Yenile</Button>
@@ -307,6 +379,12 @@ export const AdminExecutionReadinessPage = () => {
       {gate?.effective_state === "GO_WITH_OVERRIDE" && (
         <div className="rounded-lg border border-amber-700 bg-amber-950/30 p-3 text-sm text-amber-100" data-testid="admin-production-gate-override-active-banner">
           OVERRIDE RISK: GO_WITH_OVERRIDE aktif, süreli bypass modundasınız.
+        </div>
+      )}
+
+      {!!(gate?.flapping_checks || []).length && (
+        <div className="rounded-lg border border-fuchsia-700 bg-fuchsia-950/30 p-3 text-sm text-fuchsia-100" data-testid="admin-production-gate-flapping-banner">
+          FLAPPING DETECTED: {(gate?.flapping_checks || []).join(", ")}
         </div>
       )}
 
@@ -488,6 +566,137 @@ export const AdminExecutionReadinessPage = () => {
             </div>
           ))}
           {(gate?.audit_history || []).length === 0 && <p className="text-xs text-slate-400" data-testid="admin-production-gate-audit-empty">Audit kaydı bulunamadı.</p>}
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2" data-testid="admin-production-gate-history-compare-grid">
+        <div className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="admin-production-gate-check-history-panel">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-production-gate-check-history-header">
+            <h2 className="text-base font-semibold text-white" data-testid="admin-production-gate-check-history-title">Check History & Trend</h2>
+            <div className="flex gap-2" data-testid="admin-production-gate-check-history-filters">
+              <select value={historyFilterCheckKey} onChange={(event) => setHistoryFilterCheckKey(event.target.value)} className="rounded border border-slate-600 bg-slate-950 px-2 py-1 text-xs text-white" data-testid="admin-production-gate-check-history-check-filter-select">
+                {historyCheckKeys.map((key) => (
+                  <option key={key} value={key}>{key}</option>
+                ))}
+              </select>
+              <select value={historyFilterStatus} onChange={(event) => setHistoryFilterStatus(event.target.value)} className="rounded border border-slate-600 bg-slate-950 px-2 py-1 text-xs text-white" data-testid="admin-production-gate-check-history-status-filter-select">
+                <option value="ALL">ALL</option>
+                <option value="PASS">PASS</option>
+                <option value="FAIL">FAIL</option>
+                <option value="WARN">WARN</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 text-xs" data-testid="admin-production-gate-check-history-trend-summary-list">
+            {Object.entries(checkHistory?.trend_summary || {}).map(([key, value]) => (
+              <div key={key} className="rounded border border-slate-700 bg-slate-950 p-2" data-testid={`admin-production-gate-check-history-trend-summary-${key}`}>
+                <p className="text-white" data-testid={`admin-production-gate-check-history-trend-summary-key-${key}`}>{key}</p>
+                <p data-testid={`admin-production-gate-check-history-trend-summary-pass-${key}`}>PASS: {value?.PASS || 0}</p>
+                <p data-testid={`admin-production-gate-check-history-trend-summary-fail-${key}`}>FAIL: {value?.FAIL || 0}</p>
+                <p data-testid={`admin-production-gate-check-history-trend-summary-warn-${key}`}>WARN: {value?.WARN || 0}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 max-h-64 space-y-2 overflow-y-auto" data-testid="admin-production-gate-check-history-items-list">
+            {filteredHistoryItems.map((row, index) => (
+              <div key={`${row.run_id}-${index}`} className="rounded border border-slate-700 bg-slate-950 p-2 text-xs" data-testid={`admin-production-gate-check-history-item-${index}`}>
+                <p className="text-white" data-testid={`admin-production-gate-check-history-item-key-${index}`}>{row.check_key}</p>
+                <p data-testid={`admin-production-gate-check-history-item-status-${index}`}>status: {row.status}</p>
+                <p data-testid={`admin-production-gate-check-history-item-latency-${index}`}>latency: {row.latency_ms ?? "-"} ms</p>
+                <p data-testid={`admin-production-gate-check-history-item-error-${index}`}>error_code: {row.error_code || "-"}</p>
+                <p data-testid={`admin-production-gate-check-history-item-run-id-${index}`}>run_id: {row.run_id}</p>
+                <p data-testid={`admin-production-gate-check-history-item-flapping-${index}`}>flapping: {row.flapping ? "FLAPPING" : "NO"}</p>
+              </div>
+            ))}
+            {filteredHistoryItems.length === 0 && (
+              <p className="text-xs text-slate-400" data-testid="admin-production-gate-check-history-empty-explained">
+                Check history henüz oluşmadı. En az bir rerun çalıştırılmadan trend üretilemez.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="admin-production-gate-compare-panel">
+          <h2 className="text-base font-semibold text-white" data-testid="admin-production-gate-compare-title">Before / After Remediation Compare</h2>
+          <div className="mt-3 max-h-80 space-y-2 overflow-y-auto" data-testid="admin-production-gate-compare-items-list">
+            {(compareData?.items || []).map((item, index) => (
+              <div key={`${item.run_id}-${index}`} className="rounded border border-slate-700 bg-slate-950 p-2 text-xs" data-testid={`admin-production-gate-compare-item-${index}`}>
+                <p className="text-white" data-testid={`admin-production-gate-compare-item-key-${index}`}>{item.check_key}</p>
+                <p data-testid={`admin-production-gate-compare-item-state-delta-${index}`}>state_delta: {item.state_delta}</p>
+                <p className={`${(item.new_result === "PASS" && item.previous_result !== "PASS") ? "text-emerald-300" : (item.new_result === "FAIL" && item.previous_result === "PASS") ? "text-red-300" : "text-slate-200"}`} data-testid={`admin-production-gate-compare-item-result-delta-${index}`}>
+                  previous_result: {item.previous_result} → new_result: {item.new_result}
+                </p>
+                <p className={`${Number(item.latency_delta_ms || 0) < 0 ? "text-emerald-300" : Number(item.latency_delta_ms || 0) > 0 ? "text-red-300" : "text-slate-300"}`} data-testid={`admin-production-gate-compare-item-latency-delta-${index}`}>
+                  latency_delta_ms: {item.latency_delta_ms ?? "-"}
+                </p>
+              </div>
+            ))}
+            {(compareData?.items || []).length === 0 && <p className="text-xs text-slate-400" data-testid="admin-production-gate-compare-empty">Compare verisi yok. Rerun sonrası delta burada oluşur.</p>}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2" data-testid="admin-production-gate-analytics-timeline-grid">
+        <div className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="admin-production-gate-override-analytics-panel">
+          <h2 className="text-base font-semibold text-white" data-testid="admin-production-gate-override-analytics-title">Override Analytics</h2>
+          <div className="mt-3 grid gap-3 md:grid-cols-2" data-testid="admin-production-gate-override-analytics-summary-grid">
+            <div className="rounded border border-slate-700 bg-slate-950 p-3 text-xs" data-testid="admin-production-gate-override-analytics-metrics-card">
+              <p data-testid="admin-production-gate-override-analytics-count">override_count: {overrideAnalytics?.override_count ?? 0}</p>
+              <p data-testid="admin-production-gate-override-analytics-rate">override_rate: {overrideAnalytics?.override_rate ?? 0}%</p>
+              <p data-testid="admin-production-gate-override-analytics-expiry">expiry_count: {overrideAnalytics?.expiry_count ?? 0}</p>
+              <p data-testid="admin-production-gate-override-analytics-revoke">revoke_count: {overrideAnalytics?.revoke_count ?? 0}</p>
+            </div>
+            <div className="flex items-center justify-center" data-testid="admin-production-gate-override-analytics-pie-wrapper">
+              <div className="h-28 w-28 rounded-full border border-slate-600" style={reasonPieStyle} data-testid="admin-production-gate-override-analytics-pie"></div>
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-2" data-testid="admin-production-gate-override-analytics-reason-list">
+            {Object.entries(reasonDistribution).map(([reason, count], index) => (
+              <p key={reason} className="text-xs text-slate-200" data-testid={`admin-production-gate-override-analytics-reason-${index}`}>{reason}: {count}</p>
+            ))}
+            {Object.keys(reasonDistribution).length === 0 && <p className="text-xs text-slate-400" data-testid="admin-production-gate-override-analytics-reason-empty">Reason dağılımı için override kaydı bekleniyor.</p>}
+          </div>
+
+          <div className="mt-3 space-y-2" data-testid="admin-production-gate-override-analytics-top-checks-list">
+            {(overrideAnalytics?.top_override_checks || []).map((item, index) => (
+              <p key={`${item.check_key}-${index}`} className="text-xs text-slate-200" data-testid={`admin-production-gate-override-analytics-top-check-${index}`}>{item.check_key}: {item.count}</p>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="admin-production-gate-timeline-panel">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-production-gate-timeline-header">
+            <h2 className="text-base font-semibold text-white" data-testid="admin-production-gate-timeline-title">Incident Timeline</h2>
+            <div className="flex flex-wrap gap-2 text-xs" data-testid="admin-production-gate-timeline-filters">
+              {[
+                { key: "checks", label: "checks" },
+                { key: "overrides", label: "overrides" },
+                { key: "mode", label: "mode" },
+                { key: "deploy", label: "deploy" },
+              ].map((filter) => (
+                <label key={filter.key} className="flex items-center gap-1" data-testid={`admin-production-gate-timeline-filter-${filter.key}`}>
+                  <input type="checkbox" checked={timelineFilter[filter.key]} onChange={(event) => setTimelineFilter((prev) => ({ ...prev, [filter.key]: event.target.checked }))} data-testid={`admin-production-gate-timeline-filter-toggle-${filter.key}`} />
+                  {filter.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-3 max-h-80 space-y-2 overflow-y-auto" data-testid="admin-production-gate-timeline-items-list">
+            {filteredTimelineItems.map((item, index) => (
+              <div key={`${item.timestamp}-${index}`} className="rounded border border-slate-700 bg-slate-950 p-2 text-xs" data-testid={`admin-production-gate-timeline-item-${index}`}>
+                <p className="text-white" data-testid={`admin-production-gate-timeline-item-title-${index}`}>
+                  {item.category === "checks" ? "🧪" : item.category === "overrides" ? "🛡️" : item.category === "mode" ? "🔁" : "🚀"} {item.title}
+                </p>
+                <p data-testid={`admin-production-gate-timeline-item-category-${index}`}>category: {item.category}</p>
+                <p data-testid={`admin-production-gate-timeline-item-timestamp-${index}`}>timestamp: {item.timestamp}</p>
+              </div>
+            ))}
+            {filteredTimelineItems.length === 0 && <p className="text-xs text-slate-400" data-testid="admin-production-gate-timeline-empty">Seçili filtrelerde timeline kaydı yok.</p>}
+          </div>
         </div>
       </div>
 

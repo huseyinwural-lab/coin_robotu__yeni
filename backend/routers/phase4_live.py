@@ -31,14 +31,18 @@ from schemas import (
     TestOrderResponse,
     TestnetConnectivityResponse,
     ProductionGateChecklistUpdateRequest,
+    ProductionGateCheckCompareResponse,
+    ProductionGateCheckHistoryResponse,
     ProductionGateApiKeyTestRunRequest,
     ProductionGateExportResponse,
     ProductionGateModeTransitionRequest,
     ProductionGateOpsOverviewResponse,
     ProductionGateOrderScenarioRunRequest,
+    ProductionGateOverrideAnalyticsResponse,
     ProductionGateOverrideCreateRequest,
     ProductionGateStateUpdateRequest,
     ProductionGateStatusResponse,
+    ProductionGateTimelineResponse,
 )
 from services.audit_service import create_audit_log
 from services.execution_mode_control_service import get_execution_mode, switch_execution_mode
@@ -74,8 +78,12 @@ from services.production_gate_service import (
     build_production_gate_export,
     create_production_gate_override,
     enforce_production_gate_or_raise,
+    get_production_gate_checks_compare,
+    get_production_gate_checks_history,
     get_production_gate_status,
+    get_production_gate_timeline,
     get_production_gate_ops_overview,
+    get_production_gate_override_analytics,
     rerun_production_gate_checks,
     revoke_production_gate_override,
     run_order_scenario_matrix,
@@ -554,6 +562,93 @@ def admin_production_gate_mode_history(
 ):
     payload = get_production_gate_ops_overview(db, mode_history_limit=limit)
     return payload.get("mode_history") or []
+
+
+@router.get("/admin/production-gate/checks/history", response_model=ProductionGateCheckHistoryResponse)
+def admin_production_gate_checks_history(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    check_key: str | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=10, le=1000),
+):
+    try:
+        from_dt = datetime.fromisoformat(date_from.replace("Z", "+00:00")) if date_from else None
+        to_dt = datetime.fromisoformat(date_to.replace("Z", "+00:00")) if date_to else None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_date_range") from exc
+
+    payload = get_production_gate_checks_history(
+        db,
+        check_key=check_key,
+        date_from=from_dt,
+        date_to=to_dt,
+        status_filter=status_filter,
+        limit=limit,
+    )
+    return ProductionGateCheckHistoryResponse(**payload)
+
+
+@router.get("/admin/production-gate/checks/compare", response_model=ProductionGateCheckCompareResponse)
+def admin_production_gate_checks_compare(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    check_key: str | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=10, le=1000),
+):
+    try:
+        from_dt = datetime.fromisoformat(date_from.replace("Z", "+00:00")) if date_from else None
+        to_dt = datetime.fromisoformat(date_to.replace("Z", "+00:00")) if date_to else None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_date_range") from exc
+
+    payload = get_production_gate_checks_compare(
+        db,
+        check_key=check_key,
+        date_from=from_dt,
+        date_to=to_dt,
+        limit=limit,
+    )
+    return ProductionGateCheckCompareResponse(**payload)
+
+
+@router.get("/admin/production-gate/override-analytics", response_model=ProductionGateOverrideAnalyticsResponse)
+def admin_production_gate_override_analytics(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    payload = get_production_gate_override_analytics(db, limit_timeline=200)
+    return ProductionGateOverrideAnalyticsResponse(**payload)
+
+
+@router.get("/admin/production-gate/timeline", response_model=ProductionGateTimelineResponse)
+def admin_production_gate_timeline(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    categories: str | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    limit: int = Query(default=300, ge=20, le=2000),
+):
+    try:
+        from_dt = datetime.fromisoformat(date_from.replace("Z", "+00:00")) if date_from else None
+        to_dt = datetime.fromisoformat(date_to.replace("Z", "+00:00")) if date_to else None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_date_range") from exc
+
+    category_list = [item.strip().lower() for item in str(categories or "").split(",") if item.strip()]
+    payload = get_production_gate_timeline(
+        db,
+        categories=category_list,
+        date_from=from_dt,
+        date_to=to_dt,
+        limit=limit,
+    )
+    return ProductionGateTimelineResponse(**payload)
 
 
 @router.post("/admin/production-gate/checks/rerun", response_model=ProductionGateStatusResponse)

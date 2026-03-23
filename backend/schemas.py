@@ -4261,6 +4261,9 @@ class ProductionGateStatusResponse(BaseModel):
     checklist: list[ProductionGateChecklistItemResponse] = Field(default_factory=list)
     checks: list[ProductionGateCheckItemResponse] = Field(default_factory=list)
     active_override: ProductionGateOverrideSummaryResponse | None = None
+    risk_score: int = 0
+    risk_level: str = "LOW"
+    flapping_checks: list[str] = Field(default_factory=list)
     updated_at: datetime
     updated_by_user_id: str | None = None
     audit_history: list[ProductionGateAuditItemResponse] = Field(default_factory=list)
@@ -4362,6 +4365,8 @@ class ProductionGateOrderScenarioItemResponse(BaseModel):
 class ProductionGateOpsOverviewResponse(BaseModel):
     active_fail_count: int
     active_fail_codes: list[str] = Field(default_factory=list)
+    risk_score: int = 0
+    risk_level: str = "LOW"
     api_key_tests: list[ProductionGateApiKeyTestResultResponse] = Field(default_factory=list)
     permission_breakdown: list[ProductionGatePermissionBreakdownItemResponse] = Field(default_factory=list)
     exchange_health: list[ProductionGateExchangeHealthItemResponse] = Field(default_factory=list)
@@ -4376,3 +4381,58 @@ class ProductionGateApiKeyTestRunRequest(BaseModel):
 
 class ProductionGateOrderScenarioRunRequest(BaseModel):
     scenario_key: str | None = None
+
+
+class ProductionGateCheckHistoryItemResponse(BaseModel):
+    check_key: str
+    status: str
+    timestamp: datetime
+    latency_ms: float | None = None
+    error_code: str | None = None
+    run_id: str
+    flapping: bool = False
+
+
+class ProductionGateCheckHistoryResponse(BaseModel):
+    items: list[ProductionGateCheckHistoryItemResponse] = Field(default_factory=list)
+    trend_summary: dict = Field(default_factory=dict)
+    flapping_checks: list[str] = Field(default_factory=list)
+
+
+class ProductionGateCheckCompareItemResponse(BaseModel):
+    check_key: str
+    run_id: str
+    timestamp: datetime
+    previous_result: str
+    new_result: str
+    previous_latency_ms: float | None = None
+    new_latency_ms: float | None = None
+    latency_delta_ms: float | None = None
+    state_delta: str
+
+
+class ProductionGateCheckCompareResponse(BaseModel):
+    items: list[ProductionGateCheckCompareItemResponse] = Field(default_factory=list)
+
+
+class ProductionGateOverrideAnalyticsResponse(BaseModel):
+    override_count: int
+    override_rate: float
+    reason_distribution: dict = Field(default_factory=dict)
+    top_override_checks: list[dict] = Field(default_factory=list)
+    expiry_count: int
+    revoke_count: int
+    expiry_vs_revoke_ratio: dict = Field(default_factory=dict)
+    timeline: list[dict] = Field(default_factory=list)
+
+
+class ProductionGateTimelineEventResponse(BaseModel):
+    event_type: str
+    category: str
+    timestamp: datetime
+    title: str
+    details: dict = Field(default_factory=dict)
+
+
+class ProductionGateTimelineResponse(BaseModel):
+    items: list[ProductionGateTimelineEventResponse] = Field(default_factory=list)
