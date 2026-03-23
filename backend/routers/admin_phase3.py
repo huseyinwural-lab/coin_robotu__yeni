@@ -1903,20 +1903,45 @@ def _build_snapshot_diff_payload(
     }
 
     anomaly_notes: list[str] = []
+    recommended_actions: list[dict] = []
+
+    def _add_action(action: str, severity: str, reason: str) -> None:
+        recommended_actions.append(
+            {
+                "action": action,
+                "severity": severity,
+                "reason": reason,
+            }
+        )
     if counts["failed_events_delta"] > 0 and percentage_change["failed_events"] > 50:
         anomaly_notes.append(f"FAILED_EVENTS increased by {percentage_change['failed_events']}% (CRITICAL_RISK)")
+        _add_action("retry policy tune", "CRITICAL", f"failed_events +{percentage_change['failed_events']}%")
+        _add_action("timeout review", "CRITICAL", f"failed_events +{percentage_change['failed_events']}%")
     elif counts["failed_events_delta"] < 0:
         anomaly_notes.append("FAILED_EVENTS decreased (IMPROVED)")
 
     if counts["dead_letter_delta"] > 0 and percentage_change["dead_letter"] > 30:
         anomaly_notes.append(f"DEAD_LETTER increased by {percentage_change['dead_letter']}% (HIGH_RISK)")
+        _add_action("guardrail hardening", "WARNING", f"dead_letter +{percentage_change['dead_letter']}%")
+        _add_action("validation check", "WARNING", f"dead_letter +{percentage_change['dead_letter']}%")
     elif counts["dead_letter_delta"] < 0:
         anomaly_notes.append("DEAD_LETTER decreased (IMPROVED)")
 
     if counts["manual_actions_delta"] > 0:
         anomaly_notes.append("OPERATOR_INTERVENTION increased")
+        _add_action("runbook review", "WARNING", f"manual_actions +{counts['manual_actions_delta']}")
+        _add_action("automation gap", "WARNING", f"manual_actions +{counts['manual_actions_delta']}")
     elif counts["manual_actions_delta"] < 0:
         anomaly_notes.append("MANUAL_ACTIONS decreased (REDUCED)")
+
+    if counts["idempotency_collisions_delta"] > 0:
+        _add_action("idempotency check hardening", "WARNING", f"idempotency_collisions +{counts['idempotency_collisions_delta']}")
+
+    if counts["failed_events_delta"] < 0 or counts["dead_letter_delta"] < 0 or counts["manual_actions_delta"] < 0:
+        _add_action("keep current policy", "INFO", "stable improvement observed")
+
+    if not recommended_actions:
+        _add_action("keep current policy", "INFO", "stable")
 
     diff_payload = {
         "scope_a": {
@@ -1932,6 +1957,7 @@ def _build_snapshot_diff_payload(
         "counts": counts,
         "percentage_change": percentage_change,
         "anomaly_notes": anomaly_notes,
+        "recommended_actions": recommended_actions,
     }
 
     summary_lines = [
@@ -1945,6 +1971,10 @@ def _build_snapshot_diff_payload(
         summary_lines.extend([f"- {note}" for note in anomaly_notes])
     else:
         summary_lines.append("- none")
+
+    summary_lines.append("Recommended Actions")
+    for item in recommended_actions:
+        summary_lines.append(f"- [{item['severity']}] {item['action']} ({item['reason']})")
     return diff_payload, "\n".join(summary_lines) + "\n"
 
 

@@ -721,6 +721,26 @@ export const ExecutionStatesPage = () => {
               ))}
               {!diffData?.anomaly_notes?.length && <p>no anomaly note</p>}
             </div>
+
+            <div className="mt-3 space-y-1 text-xs" data-testid="execution-control-diff-recommended-actions-list">
+              <p className="font-semibold">Recommended Actions:</p>
+              {(diffData?.recommended_actions || []).map((item, idx) => (
+                <p
+                  key={`${item.action}-${idx}`}
+                  className={
+                    item.severity === "CRITICAL"
+                      ? "text-red-400"
+                      : item.severity === "WARNING"
+                        ? "text-amber-300"
+                        : "text-emerald-400"
+                  }
+                  data-testid={`execution-control-diff-recommended-action-${idx}`}
+                >
+                  [{item.severity}] {item.action} ({item.reason})
+                </p>
+              ))}
+              {!diffData?.recommended_actions?.length && <p>[INFO] keep current policy (stable)</p>}
+            </div>
           </div>
         )}
       </div>
