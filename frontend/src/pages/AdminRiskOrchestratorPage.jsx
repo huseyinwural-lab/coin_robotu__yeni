@@ -85,6 +85,29 @@ const deriveQueueSignature = (items) => {
   return ids.join("|");
 };
 
+const resolveApiErrorMessage = (error, fallbackMessage) => {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const mapped = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          return item.msg || item.message || JSON.stringify(item);
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join(" | ");
+    if (mapped) return mapped;
+  }
+  if (detail && typeof detail === "object") {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  if (typeof error?.message === "string" && error.message.trim()) return error.message;
+  return fallbackMessage;
+};
+
 export const AdminRiskOrchestratorPage = () => {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "super_admin";
@@ -209,7 +232,7 @@ export const AdminRiskOrchestratorPage = () => {
     try {
       await Promise.all([refreshCore(), refreshRejects(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Risk Enforcement paneli yüklenemedi");
+      toast.error(resolveApiErrorMessage(error, "Risk Enforcement paneli yüklenemedi"));
     } finally {
       setLoading(false);
     }
@@ -227,7 +250,7 @@ export const AdminRiskOrchestratorPage = () => {
 
   useEffect(() => {
     refreshQueue().catch((error) => {
-      toast.error(error?.response?.data?.detail || "Approval queue güncellenemedi");
+      toast.error(resolveApiErrorMessage(error, "Approval queue güncellenemedi"));
     });
   }, [refreshQueue]);
 
@@ -291,7 +314,7 @@ export const AdminRiskOrchestratorPage = () => {
       setDoubleConfirm(false);
       toast.success("What-if simülasyonu tamamlandı.");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Simülasyon çalıştırılamadı");
+      toast.error(resolveApiErrorMessage(error, "Simülasyon çalıştırılamadı"));
     }
   };
 
@@ -327,7 +350,7 @@ export const AdminRiskOrchestratorPage = () => {
       setDoubleConfirm(false);
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Policy apply başarısız");
+      toast.error(resolveApiErrorMessage(error, "Policy apply başarısız"));
     }
   };
 
@@ -339,7 +362,7 @@ export const AdminRiskOrchestratorPage = () => {
       setRevertSimulations((prev) => ({ ...prev, [versionId]: data.simulation }));
       toast.success("Revert impact simulation hazırlandı");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Revert simulation başarısız");
+      toast.error(resolveApiErrorMessage(error, "Revert simulation başarısız"));
     }
   };
 
@@ -368,7 +391,7 @@ export const AdminRiskOrchestratorPage = () => {
       }
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Revert apply başarısız");
+      toast.error(resolveApiErrorMessage(error, "Revert apply başarısız"));
     }
   };
 
@@ -388,7 +411,7 @@ export const AdminRiskOrchestratorPage = () => {
       setControlReasons((prev) => ({ ...prev, [actionType]: "" }));
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Aksiyon çalıştırılamadı");
+      toast.error(resolveApiErrorMessage(error, "Aksiyon çalıştırılamadı"));
     }
   };
 
@@ -407,7 +430,7 @@ export const AdminRiskOrchestratorPage = () => {
       setOverrideForm(overrideSeed);
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Override oluşturulamadı");
+      toast.error(resolveApiErrorMessage(error, "Override oluşturulamadı"));
     }
   };
 
@@ -419,7 +442,7 @@ export const AdminRiskOrchestratorPage = () => {
       toast.success("Override pasif hale getirildi");
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Override kapatılamadı");
+      toast.error(resolveApiErrorMessage(error, "Override kapatılamadı"));
     }
   };
 
@@ -430,7 +453,7 @@ export const AdminRiskOrchestratorPage = () => {
       toast.success("In-trade supervisor çalıştırıldı");
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Supervisor çalıştırılamadı");
+      toast.error(resolveApiErrorMessage(error, "Supervisor çalıştırılamadı"));
     }
   };
 
@@ -449,7 +472,7 @@ export const AdminRiskOrchestratorPage = () => {
       setInterventionState((prev) => ({ ...prev, reason_note: "" }));
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Müdahale başarısız");
+      toast.error(resolveApiErrorMessage(error, "Müdahale başarısız"));
     }
   };
 
@@ -459,7 +482,7 @@ export const AdminRiskOrchestratorPage = () => {
       setRejectDetail(data);
       setRejectDialogOpen(true);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Reject detayı açılamadı");
+      toast.error(resolveApiErrorMessage(error, "Reject detayı açılamadı"));
     }
   };
 
@@ -482,7 +505,7 @@ export const AdminRiskOrchestratorPage = () => {
       setApprovalNotes((prev) => ({ ...prev, [approvalId]: "" }));
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Approval aksiyonu başarısız");
+      toast.error(resolveApiErrorMessage(error, "Approval aksiyonu başarısız"));
     }
   };
 
@@ -496,7 +519,7 @@ export const AdminRiskOrchestratorPage = () => {
       toast.success(autoAssign ? "Auto-assign tamamlandı" : "Manual assignment tamamlandı");
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Assignment başarısız");
+      toast.error(resolveApiErrorMessage(error, "Assignment başarısız"));
     }
   };
 
@@ -507,7 +530,7 @@ export const AdminRiskOrchestratorPage = () => {
       toast.success("Escalation sweep çalıştırıldı");
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Queue sweep başarısız");
+      toast.error(resolveApiErrorMessage(error, "Queue sweep başarısız"));
     }
   };
 
@@ -522,7 +545,7 @@ export const AdminRiskOrchestratorPage = () => {
       toast.success("Force apply tamamlandı");
       await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Force apply başarısız");
+      toast.error(resolveApiErrorMessage(error, "Force apply başarısız"));
     }
   };
 
@@ -534,7 +557,7 @@ export const AdminRiskOrchestratorPage = () => {
       setDecisionIntelligence(data);
       toast.success("Decision intelligence yüklendi");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Decision intelligence yüklenemedi");
+      toast.error(resolveApiErrorMessage(error, "Decision intelligence yüklenemedi"));
     }
   };
 
@@ -557,7 +580,7 @@ export const AdminRiskOrchestratorPage = () => {
       URL.revokeObjectURL(url);
       toast.success(`Decision trace ${format.toUpperCase()} export tamamlandı`);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Decision trace export başarısız");
+      toast.error(resolveApiErrorMessage(error, "Decision trace export başarısız"));
     }
   };
 
