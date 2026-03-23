@@ -201,11 +201,27 @@ export const ExecutionStatesPage = () => {
 
   const resolveExportErrorMessage = async (error) => {
     const fallback = "Export hatası: Incident snapshot export başarısız";
+
+    const mapCompareValidation = (detail) => {
+      const text = String(detail || "");
+      if (text.includes("Primary and compare snapshots cannot be identical")) {
+        return "Karşılaştırma hatası: Aynı snapshot seçilemez";
+      }
+      if (text.includes("compare scope is required when compare is enabled")) {
+        return "Karşılaştırma hatası: Compare Snapshot alanları zorunlu";
+      }
+      return null;
+    };
+
     if (error?.message && String(error.message).startsWith("Export hatası:")) {
       return String(error.message);
     }
     const directDetail = error?.response?.data?.detail;
     if (directDetail) {
+      const mapped = mapCompareValidation(directDetail);
+      if (mapped) {
+        return mapped;
+      }
       return `Export hatası: ${directDetail}`;
     }
 
@@ -218,6 +234,10 @@ export const ExecutionStatesPage = () => {
           const parsed = JSON.parse(rawText);
           const parsedDetail = parsed?.detail || parsed?.message;
           if (parsedDetail) {
+            const mapped = mapCompareValidation(parsedDetail);
+            if (mapped) {
+              return mapped;
+            }
             return `Export hatası: ${parsedDetail}`;
           }
         } catch {
@@ -247,6 +267,7 @@ export const ExecutionStatesPage = () => {
       compare_execution_event_id: null,
       compare_time_from: null,
       compare_time_to: null,
+      compare_enabled: compareEnabled,
     };
 
     const fail = (message) => {
@@ -271,17 +292,14 @@ export const ExecutionStatesPage = () => {
     }
 
     if (compareEnabled) {
-      if (compareScopeType !== exportScopeType) {
-        return fail("incompatible_scope: primary ve compare scope type aynı olmalı");
-      }
       if (compareScopeType === "correlation_id") {
-        if (!compareScopeValue.trim()) return fail("Compare Correlation ID zorunlu");
+        if (!compareScopeValue.trim()) return fail("Compare Snapshot için Correlation ID zorunlu");
         body.compare_correlation_id = compareScopeValue.trim();
       } else if (compareScopeType === "execution_event_id") {
-        if (!compareScopeValue.trim()) return fail("Compare Execution Event ID zorunlu");
+        if (!compareScopeValue.trim()) return fail("Compare Snapshot için Execution Event ID zorunlu");
         body.compare_execution_event_id = compareScopeValue.trim();
       } else {
-        if (!compareTimeFrom || !compareTimeTo) return fail("Compare Time Range için Time From ve Time To zorunlu");
+        if (!compareTimeFrom || !compareTimeTo) return fail("Compare Snapshot için Time From ve Time To zorunlu");
         body.compare_time_from = compareTimeFrom;
         body.compare_time_to = compareTimeTo;
       }
@@ -330,7 +348,14 @@ export const ExecutionStatesPage = () => {
       setPlaybookPreview(null);
       setCompareExportPreview(null);
       if (showError) {
-        toast.error(error?.response?.data?.detail || "Diff preview alınamadı");
+        const detail = String(error?.response?.data?.detail || "");
+        if (detail.includes("Primary and compare snapshots cannot be identical")) {
+          toast.error("Karşılaştırma hatası: Aynı snapshot seçilemez");
+        } else if (detail.includes("compare scope is required when compare is enabled")) {
+          toast.error("Karşılaştırma hatası: Compare Snapshot alanları zorunlu");
+        } else {
+          toast.error(error?.response?.data?.detail || "Diff preview alınamadı");
+        }
       }
     } finally {
       setDiffPreviewLoading(false);
@@ -544,6 +569,8 @@ export const ExecutionStatesPage = () => {
   const deadAfter = Number(beforeAfter?.dead_letter?.after ?? 0);
   const manualBefore = Number(beforeAfter?.manual_actions?.before ?? 0);
   const manualAfter = Number(beforeAfter?.manual_actions?.after ?? 0);
+  const eventsPct = Number(beforeAfter?.events?.percentage ?? 0);
+  const manualPct = Number(beforeAfter?.manual_actions?.percentage ?? 0);
 
   const failedPct = Number(diffData?.percentage_change?.failed_events || 0);
   const deadPct = Number(diffData?.percentage_change?.dead_letter || 0);
@@ -559,16 +586,35 @@ export const ExecutionStatesPage = () => {
   const resolveRecommendedActionMeta = (item) => {
     const actionName = String(item?.action || "").toLowerCase();
     const correlationId = (filters.correlation_id || exportScopeValue || "").trim();
-    if (actionName.includes("retry policy tune")) {
-      return { label: "View Failures", path: `/admin/execution/failures?correlation_id=${encodeURIComponent(correlationId)}` };
+    if (actionName === "retry_policy_tune") {
+      return {
+        label: "View Failures",
+        path: `/admin/execution/failures?correlation_id=${encodeURIComponent(correlationId)}&reason=high_failure`,
+      };
     }
-    if (actionName.includes("guardrail hardening")) {
-      return { label: "View Idempotency", path: `/admin/execution/idempotency?correlation_id=${encodeURIComponent(correlationId)}` };
+    if (actionName === "guardrail_hardening") {
+      return {
+        label: "View Idempotency",
+        path: `/admin/execution/idempotency?correlation_id=${encodeURIComponent(correlationId)}&reason=dead_letter_rise`,
+      };
     }
-    if (actionName.includes("runbook review")) {
-      return { label: "View Trace", path: `/admin/execution/trace?correlation_id=${encodeURIComponent(correlationId)}` };
+    if (actionName === "runbook_review") {
+      return {
+        label: "View Trace",
+        path: `/admin/execution/trace?correlation_id=${encodeURIComponent(correlationId)}&reason=manual_intervention`,
+      };
     }
     return { label: null, path: null };
+  };
+
+  const formatActionTitle = (actionName) => {
+    const map = {
+      retry_policy_tune: "Retry policy tune",
+      guardrail_hardening: "Guardrail hardening",
+      runbook_review: "Runbook review",
+      keep_current_policy: "Keep current policy",
+    };
+    return map[String(actionName || "").toLowerCase()] || String(actionName || "").replaceAll("_", " ");
   };
 
   const openRecommendedAction = (item) => {
@@ -869,10 +915,10 @@ export const ExecutionStatesPage = () => {
             <div className="mt-2 rounded border border-slate-700 bg-slate-950 p-2" data-testid="execution-control-diff-section-summary">
               <p className="text-xs font-semibold text-slate-300">1) Summary</p>
               <div className="mt-2 grid gap-2 md:grid-cols-2 text-xs" data-testid="execution-control-diff-before-after-grid">
-                <p data-testid="execution-control-diff-events-before-after">EVENTS: {eventsBefore} → {eventsAfter} ({eventsAfter - eventsBefore >= 0 ? "+" : ""}{eventsAfter - eventsBefore})</p>
-                <p data-testid="execution-control-diff-failed-before-after">FAILED_EVENTS: {failedBefore} → {failedAfter} ({failedDelta >= 0 ? "+" : ""}{failedDelta}, {failedPct}%)</p>
-                <p data-testid="execution-control-diff-dead-before-after">DEAD_LETTER: {deadBefore} → {deadAfter} ({deadDelta >= 0 ? "+" : ""}{deadDelta}, {deadPct}%)</p>
-                <p data-testid="execution-control-diff-manual-before-after">MANUAL_ACTIONS: {manualBefore} → {manualAfter} ({manualDelta >= 0 ? "+" : ""}{manualDelta})</p>
+                <p data-testid="execution-control-diff-events-before-after">EVENTS: {eventsBefore} → {eventsAfter} ({eventsPct >= 0 ? "+" : ""}{eventsPct}%)</p>
+                <p data-testid="execution-control-diff-failed-before-after">FAILED EVENTS: {failedBefore} → {failedAfter} ({failedPct >= 0 ? "+" : ""}{failedPct}%) 🔴</p>
+                <p data-testid="execution-control-diff-dead-before-after">DEAD LETTER: {deadBefore} → {deadAfter} ({deadPct >= 0 ? "+" : ""}{deadPct}%) ⚠️</p>
+                <p data-testid="execution-control-diff-manual-before-after">MANUAL ACTIONS: {manualBefore} → {manualAfter} ({manualPct >= 0 ? "+" : ""}{manualPct}%) ✅</p>
               </div>
             </div>
 
@@ -890,8 +936,9 @@ export const ExecutionStatesPage = () => {
               <p className="text-xs font-semibold text-slate-300">3) Recommended Actions</p>
               <div className="mt-2 space-y-2 text-xs" data-testid="execution-control-diff-recommended-actions-list">
                 {(diffData?.recommended_actions || []).map((item, idx) => {
-                  const severity = String(item?.severity || "INFO").toUpperCase();
+                  const severity = String(item?.severity || "info").toUpperCase();
                   const actionMeta = resolveRecommendedActionMeta(item);
+                  const actionTitle = formatActionTitle(item?.action);
                   const severityStyle = severity === "CRITICAL"
                     ? "border-red-500 bg-red-950/40 text-red-300"
                     : severity === "WARNING"
@@ -900,8 +947,11 @@ export const ExecutionStatesPage = () => {
                   const icon = severity === "CRITICAL" ? "🔴" : severity === "WARNING" ? "⚠️" : "✅";
                   return (
                     <div key={`${item.action}-${idx}`} className={`rounded border p-2 ${severityStyle}`} data-testid={`execution-control-diff-recommended-action-${idx}`}>
-                      <p data-testid={`execution-control-diff-recommended-action-text-${idx}`}>
-                        {icon} [{severity}] {item.action} ({item.reason})
+                      <p className="font-semibold" data-testid={`execution-control-diff-recommended-action-text-${idx}`}>
+                        {icon} [{severity}] {actionTitle}
+                      </p>
+                      <p className="mt-1 text-[11px]" data-testid={`execution-control-diff-recommended-action-reason-${idx}`}>
+                        → {item.reason}
                       </p>
                       {actionMeta.path ? (
                         <Button

@@ -245,6 +245,18 @@ def _require_incident_export_scope(payload: IncidentSnapshotExportRequest) -> tu
     return "time_range", {"time_from": time_from.isoformat(), "time_to": time_to.isoformat()}
 
 
+def _scope_signature(scope_type: str, scope_payload: dict) -> str:
+    if scope_type == "correlation_id":
+        return f"correlation_id:{str(scope_payload.get('correlation_id') or '').strip().lower()}"
+    if scope_type == "execution_event_id":
+        return f"execution_event_id:{str(scope_payload.get('execution_event_id') or '').strip().lower()}"
+    return f"time_range:{str(scope_payload.get('time_from') or '').strip()}::{str(scope_payload.get('time_to') or '').strip()}"
+
+
+def _is_same_scope(primary_scope_type: str, primary_scope_payload: dict, compare_scope_type: str, compare_scope_payload: dict) -> bool:
+    return _scope_signature(primary_scope_type, primary_scope_payload) == _scope_signature(compare_scope_type, compare_scope_payload)
+
+
 def _is_prod_environment() -> bool:
     return str(os.environ.get("APP_ENV") or "production").lower() == "production"
 
@@ -1943,35 +1955,64 @@ def _build_snapshot_diff_payload(
                 "reason": reason,
             }
         )
+
+    def _format_reason(label: str, before_value: int, after_value: int, pct_value: int) -> str:
+        if after_value > before_value:
+            direction = "increased"
+        elif after_value < before_value:
+            direction = "decreased"
+        else:
+            direction = "unchanged"
+        if direction == "unchanged":
+            return f"{label} unchanged ({before_value} → {after_value})"
+        return f"{label} {direction} {abs(pct_value)}% ({before_value} → {after_value})"
+
     if counts["failed_events_delta"] > 0 and percentage_change["failed_events"] > 50:
         anomaly_notes.append(f"FAILED_EVENTS increased by {percentage_change['failed_events']}% (CRITICAL_RISK)")
-        _add_action("retry policy tune", "CRITICAL", f"failed_events +{percentage_change['failed_events']}%")
-        _add_action("timeout review", "CRITICAL", f"failed_events +{percentage_change['failed_events']}%")
+        _add_action(
+            "retry_policy_tune",
+            "critical",
+            _format_reason("Failures", b_counts["failed_events"], a_counts["failed_events"], percentage_change["failed_events"]),
+        )
     elif counts["failed_events_delta"] < 0:
         anomaly_notes.append("FAILED_EVENTS decreased (IMPROVED)")
 
     if counts["dead_letter_delta"] > 0 and percentage_change["dead_letter"] > 30:
         anomaly_notes.append(f"DEAD_LETTER increased by {percentage_change['dead_letter']}% (HIGH_RISK)")
-        _add_action("guardrail hardening", "WARNING", f"dead_letter +{percentage_change['dead_letter']}%")
-        _add_action("validation check", "WARNING", f"dead_letter +{percentage_change['dead_letter']}%")
+        _add_action(
+            "guardrail_hardening",
+            "warning",
+            _format_reason("Dead letter", dead_letter_b, dead_letter_a, percentage_change["dead_letter"]),
+        )
     elif counts["dead_letter_delta"] < 0:
         anomaly_notes.append("DEAD_LETTER decreased (IMPROVED)")
 
     if counts["manual_actions_delta"] > 0:
         anomaly_notes.append("OPERATOR_INTERVENTION increased")
-        _add_action("runbook review", "WARNING", f"manual_actions +{counts['manual_actions_delta']}")
-        _add_action("automation gap", "WARNING", f"manual_actions +{counts['manual_actions_delta']}")
+        _add_action(
+            "runbook_review",
+            "warning",
+            _format_reason("Manual actions", b_counts["manual_actions"], a_counts["manual_actions"], percentage_change["manual_actions"]),
+        )
     elif counts["manual_actions_delta"] < 0:
         anomaly_notes.append("MANUAL_ACTIONS decreased (REDUCED)")
 
     if counts["idempotency_collisions_delta"] > 0:
-        _add_action("idempotency check hardening", "WARNING", f"idempotency_collisions +{counts['idempotency_collisions_delta']}")
+        _add_action(
+            "guardrail_hardening",
+            "warning",
+            f"Idempotency collisions increased {counts['idempotency_collisions_delta']} ({b_counts['idempotency_collisions']} → {a_counts['idempotency_collisions']})",
+        )
 
     if counts["failed_events_delta"] < 0 or counts["dead_letter_delta"] < 0 or counts["manual_actions_delta"] < 0:
-        _add_action("keep current policy", "INFO", "stable improvement observed")
+        _add_action(
+            "keep_current_policy",
+            "info",
+            _format_reason("Failures", b_counts["failed_events"], a_counts["failed_events"], percentage_change["failed_events"]),
+        )
 
     if not recommended_actions:
-        _add_action("keep current policy", "INFO", "stable")
+        _add_action("keep_current_policy", "info", _format_reason("Failures", b_counts["failed_events"], a_counts["failed_events"], percentage_change["failed_events"]))
 
     diff_payload = {
         "scope_a": {
@@ -2033,19 +2074,25 @@ def export_incident_snapshot_bundle(
     compare_bundle = None
     compare_scope_payload = None
     compare_scope_type = None
-    if any(
+    compare_fields_present = any(
         [
             payload.compare_correlation_id,
             payload.compare_execution_event_id,
             payload.compare_time_from,
             payload.compare_time_to,
         ]
-    ):
+    )
+    compare_enabled = bool(payload.compare_enabled or compare_fields_present)
+    if payload.compare_enabled and not compare_fields_present:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="compare scope is required when compare is enabled")
+
+    if compare_enabled:
         compare_request = IncidentSnapshotExportRequest(
             correlation_id=payload.compare_correlation_id,
             execution_event_id=payload.compare_execution_event_id,
             time_from=payload.compare_time_from,
             time_to=payload.compare_time_to,
+            compare_enabled=False,
             search=payload.search,
             state=payload.state,
             status=payload.status,
@@ -2055,10 +2102,10 @@ def export_incident_snapshot_bundle(
             order_id=payload.order_id,
         )
         compare_scope_type, compare_scope_payload = _require_incident_export_scope(compare_request)
-        if compare_scope_type != scope_type:
+        if _is_same_scope(scope_type, scope_payload, compare_scope_type, compare_scope_payload):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"incompatible_scope: primary={scope_type}, compare={compare_scope_type}",
+                detail="Primary and compare snapshots cannot be identical",
             )
         compare_bundle = _build_incident_snapshot_scope_bundle(
             db,
@@ -2204,7 +2251,7 @@ def incident_snapshot_diff_preview(
         scope_payload=scope_payload,
     )
 
-    compare_enabled = any(
+    compare_fields_present = any(
         [
             payload.compare_correlation_id,
             payload.compare_execution_event_id,
@@ -2212,6 +2259,9 @@ def incident_snapshot_diff_preview(
             payload.compare_time_to,
         ]
     )
+    compare_enabled = bool(payload.compare_enabled or compare_fields_present)
+    if payload.compare_enabled and not compare_fields_present:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="compare scope is required when compare is enabled")
 
     diff_payload = None
     diff_summary = ""
@@ -2224,6 +2274,7 @@ def incident_snapshot_diff_preview(
             execution_event_id=payload.compare_execution_event_id,
             time_from=payload.compare_time_from,
             time_to=payload.compare_time_to,
+            compare_enabled=False,
             search=payload.search,
             state=payload.state,
             status=payload.status,
@@ -2233,10 +2284,10 @@ def incident_snapshot_diff_preview(
             order_id=payload.order_id,
         )
         compare_scope_type, compare_scope_payload = _require_incident_export_scope(compare_request)
-        if compare_scope_type != scope_type:
+        if _is_same_scope(scope_type, scope_payload, compare_scope_type, compare_scope_payload):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"incompatible_scope: primary={scope_type}, compare={compare_scope_type}",
+                detail="Primary and compare snapshots cannot be identical",
             )
 
         compare_bundle = _build_incident_snapshot_scope_bundle(

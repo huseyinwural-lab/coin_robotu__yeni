@@ -742,6 +742,7 @@ class IncidentSnapshotExportRequest(BaseModel):
     compare_execution_event_id: str | None = None
     compare_time_from: str | None = None
     compare_time_to: str | None = None
+    compare_enabled: bool = False
     search: str | None = None
     state: str | None = None
     status: str | None = None
