@@ -1,3 +1,57 @@
+## 2026-03-23 — FINAL BLOCKER RBAC CLOSURE ✅
+
+### Hard guard eklenen endpointler
+- `POST /api/admin-phase3/incident-snapshots/playbook/apply`
+  - `ensure_super_admin(current_admin)` eklendi
+- `POST /api/admin-phase3/incident-snapshots/playbook/execute`
+  - `ensure_super_admin(current_admin)` eklendi
+- (Doğrulama) `approve` zaten super_admin guard altında; backend/UI matrisi tekrar doğrulandı
+
+### 403 mesaj netliği
+- `ensure_super_admin` hata detayı standardize edildi:
+  - `"Super admin required"`
+
+### UI role-lock güncellemeleri
+- Dosya: `frontend/src/pages/ExecutionStatesPage.jsx`
+- Role-based disable:
+  - Apply button: admin için disabled + tooltip `Super admin required`
+  - Execute button: admin için disabled + tooltip `Super admin required`
+  - (Tutarlılık için Approve tooltip de aynı metne hizalandı)
+- Handler-level guard:
+  - `applyDiffPlaybook` ve `executeDiffPlaybook` içinde `isSuperAdmin` kontrolü eklendi
+  - UI bypass denemesinde toast ile blok: `Super admin required`
+- Dialog confirm butonları da admin için disabled + aynı tooltip
+
+### RBAC test coverage (mandatory)
+- Backend testler eklendi/güncellendi:
+  - `backend/tests/test_rbac_playbook_closure.py` (13 test)
+  - `backend/tests/test_p0_playbook_governance_chain.py` RBAC senaryoları genişletildi
+- Doğrulanan senaryolar:
+  - admin cannot apply (403)
+  - admin cannot execute (403)
+  - admin cannot approve (403)
+  - super_admin can apply/approve/execute
+  - direct endpoint UI bypass blocked
+
+### Test sonuçları
+- Pytest:
+  - `test_rbac_playbook_closure.py` → **13 passed**
+  - seçili RBAC testleri (`test_p0_playbook_governance_chain.py`) → **4 passed**
+- Testing agent:
+  - `/app/test_reports/iteration_101.json`
+  - Backend: **32/32 PASS**
+  - Frontend role-lock: **PASS** (apply/approve/execute admin’de disabled, tooltip doğrulandı)
+
+### Approve / Apply / Execute matrisinin son hali
+- admin: preview ✅, approve ❌, apply ❌, execute ❌
+- super_admin: preview ✅, approve ✅, apply ✅, execute ✅
+
+### Regresyon etkisi
+- preview / retry / rollback akışları kırılmadı (PASS)
+
+### Kalan açık
+- RBAC closure kapsamında **açık kalmadı**.
+
 ## 2026-03-23 — Execution Alerts Delivery: Mock -> Real Webhook Ready (Slack-first) ✅
 
 ### Bu tur hedefi
