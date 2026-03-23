@@ -314,7 +314,7 @@ export const PanelLayout = () => {
                 </p>
                 <NavLink
                   to="/admin/execution-policies"
-                  className="mt-2 inline-flex rounded border border-black bg-black px-2 py-1 text-[10px] font-semibold text-orange-300 hover:bg-zinc-900"
+                  className="mt-2 inline-flex rounded border border-emerald-700 bg-emerald-100 px-2 py-1 text-[10px] font-semibold text-emerald-900 hover:bg-emerald-200"
                   data-testid="navbar-release-gate-open-remediation-link"
                 >
                   Blokajı Çöz

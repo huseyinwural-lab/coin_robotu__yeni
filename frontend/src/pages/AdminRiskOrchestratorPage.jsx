@@ -1015,6 +1015,13 @@ export const AdminRiskOrchestratorPage = () => {
                     <span data-testid={`risk-alert-type-${alert.id}`}>{alert.alert_type}</span>
                     <Badge
                       variant={alert.severity === "CRITICAL" ? "destructive" : "secondary"}
+                      className={
+                        alert.severity === "WARNING"
+                          ? "border border-amber-400 !bg-amber-100 !text-amber-900"
+                          : alert.severity === "CRITICAL"
+                            ? "border border-red-500 !bg-red-100 !text-red-900"
+                            : "border border-emerald-400 !bg-emerald-100 !text-emerald-900"
+                      }
                       data-testid={`risk-alert-severity-${alert.id}`}
                     >
                       {alert.severity}
