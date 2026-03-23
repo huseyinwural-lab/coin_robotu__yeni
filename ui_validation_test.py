@@ -13,7 +13,7 @@ import re
 
 def test_ui_validation():
     """Perform concise UI validation"""
-    url = "https://execution-safety-hub.preview.emergentagent.com"
+    url = "https://hard-guard-layer.preview.emergentagent.com"
     
     try:
         # Get the landing page

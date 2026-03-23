@@ -1,8 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 
 const policySeed = {
@@ -17,240 +30,861 @@ const policySeed = {
   duplicate_suppression_window_seconds: 300,
 };
 
+const overrideSeed = {
+  override_type: "symbol",
+  target_key: "",
+  max_notional_pct: "",
+  max_open_count: "",
+  block_new_adds: false,
+  expires_in_minutes: "60",
+  reason_note: "",
+};
+
+const controlReasonSeed = {
+  kill_switch: "",
+  global_trading_pause: "",
+  force_risk_check: "",
+};
+
+const toNumberOrNull = (value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const buildRejectQuery = (filters) => {
+  const params = new URLSearchParams();
+  params.set("limit", "50");
+  if (filters.reason_code) params.set("reason_code", filters.reason_code);
+  if (filters.symbol) params.set("symbol", filters.symbol);
+  if (filters.strategy_id) params.set("strategy_id", filters.strategy_id);
+  return params.toString();
+};
+
 export const AdminRiskOrchestratorPage = () => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "super_admin";
+
+  const [loading, setLoading] = useState(true);
   const [policy, setPolicy] = useState(policySeed);
   const [status, setStatus] = useState(null);
-  const [rejects, setRejects] = useState([]);
+  const [simulation, setSimulation] = useState(null);
+  const [history, setHistory] = useState({ versions: [], change_requests: [] });
+  const [applyReason, setApplyReason] = useState("");
+  const [applyNote, setApplyNote] = useState("");
+  const [doubleConfirm, setDoubleConfirm] = useState(false);
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+
+  const [overrideForm, setOverrideForm] = useState(overrideSeed);
+  const [overrides, setOverrides] = useState([]);
+
+  const [controlReasons, setControlReasons] = useState(controlReasonSeed);
   const [supervisor, setSupervisor] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [positions, setPositions] = useState([]);
+  const [interventionState, setInterventionState] = useState({
+    position_id: "",
+    action_type: "reduce_position",
+    reason_note: "",
+    reduce_ratio: "0.5",
+    expires_in_minutes: "60",
+  });
+
+  const [rejectFilters, setRejectFilters] = useState({ reason_code: "", symbol: "", strategy_id: "" });
+  const [rejects, setRejects] = useState([]);
+  const [rejectDetail, setRejectDetail] = useState(null);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+
+  const [autoTriggers, setAutoTriggers] = useState([]);
+  const [timeline, setTimeline] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+
+  const refreshCore = useCallback(async () => {
+    const [policyRes, statusRes, historyRes, overrideRes, positionRes, triggerRes, timelineRes, alertsRes] = await Promise.all([
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/policy"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/status"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/policy/history?limit=20"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/exposure/overrides?active_only=true"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/supervisor/positions?limit=50"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/auto-trigger-logs?limit=30"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/audit/timeline?limit=40"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/alerts?limit=30"),
+    ]);
+
+    setPolicy(policyRes.data || policySeed);
+    setStatus(statusRes.data || null);
+    setHistory(historyRes.data || { versions: [], change_requests: [] });
+    setOverrides(overrideRes.data || []);
+    setPositions(positionRes.data || []);
+    setAutoTriggers(triggerRes.data || []);
+    setTimeline(timelineRes.data || []);
+    setAlerts(alertsRes.data || []);
+  }, []);
+
+  const refreshRejects = useCallback(async () => {
+    const query = buildRejectQuery(rejectFilters);
+    const { data } = await apiClient.get(`/strategy-domain/admin/risk-orchestrator/rejects?${query}`);
+    setRejects(data || []);
+  }, [rejectFilters]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [policyRes, statusRes, rejectsRes] = await Promise.all([
-        apiClient.get("/strategy-domain/admin/risk-orchestrator/policy"),
-        apiClient.get("/strategy-domain/admin/risk-orchestrator/status"),
-        apiClient.get("/strategy-domain/admin/risk-orchestrator/rejects?limit=25"),
-      ]);
-      setPolicy(policyRes.data || policySeed);
-      setStatus(statusRes.data || null);
-      setRejects(rejectsRes.data || []);
+      await Promise.all([refreshCore(), refreshRejects()]);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Risk orchestrator verileri yüklenemedi");
+      toast.error(error?.response?.data?.detail || "Risk Enforcement paneli yüklenemedi");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshCore, refreshRejects]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
-  const updatePolicy = async () => {
+  const roleBadge = useMemo(() => {
+    if (isSuperAdmin) return "super_admin";
+    return user?.role || "admin";
+  }, [isSuperAdmin, user?.role]);
+
+  const handleSimulate = async () => {
     try {
       const payload = {
-        reference_equity_usd: Number(policy.reference_equity_usd),
-        account_max_notional_pct: Number(policy.account_max_notional_pct),
-        symbol_max_notional_pct: Number(policy.symbol_max_notional_pct),
-        strategy_max_concurrent_positions: Number(policy.strategy_max_concurrent_positions),
-        strategy_cooldown_seconds: Number(policy.strategy_cooldown_seconds),
-        max_order_frequency_per_min: Number(policy.max_order_frequency_per_min),
-        max_order_burst_per_10s: Number(policy.max_order_burst_per_10s),
-        daily_loss_limit_pct: Number(policy.daily_loss_limit_pct),
-        duplicate_suppression_window_seconds: Number(policy.duplicate_suppression_window_seconds),
+        candidate_policy: {
+          reference_equity_usd: Number(policy.reference_equity_usd),
+          account_max_notional_pct: Number(policy.account_max_notional_pct),
+          symbol_max_notional_pct: Number(policy.symbol_max_notional_pct),
+          strategy_max_concurrent_positions: Number(policy.strategy_max_concurrent_positions),
+          strategy_cooldown_seconds: Number(policy.strategy_cooldown_seconds),
+          max_order_frequency_per_min: Number(policy.max_order_frequency_per_min),
+          max_order_burst_per_10s: Number(policy.max_order_burst_per_10s),
+          daily_loss_limit_pct: Number(policy.daily_loss_limit_pct),
+          duplicate_suppression_window_seconds: Number(policy.duplicate_suppression_window_seconds),
+        },
       };
-      const { data } = await apiClient.put("/strategy-domain/admin/risk-orchestrator/policy", payload);
-      setPolicy(data);
-      toast.success("Risk orchestrator policy güncellendi");
-      await loadAll();
+      const { data } = await apiClient.post("/strategy-domain/admin/risk-orchestrator/policy/simulate", payload);
+      setSimulation(data);
+      setDoubleConfirm(false);
+      toast.success("What-if simülasyonu tamamlandı.");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Policy güncellenemedi");
+      toast.error(error?.response?.data?.detail || "Simülasyon çalıştırılamadı");
     }
   };
 
-  const runSupervisor = async () => {
+  const handleApply = async () => {
+    if (!simulation?.simulation_id) {
+      toast.error("Önce simülasyon çalıştırmalısınız.");
+      return;
+    }
+    try {
+      await apiClient.post("/strategy-domain/admin/risk-orchestrator/policy/apply", {
+        simulation_id: simulation.simulation_id,
+        reason_note: applyReason,
+        approval_note: applyNote,
+        double_confirmed: doubleConfirm,
+      });
+      toast.success("Policy başarıyla uygulandı.");
+      setApplyDialogOpen(false);
+      setApplyReason("");
+      setApplyNote("");
+      setSimulation(null);
+      await refreshCore();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Policy apply başarısız");
+    }
+  };
+
+  const handleRevert = async (versionId) => {
+    if (!isSuperAdmin) return;
+    try {
+      await apiClient.post(`/strategy-domain/admin/risk-orchestrator/policy/revert/${versionId}`, {
+        reason_note: "Tarihçe versiyonundan geri alındı",
+        double_confirmed: true,
+      });
+      toast.success("Policy revert tamamlandı");
+      await refreshCore();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Revert başarısız");
+    }
+  };
+
+  const executeControlAction = async (actionType) => {
+    try {
+      const reason = controlReasons[actionType];
+      if (!reason) {
+        toast.error("Aksiyon sebebi zorunludur.");
+        return;
+      }
+      await apiClient.post("/strategy-domain/admin/risk-orchestrator/actions/execute", {
+        action_type: actionType,
+        reason_note: reason,
+        context: {},
+      });
+      toast.success("Kritik risk aksiyonu işlendi.");
+      setControlReasons((prev) => ({ ...prev, [actionType]: "" }));
+      await refreshCore();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Aksiyon çalıştırılamadı");
+    }
+  };
+
+  const handleOverrideCreate = async () => {
+    try {
+      await apiClient.post("/strategy-domain/admin/risk-orchestrator/exposure/overrides", {
+        override_type: overrideForm.override_type,
+        target_key: overrideForm.target_key,
+        reason_note: overrideForm.reason_note,
+        max_notional_pct: toNumberOrNull(overrideForm.max_notional_pct),
+        max_open_count: toNumberOrNull(overrideForm.max_open_count),
+        block_new_adds: overrideForm.block_new_adds,
+        expires_in_minutes: toNumberOrNull(overrideForm.expires_in_minutes),
+      });
+      toast.success("Exposure override kaydedildi.");
+      setOverrideForm(overrideSeed);
+      await refreshCore();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Override oluşturulamadı");
+    }
+  };
+
+  const handleOverrideDeactivate = async (overrideId) => {
+    try {
+      await apiClient.post(`/strategy-domain/admin/risk-orchestrator/exposure/overrides/${overrideId}/deactivate`, {
+        reason_note: "Manual deactivate",
+      });
+      toast.success("Override pasif hale getirildi");
+      await refreshCore();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Override kapatılamadı");
+    }
+  };
+
+  const handleSupervisorRun = async () => {
     try {
       const { data } = await apiClient.post("/strategy-domain/admin/risk-orchestrator/supervisor/run");
       setSupervisor(data);
       toast.success("In-trade supervisor çalıştırıldı");
+      await refreshCore();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Supervisor çalıştırılamadı");
     }
   };
 
-  const killSwitchLabel = useMemo(() => {
-    if (!status) return "-";
-    return status.kill_switch_active ? "ACTIVE" : "inactive";
-  }, [status]);
+  const handleIntervene = async () => {
+    try {
+      await apiClient.post("/strategy-domain/admin/risk-orchestrator/supervisor/intervene", {
+        position_id: interventionState.position_id,
+        action_type: interventionState.action_type,
+        reason_note: interventionState.reason_note,
+        payload: {
+          reduce_ratio: toNumberOrNull(interventionState.reduce_ratio),
+          expires_in_minutes: toNumberOrNull(interventionState.expires_in_minutes),
+        },
+      });
+      toast.success("Pozisyon müdahalesi işlendi");
+      setInterventionState((prev) => ({ ...prev, reason_note: "" }));
+      await refreshCore();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Müdahale başarısız");
+    }
+  };
+
+  const openRejectDetail = async (rejectId) => {
+    try {
+      const { data } = await apiClient.get(`/strategy-domain/admin/risk-orchestrator/rejects/${rejectId}`);
+      setRejectDetail(data);
+      setRejectDialogOpen(true);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Reject detayı açılamadı");
+    }
+  };
+
+  const superAdminOnlyTitle = isSuperAdmin ? "" : "Sadece super_admin kullanıcıları çalıştırabilir";
 
   return (
-    <section className="space-y-4" data-testid="admin-risk-orchestrator-page">
-      <header className="border border-orange-700 bg-slate-900 p-4" data-testid="admin-risk-orchestrator-header">
-        <h2 className="text-4xl font-black uppercase tracking-tight text-orange-300" data-testid="admin-risk-orchestrator-title">
-          Risk Orchestrator Control
-        </h2>
-        <p className="mt-2 text-sm text-slate-300" data-testid="admin-risk-orchestrator-description">
-          Pre-trade gate + in-trade supervisor + cooldown/frequency/duplicate suppression kuralları.
-        </p>
-      </header>
-
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]" data-testid="admin-risk-orchestrator-top-grid">
-        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-risk-policy-panel">
-          <div className="flex items-center justify-between">
-            <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-risk-policy-title">Policy Settings</p>
-            <Button
-              variant="outline"
-              className="border-slate-600 text-slate-200"
-              onClick={loadAll}
-              data-testid="admin-risk-policy-refresh-button"
-            >
-              Refresh
-            </Button>
-          </div>
-          {loading && (
-            <p className="text-sm text-slate-400" data-testid="admin-risk-policy-loading">Yükleniyor...</p>
-          )}
-          <div className="grid gap-2 md:grid-cols-2" data-testid="admin-risk-policy-input-grid">
-            <Input
-              type="number"
-              value={policy.reference_equity_usd}
-              onChange={(e) => setPolicy((prev) => ({ ...prev, reference_equity_usd: e.target.value }))}
-              placeholder="reference equity"
-              data-testid="risk-policy-reference-equity-input"
-            />
-            <Input
-              type="number"
-              value={policy.account_max_notional_pct}
-              onChange={(e) => setPolicy((prev) => ({ ...prev, account_max_notional_pct: e.target.value }))}
-              placeholder="account max notional %"
-              data-testid="risk-policy-account-max-notional-input"
-            />
-            <Input
-              type="number"
-              value={policy.symbol_max_notional_pct}
-              onChange={(e) => setPolicy((prev) => ({ ...prev, symbol_max_notional_pct: e.target.value }))}
-              placeholder="symbol max notional %"
-              data-testid="risk-policy-symbol-max-notional-input"
-            />
-            <Input
-              type="number"
-              value={policy.strategy_max_concurrent_positions}
-              onChange={(e) => setPolicy((prev) => ({ ...prev, strategy_max_concurrent_positions: e.target.value }))}
-              placeholder="max concurrent positions"
-              data-testid="risk-policy-max-concurrent-input"
-            />
-            <Input
-              type="number"
-              value={policy.strategy_cooldown_seconds}
-              onChange={(e) => setPolicy((prev) => ({ ...prev, strategy_cooldown_seconds: e.target.value }))}
-              placeholder="cooldown seconds"
-              data-testid="risk-policy-cooldown-input"
-            />
-            <Input
-              type="number"
-              value={policy.max_order_frequency_per_min}
-              onChange={(e) => setPolicy((prev) => ({ ...prev, max_order_frequency_per_min: e.target.value }))}
-              placeholder="orders / min"
-              data-testid="risk-policy-frequency-input"
-            />
-            <Input
-              type="number"
-              value={policy.max_order_burst_per_10s}
-              onChange={(e) => setPolicy((prev) => ({ ...prev, max_order_burst_per_10s: e.target.value }))}
-              placeholder="burst / 10s"
-              data-testid="risk-policy-burst-input"
-            />
-            <Input
-              type="number"
-              value={policy.daily_loss_limit_pct}
-              onChange={(e) => setPolicy((prev) => ({ ...prev, daily_loss_limit_pct: e.target.value }))}
-              placeholder="daily loss %"
-              data-testid="risk-policy-daily-loss-input"
-            />
-            <Input
-              type="number"
-              value={policy.duplicate_suppression_window_seconds}
-              onChange={(e) => setPolicy((prev) => ({ ...prev, duplicate_suppression_window_seconds: e.target.value }))}
-              placeholder="duplicate window s"
-              data-testid="risk-policy-duplicate-window-input"
-            />
-          </div>
-          <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={updatePolicy} data-testid="risk-policy-save-button">
-            Save Policy
-          </Button>
-        </div>
-
-        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-risk-status-panel">
-          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-risk-status-title">Live Status</p>
-          <div className="space-y-2" data-testid="admin-risk-status-metrics">
-            <p className="text-sm" data-testid="admin-risk-status-open-intents">Open intents: {status?.open_intents ?? "-"}</p>
-            <p className="text-sm" data-testid="admin-risk-status-kill-switch">Kill switch: {killSwitchLabel}</p>
-            <p className="text-xs text-slate-400" data-testid="admin-risk-status-kill-switch-reasons">
-              reasons: {status?.kill_switch_reasons?.length ? status.kill_switch_reasons.join(", ") : "-"}
+    <section className="space-y-6 pb-8" data-testid="risk-enforcement-page">
+      <header
+        className="sticky top-0 z-10 rounded-xl border bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 p-4 shadow-lg"
+        data-testid="risk-enforcement-sticky-status"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div data-testid="risk-enforcement-header-left">
+            <h1 className="text-4xl font-black tracking-tight text-emerald-200" data-testid="risk-enforcement-title">
+              Risk Enforcement + Intervention System
+            </h1>
+            <p className="mt-2 text-sm text-slate-300" data-testid="risk-enforcement-subtitle">
+              Simülasyon zorunlu, audit zorunlu, kritik aksiyonlar role-gated.
             </p>
           </div>
-          <div className="grid gap-2" data-testid="admin-risk-status-exposure-grid">
-            <div className="border border-slate-700 p-2" data-testid="admin-risk-status-symbol-exposure">
-              <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-risk-symbol-title">Symbol Exposure</p>
-              {(status?.open_intents_by_symbol || []).map((row) => (
-                <div key={row.key} className="flex items-center justify-between text-xs" data-testid={`admin-risk-symbol-row-${row.key}`}>
-                  <span>{row.key}</span>
-                  <span>{row.open_count} | ${row.notional.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
-            <div className="border border-slate-700 p-2" data-testid="admin-risk-status-strategy-exposure">
-              <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-risk-strategy-title">Strategy Exposure</p>
-              {(status?.open_intents_by_strategy || []).map((row) => (
-                <div key={row.key} className="flex items-center justify-between text-xs" data-testid={`admin-risk-strategy-row-${row.key}`}>
-                  <span>{row.key}</span>
-                  <span>{row.open_count} | ${row.notional.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
+          <div className="flex items-center gap-2" data-testid="risk-enforcement-header-badges">
+            <Badge data-testid="risk-role-badge">Rol: {roleBadge}</Badge>
+            <Badge variant={status?.kill_switch_active ? "destructive" : "secondary"} data-testid="risk-kill-switch-badge">
+              Kill Switch: {status?.kill_switch_active ? "AKTİF" : "pasif"}
+            </Badge>
+            <Badge variant={status?.trading_enabled ? "secondary" : "destructive"} data-testid="risk-trading-enabled-badge">
+              Trading: {status?.trading_enabled ? "açık" : "pause"}
+            </Badge>
+            <Button variant="outline" onClick={loadAll} data-testid="risk-refresh-all-button">
+              Yenile
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            className="border-emerald-400 text-emerald-200"
-            onClick={runSupervisor}
-            data-testid="admin-risk-supervisor-run-button"
-          >
-            Run In-Trade Supervisor
-          </Button>
-          {supervisor && (
-            <div className="border border-slate-700 p-2" data-testid="admin-risk-supervisor-result">
-              <p className="text-xs text-slate-400" data-testid="admin-risk-supervisor-timestamp">
-                evaluated_at: {new Date(supervisor.evaluated_at).toLocaleString()}
-              </p>
-              {(supervisor.breaches || []).length === 0 && (
-                <p className="text-xs text-emerald-300" data-testid="admin-risk-supervisor-empty">No breaches detected</p>
-              )}
-              {(supervisor.breaches || []).map((breach, index) => (
-                <div key={`${breach.key}-${index}`} className="text-xs text-slate-200" data-testid={`admin-risk-supervisor-breach-${index}`}>
-                  {breach.breach_type} · {breach.key} · {breach.open_count} | ${breach.notional.toFixed(2)}
+        </div>
+      </header>
+
+      {loading && (
+        <Card data-testid="risk-page-loading-card">
+          <CardContent className="pt-6 text-sm text-slate-400" data-testid="risk-page-loading-text">
+            Risk paneli yükleniyor...
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-5 xl:grid-cols-2" data-testid="risk-main-grid">
+        <Card data-testid="risk-policy-management-card">
+          <CardHeader>
+            <CardTitle data-testid="risk-policy-management-title">1) Policy Management</CardTitle>
+            <CardDescription data-testid="risk-policy-management-description">
+              Apply öncesi simülasyon + double-confirm zorunlu.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-2" data-testid="risk-policy-input-grid">
+              {Object.keys(policySeed).map((key) => (
+                <div key={key} className="space-y-1" data-testid={`risk-policy-input-wrapper-${key}`}>
+                  <label className="text-xs text-slate-500" data-testid={`risk-policy-input-label-${key}`}>
+                    {key}
+                  </label>
+                  <Input
+                    type="number"
+                    value={policy[key] ?? ""}
+                    onChange={(event) => setPolicy((prev) => ({ ...prev, [key]: event.target.value }))}
+                    data-testid={`risk-policy-input-${key}`}
+                  />
                 </div>
               ))}
             </div>
-          )}
-        </div>
+
+            <div className="flex flex-wrap gap-2" data-testid="risk-policy-action-buttons">
+              <Button onClick={handleSimulate} data-testid="risk-policy-simulate-button">
+                Simülasyon Çalıştır
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setApplyDialogOpen(true)}
+                disabled={!isSuperAdmin}
+                title={superAdminOnlyTitle}
+                data-testid="risk-policy-open-apply-dialog-button"
+              >
+                Apply (Double Confirm)
+              </Button>
+            </div>
+
+            <div className="rounded-lg border p-3" data-testid="risk-policy-simulation-result-box">
+              <p className="text-xs text-slate-500" data-testid="risk-policy-simulation-label">Son simülasyon</p>
+              {!simulation && (
+                <p className="text-sm text-slate-400" data-testid="risk-policy-simulation-empty">Henüz simülasyon yok.</p>
+              )}
+              {simulation && (
+                <div className="space-y-2" data-testid="risk-policy-simulation-content">
+                  <Badge
+                    variant={simulation.result_status === "critical" ? "destructive" : "secondary"}
+                    data-testid="risk-policy-simulation-status-badge"
+                  >
+                    Durum: {simulation.result_status}
+                  </Badge>
+                  <p className="text-xs text-slate-500" data-testid="risk-policy-simulation-id">
+                    simulation_id: {simulation.simulation_id}
+                  </p>
+                  <div className="space-y-1" data-testid="risk-policy-diff-list">
+                    {Object.entries(simulation.diff_summary?.changed_fields || {}).map(([field, diff]) => (
+                      <div
+                        key={field}
+                        className="flex items-center justify-between text-xs"
+                        data-testid={`risk-policy-diff-row-${field}`}
+                      >
+                        <span>{field}</span>
+                        <span>
+                          {String(diff.before)} → {String(diff.after)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border p-3" data-testid="risk-policy-history-box">
+              <p className="text-xs text-slate-500" data-testid="risk-policy-history-title">Versiyon geçmişi</p>
+              <div className="mt-2 space-y-2" data-testid="risk-policy-history-list">
+                {(history.versions || []).slice(0, 6).map((version) => (
+                  <div
+                    key={version.version_id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-xs"
+                    data-testid={`risk-policy-history-row-${version.version_id}`}
+                  >
+                    <span data-testid={`risk-policy-history-version-no-${version.version_id}`}>v{version.version_no}</span>
+                    <span data-testid={`risk-policy-history-reason-${version.version_id}`}>{version.reason_note}</span>
+                    <span data-testid={`risk-policy-history-created-${version.version_id}`}>
+                      {new Date(version.created_at).toLocaleString()}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!isSuperAdmin}
+                      title={superAdminOnlyTitle}
+                      onClick={() => handleRevert(version.version_id)}
+                      data-testid={`risk-policy-revert-button-${version.version_id}`}
+                    >
+                      Revert
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="risk-control-actions-card">
+          <CardHeader>
+            <CardTitle data-testid="risk-control-actions-title">2) Critical Risk Control Actions</CardTitle>
+            <CardDescription data-testid="risk-control-actions-description">
+              Kill switch, global pause, force risk check (reason zorunlu).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {[
+              ["kill_switch", "Kill Switch"],
+              ["global_trading_pause", "Global Trading Pause"],
+              ["force_risk_check", "Force Risk Check"],
+            ].map(([actionType, title]) => (
+              <div key={actionType} className="rounded-lg border p-3" data-testid={`risk-control-action-box-${actionType}`}>
+                <p className="text-sm font-semibold" data-testid={`risk-control-action-title-${actionType}`}>{title}</p>
+                <Textarea
+                  value={controlReasons[actionType] || ""}
+                  onChange={(event) =>
+                    setControlReasons((prev) => ({
+                      ...prev,
+                      [actionType]: event.target.value,
+                    }))
+                  }
+                  placeholder="Aksiyon sebebi"
+                  className="mt-2"
+                  data-testid={`risk-control-action-reason-input-${actionType}`}
+                />
+                <Button
+                  className="mt-2"
+                  variant="destructive"
+                  onClick={() => executeControlAction(actionType)}
+                  disabled={!isSuperAdmin}
+                  title={superAdminOnlyTitle}
+                  data-testid={`risk-control-action-submit-button-${actionType}`}
+                >
+                  Uygula
+                </Button>
+              </div>
+            ))}
+
+            <div className="rounded-lg border p-3" data-testid="risk-supervisor-box">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold" data-testid="risk-supervisor-title">In-Trade Supervisor</p>
+                <Button onClick={handleSupervisorRun} data-testid="risk-supervisor-run-button">
+                  Supervisor Run
+                </Button>
+              </div>
+              {supervisor && (
+                <div className="mt-2 space-y-1 text-xs" data-testid="risk-supervisor-result-list">
+                  <p data-testid="risk-supervisor-evaluated-at">{new Date(supervisor.evaluated_at).toLocaleString()}</p>
+                  {(supervisor.breaches || []).length === 0 && (
+                    <p data-testid="risk-supervisor-empty-breach">Breach yok.</p>
+                  )}
+                  {(supervisor.breaches || []).map((breach, index) => (
+                    <div key={`${breach.key}-${index}`} data-testid={`risk-supervisor-breach-row-${index}`}>
+                      {breach.breach_type} · {breach.key} · {breach.open_count}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="risk-exposure-card">
+          <CardHeader>
+            <CardTitle data-testid="risk-exposure-title">3) Exposure Control & Manual Override</CardTitle>
+            <CardDescription data-testid="risk-exposure-description">
+              Symbol/strategy bazlı limit override ve block-adds.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-2" data-testid="risk-exposure-form-grid">
+              <select
+                value={overrideForm.override_type}
+                onChange={(event) => setOverrideForm((prev) => ({ ...prev, override_type: event.target.value }))}
+                className="h-9 rounded-md border bg-background px-2"
+                data-testid="risk-override-type-select"
+              >
+                <option value="symbol">symbol</option>
+                <option value="strategy">strategy</option>
+                <option value="block_adds">block_adds</option>
+              </select>
+              <Input
+                value={overrideForm.target_key}
+                onChange={(event) => setOverrideForm((prev) => ({ ...prev, target_key: event.target.value }))}
+                placeholder="Target key"
+                data-testid="risk-override-target-input"
+              />
+              <Input
+                value={overrideForm.max_notional_pct}
+                onChange={(event) => setOverrideForm((prev) => ({ ...prev, max_notional_pct: event.target.value }))}
+                placeholder="max notional %"
+                data-testid="risk-override-max-notional-input"
+              />
+              <Input
+                value={overrideForm.max_open_count}
+                onChange={(event) => setOverrideForm((prev) => ({ ...prev, max_open_count: event.target.value }))}
+                placeholder="max open count"
+                data-testid="risk-override-max-open-count-input"
+              />
+              <Input
+                value={overrideForm.expires_in_minutes}
+                onChange={(event) => setOverrideForm((prev) => ({ ...prev, expires_in_minutes: event.target.value }))}
+                placeholder="expiry (min)"
+                data-testid="risk-override-expiry-input"
+              />
+              <div className="flex items-center gap-2" data-testid="risk-override-block-adds-wrapper">
+                <Checkbox
+                  checked={overrideForm.block_new_adds}
+                  onCheckedChange={(checked) =>
+                    setOverrideForm((prev) => ({ ...prev, block_new_adds: checked === true }))
+                  }
+                  data-testid="risk-override-block-adds-checkbox"
+                />
+                <span className="text-xs">block_new_adds</span>
+              </div>
+            </div>
+            <Textarea
+              value={overrideForm.reason_note}
+              onChange={(event) => setOverrideForm((prev) => ({ ...prev, reason_note: event.target.value }))}
+              placeholder="Override reason"
+              data-testid="risk-override-reason-textarea"
+            />
+            <Button
+              onClick={handleOverrideCreate}
+              disabled={!isSuperAdmin}
+              title={superAdminOnlyTitle}
+              data-testid="risk-override-create-button"
+            >
+              Override Ekle
+            </Button>
+
+            <div className="space-y-2" data-testid="risk-override-active-list">
+              {overrides.map((item) => (
+                <div
+                  key={item.override_id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-xs"
+                  data-testid={`risk-override-row-${item.override_id}`}
+                >
+                  <span data-testid={`risk-override-target-${item.override_id}`}>{item.override_type} · {item.target_key}</span>
+                  <span data-testid={`risk-override-status-${item.override_id}`}>{item.status}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!isSuperAdmin}
+                    title={superAdminOnlyTitle}
+                    onClick={() => handleOverrideDeactivate(item.override_id)}
+                    data-testid={`risk-override-deactivate-button-${item.override_id}`}
+                  >
+                    Deactivate
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="risk-intervention-card">
+          <CardHeader>
+            <CardTitle data-testid="risk-intervention-title">4) Open Position Intervention</CardTitle>
+            <CardDescription data-testid="risk-intervention-description">
+              Reduce, close, block further adds.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2" data-testid="risk-intervention-form-grid">
+              <select
+                value={interventionState.position_id}
+                onChange={(event) => setInterventionState((prev) => ({ ...prev, position_id: event.target.value }))}
+                className="h-9 rounded-md border bg-background px-2"
+                data-testid="risk-intervention-position-select"
+              >
+                <option value="">Pozisyon seçin</option>
+                {positions.map((position) => (
+                  <option key={position.position_id} value={position.position_id}>
+                    {position.symbol} · {position.position_id}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={interventionState.action_type}
+                onChange={(event) => setInterventionState((prev) => ({ ...prev, action_type: event.target.value }))}
+                className="h-9 rounded-md border bg-background px-2"
+                data-testid="risk-intervention-action-select"
+              >
+                <option value="reduce_position">reduce_position</option>
+                <option value="close_position">close_position</option>
+                <option value="block_further_adds">block_further_adds</option>
+              </select>
+              <Input
+                value={interventionState.reduce_ratio}
+                onChange={(event) => setInterventionState((prev) => ({ ...prev, reduce_ratio: event.target.value }))}
+                placeholder="reduce ratio"
+                data-testid="risk-intervention-reduce-ratio-input"
+              />
+              <Input
+                value={interventionState.expires_in_minutes}
+                onChange={(event) =>
+                  setInterventionState((prev) => ({
+                    ...prev,
+                    expires_in_minutes: event.target.value,
+                  }))
+                }
+                placeholder="block expiry"
+                data-testid="risk-intervention-expiry-input"
+              />
+            </div>
+            <Textarea
+              value={interventionState.reason_note}
+              onChange={(event) => setInterventionState((prev) => ({ ...prev, reason_note: event.target.value }))}
+              placeholder="Intervention reason"
+              data-testid="risk-intervention-reason-textarea"
+            />
+            <Button
+              onClick={handleIntervene}
+              disabled={!isSuperAdmin}
+              title={superAdminOnlyTitle}
+              data-testid="risk-intervention-submit-button"
+            >
+              Müdahale Uygula
+            </Button>
+
+            <div className="space-y-1" data-testid="risk-open-position-list">
+              {positions.map((position) => (
+                <div
+                  key={position.position_id}
+                  className="grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded border p-2 text-xs"
+                  data-testid={`risk-open-position-row-${position.position_id}`}
+                >
+                  <span data-testid={`risk-open-position-meta-${position.position_id}`}>
+                    {position.symbol} · size: {Number(position.size).toFixed(4)}
+                  </span>
+                  <Badge data-testid={`risk-open-position-status-${position.position_id}`}>{position.status}</Badge>
+                  <span data-testid={`risk-open-position-pnl-${position.position_id}`}>
+                    pnl: {Number(position.unrealized_pnl).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="border border-slate-800 bg-slate-900 p-4" data-testid="admin-risk-rejects-panel">
-        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-risk-rejects-title">Recent Risk Rejects</p>
-        {rejects.length === 0 && (
-          <p className="mt-2 text-sm text-slate-400" data-testid="admin-risk-rejects-empty">Henüz reject kaydı yok.</p>
-        )}
-        <div className="mt-3 space-y-2" data-testid="admin-risk-rejects-list">
-          {rejects.map((row) => (
-            <div key={row.id} className="border border-slate-700 p-2 text-xs" data-testid={`admin-risk-reject-row-${row.id}`}>
-              <p data-testid={`admin-risk-reject-meta-${row.id}`}>{row.strategy_id || "-"} · {row.symbol || "-"}</p>
-              <p className="text-slate-400" data-testid={`admin-risk-reject-reasons-${row.id}`}>
-                {row.reason_codes?.join(", ") || "-"}
-              </p>
+      <div className="grid gap-5 xl:grid-cols-2" data-testid="risk-bottom-grid">
+        <Card data-testid="risk-rejects-card">
+          <CardHeader>
+            <CardTitle data-testid="risk-rejects-title">5) Risk Rejects (Drill-down)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-3" data-testid="risk-rejects-filter-grid">
+              <Input
+                value={rejectFilters.reason_code}
+                onChange={(event) => setRejectFilters((prev) => ({ ...prev, reason_code: event.target.value }))}
+                placeholder="reason_code"
+                data-testid="risk-rejects-filter-reason-input"
+              />
+              <Input
+                value={rejectFilters.symbol}
+                onChange={(event) => setRejectFilters((prev) => ({ ...prev, symbol: event.target.value }))}
+                placeholder="symbol"
+                data-testid="risk-rejects-filter-symbol-input"
+              />
+              <Input
+                value={rejectFilters.strategy_id}
+                onChange={(event) => setRejectFilters((prev) => ({ ...prev, strategy_id: event.target.value }))}
+                placeholder="strategy_id"
+                data-testid="risk-rejects-filter-strategy-input"
+              />
             </div>
-          ))}
-        </div>
+            <Button onClick={refreshRejects} data-testid="risk-rejects-filter-apply-button">
+              Filter Uygula
+            </Button>
+
+            <div className="space-y-2" data-testid="risk-rejects-list">
+              {rejects.map((row) => (
+                <button
+                  type="button"
+                  key={row.id}
+                  onClick={() => openRejectDetail(row.id)}
+                  className="w-full rounded border p-2 text-left text-xs transition-colors hover:bg-slate-50"
+                  data-testid={`risk-reject-row-button-${row.id}`}
+                >
+                  <p data-testid={`risk-reject-row-meta-${row.id}`}>
+                    {row.strategy_id || "-"} · {row.symbol || "-"}
+                  </p>
+                  <p className="text-slate-500" data-testid={`risk-reject-row-reasons-${row.id}`}>
+                    {(row.reason_codes || []).join(", ") || "-"}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="risk-alerts-card">
+          <CardHeader>
+            <CardTitle data-testid="risk-alerts-title">6) Alerts + Auto Trigger Logs</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2" data-testid="risk-alert-list">
+              {alerts.map((alert) => (
+                <div
+                  key={alert.id}
+                  className="rounded border p-2 text-xs"
+                  data-testid={`risk-alert-row-${alert.id}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span data-testid={`risk-alert-type-${alert.id}`}>{alert.alert_type}</span>
+                    <Badge
+                      variant={alert.severity === "CRITICAL" ? "destructive" : "secondary"}
+                      data-testid={`risk-alert-severity-${alert.id}`}
+                    >
+                      {alert.severity}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-slate-600" data-testid={`risk-alert-message-${alert.id}`}>{alert.message}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2" data-testid="risk-auto-trigger-list">
+              {autoTriggers.map((trigger) => (
+                <div
+                  key={trigger.trigger_id}
+                  className="rounded border p-2 text-xs"
+                  data-testid={`risk-auto-trigger-row-${trigger.trigger_id}`}
+                >
+                  <p data-testid={`risk-auto-trigger-main-${trigger.trigger_id}`}>
+                    {trigger.breach_type} · {trigger.target_key}
+                  </p>
+                  <p className="text-slate-500" data-testid={`risk-auto-trigger-action-${trigger.trigger_id}`}>
+                    öneri: {trigger.suggested_action}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      <Card data-testid="risk-audit-timeline-card">
+        <CardHeader>
+          <CardTitle data-testid="risk-audit-timeline-title">7) Audit & Governance Timeline</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2" data-testid="risk-audit-timeline-list">
+            {timeline.map((item) => (
+              <div
+                key={`${item.event_type}-${item.event_id}`}
+                className="rounded border p-2 text-xs"
+                data-testid={`risk-audit-item-${item.event_type}-${item.event_id}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span data-testid={`risk-audit-item-type-${item.event_id}`}>{item.event_type}</span>
+                  <span data-testid={`risk-audit-item-status-${item.event_id}`}>{item.status}</span>
+                  <span data-testid={`risk-audit-item-created-${item.event_id}`}>
+                    {new Date(item.created_at).toLocaleString()}
+                  </span>
+                </div>
+                <p className="mt-1 text-slate-600" data-testid={`risk-audit-item-reason-${item.event_id}`}>
+                  {item.reason_note}
+                </p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={applyDialogOpen} onOpenChange={setApplyDialogOpen}>
+        <DialogContent data-testid="risk-policy-apply-dialog">
+          <DialogHeader>
+            <DialogTitle data-testid="risk-policy-apply-dialog-title">Policy Apply Confirm</DialogTitle>
+            <DialogDescription data-testid="risk-policy-apply-dialog-description">
+              Simülasyon olmadan apply kapalıdır. Reason ve double-confirm zorunlu.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3" data-testid="risk-policy-apply-dialog-content">
+            <p className="text-xs" data-testid="risk-policy-apply-dialog-simulation-id">
+              simulation_id: {simulation?.simulation_id || "-"}
+            </p>
+            <Textarea
+              value={applyReason}
+              onChange={(event) => setApplyReason(event.target.value)}
+              placeholder="Apply reason"
+              data-testid="risk-policy-apply-reason-textarea"
+            />
+            <Textarea
+              value={applyNote}
+              onChange={(event) => setApplyNote(event.target.value)}
+              placeholder="Approval note"
+              data-testid="risk-policy-apply-note-textarea"
+            />
+            <div className="flex items-center gap-2" data-testid="risk-policy-apply-double-confirm-wrapper">
+              <Checkbox
+                checked={doubleConfirm}
+                onCheckedChange={(checked) => setDoubleConfirm(checked === true)}
+                data-testid="risk-policy-apply-double-confirm-checkbox"
+              />
+              <span className="text-xs">Evet, kritik değişikliğin canlı sistemi etkileyeceğini onaylıyorum.</span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApplyDialogOpen(false)} data-testid="risk-policy-apply-cancel-button">
+              Vazgeç
+            </Button>
+            <Button
+              onClick={handleApply}
+              disabled={!isSuperAdmin || !doubleConfirm || !simulation}
+              title={superAdminOnlyTitle}
+              data-testid="risk-policy-apply-confirm-button"
+            >
+              Apply Policy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent data-testid="risk-reject-detail-dialog">
+          <DialogHeader>
+            <DialogTitle data-testid="risk-reject-detail-title">Reject Root Cause</DialogTitle>
+            <DialogDescription data-testid="risk-reject-detail-description">
+              İşlem reddinin kök nedeni ve metrik detayları.
+            </DialogDescription>
+          </DialogHeader>
+
+          {rejectDetail && (
+            <div className="space-y-2 text-xs" data-testid="risk-reject-detail-content">
+              <p data-testid="risk-reject-detail-id">id: {rejectDetail.id}</p>
+              <p data-testid="risk-reject-detail-root-cause">root_cause: {rejectDetail.root_cause || "-"}</p>
+              <p data-testid="risk-reject-detail-symbol">symbol: {rejectDetail.symbol || "-"}</p>
+              <p data-testid="risk-reject-detail-strategy">strategy: {rejectDetail.strategy_id || "-"}</p>
+              <pre className="max-h-60 overflow-auto rounded bg-slate-950 p-2 text-slate-100" data-testid="risk-reject-detail-json">
+                {JSON.stringify(rejectDetail.details || {}, null, 2)}
+              </pre>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 };

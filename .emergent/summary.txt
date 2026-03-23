@@ -1,56 +1,68 @@
 <analysis>**original_problem_statement**: 
-Kullanıcı, Execution Control + Recovery System için P1 aşamasının (Risk & Capital Control, Report Details, Auto-refresh, Action Impact Timeline) başarıyla tamamlanmasının ardından sistemi production-grade bir Karar Kontrol Motoru (Decision Control Engine) haline getirmek için **FINAL HARD TASK ORDER — GAP CLOSURE** görevini verdi.
-Bu görev iki parça halinde istenmiştir:
-*   **Parça 1 (MANDATORY)**: Signal Governance (Approve/Reject lifecycle, Reject için reason zorunluluğu), Auto-refresh Safety (Default OFF ve işlem anında pause), Export Discipline (Snapshot, filtrelerin audit'e yazılması), UI Hard Safety (Destructive eylemler için modal, role-based disable, loading statüleri).
-*   **Parça 2**: Timeline Chain View (Neden-sonuç zinciri için ayrı  route'u), Playbook Safe Execution (Ayrı  modeli, preview -> approve -> execute adımları), Auto-ack hardening (rule validation, dry-run, preview).
+Kullanıcı, Execution Control + Recovery Systemin tamamlanmasının ardından, mevcut  ekranının yalnızca bir konfigürasyon (policy) editörü olmaktan çıkarılarak Risk Enforcement + Intervention System (Risk Motoru / Hard-Guard Layer) olarak yeniden tasarlanmasını talep etmiştir. 
+**PRODUCT REQUIREMENTS:**
+1. **Policy Management:** Validasyon, versiyonlama, diff görünümü, save öncesi zorunlu simülasyon (What-if analizi) ve double-confirm modal.
+2. **Risk Control Actions:** Kill switch, global trading pause ve force risk check entegrasyonu (reason ve audit zorunlu).
+3. **Exposure Control:** Symbol/Strategy exposure listeleri ve reason/expiry ile manuel override.
+4. **In-Trade Supervisor:** Açık pozisyonlara müdahale (reduce, close, block further adds) ve auto-trigger log.
+5. **Risk Rejects:** Filtreleme, detay drawer/modal (drill-down root cause analizi).
+6. **Audit & Governance:** Change history timeline, actor/reason log, revert işlemi.
+7. **Simulation:** Kritik değişiklikler simüle edilmeden uygulanamaz.
+8. **Alerts:** Risk breach alert paneli (info, warning, critical).
 
 **User's preferred language**: Turkish (Türkçe)
 **(INSTRUCT NEXT AGENT: KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.)**
 
 **what currently exists?**: 
-Execution Control, Snapshot Diff Engine, Alerts modülleri ve P0/P1 Strategy Observability (Signal Simulate/Execute, Risk & Capital Limitleri, Score Tuning) başarıyla uygulandı.  modüler yapıya (analytics, export, recovery, alerts, common) başarıyla ayrıldı. P1 kapanış UI düzeltmeleri (Compare bloklarının ayrılması, recommended action'lara gerekçe -reason- eklenmesi) yapıldı. GAP CLOSURE görevi kod bazında büyük ölçüde entegre edildi ancak test sırasında backend'de 500 hatası alındı.
+Sistem, uçtan uca execution control, playbook state machine (preview -> approve -> execute -> rollback/retry), gerçek Slack webhook delivery (state tracking ve retry mekanizmalı), causality-based timeline view, role-based export masking (admin vs user) ve RBAC guard'ları ile production-ready seviyeye gelmiştir. Son olarak Admin Risk Orchestrator'ın hard-guard mimarisine dönüştürülmesi işine başlanmış ve DB modelleri kodlanmıştır.
 
 **Last working item**: 
-    - Last item agent was working: GAP CLOSURE sprinti dahilinde uçtan uca test senaryolarını ( kullanarak curl ile) doğrulamak. Bu test esnasında  endpoint'ine yapılan istekte 500 Internal Server Error fırlatıldı. Ajan logları incelemek üzereydi.
-    - Status: IN PROGRESS / BLOCKED (Backend 500 Error)
-    - Agent Testing Done: Y (Kısmi test yapıldı, hata tespit edildi)
-    - Which testing method agent to use? Hata çözümü için backend loglarını okumak (bash ile log takibi), ardından  veya  ile backend testi yapmak. Sonrasında hem frontend hem backend için kapsamlı doğrulama adına testing agent () kullanmak.
+    - Last item agent was working: Admin Risk Orchestrator hard-guard katmanı için yeni veritabanı tablolarının (, , ,  vb.)  dosyasına eklenmesi.
+    - Status: IN PROGRESS
+    - Agent Testing Done: N
+    - Which testing method agent to use? Hem backend hem frontend için  kullanılmalıdır (Alembic migration oluşturulup backend API'leri ve UI modülleri yazıldıktan sonra).
     - User Testing Done: N
 
 **All Pending/In progress Issue list**: 
-  Issue 1:  API 500 Internal Server Error (P0)
-     - Attempted fixes: Ajan log dosyasını okumaya çalıştı () ancak işlemi sonlandırdı, henüz bir düzeltme yapılmadı.
-     - Next debug checklist:  dosyasının en son satırlarını okuyup 500 hatasına neden olan traceback'i tespit et. Özellikle  ve incident export request alanlarını incele.
-     - Why fix this issue and what will be achieved with the fix? GAP CLOSURE Parça 2 (Playbook Safe Execution) için playbook_preview kritik önem taşıyor. Bu çözülmeden sistem production'a alınamaz.
-     - Status: IN PROGRESS / BLOCKED
+  Issue 1: Alembic Migration Eksikliği (Risk Orchestrator) (P0)
+     - Attempted fixes: Yeni modeller eklendi ancak migration komutu henüz çalıştırılmadı.
+     - Next debug checklist: FAILED: No 'script_location' key found in configuration. çalıştırılmalı ve FAILED: No 'script_location' key found in configuration. yapılmalı.
+     - Why fix this issue and what will be achieved with the fix? Veritabanı tabloları oluşmadan backend endpoint'leri 500 hatası verecektir.
+     - Status: NOT STARTED
      - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Both (Önce backend, sonra UI entegrasyonu)
+     - Should Test frontend/backend/both after fix? Backend
+     - Blocked on other issue: None
 
 **In progress Task List**: 
-  Task 1: GAP CLOSURE - Parça 1 ve Parça 2 Final Doğrulamaları (P0)
-     - Where to resume: Backend 500 hatası giderildikten sonra, Approve/Reject governance flow, Timeline Chain View detay sayfası ve Playbook Preview -> Approve -> Execute adımlarının UI üzerinden çalışıp çalışmadığını doğrula.
-     - What will be achieved with this? Kullanıcının kesin şart koştuğu güvenli, denetlenebilir, yanlış karar vermeyen operasyon kokpiti teslim edilecek.
-     - Status: IN PROGRESS (Kodlar patch'lendi, backend error çözümü bekleniyor)
+  Task 1: Admin Risk Orchestrator Risk Enforcement + Intervention System (P0)
+     - Where to resume: 'ye eklenen modeller için migration oluştur,  dosyasına Pydantic şemalarını ekle,  içindeki risk orchestrator endpoint'lerini genişlet ve son olarak  sayfasını yeni layout ile (Policy, Control Actions, Exposure, Running Trades vb.) baştan yaz.
+     - What will be achieved with this? Sistem, yanlış konfigürasyonlara ve canlı trading risklerine karşı tam korumalı, audit edilebilen bir hard-guard noktası kazanacak.
+     - Status: IN PROGRESS
      - Should Test frontend/backend/both after fix? Both
-     - Blocked on something: Issue 1 (500 Internal Server Error)
+     - Blocked on something: Veritabanı migration işlemi
 
 **Upcoming and Future Tasks**
-    Upcoming Tasks (P1/P2):
-    - P2: Risk/observability ekranlarında saved filter presets eklenmesi.
-    - P2: Timeline üzerinde chain bazlı görsel ilişkilendirme (Grouped chain view summary UI).
-    - P2: Rejected edilen sinyalleri ileride tekrar pending durumuna çekmek (Reopen / reset to pending) için aksiyon eklenmesi (Bu turda bilerek kapsam dışı bırakıldı).
+    Upcoming Tasks:
+    - P1: Risk Orchestrator için Exposure override, Auto-trigger log, Alert paneli, Revert/rollback.
+    - P2: Auto-refresh, UX polish, Gelişmiş analytics bağlantıları.
     
-    *(Not: Kullanıcının özellikle Scope Dışı belirttiği Predictive analytics, Role-based masking ve Streaming export görevleri eklenmemelidir.)*
+    Future Tasks:
+    - P2: Predictive analytics, ML entegrasyonu, advanced forecasting.
+    - P2: Saved filter presets, grouped chain summary UI, rejected→pending reopen.
+    - P2:  (Redis snapshot) dosya boyutu yönetimi ve temizliği (Kullanıcı 3. konuya sonra bakarız diyerek beklemeye aldı).
 
 **Completed work in this session**
-- Strategy Observability UI mock entegrasyonu (Top Signals Simulate/Execute, Explainability Sheet) (DONE)
-- P1 Risk & Capital Control Layer (Limit & Exposure Override) ve detay raporu ekranı (DONE)
-- Action Impact Timeline eklenmesi (DONE)
--  dosyasının modüler klasör yapısına () bölünmesi (DONE)
-- Execution States Compare UI iyileştirmesi, Export Preview yeteneği ve Recommended Actions için detaylı reason metinleri (DONE)
+- Playbook Governance  500 error fix (migration eklendi) (DONE)
+- P1 Timeline Chain View (Causal chain, broken link tespiti, seed izolasyonu) (DONE)
+- P1 Production Readiness Lock (Playbook state machine, rollback, retry, robust export snapshot audit) (DONE)
+- P0 Execution Alerts Real Webhook Delivery (Slack, Retry/Backoff, Dead Letter queue) (DONE)
+- FINAL BLOCKER - RBAC Closure (Apply/Execute için  zorunluluğu backend ve UI'da sağlandı) (DONE)
+- Final Sprint (State Diagram interactivity, Alert Intelligence, Timeout Analytics, Role-based Export Masking) (DONE)
+- Top Signals API  500 error hotfix (DONE)
+- Workflow secret scan fix (Hardcoded test şifreleri temizlendi) (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-None. Kullanıcı talepleri ve bug'lar düzenli olarak çözülerek ilerlendi, yalnızca son adımdaki 500 hatası kaldı.
+None. Kullanıcının belirttiği tüm anlık hata raporları (top signals 500, test pass/fail) anında çözüldü.
 
 **Known issue recurrence from previous fork**
   - Issue recurrence in previous fork: None
@@ -61,64 +73,72 @@ None. Kullanıcı talepleri ve bug'lar düzenli olarak çözülerek ilerlendi, y
 
 
 **Key Technical Concepts**
-- **Safe Execution Layer**: Playbook işlemleri doğrudan çalıştırılamaz; zorunlu olarak Preview -> Approve (sadece super_admin) -> Execute akışından geçmelidir. State yönetimi için ayrı bir  modeli oluşturulmuştur.
-- **Signal Governance**: Sinyaller default olarak pending başlar, yalnızca approved sinyaller çalıştırılabilir (execute), reject işlemi için ise mutlaka reason (sebep) girilmesi gerekir.
-- **Strict Snapshot Audit**: Export işlemleri (CSV/JSON), hangi filtrelerle yapıldığı ve oluşturulduğu zamandaki verinin (snapshot) büyüklüğü ile birlikte zorunlu olarak Audit Log'a yazılır.
+- **Hard-Guard Risk Motoru:** Risk konfigürasyonu apply edilmeden önce zorunlu simülasyon (what-if) gerektirir.
+- **Playbook State Machine:**  ->  ->  ->  / . Fail durumunda , execute durumunda  yapılabilir.
+- **Role-Based Export Masking:** Admin kullanıcılar correlation_id ve trace detaylarını tam görürken, user rolündekiler kısmi veya maskelenmiş veri görür (Response layer'da maskelenir).
+- **Delivery State Machine:** Webhook alertleri , , , ,  statülerinden geçer. Üstel backoff ile retry mekanizması bulunur.
 
 **key DB schema**
-  - : uid=0(root) gid=0(root) groups=0(root), , , , , ,  (Safe execution için yeni eklendi)
-  - 
-  - 
+  - Yeni eklenen tablolar (Migration bekleniyor):
+    - 
+    - 
+    - 
+    - 
+    - 
+    - 
 
 **changes in tech stack**
-  - Yok.
+  - None.
 
 **All files of reference** 
-  -  (500 hatasının kaynağı burada olabilir, Playbook önizleme işlemleri)
-  - 
-  -  (500 hatasının hata ayıklaması için kritik)
-  - 
+  -  (Yeni RO modelleri eklendi)
+  -  (RO endpoint'leri burada geliştirilecek)
+  -  (Modellere uygun Pydantic şemaları yazılacak)
+  -  (Komple baştan layout yapılacak)
+  -  &  (Aksiyon entegrasyonu için incelenmeli)
 
 **Areas that need refactoring**: 
-Modüler yapıya () geçiş yapıldı. Mevcut yapı oldukça güncel ve modülerdir. Refactoring ihtiyacı acil değildir.
+ dosyası, kullanıcının talep ettiği gibi tek parça panel olmaktan çıkarılıp, sticky status bar, policy management, critical actions, exposure control gibi çoklu modüller içeren kompleks bir panele refactor edilecektir.
 
 **key api endpoints**
-  - 
-  - 
-  - 
-  -  (Şu an 500 dönüyor)
-  - 
-  - 
+  - RO için eklenecek/genişletilecek endpointler: , ,  vs.
+  - Mevcut Playbook Execution: 
+  - Mevcut Alert Delivery: 
 
 **Critical Info for New Agent** 
-- **Rol Yetkileri (Enforced)**: Adminler sadece okuyabilir ve simülasyon yapabilir.  yetkisine sahip olanlar işlemleri uygulayabilir (Execute, Override, Approve).
-- **MOCK Veri Kuralı**: Slack webhook iletimi ve Binance Futures execution işlemleri mevcut mimaride **MOCK** olarak devam etmektedir. Kullanıcı bu durumu onaylamıştır.
-- **İşlem Önceliği (Teslim Sırası)**: Hata çözüldükten sonra GAP CLOSURE Parça 1 kontrolleri kesin olarak sağlanmalı, sonrasında Parça 2 (Timeline Chain Detail ve Playbook Safe Execution) doğrulanıp süreç bitirilmelidir.
+- **ZORUNLU KURALLAR:** Risk Orchestrator policy değişikliğinden önce simülasyon (what-if) *ZORUNLUDUR*. Kritik işlemler loglanmalı, reason note alınmalı ve actor işlenmelidir. Apply without simulation kapalı olmalıdır.
+- **UI GÜVENLİĞİ:** Execute ve Apply işlemleri  dışındaki kullanıcılara disabled durumdadır ve tooltip ile nedeni açıklanmaktadır. Bu davranış Risk Orchestrator modülünde de kritik eylemler için benimsenmelidir.
+- Ajan en son  dosyasına DB modellerini  ile eklemiş fakat Alembic migration çalıştırmamıştır. İşe migration alarak ve Pydantic modellerini güncelleyerek başlayın.
 
 **documents and test reports created in this job** 
-  -  -  (Son aşamaya kadar tüm Backend ve UI test raporları)
-  -  (Güncel süreç ve sprint'ler dökümante edildi)
+  -  ile  arası (Backend & UI Playbook, RBAC, Alerts testleri)
+  -  (Secret leak guard raporu)
 
 **Last 10 User Messages and any pending HUMAN messages** 
-- Kullanıcı GAP CLOSURE sprinti için FINAL HARD TASK ORDER verdi. (Signal Governance, Auto-refresh fix, Export Snapshot, Timeline Chain View, Playbook Safe Execution, UI Hard Safety).
-- Kullanıcı bu işlerin 2 parça halinde teslim edilmesini ve Parça 1 tamamlanmadan Parça 2 bitti sayılmaz kuralını ekledi. (Bekleyen mesaj yok, ajan backend kodlarını uyguladıktan sonra curl testi atarken 500 hatasına takıldı).
+1. Kullanıcı Playbook Safe Execution ve RBAC için P0 Final görev emrini verdi. (Yapıldı)
+2. Kullanıcı Execution Alerts: Mocktan Real Webhook Deliveryye geçiş görevini verdi. (Yapıldı)
+3. Kullanıcı FINAL BLOCKER - RBAC Closure diyerek approve/execute için  backend/frontend enforce edilmesini istedi. (Yapıldı)
+4. Kullanıcı FINAL SPRINT (State diagram, Alert grouping, Timeout analizi, Role-based masking) görevini verdi. (Yapıldı)
+5. Kullanıcı 3 adet fix istedi (Top signals 500, Workflow secret fail, RDB size). İlk ikisini yapıp üçüncüsünü bekletme talimatı verdi. (Yapıldı)
+6. Kullanıcı en son: **Admin Risk Orchestrator ekranının Risk Enforcement + Intervention System olarak yeniden tasarlanması** görevini verdi. İçinde Policy, Exposure, Supervisor, Rejects, Simulation ve Audit modülleri bulunuyor. (Ajan DB tablolarını ekleyip durdu).
 
 **Project Health Check:**
-- Broken:  API (500 error).
-- Mocked: Slack Webhooks, Binance Integration.
+- Broken: Yok (Tüm 500 hataları çözüldü).
+- Mocked: Slack webhook (Gerçek URL yok, mock modunda). Binance Futures.
 
 **3rd Party Integrations** 
-- Slack (Mocked)
-- Binance (Mocked)
+- Slack Webhook (MOCKED / Provider Agnostic Delivery yapısı kuruldu)
+- Binance (MOCKED)
 
 **Testing status**
-  - Testing agent used after significant changes: YES (95. iterasyona kadar testler tam)
+  - Testing agent used after significant changes: YES (Tüm kritik aşamalarda iterasyon 102'ye kadar tam test yapıldı)
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: , 
-  - Known regressions:  endpoint'i modüler refactor sonrası son GAP CLOSURE yamalarıyla bozuldu.
+  - Test files created: , ,  vs.
+  - Known regressions: None.
 
 **Credentials to test flow:**
-- Admin/Super Admin:  / 
+- Super Admin:  / 
+- Admin (User):  / 
 
 **What agent forgot to execute**
-Ajan, son UI ve backend geliştirmelerini  ile uyguladı ancak son  komutu ile test ederken  500 hatası verdi. Hatanın kök nedenini tam olarak tespit edip (traceback'i  üzerinden okuyarak) fix'i atmayı tamamlamadı. Kullanıcının beklediği test onayı ve kapanış henüz gerçekleşmedi.</analysis>
+Ajan, Risk Orchestrator modülü için  dosyasına SQLAlchemy modellerini ekledi ancak iş oturumu sonlandığı için **Alembic migration oluşturmayı, Pydantic şemalarını (schemas.py) yazmayı ve API endpointlerini kurgulamayı** yapamadı. Yeni ajanın öncelikle migration (FAILED: No 'script_location' key found in configuration.) alarak işe başlaması gerekmektedir.</analysis>

@@ -20,7 +20,105 @@ class RiskOrchestratorPolicy(Base):
     max_order_burst_per_10s: Mapped[int] = mapped_column(Integer, default=3)
     daily_loss_limit_pct: Mapped[float] = mapped_column(Float, default=5)
     duplicate_suppression_window_seconds: Mapped[int] = mapped_column(Integer, default=300)
+    policy_version: Mapped[int] = mapped_column(Integer, default=1)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class RiskOrchestratorPolicyVersion(Base):
+    __tablename__ = "risk_orchestrator_policy_versions"
+
+    version_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    version_no: Mapped[int] = mapped_column(Integer, index=True, default=1)
+    policy_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    diff_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    changed_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    changed_role: Mapped[str] = mapped_column(String(40), default="admin")
+    reason_note: Mapped[str] = mapped_column(Text, default="")
+    simulation_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    approval_request_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    reverted_from_version_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class RiskOrchestratorPolicyChangeRequest(Base):
+    __tablename__ = "risk_orchestrator_policy_change_requests"
+
+    request_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    requested_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    requested_role: Mapped[str] = mapped_column(String(40), default="admin")
+    approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    approval_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason_note: Mapped[str] = mapped_column(Text, default="")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    simulation_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    critical_fields: Mapped[list[str]] = mapped_column(JSON, default=list)
+    double_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RiskOrchestratorPolicySimulation(Base):
+    __tablename__ = "risk_orchestrator_policy_simulations"
+
+    simulation_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    actor_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    actor_role: Mapped[str] = mapped_column(String(40), default="admin")
+    baseline_policy: Mapped[dict] = mapped_column(JSON, default=dict)
+    candidate_policy: Mapped[dict] = mapped_column(JSON, default=dict)
+    result_status: Mapped[str] = mapped_column(String(20), default="safe", index=True)
+    diff_summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    impacted_strategies: Mapped[list[str]] = mapped_column(JSON, default=list)
+    impacted_symbols: Mapped[list[str]] = mapped_column(JSON, default=list)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class RiskOrchestratorManualOverride(Base):
+    __tablename__ = "risk_orchestrator_manual_overrides"
+
+    override_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    override_type: Mapped[str] = mapped_column(String(40), default="symbol", index=True)
+    target_key: Mapped[str] = mapped_column(String(120), index=True)
+    override_value: Mapped[dict] = mapped_column(JSON, default=dict)
+    reason_note: Mapped[str] = mapped_column(Text, default="")
+    actor_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    actor_role: Mapped[str] = mapped_column(String(40), default="admin")
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RiskOrchestratorInterventionLog(Base):
+    __tablename__ = "risk_orchestrator_intervention_logs"
+
+    intervention_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    intent_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    action_type: Mapped[str] = mapped_column(String(80), index=True)
+    reason_note: Mapped[str] = mapped_column(Text, default="")
+    actor_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    actor_role: Mapped[str] = mapped_column(String(40), default="admin")
+    status: Mapped[str] = mapped_column(String(30), default="success", index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    result_summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class RiskOrchestratorAutoTriggerLog(Base):
+    __tablename__ = "risk_orchestrator_auto_trigger_logs"
+
+    trigger_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    breach_type: Mapped[str] = mapped_column(String(80), index=True)
+    target_key: Mapped[str] = mapped_column(String(120), index=True)
+    severity: Mapped[str] = mapped_column(String(20), default="warning", index=True)
+    suggested_action: Mapped[str] = mapped_column(String(80), default="review")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    acknowledged_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 class RiskPolicy(Base):
     __tablename__ = "risk_policies"

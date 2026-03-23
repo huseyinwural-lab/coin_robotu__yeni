@@ -1416,6 +1416,7 @@ class RiskOrchestratorPolicyResponse(BaseModel):
     max_order_burst_per_10s: int
     daily_loss_limit_pct: float
     duplicate_suppression_window_seconds: int
+    policy_version: int = 1
     updated_at: datetime | None = None
 
 
@@ -1441,6 +1442,7 @@ class RiskOrchestratorStatusResponse(BaseModel):
     policy: RiskOrchestratorPolicyResponse
     kill_switch_active: bool
     kill_switch_reasons: list[str]
+    trading_enabled: bool = True
     open_intents: int
     open_intents_by_symbol: list[RiskOrchestratorExposureResponse]
     open_intents_by_strategy: list[RiskOrchestratorExposureResponse]
@@ -1467,6 +1469,199 @@ class RiskOrchestratorSupervisorBreach(BaseModel):
 class RiskOrchestratorSupervisorResponse(BaseModel):
     evaluated_at: datetime
     breaches: list[RiskOrchestratorSupervisorBreach]
+
+
+class RiskOrchestratorPolicySimulationRequest(BaseModel):
+    candidate_policy: RiskOrchestratorPolicyUpdate
+
+
+class RiskOrchestratorPolicySimulationResponse(BaseModel):
+    simulation_id: str
+    result_status: str
+    baseline_policy: dict
+    candidate_policy: dict
+    diff_summary: dict
+    impacted_strategies: list[str]
+    impacted_symbols: list[str]
+    metrics: dict
+    created_at: datetime
+
+
+class RiskOrchestratorPolicyApplyRequest(BaseModel):
+    simulation_id: str
+    reason_note: str = Field(min_length=3, max_length=1000)
+    double_confirmed: bool = False
+    approval_note: str | None = Field(default=None, max_length=1000)
+
+
+class RiskOrchestratorPolicyVersionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    version_id: str
+    version_no: int
+    policy_payload: dict
+    diff_payload: dict
+    changed_by: str
+    changed_role: str
+    reason_note: str
+    simulation_id: str | None = None
+    approval_request_id: str | None = None
+    reverted_from_version_id: str | None = None
+    created_at: datetime
+
+
+class RiskOrchestratorPolicyChangeRequestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    request_id: str
+    status: str
+    requested_by: str
+    requested_role: str
+    approved_by: str | None = None
+    approval_note: str | None = None
+    reason_note: str
+    payload: dict
+    simulation_id: str | None = None
+    critical_fields: list[str] = Field(default_factory=list)
+    double_confirmed: bool
+    created_at: datetime
+    updated_at: datetime
+    decided_at: datetime | None = None
+
+
+class RiskOrchestratorPolicyHistoryResponse(BaseModel):
+    versions: list[RiskOrchestratorPolicyVersionResponse]
+    change_requests: list[RiskOrchestratorPolicyChangeRequestResponse]
+
+
+class RiskOrchestratorPolicyRevertRequest(BaseModel):
+    reason_note: str = Field(min_length=3, max_length=1000)
+    double_confirmed: bool = False
+
+
+class RiskOrchestratorControlActionRequest(BaseModel):
+    action_type: str
+    reason_note: str = Field(min_length=3, max_length=1000)
+    context: dict = Field(default_factory=dict)
+
+
+class RiskOrchestratorControlActionResponse(BaseModel):
+    intervention_id: str
+    action_type: str
+    status: str
+    reason_note: str
+    effective_state: dict
+    created_at: datetime
+
+
+class RiskOrchestratorManualOverrideCreateRequest(BaseModel):
+    override_type: str
+    target_key: str
+    reason_note: str = Field(min_length=3, max_length=1000)
+    max_notional_pct: float | None = None
+    max_open_count: int | None = None
+    block_new_adds: bool = False
+    expires_in_minutes: int | None = Field(default=None, ge=1, le=10080)
+
+
+class RiskOrchestratorManualOverrideDeactivateRequest(BaseModel):
+    reason_note: str = Field(min_length=3, max_length=1000)
+
+
+class RiskOrchestratorManualOverrideResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    override_id: str
+    override_type: str
+    target_key: str
+    override_value: dict
+    reason_note: str
+    actor_id: str
+    actor_role: str
+    status: str
+    expires_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    deactivated_at: datetime | None = None
+
+
+class RiskOrchestratorOpenPositionResponse(BaseModel):
+    position_id: str
+    user_id: str
+    strategy_id: str | None = None
+    symbol: str
+    size: float
+    entry_price: float
+    current_price: float
+    unrealized_pnl: float
+    leverage: int
+    cluster_id: str | None = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class RiskOrchestratorInterventionRequest(BaseModel):
+    position_id: str
+    action_type: str
+    reason_note: str = Field(min_length=3, max_length=1000)
+    payload: dict = Field(default_factory=dict)
+
+
+class RiskOrchestratorInterventionResponse(BaseModel):
+    intervention_id: str
+    action_type: str
+    status: str
+    reason_note: str
+    intent_id: str | None = None
+    result_summary: dict
+    created_at: datetime
+
+
+class RiskOrchestratorAutoTriggerLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    trigger_id: str
+    breach_type: str
+    target_key: str
+    severity: str
+    suggested_action: str
+    payload: dict
+    acknowledged_by: str | None = None
+    acknowledged_at: datetime | None = None
+    created_at: datetime
+
+
+class RiskOrchestratorRejectDetailResponse(BaseModel):
+    id: str
+    created_at: datetime
+    strategy_id: str | None = None
+    strategy_version_id: str | None = None
+    symbol: str | None = None
+    reason_codes: list[str]
+    root_cause: str | None = None
+    details: dict
+
+
+class RiskOrchestratorAuditTimelineItemResponse(BaseModel):
+    event_id: str
+    event_type: str
+    actor_id: str | None = None
+    actor_role: str | None = None
+    status: str
+    reason_note: str
+    payload: dict
+    created_at: datetime
+
+
+class RiskOrchestratorAlertResponse(BaseModel):
+    id: str
+    alert_type: str
+    severity: str
+    status: str
+    message: str
+    details: dict
+    created_at: datetime
 
 
 class UserPortfolioOverviewResponse(BaseModel):

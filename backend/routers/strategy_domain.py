@@ -5,9 +5,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import require_admin
+from deps import require_admin, require_super_admin
 from models import (
-    AuditLog,
     DecisionTraceCold,
     DecisionTraceHot,
     ExecutionIntent,
@@ -24,9 +23,28 @@ from schemas import (
     ExecutionIntentResponse,
     RegimeEvaluationResponse,
     RegimeSnapshotResponse,
+    RiskOrchestratorAlertResponse,
     RiskOrchestratorAnalyticsResponse,
+    RiskOrchestratorAuditTimelineItemResponse,
+    RiskOrchestratorAutoTriggerLogResponse,
+    RiskOrchestratorControlActionRequest,
+    RiskOrchestratorControlActionResponse,
+    RiskOrchestratorInterventionRequest,
+    RiskOrchestratorInterventionResponse,
+    RiskOrchestratorManualOverrideCreateRequest,
+    RiskOrchestratorManualOverrideDeactivateRequest,
+    RiskOrchestratorManualOverrideResponse,
+    RiskOrchestratorOpenPositionResponse,
+    RiskOrchestratorPolicyApplyRequest,
+    RiskOrchestratorPolicyChangeRequestResponse,
+    RiskOrchestratorPolicyHistoryResponse,
     RiskOrchestratorPolicyResponse,
+    RiskOrchestratorPolicyRevertRequest,
+    RiskOrchestratorPolicySimulationRequest,
+    RiskOrchestratorPolicySimulationResponse,
     RiskOrchestratorPolicyUpdate,
+    RiskOrchestratorPolicyVersionResponse,
+    RiskOrchestratorRejectDetailResponse,
     RiskOrchestratorRejectResponse,
     RiskOrchestratorStatusResponse,
     RiskOrchestratorSupervisorResponse,
@@ -48,11 +66,25 @@ from services.audit_service import create_audit_log
 from services.decision_kernel_service import build_context_hash, build_decision_hash, evaluate_decision_context
 from services.regime_classifier_service import classify_regime, is_regime_allowed, persist_regime_snapshot
 from services.risk_orchestrator_service import (
+    apply_policy_from_simulation,
+    build_audit_timeline,
     build_status_snapshot,
+    create_manual_override,
+    deactivate_manual_override,
     evaluate_pre_trade,
+    execute_control_action,
+    execute_position_intervention,
     get_or_create_policy,
+    get_reject_detail,
+    list_auto_trigger_logs,
+    list_manual_overrides,
+    list_open_positions,
+    list_policy_history,
+    list_risk_alerts,
+    list_risk_rejects,
+    revert_policy_to_version,
     run_in_trade_supervisor,
-    update_policy,
+    simulate_policy_change,
 )
 from services.runtime_execution_service import dispatch_decision_result, process_submission_event_once
 from services.runtime_ops_service import (
@@ -138,6 +170,22 @@ def _evaluate_regime_gate(
         )
 
     return RegimeSnapshotResponse.model_validate(snapshot_row), allowed, reason_code, binding.binding_id if binding else None
+
+
+def _policy_response(policy) -> RiskOrchestratorPolicyResponse:
+    return RiskOrchestratorPolicyResponse(
+        reference_equity_usd=policy.reference_equity_usd,
+        account_max_notional_pct=policy.account_max_notional_pct,
+        symbol_max_notional_pct=policy.symbol_max_notional_pct,
+        strategy_max_concurrent_positions=policy.strategy_max_concurrent_positions,
+        strategy_cooldown_seconds=policy.strategy_cooldown_seconds,
+        max_order_frequency_per_min=policy.max_order_frequency_per_min,
+        max_order_burst_per_10s=policy.max_order_burst_per_10s,
+        daily_loss_limit_pct=policy.daily_loss_limit_pct,
+        duplicate_suppression_window_seconds=policy.duplicate_suppression_window_seconds,
+        policy_version=int(getattr(policy, "policy_version", 1) or 1),
+        updated_at=policy.updated_at,
+    )
 
 
 @router.get("/admin/strategies", response_model=list[StrategyDefinitionResponse])
@@ -403,40 +451,98 @@ def admin_regime_evaluate(
 def admin_risk_policy(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _ = current_admin
     policy = get_or_create_policy(db)
-    return RiskOrchestratorPolicyResponse(
-        reference_equity_usd=policy.reference_equity_usd,
-        account_max_notional_pct=policy.account_max_notional_pct,
-        symbol_max_notional_pct=policy.symbol_max_notional_pct,
-        strategy_max_concurrent_positions=policy.strategy_max_concurrent_positions,
-        strategy_cooldown_seconds=policy.strategy_cooldown_seconds,
-        max_order_frequency_per_min=policy.max_order_frequency_per_min,
-        max_order_burst_per_10s=policy.max_order_burst_per_10s,
-        daily_loss_limit_pct=policy.daily_loss_limit_pct,
-        duplicate_suppression_window_seconds=policy.duplicate_suppression_window_seconds,
-        updated_at=policy.updated_at,
-    )
+    return _policy_response(policy)
 
 
 @router.put("/admin/risk-orchestrator/policy", response_model=RiskOrchestratorPolicyResponse)
 def admin_update_risk_policy(
     payload: RiskOrchestratorPolicyUpdate,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    _ = payload
+    _ = current_super_admin
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="simulation_required_use_policy_simulate_and_apply",
+    )
+
+
+@router.post(
+    "/admin/risk-orchestrator/policy/simulate",
+    response_model=RiskOrchestratorPolicySimulationResponse,
+)
+def admin_risk_policy_simulate(
+    payload: RiskOrchestratorPolicySimulationRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = simulate_policy_change(
+        db,
+        actor_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        candidate_payload=payload.candidate_policy.model_dump(),
+    )
+    return RiskOrchestratorPolicySimulationResponse(**result)
+
+
+@router.post(
+    "/admin/risk-orchestrator/policy/apply",
+    response_model=RiskOrchestratorPolicyResponse,
+)
+def admin_risk_policy_apply(
+    payload: RiskOrchestratorPolicyApplyRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    result = apply_policy_from_simulation(
+        db,
+        simulation_id=payload.simulation_id,
+        actor_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        reason_note=payload.reason_note,
+        double_confirmed=payload.double_confirmed,
+        approval_note=payload.approval_note,
+    )
+    return _policy_response(result["policy"])
+
+
+@router.get(
+    "/admin/risk-orchestrator/policy/history",
+    response_model=RiskOrchestratorPolicyHistoryResponse,
+)
+def admin_risk_policy_history(
+    limit: int = 25,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     _ = current_admin
-    policy = update_policy(db, payload=payload.model_dump())
-    return RiskOrchestratorPolicyResponse(
-        reference_equity_usd=policy.reference_equity_usd,
-        account_max_notional_pct=policy.account_max_notional_pct,
-        symbol_max_notional_pct=policy.symbol_max_notional_pct,
-        strategy_max_concurrent_positions=policy.strategy_max_concurrent_positions,
-        strategy_cooldown_seconds=policy.strategy_cooldown_seconds,
-        max_order_frequency_per_min=policy.max_order_frequency_per_min,
-        max_order_burst_per_10s=policy.max_order_burst_per_10s,
-        daily_loss_limit_pct=policy.daily_loss_limit_pct,
-        duplicate_suppression_window_seconds=policy.duplicate_suppression_window_seconds,
-        updated_at=policy.updated_at,
+    history = list_policy_history(db, limit=limit)
+    return RiskOrchestratorPolicyHistoryResponse(
+        versions=[RiskOrchestratorPolicyVersionResponse.model_validate(item) for item in history["versions"]],
+        change_requests=[RiskOrchestratorPolicyChangeRequestResponse.model_validate(item) for item in history["change_requests"]],
     )
+
+
+@router.post(
+    "/admin/risk-orchestrator/policy/revert/{version_id}",
+    response_model=RiskOrchestratorPolicyResponse,
+)
+def admin_risk_policy_revert(
+    version_id: str,
+    payload: RiskOrchestratorPolicyRevertRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    result = revert_policy_to_version(
+        db,
+        version_id=version_id,
+        actor_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        reason_note=payload.reason_note,
+        double_confirmed=payload.double_confirmed,
+    )
+    return _policy_response(result["policy"])
 
 
 @router.get("/admin/risk-orchestrator/status", response_model=RiskOrchestratorStatusResponse)
@@ -445,20 +551,10 @@ def admin_risk_status(current_admin: User = Depends(require_admin), db: Session 
     snapshot = build_status_snapshot(db)
     policy = snapshot["policy"]
     return RiskOrchestratorStatusResponse(
-        policy=RiskOrchestratorPolicyResponse(
-            reference_equity_usd=policy.reference_equity_usd,
-            account_max_notional_pct=policy.account_max_notional_pct,
-            symbol_max_notional_pct=policy.symbol_max_notional_pct,
-            strategy_max_concurrent_positions=policy.strategy_max_concurrent_positions,
-            strategy_cooldown_seconds=policy.strategy_cooldown_seconds,
-            max_order_frequency_per_min=policy.max_order_frequency_per_min,
-            max_order_burst_per_10s=policy.max_order_burst_per_10s,
-            daily_loss_limit_pct=policy.daily_loss_limit_pct,
-            duplicate_suppression_window_seconds=policy.duplicate_suppression_window_seconds,
-            updated_at=policy.updated_at,
-        ),
+        policy=_policy_response(policy),
         kill_switch_active=snapshot["kill_switch_active"],
         kill_switch_reasons=snapshot["kill_switch_reasons"],
+        trading_enabled=snapshot.get("trading_enabled", True),
         open_intents=snapshot["open_intents"],
         open_intents_by_symbol=snapshot["open_intents_by_symbol"],
         open_intents_by_strategy=snapshot["open_intents_by_strategy"],
@@ -467,17 +563,20 @@ def admin_risk_status(current_admin: User = Depends(require_admin), db: Session 
 
 @router.get("/admin/risk-orchestrator/rejects", response_model=list[RiskOrchestratorRejectResponse])
 def admin_risk_rejects(
+    reason_code: str | None = None,
+    symbol: str | None = None,
+    strategy_id: str | None = None,
     limit: int = 50,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     _ = current_admin
-    rows = (
-        db.query(AuditLog)
-        .filter(AuditLog.action == "risk_orchestrator_reject")
-        .order_by(AuditLog.created_at.desc())
-        .limit(limit)
-        .all()
+    rows = list_risk_rejects(
+        db,
+        reason_code=reason_code,
+        symbol=symbol,
+        strategy_id=strategy_id,
+        limit=limit,
     )
     results: list[RiskOrchestratorRejectResponse] = []
     for row in rows:
@@ -496,11 +595,325 @@ def admin_risk_rejects(
     return results
 
 
+@router.get("/admin/risk-orchestrator/rejects/{reject_id}", response_model=RiskOrchestratorRejectDetailResponse)
+def admin_risk_reject_detail(
+    reject_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    row = get_reject_detail(db, audit_log_id=reject_id)
+    details = row.details or {}
+    reason_codes = details.get("reason_codes", [])
+    return RiskOrchestratorRejectDetailResponse(
+        id=row.id,
+        created_at=row.created_at,
+        strategy_id=details.get("strategy_id"),
+        strategy_version_id=details.get("strategy_version_id"),
+        symbol=details.get("symbol"),
+        reason_codes=reason_codes,
+        root_cause=(reason_codes[0] if reason_codes else None),
+        details=details,
+    )
+
+
 @router.post("/admin/risk-orchestrator/supervisor/run", response_model=RiskOrchestratorSupervisorResponse)
 def admin_risk_supervisor_run(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    _ = current_admin
-    result = run_in_trade_supervisor(db)
+    result = run_in_trade_supervisor(
+        db,
+        persist=True,
+        actor_id=current_admin.id,
+        actor_role=current_admin.role.value,
+    )
     return RiskOrchestratorSupervisorResponse(**result)
+
+
+@router.get(
+    "/admin/risk-orchestrator/supervisor/positions",
+    response_model=list[RiskOrchestratorOpenPositionResponse],
+)
+def admin_risk_supervisor_positions(
+    limit: int = 100,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows = list_open_positions(db, limit=limit)
+    return [
+        RiskOrchestratorOpenPositionResponse(
+            position_id=row.position_id,
+            user_id=row.user_id,
+            strategy_id=row.strategy_id,
+            symbol=row.symbol,
+            size=row.size,
+            entry_price=row.entry_price,
+            current_price=row.current_price,
+            unrealized_pnl=row.unrealized_pnl,
+            leverage=row.leverage,
+            cluster_id=row.cluster_id,
+            status=row.status,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+        for row in rows
+    ]
+
+
+@router.post(
+    "/admin/risk-orchestrator/supervisor/intervene",
+    response_model=RiskOrchestratorInterventionResponse,
+)
+def admin_risk_supervisor_intervene(
+    payload: RiskOrchestratorInterventionRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    result = execute_position_intervention(
+        db,
+        position_id=payload.position_id,
+        action_type=payload.action_type,
+        reason_note=payload.reason_note,
+        actor_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        payload=payload.payload,
+    )
+    intervention = result["intervention"]
+    return RiskOrchestratorInterventionResponse(
+        intervention_id=intervention.intervention_id,
+        action_type=intervention.action_type,
+        status=intervention.status,
+        reason_note=intervention.reason_note,
+        intent_id=intervention.intent_id,
+        result_summary=intervention.result_summary,
+        created_at=intervention.created_at,
+    )
+
+
+@router.post(
+    "/admin/risk-orchestrator/actions/execute",
+    response_model=RiskOrchestratorControlActionResponse,
+)
+def admin_risk_control_action(
+    payload: RiskOrchestratorControlActionRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    result = execute_control_action(
+        db,
+        action_type=payload.action_type,
+        reason_note=payload.reason_note,
+        actor_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        context=payload.context,
+    )
+    intervention = result["intervention"]
+    return RiskOrchestratorControlActionResponse(
+        intervention_id=intervention.intervention_id,
+        action_type=payload.action_type,
+        status=intervention.status,
+        reason_note=intervention.reason_note,
+        effective_state=result["effective_state"],
+        created_at=intervention.created_at,
+    )
+
+
+@router.post(
+    "/admin/risk-orchestrator/actions/kill-switch",
+    response_model=RiskOrchestratorControlActionResponse,
+)
+def admin_risk_kill_switch_action(
+    payload: RiskOrchestratorControlActionRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    result = execute_control_action(
+        db,
+        action_type="kill_switch",
+        reason_note=payload.reason_note,
+        actor_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        context=payload.context,
+    )
+    intervention = result["intervention"]
+    return RiskOrchestratorControlActionResponse(
+        intervention_id=intervention.intervention_id,
+        action_type="kill_switch",
+        status=intervention.status,
+        reason_note=intervention.reason_note,
+        effective_state=result["effective_state"],
+        created_at=intervention.created_at,
+    )
+
+
+@router.post(
+    "/admin/risk-orchestrator/actions/global-pause",
+    response_model=RiskOrchestratorControlActionResponse,
+)
+def admin_risk_global_pause_action(
+    payload: RiskOrchestratorControlActionRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    result = execute_control_action(
+        db,
+        action_type="global_trading_pause",
+        reason_note=payload.reason_note,
+        actor_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        context=payload.context,
+    )
+    intervention = result["intervention"]
+    return RiskOrchestratorControlActionResponse(
+        intervention_id=intervention.intervention_id,
+        action_type="global_trading_pause",
+        status=intervention.status,
+        reason_note=intervention.reason_note,
+        effective_state=result["effective_state"],
+        created_at=intervention.created_at,
+    )
+
+
+@router.post(
+    "/admin/risk-orchestrator/actions/force-risk-check",
+    response_model=RiskOrchestratorControlActionResponse,
+)
+def admin_risk_force_check_action(
+    payload: RiskOrchestratorControlActionRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    result = execute_control_action(
+        db,
+        action_type="force_risk_check",
+        reason_note=payload.reason_note,
+        actor_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        context=payload.context,
+    )
+    intervention = result["intervention"]
+    return RiskOrchestratorControlActionResponse(
+        intervention_id=intervention.intervention_id,
+        action_type="force_risk_check",
+        status=intervention.status,
+        reason_note=intervention.reason_note,
+        effective_state=result["effective_state"],
+        created_at=intervention.created_at,
+    )
+
+
+@router.post(
+    "/admin/risk-orchestrator/exposure/overrides",
+    response_model=RiskOrchestratorManualOverrideResponse,
+)
+def admin_risk_exposure_override_create(
+    payload: RiskOrchestratorManualOverrideCreateRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    override_value = {
+        "max_notional_pct": payload.max_notional_pct,
+        "max_open_count": payload.max_open_count,
+        "block_new_adds": payload.block_new_adds,
+    }
+    row = create_manual_override(
+        db,
+        actor_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        override_type=payload.override_type,
+        target_key=payload.target_key,
+        reason_note=payload.reason_note,
+        override_value=override_value,
+        expires_in_minutes=payload.expires_in_minutes,
+    )
+    return RiskOrchestratorManualOverrideResponse.model_validate(row)
+
+
+@router.get(
+    "/admin/risk-orchestrator/exposure/overrides",
+    response_model=list[RiskOrchestratorManualOverrideResponse],
+)
+def admin_risk_exposure_override_list(
+    active_only: bool = True,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows = list_manual_overrides(db, active_only=active_only)
+    return [RiskOrchestratorManualOverrideResponse.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/admin/risk-orchestrator/exposure/overrides/{override_id}/deactivate",
+    response_model=RiskOrchestratorManualOverrideResponse,
+)
+def admin_risk_exposure_override_deactivate(
+    override_id: str,
+    payload: RiskOrchestratorManualOverrideDeactivateRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    row = deactivate_manual_override(
+        db,
+        override_id=override_id,
+        actor_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        reason_note=payload.reason_note,
+    )
+    return RiskOrchestratorManualOverrideResponse.model_validate(row)
+
+
+@router.get(
+    "/admin/risk-orchestrator/auto-trigger-logs",
+    response_model=list[RiskOrchestratorAutoTriggerLogResponse],
+)
+def admin_risk_auto_trigger_logs(
+    limit: int = 50,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows = list_auto_trigger_logs(db, limit=limit)
+    return [RiskOrchestratorAutoTriggerLogResponse.model_validate(row) for row in rows]
+
+
+@router.get(
+    "/admin/risk-orchestrator/audit/timeline",
+    response_model=list[RiskOrchestratorAuditTimelineItemResponse],
+)
+def admin_risk_audit_timeline(
+    limit: int = 100,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows = build_audit_timeline(db, limit=limit)
+    return [RiskOrchestratorAuditTimelineItemResponse(**row) for row in rows]
+
+
+@router.get(
+    "/admin/risk-orchestrator/alerts",
+    response_model=list[RiskOrchestratorAlertResponse],
+)
+def admin_risk_alerts(
+    severity: str | None = None,
+    limit: int = 50,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows = list_risk_alerts(db, severity=severity, limit=limit)
+    return [
+        RiskOrchestratorAlertResponse(
+            id=row.id,
+            alert_type=row.alert_type,
+            severity=row.severity,
+            status=row.status,
+            message=row.message,
+            details=row.details,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
 
 
 @router.post("/admin/runtime/dispatch", response_model=RuntimeDispatchResponse)

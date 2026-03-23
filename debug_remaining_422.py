@@ -7,7 +7,7 @@ import requests
 import json
 import uuid
 
-BASE_URL = "https://execution-safety-hub.preview.emergentagent.com"
+BASE_URL = "https://hard-guard-layer.preview.emergentagent.com"
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
 SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
 
