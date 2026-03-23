@@ -1180,10 +1180,10 @@ def admin_release_gate_alias(current_user: User = Depends(require_admin), db: Se
 @router.post("/execution-readiness/override", response_model=ReleaseGateOverrideResponse)
 def create_execution_guard_override(
     payload: ReleaseGateOverrideRequest,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
-    reason_code = payload.reason_code or "execution_guard_manual_override"
+    reason_code = payload.reason_code or "EXECUTION_GUARD_MANUAL_OVERRIDE"
     try:
         row = create_release_gate_override(
             db,
@@ -1223,7 +1223,7 @@ def create_execution_guard_override(
 @router.post("/execution-override", response_model=ReleaseGateOverrideResponse)
 def create_execution_guard_override_alias(
     payload: ReleaseGateOverrideRequest,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
     return create_execution_guard_override(payload=payload, current_user=current_user, db=db)
@@ -1232,7 +1232,7 @@ def create_execution_guard_override_alias(
 @router.post("/execution-readiness/override/{override_id}/revoke", response_model=ReleaseGateOverrideResponse)
 def revoke_execution_guard_override(
     override_id: str,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
     try:

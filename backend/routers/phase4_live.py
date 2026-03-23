@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from core.users.user_exchange_connector import credential_fingerprint, mask_secret
-from db import get_db
-from deps import get_current_user, require_admin
+from db import get_db, redis_client
+from deps import get_current_user, require_admin, require_super_admin
 from models import AdminControl, User
 from schemas import (
     ExchangeSettingsResponse,
@@ -30,8 +30,15 @@ from schemas import (
     ActiveAlertResponse,
     TestOrderResponse,
     TestnetConnectivityResponse,
+    ProductionGateChecklistUpdateRequest,
+    ProductionGateExportResponse,
+    ProductionGateModeTransitionRequest,
+    ProductionGateOverrideCreateRequest,
+    ProductionGateStateUpdateRequest,
+    ProductionGateStatusResponse,
 )
 from services.audit_service import create_audit_log
+from services.execution_mode_control_service import get_execution_mode, switch_execution_mode
 from services.live_mode_service import (
     adapter,
     apply_config_update,
@@ -60,9 +67,24 @@ from services.live_mode_service import (
     trigger_close_all_positions,
     trigger_stop_all_bots,
 )
+from services.production_gate_service import (
+    build_production_gate_export,
+    create_production_gate_override,
+    enforce_production_gate_or_raise,
+    get_production_gate_status,
+    rerun_production_gate_checks,
+    revoke_production_gate_override,
+    set_production_gate_state,
+    update_production_gate_checklist_item,
+)
 
 router = APIRouter(prefix="/phase4", tags=["phase4_live"])
 logger = logging.getLogger(__name__)
+MODE_TRANSITION_PHRASES = {
+    "LIVE": "SWITCH TO LIVE",
+    "PAPER": "SWITCH TO PAPER",
+    "MOCK": "SWITCH TO MOCK",
+}
 
 
 def _quality_response(item) -> ExecutionQualitySummaryResponse:
@@ -109,6 +131,15 @@ def update_live_config(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    if bool(payload.live_mode_enabled) or bool(payload.trading_enabled):
+        enforce_production_gate_or_raise(
+            db,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            action_type="phase4_live_config_enable",
+            reason_text="phase4_live_config_enable",
+        )
+
     config = get_or_create_live_config(db)
     updated = apply_config_update(db, config, payload.model_dump())
     create_audit_log(
@@ -360,7 +391,7 @@ def admin_release_gate(
 @router.post("/admin/release-gate/override", response_model=ReleaseGateOverrideResponse)
 def create_gate_override(
     payload: ReleaseGateOverrideRequest,
-    current_admin: User = Depends(require_admin),
+    current_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
     try:
@@ -402,7 +433,7 @@ def create_gate_override(
 @router.post("/admin/release-gate/override/{override_id}/revoke", response_model=ReleaseGateOverrideResponse)
 def revoke_gate_override(
     override_id: str,
-    current_admin: User = Depends(require_admin),
+    current_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
     try:
@@ -456,6 +487,203 @@ def gate_override_history(
         )
         for row in rows
     ]
+
+
+@router.get("/admin/production-gate", response_model=ProductionGateStatusResponse)
+def admin_production_gate_status(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    refresh_checks: bool = Query(default=False),
+):
+    return ProductionGateStatusResponse(**get_production_gate_status(db, refresh_checks=bool(refresh_checks), audit_limit=40))
+
+
+@router.post("/admin/production-gate/checks/rerun", response_model=ProductionGateStatusResponse)
+def admin_production_gate_rerun_all(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    payload = rerun_production_gate_checks(
+        db,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        check_key=None,
+    )
+    return ProductionGateStatusResponse(**payload)
+
+
+@router.post("/admin/production-gate/checks/{check_key}/rerun", response_model=ProductionGateStatusResponse)
+def admin_production_gate_rerun_single(
+    check_key: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = rerun_production_gate_checks(
+            db,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            check_key=check_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return ProductionGateStatusResponse(**payload)
+
+
+@router.patch("/admin/production-gate/checklist/{item_key}", response_model=ProductionGateStatusResponse)
+def admin_production_gate_update_checklist(
+    item_key: str,
+    request: ProductionGateChecklistUpdateRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = update_production_gate_checklist_item(
+            db,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            item_key=item_key,
+            checked=bool(request.checked),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return ProductionGateStatusResponse(**payload)
+
+
+@router.post("/admin/production-gate/state", response_model=ProductionGateStatusResponse)
+def admin_production_gate_set_state(
+    request: ProductionGateStateUpdateRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = set_production_gate_state(
+            db,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            target_state=request.target_state,
+            reason_code=request.reason_code,
+            reason_text=request.reason_text,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return ProductionGateStatusResponse(**payload)
+
+
+@router.post("/admin/production-gate/override", response_model=ProductionGateStatusResponse)
+def admin_production_gate_create_override(
+    request: ProductionGateOverrideCreateRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = create_production_gate_override(
+            db,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            reason_code=request.reason_code,
+            reason_text=request.reason_text,
+            ttl_minutes=int(request.ttl_minutes),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return ProductionGateStatusResponse(**payload)
+
+
+@router.post("/admin/production-gate/override/{override_id}/revoke", response_model=ProductionGateStatusResponse)
+def admin_production_gate_revoke_override(
+    override_id: str,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload = revoke_production_gate_override(
+            db,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            override_id=override_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return ProductionGateStatusResponse(**payload)
+
+
+@router.post("/admin/production-gate/mode-transition")
+def admin_production_gate_mode_transition(
+    request: ProductionGateModeTransitionRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    target_mode = str(request.target_mode or "").strip().upper()
+    expected_phrase = MODE_TRANSITION_PHRASES[target_mode]
+    if str(request.confirmation_phrase or "").strip().upper() != expected_phrase:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "invalid_confirmation_phrase", "expected_phrase": expected_phrase},
+        )
+
+    previous_mode = get_execution_mode(db, redis_client)
+    if target_mode == "LIVE":
+        enforce_production_gate_or_raise(
+            db,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            action_type="production_gate_mode_transition",
+            reason_text=request.reason_text,
+        )
+
+    try:
+        switch_payload = switch_execution_mode(
+            db,
+            redis_client,
+            mode=target_mode,
+            reason=request.reason_text,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="PRODUCTION_GATE_MODE_TRANSITION",
+        entity_type="production_gate",
+        entity_id="global",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning" if target_mode == "LIVE" else "info",
+        details={
+            "previous_state": previous_mode,
+            "next_state": target_mode,
+            "reason_code": "MODE_TRANSITION",
+            "reason_text": request.reason_text,
+            "expiry": None,
+        },
+    )
+    gate_payload = get_production_gate_status(db, refresh_checks=False, audit_limit=40)
+    return {
+        "status": "ok",
+        "transition": switch_payload,
+        "gate": gate_payload,
+    }
+
+
+@router.get("/admin/production-gate/export", response_model=ProductionGateExportResponse)
+def admin_production_gate_export(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    payload = build_production_gate_export(db)
+    return ProductionGateExportResponse(**payload)
+
+
+@router.get("/admin/production-gate/export/raw")
+def admin_production_gate_export_raw(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    payload = build_production_gate_export(db)
+    return payload
 
 
 @router.get("/admin/override-analytics", response_model=OverrideAnalyticsResponse)

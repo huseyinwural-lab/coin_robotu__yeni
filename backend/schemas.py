@@ -4203,3 +4203,93 @@ class LiveReadinessScoreResponse(BaseModel):
     release_gate_status: str
     live_activation: str
     critical_blockers: list[str]
+
+
+class ProductionGateChecklistItemResponse(BaseModel):
+    item_key: str
+    title: str
+    required: bool = True
+    checked: bool = False
+    updated_at: datetime | None = None
+    updated_by_user_id: str | None = None
+
+
+class ProductionGateCheckItemResponse(BaseModel):
+    check_key: str
+    title: str
+    status: str
+    blocking: bool
+    fail_reason: str | None = None
+    remediation: str | None = None
+    remediation_payload: dict = Field(default_factory=dict)
+    last_run_at: datetime | None = None
+    stale: bool = False
+
+
+class ProductionGateOverrideSummaryResponse(BaseModel):
+    override_id: str
+    reason_code: str
+    reason_text: str
+    expires_at: datetime
+    created_at: datetime
+    revoked_at: datetime | None = None
+    created_by_user_id: str
+
+
+class ProductionGateAuditItemResponse(BaseModel):
+    id: str
+    action: str
+    severity: str
+    actor_user_id: str | None = None
+    actor_role: str
+    details: dict = Field(default_factory=dict)
+    created_at: datetime
+
+
+class ProductionGateStatusResponse(BaseModel):
+    configured_state: str
+    effective_state: str
+    deploy_allowed: bool
+    checklist_complete: bool
+    checks_all_pass: bool
+    has_stale_or_running: bool
+    blocked_reason_codes: list[str] = Field(default_factory=list)
+    blocked_reason_text: str | None = None
+    release_gate_contract: str = "UNKNOWN"
+    validation_block_http_status: int = 400
+    deploy_block_http_status: int = 403
+    checklist: list[ProductionGateChecklistItemResponse] = Field(default_factory=list)
+    checks: list[ProductionGateCheckItemResponse] = Field(default_factory=list)
+    active_override: ProductionGateOverrideSummaryResponse | None = None
+    updated_at: datetime
+    updated_by_user_id: str | None = None
+    audit_history: list[ProductionGateAuditItemResponse] = Field(default_factory=list)
+
+
+class ProductionGateChecklistUpdateRequest(BaseModel):
+    checked: bool
+
+
+class ProductionGateStateUpdateRequest(BaseModel):
+    target_state: str = Field(pattern="^(NO_GO|GO)$")
+    reason_code: str = Field(min_length=2, max_length=80)
+    reason_text: str = Field(min_length=5, max_length=600)
+
+
+class ProductionGateOverrideCreateRequest(BaseModel):
+    reason_code: str = Field(
+        pattern="^(INCIDENT_MITIGATION|THIRD_PARTY_DEGRADATION|HOTFIX_VALIDATED|MANUAL_RISK_ACCEPTANCE)$"
+    )
+    reason_text: str = Field(min_length=12, max_length=1000)
+    ttl_minutes: int = Field(default=30, ge=1, le=30)
+
+
+class ProductionGateModeTransitionRequest(BaseModel):
+    target_mode: str = Field(pattern="^(LIVE|PAPER|MOCK)$")
+    reason_text: str = Field(min_length=8, max_length=600)
+    confirmation_phrase: str = Field(min_length=5, max_length=80)
+
+
+class ProductionGateExportResponse(BaseModel):
+    exported_at: datetime
+    gate: ProductionGateStatusResponse

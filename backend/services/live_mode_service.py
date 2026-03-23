@@ -60,7 +60,17 @@ MAX_SAFE_POSITION_PCT = 0.1
 MAX_SAFE_LEVERAGE = 1
 MAX_SAFE_NOTIONAL_EXPOSURE = 150
 VALIDATION_STALE_MINUTES = 10
-OVERRIDE_REASON_CODES = {"false_positive", "exchange_incident", "ops_emergency", "manual_review", "execution_guard_manual_override"}
+OVERRIDE_REASON_CODES = {
+    "FALSE_POSITIVE",
+    "EXCHANGE_INCIDENT",
+    "OPS_EMERGENCY",
+    "MANUAL_REVIEW",
+    "EXECUTION_GUARD_MANUAL_OVERRIDE",
+    "INCIDENT_MITIGATION",
+    "THIRD_PARTY_DEGRADATION",
+    "HOTFIX_VALIDATED",
+    "MANUAL_RISK_ACCEPTANCE",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -1269,13 +1279,13 @@ def create_release_gate_override(
     deploy_context: dict,
     environment: str = "prod",
 ) -> ReleaseGateOverride:
-    normalized_reason = reason_code.strip().lower()
+    normalized_reason = reason_code.strip().upper()
     if normalized_reason not in OVERRIDE_REASON_CODES:
         raise ValueError("reason_code geçersiz")
     if len(reason_note.strip()) < 12:
         raise ValueError("reason_note en az 12 karakter olmalı")
-    if ttl_minutes > 60:
-        raise ValueError("ttl_minutes en fazla 60 olabilir")
+    if ttl_minutes > 30:
+        raise ValueError("ttl_minutes en fazla 30 olabilir")
 
     gate = release_gate_view(db, environment=environment)
     if gate["status"] != "BLOCKED":

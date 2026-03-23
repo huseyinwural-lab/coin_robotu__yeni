@@ -27,6 +27,7 @@ from services.live_trading_dashboard_service import (
     build_scanner_health,
     export_daily_report_csv,
 )
+from services.production_gate_service import enforce_production_gate_or_raise
 
 router = APIRouter(prefix="/admin/live-trading", tags=["admin_live_trading_dashboard"])
 
@@ -258,6 +259,17 @@ def admin_live_trading_switch_execution_mode(
     db: Session = Depends(get_db),
 ):
     manager = _require_manager(current_admin)
+    previous_mode = get_execution_mode(db, redis_client)
+
+    if payload.mode == "LIVE":
+        enforce_production_gate_or_raise(
+            db,
+            actor_user_id=manager.id,
+            actor_role=manager.role.value,
+            action_type="admin_live_trading_execution_mode",
+            reason_text=payload.reason,
+        )
+
     expected_phrase = MODE_SWITCH_PHRASE[payload.mode]
     if payload.confirmation_phrase.strip().upper() != expected_phrase:
         raise HTTPException(
@@ -272,6 +284,22 @@ def admin_live_trading_switch_execution_mode(
         reason=payload.reason,
         actor_user_id=manager.id,
         actor_role=manager.role.value,
+    )
+    create_audit_log(
+        db,
+        action="PRODUCTION_GATE_MODE_TRANSITION",
+        entity_type="production_gate",
+        entity_id="global",
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning" if payload.mode == "LIVE" else "info",
+        details={
+            "previous_state": previous_mode,
+            "next_state": payload.mode,
+            "reason_code": "MODE_TRANSITION",
+            "reason_text": payload.reason,
+            "expiry": None,
+        },
     )
     return {"status": "ok", **result}
 
