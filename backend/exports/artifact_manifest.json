@@ -1,7 +1,7 @@
 {
   "manifest_version": "2.0",
-  "generated_at": "2026-03-23T23:21:20.916236+00:00",
-  "generated_from_commit": "ecc12188562820467d64f31b705fc43e121e4872",
+  "generated_at": "2026-03-23T23:50:43.598720+00:00",
+  "generated_from_commit": "56602d7aa792bbd5cbd0f94a85642704fe444ecb",
   "artifacts": [
     {
       "path": "/test_reports/production_gate_p1_evidence.md",
@@ -145,6 +145,84 @@
       "chain_position": 10,
       "prev_chain_hash": "4922207ed0ae30499bfa9a1e75089d3fda8335c63405d6f4b014b8617e2ba594",
       "chain_hash": "085d9dfadb9c53278af1f5a6a5fa2c4ef7bd436adb2e945edc904360c7d6827a"
+    },
+    {
+      "path": "/test_reports/production_gate_p2_hardening_evidence.md",
+      "absolute_path": "/app/test_reports/production_gate_p2_hardening_evidence.md",
+      "type": "markdown",
+      "description": "P2 hardening closure evidence (cross-check, risk, flapping, timeline, compare, cleanup)",
+      "commit_hash": "56602d7aa792bbd5cbd0f94a85642704fe444ecb",
+      "timestamp": "2026-03-23T23:50:43.598720+00:00",
+      "exists": true,
+      "size_bytes": 2929,
+      "chain_position": 11,
+      "prev_chain_hash": "085d9dfadb9c53278af1f5a6a5fa2c4ef7bd436adb2e945edc904360c7d6827a",
+      "chain_hash": "402f779ce2ebf3be6484641b4a78751cea3bb19c7623243189f7b7e1ba714d8d"
+    },
+    {
+      "path": "/test_reports/production_gate_p2_risk_engine.json",
+      "absolute_path": "/app/test_reports/production_gate_p2_risk_engine.json",
+      "type": "json",
+      "description": "P2 deterministic risk engine factors/weights/explanation evidence",
+      "commit_hash": "56602d7aa792bbd5cbd0f94a85642704fe444ecb",
+      "timestamp": "2026-03-23T23:50:43.598720+00:00",
+      "exists": true,
+      "size_bytes": 915,
+      "chain_position": 12,
+      "prev_chain_hash": "402f779ce2ebf3be6484641b4a78751cea3bb19c7623243189f7b7e1ba714d8d",
+      "chain_hash": "9004329fb079289fdd764925e591de728926884d52c2c1d21683334d115f8e09"
+    },
+    {
+      "path": "/test_reports/production_gate_p2_flapping.json",
+      "absolute_path": "/app/test_reports/production_gate_p2_flapping.json",
+      "type": "json",
+      "description": "P2 flapping metrics (window/threshold/severity) evidence",
+      "commit_hash": "56602d7aa792bbd5cbd0f94a85642704fe444ecb",
+      "timestamp": "2026-03-23T23:50:43.598720+00:00",
+      "exists": true,
+      "size_bytes": 12421,
+      "chain_position": 13,
+      "prev_chain_hash": "9004329fb079289fdd764925e591de728926884d52c2c1d21683334d115f8e09",
+      "chain_hash": "15da8b4fa1b566b93687d149ef05173ea93d6d8f73d71541f433d4787a2dff85"
+    },
+    {
+      "path": "/test_reports/production_gate_p2_timeline_audit_match.json",
+      "absolute_path": "/app/test_reports/production_gate_p2_timeline_audit_match.json",
+      "type": "json",
+      "description": "P2 timeline and audit_id/request_id match evidence",
+      "commit_hash": "56602d7aa792bbd5cbd0f94a85642704fe444ecb",
+      "timestamp": "2026-03-23T23:50:43.598720+00:00",
+      "exists": true,
+      "size_bytes": 20859,
+      "chain_position": 14,
+      "prev_chain_hash": "15da8b4fa1b566b93687d149ef05173ea93d6d8f73d71541f433d4787a2dff85",
+      "chain_hash": "ae1d4abf1bbf0622af997751f0806e61672a1211be4962c1b336b6700607be58"
+    },
+    {
+      "path": "/test_reports/production_gate_p2_compare_multi_run.json",
+      "absolute_path": "/app/test_reports/production_gate_p2_compare_multi_run.json",
+      "type": "json",
+      "description": "P2 multi-run compare evidence (run_count >= 3)",
+      "commit_hash": "56602d7aa792bbd5cbd0f94a85642704fe444ecb",
+      "timestamp": "2026-03-23T23:50:43.598720+00:00",
+      "exists": true,
+      "size_bytes": 2407,
+      "chain_position": 15,
+      "prev_chain_hash": "ae1d4abf1bbf0622af997751f0806e61672a1211be4962c1b336b6700607be58",
+      "chain_hash": "0410d0276ec08a7b08629a241d7c3172299a77d488d25ef8890db771445438ea"
+    },
+    {
+      "path": "/test_reports/iteration_115.json",
+      "absolute_path": "/app/test_reports/iteration_115.json",
+      "type": "json",
+      "description": "P2 independent testing agent report",
+      "commit_hash": "56602d7aa792bbd5cbd0f94a85642704fe444ecb",
+      "timestamp": "2026-03-23T23:50:43.598720+00:00",
+      "exists": true,
+      "size_bytes": 4239,
+      "chain_position": 16,
+      "prev_chain_hash": "0410d0276ec08a7b08629a241d7c3172299a77d488d25ef8890db771445438ea",
+      "chain_hash": "a67b28e3307c1a9ca526e653ccb7fa8f67b2058ebd8df06973a3b4b8495c16ed"
     }
   ],
   "schema_version": "1.1"
