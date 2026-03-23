@@ -40,6 +40,7 @@ export default function AdminStrategyObservabilityDetailPage() {
 
   const [detailData, setDetailData] = useState(null);
   const [timelineData, setTimelineData] = useState({ summary: null, items: [] });
+  const [timelineKpis, setTimelineKpis] = useState(null);
 
   const activeFilters = useMemo(
     () => ({
@@ -115,9 +116,11 @@ export default function AdminStrategyObservabilityDetailPage() {
         summary: data?.summary || null,
         items: data?.items || [],
       });
+      setTimelineKpis(data?.kpi_cards || null);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Action impact timeline yüklenemedi");
       setTimelineData({ summary: null, items: [] });
+      setTimelineKpis(null);
     } finally {
       setTimelineLoading(false);
     }
@@ -389,6 +392,24 @@ export default function AdminStrategyObservabilityDetailPage() {
               system: {timelineData?.summary?.system_reaction_count ?? 0}
             </Badge>
           </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="strategy-observability-detail-kpi-cards-grid">
+          {[
+            { key: "selected_signals", label: "Selected" },
+            { key: "rejected_signals", label: "Rejected" },
+            { key: "risk_breaches", label: "Risk Breaches" },
+          ].map((card) => {
+            const values = timelineKpis?.[card.key] || { before: 0, after: 0, delta: 0 };
+            return (
+              <div key={card.key} className="border border-black/30 bg-white p-2" data-testid={`strategy-observability-detail-kpi-card-${card.key}`}>
+                <p className="text-xs font-semibold" data-testid={`strategy-observability-detail-kpi-title-${card.key}`}>{card.label}</p>
+                <p className="text-xs" data-testid={`strategy-observability-detail-kpi-before-${card.key}`}>before: {values.before ?? 0}</p>
+                <p className="text-xs" data-testid={`strategy-observability-detail-kpi-after-${card.key}`}>after: {values.after ?? 0}</p>
+                <p className="text-xs" data-testid={`strategy-observability-detail-kpi-delta-${card.key}`}>delta: {values.delta ?? 0}</p>
+              </div>
+            );
+          })}
         </div>
 
         <div className="mt-3 overflow-x-auto border border-black/25 bg-white" data-testid="strategy-observability-detail-timeline-table-wrapper">

@@ -1054,6 +1054,9 @@ def strategy_action_impact_timeline(
     db: Session = Depends(get_db),
 ):
     normalized, start_at, end_at = _resolve_time_range(window, time_from, time_to)
+    window_duration = end_at - start_at
+    prev_start = start_at - window_duration
+    prev_end = start_at
 
     audit_rows = (
         db.query(AuditLog)
@@ -1107,6 +1110,57 @@ def strategy_action_impact_timeline(
     manual_count = sum(1 for item in timeline_rows if item.get("event_type") == "manual_action")
     system_count = sum(1 for item in timeline_rows if item.get("event_type") == "system_reaction")
 
+    def _event_kpis(range_start: datetime, range_end: datetime) -> dict:
+        base_query = db.query(StrategyObservabilityEvent).filter(
+            StrategyObservabilityEvent.created_at >= range_start,
+            StrategyObservabilityEvent.created_at <= range_end,
+        )
+        if strategy_id:
+            base_query = base_query.filter(StrategyObservabilityEvent.strategy_id == strategy_id)
+        selected = base_query.filter(StrategyObservabilityEvent.event_type == "selected_for_execution").count()
+        rejected = base_query.filter(StrategyObservabilityEvent.event_type != "selected_for_execution").count()
+        return {
+            "selected_signals": int(selected),
+            "rejected_signals": int(rejected),
+        }
+
+    def _risk_breach_count(range_start: datetime, range_end: datetime) -> int:
+        rows = (
+            db.query(SystemAlert)
+            .filter(
+                SystemAlert.created_at >= range_start,
+                SystemAlert.created_at <= range_end,
+                or_(
+                    SystemAlert.alert_type.ilike("%breach%"),
+                    SystemAlert.root_cause_code.ilike("%breach%"),
+                ),
+            )
+            .all()
+        )
+        if not strategy_id:
+            return len(rows)
+        matched = []
+        for row in rows:
+            details_blob = json.dumps(row.details or {}, ensure_ascii=False)
+            if strategy_id in str(row.entity_key or "") or strategy_id in details_blob:
+                matched.append(row)
+        return len(matched)
+
+    after_kpis = _event_kpis(start_at, end_at)
+    before_kpis = _event_kpis(prev_start, prev_end)
+    after_kpis["risk_breaches"] = _risk_breach_count(start_at, end_at)
+    before_kpis["risk_breaches"] = _risk_breach_count(prev_start, prev_end)
+
+    kpi_cards = {}
+    for key in ["selected_signals", "rejected_signals", "risk_breaches"]:
+        before_value = int(before_kpis.get(key, 0))
+        after_value = int(after_kpis.get(key, 0))
+        kpi_cards[key] = {
+            "before": before_value,
+            "after": after_value,
+            "delta": after_value - before_value,
+        }
+
     return {
         "status": "success",
         "filters": {
@@ -1121,6 +1175,7 @@ def strategy_action_impact_timeline(
             "manual_action_count": manual_count,
             "system_reaction_count": system_count,
         },
+        "kpi_cards": kpi_cards,
         "items": timeline_rows,
     }
 

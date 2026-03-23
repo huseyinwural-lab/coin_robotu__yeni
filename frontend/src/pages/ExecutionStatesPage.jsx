@@ -52,6 +52,11 @@ export const ExecutionStatesPage = () => {
   const [exportPreview, setExportPreview] = useState({ events: 0, failures: 0, transitions: 0 });
   const [diffSnapshot, setDiffSnapshot] = useState(null);
   const [diffPreviewLoading, setDiffPreviewLoading] = useState(false);
+  const [playbookPreview, setPlaybookPreview] = useState(null);
+  const [playbookPreviewLoading, setPlaybookPreviewLoading] = useState(false);
+  const [playbookApplyLoading, setPlaybookApplyLoading] = useState(false);
+  const [playbookConfirmChecked, setPlaybookConfirmChecked] = useState(false);
+  const [playbookReason, setPlaybookReason] = useState("");
 
   const filters = useMemo(
     () => ({
@@ -296,13 +301,79 @@ export const ExecutionStatesPage = () => {
       const snapshot = data?.state_snapshot || null;
       setDiffSnapshot(snapshot);
       setExportPreview(snapshot?.preview || { events: 0, failures: 0, transitions: 0 });
+      setPlaybookPreview(null);
+      setPlaybookConfirmChecked(false);
     } catch (error) {
       setDiffSnapshot(null);
+      setPlaybookPreview(null);
       if (showError) {
         toast.error(error?.response?.data?.detail || "Diff preview alınamadı");
       }
     } finally {
       setDiffPreviewLoading(false);
+    }
+  };
+
+  const previewDiffPlaybook = async () => {
+    if (!diffSnapshot?.diff) {
+      toast.error("Önce diff preview oluşturulmalı");
+      return;
+    }
+    setPlaybookPreviewLoading(true);
+    try {
+      const { data } = await apiClient.post("/admin-phase3/incident-snapshots/playbook/preview", {
+        recommended_actions: diffSnapshot?.diff?.recommended_actions || [],
+        anomaly_notes: diffSnapshot?.diff?.anomaly_notes || [],
+        scope: {
+          export_scope_type: exportScopeType,
+          export_scope_value: exportScopeValue,
+          compare_enabled: compareEnabled,
+          compare_scope_type: compareScopeType,
+        },
+      });
+      setPlaybookPreview({
+        preview_token: data?.preview_token,
+        ...(data?.preview || {}),
+      });
+      setPlaybookConfirmChecked(false);
+      toast.success("One-click playbook preview hazır");
+    } catch (error) {
+      setPlaybookPreview(null);
+      toast.error(error?.response?.data?.detail || "Playbook preview alınamadı");
+    } finally {
+      setPlaybookPreviewLoading(false);
+    }
+  };
+
+  const applyDiffPlaybook = async () => {
+    const previewToken = playbookPreview?.preview_token;
+    if (!previewToken) {
+      toast.error("Önce playbook preview alınmalı");
+      return;
+    }
+    if (!playbookConfirmChecked) {
+      toast.error("Playbook apply için confirm zorunlu");
+      return;
+    }
+    if (playbookReason.trim().length < 3) {
+      toast.error("Playbook reason en az 3 karakter olmalı");
+      return;
+    }
+    setPlaybookApplyLoading(true);
+    try {
+      const { data } = await apiClient.post("/admin-phase3/incident-snapshots/playbook/apply", {
+        preview_token: previewToken,
+        confirm: true,
+        reason: playbookReason.trim(),
+      });
+      toast.success(data?.message || "Playbook apply tamamlandı (non-destructive)");
+      setPlaybookReason("");
+      setPlaybookConfirmChecked(false);
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Playbook apply başarısız");
+    } finally {
+      setPlaybookApplyLoading(false);
     }
   };
 
@@ -740,6 +811,54 @@ export const ExecutionStatesPage = () => {
                 </p>
               ))}
               {!diffData?.recommended_actions?.length && <p>[INFO] keep current policy (stable)</p>}
+            </div>
+
+            <div className="mt-4 border border-slate-700 bg-slate-950 p-3 text-xs" data-testid="execution-control-diff-playbook-panel">
+              <p className="font-semibold" data-testid="execution-control-diff-playbook-title">One-click Playbook (Preview + Confirm)</p>
+              <p data-testid="execution-control-diff-playbook-note">Non-destructive apply mode aktiftir.</p>
+              <div className="mt-2 flex flex-wrap gap-2" data-testid="execution-control-diff-playbook-buttons-row">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={previewDiffPlaybook}
+                  disabled={playbookPreviewLoading || !diffData}
+                  data-testid="execution-control-diff-playbook-preview-button"
+                >
+                  Playbook Preview
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={applyDiffPlaybook}
+                  disabled={playbookApplyLoading || !playbookPreview?.preview_token || !playbookConfirmChecked || playbookReason.trim().length < 3}
+                  data-testid="execution-control-diff-playbook-apply-button"
+                >
+                  Playbook Apply
+                </Button>
+              </div>
+
+              <p className="mt-2" data-testid="execution-control-diff-playbook-preview-token">
+                preview_token: {playbookPreview?.preview_token || "-"}
+              </p>
+              <p data-testid="execution-control-diff-playbook-severity">
+                highest_severity: {playbookPreview?.highest_severity || "-"}
+              </p>
+
+              <Input
+                value={playbookReason}
+                onChange={(event) => setPlaybookReason(event.target.value)}
+                placeholder="playbook apply reason"
+                data-testid="execution-control-diff-playbook-reason-input"
+              />
+
+              <label className="mt-2 flex items-center gap-2" data-testid="execution-control-diff-playbook-confirm-row">
+                <input
+                  type="checkbox"
+                  checked={playbookConfirmChecked}
+                  onChange={(event) => setPlaybookConfirmChecked(event.target.checked)}
+                  data-testid="execution-control-diff-playbook-confirm-checkbox"
+                />
+                <span>Preview adımlarını kontrol ettim, apply için onaylıyorum.</span>
+              </label>
             </div>
           </div>
         )}

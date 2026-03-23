@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 
@@ -22,6 +23,10 @@ export const ExecutionAnalyticsPage = () => {
   const [failureClasses, setFailureClasses] = useState([]);
   const [executionAlerts, setExecutionAlerts] = useState([]);
   const [alertStatusFilter, setAlertStatusFilter] = useState("all");
+  const [autoAckPolicy, setAutoAckPolicy] = useState(null);
+  const [autoAckReason, setAutoAckReason] = useState("policy_update");
+  const [autoAckDryRun, setAutoAckDryRun] = useState(true);
+  const [autoAckRunning, setAutoAckRunning] = useState(false);
 
   const filters = useMemo(
     () => ({
@@ -63,17 +68,19 @@ export const ExecutionAnalyticsPage = () => {
     setLoading(true);
     try {
       const query = buildParams();
-      const [summaryRes, stateLatencyRes, failureRes, alertsRes] = await Promise.all([
+      const [summaryRes, stateLatencyRes, failureRes, alertsRes, policyRes] = await Promise.all([
         apiClient.get(`/admin-phase3/execution-analytics/summary?${query}`),
         apiClient.get(`/admin-phase3/execution-analytics/state-latency?${query}`),
         apiClient.get(`/admin-phase3/execution-analytics/failure-trends?${query}`),
         apiClient.get("/admin-phase3/execution-alerts", { params: { status_filter: alertStatusFilter, limit: 50 } }),
+        apiClient.get("/admin-phase3/execution-alerts/auto-ack/policy"),
       ]);
       setSummary(summaryRes.data || null);
       setStateLatency(stateLatencyRes.data?.rows || []);
       setFailureTrend(failureRes.data?.daily_trend || []);
       setFailureClasses(failureRes.data?.top_failure_classes || []);
       setExecutionAlerts(alertsRes.data || []);
+      setAutoAckPolicy(policyRes.data?.policy || null);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Execution analytics yüklenemedi");
     } finally {
@@ -105,6 +112,40 @@ export const ExecutionAnalyticsPage = () => {
       await loadAnalytics();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Alert ack işlemi başarısız");
+    }
+  };
+
+  const updateAutoAckPolicy = async (patch = {}) => {
+    try {
+      const payload = {
+        enabled: patch.enabled ?? Boolean(autoAckPolicy?.enabled),
+        threshold_hours: Number(patch.threshold_hours ?? autoAckPolicy?.threshold_hours ?? 24),
+        only_execution_alerts: patch.only_execution_alerts ?? Boolean(autoAckPolicy?.only_execution_alerts ?? true),
+        reason: autoAckReason || "policy_update",
+      };
+      const { data } = await apiClient.put("/admin-phase3/execution-alerts/auto-ack/policy", payload);
+      setAutoAckPolicy(data?.policy || null);
+      toast.success("INFO auto-ack policy güncellendi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Auto-ack policy güncellenemedi");
+    }
+  };
+
+  const runInfoAutoAck = async () => {
+    setAutoAckRunning(true);
+    try {
+      const { data } = await apiClient.post("/admin-phase3/execution-alerts/auto-ack/run", null, {
+        params: {
+          reason: autoAckReason || "scheduled_auto_ack",
+          dry_run: autoAckDryRun,
+        },
+      });
+      toast.success(`${autoAckDryRun ? "Dry-run" : "Run"} tamamlandı: ${data?.acked_count ?? 0} alert`);
+      await loadAnalytics();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "INFO auto-ack run başarısız");
+    } finally {
+      setAutoAckRunning(false);
     }
   };
 
@@ -307,6 +348,78 @@ export const ExecutionAnalyticsPage = () => {
             </SelectContent>
           </Select>
         </div>
+
+        <div className="grid gap-2 rounded border border-slate-700 bg-slate-950 p-3 md:grid-cols-6" data-testid="execution-control-alert-auto-ack-policy-panel">
+          <div className="flex items-center gap-2" data-testid="execution-control-alert-auto-ack-enabled-row">
+            <Switch
+              checked={Boolean(autoAckPolicy?.enabled)}
+              onCheckedChange={(checked) => {
+                setAutoAckPolicy((prev) => ({ ...(prev || {}), enabled: Boolean(checked) }));
+              }}
+              data-testid="execution-control-alert-auto-ack-enabled-switch"
+            />
+            <span className="text-xs">INFO auto-ack enabled</span>
+          </div>
+
+          <Input
+            type="number"
+            min={1}
+            max={168}
+            value={autoAckPolicy?.threshold_hours ?? 24}
+            onChange={(event) => {
+              const value = Math.min(Math.max(Number(event.target.value) || 24, 1), 168);
+              setAutoAckPolicy((prev) => ({ ...(prev || {}), threshold_hours: value }));
+            }}
+            data-testid="execution-control-alert-auto-ack-threshold-input"
+          />
+
+          <Input
+            value={autoAckReason}
+            onChange={(event) => setAutoAckReason(event.target.value)}
+            placeholder="policy reason"
+            data-testid="execution-control-alert-auto-ack-reason-input"
+          />
+
+          <div className="flex items-center gap-2" data-testid="execution-control-alert-auto-ack-execution-only-row">
+            <Switch
+              checked={Boolean(autoAckPolicy?.only_execution_alerts ?? true)}
+              onCheckedChange={(checked) => {
+                setAutoAckPolicy((prev) => ({ ...(prev || {}), only_execution_alerts: Boolean(checked) }));
+              }}
+              data-testid="execution-control-alert-auto-ack-execution-only-switch"
+            />
+            <span className="text-xs">only execution alerts</span>
+          </div>
+
+          <div className="flex items-center gap-2" data-testid="execution-control-alert-auto-ack-dry-run-row">
+            <Switch
+              checked={autoAckDryRun}
+              onCheckedChange={(checked) => setAutoAckDryRun(Boolean(checked))}
+              data-testid="execution-control-alert-auto-ack-dry-run-switch"
+            />
+            <span className="text-xs">dry-run</span>
+          </div>
+
+          <div className="flex flex-wrap gap-2" data-testid="execution-control-alert-auto-ack-actions-row">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => updateAutoAckPolicy()}
+              data-testid="execution-control-alert-auto-ack-policy-save-button"
+            >
+              Policy Kaydet
+            </Button>
+            <Button
+              size="sm"
+              onClick={runInfoAutoAck}
+              disabled={autoAckRunning || String(autoAckReason || "").trim().length < 3}
+              data-testid="execution-control-alert-auto-ack-run-button"
+            >
+              {autoAckDryRun ? "Dry-run" : "Run"}
+            </Button>
+          </div>
+        </div>
+
         <div className="overflow-x-auto" data-testid="execution-control-alert-table-wrapper">
           <Table>
             <TableHeader>

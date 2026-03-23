@@ -81,6 +81,7 @@ from services.execution_alert_service import (
     trigger_idempotency_collision_alert,
     trigger_timeout_spike_alert,
 )
+from routers.admin_phase3_modules import alerts_router, analytics_router, export_router, recovery_router
 
 router = APIRouter(prefix="/admin-phase3", tags=["admin_phase3"])
 
@@ -2553,3 +2554,9 @@ def simulate_execution_state_flow_batch(
         created=len(records),
         records=records,
     )
+
+
+router.include_router(analytics_router)
+router.include_router(export_router)
+router.include_router(recovery_router)
+router.include_router(alerts_router)

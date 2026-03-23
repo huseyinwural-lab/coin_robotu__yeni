@@ -137,6 +137,7 @@ export const AdminStrategyObservabilityPage = () => {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineSummary, setTimelineSummary] = useState(null);
   const [timelineItems, setTimelineItems] = useState([]);
+  const [timelineKpiCards, setTimelineKpiCards] = useState(null);
 
   const [auditLimit, setAuditLimit] = useState(50);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -280,10 +281,12 @@ export const AdminStrategyObservabilityPage = () => {
       });
       setTimelineSummary(data?.summary || null);
       setTimelineItems(data?.items || []);
+      setTimelineKpiCards(data?.kpi_cards || null);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Action impact timeline alınamadı");
       setTimelineSummary(null);
       setTimelineItems([]);
+      setTimelineKpiCards(null);
     } finally {
       setTimelineLoading(false);
     }
@@ -1789,6 +1792,24 @@ export const AdminStrategyObservabilityPage = () => {
               Timeline Yenile
             </Button>
           </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="action-impact-kpi-cards-grid">
+          {[
+            { key: "selected_signals", label: "Selected Signals" },
+            { key: "rejected_signals", label: "Rejected Signals" },
+            { key: "risk_breaches", label: "Risk Breaches" },
+          ].map((card) => {
+            const values = timelineKpiCards?.[card.key] || { before: 0, after: 0, delta: 0 };
+            return (
+              <div key={card.key} className="border border-black/25 bg-white p-2" data-testid={`action-impact-kpi-card-${card.key}`}>
+                <p className="text-xs font-semibold" data-testid={`action-impact-kpi-card-title-${card.key}`}>{card.label}</p>
+                <p className="text-xs" data-testid={`action-impact-kpi-card-before-${card.key}`}>before: {values.before ?? 0}</p>
+                <p className="text-xs" data-testid={`action-impact-kpi-card-after-${card.key}`}>after: {values.after ?? 0}</p>
+                <p className="text-xs" data-testid={`action-impact-kpi-card-delta-${card.key}`}>delta: {values.delta ?? 0}</p>
+              </div>
+            );
+          })}
         </div>
 
         <div className="mt-3 overflow-x-auto border border-black/25 bg-white" data-testid="action-impact-timeline-table-wrapper">
