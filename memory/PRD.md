@@ -1,3 +1,47 @@
+## 2026-03-23 — P1 Incident Snapshot Diff (JSON + İnsan Okunur Özet) ✅
+
+### Sprint kararı
+- P0 alert sistemi tamamlandıktan sonra P1 olarak **Incident Snapshot Diff** alındı.
+- Auto-ack policy bu sprintte **backlog** olarak bırakıldı (INFO, 24h seen=true).
+
+### Uygulanan özellikler
+- `POST /api/admin-phase3/incident-snapshots/export` compare mode destekli:
+  - request alanları: `compare_correlation_id`, `compare_execution_event_id`, `compare_time_from`, `compare_time_to`
+  - compare aktifken ZIP’e eklendi:
+    - `diff.json`
+    - `diff_summary.txt`
+- `diff.json` kapsamı:
+  - `scope_comparison` (primary/compare scope metadata)
+  - `count_delta`:
+    - `events`
+    - `transitions`
+    - `failed_events`
+    - `manual_actions`
+    - `idempotency_collisions`
+  - trend değerleri: `arttı / azaldı / değişmedi`
+- `summary.json` compare modunda `compare_scope` metadata içeriyor.
+- Incompatible scope durumunda net hata:
+  - `422 incompatible_scope: primary=..., compare=...`
+
+### Frontend
+- `/admin/execution/states` export paneline compare akışı eklendi:
+  - `Compare Snapshot ON/OFF`
+  - compare scope seçimi + değer/time_range girişleri
+  - frontend scope uyumluluk validasyonu
+
+### Test / doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_87.json`
+  - Backend: **100% (16/16 PASS)**
+  - Frontend: **100% PASS**
+- Regresyon PASS:
+  - execution analytics endpointleri
+  - execution states control endpointi
+  - execution alerts endpointi
+
+### Not
+- Slack webhook delivery **MOCKED**.
+- Binance Futures execution **MOCKED**.
+
 ## 2026-03-23 — P0 Execution Failure Webhook Alert Sistemi ✅
 
 ### Uygulanan kapsam (kullanıcı kararıyla)
