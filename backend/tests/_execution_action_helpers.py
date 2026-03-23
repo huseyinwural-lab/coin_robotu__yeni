@@ -60,6 +60,20 @@ def provision_user() -> tuple[str, dict, dict]:
     return base, user_headers, admin_headers
 
 
+def build_approve_payload(base: str, admin_headers: dict, intent_id: str, note: str) -> dict:
+    detail = requests.get(f"{base}/api/admin/execution-queue/{intent_id}/detail", headers=admin_headers, timeout=20)
+    detail.raise_for_status()
+    detail_data = detail.json()
+    is_high_risk = bool((detail_data.get("risk_payload") or {}).get("is_high_risk"))
+    return {
+        "reason": note,
+        "note": note,
+        "detail_version": detail_data.get("detail_version"),
+        "read_acknowledged": True,
+        "double_confirmation": True if is_high_risk else False,
+    }
+
+
 def create_and_release_open_position(base: str, user_headers: dict, admin_headers: dict) -> dict:
     preview_payload = {
         "source_type": "manual",
@@ -98,7 +112,7 @@ def create_and_release_open_position(base: str, user_headers: dict, admin_header
     approve = requests.post(
         f"{base}/api/admin/execution-queue/{intent_id}/approve",
         headers=admin_headers,
-        json={"note": "test_open_position"},
+        json=build_approve_payload(base, admin_headers, intent_id, "test_open_position"),
         timeout=20,
     )
     approve.raise_for_status()
@@ -159,7 +173,7 @@ def preview_submit_approve_position_action(
     approve = requests.post(
         f"{base}/api/admin/execution-queue/{intent_id}/approve",
         headers=admin_headers,
-        json={"note": f"test_{intent_type.lower()}"},
+        json=build_approve_payload(base, admin_headers, intent_id, f"test_{intent_type.lower()}"),
         timeout=20,
     )
     approve.raise_for_status()

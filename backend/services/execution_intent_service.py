@@ -1,12 +1,14 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 
-from sqlalchemy import func
+from sqlalchemy import asc, desc, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import redis_client
-from models import BotProfile, PaperPosition, Position, PositionLedgerEvent, UserExecutionIntent
+from models import AuditLog, BotProfile, PaperPosition, Position, PositionLedgerEvent, UserExecutionIntent
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
@@ -36,6 +38,17 @@ POSITION_ACTION_TYPES = {
 }
 RISK_REDUCTION_ACTIONS = {"CLOSE_POSITION", "PARTIAL_CLOSE", "MOVE_STOP", "MOVE_TAKE_PROFIT"}
 DUPLICATE_INTENT_REASON_CODE = "DUPLICATE_INTENT"
+HIGH_RISK_THRESHOLD = 70.0
+MEDIUM_RISK_THRESHOLD = 35.0
+EXECUTION_INTENT_ALLOWED_TRANSITIONS = {
+    "PREVIEWED": {"QUEUED", "REJECTED", "CANCELLED"},
+    "SUBMITTED": {"QUEUED", "REJECTED", "CANCELLED"},
+    "QUEUED": {"APPROVED", "REJECTED", "CANCELLED"},
+    "APPROVED": {"RELEASED", "CANCELLED"},
+    "REJECTED": {"QUEUED", "CANCELLED"},
+    "RELEASED": set(),
+    "CANCELLED": set(),
+}
 
 
 class DuplicateExecutionIntentError(ValueError):
@@ -147,6 +160,196 @@ def _extract_hedge_context(normalized_payload: dict) -> tuple[str | None, float 
         return None, None, None
     recommendation = f"{hedge_symbol}:{hedge.get('hedge_direction')}:{hedge.get('hedge_size')}"
     return recommendation, float(hedge.get("risk_reduction_score") or 0), hedge.get("correlation_basis")
+
+
+def _is_high_risk_intent(intent: UserExecutionIntent) -> bool:
+    if float(intent.risk_score or 0.0) >= HIGH_RISK_THRESHOLD:
+        return True
+    risk_flags = [str(item or "").lower() for item in (intent.risk_flags or [])]
+    return any("critical" in item or "high" in item or "override" in item for item in risk_flags)
+
+
+def _risk_severity(intent: UserExecutionIntent) -> str:
+    score = float(intent.risk_score or 0.0)
+    if _is_high_risk_intent(intent):
+        return "high"
+    if score >= MEDIUM_RISK_THRESHOLD:
+        return "med"
+    return "low"
+
+
+def build_intent_risk_payload(intent: UserExecutionIntent) -> dict:
+    severity = _risk_severity(intent)
+    flags = [str(item) for item in (intent.risk_flags or [])]
+    reject_codes = [str(item) for item in (intent.reject_reason_codes or [])]
+
+    breakdown = []
+    if float(intent.risk_score or 0.0) > 0:
+        breakdown.append({
+            "code": "risk_score",
+            "label": "risk_score",
+            "value": round(float(intent.risk_score or 0.0), 2),
+            "severity": severity,
+            "explanation": "Intent risk skoru" if severity != "high" else "Yüksek risk skoruna sahip intent",
+        })
+    for flag in flags[:8]:
+        breakdown.append(
+            {
+                "code": flag,
+                "label": flag.replace("_", " "),
+                "value": 1,
+                "severity": "high" if "critical" in flag.lower() or "override" in flag.lower() else "med",
+                "explanation": f"Risk flag tetiklendi: {flag}",
+            }
+        )
+    for reason in reject_codes[:8]:
+        breakdown.append(
+            {
+                "code": reason,
+                "label": reason.replace("_", " "),
+                "value": 1,
+                "severity": "med",
+                "explanation": f"Önceki reddetme nedeni: {reason}",
+            }
+        )
+
+    suggestions = []
+    if severity == "high":
+        suggestions.extend(["Pozisyon boyutunu azalt", "Gerekirse manual override yerine reject+retry uygula"])
+    elif severity == "med":
+        suggestions.append("Payload parametrelerini kontrol et ve risk açıklamasını doğrula")
+    else:
+        suggestions.append("Standart kontrol akışı yeterli")
+
+    return {
+        "severity": severity,
+        "is_high_risk": severity == "high",
+        "reason_breakdown": breakdown,
+        "tooltip": "High risk intent: double confirmation ve detay onayı zorunlu" if severity == "high" else "Risk seviyesi kontrol edildi",
+        "suggestions": suggestions,
+    }
+
+
+def _intent_detail_version(intent: UserExecutionIntent) -> str:
+    payload = {
+        "intent_id": intent.id,
+        "status": intent.status,
+        "risk_score": float(intent.risk_score or 0),
+        "risk_flags": intent.risk_flags or [],
+        "reject_reason_codes": intent.reject_reason_codes or [],
+        "normalized_order_payload": intent.normalized_order_payload or {},
+        "updated_at": intent.updated_at.isoformat() if intent.updated_at else None,
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def resolve_intent_detail_version(intent: UserExecutionIntent) -> str:
+    return _intent_detail_version(intent)
+
+
+def _append_state_log(intent: UserExecutionIntent, *, from_status: str, to_status: str, actor_id: str | None, reason: str) -> None:
+    payload = dict(intent.normalized_order_payload or {})
+    gate_payload = dict(payload.get("decision_gate") or {})
+    state_history = list(gate_payload.get("state_history") or [])
+    state_history.append(
+        {
+            "at": datetime.now(timezone.utc).isoformat(),
+            "from_status": from_status,
+            "to_status": to_status,
+            "actor_id": actor_id,
+            "reason": reason,
+        }
+    )
+    gate_payload["state_history"] = state_history[-120:]
+    payload["decision_gate"] = gate_payload
+    intent.normalized_order_payload = payload
+
+
+def _transition_execution_intent_status(
+    intent: UserExecutionIntent,
+    *,
+    target_status: str,
+    actor_user_id: str | None,
+    reason: str,
+) -> None:
+    current_status = str(intent.status or "").upper()
+    target = str(target_status or "").upper()
+    if current_status == target:
+        _append_state_log(intent, from_status=current_status, to_status=target, actor_id=actor_user_id, reason=f"{reason}:idempotent")
+        return
+
+    allowed = EXECUTION_INTENT_ALLOWED_TRANSITIONS.get(current_status, set())
+    if target not in allowed:
+        raise ValueError(f"invalid_state_transition:{current_status}->{target}")
+
+    intent.status = target
+    _append_state_log(intent, from_status=current_status, to_status=target, actor_id=actor_user_id, reason=reason)
+
+
+def resolve_intent_operational_status(intent: UserExecutionIntent) -> str:
+    status = str(intent.status or "").upper()
+    if status == "REJECTED":
+        return "retryable"
+    if status == "CANCELLED":
+        return "failed"
+    if status == "QUEUED":
+        now_ts = datetime.now(timezone.utc)
+        created = intent.created_at if intent.created_at and intent.created_at.tzinfo else (
+            intent.created_at.replace(tzinfo=timezone.utc) if intent.created_at else now_ts
+        )
+        age_seconds = (now_ts - created).total_seconds()
+        if age_seconds >= 300:
+            return "locked"
+        return "retryable"
+    return "locked"
+
+
+def build_execution_intent_detail(db: Session, intent: UserExecutionIntent) -> dict:
+    risk_payload = build_intent_risk_payload(intent)
+    open_positions = (
+        db.query(PaperPosition)
+        .filter(PaperPosition.user_id == intent.user_id, PaperPosition.status == "open")
+        .all()
+    )
+    exposure_before = float(sum(float(item.quantity or 0) * float(item.entry_price or 0) for item in open_positions))
+    exposure_after = exposure_before + float(intent.notional or 0)
+    expected_impact = {
+        "exposure_before": round(exposure_before, 2),
+        "exposure_after": round(exposure_after, 2),
+        "exposure_delta": round(float(intent.notional or 0), 2),
+        "risk_delta": round(float(intent.risk_score or 0), 2),
+        "pnl_estimate": round(float(intent.notional or 0) * 0.01, 2),
+    }
+    return {
+        "intent_id": intent.id,
+        "detail_version": _intent_detail_version(intent),
+        "order_preview": {
+            "symbol": intent.symbol,
+            "market_type": intent.market_type,
+            "side": intent.side,
+            "notional": float(intent.notional or 0),
+            "size": float(intent.size or 0),
+            "price": float(intent.price) if intent.price is not None else None,
+            "stop_price": float(intent.stop_price) if intent.stop_price is not None else None,
+            "take_profit_price": float(intent.take_profit_price) if intent.take_profit_price is not None else None,
+        },
+        "intent_metadata": {
+            "intent_type": intent.intent_type,
+            "position_id": intent.position_id,
+            "intent_token": intent.intent_token,
+            "status": intent.status,
+            "created_at": intent.created_at.isoformat() if intent.created_at else None,
+        },
+        "normalized_payload": intent.normalized_order_payload or {},
+        "risk_payload": risk_payload,
+        "gate_decision": {
+            "gate_decision": intent.gate_decision,
+            "meta_engine_decision": intent.meta_engine_decision,
+            "operational_status": resolve_intent_operational_status(intent),
+        },
+        "expected_impact": expected_impact,
+    }
 
 
 def _resolve_position_for_action(db: Session, user_id: str, position_id: str) -> PaperPosition:
@@ -1108,14 +1311,43 @@ def _apply_position_action_intent(db: Session, intent: UserExecutionIntent) -> t
     return position, event_type, position_action_reason
 
 
-def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, admin_note: str = "") -> UserExecutionIntent:
-    intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.id == intent_id).first()
+def approve_execution_intent(
+    db: Session,
+    intent_id: str,
+    admin_user_id: str,
+    admin_note: str = "",
+    *,
+    detail_version: str | None = None,
+    read_acknowledged: bool = False,
+    double_confirmation: bool = False,
+    allow_override: bool = False,
+) -> UserExecutionIntent:
+    intent = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.id == intent_id)
+        .with_for_update()
+        .first()
+    )
     if intent is None:
         raise ValueError("intent_not_found")
-    if intent.status != "QUEUED":
+    if str(intent.status or "").upper() != "QUEUED":
         raise ValueError("intent_not_in_queue")
 
-    if intent.intent_type == "OPEN_POSITION":
+    resolved_reason = str(admin_note or "").strip()
+    if len(resolved_reason) < 3:
+        raise ValueError("decision_reason_required")
+    if not read_acknowledged:
+        raise ValueError("intent_detail_read_ack_required")
+
+    current_detail_version = _intent_detail_version(intent)
+    if detail_version and detail_version != current_detail_version:
+        raise ValueError("stale_intent_detail_version")
+
+    risk_payload = build_intent_risk_payload(intent)
+    if risk_payload.get("is_high_risk") and not bool(double_confirmation):
+        raise ValueError("high_risk_double_confirmation_required")
+
+    if intent.intent_type == "OPEN_POSITION" and not allow_override:
         enforce_execution_guard_or_raise(
             db,
             user_id=intent.user_id,
@@ -1134,19 +1366,41 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
             entity_id=intent.id,
         )
 
-    intent.status = "APPROVED"
-    intent.admin_user_id = admin_user_id
-    intent.admin_note = admin_note
-    intent.approved_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(intent)
-
     normalized = intent.normalized_order_payload or {}
+    decision_gate = dict(normalized.get("decision_gate") or {})
+    decision_gate.update(
+        {
+            "detail_version": current_detail_version,
+            "read_acknowledged": bool(read_acknowledged),
+            "double_confirmation": bool(double_confirmation),
+            "override_execute": bool(allow_override),
+            "approved_by": admin_user_id,
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    normalized["decision_gate"] = decision_gate
+    if allow_override:
+        flags = list(intent.risk_flags or [])
+        if "execution_override_applied" not in flags:
+            flags.append("execution_override_applied")
+        intent.risk_flags = flags
+
+    intent.admin_user_id = admin_user_id
+    intent.admin_note = resolved_reason
+    intent.approved_at = datetime.now(timezone.utc)
+    intent.normalized_order_payload = normalized
+    _transition_execution_intent_status(
+        intent,
+        target_status="APPROVED",
+        actor_user_id=admin_user_id,
+        reason="execution_approval_granted",
+    )
+
     try:
         symbol = normalize_symbol(
-        normalized.get("symbol") or intent.symbol,
-        missing_error_code="symbol_required_for_execution_order",
-        invalid_error_code="invalid_quote_asset",
+            normalized.get("symbol") or intent.symbol,
+            missing_error_code="symbol_required_for_execution_order",
+            invalid_error_code="invalid_quote_asset",
         )
     except InvalidSymbol as exc:
         raise ValueError(str(exc)) from exc
@@ -1174,7 +1428,12 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
             )
         )
 
-    intent.status = "RELEASED"
+    _transition_execution_intent_status(
+        intent,
+        target_status="RELEASED",
+        actor_user_id=admin_user_id,
+        reason="execution_order_released",
+    )
     intent.released_at = datetime.now(timezone.utc)
 
     risk_adjustment_reason = "position_size_adjusted_by_portfolio_risk" if "portfolio_risk_adjusted" in (intent.risk_flags or []) else None
@@ -1216,9 +1475,11 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
         },
         context_payload={
             "admin_user_id": admin_user_id,
-            "admin_note": admin_note,
+            "admin_note": resolved_reason,
             "intent_token": intent.intent_token,
             "position_id": intent.position_id,
+            "detail_version": current_detail_version,
+            "override_execute": bool(allow_override),
         },
     )
 
@@ -1272,16 +1533,55 @@ def approve_execution_intent(db: Session, intent_id: str, admin_user_id: str, ad
     return intent
 
 
-def reject_execution_intent(db: Session, intent_id: str, admin_user_id: str, admin_note: str = "") -> UserExecutionIntent:
-    intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.id == intent_id).first()
+def reject_execution_intent(
+    db: Session,
+    intent_id: str,
+    admin_user_id: str,
+    admin_note: str = "",
+    *,
+    detail_version: str | None = None,
+    read_acknowledged: bool = False,
+) -> UserExecutionIntent:
+    intent = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.id == intent_id)
+        .with_for_update()
+        .first()
+    )
     if intent is None:
         raise ValueError("intent_not_found")
-    if intent.status not in {"QUEUED", "SUBMITTED", "PREVIEWED"}:
+    if str(intent.status or "").upper() not in {"QUEUED", "SUBMITTED", "PREVIEWED", "APPROVED"}:
         raise ValueError("intent_not_rejectable")
 
-    intent.status = "REJECTED"
+    resolved_reason = str(admin_note or "").strip()
+    if len(resolved_reason) < 3:
+        raise ValueError("decision_reason_required")
+    if not read_acknowledged:
+        raise ValueError("intent_detail_read_ack_required")
+
+    current_detail_version = _intent_detail_version(intent)
+    if detail_version and detail_version != current_detail_version:
+        raise ValueError("stale_intent_detail_version")
+
+    _transition_execution_intent_status(
+        intent,
+        target_status="REJECTED",
+        actor_user_id=admin_user_id,
+        reason="execution_rejected_by_admin",
+    )
     intent.admin_user_id = admin_user_id
-    intent.admin_note = admin_note
+    intent.admin_note = resolved_reason
+    normalized_payload = dict(intent.normalized_order_payload or {})
+    decision_gate = dict(normalized_payload.get("decision_gate") or {})
+    decision_gate.update(
+        {
+            "detail_version": current_detail_version,
+            "read_acknowledged": True,
+            "rejected_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    normalized_payload["decision_gate"] = decision_gate
+    intent.normalized_order_payload = normalized_payload
     hedge_recommendation, hedge_risk_reduction, correlation_basis = _extract_hedge_context(intent.normalized_order_payload or {})
     record_decision_trace(
         db,
@@ -1315,7 +1615,7 @@ def reject_execution_intent(db: Session, intent_id: str, admin_user_id: str, adm
         },
         context_payload={
             "admin_user_id": admin_user_id,
-            "admin_note": admin_note,
+            "admin_note": resolved_reason,
             "intent_token": intent.intent_token,
             "position_id": intent.position_id,
         },
@@ -1325,31 +1625,175 @@ def reject_execution_intent(db: Session, intent_id: str, admin_user_id: str, adm
     return intent
 
 
-def list_execution_queue(db: Session, *, status_filter: str = "QUEUED", limit: int = 100) -> list[UserExecutionIntent]:
+def list_execution_queue(
+    db: Session,
+    *,
+    status_filter: str = "QUEUED",
+    limit: int = 100,
+    search: str | None = None,
+    risk_filter: str = "all",
+    intent_type: str = "all",
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
+) -> list[UserExecutionIntent]:
     query = db.query(UserExecutionIntent)
     if status_filter != "all":
         query = query.filter(UserExecutionIntent.status == status_filter)
-    return query.order_by(UserExecutionIntent.created_at.desc()).limit(limit).all()
+    if intent_type != "all":
+        query = query.filter(UserExecutionIntent.intent_type == intent_type)
+
+    normalized_search = str(search or "").strip()
+    if normalized_search:
+        like_pattern = f"%{normalized_search}%"
+        query = query.filter(
+            or_(
+                UserExecutionIntent.id.ilike(like_pattern),
+                UserExecutionIntent.intent_token.ilike(like_pattern),
+                UserExecutionIntent.symbol.ilike(like_pattern),
+                UserExecutionIntent.user_id.ilike(like_pattern),
+            )
+        )
+
+    sort_column_map = {
+        "created_at": UserExecutionIntent.created_at,
+        "updated_at": UserExecutionIntent.updated_at,
+        "notional": UserExecutionIntent.notional,
+        "size": UserExecutionIntent.size,
+        "risk_score": UserExecutionIntent.risk_score,
+    }
+    sort_column = sort_column_map.get(str(sort_by or "created_at"), UserExecutionIntent.created_at)
+    sort_expression = asc(sort_column) if str(sort_dir or "desc").lower() == "asc" else desc(sort_column)
+    rows = query.order_by(sort_expression).limit(max(min(int(limit or 100) * 4, 1000), 20)).all()
+
+    normalized_risk_filter = str(risk_filter or "all").lower()
+    if normalized_risk_filter in {"low", "med", "high"}:
+        rows = [row for row in rows if _risk_severity(row) == normalized_risk_filter]
+
+    return rows[: max(min(int(limit or 100), 500), 1)]
 
 
 def retry_execution_intent(db: Session, intent_id: str, admin_user_id: str, admin_note: str = "") -> UserExecutionIntent:
-    intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.id == intent_id).first()
+    intent = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.id == intent_id)
+        .with_for_update()
+        .first()
+    )
     if intent is None:
         raise ValueError("intent_not_found")
     if intent.status != "REJECTED":
         raise ValueError("intent_not_retryable")
 
-    intent.status = "QUEUED"
+    resolved_reason = str(admin_note or "").strip()
+    if len(resolved_reason) < 3:
+        raise ValueError("decision_reason_required")
+
+    _transition_execution_intent_status(
+        intent,
+        target_status="QUEUED",
+        actor_user_id=admin_user_id,
+        reason="execution_retry_requested",
+    )
     intent.submitted_at = datetime.now(timezone.utc)
     intent.approved_at = None
     intent.released_at = None
     intent.cancelled_at = None
     intent.admin_user_id = admin_user_id
-    intent.admin_note = admin_note or "retried_from_admin_queue"
+    intent.admin_note = resolved_reason
     intent.reject_reason_codes = []
     db.commit()
     db.refresh(intent)
     return intent
+
+
+def cancel_execution_intent_by_admin(db: Session, intent_id: str, admin_user_id: str, admin_note: str = "") -> UserExecutionIntent:
+    intent = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.id == intent_id)
+        .with_for_update()
+        .first()
+    )
+    if intent is None:
+        raise ValueError("intent_not_found")
+
+    resolved_reason = str(admin_note or "").strip()
+    if len(resolved_reason) < 3:
+        raise ValueError("decision_reason_required")
+
+    _transition_execution_intent_status(
+        intent,
+        target_status="CANCELLED",
+        actor_user_id=admin_user_id,
+        reason="execution_cancelled_by_admin",
+    )
+    intent.cancelled_at = datetime.now(timezone.utc)
+    intent.admin_user_id = admin_user_id
+    intent.admin_note = resolved_reason
+    db.commit()
+    db.refresh(intent)
+    return intent
+
+
+def edit_execution_intent_by_admin(
+    db: Session,
+    intent_id: str,
+    admin_user_id: str,
+    *,
+    reason: str,
+    patch: dict,
+) -> tuple[UserExecutionIntent, dict]:
+    intent = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.id == intent_id)
+        .with_for_update()
+        .first()
+    )
+    if intent is None:
+        raise ValueError("intent_not_found")
+    if str(intent.status or "").upper() not in {"QUEUED", "REJECTED", "PREVIEWED", "SUBMITTED"}:
+        raise ValueError("intent_not_editable")
+
+    resolved_reason = str(reason or "").strip()
+    if len(resolved_reason) < 3:
+        raise ValueError("decision_reason_required")
+
+    editable_fields = ["notional", "size", "price", "stop_price", "take_profit_price"]
+    diff = {}
+    normalized_payload = dict(intent.normalized_order_payload or {})
+
+    for field in editable_fields:
+        if field not in patch or patch.get(field) is None:
+            continue
+        before_value = getattr(intent, field)
+        after_value = float(patch.get(field))
+        if before_value is None or float(before_value) != after_value:
+            setattr(intent, field, after_value)
+            diff[field] = {"before": before_value, "after": after_value}
+            normalized_payload[field] = after_value
+
+    if not diff:
+        raise ValueError("no_editable_fields_changed")
+
+    updated_risk_score = min(max(float(intent.risk_score or 0) + (float(intent.notional or 0) / 5000), 0), 100)
+    intent.risk_score = updated_risk_score
+    flags = list(intent.risk_flags or [])
+    if "manual_edit_revalidated" not in flags:
+        flags.append("manual_edit_revalidated")
+    intent.risk_flags = flags
+    normalized_payload["manual_edit"] = {
+        "edited_by": admin_user_id,
+        "edited_at": datetime.now(timezone.utc).isoformat(),
+        "reason": resolved_reason,
+        "diff": diff,
+    }
+    intent.normalized_order_payload = normalized_payload
+    intent.admin_user_id = admin_user_id
+    intent.admin_note = resolved_reason
+    intent.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(intent)
+    return intent, diff
 
 
 def rejection_reason_summary(db: Session, limit: int = 500) -> list[dict]:
@@ -1387,6 +1831,67 @@ def queue_status_summary(db: Session) -> dict:
         "rejected": int(by_status.get("REJECTED", 0)),
         "released": int(by_status.get("RELEASED", 0)),
         "by_status": by_status,
+    }
+
+
+def rejection_reason_trend(db: Session, *, limit: int = 1000) -> list[dict]:
+    rows = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.status == "REJECTED")
+        .order_by(UserExecutionIntent.updated_at.desc())
+        .limit(limit)
+        .all()
+    )
+    buckets: dict[str, int] = {}
+    for row in rows:
+        day = (row.updated_at or row.created_at).date().isoformat() if (row.updated_at or row.created_at) else "unknown"
+        buckets[day] = buckets.get(day, 0) + 1
+    return [{"date": key, "count": buckets[key]} for key in sorted(buckets.keys())]
+
+
+def build_queue_observability_metrics(db: Session, *, days: int = 7) -> dict:
+    since = datetime.now(timezone.utc) - timedelta(days=max(days, 1))
+    released_rows = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.released_at.isnot(None), UserExecutionIntent.created_at >= since)
+        .all()
+    )
+    approval_latencies = []
+    for row in released_rows:
+        if row.released_at and row.created_at:
+            created = row.created_at if row.created_at.tzinfo else row.created_at.replace(tzinfo=timezone.utc)
+            released = row.released_at if row.released_at.tzinfo else row.released_at.replace(tzinfo=timezone.utc)
+            approval_latencies.append(max((released - created).total_seconds(), 0.0))
+
+    operator_rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.entity_type == "execution_intent", AuditLog.created_at >= since)
+        .order_by(AuditLog.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    operator_activity: dict[str, int] = {}
+    override_usage = 0
+    for row in operator_rows:
+        actor = str(row.actor_user_id or "system")
+        operator_activity[actor] = operator_activity.get(actor, 0) + 1
+        action_name = str(row.action or "").upper()
+        if "OVERRIDE" in action_name:
+            override_usage += 1
+
+    return {
+        "approval_latency_seconds": {
+            "avg": round(sum(approval_latencies) / max(len(approval_latencies), 1), 2),
+            "p95": round(sorted(approval_latencies)[max(int(len(approval_latencies) * 0.95) - 1, 0)], 2)
+            if approval_latencies
+            else 0.0,
+            "count": len(approval_latencies),
+        },
+        "operator_activity": [
+            {"actor_user_id": actor, "action_count": count}
+            for actor, count in sorted(operator_activity.items(), key=lambda item: item[1], reverse=True)[:20]
+        ],
+        "override_usage": override_usage,
     }
 
 

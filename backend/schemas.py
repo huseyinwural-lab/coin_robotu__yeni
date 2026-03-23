@@ -2740,6 +2740,11 @@ class ExecutionIntentQueueItemResponse(BaseModel):
     gate_decision: str | None = None
     meta_engine_decision: str | None = None
     cluster_id: str | None = None
+    risk_payload: dict = Field(default_factory=dict)
+    operational_status: str = "retryable"
+    expected_impact: dict = Field(default_factory=dict)
+    detail_version: str | None = None
+    snapshot_generated_at: datetime | None = None
     created_at: datetime
 
 
@@ -3742,6 +3747,11 @@ class BlockedReasonTimelineEnvelopeResponse(BaseModel):
 
 class AdminExecutionQueueDecisionRequest(BaseModel):
     note: str = ""
+    reason: str = ""
+    read_acknowledged: bool = False
+    double_confirmation: bool = False
+    override_execute: bool = False
+    detail_version: str | None = None
 
 
 class AdminExecutionQueueDecisionResponse(BaseModel):
@@ -3749,6 +3759,72 @@ class AdminExecutionQueueDecisionResponse(BaseModel):
     status: str
     admin_note: str
     execution_mode: str = "mocked"
+    detail_version: str | None = None
+
+
+class ExecutionIntentHistoryItemResponse(BaseModel):
+    id: str
+    action: str
+    actor_user_id: str | None = None
+    actor_role: str | None = None
+    reason: str | None = None
+    details: dict = Field(default_factory=dict)
+    created_at: datetime
+
+
+class ExecutionIntentDetailResponse(BaseModel):
+    intent_id: str
+    detail_version: str
+    order_preview: dict = Field(default_factory=dict)
+    normalized_payload: dict = Field(default_factory=dict)
+    intent_metadata: dict = Field(default_factory=dict)
+    risk_payload: dict = Field(default_factory=dict)
+    gate_decision: dict = Field(default_factory=dict)
+    expected_impact: dict = Field(default_factory=dict)
+
+
+class AdminExecutionQueueBulkDecisionRequest(BaseModel):
+    intent_ids: list[str] = Field(default_factory=list)
+    action: str
+    reason: str = ""
+    read_acknowledged: bool = False
+    double_confirmation: bool = False
+
+
+class AdminExecutionQueueBulkDecisionResponse(BaseModel):
+    action: str
+    processed_count: int
+    failed_count: int
+    processed_intent_ids: list[str] = Field(default_factory=list)
+    failures: list[dict] = Field(default_factory=list)
+
+
+class AdminExecutionQueueControlRequest(BaseModel):
+    reason: str = ""
+
+
+class AdminExecutionQueueControlResponse(BaseModel):
+    paused: bool
+    paused_by: str | None = None
+    paused_reason: str | None = None
+    paused_at: str | None = None
+    updated_at: str | None = None
+
+
+class AdminExecutionQueueEditRequest(BaseModel):
+    notional: float | None = None
+    size: float | None = None
+    price: float | None = None
+    stop_price: float | None = None
+    take_profit_price: float | None = None
+    reason: str = ""
+
+
+class AdminExecutionQueueEditResponse(BaseModel):
+    intent_id: str
+    status: str
+    diff: dict = Field(default_factory=dict)
+    detail_version: str | None = None
 
 
 class AdminExecutionIntentOwnerRevalidateResponse(BaseModel):
