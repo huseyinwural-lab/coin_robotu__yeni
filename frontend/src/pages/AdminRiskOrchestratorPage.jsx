@@ -61,6 +61,15 @@ const buildRejectQuery = (filters) => {
   return params.toString();
 };
 
+const buildQueueQuery = ({ scope, state, criticalFirst }) => {
+  const params = new URLSearchParams();
+  params.set("limit", "50");
+  params.set("scope", scope);
+  params.set("critical_first", criticalFirst ? "true" : "false");
+  if (state) params.set("state", state);
+  return params.toString();
+};
+
 export const AdminRiskOrchestratorPage = () => {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "super_admin";
@@ -101,12 +110,34 @@ export const AdminRiskOrchestratorPage = () => {
   const [approvals, setApprovals] = useState([]);
   const [decisionTraces, setDecisionTraces] = useState([]);
   const [approvalNotes, setApprovalNotes] = useState({});
+  const [assignmentInputs, setAssignmentInputs] = useState({});
   const [applyWithOverride, setApplyWithOverride] = useState(false);
   const [lastApplyResult, setLastApplyResult] = useState(null);
   const [revertSimulations, setRevertSimulations] = useState({});
+  const [queueScope, setQueueScope] = useState("all");
+  const [queueState, setQueueState] = useState("pending");
+  const [criticalFirst, setCriticalFirst] = useState(true);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [rejectInsights, setRejectInsights] = useState([]);
+  const [decisionIntelligence, setDecisionIntelligence] = useState(null);
+  const [sweepResult, setSweepResult] = useState(null);
 
   const refreshCore = useCallback(async () => {
-    const [policyRes, statusRes, historyRes, overrideRes, positionRes, triggerRes, timelineRes, alertsRes, approvalsRes, tracesRes] = await Promise.all([
+    const queueQuery = buildQueueQuery({ scope: queueScope, state: queueState, criticalFirst });
+    const [
+      policyRes,
+      statusRes,
+      historyRes,
+      overrideRes,
+      positionRes,
+      triggerRes,
+      timelineRes,
+      alertsRes,
+      approvalsRes,
+      tracesRes,
+      dashboardRes,
+      insightsRes,
+    ] = await Promise.all([
       apiClient.get("/strategy-domain/admin/risk-orchestrator/policy"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/status"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/policy/history?limit=20"),
@@ -115,8 +146,10 @@ export const AdminRiskOrchestratorPage = () => {
       apiClient.get("/strategy-domain/admin/risk-orchestrator/auto-trigger-logs?limit=30"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/audit/timeline?limit=40"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/alerts?limit=30"),
-      apiClient.get("/strategy-domain/admin/risk-orchestrator/policy/approvals?limit=20"),
+      apiClient.get(`/strategy-domain/admin/risk-orchestrator/policy/queue?${queueQuery}`),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/policy/decision-traces?limit=25"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/operations/dashboard"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/rejects/insights"),
     ]);
 
     setPolicy(policyRes.data || policySeed);
@@ -129,7 +162,9 @@ export const AdminRiskOrchestratorPage = () => {
     setAlerts(alertsRes.data || []);
     setApprovals(approvalsRes.data || []);
     setDecisionTraces(tracesRes.data || []);
-  }, []);
+    setDashboardData(dashboardRes.data || null);
+    setRejectInsights(insightsRes.data?.insights || []);
+  }, [criticalFirst, queueScope, queueState]);
 
   const refreshRejects = useCallback(async () => {
     const query = buildRejectQuery(rejectFilters);
@@ -200,7 +235,7 @@ export const AdminRiskOrchestratorPage = () => {
       setLastApplyResult(data);
       if (data.status === "applied") {
         toast.success("Policy başarıyla uygulandı.");
-      } else if (data.status === "pending_approval") {
+      } else if (data.status === "pending" || data.status === "assigned") {
         toast.info("Policy second approval kuyruğuna alındı.");
       } else if (data.status === "blocked") {
         toast.error("CRITICAL gate nedeniyle apply bloklandı.");
@@ -372,6 +407,58 @@ export const AdminRiskOrchestratorPage = () => {
     }
   };
 
+  const handleAssign = async (approvalId, autoAssign) => {
+    try {
+      const assigneeId = assignmentInputs[approvalId] || "";
+      await apiClient.post(`/strategy-domain/admin/risk-orchestrator/policy/queue/${approvalId}/assign`, {
+        assignee_id: autoAssign ? null : assigneeId,
+        auto_assign: autoAssign,
+      });
+      toast.success(autoAssign ? "Auto-assign tamamlandı" : "Manual assignment tamamlandı");
+      await refreshCore();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Assignment başarısız");
+    }
+  };
+
+  const handleQueueSweep = async () => {
+    try {
+      const { data } = await apiClient.post("/strategy-domain/admin/risk-orchestrator/policy/queue/sweep");
+      setSweepResult(data);
+      toast.success("Escalation sweep çalıştırıldı");
+      await refreshCore();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Queue sweep başarısız");
+    }
+  };
+
+  const handleForceApply = async (approvalId) => {
+    if (!isSuperAdmin) return;
+    try {
+      const { data } = await apiClient.post(
+        `/strategy-domain/admin/risk-orchestrator/policy/queue/${approvalId}/force-apply`,
+        { reason_note: "SLA breach force apply" },
+      );
+      setLastApplyResult(data);
+      toast.success("Force apply tamamlandı");
+      await refreshCore();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Force apply başarısız");
+    }
+  };
+
+  const loadDecisionIntelligence = async (traceId) => {
+    try {
+      const { data } = await apiClient.get(
+        `/strategy-domain/admin/risk-orchestrator/policy/decision-intelligence/${traceId}`,
+      );
+      setDecisionIntelligence(data);
+      toast.success("Decision intelligence yüklendi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Decision intelligence yüklenemedi");
+    }
+  };
+
   const superAdminOnlyTitle = isSuperAdmin ? "" : "Sadece super_admin kullanıcıları çalıştırabilir";
 
   return (
@@ -410,6 +497,7 @@ export const AdminRiskOrchestratorPage = () => {
           ["operations", "Operations"],
           ["monitoring", "Monitoring"],
           ["approvals", "Approvals & Trace"],
+          ["control-tower", "Control Tower"],
         ].map(([tabKey, tabLabel]) => (
           <Button
             key={tabKey}
@@ -868,6 +956,22 @@ export const AdminRiskOrchestratorPage = () => {
                 </button>
               ))}
             </div>
+
+            <div className="rounded border p-2" data-testid="risk-reject-insight-panel">
+              <p className="text-xs font-semibold" data-testid="risk-reject-insight-title">Suggest Adjustment</p>
+              <div className="mt-2 space-y-1" data-testid="risk-reject-insight-list">
+                {rejectInsights.length === 0 && (
+                  <p className="text-xs text-slate-500" data-testid="risk-reject-insight-empty">
+                    Eşik altında, öneri yok.
+                  </p>
+                )}
+                {rejectInsights.map((item) => (
+                  <div key={`${item.rule}-${item.count}`} className="text-xs" data-testid={`risk-reject-insight-row-${item.rule}`}>
+                    <span className="font-medium">{item.rule}</span> · {item.count}x · öneri: {item.suggestion}
+                  </div>
+                ))}
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -954,10 +1058,53 @@ export const AdminRiskOrchestratorPage = () => {
           <CardHeader>
             <CardTitle data-testid="risk-approval-queue-title">4-Eyes Approval Queue</CardTitle>
             <CardDescription data-testid="risk-approval-queue-description">
-              pending_approval → approved/rejected akışı. Aynı kullanıcı ikinci onay veremez.
+              pending/assigned/approved/rejected/expired + SLA countdown + ownership
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2" data-testid="risk-queue-filter-grid">
+              <select
+                value={queueScope}
+                onChange={(event) => setQueueScope(event.target.value)}
+                className="h-9 rounded-md border bg-background px-2"
+                data-testid="risk-queue-scope-select"
+              >
+                <option value="all">All</option>
+                <option value="my">My approvals</option>
+                <option value="unassigned">Unassigned</option>
+              </select>
+              <select
+                value={queueState}
+                onChange={(event) => setQueueState(event.target.value)}
+                className="h-9 rounded-md border bg-background px-2"
+                data-testid="risk-queue-state-select"
+              >
+                <option value="">all states</option>
+                <option value="pending">pending</option>
+                <option value="assigned">assigned</option>
+                <option value="approved">approved</option>
+                <option value="rejected">rejected</option>
+                <option value="expired">expired</option>
+              </select>
+              <div className="flex items-center gap-2" data-testid="risk-queue-critical-first-wrapper">
+                <Checkbox
+                  checked={criticalFirst}
+                  onCheckedChange={(checked) => setCriticalFirst(checked === true)}
+                  data-testid="risk-queue-critical-first-checkbox"
+                />
+                <span className="text-xs">Critical first sorting</span>
+              </div>
+              <Button variant="outline" onClick={handleQueueSweep} data-testid="risk-queue-sweep-button">
+                Escalation Sweep
+              </Button>
+            </div>
+
+            {sweepResult && (
+              <div className="rounded border p-2 text-xs" data-testid="risk-queue-sweep-result">
+                warning: {sweepResult.warning_escalations} · critical: {sweepResult.critical_escalations} · stuck: {sweepResult.stuck_detected}
+              </div>
+            )}
+
             <div className="rounded border p-2 text-xs" data-testid="risk-last-apply-result-box">
               <p data-testid="risk-last-apply-status">last_status: {lastApplyResult?.status || "-"}</p>
               <p data-testid="risk-last-apply-classification">classification: {lastApplyResult?.classification || "-"}</p>
@@ -980,9 +1127,53 @@ export const AdminRiskOrchestratorPage = () => {
                   <p className="mt-1" data-testid={`risk-approval-meta-${item.approval_id}`}>
                     score: {item.risk_score} · expires: {new Date(item.expires_at).toLocaleString()}
                   </p>
-                  <p className="text-slate-600" data-testid={`risk-approval-requested-by-${item.approval_id}`}>
-                    requested_by: {item.requested_by} · second_approver: {item.second_approver_id || "-"}
+                  <p
+                    className={`font-medium ${
+                      item.sla_stage === "critical" || item.sla_stage === "expired"
+                        ? "text-red-600"
+                        : item.sla_stage === "approaching"
+                          ? "text-yellow-600"
+                          : "text-emerald-600"
+                    }`}
+                    data-testid={`risk-approval-countdown-${item.approval_id}`}
+                  >
+                    SLA: {item.sla_remaining_seconds}s · stage: {item.sla_stage}
                   </p>
+                  <p className="text-slate-600" data-testid={`risk-approval-requested-by-${item.approval_id}`}>
+                    requested_by: {item.requested_by} · assigned_to: {item.assigned_to || "-"} · second_approver: {item.second_approver_id || "-"}
+                  </p>
+
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2" data-testid={`risk-approval-assignment-${item.approval_id}`}>
+                    <Input
+                      value={assignmentInputs[item.approval_id] || ""}
+                      onChange={(event) =>
+                        setAssignmentInputs((prev) => ({
+                          ...prev,
+                          [item.approval_id]: event.target.value,
+                        }))
+                      }
+                      placeholder="Manual assignee user_id"
+                      data-testid={`risk-approval-assignee-input-${item.approval_id}`}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAssign(item.approval_id, false)}
+                        data-testid={`risk-approval-assign-manual-button-${item.approval_id}`}
+                      >
+                        Manual Assign
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAssign(item.approval_id, true)}
+                        data-testid={`risk-approval-assign-auto-button-${item.approval_id}`}
+                      >
+                        Auto Assign
+                      </Button>
+                    </div>
+                  </div>
 
                   <Textarea
                     className="mt-2"
@@ -1001,7 +1192,7 @@ export const AdminRiskOrchestratorPage = () => {
                     <Button
                       size="sm"
                       onClick={() => handleApprovalDecision(item.approval_id, "approve")}
-                      disabled={item.state !== "pending_approval"}
+                      disabled={!(["pending", "assigned"].includes(item.state))}
                       data-testid={`risk-approval-approve-button-${item.approval_id}`}
                     >
                       Approve
@@ -1010,10 +1201,19 @@ export const AdminRiskOrchestratorPage = () => {
                       size="sm"
                       variant="destructive"
                       onClick={() => handleApprovalDecision(item.approval_id, "reject")}
-                      disabled={item.state !== "pending_approval"}
+                      disabled={!(["pending", "assigned"].includes(item.state))}
                       data-testid={`risk-approval-reject-button-${item.approval_id}`}
                     >
                       Reject
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleForceApply(item.approval_id)}
+                      disabled={!isSuperAdmin || !(["pending", "assigned", "expired"].includes(item.state))}
+                      data-testid={`risk-approval-force-apply-button-${item.approval_id}`}
+                    >
+                      Force Apply
                     </Button>
                   </div>
                 </div>
@@ -1046,8 +1246,78 @@ export const AdminRiskOrchestratorPage = () => {
                 <p className="text-slate-600" data-testid={`risk-decision-trace-meta-${trace.trace_id}`}>
                   req: {trace.requested_by} · appr: {trace.approver_id || "-"}
                 </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => loadDecisionIntelligence(trace.trace_id)}
+                  data-testid={`risk-decision-trace-intelligence-button-${trace.trace_id}`}
+                >
+                  Decision Intelligence
+                </Button>
               </div>
             ))}
+
+            {decisionIntelligence && (
+              <div className="rounded border p-2 text-xs" data-testid="risk-decision-intelligence-panel">
+                <p data-testid="risk-decision-intelligence-why">
+                  why: {decisionIntelligence.why_decision?.explanation || "-"}
+                </p>
+                <pre className="mt-1 max-h-44 overflow-auto rounded bg-slate-950 p-2 text-slate-100" data-testid="risk-decision-intelligence-breakdown-json">
+                  {JSON.stringify(decisionIntelligence.risk_breakdown || {}, null, 2)}
+                </pre>
+                <pre className="mt-1 max-h-44 overflow-auto rounded bg-slate-950 p-2 text-slate-100" data-testid="risk-decision-intelligence-diff-json">
+                  {JSON.stringify(decisionIntelligence.before_after_diff || {}, null, 2)}
+                </pre>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+      )}
+
+      {activeTab === "control-tower" && (
+      <div className="grid gap-5 xl:grid-cols-2" data-testid="risk-control-tower-grid">
+        <Card data-testid="risk-control-tower-summary-card">
+          <CardHeader>
+            <CardTitle data-testid="risk-control-tower-summary-title">Operational Dashboard</CardTitle>
+            <CardDescription data-testid="risk-control-tower-summary-description">
+              Tek bakışta queue, reject spike, override kullanımı ve risk dağılımı.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-2" data-testid="risk-control-tower-summary-metrics">
+            <div className="rounded border p-2 text-xs" data-testid="ct-active-pending">
+              active_pending: {dashboardData?.active_pending_approvals ?? "-"}
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-critical-queue">
+              critical_queue: {dashboardData?.critical_queue ?? "-"}
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-unassigned">
+              unassigned: {dashboardData?.unassigned ?? "-"}
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-my-approvals">
+              my_approvals: {dashboardData?.my_approvals ?? "-"}
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-reject-spike">
+              reject_spike_last_hour: {dashboardData?.reject_spike_last_hour ?? "-"}
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-override-usage">
+              override_usage: {dashboardData?.override_usage?.active_count ?? "-"} / {Number(dashboardData?.override_usage?.total_notional_pct || 0).toFixed(2)}%
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="risk-control-tower-distribution-card">
+          <CardHeader>
+            <CardTitle data-testid="risk-control-tower-distribution-title">Risk Score Distribution & Throughput</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded border p-2 text-xs" data-testid="ct-risk-distribution-json">
+              <pre>{JSON.stringify(dashboardData?.risk_score_distribution || {}, null, 2)}</pre>
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-throughput-json">
+              <pre>{JSON.stringify(dashboardData?.approval_throughput_last_hour || {}, null, 2)}</pre>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Iterable
 from uuid import uuid4
 
+import sqlalchemy as sa
 from fastapi import HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -25,6 +26,7 @@ from models import (
     RiskOrchestratorPolicySimulation,
     RiskOrchestratorPolicyVersion,
     SystemAlert,
+    User,
 )
 from services.audit_service import create_audit_log
 from services.execution_safety_service import execution_safety_snapshot, update_execution_safety_state
@@ -60,6 +62,8 @@ APPROVAL_TIMEOUT_MINUTES = 10
 OVERRIDE_EXPIRY_ALERT_MINUTES = 5
 OVERRIDE_ACTIVE_LIMIT = 12
 OVERRIDE_TOTAL_NOTIONAL_LIMIT = 200.0
+APPROVER_PENDING_LIMIT = 8
+STUCK_APPROVAL_MINUTES = 4
 
 
 def _clamp(value: float, min_value: float = 0.0, max_value: float = 100.0) -> float:
@@ -99,6 +103,147 @@ def _approval_flow_from_classification(classification: str) -> dict:
 
 def _current_policy_version(policy: RiskOrchestratorPolicy) -> int:
     return int(getattr(policy, "policy_version", 1) or 1)
+
+
+def _approval_ui_link(approval_id: str) -> str:
+    return f"/admin/risk-orchestrator?tab=approvals&approval_id={approval_id}"
+
+
+def _emit_approval_event(
+    db: Session,
+    *,
+    event_type: str,
+    request: RiskOrchestratorApprovalRequest,
+    actor_id: str | None,
+    reason: str,
+    extra: dict | None = None,
+    severity: str = "INFO",
+) -> None:
+    details = {
+        "request_id": request.approval_id,
+        "risk_score": float(request.risk_score or 0),
+        "classification": request.classification,
+        "actor": actor_id,
+        "reason": reason,
+        "link_to_ui": _approval_ui_link(request.approval_id),
+        "state": request.state,
+        "assigned_to": request.assigned_to,
+        "requested_by": request.requested_by,
+    }
+    if extra:
+        details.update(extra)
+
+    create_system_alert(
+        db,
+        alert_type=event_type,
+        severity=severity,
+        message=f"Approval event: {event_type}",
+        details=details,
+        entity_key=request.approval_id,
+        root_cause_code=event_type,
+        state_key=f"approval_event_{event_type}_{request.approval_id}",
+    )
+
+
+def _eligible_approvers(db: Session) -> list[User]:
+    return (
+        db.query(User)
+        .filter(
+            User.is_active.is_(True),
+            User.role.in_(["super_admin", "admin", "ops"]),
+        )
+        .order_by(User.created_at.asc())
+        .all()
+    )
+
+
+def _approver_pending_count(db: Session, *, approver_id: str) -> int:
+    return (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(
+            RiskOrchestratorApprovalRequest.state.in_(["pending", "assigned"]),
+            RiskOrchestratorApprovalRequest.assigned_to == approver_id,
+        )
+        .count()
+    )
+
+
+def _select_auto_assignee(
+    db: Session,
+    *,
+    requested_by: str,
+    classification: str,
+) -> User | None:
+    candidates = [item for item in _eligible_approvers(db) if item.id != requested_by]
+    if not candidates:
+        return None
+
+    role_priority = ["super_admin", "admin", "ops"]
+    if classification == "CRITICAL":
+        role_priority = ["super_admin", "admin", "ops"]
+    elif classification == "WARNING":
+        role_priority = ["admin", "super_admin", "ops"]
+
+    role_ordered: list[User] = []
+    for role in role_priority:
+        role_ordered.extend([item for item in candidates if str(item.role.value if hasattr(item.role, "value") else item.role) == role])
+
+    if not role_ordered:
+        role_ordered = candidates
+
+    scored: list[tuple[int, datetime, User]] = []
+    for candidate in role_ordered:
+        pending_count = _approver_pending_count(db, approver_id=candidate.id)
+        if pending_count >= APPROVER_PENDING_LIMIT:
+            continue
+        last_assigned = (
+            db.query(RiskOrchestratorApprovalRequest)
+            .filter(RiskOrchestratorApprovalRequest.assigned_to == candidate.id)
+            .order_by(RiskOrchestratorApprovalRequest.assigned_at.desc())
+            .first()
+        )
+        assigned_at = last_assigned.assigned_at if last_assigned and last_assigned.assigned_at else datetime.fromtimestamp(0, tz=timezone.utc)
+        scored.append((pending_count, assigned_at, candidate))
+
+    if not scored:
+        return None
+
+    scored.sort(key=lambda item: (item[0], item[1]))
+    return scored[0][2]
+
+
+def _assign_approval_request(
+    db: Session,
+    *,
+    request: RiskOrchestratorApprovalRequest,
+    assignee_id: str,
+    actor_id: str | None,
+    auto_assigned: bool,
+) -> RiskOrchestratorApprovalRequest:
+    pending_count = _approver_pending_count(db, approver_id=assignee_id)
+    if pending_count >= APPROVER_PENDING_LIMIT:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="approver_pending_limit_reached")
+
+    request.assigned_to = assignee_id
+    request.assigned_at = _now()
+    request.auto_assigned = auto_assigned
+    request.last_activity_at = _now()
+    request.state = "assigned"
+    request.updated_at = _now()
+    db.commit()
+    db.refresh(request)
+
+    _emit_approval_event(
+        db,
+        event_type="approval_assigned",
+        request=request,
+        actor_id=actor_id,
+        reason="auto_assigned" if auto_assigned else "manual_assigned",
+        extra={"assigned_to": assignee_id},
+        severity="INFO",
+    )
+    db.commit()
+    return request
 
 
 def _policy_payload(policy: RiskOrchestratorPolicy) -> dict:
@@ -541,6 +686,7 @@ def apply_policy_from_simulation(
     request_key: str | None,
     expected_policy_version: int | None,
     flow_type: str = "apply",
+    force_resolution: bool = False,
 ) -> dict:
     simulation = (
         db.query(RiskOrchestratorPolicySimulation)
@@ -567,6 +713,13 @@ def apply_policy_from_simulation(
         "components": (simulation.metrics or {}).get("score_components") or {},
     }
     approval_flow = _approval_flow_from_classification(risk_gate["classification"])
+    if force_resolution:
+        approval_flow = {
+            "requires_double_confirm": False,
+            "requires_second_approval": False,
+            "default_blocked": False,
+            "rule_path": "FORCE_OVERRIDE_APPLY",
+        }
 
     if approval_flow["requires_double_confirm"] and not double_confirmed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="double_confirmation_required")
@@ -578,7 +731,7 @@ def apply_policy_from_simulation(
         .first()
     )
     if existing_approval is not None:
-        if existing_approval.state in {"pending_approval", "approved", "rejected", "timeout"}:
+        if existing_approval.state in {"pending", "assigned", "approved", "rejected", "expired"}:
             return {
                 "status": existing_approval.state,
                 "flow_type": existing_approval.flow_type,
@@ -598,7 +751,7 @@ def apply_policy_from_simulation(
         .order_by(RiskOrchestratorDecisionTrace.created_at.desc())
         .first()
     )
-    if existing_trace is not None and existing_trace.decision_state in {"applied", "blocked", "pending_approval", "rejected"}:
+    if existing_trace is not None and existing_trace.decision_state in {"applied", "blocked", "pending", "assigned", "rejected", "expired"}:
         return {
             "status": existing_trace.decision_state,
             "flow_type": existing_trace.flow_type,
@@ -633,6 +786,23 @@ def apply_policy_from_simulation(
             },
         )
         db.add(trace)
+        create_system_alert(
+            db,
+            alert_type="critical_block",
+            severity="CRITICAL",
+            message="Critical policy change blocked by risk gate",
+            details={
+                "request_id": computed_request_key,
+                "risk_score": float(risk_gate["risk_score"]),
+                "classification": risk_gate["classification"],
+                "actor": actor_id,
+                "reason": reason_note,
+                "link_to_ui": "/admin/risk-orchestrator?tab=risk-gate",
+            },
+            entity_key=computed_request_key,
+            root_cause_code="critical_block",
+            state_key=f"critical_block_{computed_request_key}",
+        )
         db.commit()
         return {
             "status": "blocked",
@@ -654,13 +824,15 @@ def apply_policy_from_simulation(
             flow_type=flow_type,
             simulation_id=simulation_id,
             classification=risk_gate["classification"],
+            priority=risk_gate["classification"],
             risk_score=float(risk_gate["risk_score"]),
-            state="pending_approval",
+            state="pending",
             requested_by=actor_id,
             requested_role=actor_role,
             reason_note=reason_note,
             override_used=apply_with_override,
             expires_at=_now() + timedelta(minutes=APPROVAL_TIMEOUT_MINUTES),
+            last_activity_at=_now(),
             context_payload={
                 "approval_flow": approval_flow,
                 "score_components": risk_gate["components"],
@@ -674,7 +846,7 @@ def apply_policy_from_simulation(
             classification=risk_gate["classification"],
             risk_score=float(risk_gate["risk_score"]),
             rule_path="CRITICAL_PENDING_4_EYES",
-            decision_state="pending_approval",
+            decision_state="pending",
             requested_by=actor_id,
             approver_id=None,
             request_key=computed_request_key,
@@ -688,8 +860,49 @@ def apply_policy_from_simulation(
         db.add(approval_request)
         db.add(trace)
         db.commit()
+
+        _emit_approval_event(
+            db,
+            event_type="approval_requested",
+            request=approval_request,
+            actor_id=actor_id,
+            reason=reason_note,
+            extra={"rule_path": "CRITICAL_PENDING_4_EYES"},
+            severity="WARNING",
+        )
+
+        auto_assignee = _select_auto_assignee(
+            db,
+            requested_by=actor_id,
+            classification=risk_gate["classification"],
+        )
+        if auto_assignee is not None:
+            try:
+                approval_request = _assign_approval_request(
+                    db,
+                    request=approval_request,
+                    assignee_id=auto_assignee.id,
+                    actor_id=actor_id,
+                    auto_assigned=True,
+                )
+            except HTTPException:
+                create_system_alert(
+                    db,
+                    alert_type="approval_bottleneck",
+                    severity="WARNING",
+                    message="Auto assignment skipped: approver pending limit reached",
+                    details={
+                        "request_id": approval_request.approval_id,
+                        "candidate_assignee": auto_assignee.id,
+                    },
+                    entity_key=approval_request.approval_id,
+                    root_cause_code="approver_pending_limit",
+                    state_key=f"approval_bottleneck_{approval_request.approval_id}",
+                )
+                db.commit()
+
         return {
-            "status": "pending_approval",
+            "status": approval_request.state,
             "flow_type": flow_type,
             "simulation_id": simulation_id,
             "risk_score": float(risk_gate["risk_score"]),
@@ -803,26 +1016,184 @@ def _expire_stale_approval_requests(db: Session) -> None:
     rows = (
         db.query(RiskOrchestratorApprovalRequest)
         .filter(
-            RiskOrchestratorApprovalRequest.state == "pending_approval",
-            RiskOrchestratorApprovalRequest.expires_at < now_ts,
+            RiskOrchestratorApprovalRequest.state.in_(["pending", "assigned"]),
+            RiskOrchestratorApprovalRequest.expires_at <= now_ts,
         )
         .all()
     )
     if not rows:
         return
     for row in rows:
-        row.state = "timeout"
+        row.state = "expired"
         row.rejected_at = now_ts
+        row.expired_at = now_ts
         row.updated_at = now_ts
+        row.last_activity_at = now_ts
+        row.second_approver_note = "SLA breach auto-reject"
+
+        trace = RiskOrchestratorDecisionTrace(
+            trace_id=f"ro-trace-{uuid4().hex[:18]}",
+            flow_type=row.flow_type,
+            simulation_id=row.simulation_id,
+            classification=row.classification,
+            risk_score=float(row.risk_score or 0),
+            rule_path="FORCED_AUTO_REJECT_SLA_BREACH",
+            decision_state="expired",
+            requested_by=row.requested_by,
+            approver_id=None,
+            request_key=row.request_key,
+            reason_note=row.reason_note,
+            approval_note="SLA breach auto-reject",
+            payload={"approval_id": row.approval_id, "reason": "sla_breach"},
+        )
+        db.add(trace)
+        row.final_decision_trace_id = trace.trace_id
+
+        _emit_approval_event(
+            db,
+            event_type="approval_expired",
+            request=row,
+            actor_id=None,
+            reason="sla_breach_auto_reject",
+            extra={"forced_resolution": "auto_reject"},
+            severity="CRITICAL",
+        )
+
     db.commit()
 
 
-def list_policy_approval_requests(db: Session, *, state: str | None = None, limit: int = 50) -> list[RiskOrchestratorApprovalRequest]:
+def process_approval_escalations(db: Session) -> dict:
+    now_ts = _now()
     _expire_stale_approval_requests(db)
+
+    rows = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(
+            RiskOrchestratorApprovalRequest.state.in_(["pending", "assigned"]),
+            RiskOrchestratorApprovalRequest.classification == "CRITICAL",
+        )
+        .all()
+    )
+
+    warning_count = 0
+    critical_count = 0
+    stuck_count = 0
+
+    for row in rows:
+        elapsed = (now_ts - row.created_at).total_seconds()
+
+        if elapsed >= 8 * 60 and row.critical_escalated_at is None:
+            row.critical_escalated_at = now_ts
+            row.escalation_count = int(row.escalation_count or 0) + 1
+            row.last_activity_at = now_ts
+            row.updated_at = now_ts
+            _emit_approval_event(
+                db,
+                event_type="approval_expiring",
+                request=row,
+                actor_id=None,
+                reason="critical_escalation_8m",
+                extra={"sla_stage": "critical", "elapsed_seconds": int(elapsed)},
+                severity="CRITICAL",
+            )
+            critical_count += 1
+
+            if row.assigned_to is None:
+                assignee = _select_auto_assignee(db, requested_by=row.requested_by, classification=row.classification)
+                if assignee is not None:
+                    try:
+                        _assign_approval_request(
+                            db,
+                            request=row,
+                            assignee_id=assignee.id,
+                            actor_id=None,
+                            auto_assigned=True,
+                        )
+                    except HTTPException:
+                        pass
+
+        elif elapsed >= 5 * 60 and row.warning_escalated_at is None:
+            row.warning_escalated_at = now_ts
+            row.escalation_count = int(row.escalation_count or 0) + 1
+            row.last_activity_at = now_ts
+            row.updated_at = now_ts
+            _emit_approval_event(
+                db,
+                event_type="approval_expiring",
+                request=row,
+                actor_id=None,
+                reason="warning_escalation_5m",
+                extra={"sla_stage": "warning", "elapsed_seconds": int(elapsed)},
+                severity="WARNING",
+            )
+            warning_count += 1
+
+        inactivity_seconds = (now_ts - (row.last_activity_at or row.created_at)).total_seconds()
+        if inactivity_seconds >= STUCK_APPROVAL_MINUTES * 60:
+            create_system_alert(
+                db,
+                alert_type="approval_stuck",
+                severity="WARNING",
+                message="Approval request seems stuck",
+                details={
+                    "request_id": row.approval_id,
+                    "classification": row.classification,
+                    "assigned_to": row.assigned_to,
+                    "inactive_seconds": int(inactivity_seconds),
+                },
+                entity_key=row.approval_id,
+                root_cause_code="approval_stuck",
+                state_key=f"approval_stuck_{row.approval_id}",
+            )
+            stuck_count += 1
+
+    if rows:
+        db.commit()
+
+    return {
+        "warning_escalations": warning_count,
+        "critical_escalations": critical_count,
+        "stuck_detected": stuck_count,
+    }
+
+
+def list_policy_approval_requests(db: Session, *, state: str | None = None, limit: int = 50) -> list[RiskOrchestratorApprovalRequest]:
+    process_approval_escalations(db)
     query = db.query(RiskOrchestratorApprovalRequest)
     if state:
         query = query.filter(RiskOrchestratorApprovalRequest.state == state)
     return query.order_by(RiskOrchestratorApprovalRequest.created_at.desc()).limit(limit).all()
+
+
+def list_policy_queue(
+    db: Session,
+    *,
+    actor_id: str,
+    scope: str = "all",
+    state: str | None = None,
+    critical_first: bool = True,
+    limit: int = 100,
+) -> list[RiskOrchestratorApprovalRequest]:
+    process_approval_escalations(db)
+    query = db.query(RiskOrchestratorApprovalRequest)
+
+    if scope == "my":
+        query = query.filter(RiskOrchestratorApprovalRequest.assigned_to == actor_id)
+    elif scope == "unassigned":
+        query = query.filter(RiskOrchestratorApprovalRequest.assigned_to.is_(None))
+
+    if state:
+        query = query.filter(RiskOrchestratorApprovalRequest.state == state)
+
+    if critical_first:
+        query = query.order_by(
+            sa.case((RiskOrchestratorApprovalRequest.classification == "CRITICAL", 0), else_=1),
+            RiskOrchestratorApprovalRequest.expires_at.asc(),
+        )
+    else:
+        query = query.order_by(RiskOrchestratorApprovalRequest.created_at.desc())
+
+    return query.limit(limit).all()
 
 
 def approve_policy_approval_request(
@@ -844,15 +1215,18 @@ def approve_policy_approval_request(
     _expire_stale_approval_requests(db)
     db.refresh(request)
 
-    if request.state != "pending_approval":
+    if request.state not in {"pending", "assigned"}:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="approval_request_not_pending")
     if request.requested_by == actor_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="same_user_second_approval_blocked")
+    if request.assigned_to and request.assigned_to != actor_id and actor_role != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="approval_owned_by_another_actor")
 
     request.state = "approved"
     request.second_approver_id = actor_id
     request.second_approver_note = decision_note
     request.approved_at = _now()
+    request.last_activity_at = _now()
     request.updated_at = _now()
     db.commit()
     db.refresh(request)
@@ -895,6 +1269,15 @@ def approve_policy_approval_request(
     db.add(trace)
     request.final_decision_trace_id = apply_result.get("decision_trace_id")
     request.updated_at = _now()
+    request.last_activity_at = _now()
+    _emit_approval_event(
+        db,
+        event_type="approval_approved",
+        request=request,
+        actor_id=actor_id,
+        reason=decision_note,
+        severity="INFO",
+    )
     db.commit()
     db.refresh(request)
 
@@ -923,15 +1306,18 @@ def reject_policy_approval_request(
     _expire_stale_approval_requests(db)
     db.refresh(request)
 
-    if request.state != "pending_approval":
+    if request.state not in {"pending", "assigned"}:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="approval_request_not_pending")
     if request.requested_by == actor_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="same_user_second_approval_blocked")
+    if request.assigned_to and request.assigned_to != actor_id and actor_role != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="approval_owned_by_another_actor")
 
     request.state = "rejected"
     request.second_approver_id = actor_id
     request.second_approver_note = decision_note
     request.rejected_at = _now()
+    request.last_activity_at = _now()
     request.updated_at = _now()
 
     trace = RiskOrchestratorDecisionTrace(
@@ -951,9 +1337,302 @@ def reject_policy_approval_request(
     )
     db.add(trace)
     request.final_decision_trace_id = trace.trace_id
+    _emit_approval_event(
+        db,
+        event_type="approval_rejected",
+        request=request,
+        actor_id=actor_id,
+        reason=decision_note,
+        severity="WARNING",
+    )
     db.commit()
     db.refresh(request)
     return request
+
+
+def assign_policy_approval_request(
+    db: Session,
+    *,
+    approval_id: str,
+    actor_id: str,
+    assignee_id: str | None,
+    auto_assign: bool,
+) -> RiskOrchestratorApprovalRequest:
+    request = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(RiskOrchestratorApprovalRequest.approval_id == approval_id)
+        .first()
+    )
+    if request is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="approval_request_not_found")
+    if request.state not in {"pending", "assigned"}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="approval_request_not_assignable")
+
+    selected_assignee_id = assignee_id
+    if auto_assign:
+        selected = _select_auto_assignee(
+            db,
+            requested_by=request.requested_by,
+            classification=request.classification,
+        )
+        if selected is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="no_eligible_auto_assignee")
+        selected_assignee_id = selected.id
+
+    if not selected_assignee_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="assignee_required")
+
+    return _assign_approval_request(
+        db,
+        request=request,
+        assignee_id=selected_assignee_id,
+        actor_id=actor_id,
+        auto_assigned=auto_assign,
+    )
+
+
+def force_apply_approval_request(
+    db: Session,
+    *,
+    approval_id: str,
+    actor_id: str,
+    actor_role: str,
+    reason_note: str,
+) -> dict:
+    request = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(RiskOrchestratorApprovalRequest.approval_id == approval_id)
+        .first()
+    )
+    if request is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="approval_request_not_found")
+    if request.state not in {"pending", "assigned", "expired"}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="approval_request_not_force_applicable")
+
+    request.force_applied = True
+    request.state = "approved"
+    request.second_approver_id = actor_id
+    request.second_approver_note = f"force_apply:{reason_note}"
+    request.approved_at = _now()
+    request.last_activity_at = _now()
+    request.updated_at = _now()
+    db.commit()
+    db.refresh(request)
+
+    result = apply_policy_from_simulation(
+        db,
+        simulation_id=request.simulation_id,
+        actor_id=request.requested_by,
+        actor_role=request.requested_role,
+        reason_note=request.reason_note,
+        double_confirmed=True,
+        apply_with_override=True,
+        approval_note=f"force_apply:{reason_note}",
+        request_key=f"{request.request_key}:force_apply",
+        expected_policy_version=None,
+        flow_type=request.flow_type,
+        force_resolution=True,
+    )
+
+    request.final_decision_trace_id = result.get("decision_trace_id")
+    request.updated_at = _now()
+    db.commit()
+
+    _emit_approval_event(
+        db,
+        event_type="force_override",
+        request=request,
+        actor_id=actor_id,
+        reason=reason_note,
+        severity="CRITICAL",
+    )
+    db.commit()
+    return result
+
+
+def build_decision_intelligence(db: Session, *, trace_id: str) -> dict:
+    trace = (
+        db.query(RiskOrchestratorDecisionTrace)
+        .filter(RiskOrchestratorDecisionTrace.trace_id == trace_id)
+        .first()
+    )
+    if trace is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="decision_trace_not_found")
+
+    simulation = (
+        db.query(RiskOrchestratorPolicySimulation)
+        .filter(RiskOrchestratorPolicySimulation.simulation_id == trace.simulation_id)
+        .first()
+    )
+
+    similar = (
+        db.query(RiskOrchestratorDecisionTrace)
+        .filter(
+            RiskOrchestratorDecisionTrace.rule_path == trace.rule_path,
+            RiskOrchestratorDecisionTrace.classification == trace.classification,
+            RiskOrchestratorDecisionTrace.trace_id != trace.trace_id,
+        )
+        .order_by(RiskOrchestratorDecisionTrace.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    why_text = "allowed"
+    if trace.decision_state in {"blocked", "rejected", "expired"}:
+        why_text = "blocked"
+    if trace.decision_state in {"pending", "assigned"}:
+        why_text = "pending"
+
+    return {
+        "trace": trace,
+        "before_after_diff": simulation.diff_summary if simulation else {},
+        "risk_breakdown": (simulation.metrics or {}).get("score_components") if simulation else (trace.payload or {}).get("score_components", {}),
+        "why_decision": {
+            "state": trace.decision_state,
+            "rule_path": trace.rule_path,
+            "classification": trace.classification,
+            "explanation": f"Decision {why_text} by rule {trace.rule_path}",
+        },
+        "similar_patterns": [
+            {
+                "trace_id": item.trace_id,
+                "decision_state": item.decision_state,
+                "risk_score": item.risk_score,
+                "created_at": item.created_at,
+            }
+            for item in similar
+        ],
+    }
+
+
+def build_reject_insights(db: Session) -> dict:
+    now_ts = _now()
+    rows = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "risk_orchestrator_reject",
+            AuditLog.created_at >= now_ts - timedelta(minutes=30),
+        )
+        .all()
+    )
+
+    counters: dict[str, int] = {}
+    for row in rows:
+        reason_codes = (row.details or {}).get("reason_codes") or []
+        for reason in reason_codes:
+            counters[reason] = counters.get(reason, 0) + 1
+
+    insights: list[dict] = []
+    for reason, count in sorted(counters.items(), key=lambda item: item[1], reverse=True):
+        if count < 3:
+            continue
+        suggestion = "policy_too_strict"
+        if "symbol" in reason:
+            suggestion = "symbol_risk_anomaly"
+        elif "cooldown" in reason or "frequency" in reason:
+            suggestion = "execution_frequency_tuning"
+
+        insights.append(
+            {
+                "rule": reason,
+                "count": count,
+                "window_minutes": 30,
+                "suggestion": suggestion,
+                "message": f"{reason} son 30 dk içinde {count} kez tetiklendi. Öneri: {suggestion}",
+            }
+        )
+
+    return {
+        "window_minutes": 30,
+        "insights": insights,
+    }
+
+
+def build_operational_dashboard(db: Session, *, actor_id: str | None = None) -> dict:
+    process_approval_escalations(db)
+    now_ts = _now()
+
+    pending_total = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(RiskOrchestratorApprovalRequest.state.in_(["pending", "assigned"]))
+        .count()
+    )
+    critical_queue = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(
+            RiskOrchestratorApprovalRequest.state.in_(["pending", "assigned"]),
+            RiskOrchestratorApprovalRequest.classification == "CRITICAL",
+        )
+        .count()
+    )
+    unassigned = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(
+            RiskOrchestratorApprovalRequest.state.in_(["pending", "assigned"]),
+            RiskOrchestratorApprovalRequest.assigned_to.is_(None),
+        )
+        .count()
+    )
+    my_approvals = 0
+    if actor_id:
+        my_approvals = (
+            db.query(RiskOrchestratorApprovalRequest)
+            .filter(
+                RiskOrchestratorApprovalRequest.state.in_(["pending", "assigned"]),
+                RiskOrchestratorApprovalRequest.assigned_to == actor_id,
+            )
+            .count()
+        )
+
+    reject_spike = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "risk_orchestrator_reject",
+            AuditLog.created_at >= now_ts - timedelta(hours=1),
+        )
+        .count()
+    )
+
+    active_overrides = _active_overrides(db)
+    override_usage = {
+        "active_count": len(active_overrides),
+        "total_notional_pct": sum(float((item.override_value or {}).get("max_notional_pct") or 0) for item in active_overrides),
+    }
+
+    traces = (
+        db.query(RiskOrchestratorDecisionTrace)
+        .filter(RiskOrchestratorDecisionTrace.created_at >= now_ts - timedelta(hours=24))
+        .all()
+    )
+    distribution = {"safe": 0, "warning": 0, "critical": 0}
+    for trace in traces:
+        cls = (trace.classification or "").lower()
+        if cls in distribution:
+            distribution[cls] += 1
+
+    throughput_rows = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(
+            RiskOrchestratorApprovalRequest.state.in_(["approved", "rejected", "expired"]),
+            RiskOrchestratorApprovalRequest.updated_at >= now_ts - timedelta(hours=1),
+        )
+        .all()
+    )
+    throughput: dict[str, int] = {}
+    for row in throughput_rows:
+        approver = row.second_approver_id or "system"
+        throughput[approver] = throughput.get(approver, 0) + 1
+
+    return {
+        "active_pending_approvals": pending_total,
+        "critical_queue": critical_queue,
+        "unassigned": unassigned,
+        "my_approvals": my_approvals,
+        "reject_spike_last_hour": reject_spike,
+        "override_usage": override_usage,
+        "risk_score_distribution": distribution,
+        "approval_throughput_last_hour": throughput,
+    }
 
 
 def list_decision_traces(db: Session, *, limit: int = 100) -> list[RiskOrchestratorDecisionTrace]:

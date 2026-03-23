@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import ValidationError
@@ -24,10 +25,16 @@ from schemas import (
     RegimeEvaluationResponse,
     RegimeSnapshotResponse,
     RiskOrchestratorAlertResponse,
+    RiskOrchestratorApprovalAssignRequest,
     RiskOrchestratorApprovalDecisionRequest,
+    RiskOrchestratorApprovalQueueItemResponse,
     RiskOrchestratorApprovalRequestResponse,
     RiskOrchestratorAnalyticsResponse,
     RiskOrchestratorDecisionTraceResponse,
+    RiskOrchestratorDecisionIntelligenceResponse,
+    RiskOrchestratorForceApplyRequest,
+    RiskOrchestratorOperationalDashboardResponse,
+    RiskOrchestratorRejectInsightsResponse,
     RiskOrchestratorPolicyApplyResponse,
     RiskOrchestratorRevertSimulationResponse,
     RiskOrchestratorAuditTimelineItemResponse,
@@ -71,11 +78,18 @@ from services.audit_service import create_audit_log
 from services.decision_kernel_service import build_context_hash, build_decision_hash, evaluate_decision_context
 from services.regime_classifier_service import classify_regime, is_regime_allowed, persist_regime_snapshot
 from services.risk_orchestrator_service import (
+    assign_policy_approval_request,
+    build_decision_intelligence,
+    build_operational_dashboard,
+    build_reject_insights,
+    force_apply_approval_request,
     apply_revert_from_simulation,
     approve_policy_approval_request,
     apply_policy_from_simulation,
     build_audit_timeline,
     list_decision_traces,
+    list_policy_queue,
+    process_approval_escalations,
     list_policy_approval_requests,
     build_status_snapshot,
     create_manual_override,
@@ -195,6 +209,27 @@ def _policy_response(policy) -> RiskOrchestratorPolicyResponse:
         duplicate_suppression_window_seconds=policy.duplicate_suppression_window_seconds,
         policy_version=int(getattr(policy, "policy_version", 1) or 1),
         updated_at=policy.updated_at,
+    )
+
+
+def _sla_snapshot(item) -> tuple[int, str]:
+    now_ts = datetime.now(timezone.utc)
+    remaining = int((item.expires_at - now_ts).total_seconds())
+    if remaining <= 0:
+        return 0, "expired"
+    if remaining <= 2 * 60:
+        return remaining, "critical"
+    if remaining <= 5 * 60:
+        return remaining, "approaching"
+    return remaining, "safe"
+
+
+def _approval_queue_item_response(item) -> RiskOrchestratorApprovalQueueItemResponse:
+    remaining, stage = _sla_snapshot(item)
+    return RiskOrchestratorApprovalQueueItemResponse(
+        **RiskOrchestratorApprovalRequestResponse.model_validate(item).model_dump(),
+        sla_remaining_seconds=remaining,
+        sla_stage=stage,
     )
 
 
@@ -556,6 +591,82 @@ def admin_risk_policy_approvals(
     return [RiskOrchestratorApprovalRequestResponse.model_validate(row) for row in rows]
 
 
+@router.get(
+    "/admin/risk-orchestrator/policy/queue",
+    response_model=list[RiskOrchestratorApprovalQueueItemResponse],
+)
+def admin_risk_policy_queue(
+    scope: str = "all",
+    state: str | None = None,
+    critical_first: bool = True,
+    limit: int = 100,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    rows = list_policy_queue(
+        db,
+        actor_id=current_admin.id,
+        scope=scope,
+        state=state,
+        critical_first=critical_first,
+        limit=limit,
+    )
+    return [_approval_queue_item_response(item) for item in rows]
+
+
+@router.post("/admin/risk-orchestrator/policy/queue/sweep")
+def admin_risk_policy_queue_sweep(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return process_approval_escalations(db)
+
+
+@router.post(
+    "/admin/risk-orchestrator/policy/queue/{approval_id}/assign",
+    response_model=RiskOrchestratorApprovalQueueItemResponse,
+)
+def admin_risk_policy_queue_assign(
+    approval_id: str,
+    payload: RiskOrchestratorApprovalAssignRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = assign_policy_approval_request(
+        db,
+        approval_id=approval_id,
+        actor_id=current_admin.id,
+        assignee_id=payload.assignee_id,
+        auto_assign=payload.auto_assign,
+    )
+    return _approval_queue_item_response(row)
+
+
+@router.post(
+    "/admin/risk-orchestrator/policy/queue/{approval_id}/force-apply",
+    response_model=RiskOrchestratorPolicyApplyResponse,
+)
+def admin_risk_policy_queue_force_apply(
+    approval_id: str,
+    payload: RiskOrchestratorForceApplyRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    result = force_apply_approval_request(
+        db,
+        approval_id=approval_id,
+        actor_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        reason_note=payload.reason_note,
+    )
+    response_payload = {
+        **result,
+        "policy": _policy_response(result["policy"]) if result.get("policy") is not None else None,
+    }
+    return RiskOrchestratorPolicyApplyResponse(**response_payload)
+
+
 @router.post(
     "/admin/risk-orchestrator/policy/approvals/{approval_id}/approve",
     response_model=RiskOrchestratorPolicyApplyResponse,
@@ -613,6 +724,51 @@ def admin_risk_policy_decision_traces(
     _ = current_admin
     rows = list_decision_traces(db, limit=limit)
     return [RiskOrchestratorDecisionTraceResponse.model_validate(row) for row in rows]
+
+
+@router.get(
+    "/admin/risk-orchestrator/policy/decision-intelligence/{trace_id}",
+    response_model=RiskOrchestratorDecisionIntelligenceResponse,
+)
+def admin_risk_policy_decision_intelligence(
+    trace_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    data = build_decision_intelligence(db, trace_id=trace_id)
+    return RiskOrchestratorDecisionIntelligenceResponse(
+        trace=RiskOrchestratorDecisionTraceResponse.model_validate(data["trace"]),
+        before_after_diff=data["before_after_diff"],
+        risk_breakdown=data["risk_breakdown"],
+        why_decision=data["why_decision"],
+        similar_patterns=data["similar_patterns"],
+    )
+
+
+@router.get(
+    "/admin/risk-orchestrator/rejects/insights",
+    response_model=RiskOrchestratorRejectInsightsResponse,
+)
+def admin_risk_rejects_insights(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    data = build_reject_insights(db)
+    return RiskOrchestratorRejectInsightsResponse(**data)
+
+
+@router.get(
+    "/admin/risk-orchestrator/operations/dashboard",
+    response_model=RiskOrchestratorOperationalDashboardResponse,
+)
+def admin_risk_operational_dashboard(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    data = build_operational_dashboard(db, actor_id=current_admin.id)
+    return RiskOrchestratorOperationalDashboardResponse(**data)
 
 
 @router.post(

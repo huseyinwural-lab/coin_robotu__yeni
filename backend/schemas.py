@@ -1521,21 +1521,77 @@ class RiskOrchestratorApprovalRequestResponse(BaseModel):
     flow_type: str
     simulation_id: str
     classification: str
+    priority: str
     risk_score: float
     state: str
     requested_by: str
     requested_role: str
+    assigned_to: str | None = None
+    assigned_at: datetime | None = None
+    auto_assigned: bool = False
     reason_note: str
     override_used: bool
     second_approver_id: str | None = None
     second_approver_note: str | None = None
     approved_at: datetime | None = None
     rejected_at: datetime | None = None
+    warning_escalated_at: datetime | None = None
+    critical_escalated_at: datetime | None = None
+    expired_at: datetime | None = None
+    escalation_count: int = 0
+    force_applied: bool = False
     expires_at: datetime
     context_payload: dict
     final_decision_trace_id: str | None = None
+    last_activity_at: datetime
     created_at: datetime
     updated_at: datetime
+
+
+class RiskOrchestratorApprovalQueueItemResponse(RiskOrchestratorApprovalRequestResponse):
+    sla_remaining_seconds: int
+    sla_stage: str
+
+
+class RiskOrchestratorApprovalAssignRequest(BaseModel):
+    assignee_id: str | None = None
+    auto_assign: bool = False
+
+
+class RiskOrchestratorForceApplyRequest(BaseModel):
+    reason_note: str = Field(min_length=3, max_length=1000)
+
+
+class RiskOrchestratorDecisionIntelligenceResponse(BaseModel):
+    trace: "RiskOrchestratorDecisionTraceResponse"
+    before_after_diff: dict
+    risk_breakdown: dict
+    why_decision: dict
+    similar_patterns: list[dict]
+
+
+class RiskOrchestratorRejectInsightItem(BaseModel):
+    rule: str
+    count: int
+    window_minutes: int
+    suggestion: str
+    message: str
+
+
+class RiskOrchestratorRejectInsightsResponse(BaseModel):
+    window_minutes: int
+    insights: list[RiskOrchestratorRejectInsightItem]
+
+
+class RiskOrchestratorOperationalDashboardResponse(BaseModel):
+    active_pending_approvals: int
+    critical_queue: int
+    unassigned: int
+    my_approvals: int
+    reject_spike_last_hour: int
+    override_usage: dict
+    risk_score_distribution: dict
+    approval_throughput_last_hour: dict
 
 
 class RiskOrchestratorApprovalDecisionRequest(BaseModel):
