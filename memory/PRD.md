@@ -1,3 +1,28 @@
+## 2026-03-23 — Risk Enforcement + Intervention System (Admin Risk Orchestrator) ✅
+
+### Bu iterasyonda tamamlananlar (P0)
+- **DB Migration tamamlandı:** `ae34519584d9_risk_orchestrator_guard_models.py` ile RO guard tabloları ve `risk_orchestrator_policies.policy_version` alanı güvenli/idempotent şekilde eklendi, `alembic upgrade head` uygulandı.
+- **Backend tamamlandı:**
+  - Policy akışı: `simulate` → `apply` (double confirm zorunlu) → `history` → `revert`
+  - Control actions: `kill-switch`, `global-pause`, `force-risk-check`
+  - Exposure override: create/list/deactivate
+  - In-trade supervisor: run, open positions list, intervention (reduce/close/block adds)
+  - Rejects: filtreleme + detail drill-down
+  - Audit & governance: timeline
+  - Alerts + auto-trigger logs endpointleri
+- **Frontend tamamlandı:** `AdminRiskOrchestratorPage.jsx` tam refactor edildi; çok modüllü Risk Enforcement paneli (policy, critical actions, exposure, intervention, rejects, alerts, timeline), super_admin gating ve zorunlu double-confirm modal eklendi.
+
+### Doğrulama / Test Durumu
+- **Testing Agent Iteration 103:** backend 19/19 pass (1 skipped), frontend 14/14 kritik `data-testid` pass.
+- Regresyon düzeltmeleri doğrulandı:
+  - datetime JSON serialize (force-risk-check)
+  - execution safety parametre uyuşmazlığı
+  - rejects endpoint `created_at` alanı
+
+### Açık Kalanlar (Backlog)
+- **P1:** richer revert UX (diff-before-apply side-by-side), override lifecycle analytics, alert filtre/paging iyileştirme.
+- **P2:** auto-refresh tuning, predictive analytics/ML bağları, saved filter presets.
+
 ## 2026-03-23 — Hotfix: Strategy Observability 500 + Workflow Gate Fix ✅
 
 ### 1) Strategy observability verisi alınamadı (500) — ÇÖZÜLDÜ
