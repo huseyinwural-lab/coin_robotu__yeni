@@ -1,3 +1,57 @@
+## 2026-03-23 — GAP CLOSURE P0: PLAYBOOK_PREVIEW 500 RCA + Kalıcı Fix ✅
+
+### Kök neden (RCA)
+- `POST /api/admin-phase3/incident-snapshots/playbook/preview` çağrısında 500 hatasının kökü:
+  - PostgreSQL tarafında ilgili tabloların migration ile hiç oluşturulmamış olması.
+  - Hata: `psycopg2.errors.UndefinedTable: relation "playbook_execution_runs" does not exist`
+- Aynı sınıf risk alanı:
+  - `signal_governance_decisions`
+  - `playbook_execution_runs`
+  - `playbook_rollback_markers`
+
+### Uygulanan fix stratejisi
+- Yeni migration eklendi: `20260323_0062_governance_playbook_tables.py`
+  - Eksik governance + playbook tablolarını oluşturur
+  - İndeksleri ekler
+  - Kısmi varlık senaryoları için idempotent (table/column/index existence check)
+- Alembic head doğrulandı: `20260323_0062 (head)`
+
+### Etkilenen dosyalar
+- `backend/migrations/versions/20260323_0062_governance_playbook_tables.py` (yeni)
+
+### Kırılan / kırılmayan akışlar (fix sonrası)
+- ✅ Düzelen:
+  - `POST /api/admin-phase3/incident-snapshots/playbook/preview` (500 -> 200)
+  - Safe execution zinciri: `preview -> apply(planned) -> approve -> execute`
+  - Governance approve/reject endpointleri (tablo eksikliği kaynaklı potansiyel 500 riski kapandı)
+- ✅ Kırılmayan:
+  - Export snapshot akışı (`/incident-snapshots/export`) 200 + snapshot headerları
+  - Audit üretimi (`incident_playbook_*`, `incident_snapshot_export`)
+
+### Doğrulama özeti
+- Self-test:
+  - Super admin + admin login doğrulandı
+  - Role guard: admin için approve/reject kısıtları 403
+  - Reject reason enforcement: 422
+  - Export header doğrulaması: `x-incident-snapshot-at`, `x-incident-snapshot-filters`, `x-incident-snapshot-row-count`
+- Testing agent raporu: `/app/test_reports/iteration_96.json`
+  - Backend: **100% (16/16 PASS)**
+  - Frontend: **100% PASS**
+  - Kritik/minor issue: yok
+- Ek doğrulama:
+  - `auto_frontend_testing_agent`: UI regresyon yok (data-dependent diff panel notu dahil)
+  - `deep_testing_backend_v2`: P0 zincir PASS
+
+### Test credential teyidi (bu fork ortamında)
+- `backend/.env` üzerinden doğrulandı:
+  - `canary.admin@platform.local / CanaryAdmin123!`
+- Runtime test admin kullanıcı hazırlandı:
+  - `canary.requester@platform.local / CanaryRequester123!`
+
+### Mock notu
+- Slack webhook delivery **MOCKED**
+- Binance futures execution **MOCKED**
+
 ## 2026-03-23 — FINAL P1 Kapanış Fix (Recommended Actions Context + Compare Validation) ✅
 
 ### Uygulanan kritik düzeltmeler
