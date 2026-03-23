@@ -20,11 +20,18 @@ import requests
 import time
 from datetime import datetime
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://hard-guard-layer.preview.emergentagent.com")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 
 # Test credentials
-SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
-SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
+SUPER_ADMIN_EMAIL = os.environ.get("BACKEND_TEST_SUPER_ADMIN_EMAIL", "")
+SUPER_ADMIN_PASSWORD = os.environ.get("BACKEND_TEST_SUPER_ADMIN_PASSWORD", "")
+
+INTEGRATION_TEST_BLOCKED = not BASE_URL or not SUPER_ADMIN_EMAIL or not SUPER_ADMIN_PASSWORD
+
+pytestmark = pytest.mark.skipif(
+    INTEGRATION_TEST_BLOCKED,
+    reason="Integration testleri için REACT_APP_BACKEND_URL ve BACKEND_TEST_SUPER_ADMIN_* env gereklidir.",
+)
 
 
 @pytest.fixture(scope="module")
@@ -342,7 +349,6 @@ class TestFourEyesApproval:
         
         if pending:
             approval_id = pending[0]["approval_id"]
-            requested_by = pending[0]["requested_by"]
             
             # Try to approve own request (should fail with same_user_second_approval_blocked)
             approve_response = requests.post(

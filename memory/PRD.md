@@ -1,3 +1,48 @@
+## 2026-03-23 — Pre-Apply Risk Gate + Multi-Stage Approval + Operational Hardening ✅
+
+### Uygulanan ana geliştirmeler
+- **Pre-Apply Risk Score Engine** canlıya alındı: Simulation çıktısından `risk_score (0-100)`, `classification (SAFE/WARNING/CRITICAL)` ve `approval_flow` üretiliyor.
+  - Ağırlıklar (seçim B): Exposure 35 / Reject 20 / DailyLoss 20 / Concurrent 15 / Volatility 10
+  - Ek risk penalty’leri: aktif breach, override abuse, kritik alan gevşetme, geniş değişiklik seti
+- **Apply pipeline multi-stage** yapıya geçirildi:
+  - SAFE → direkt apply
+  - WARNING → double-confirm zorunlu
+  - CRITICAL → varsayılan BLOCK; sadece `apply_with_override + 4-eyes` ile `pending_approval`
+- **4-Eyes approval sistemi** eklendi:
+  - Durumlar: `pending_approval`, `approved`, `rejected`, `timeout`
+  - Aynı kullanıcı ikinci onay/reddetme yapamaz (`same_user_second_approval_blocked`)
+  - Timeout: **10 dakika**
+- **Revert hardening**: `revert/{version_id}/simulate` zorunlu; simulation olmadan revert apply engelli (`revert_simulation_required`).
+- **Decision Trace zinciri** eklendi (`risk_orchestrator_decision_traces`): simulation, score, classification, rule_path, decision_state, requester/approver kaydı.
+- **Approval request tablosu** eklendi (`risk_orchestrator_approval_requests`), idempotent `request_key` ile deterministik replay.
+- **Override risk enforcement** güçlendirildi:
+  - count/size limit kontrolü
+  - expiry yaklaşınca alert + auto-disable (seçim B, son 5 dk)
+  - risk score’a override abuse penalty dahil edildi.
+- **Frontend (tek sayfa, sekmeli)**: `Risk Gate / Operations / Monitoring / Approvals & Trace` modülleri ile yeni uçtan uca akış tamamlandı.
+
+### Teknik değişiklikler
+- Yeni migration: `20260323_0066_risk_gate_approvals_and_decision_trace.py`
+- Yeni modeller:
+  - `RiskOrchestratorApprovalRequest`
+  - `RiskOrchestratorDecisionTrace`
+- Genişletilen API yüzeyi:
+  - `POST /policy/simulate`
+  - `POST /policy/apply`
+  - `GET /policy/approvals`
+  - `POST /policy/approvals/{id}/approve`
+  - `POST /policy/approvals/{id}/reject`
+  - `GET /policy/decision-traces`
+  - `POST /policy/revert/{version_id}/simulate`
+  - `POST /policy/revert/{version_id}/apply`
+
+### Test durumu
+- Testing Agent `iteration_104`: **Backend 18/18 pass**, frontend kapsamlı UI doğrulaması pass.
+- Ek self-test: CRITICAL block/pending, same-user block, WARNING double-confirm, revert simulation zorunluluğu doğrulandı.
+
+### Notlar
+- Testing agent tarafından eklenen `test_risk_gate_multi_stage_approval.py` CI kırmaması için env-gated/skipif hale getirildi.
+
 ## 2026-03-23 — Risk Enforcement + Intervention System (Admin Risk Orchestrator) ✅
 
 ### Bu iterasyonda tamamlananlar (P0)
