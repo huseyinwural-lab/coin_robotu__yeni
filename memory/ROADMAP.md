@@ -1,5 +1,26 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-23 Update (Production Gate P0)
+- ✅ Tamamlandı:
+  1. Backend-first Production Gate state engine (`NO_GO | GO | GO_WITH_OVERRIDE`)
+  2. Deploy/LIVE hard-block enforcement (403) + validation block (400)
+  3. Override create/revoke/expiry akışları (super_admin + max 30 dk + strict enum)
+  4. Checklist enforcement + stale/running check GO blokajı
+  5. Mode transition guard (reason + confirmation + audit)
+  6. Rerun all/single checks + fail reason/remediation payload standardı
+  7. JSON export endpointleri
+  8. Execution Readiness sayfasının write-capable Control Panel’e dönüşümü
+
+## P1 (Sıradaki)
+1. Auto-refresh interval + incremental polling stratejisi
+2. Fail alert + exchange health detay görünümü (operator-first)
+3. Export UX iyileştirmeleri (scope/filters/date range)
+
+## P2 (Backlog)
+1. Check history/trend görselleştirme
+2. Override analytics (before/after, frequency, impact)
+3. Gate kararlarının timeline/incident korelasyonu
+
 ## 2026-03-22 Update (Faz-2 Tam Kapanış)
 - ✅ Tur-1 tamamlandı: Freshness/SLA + KPI Recommendation + Trend/Analytics
 - ✅ Tur-2 tamamlandı: Export/Data Access + Universe Bulk UX + Debug policy + UX polish

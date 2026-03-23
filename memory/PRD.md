@@ -1,3 +1,56 @@
+## 2026-03-23 — Production Gate Control Panel (P0) Implementasyon Güncellemesi
+
+### Tamamlananlar (Backend-first)
+- `Execution Readiness` akışı write-capable **Production Gate Control Panel** olarak geliştirildi.
+- Yeni state engine: `NO_GO | GO | GO_WITH_OVERRIDE` (override max 30 dk, strict enum reason, super_admin enforcement).
+- Deploy/LIVE hard-block backend seviyesinde zorunlu hale getirildi:
+  - `POST /api/phase4/admin/production-gate/mode-transition`
+  - `PUT /api/phase4/live-config` (live/trading enable)
+  - `POST /api/admin/live-trading/control-layer/execution-mode` (LIVE)
+- Yeni endpoint seti eklendi:
+  - `GET /api/phase4/admin/production-gate`
+  - `POST /api/phase4/admin/production-gate/state`
+  - `PATCH /api/phase4/admin/production-gate/checklist/{item_key}`
+  - `POST /api/phase4/admin/production-gate/checks/rerun`
+  - `POST /api/phase4/admin/production-gate/checks/{check_key}/rerun`
+  - `POST /api/phase4/admin/production-gate/override`
+  - `POST /api/phase4/admin/production-gate/override/{override_id}/revoke`
+  - `POST /api/phase4/admin/production-gate/mode-transition`
+  - `GET /api/phase4/admin/production-gate/export` + `/export/raw`
+- Audit chain zorunlu alanları ile loglanıyor: `actor, timestamp(created_at), previous_state, next_state, reason_code, reason_text, expiry, request_id`.
+- Override reason ve TTL kuralları sertleştirildi (global override service de max 30 dk ve uppercase reason normalization).
+
+### Frontend (P0)
+- `/admin/execution-readiness` sayfası Control Panel olarak yeniden yazıldı:
+  - Production Gate header + state kartları (configured/effective/deploy allowed)
+  - GO / NO_GO / GO_WITH_OVERRIDE aksiyonları
+  - checklist enforcement UI
+  - override modal + revoke action
+  - mode transition confirm modal
+  - rerun all/single check butonları
+  - fail reason + remediation görünümü
+  - audit/history paneli
+  - JSON export butonu
+- Kritik ve etkileşimli öğelere kapsamlı `data-testid` eklendi.
+
+### Doğrulama & Test Kanıtları
+- Smoke screenshot alındı (frontend load): `mcp_screenshot_tool`.
+- Testing agent raporu: `/app/test_reports/iteration_112.json` (backend/frontend geçiş raporu, 21/21 backend PASS).
+- Self-test (curl/python) ile doğrulananlar:
+  - NO_GO iken LIVE geçişi **403** block
+  - checklist eksikken GO **400** block
+  - override ile geçici LIVE geçişi **200**
+  - forced expiry sonrası otomatik block (NO_GO + LIVE **403**)
+  - revoke sonrası anlık block (LIVE **403**)
+  - MOCK/LIVE transition için reason + audit kaydı örneği
+  - live-config enable NO_GO altında **403** block
+- Not: Normal GO denemesi bu ortamda mevcut otomatik check fail durumları nedeniyle `checks_not_passed` ile **400** dönmektedir (beklenen policy davranışı).
+
+### Kalanlar / Sonraki Öncelikler
+- **P1:** Auto-refresh interval + daha gelişmiş health/fail alert görünümü.
+- **P1:** Export UX iyileştirmeleri (filtrelenmiş rapor ve zaman damgası seçenekleri).
+- **P2:** Check trend/history grafikleri, override analytics, before/after karşılaştırmalar.
+
 ## 2026-03-23 — Production Readiness Finalizasyonu (P0-FINAL) ✅
 
 ### Tamamlanan son kapanışlar

@@ -1,5 +1,15 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-23
+### Production Gate Control Panel (P0)
+- Backend state engine eklendi: `NO_GO | GO | GO_WITH_OVERRIDE`.
+- Override kuralları sertleştirildi: super_admin only, max 30 dk, strict enum reason.
+- Deploy/LIVE block enforcement canlı endpointlerde zorunlu hale getirildi (403 hard-block).
+- Yeni Production Gate API seti eklendi (state, checklist, rerun, override/revoke, mode-transition, export).
+- Audit log zinciri genişletildi (previous/next state, reason_code/text, expiry, request_id).
+- `AdminExecutionReadinessPage.jsx` write-capable control panel olarak yeniden tasarlandı.
+- Test raporu: `/app/test_reports/iteration_112.json`.
+
 ## 2026-03-22
 ### Hotfix — Admin Login Failure (PostgreSQL Down)
 - PostgreSQL yeniden kuruldu/başlatıldı.
