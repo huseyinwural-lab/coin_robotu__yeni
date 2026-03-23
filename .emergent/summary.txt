@@ -1,122 +1,124 @@
-<analysis>**original_problem_statement**: The user initially requested to bring the Strategy Allocation Dashboard to Production Closure (Checkpoints 1 & 2), including Concurrency Control, Snapshot Restore, and Undo/Revert/Explainability capabilities. After completing this, the focus shifted to transforming the Execution State Machine into an Execution Control + Recovery System. Currently, the task is implementing Execution Control P1: adding advanced state filters, a read-only state diagram, a dedicated Analytics route, and an Incident Snapshot export feature (generating a ZIP with JSON/CSV).
+<analysis>**original_problem_statement**: 
+Kullanıcı, Execution Control + Recovery System için P1 aşamasının (Risk & Capital Control, Report Details, Auto-refresh, Action Impact Timeline) başarıyla tamamlanmasının ardından sistemi production-grade bir Karar Kontrol Motoru (Decision Control Engine) haline getirmek için **FINAL HARD TASK ORDER — GAP CLOSURE** görevini verdi.
+Bu görev iki parça halinde istenmiştir:
+*   **Parça 1 (MANDATORY)**: Signal Governance (Approve/Reject lifecycle, Reject için reason zorunluluğu), Auto-refresh Safety (Default OFF ve işlem anında pause), Export Discipline (Snapshot, filtrelerin audit'e yazılması), UI Hard Safety (Destructive eylemler için modal, role-based disable, loading statüleri).
+*   **Parça 2**: Timeline Chain View (Neden-sonuç zinciri için ayrı  route'u), Playbook Safe Execution (Ayrı  modeli, preview -> approve -> execute adımları), Auto-ack hardening (rule validation, dry-run, preview).
 
 **User's preferred language**: Turkish (Türkçe)
-**INSTRUCT NEXT AGENT**: You MUST respond to the user in Turkish only.
+**(INSTRUCT NEXT AGENT: KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.)**
 
-**what currently exists?**: Strategy Intelligence, Strategy Allocation, and their corresponding Governance/Undo-Revert mechanics are fully operational. Execution Control P0 is complete (Simulation isolation, Idempotency tracking, Failed event recovery, Trace routing, Manual intervention guardrails). Execution Control P1 code has just been written (adding advanced URL filters, analytics aggregations, and the ZIP incident snapshot bundle), but testing and verification are pending.
+**what currently exists?**: 
+Execution Control, Snapshot Diff Engine, Alerts modülleri ve P0/P1 Strategy Observability (Signal Simulate/Execute, Risk & Capital Limitleri, Score Tuning) başarıyla uygulandı.  modüler yapıya (analytics, export, recovery, alerts, common) başarıyla ayrıldı. P1 kapanış UI düzeltmeleri (Compare bloklarının ayrılması, recommended action'lara gerekçe -reason- eklenmesi) yapıldı. GAP CLOSURE görevi kod bazında büyük ölçüde entegre edildi ancak test sırasında backend'de 500 hatası alındı.
 
-**Last working item**:
-    - Last item agent was working: Implementing Execution Control P1. The agent applied backend patches to  for advanced filtering, the  endpoints, and the  ZIP endpoint. Frontend patches were applied to , , and routing. 
-    - Status: IN PROGRESS
-    - Agent Testing Done: N (For the newly applied P1 patches)
-    - Which testing method agent to use?: Both. Backend tests/curl for the zip download and analytics endpoints, and frontend testing agent / screenshot tool to verify the new Analytics route and States filter UI.
+**Last working item**: 
+    - Last item agent was working: GAP CLOSURE sprinti dahilinde uçtan uca test senaryolarını ( kullanarak curl ile) doğrulamak. Bu test esnasında  endpoint'ine yapılan istekte 500 Internal Server Error fırlatıldı. Ajan logları incelemek üzereydi.
+    - Status: IN PROGRESS / BLOCKED (Backend 500 Error)
+    - Agent Testing Done: Y (Kısmi test yapıldı, hata tespit edildi)
+    - Which testing method agent to use? Hata çözümü için backend loglarını okumak (bash ile log takibi), ardından  veya  ile backend testi yapmak. Sonrasında hem frontend hem backend için kapsamlı doğrulama adına testing agent () kullanmak.
     - User Testing Done: N
 
 **All Pending/In progress Issue list**: 
-  Issue 1: Test and Verify Execution Control P1 (P0)
-     - Attempted fixes: The code for the analytics route, state diagram UI, and ZIP export was patched, but no final tests have been run.
-     - Next debug checklist: Check backend logs. Run bash  against  and . Launch frontend screenshot tool on  and .
-     - Why fix this issue and what will be achieved with the fix? Validates the P1 delivery to ensure the operator dashboard is production-ready for incident reviews.
-     - Status: TESTING PENDING
+  Issue 1:  API 500 Internal Server Error (P0)
+     - Attempted fixes: Ajan log dosyasını okumaya çalıştı () ancak işlemi sonlandırdı, henüz bir düzeltme yapılmadı.
+     - Next debug checklist:  dosyasının en son satırlarını okuyup 500 hatasına neden olan traceback'i tespit et. Özellikle  ve incident export request alanlarını incele.
+     - Why fix this issue and what will be achieved with the fix? GAP CLOSURE Parça 2 (Playbook Safe Execution) için playbook_preview kritik önem taşıyor. Bu çözülmeden sistem production'a alınamaz.
+     - Status: IN PROGRESS / BLOCKED
      - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Both
-     - Blocked on other issue: None
+     - Should Test frontend/backend/both after fix? Both (Önce backend, sonra UI entegrasyonu)
 
-**In progress Task List**:
-  Task 1: Incident Snapshot ZIP Export
-     - Where to resume: Verify  endpoint in . Ensure it correctly returns a ZIP file containing , , and the required CSVs (, , , , ).
-     - What will be achieved with this? Allows operators to download a deterministic snapshot of an execution incident for audit and post-mortem.
-     - Status: TESTING PENDING
+**In progress Task List**: 
+  Task 1: GAP CLOSURE - Parça 1 ve Parça 2 Final Doğrulamaları (P0)
+     - Where to resume: Backend 500 hatası giderildikten sonra, Approve/Reject governance flow, Timeline Chain View detay sayfası ve Playbook Preview -> Approve -> Execute adımlarının UI üzerinden çalışıp çalışmadığını doğrula.
+     - What will be achieved with this? Kullanıcının kesin şart koştuğu güvenli, denetlenebilir, yanlış karar vermeyen operasyon kokpiti teslim edilecek.
+     - Status: IN PROGRESS (Kodlar patch'lendi, backend error çözümü bekleniyor)
      - Should Test frontend/backend/both after fix? Both
-     - Blocked on something: None
+     - Blocked on something: Issue 1 (500 Internal Server Error)
 
 **Upcoming and Future Tasks**
-    Upcoming Tasks (P2 Execution System Enhancements):
-    - P2: Webhook alert integration for Execution failures.
-    - P2: Full dashboarding and advanced predictive trend analytics.
-    - P2: Role-based export policy enrichments.
-    - P2: Partial entity-scoped rebuild improvements.
+    Upcoming Tasks (P1/P2):
+    - P2: Risk/observability ekranlarında saved filter presets eklenmesi.
+    - P2: Timeline üzerinde chain bazlı görsel ilişkilendirme (Grouped chain view summary UI).
+    - P2: Rejected edilen sinyalleri ileride tekrar pending durumuna çekmek (Reopen / reset to pending) için aksiyon eklenmesi (Bu turda bilerek kapsam dışı bırakıldı).
+    
+    *(Not: Kullanıcının özellikle Scope Dışı belirttiği Predictive analytics, Role-based masking ve Streaming export görevleri eklenmemelidir.)*
 
 **Completed work in this session**
-- Strategy Allocation Checkpoint 1: Concurrency , Re-validation, Simulation parity (DONE)
-- Strategy Allocation Checkpoint 2: Snapshot Restore, Approval Visibility, Audit-grade JSON/CSV Export (DONE)
-- P2 Undo/Revert + Explainability Layer for both Intelligence and Allocation modules (DONE)
-- Execution Control System P0: Simulation Isolation, Failed/Dead-letter Recovery, Idempotency Collision Panel, Trace Page, Manual Action Guardrails (DONE)
+- Strategy Observability UI mock entegrasyonu (Top Signals Simulate/Execute, Explainability Sheet) (DONE)
+- P1 Risk & Capital Control Layer (Limit & Exposure Override) ve detay raporu ekranı (DONE)
+- Action Impact Timeline eklenmesi (DONE)
+-  dosyasının modüler klasör yapısına () bölünmesi (DONE)
+- Execution States Compare UI iyileştirmesi, Export Preview yeteneği ve Recommended Actions için detaylı reason metinleri (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-None.
+None. Kullanıcı talepleri ve bug'lar düzenli olarak çözülerek ilerlendi, yalnızca son adımdaki 500 hatası kaldı.
 
 **Known issue recurrence from previous fork**
-  - Issue recurrence in previous fork: 
-  - Recurrence count: Multiple (Ongoing)
-  - Status: RESOLVED (Graceful fallback handles it, but in-memory wipes on restart. This is expected in the preview environment).
+  - Issue recurrence in previous fork: None
+  - Recurrence count: 0
+  - Status: RESOLVED
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Incident Snapshot Export**: Creating an on-the-fly ZIP bundle combining JSON metadata and CSV lists for incident post-mortems. MUST contain  with strict metadata.
-- **Idempotency Control**: Blocking duplicate manual interventions using  and collision logs to prevent double-ordering.
-- **Undo/Revert**: Target-based snapshot reverting of execution policies to prevent state drift.
+- **Safe Execution Layer**: Playbook işlemleri doğrudan çalıştırılamaz; zorunlu olarak Preview -> Approve (sadece super_admin) -> Execute akışından geçmelidir. State yönetimi için ayrı bir  modeli oluşturulmuştur.
+- **Signal Governance**: Sinyaller default olarak pending başlar, yalnızca approved sinyaller çalıştırılabilir (execute), reject işlemi için ise mutlaka reason (sebep) girilmesi gerekir.
+- **Strict Snapshot Audit**: Export işlemleri (CSV/JSON), hangi filtrelerle yapıldığı ve oluşturulduğu zamandaki verinin (snapshot) büyüklüğü ile birlikte zorunlu olarak Audit Log'a yazılır.
 
 **key DB schema**
-  - : Tracks blocked replay attempts and duplicated manual requests.
-  - : Tracks dead-letters, retry budgets, and failure classifications.
-  -  / : Extended with  (production/simulation/paper) and .
+  - : uid=0(root) gid=0(root) groups=0(root), , , , , ,  (Safe execution için yeni eklendi)
+  - 
+  - 
 
 **changes in tech stack**
-  - None. (PostgreSQL strictly mandated. MongoDB/SQLite strictly forbidden).
+  - Yok.
 
-**All files of reference**
+**All files of reference** 
+  -  (500 hatasının kaynağı burada olabilir, Playbook önizleme işlemleri)
   - 
-  - 
-  - 
-  - 
+  -  (500 hatasının hata ayıklaması için kritik)
   - 
 
-**Areas that need refactoring**:
--  has grown very large as it now handles Execution Queue, Readiness, States, Trace, Analytics, and Incident ZIP creation. Consider splitting into sub-routers (e.g., ) in future forks.
+**Areas that need refactoring**: 
+Modüler yapıya () geçiş yapıldı. Mevcut yapı oldukça güncel ve modülerdir. Refactoring ihtiyacı acil değildir.
 
 **key api endpoints**
-  -  (Updated with advanced filters)
-  -  (Summary, state-latency, failure-trends)
-  -  (Generates ZIP)
+  - 
+  - 
+  - 
+  -  (Şu an 500 dönüyor)
+  - 
+  - 
 
-**Critical Info for New Agent**
-- **Strict User Rules for P1:** 
-  1.  filter contract MUST stay fixed (, , ).
-  2. Analytics accounts MUST act as deterministic snapshots, not real-time event-driven widgets. 
-  3. The State diagram must remain **read-only** (no direct interaction/clicks to mutate state).
-  4. Incident snapshot endpoint priorities:  >  > .
-  5. The  in the ZIP export MUST include export time, actor, filter scope, identifiers, and generated file list.
-- Testing is pending for the latest frontend/backend patches related to P1. Start immediately by validating the code with  and frontend smoke tests.
+**Critical Info for New Agent** 
+- **Rol Yetkileri (Enforced)**: Adminler sadece okuyabilir ve simülasyon yapabilir.  yetkisine sahip olanlar işlemleri uygulayabilir (Execute, Override, Approve).
+- **MOCK Veri Kuralı**: Slack webhook iletimi ve Binance Futures execution işlemleri mevcut mimaride **MOCK** olarak devam etmektedir. Kullanıcı bu durumu onaylamıştır.
+- **İşlem Önceliği (Teslim Sırası)**: Hata çözüldükten sonra GAP CLOSURE Parça 1 kontrolleri kesin olarak sağlanmalı, sonrasında Parça 2 (Timeline Chain Detail ve Playbook Safe Execution) doğrulanıp süreç bitirilmelidir.
 
-**documents and test reports created in this job**
-  -  to 
+**documents and test reports created in this job** 
+  -  -  (Son aşamaya kadar tüm Backend ve UI test raporları)
+  -  (Güncel süreç ve sprint'ler dökümante edildi)
 
 **Last 10 User Messages and any pending HUMAN messages** 
-1. User: Confirmed Checkpoint 2 testing. Outlined P2: Undo/Revert + Explainability Layer.
-2. User: Confirmed P2 technical plan and scope.
-3. User: Outlined Execution State Machine -> Execution Control + Recovery System transition (Phases 1-9). Requested P0 only.
-4. User: Confirmed Execution P0 implementation plan and explicit guardrails.
-5. User: Approved Execution P0. Outlined Execution P1 (Advanced filters, state diagram, analytics route, Incident snapshot). Requested JSON+CSV zip for incident export.
-6. User (Pending Context): Approved the agent's short technical plan for P1. Defined 6 strict constraints (stable filter contract, deterministic analytics, read-only diagram, strict snapshot priorities, metadata in , shared filter language). Instructed to begin implementation. 
+- Kullanıcı GAP CLOSURE sprinti için FINAL HARD TASK ORDER verdi. (Signal Governance, Auto-refresh fix, Export Snapshot, Timeline Chain View, Playbook Safe Execution, UI Hard Safety).
+- Kullanıcı bu işlerin 2 parça halinde teslim edilmesini ve Parça 1 tamamlanmadan Parça 2 bitti sayılmaz kuralını ekledi. (Bekleyen mesaj yok, ajan backend kodlarını uyguladıktan sonra curl testi atarken 500 hatasına takıldı).
 
 **Project Health Check:**
-- Mocked: Binance Futures execution.
-- Broken: None known, but P1 is completely untested.
+- Broken:  API (500 error).
+- Mocked: Slack Webhooks, Binance Integration.
 
-**3rd Party Integrations**
-- Binance Futures Testnet (requires User API Key).
+**3rd Party Integrations** 
+- Slack (Mocked)
+- Binance (Mocked)
 
 **Testing status**
-  - Testing agent used after significant changes: YES (up to P0 Execution Control)
+  - Testing agent used after significant changes: YES (95. iterasyona kadar testler tam)
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: Heavily updated backend tests in iterations 80-83.
-  - Known regressions: None.
+  - Test files created: , 
+  - Known regressions:  endpoint'i modüler refactor sonrası son GAP CLOSURE yamalarıyla bozuldu.
 
 **Credentials to test flow:**
-- Super Admin:  / 
+- Admin/Super Admin:  / 
 
 **What agent forgot to execute**
-The agent successfully applied the code patches for the Execution Control P1 phase (Analytics route, Advanced Filters, ZIP export) but ran out of context before it could run linting, test the backend endpoints, or verify the frontend UI via the testing agent. Start your session by testing these patched functionalities.</analysis>
+Ajan, son UI ve backend geliştirmelerini  ile uyguladı ancak son  komutu ile test ederken  500 hatası verdi. Hatanın kök nedenini tam olarak tespit edip (traceback'i  üzerinden okuyarak) fix'i atmayı tamamlamadı. Kullanıcının beklediği test onayı ve kapanış henüz gerçekleşmedi.</analysis>

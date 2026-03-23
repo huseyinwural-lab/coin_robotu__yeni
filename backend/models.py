@@ -97,6 +97,11 @@ from model_domains.strategy_decision import (
     StrategyVersion,
     UserDecisionTrace,
 )
+from model_domains.governance_execution import (
+    SignalGovernanceDecision,
+    PlaybookExecutionRun,
+    PlaybookRollbackMarker,
+)
 
 _ = immutability_listeners
 
@@ -125,6 +130,9 @@ __all__ = [
     "StrategyObservabilityEvent",
     "StrategyDefinition",
     "StrategyVersion",
+    "SignalGovernanceDecision",
+    "PlaybookExecutionRun",
+    "PlaybookRollbackMarker",
     "StrategyRegimeBinding",
     "CanonicalStrategyRegistry",
     "StrategyFamilyGate",

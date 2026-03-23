@@ -29,7 +29,7 @@ export default function AdminStrategyObservabilityDetailPage() {
   const [windowRange, setWindowRange] = useState("24h");
   const [timeFrom, setTimeFrom] = useState("");
   const [timeTo, setTimeTo] = useState("");
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [autoRefreshSeconds, setAutoRefreshSeconds] = useState(30);
 
   const [strategyOptions, setStrategyOptions] = useState([]);
@@ -41,6 +41,7 @@ export default function AdminStrategyObservabilityDetailPage() {
   const [detailData, setDetailData] = useState(null);
   const [timelineData, setTimelineData] = useState({ summary: null, items: [] });
   const [timelineKpis, setTimelineKpis] = useState(null);
+  const [lastExportSnapshot, setLastExportSnapshot] = useState(null);
 
   const activeFilters = useMemo(
     () => ({
@@ -139,6 +140,12 @@ export default function AdminStrategyObservabilityDetailPage() {
             export_format: "json",
           },
         });
+        setLastExportSnapshot({
+          timestamp: data?.snapshot_timestamp || data?.filters?.snapshot_timestamp || null,
+          row_count: data?.row_count ?? data?.count ?? 0,
+          filters: data?.filters || activeFilters,
+          export_type: "json",
+        });
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
@@ -154,6 +161,12 @@ export default function AdminStrategyObservabilityDetailPage() {
             export_format: "csv",
           },
           responseType: "blob",
+        });
+        setLastExportSnapshot({
+          timestamp: response.headers?.["x-snapshot-timestamp"] || null,
+          row_count: Number(response.headers?.["x-row-count"] || 0),
+          filters: activeFilters,
+          export_type: "csv",
         });
         const contentDisposition = response.headers?.["content-disposition"] || "";
         const fileNameMatch = /filename="([^"]+)"/.exec(contentDisposition);
@@ -304,6 +317,15 @@ export default function AdminStrategyObservabilityDetailPage() {
         </div>
       </section>
 
+      {lastExportSnapshot && (
+        <div className="border border-black/30 bg-orange-100 p-3 text-xs" data-testid="strategy-observability-detail-last-export-panel">
+          <p className="font-semibold" data-testid="strategy-observability-detail-last-export-title">Export snapshot at: {lastExportSnapshot.timestamp || "-"}</p>
+          <p data-testid="strategy-observability-detail-last-export-row-count">row_count: {lastExportSnapshot.row_count ?? 0}</p>
+          <p data-testid="strategy-observability-detail-last-export-filters">filters: {JSON.stringify(lastExportSnapshot.filters || {})}</p>
+          <p data-testid="strategy-observability-detail-last-export-type">export_type: {lastExportSnapshot.export_type || "-"}</p>
+        </div>
+      )}
+
       <section className="grid gap-3 lg:grid-cols-4" data-testid="strategy-observability-detail-summary-grid">
         <div className="border border-black/30 bg-orange-100 p-3" data-testid="strategy-observability-detail-summary-total-card">
           <p className="text-xs uppercase">Signals Total</p>
@@ -434,7 +456,21 @@ export default function AdminStrategyObservabilityDetailPage() {
                   <TableCell data-testid={`strategy-observability-detail-timeline-action-${index}`}>{row.action || "-"}</TableCell>
                   <TableCell data-testid={`strategy-observability-detail-timeline-role-${index}`}>{row.actor_role || "-"}</TableCell>
                   <TableCell data-testid={`strategy-observability-detail-timeline-reason-${index}`}>{row.reason || "-"}</TableCell>
-                  <TableCell data-testid={`strategy-observability-detail-timeline-chain-${index}`}>{row.chain_ref || "-"}</TableCell>
+                  <TableCell data-testid={`strategy-observability-detail-timeline-chain-${index}`}>
+                    {row.chain_id ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-black bg-white text-black"
+                        onClick={() => navigate(`/admin/strategy/timeline/${encodeURIComponent(row.chain_id)}`)}
+                        data-testid={`strategy-observability-detail-timeline-chain-link-${index}`}
+                      >
+                        {row.chain_id}
+                      </Button>
+                    ) : (
+                      row.chain_ref || "-"
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
               {!timelineLoading && (timelineData?.items || []).length === 0 && (

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 P0 GO-BLOCKER Backend Validation
-Target: https://exec-tuning.preview.emergentagent.com
+Target: https://execution-safety-hub.preview.emergentagent.com
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test Steps:
@@ -28,7 +28,7 @@ def test_p0_go_blocker():
     P0 GO-BLOCKER backend validation test
     """
     
-    BASE_URL = "https://exec-tuning.preview.emergentagent.com"
+    BASE_URL = "https://execution-safety-hub.preview.emergentagent.com"
     ADMIN_EMAIL = "canary.admin@platform.local"
     ADMIN_PASSWORD = "CanaryAdmin123!"
     

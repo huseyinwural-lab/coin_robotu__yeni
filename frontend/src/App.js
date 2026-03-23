@@ -25,6 +25,7 @@ import { AdminRuntimeRecoveryPage } from "@/pages/AdminRuntimeRecoveryPage";
 import { AdminStrategiesPage } from "@/pages/AdminStrategiesPage";
 import { AdminStrategyObservabilityPage } from "@/pages/AdminStrategyObservabilityPage";
 import AdminStrategyObservabilityDetailPage from "@/pages/AdminStrategyObservabilityDetailPage";
+import AdminStrategyTimelineChainPage from "@/pages/AdminStrategyTimelineChainPage";
 import { AdminSystemAlertsPage } from "@/pages/AdminSystemAlertsPage";
 import { AdminUserApprovalsPage } from "@/pages/AdminUserApprovalsPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
@@ -143,6 +144,7 @@ function App() {
             <Route path="system-alerts" element={<AdminSystemAlertsPage />} />
             <Route path="strategy/observability" element={<AdminStrategyObservabilityPage />} />
             <Route path="strategy/observability/:strategyId" element={<AdminStrategyObservabilityDetailPage />} />
+            <Route path="strategy/timeline/:chainId" element={<AdminStrategyTimelineChainPage />} />
             <Route path="futures/risk-monitor" element={<AdminFuturesRiskMonitorPage />} />
             <Route path="futures/liquidation-protection" element={<AdminFuturesRiskMonitorPage />} />
             <Route path="futures/strategy-control" element={<AdminFuturesStrategyControlGovernancePage />} />

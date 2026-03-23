@@ -26,6 +26,8 @@ export const ExecutionAnalyticsPage = () => {
   const [autoAckPolicy, setAutoAckPolicy] = useState(null);
   const [autoAckReason, setAutoAckReason] = useState("policy_update");
   const [autoAckDryRun, setAutoAckDryRun] = useState(true);
+  const [autoAckPreviewToken, setAutoAckPreviewToken] = useState("");
+  const [autoAckPreviewCount, setAutoAckPreviewCount] = useState(0);
   const [autoAckRunning, setAutoAckRunning] = useState(false);
 
   const filters = useMemo(
@@ -132,20 +134,40 @@ export const ExecutionAnalyticsPage = () => {
   };
 
   const runInfoAutoAck = async () => {
+    if (!autoAckPreviewToken) {
+      toast.error("Önce auto-ack preview çalıştırın");
+      return;
+    }
     setAutoAckRunning(true);
     try {
       const { data } = await apiClient.post("/admin-phase3/execution-alerts/auto-ack/run", null, {
         params: {
           reason: autoAckReason || "scheduled_auto_ack",
+          preview_token: autoAckPreviewToken,
           dry_run: autoAckDryRun,
         },
       });
       toast.success(`${autoAckDryRun ? "Dry-run" : "Run"} tamamlandı: ${data?.acked_count ?? 0} alert`);
+      setAutoAckPreviewToken("");
+      setAutoAckPreviewCount(0);
       await loadAnalytics();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "INFO auto-ack run başarısız");
     } finally {
       setAutoAckRunning(false);
+    }
+  };
+
+  const previewInfoAutoAck = async () => {
+    try {
+      const { data } = await apiClient.post("/admin-phase3/execution-alerts/auto-ack/preview");
+      setAutoAckPreviewToken(data?.preview_token || "");
+      setAutoAckPreviewCount(Number(data?.matched_count || 0));
+      toast.success(`Preview hazır: ${data?.matched_count || 0} eşleşme`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Auto-ack preview başarısız");
+      setAutoAckPreviewToken("");
+      setAutoAckPreviewCount(0);
     }
   };
 
@@ -391,13 +413,17 @@ export const ExecutionAnalyticsPage = () => {
             <span className="text-xs">only execution alerts</span>
           </div>
 
-          <div className="flex items-center gap-2" data-testid="execution-control-alert-auto-ack-dry-run-row">
-            <Switch
-              checked={autoAckDryRun}
-              onCheckedChange={(checked) => setAutoAckDryRun(Boolean(checked))}
-              data-testid="execution-control-alert-auto-ack-dry-run-switch"
-            />
-            <span className="text-xs">dry-run</span>
+          <div className="space-y-1 text-xs" data-testid="execution-control-alert-auto-ack-preview-info-row">
+            <p data-testid="execution-control-alert-auto-ack-preview-token">preview_token: {autoAckPreviewToken || "-"}</p>
+            <p data-testid="execution-control-alert-auto-ack-preview-count">matched_count: {autoAckPreviewCount}</p>
+            <div className="flex items-center gap-2" data-testid="execution-control-alert-auto-ack-dry-run-row">
+              <Switch
+                checked={autoAckDryRun}
+                onCheckedChange={(checked) => setAutoAckDryRun(Boolean(checked))}
+                data-testid="execution-control-alert-auto-ack-dry-run-switch"
+              />
+              <span>dry-run</span>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2" data-testid="execution-control-alert-auto-ack-actions-row">
@@ -411,11 +437,20 @@ export const ExecutionAnalyticsPage = () => {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              onClick={previewInfoAutoAck}
+              data-testid="execution-control-alert-auto-ack-preview-button"
+            >
+              Preview
+            </Button>
+            <Button
+              size="sm"
               onClick={runInfoAutoAck}
-              disabled={autoAckRunning || String(autoAckReason || "").trim().length < 3}
+              disabled={autoAckRunning || String(autoAckReason || "").trim().length < 3 || !autoAckPreviewToken}
+              title={!autoAckPreviewToken ? "Önce preview çalıştırılmalı" : ""}
               data-testid="execution-control-alert-auto-ack-run-button"
             >
-              {autoAckDryRun ? "Dry-run" : "Run"}
+              Run
             </Button>
           </div>
         </div>

@@ -13,7 +13,7 @@ Test Requirements:
 7) GET /api/admin/futures/strategy-control/policy-suggestions -> taxonomy_24h, taxonomy_7d, rules
 8) Permission matrix doğrulaması: super_admin full, admin request-only, ops read-only (write yok)
 
-Base URL: https://exec-tuning.preview.emergentagent.com
+Base URL: https://execution-safety-hub.preview.emergentagent.com
 Credentials:
 - super_admin: canary.admin@platform.local / CanaryAdmin123!
 - admin requester: canary.requester@platform.local / CanaryRequester123!
@@ -26,7 +26,7 @@ import sys
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://exec-tuning.preview.emergentagent.com"
+BASE_URL = "https://execution-safety-hub.preview.emergentagent.com"
 CREDENTIALS = {
     "super_admin": {"email": "canary.admin@platform.local", "password": "CanaryAdmin123!"},
     "admin_requester": {"email": "canary.requester@platform.local", "password": "CanaryRequester123!"},

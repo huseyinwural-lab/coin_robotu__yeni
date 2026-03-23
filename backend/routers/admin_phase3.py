@@ -2233,6 +2233,9 @@ def export_incident_snapshot_bundle(
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Incident-Snapshot-Scope": scope_type,
             "X-Incident-Snapshot-Scope-Selected": scope_type,
+            "X-Incident-Snapshot-At": metadata["exported_at"],
+            "X-Incident-Snapshot-Row-Count": str(primary_bundle["row_counts"]["events"]),
+            "X-Incident-Snapshot-Filters": json.dumps(_serialize_execution_filter_context(filters_ctx), ensure_ascii=False),
         },
     )
 

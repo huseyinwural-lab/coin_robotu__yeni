@@ -2,10 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
 const SOURCE_OPTIONS = ["all", "production", "paper", "simulation", "replay"];
@@ -28,6 +37,8 @@ const readFilter = (sp, key, fallback = "") => sp.get(key) || fallback;
 
 export const ExecutionStatesPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSuperAdmin = String(user?.role || "") === "super_admin";
   const backendUrl = String(process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
   const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState([]);
@@ -59,6 +70,13 @@ export const ExecutionStatesPage = () => {
   const [playbookApplyLoading, setPlaybookApplyLoading] = useState(false);
   const [playbookConfirmChecked, setPlaybookConfirmChecked] = useState(false);
   const [playbookReason, setPlaybookReason] = useState("");
+  const [playbookRunId, setPlaybookRunId] = useState("");
+  const [playbookExecutionState, setPlaybookExecutionState] = useState("preview");
+  const [playbookApproveLoading, setPlaybookApproveLoading] = useState(false);
+  const [playbookExecuteLoading, setPlaybookExecuteLoading] = useState(false);
+  const [playbookApplyDialogOpen, setPlaybookApplyDialogOpen] = useState(false);
+  const [playbookExecuteDialogOpen, setPlaybookExecuteDialogOpen] = useState(false);
+  const [lastExportSnapshot, setLastExportSnapshot] = useState(null);
 
   const filters = useMemo(
     () => ({
@@ -335,6 +353,8 @@ export const ExecutionStatesPage = () => {
       if (!compareEnabled) {
         setDiffSnapshot(null);
         setPlaybookPreview(null);
+        setPlaybookRunId("");
+        setPlaybookExecutionState("preview");
         return;
       }
 
@@ -342,10 +362,14 @@ export const ExecutionStatesPage = () => {
       const snapshot = data?.state_snapshot || null;
       setDiffSnapshot(snapshot);
       setPlaybookPreview(null);
+      setPlaybookRunId("");
+      setPlaybookExecutionState("preview");
       setPlaybookConfirmChecked(false);
     } catch (error) {
       setDiffSnapshot(null);
       setPlaybookPreview(null);
+      setPlaybookRunId("");
+      setPlaybookExecutionState("preview");
       setCompareExportPreview(null);
       if (showError) {
         const detail = String(error?.response?.data?.detail || "");
@@ -383,6 +407,8 @@ export const ExecutionStatesPage = () => {
         preview_token: data?.preview_token,
         ...(data?.preview || {}),
       });
+      setPlaybookRunId(data?.playbook_run_id || "");
+      setPlaybookExecutionState(data?.execution_state || "preview");
       setPlaybookConfirmChecked(false);
       toast.success("One-click playbook preview hazır");
     } catch (error) {
@@ -415,6 +441,8 @@ export const ExecutionStatesPage = () => {
         reason: playbookReason.trim(),
       });
       toast.success(data?.message || "Playbook apply tamamlandı (non-destructive)");
+      setPlaybookRunId(data?.result?.playbook_run_id || playbookRunId);
+      setPlaybookExecutionState(data?.result?.execution_state || "planned");
       setPlaybookReason("");
       setPlaybookConfirmChecked(false);
       await load();
@@ -422,6 +450,62 @@ export const ExecutionStatesPage = () => {
       toast.error(error?.response?.data?.detail || "Playbook apply başarısız");
     } finally {
       setPlaybookApplyLoading(false);
+    }
+  };
+
+  const approveDiffPlaybook = async () => {
+    if (!isSuperAdmin) {
+      toast.error("Playbook approve sadece super_admin için açık");
+      return;
+    }
+    if (!playbookRunId) {
+      toast.error("Önce playbook preview/apply çalıştırılmalı");
+      return;
+    }
+    if (playbookReason.trim().length < 3) {
+      toast.error("Approve reason en az 3 karakter olmalı");
+      return;
+    }
+    setPlaybookApproveLoading(true);
+    try {
+      const { data } = await apiClient.post("/admin-phase3/incident-snapshots/playbook/approve", {
+        playbook_run_id: playbookRunId,
+        confirm: true,
+        reason: playbookReason.trim(),
+      });
+      setPlaybookExecutionState(data?.execution_state || "approved");
+      toast.success("Playbook approved");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Playbook approve başarısız");
+    } finally {
+      setPlaybookApproveLoading(false);
+    }
+  };
+
+  const executeDiffPlaybook = async () => {
+    if (!playbookRunId) {
+      toast.error("Önce playbook preview/apply/approve tamamlanmalı");
+      return;
+    }
+    if (playbookReason.trim().length < 3) {
+      toast.error("Execute reason en az 3 karakter olmalı");
+      return;
+    }
+    setPlaybookExecuteLoading(true);
+    try {
+      const { data } = await apiClient.post("/admin-phase3/incident-snapshots/playbook/execute", {
+        playbook_run_id: playbookRunId,
+        confirm: true,
+        reason: playbookReason.trim(),
+      });
+      setPlaybookExecutionState(data?.execution_state || "executed");
+      toast.success(data?.message || "Playbook execute tamamlandı");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Playbook execute başarısız");
+    } finally {
+      setPlaybookExecuteLoading(false);
     }
   };
 
@@ -467,6 +551,23 @@ export const ExecutionStatesPage = () => {
         }
         throw new Error(`Export hatası: ${detail}`);
       }
+
+      const snapshotAt = response.headers.get("x-incident-snapshot-at");
+      const rowCount = Number(response.headers.get("x-incident-snapshot-row-count") || 0);
+      const filtersRaw = response.headers.get("x-incident-snapshot-filters");
+      let parsedFilters = {};
+      if (filtersRaw) {
+        try {
+          parsedFilters = JSON.parse(filtersRaw);
+        } catch {
+          parsedFilters = {};
+        }
+      }
+      setLastExportSnapshot({
+        timestamp: snapshotAt,
+        row_count: rowCount,
+        filters: parsedFilters,
+      });
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -809,6 +910,14 @@ export const ExecutionStatesPage = () => {
               : `~ ${exportPreview.events || 0} events, ${exportPreview.failures || 0} failures export edilecek`}
         </p>
 
+        {lastExportSnapshot && (
+          <div className="mt-2 rounded border border-slate-700 bg-slate-950 p-2 text-xs" data-testid="execution-control-incident-last-export-panel">
+            <p data-testid="execution-control-incident-last-export-timestamp">Export snapshot at: {lastExportSnapshot.timestamp || "-"}</p>
+            <p data-testid="execution-control-incident-last-export-row-count">row_count: {lastExportSnapshot.row_count ?? 0}</p>
+            <p data-testid="execution-control-incident-last-export-filters">filters: {JSON.stringify(lastExportSnapshot.filters || {})}</p>
+          </div>
+        )}
+
         <div className="mt-3 space-y-3" data-testid="execution-control-incident-compare-panel">
           <Button
             variant="outline"
@@ -977,7 +1086,7 @@ export const ExecutionStatesPage = () => {
 
             <div className="mt-4 border border-slate-700 bg-slate-950 p-3 text-xs" data-testid="execution-control-diff-playbook-panel">
               <p className="font-semibold" data-testid="execution-control-diff-playbook-title">One-click Playbook (Preview + Confirm)</p>
-              <p data-testid="execution-control-diff-playbook-note">Non-destructive apply mode aktiftir.</p>
+              <p data-testid="execution-control-diff-playbook-note">Safe execution state flow: preview → planned → approved → executed</p>
               <div className="mt-2 flex flex-wrap gap-2" data-testid="execution-control-diff-playbook-buttons-row">
                 <Button
                   size="sm"
@@ -990,17 +1099,39 @@ export const ExecutionStatesPage = () => {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={applyDiffPlaybook}
+                  onClick={() => setPlaybookApplyDialogOpen(true)}
                   disabled={playbookApplyLoading || !playbookPreview?.preview_token || !playbookConfirmChecked || playbookReason.trim().length < 3}
+                  title={!playbookPreview?.preview_token ? "Önce preview alınmalı" : !playbookConfirmChecked ? "Confirm zorunlu" : playbookReason.trim().length < 3 ? "Reason en az 3 karakter" : ""}
                   data-testid="execution-control-diff-playbook-apply-button"
                 >
-                  Playbook Apply
+                  Plan Apply
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={approveDiffPlaybook}
+                  disabled={playbookApproveLoading || !isSuperAdmin || !playbookRunId || playbookExecutionState !== "planned" || playbookReason.trim().length < 3}
+                  title={!isSuperAdmin ? "Sadece super_admin approve edebilir" : playbookExecutionState !== "planned" ? "Önce planned state gerekli" : ""}
+                  data-testid="execution-control-diff-playbook-approve-button"
+                >
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setPlaybookExecuteDialogOpen(true)}
+                  disabled={playbookExecuteLoading || !playbookRunId || playbookExecutionState !== "approved" || playbookReason.trim().length < 3}
+                  title={playbookExecutionState !== "approved" ? "Execute için playbook approved olmalı" : ""}
+                  data-testid="execution-control-diff-playbook-execute-button"
+                >
+                  Execute
                 </Button>
               </div>
 
               <p className="mt-2" data-testid="execution-control-diff-playbook-preview-token">
                 preview_token: {playbookPreview?.preview_token || "-"}
               </p>
+              <p data-testid="execution-control-diff-playbook-run-id">playbook_run_id: {playbookRunId || "-"}</p>
+              <p data-testid="execution-control-diff-playbook-state">execution_state: {playbookExecutionState || "-"}</p>
               <p data-testid="execution-control-diff-playbook-severity">
                 highest_severity: {playbookPreview?.highest_severity || "-"}
               </p>
@@ -1024,6 +1155,52 @@ export const ExecutionStatesPage = () => {
             </div>
           </div>
         )}
+
+        <Dialog open={playbookApplyDialogOpen} onOpenChange={setPlaybookApplyDialogOpen}>
+          <DialogContent data-testid="execution-control-diff-playbook-apply-dialog">
+            <DialogHeader>
+              <DialogTitle data-testid="execution-control-diff-playbook-apply-dialog-title">Playbook Plan Apply Onayı</DialogTitle>
+              <DialogDescription data-testid="execution-control-diff-playbook-apply-dialog-description">
+                Bu işlem playbook’u planned state’e geçirir.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPlaybookApplyDialogOpen(false)} data-testid="execution-control-diff-playbook-apply-dialog-cancel-button">Vazgeç</Button>
+              <Button
+                onClick={async () => {
+                  await applyDiffPlaybook();
+                  setPlaybookApplyDialogOpen(false);
+                }}
+                data-testid="execution-control-diff-playbook-apply-dialog-confirm-button"
+              >
+                Onayla
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={playbookExecuteDialogOpen} onOpenChange={setPlaybookExecuteDialogOpen}>
+          <DialogContent data-testid="execution-control-diff-playbook-execute-dialog">
+            <DialogHeader>
+              <DialogTitle data-testid="execution-control-diff-playbook-execute-dialog-title">Playbook Execute Onayı</DialogTitle>
+              <DialogDescription data-testid="execution-control-diff-playbook-execute-dialog-description">
+                Execute sadece approved playbook için çalışır. Devam edilsin mi?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPlaybookExecuteDialogOpen(false)} data-testid="execution-control-diff-playbook-execute-dialog-cancel-button">Vazgeç</Button>
+              <Button
+                onClick={async () => {
+                  await executeDiffPlaybook();
+                  setPlaybookExecuteDialogOpen(false);
+                }}
+                data-testid="execution-control-diff-playbook-execute-dialog-confirm-button"
+              >
+                Execute
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </section>
   );

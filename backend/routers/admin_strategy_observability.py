@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
 from deps import require_admin, require_super_admin
-from models import AuditLog, StrategyObservabilityEvent, SystemAlert, User
+from models import AuditLog, SignalGovernanceDecision, StrategyObservabilityEvent, SystemAlert, User
 from services.audit_service import create_audit_log
 from services.strategy_observability_service import (
     get_rejection_analytics,
@@ -80,12 +80,24 @@ class ScoreAutoTuningToggleRequest(BaseModel):
     reason: str = Field(..., min_length=3)
 
 
+class SignalApproveRequest(BaseModel):
+    signal_id: str
+    reason: str | None = None
+    metadata: dict = Field(default_factory=dict)
+
+
+class SignalRejectRequest(BaseModel):
+    signal_id: str
+    reason: str = Field(..., min_length=3)
+    metadata: dict = Field(default_factory=dict)
+
+
 def _role_value(user: User) -> str:
     role = user.role
     return role.value if hasattr(role, "value") else str(role)
 
 
-def _signal_to_dict(row: StrategyObservabilityEvent) -> dict:
+def _signal_to_dict(row: StrategyObservabilityEvent, governance_status: str = "pending", governance_reason: str | None = None) -> dict:
     return {
         "signal_id": row.id,
         "symbol": row.symbol,
@@ -103,8 +115,54 @@ def _signal_to_dict(row: StrategyObservabilityEvent) -> dict:
         "reject_reasons": row.reject_reasons or [],
         "decision_path": row.decision_path or [],
         "event_metadata": row.event_metadata or {},
+        "governance_status": governance_status,
+        "governance_reason": governance_reason,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
+
+
+def _governance_map(db: Session, signal_ids: list[str]) -> dict[str, SignalGovernanceDecision]:
+    if not signal_ids:
+        return {}
+    rows = db.query(SignalGovernanceDecision).filter(SignalGovernanceDecision.signal_id.in_(signal_ids)).all()
+    return {row.signal_id: row for row in rows}
+
+
+def _signal_with_governance(row: StrategyObservabilityEvent, governance_map: dict[str, SignalGovernanceDecision]) -> dict:
+    governance = governance_map.get(row.id)
+    return _signal_to_dict(
+        row,
+        governance_status=(governance.status if governance else "pending"),
+        governance_reason=(governance.reason if governance else None),
+    )
+
+
+def _set_signal_governance(
+    db: Session,
+    *,
+    signal_id: str,
+    status_value: str,
+    actor_id: str,
+    reason: str | None,
+    metadata: dict | None,
+) -> SignalGovernanceDecision:
+    row = db.query(SignalGovernanceDecision).filter(SignalGovernanceDecision.signal_id == signal_id).first()
+    if row is None:
+        row = SignalGovernanceDecision(
+            signal_id=signal_id,
+            status=status_value,
+            actor_id=actor_id,
+            reason=reason,
+            metadata_payload=metadata or {},
+        )
+        db.add(row)
+    else:
+        row.status = status_value
+        row.actor_id = actor_id
+        row.reason = reason
+        row.metadata_payload = metadata or {}
+        row.acted_at = datetime.now(timezone.utc)
+    return row
 
 
 def _default_score_config() -> dict:
@@ -306,6 +364,7 @@ def _serialize_action_timeline_items(
     signal_strategy_map: dict[str, str],
 ) -> list[dict]:
     timeline: list[dict] = []
+    chain_anchor: dict[str, str] = {}
 
     for row in audit_rows:
         details = row.details or {}
@@ -320,6 +379,9 @@ def _serialize_action_timeline_items(
         if strategy_filter and row_strategy_id != strategy_filter:
             continue
 
+        chain_id = str(details.get("chain_id") or details.get("preview_token") or details.get("request_id") or row.entity_id or row.id)
+        chain_anchor[chain_id] = row.id
+
         timeline.append(
             {
                 "event_id": row.id,
@@ -329,8 +391,10 @@ def _serialize_action_timeline_items(
                 "action": row.action,
                 "actor_role": row.actor_role,
                 "reason": details.get("reason"),
-                "impact_hint": details.get("state_snapshot") or details.get("after_payload") or details,
-                "chain_ref": details.get("preview_token") or details.get("request_id") or row.entity_id,
+                "impact_payload": details.get("state_snapshot") or details.get("after_payload") or details,
+                "chain_id": chain_id,
+                "parent_event_id": None,
+                "chain_ref": chain_id,
             }
         )
 
@@ -347,6 +411,7 @@ def _serialize_action_timeline_items(
         if strategy_filter and row_strategy_id != strategy_filter:
             continue
 
+        chain_id = str(details.get("chain_id") or row.entity_key or row.state_key or row.root_cause_code or row.id)
         timeline.append(
             {
                 "event_id": row.id,
@@ -356,10 +421,12 @@ def _serialize_action_timeline_items(
                 "action": row.alert_type,
                 "actor_role": "system",
                 "reason": row.message,
-                "impact_hint": details,
+                "impact_payload": details,
                 "severity": row.severity,
                 "status": row.status,
-                "chain_ref": row.entity_key or row.state_key or row.root_cause_code,
+                "chain_id": chain_id,
+                "parent_event_id": chain_anchor.get(chain_id),
+                "chain_ref": chain_id,
                 "alert_detail_path": f"/api/admin/action-center/alerts/{row.id}/detail",
             }
         )
@@ -375,7 +442,104 @@ def top_signals(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    return get_top_signals(db, window=window, top_n=top_n)
+    payload = get_top_signals(db, window=window, top_n=top_n)
+    signal_ids = [str(item.get("signal_id")) for item in (payload.get("items") or []) if item.get("signal_id")]
+    governance = _governance_map(db, signal_ids)
+    items = []
+    for item in payload.get("items") or []:
+        signal_id = str(item.get("signal_id") or "")
+        decision = governance.get(signal_id)
+        items.append(
+            {
+                **item,
+                "governance_status": decision.status if decision else "pending",
+                "governance_reason": decision.reason if decision else None,
+            }
+        )
+    return {
+        **payload,
+        "items": items,
+    }
+
+
+@router.post("/signals/approve")
+def approve_signal(
+    payload: SignalApproveRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    signal_row = db.query(StrategyObservabilityEvent).filter(StrategyObservabilityEvent.id == payload.signal_id).first()
+    if signal_row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="signal_not_found")
+
+    governance_row = _set_signal_governance(
+        db,
+        signal_id=payload.signal_id,
+        status_value="approved",
+        actor_id=current_admin.id,
+        reason=payload.reason,
+        metadata=payload.metadata,
+    )
+    create_audit_log(
+        db,
+        action="strategy_signal_approve",
+        entity_type="strategy_signal",
+        entity_id=payload.signal_id,
+        actor_user_id=current_admin.id,
+        actor_role=_role_value(current_admin),
+        details={
+            "reason": payload.reason,
+            "metadata": payload.metadata,
+            "status": "approved",
+        },
+    )
+    db.commit()
+    return {
+        "status": "success",
+        "message": "signal_approved",
+        "signal_id": payload.signal_id,
+        "governance_status": governance_row.status,
+    }
+
+
+@router.post("/signals/reject")
+def reject_signal(
+    payload: SignalRejectRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    signal_row = db.query(StrategyObservabilityEvent).filter(StrategyObservabilityEvent.id == payload.signal_id).first()
+    if signal_row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="signal_not_found")
+
+    governance_row = _set_signal_governance(
+        db,
+        signal_id=payload.signal_id,
+        status_value="rejected",
+        actor_id=current_admin.id,
+        reason=payload.reason,
+        metadata=payload.metadata,
+    )
+    create_audit_log(
+        db,
+        action="strategy_signal_reject",
+        entity_type="strategy_signal",
+        entity_id=payload.signal_id,
+        actor_user_id=current_admin.id,
+        actor_role=_role_value(current_admin),
+        details={
+            "reason": payload.reason,
+            "metadata": payload.metadata,
+            "status": "rejected",
+        },
+    )
+    db.commit()
+    return {
+        "status": "success",
+        "message": "signal_rejected",
+        "signal_id": payload.signal_id,
+        "governance_status": governance_row.status,
+    }
 
 
 @router.post("/top-signals/simulate")
@@ -435,12 +599,32 @@ def execute_top_signals(
     if not rows:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="signals_not_found")
 
+    governance = _governance_map(db, [row.id for row in rows])
+    not_approved = [
+        row.id
+        for row in rows
+        if (governance.get(row.id).status if governance.get(row.id) else "pending") != "approved"
+    ]
+    if not_approved:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"signals_not_approved_for_execution:{','.join(sorted(not_approved))}",
+        )
+
     executed_items = []
     for row in rows:
         metadata = dict(row.event_metadata or {})
         metadata["last_execution_action"] = "executed"
         metadata["last_execution_reason"] = payload.reason
         row.event_metadata = metadata
+        _set_signal_governance(
+            db,
+            signal_id=row.id,
+            status_value="executed",
+            actor_id=current_admin.id,
+            reason=payload.reason,
+            metadata={"source": "execute_top_signals", "preview_token": payload.preview_token},
+        )
         executed_items.append({"signal_id": row.id, "symbol": row.symbol, "status": "EXECUTED"})
 
     create_audit_log(
@@ -553,11 +737,32 @@ def bulk_execute_top_signals(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="preview_token_invalid_or_expired")
     signal_ids = sorted(preview.get("signal_ids", []))
     rows = _fetch_signals_by_ids(db, signal_ids)
+
+    governance = _governance_map(db, [row.id for row in rows])
+    not_approved = [
+        row.id
+        for row in rows
+        if (governance.get(row.id).status if governance.get(row.id) else "pending") != "approved"
+    ]
+    if not_approved:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"signals_not_approved_for_execution:{','.join(sorted(not_approved))}",
+        )
+
     for row in rows:
         metadata = dict(row.event_metadata or {})
         metadata["last_execution_action"] = "bulk_executed"
         metadata["last_execution_reason"] = payload.reason
         row.event_metadata = metadata
+        _set_signal_governance(
+            db,
+            signal_id=row.id,
+            status_value="executed",
+            actor_id=current_admin.id,
+            reason=payload.reason,
+            metadata={"source": "bulk_execute", "preview_token": payload.preview_token},
+        )
 
     create_audit_log(
         db,
@@ -982,15 +1187,17 @@ def strategy_observability_export(
     time_from: str | None = Query(default=None),
     time_to: str | None = Query(default=None),
     top_n: int = Query(default=1000, ge=1, le=5000),
-    _: User = Depends(require_admin),
+    current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    snapshot_timestamp = datetime.now(timezone.utc)
+    effective_time_to = time_to or snapshot_timestamp.isoformat()
     normalized, start_at, end_at, rows = _query_strategy_rows(
         db,
         strategy_id=strategy_id,
         window=window,
         time_from=time_from,
-        time_to=time_to,
+        time_to=effective_time_to,
         limit=top_n,
     )
     payload_rows = _rows_to_export_payload(rows)
@@ -1000,14 +1207,33 @@ def strategy_observability_export(
         "time_from": start_at.isoformat(),
         "time_to": end_at.isoformat(),
         "top_n": top_n,
+        "snapshot_timestamp": snapshot_timestamp.isoformat(),
     }
+
+    create_audit_log(
+        db,
+        action="strategy_observability_export",
+        entity_type="strategy_observability",
+        entity_id=strategy_id or "all",
+        actor_user_id=current_admin.id,
+        actor_role=_role_value(current_admin),
+        details={
+            "export_type": export_format,
+            "filters": filters_payload,
+            "dataset_size": len(payload_rows),
+            "row_count": len(payload_rows),
+        },
+    )
+    db.commit()
 
     if export_format == "json":
         return {
             "status": "success",
             "export_format": "json",
             "filters": filters_payload,
+            "snapshot_timestamp": snapshot_timestamp.isoformat(),
             "count": len(payload_rows),
+            "row_count": len(payload_rows),
             "items": payload_rows,
         }
 
@@ -1039,6 +1265,8 @@ def strategy_observability_export(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Observability-Filters": json.dumps(filters_payload, ensure_ascii=False),
+            "X-Snapshot-Timestamp": snapshot_timestamp.isoformat(),
+            "X-Row-Count": str(len(payload_rows)),
         },
     )
 
@@ -1177,6 +1405,65 @@ def strategy_action_impact_timeline(
         },
         "kpi_cards": kpi_cards,
         "items": timeline_rows,
+    }
+
+
+@router.get("/timeline/{chain_id}")
+def strategy_timeline_chain_detail(
+    chain_id: str,
+    window: str = Query(default="30d"),
+    strategy_id: str | None = Query(default=None),
+    time_from: str | None = Query(default=None),
+    time_to: str | None = Query(default=None),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    normalized, start_at, end_at = _resolve_time_range(window, time_from, time_to)
+
+    audit_rows = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.created_at >= start_at,
+            AuditLog.created_at <= end_at,
+            AuditLog.action.like("strategy_%"),
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(2000)
+        .all()
+    )
+    system_alert_rows = (
+        db.query(SystemAlert)
+        .filter(
+            SystemAlert.created_at >= start_at,
+            SystemAlert.created_at <= end_at,
+        )
+        .order_by(SystemAlert.created_at.desc())
+        .limit(2000)
+        .all()
+    )
+
+    signal_strategy_map: dict[str, str] = {}
+    timeline_rows = _serialize_action_timeline_items(
+        audit_rows=audit_rows,
+        system_alert_rows=system_alert_rows,
+        strategy_filter=strategy_id,
+        signal_strategy_map=signal_strategy_map,
+    )
+
+    chain_nodes = [item for item in timeline_rows if str(item.get("chain_id") or "") == chain_id]
+    chain_nodes.sort(key=lambda item: item.get("timestamp") or "")
+
+    return {
+        "status": "success",
+        "chain_id": chain_id,
+        "filters": {
+            "window": normalized,
+            "strategy_id": strategy_id,
+            "time_from": start_at.isoformat(),
+            "time_to": end_at.isoformat(),
+        },
+        "count": len(chain_nodes),
+        "nodes": chain_nodes,
     }
 
 

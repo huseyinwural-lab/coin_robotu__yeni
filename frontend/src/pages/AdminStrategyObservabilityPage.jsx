@@ -62,6 +62,8 @@ export const AdminStrategyObservabilityPage = () => {
 
   const [topSignals, setTopSignals] = useState([]);
   const [selectedSignalIds, setSelectedSignalIds] = useState([]);
+  const [governanceReasons, setGovernanceReasons] = useState({});
+  const [governanceActionLoading, setGovernanceActionLoading] = useState({});
   const [selectedSimulation, setSelectedSimulation] = useState({
     previewToken: "",
     signalIds: [],
@@ -108,7 +110,7 @@ export const AdminStrategyObservabilityPage = () => {
 
   const [report, setReport] = useState(null);
   const [riskCapital, setRiskCapital] = useState(null);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const [autoRefreshSeconds, setAutoRefreshSeconds] = useState(30);
   const [exportStrategyId, setExportStrategyId] = useState("");
 
@@ -124,12 +126,14 @@ export const AdminStrategyObservabilityPage = () => {
   const [riskLimitsPreview, setRiskLimitsPreview] = useState(null);
   const [riskLimitsReason, setRiskLimitsReason] = useState("");
   const [riskLimitsConfirmChecked, setRiskLimitsConfirmChecked] = useState(false);
+  const [riskLimitsApplyDialogOpen, setRiskLimitsApplyDialogOpen] = useState(false);
 
   const [exposureOverrideStrategyId, setExposureOverrideStrategyId] = useState("");
   const [exposureOverrideCapPct, setExposureOverrideCapPct] = useState("20");
   const [exposureOverridePreview, setExposureOverridePreview] = useState(null);
   const [exposureOverrideReason, setExposureOverrideReason] = useState("");
   const [exposureOverrideConfirmChecked, setExposureOverrideConfirmChecked] = useState(false);
+  const [exposureApplyDialogOpen, setExposureApplyDialogOpen] = useState(false);
 
   const [riskAlertLinkLoading, setRiskAlertLinkLoading] = useState(false);
   const [riskAlertLinkDetail, setRiskAlertLinkDetail] = useState(null);
@@ -138,6 +142,8 @@ export const AdminStrategyObservabilityPage = () => {
   const [timelineSummary, setTimelineSummary] = useState(null);
   const [timelineItems, setTimelineItems] = useState([]);
   const [timelineKpiCards, setTimelineKpiCards] = useState(null);
+  const [lastExportSnapshot, setLastExportSnapshot] = useState(null);
+  const [scoreOverrideDialogOpen, setScoreOverrideDialogOpen] = useState(false);
 
   const [auditLimit, setAuditLimit] = useState(50);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -157,6 +163,13 @@ export const AdminStrategyObservabilityPage = () => {
   const safeTopN = useMemo(() => Math.min(Math.max(Number(topN) || 10, 1), 50), [topN]);
   const normalizedSelectedSignalIds = useMemo(() => normalizeIds(selectedSignalIds), [selectedSignalIds]);
   const normalizedSelectedSimulationIds = useMemo(() => normalizeIds(selectedSimulation.signalIds), [selectedSimulation.signalIds]);
+  const topSignalsById = useMemo(
+    () =>
+      Object.fromEntries(
+        (topSignals || []).map((item) => [String(item.signal_id || ""), item])
+      ),
+    [topSignals]
+  );
 
   const selectedMatchSimulation = useMemo(() => {
     if (!selectedSimulation.previewToken) {
@@ -165,7 +178,24 @@ export const AdminStrategyObservabilityPage = () => {
     return normalizedSelectedSignalIds.join("|") === normalizedSelectedSimulationIds.join("|");
   }, [normalizedSelectedSignalIds, normalizedSelectedSimulationIds, selectedSimulation.previewToken]);
 
-  const canExecuteSelectedSignals = isSuperAdmin && normalizedSelectedSignalIds.length > 0 && selectedMatchSimulation;
+  const canExecuteSelectedSignals = isSuperAdmin && normalizedSelectedSignalIds.length > 0 && selectedMatchSimulation && selectedSignalsApproved;
+  const selectedSignalsApproved = normalizedSelectedSignalIds.every(
+    (signalId) => String(topSignalsById?.[signalId]?.governance_status || "pending") === "approved"
+  );
+  const timelineChainSummary = useMemo(() => {
+    const map = {};
+    for (const item of timelineItems || []) {
+      const chainId = String(item.chain_id || item.chain_ref || "").trim();
+      if (!chainId) {
+        continue;
+      }
+      map[chainId] = (map[chainId] || 0) + 1;
+    }
+    return Object.entries(map)
+      .map(([chainId, count]) => ({ chainId, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20);
+  }, [timelineItems]);
   const allSignalsSelected = topSignals.length > 0 && selectedSignalIds.length === topSignals.length;
 
   const regimeRows = useMemo(() => {
@@ -365,7 +395,8 @@ export const AdminStrategyObservabilityPage = () => {
   }, [loadActionImpactTimeline]);
 
   useEffect(() => {
-    if (!autoRefreshEnabled) {
+    const modalOpen = executeDialogOpen || scoreOverrideDialogOpen || riskLimitsApplyDialogOpen || exposureApplyDialogOpen;
+    if (!autoRefreshEnabled || modalOpen) {
       return undefined;
     }
     const intervalMs = Math.max(Number(autoRefreshSeconds) || 30, 10) * 1000;
@@ -376,7 +407,18 @@ export const AdminStrategyObservabilityPage = () => {
       loadActionImpactTimeline();
     }, intervalMs);
     return () => window.clearInterval(timer);
-  }, [autoRefreshEnabled, autoRefreshSeconds, loadActionImpactTimeline, loadAuditLog, loadData, loadRejectionDetails]);
+  }, [
+    autoRefreshEnabled,
+    autoRefreshSeconds,
+    executeDialogOpen,
+    exposureApplyDialogOpen,
+    loadActionImpactTimeline,
+    loadAuditLog,
+    loadData,
+    loadRejectionDetails,
+    riskLimitsApplyDialogOpen,
+    scoreOverrideDialogOpen,
+  ]);
 
   const updateSelectedSignal = (signalId, checked) => {
     setSelectedSignalIds((prev) => {
@@ -406,6 +448,53 @@ export const AdminStrategyObservabilityPage = () => {
       toast.error(error?.response?.data?.detail || "Explainability detayı alınamadı");
     } finally {
       setExplainabilityLoading(false);
+    }
+  };
+
+  const approveSignal = async (signalId) => {
+    if (!isSuperAdmin) {
+      toast.error("Approve sadece super_admin için açık");
+      return;
+    }
+    setGovernanceActionLoading((prev) => ({ ...prev, [signalId]: true }));
+    try {
+      await apiClient.post("/admin/strategy/signals/approve", {
+        signal_id: signalId,
+        reason: governanceReasons[signalId] || "approved_by_operator",
+        metadata: { source: "top_signals_table" },
+      });
+      toast.success("Signal approved");
+      await Promise.all([loadData(), loadAuditLog(), loadActionImpactTimeline()]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Signal approve başarısız");
+    } finally {
+      setGovernanceActionLoading((prev) => ({ ...prev, [signalId]: false }));
+    }
+  };
+
+  const rejectSignal = async (signalId) => {
+    if (!isSuperAdmin) {
+      toast.error("Reject sadece super_admin için açık");
+      return;
+    }
+    const reason = String(governanceReasons[signalId] || "").trim();
+    if (reason.length < 3) {
+      toast.error("Reject reason en az 3 karakter olmalı");
+      return;
+    }
+    setGovernanceActionLoading((prev) => ({ ...prev, [signalId]: true }));
+    try {
+      await apiClient.post("/admin/strategy/signals/reject", {
+        signal_id: signalId,
+        reason,
+        metadata: { source: "top_signals_table" },
+      });
+      toast.success("Signal rejected");
+      await Promise.all([loadData(), loadAuditLog(), loadActionImpactTimeline()]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Signal reject başarısız");
+    } finally {
+      setGovernanceActionLoading((prev) => ({ ...prev, [signalId]: false }));
     }
   };
 
@@ -657,15 +746,15 @@ export const AdminStrategyObservabilityPage = () => {
   const applyScoreOverride = async () => {
     if (!isSuperAdmin) {
       toast.error("Score override sadece super_admin için açık");
-      return;
+      return false;
     }
     if (!String(scoreOverrideSignalId || "").trim()) {
       toast.error("Override için signal seçin");
-      return;
+      return false;
     }
     if (String(scoreOverrideReason || "").trim().length < 3) {
       toast.error("Override reason en az 3 karakter olmalı");
-      return;
+      return false;
     }
     setFeedbackLoading("Score Override", "Score override uygulanıyor");
     try {
@@ -678,10 +767,12 @@ export const AdminStrategyObservabilityPage = () => {
       toast.success("Score override uygulandı");
       setScoreOverrideReason("");
       await Promise.all([loadData(), loadAuditLog()]);
+      return true;
     } catch (error) {
       const message = error?.response?.data?.detail || "Score override başarısız";
       setFeedbackError("Score Override", message);
       toast.error(message);
+      return false;
     }
   };
 
@@ -712,19 +803,19 @@ export const AdminStrategyObservabilityPage = () => {
   const applyRiskLimits = async () => {
     if (!isSuperAdmin) {
       toast.error("Risk limits apply sadece super_admin için açık");
-      return;
+      return false;
     }
     if (!riskLimitsPreview?.preview_token) {
       toast.error("Önce risk limits preview alınmalı");
-      return;
+      return false;
     }
     if (!riskLimitsConfirmChecked) {
       toast.error("Risk limits apply için confirm zorunlu");
-      return;
+      return false;
     }
     if (riskLimitsReason.trim().length < 3) {
       toast.error("Risk limits reason en az 3 karakter olmalı");
-      return;
+      return false;
     }
     setFeedbackLoading("Risk Limits Apply", "Risk limits uygulanıyor");
     try {
@@ -739,10 +830,12 @@ export const AdminStrategyObservabilityPage = () => {
       setRiskLimitsConfirmChecked(false);
       setRiskLimitsPreview(null);
       await Promise.all([loadData(), loadAuditLog(), loadActionImpactTimeline()]);
+      return true;
     } catch (error) {
       const message = error?.response?.data?.detail || "Risk limits apply başarısız";
       setFeedbackError("Risk Limits Apply", message);
       toast.error(message);
+      return false;
     }
   };
 
@@ -771,19 +864,19 @@ export const AdminStrategyObservabilityPage = () => {
   const applyExposureOverride = async () => {
     if (!isSuperAdmin) {
       toast.error("Exposure override apply sadece super_admin için açık");
-      return;
+      return false;
     }
     if (!exposureOverridePreview?.preview_token) {
       toast.error("Önce exposure override preview alınmalı");
-      return;
+      return false;
     }
     if (!exposureOverrideConfirmChecked) {
       toast.error("Exposure override apply için confirm zorunlu");
-      return;
+      return false;
     }
     if (exposureOverrideReason.trim().length < 3) {
       toast.error("Exposure override reason en az 3 karakter olmalı");
-      return;
+      return false;
     }
     setFeedbackLoading("Exposure Override Apply", "Exposure override uygulanıyor");
     try {
@@ -798,10 +891,12 @@ export const AdminStrategyObservabilityPage = () => {
       setExposureOverrideConfirmChecked(false);
       setExposureOverridePreview(null);
       await Promise.all([loadData(), loadAuditLog(), loadActionImpactTimeline()]);
+      return true;
     } catch (error) {
       const message = error?.response?.data?.detail || "Exposure override apply başarısız";
       setFeedbackError("Exposure Override Apply", message);
       toast.error(message);
+      return false;
     }
   };
 
@@ -831,6 +926,12 @@ export const AdminStrategyObservabilityPage = () => {
     try {
       if (exportFormat === "json") {
         const { data } = await apiClient.get("/admin/strategy/observability/export", { params });
+        setLastExportSnapshot({
+          timestamp: data?.snapshot_timestamp || data?.filters?.snapshot_timestamp || null,
+          row_count: data?.row_count ?? data?.count ?? 0,
+          filters: data?.filters || params,
+          export_type: "json",
+        });
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
@@ -845,6 +946,14 @@ export const AdminStrategyObservabilityPage = () => {
           responseType: "blob",
         });
         const contentDisposition = response.headers?.["content-disposition"] || "";
+        const snapshotTimestamp = response.headers?.["x-snapshot-timestamp"] || null;
+        const rowCount = Number(response.headers?.["x-row-count"] || 0);
+        setLastExportSnapshot({
+          timestamp: snapshotTimestamp,
+          row_count: rowCount,
+          filters: params,
+          export_type: "csv",
+        });
         const fileNameMatch = /filename="([^"]+)"/.exec(contentDisposition);
         const filename = fileNameMatch?.[1] || `observability_${exportStrategyId || "all"}_${windowRange}.csv`;
         const link = document.createElement("a");
@@ -996,6 +1105,15 @@ export const AdminStrategyObservabilityPage = () => {
         </Button>
       </div>
 
+      {lastExportSnapshot && (
+        <div className="border border-black/30 bg-orange-100 p-3 text-xs" data-testid="strategy-observability-last-export-snapshot-panel">
+          <p data-testid="strategy-observability-last-export-snapshot-title" className="font-semibold">Export snapshot at: {lastExportSnapshot.timestamp || "-"}</p>
+          <p data-testid="strategy-observability-last-export-row-count">row_count: {lastExportSnapshot.row_count ?? 0}</p>
+          <p data-testid="strategy-observability-last-export-filters">filters: {JSON.stringify(lastExportSnapshot.filters || {})}</p>
+          <p data-testid="strategy-observability-last-export-type">export_type: {lastExportSnapshot.export_type || "-"}</p>
+        </div>
+      )}
+
       {actionFeedback.state !== "idle" && (
         <div className={`border p-3 text-sm ${feedbackClass}`} data-testid="strategy-observability-action-feedback-banner">
           <p className="font-semibold" data-testid="strategy-observability-action-feedback-title">{actionFeedback.title}</p>
@@ -1028,6 +1146,17 @@ export const AdminStrategyObservabilityPage = () => {
               className="border border-black bg-black text-orange-300 hover:bg-zinc-800"
               onClick={() => setExecuteDialogOpen(true)}
               disabled={!canExecuteSelectedSignals}
+              title={
+                !isSuperAdmin
+                  ? "Sadece super_admin execute edebilir"
+                  : normalizedSelectedSignalIds.length === 0
+                    ? "Önce sinyal seçin"
+                    : !selectedMatchSimulation
+                      ? "Önce aynı sinyal seti için simulate yapın"
+                      : !selectedSignalsApproved
+                        ? "Execute için tüm seçili sinyaller approved olmalı"
+                        : ""
+              }
               data-testid="top-signals-execute-selected-button"
             >
               Seçiliyi Execute Et
@@ -1120,6 +1249,54 @@ export const AdminStrategyObservabilityPage = () => {
                           data-testid={`top-signals-detail-button-${signalId}`}
                         >
                           Detail
+                        </Button>
+                        <Badge
+                          className={
+                            item.governance_status === "approved"
+                              ? "border-emerald-700 bg-emerald-100 text-emerald-900"
+                              : item.governance_status === "rejected"
+                                ? "border-red-700 bg-red-100 text-red-900"
+                                : item.governance_status === "executed"
+                                  ? "border-blue-700 bg-blue-100 text-blue-900"
+                                  : "border-slate-600 bg-slate-100 text-slate-800"
+                          }
+                          data-testid={`top-signals-governance-status-badge-${signalId}`}
+                        >
+                          {item.governance_status || "pending"}
+                        </Badge>
+                        <Input
+                          value={governanceReasons[signalId] || ""}
+                          onChange={(event) =>
+                            setGovernanceReasons((prev) => ({
+                              ...prev,
+                              [signalId]: event.target.value,
+                            }))
+                          }
+                          placeholder="reject reason"
+                          className="h-8 w-48"
+                          data-testid={`top-signals-governance-reason-input-${signalId}`}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-black bg-white text-black"
+                          onClick={() => approveSignal(signalId)}
+                          disabled={!isSuperAdmin || governanceActionLoading[signalId]}
+                          title={!isSuperAdmin ? "Sadece super_admin approve edebilir" : ""}
+                          data-testid={`top-signals-approve-button-${signalId}`}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-black bg-white text-black"
+                          onClick={() => rejectSignal(signalId)}
+                          disabled={!isSuperAdmin || governanceActionLoading[signalId] || String(governanceReasons[signalId] || "").trim().length < 3}
+                          title={!isSuperAdmin ? "Sadece super_admin reject edebilir" : "Reject için reason en az 3 karakter"}
+                          data-testid={`top-signals-reject-button-${signalId}`}
+                        >
+                          Reject
                         </Button>
                         <Badge
                           className={rowSimulated ? "border-emerald-700 bg-emerald-100 text-emerald-900" : "border-slate-600 bg-slate-100 text-slate-800"}
@@ -1371,8 +1548,17 @@ export const AdminStrategyObservabilityPage = () => {
 
             <Button
               className="border border-black bg-black text-orange-300 hover:bg-zinc-800"
-              onClick={applyScoreOverride}
+              onClick={() => setScoreOverrideDialogOpen(true)}
               disabled={!isSuperAdmin || scoreOverrideReason.trim().length < 3 || !scoreOverrideSignalId}
+              title={
+                !isSuperAdmin
+                  ? "Sadece super_admin override uygulayabilir"
+                  : !scoreOverrideSignalId
+                    ? "Önce signal seçin"
+                    : scoreOverrideReason.trim().length < 3
+                      ? "Reason en az 3 karakter olmalı"
+                      : ""
+              }
               data-testid="score-override-apply-button"
             >
               Apply Override
@@ -1657,8 +1843,19 @@ export const AdminStrategyObservabilityPage = () => {
             </div>
             <Button
               className="border border-black bg-black text-orange-300 hover:bg-zinc-800"
-              onClick={applyRiskLimits}
+              onClick={() => setRiskLimitsApplyDialogOpen(true)}
               disabled={!isSuperAdmin || !riskLimitsPreview?.preview_token || !riskLimitsConfirmChecked || riskLimitsReason.trim().length < 3}
+              title={
+                !isSuperAdmin
+                  ? "Sadece super_admin risk limit apply yapabilir"
+                  : !riskLimitsPreview?.preview_token
+                    ? "Önce preview alınmalı"
+                    : !riskLimitsConfirmChecked
+                      ? "Önce confirm kutusu işaretlenmeli"
+                      : riskLimitsReason.trim().length < 3
+                        ? "Reason en az 3 karakter olmalı"
+                        : ""
+              }
               data-testid="risk-limits-apply-button"
             >
               Risk Limits Apply
@@ -1712,8 +1909,19 @@ export const AdminStrategyObservabilityPage = () => {
             </div>
             <Button
               className="border border-black bg-black text-orange-300 hover:bg-zinc-800"
-              onClick={applyExposureOverride}
+              onClick={() => setExposureApplyDialogOpen(true)}
               disabled={!isSuperAdmin || !exposureOverridePreview?.preview_token || !exposureOverrideConfirmChecked || exposureOverrideReason.trim().length < 3}
+              title={
+                !isSuperAdmin
+                  ? "Sadece super_admin exposure override apply yapabilir"
+                  : !exposureOverridePreview?.preview_token
+                    ? "Önce preview alınmalı"
+                    : !exposureOverrideConfirmChecked
+                      ? "Önce confirm kutusu işaretlenmeli"
+                      : exposureOverrideReason.trim().length < 3
+                        ? "Reason en az 3 karakter olmalı"
+                        : ""
+              }
               data-testid="risk-exposure-override-apply-button"
             >
               Exposure Override Apply
@@ -1812,6 +2020,25 @@ export const AdminStrategyObservabilityPage = () => {
           })}
         </div>
 
+        <div className="mt-3 border border-black/25 bg-white p-2" data-testid="action-impact-chain-summary-panel">
+          <p className="text-xs font-semibold" data-testid="action-impact-chain-summary-title">Grouped Chain Summary</p>
+          <div className="mt-2 flex flex-wrap gap-2" data-testid="action-impact-chain-summary-list">
+            {timelineChainSummary.map((item, index) => (
+              <Button
+                key={`${item.chainId}-${index}`}
+                size="sm"
+                variant="outline"
+                className="h-7 border-black bg-white text-black"
+                onClick={() => navigate(`/admin/strategy/timeline/${encodeURIComponent(item.chainId)}`)}
+                data-testid={`action-impact-chain-summary-button-${index}`}
+              >
+                {item.chainId} ({item.count})
+              </Button>
+            ))}
+            {timelineChainSummary.length === 0 && <p className="text-xs" data-testid="action-impact-chain-summary-empty">chain yok</p>}
+          </div>
+        </div>
+
         <div className="mt-3 overflow-x-auto border border-black/25 bg-white" data-testid="action-impact-timeline-table-wrapper">
           <Table data-testid="action-impact-timeline-table">
             <TableHeader>
@@ -1834,7 +2061,21 @@ export const AdminStrategyObservabilityPage = () => {
                   <TableCell data-testid={`action-impact-timeline-action-${index}`}>{item.action || "-"}</TableCell>
                   <TableCell data-testid={`action-impact-timeline-strategy-${index}`}>{item.strategy_id || "-"}</TableCell>
                   <TableCell data-testid={`action-impact-timeline-reason-${index}`}>{item.reason || "-"}</TableCell>
-                  <TableCell data-testid={`action-impact-timeline-chain-${index}`}>{item.chain_ref || "-"}</TableCell>
+                  <TableCell data-testid={`action-impact-timeline-chain-${index}`}>
+                    {item.chain_id ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 border-black bg-white text-black"
+                        onClick={() => navigate(`/admin/strategy/timeline/${encodeURIComponent(item.chain_id)}`)}
+                        data-testid={`action-impact-timeline-chain-link-${index}`}
+                      >
+                        {item.chain_id}
+                      </Button>
+                    ) : (
+                      item.chain_ref || "-"
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
               {!timelineLoading && timelineItems.length === 0 && (
@@ -1911,6 +2152,87 @@ export const AdminStrategyObservabilityPage = () => {
           </Table>
         </div>
       </section>
+
+      <Dialog open={scoreOverrideDialogOpen} onOpenChange={setScoreOverrideDialogOpen}>
+        <DialogContent data-testid="score-override-confirm-dialog">
+          <DialogHeader>
+            <DialogTitle data-testid="score-override-confirm-dialog-title">Manual Override Onayı</DialogTitle>
+            <DialogDescription data-testid="score-override-confirm-dialog-description">
+              Bu işlem skor kararını manuel etkiler. Onaylıyor musunuz?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScoreOverrideDialogOpen(false)} data-testid="score-override-confirm-cancel-button">
+              Vazgeç
+            </Button>
+            <Button
+              onClick={async () => {
+                const success = await applyScoreOverride();
+                if (success) {
+                  setScoreOverrideDialogOpen(false);
+                }
+              }}
+              data-testid="score-override-confirm-apply-button"
+            >
+              Onayla
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={riskLimitsApplyDialogOpen} onOpenChange={setRiskLimitsApplyDialogOpen}>
+        <DialogContent data-testid="risk-limits-confirm-dialog">
+          <DialogHeader>
+            <DialogTitle data-testid="risk-limits-confirm-dialog-title">Risk Limits Apply Onayı</DialogTitle>
+            <DialogDescription data-testid="risk-limits-confirm-dialog-description">
+              Risk limit değişikliği canlı kararları etkiler. Uygulamayı onaylıyor musunuz?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRiskLimitsApplyDialogOpen(false)} data-testid="risk-limits-confirm-cancel-button">
+              Vazgeç
+            </Button>
+            <Button
+              onClick={async () => {
+                const success = await applyRiskLimits();
+                if (success) {
+                  setRiskLimitsApplyDialogOpen(false);
+                }
+              }}
+              data-testid="risk-limits-confirm-apply-button"
+            >
+              Onayla
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={exposureApplyDialogOpen} onOpenChange={setExposureApplyDialogOpen}>
+        <DialogContent data-testid="exposure-override-confirm-dialog">
+          <DialogHeader>
+            <DialogTitle data-testid="exposure-override-confirm-dialog-title">Exposure Override Onayı</DialogTitle>
+            <DialogDescription data-testid="exposure-override-confirm-dialog-description">
+              Exposure override işlemi risk dağılımını değiştirir. Onaylıyor musunuz?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExposureApplyDialogOpen(false)} data-testid="exposure-override-confirm-cancel-button">
+              Vazgeç
+            </Button>
+            <Button
+              onClick={async () => {
+                const success = await applyExposureOverride();
+                if (success) {
+                  setExposureApplyDialogOpen(false);
+                }
+              }}
+              data-testid="exposure-override-confirm-apply-button"
+            >
+              Onayla
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={executeDialogOpen} onOpenChange={setExecuteDialogOpen}>
         <DialogContent data-testid="execute-selected-confirm-dialog">

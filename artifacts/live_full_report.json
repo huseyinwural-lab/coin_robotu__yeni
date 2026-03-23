@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "base_url": "https://exec-tuning.preview.emergentagent.com",
+  "base_url": "https://execution-safety-hub.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",
