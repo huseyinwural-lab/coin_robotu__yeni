@@ -1944,18 +1944,130 @@ def export_incident_snapshot_bundle(
         diff_keys = ["events", "transitions", "failed_events", "manual_actions", "idempotency_collisions"]
         count_delta = {}
         summary_lines = ["Snapshot Diff Summary"]
+        anomaly_notes = []
+
+        def _pct_change(current_value: int, compare_value: int) -> float:
+            if compare_value == 0:
+                return 100.0 if current_value > 0 else 0.0
+            return ((current_value - compare_value) / compare_value) * 100.0
+
         for key in diff_keys:
             current_value = primary_bundle["row_counts"].get(key, 0)
             compare_value = compare_bundle["row_counts"].get(key, 0)
             delta = current_value - compare_value
             trend = "arttı" if delta > 0 else "azaldı" if delta < 0 else "değişmedi"
+            if key in {"failed_events", "manual_actions"}:
+                direction = "increased" if delta > 0 else "improved" if delta < 0 else "unchanged"
+            else:
+                direction = "increased" if delta > 0 else "reduced" if delta < 0 else "unchanged"
             count_delta[key] = {
                 "current": current_value,
                 "compare": compare_value,
                 "delta": delta,
                 "trend": trend,
+                "direction": direction,
             }
-            summary_lines.append(f"- {key}: current={current_value}, compare={compare_value}, delta={delta} ({trend})")
+            summary_lines.append(
+                f"- {key}: current={current_value}, compare={compare_value}, delta={delta} ({trend}, {direction})"
+            )
+
+            if key == "failed_events":
+                pct = _pct_change(current_value, compare_value)
+                if delta > 0 and pct > 50:
+                    anomaly_notes.append(
+                        {
+                            "rule_id": "failed_events_risk_gt_50pct",
+                            "severity": "critical",
+                            "metric": key,
+                            "message": f"risk: failed_events increased by {pct:.2f}%",
+                            "current": current_value,
+                            "compare": compare_value,
+                            "delta": delta,
+                            "pct_change": round(pct, 4),
+                        }
+                    )
+                elif delta < 0:
+                    anomaly_notes.append(
+                        {
+                            "rule_id": "failed_events_negative_delta",
+                            "severity": "info",
+                            "metric": key,
+                            "message": "improved: failed_events reduced",
+                            "current": current_value,
+                            "compare": compare_value,
+                            "delta": delta,
+                            "pct_change": round(pct, 4),
+                        }
+                    )
+
+            if key == "manual_actions":
+                pct = _pct_change(current_value, compare_value)
+                if delta > 0:
+                    anomaly_notes.append(
+                        {
+                            "rule_id": "manual_actions_increased",
+                            "severity": "warning",
+                            "metric": key,
+                            "message": "operator intervention increased",
+                            "current": current_value,
+                            "compare": compare_value,
+                            "delta": delta,
+                            "pct_change": round(pct, 4),
+                        }
+                    )
+                elif delta < 0:
+                    anomaly_notes.append(
+                        {
+                            "rule_id": "manual_actions_negative_delta",
+                            "severity": "info",
+                            "metric": key,
+                            "message": "reduced: operator intervention decreased",
+                            "current": current_value,
+                            "compare": compare_value,
+                            "delta": delta,
+                            "pct_change": round(pct, 4),
+                        }
+                    )
+
+        primary_dead_letter = sum(1 for row in primary_bundle["failures"] if str(row.get("status", "")).lower() in {"dead", "quarantined"})
+        compare_dead_letter = sum(1 for row in compare_bundle["failures"] if str(row.get("status", "")).lower() in {"dead", "quarantined"})
+        dead_letter_delta = primary_dead_letter - compare_dead_letter
+        dead_letter_pct = _pct_change(primary_dead_letter, compare_dead_letter)
+
+        if dead_letter_delta > 0 and dead_letter_pct > 50:
+            anomaly_notes.append(
+                {
+                    "rule_id": "dead_letter_risk_gt_50pct",
+                    "severity": "critical",
+                    "metric": "dead_letter",
+                    "message": f"risk: dead_letter increased by {dead_letter_pct:.2f}%",
+                    "current": primary_dead_letter,
+                    "compare": compare_dead_letter,
+                    "delta": dead_letter_delta,
+                    "pct_change": round(dead_letter_pct, 4),
+                }
+            )
+        elif dead_letter_delta < 0:
+            anomaly_notes.append(
+                {
+                    "rule_id": "dead_letter_negative_delta",
+                    "severity": "info",
+                    "metric": "dead_letter",
+                    "message": "improved: dead_letter reduced",
+                    "current": primary_dead_letter,
+                    "compare": compare_dead_letter,
+                    "delta": dead_letter_delta,
+                    "pct_change": round(dead_letter_pct, 4),
+                }
+            )
+
+        if anomaly_notes:
+            summary_lines.append("Anomaly Notes")
+            for note in anomaly_notes:
+                summary_lines.append(f"- [{note['severity']}] {note['metric']}: {note['message']}")
+        else:
+            summary_lines.append("Anomaly Notes")
+            summary_lines.append("- none")
 
         diff_json = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1964,6 +2076,7 @@ def export_incident_snapshot_bundle(
                 "compare": {"scope_type": compare_scope_type, "scope_identifiers": compare_scope_payload},
             },
             "count_delta": count_delta,
+            "anomaly_notes": anomaly_notes,
         }
         diff_summary_text = "\n".join(summary_lines) + "\n"
 
