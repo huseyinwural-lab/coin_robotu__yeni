@@ -1,3 +1,47 @@
+## 2026-03-23 — P0→P1→P2 Tek Geçiş Sertleştirme (Bu Fork) ✅
+
+### Bu iterasyonda tamamlananlar
+- **P0 Stabilizasyon/Hardening**
+  - Queue determinism güçlendirildi: kritik item’larda owner garantisi, inaktif/aşırı yüklü assignee durumunda fallback reassignment.
+  - Idempotency ve concurrency hardening: apply idempotent replay akışı öne alındı; approval/assign/force işlemlerine state-lock (`with_for_update`) ve duplicate-safe guardlar eklendi.
+  - Forced resolution sertleştirildi: `expired` item için force-apply hard reject (`expired_request_force_apply_forbidden`), geçersiz state’lerde net conflict.
+  - Queue endpointi pagination destekler hale getirildi (`page`, `limit`).
+- **P1 Operasyonel kalite**
+  - Event zinciri korunarak approval vote/approved path’lerinde standart payload devam ettirildi.
+  - UI queue filter/state sync bug fix: stale response yarışları request-sequence ile engellendi.
+- **P2 Ölçeklenebilirlik & zeka**
+  - Predictive risk sinyali eklendi (breach trend + queue pressure + volatility acceleration) ve risk score bileşenine entegre edildi.
+  - Governance katmanı eklendi: ağırlıklı rol oyları + quorum eşiği ile approval finalizasyonu.
+  - Performans: queue/dashboard TTL cache, queue pagination, frontend smart auto-refresh toggle.
+
+### Frontend değişiklikleri
+- `AdminRiskOrchestratorPage.jsx`
+  - Queue için sayfalama kontrolleri (Önceki/Sonraki), auto-refresh toggle, boş durum görünümü.
+  - Queue filtre değişimlerinde backend ile tam senkron, stale liste overwrite engeli.
+  - Control Tower’a `predictive_risk_signal` ve `governance` metrik kutuları + JSON panelleri eklendi.
+
+### Backend/API değişiklikleri
+- `risk_orchestrator_service.py`
+  - `apply_policy_from_simulation`: idempotent replay sırası iyileştirildi, approval finalization path eklendi, blocked/applied cache invalidation.
+  - `list_policy_queue`: cache + pagination (`page`) eklendi.
+  - `approve/reject/assign/force_apply`: state lock/hard guards ve cache invalidation eklendi.
+  - `build_operational_dashboard`: predictive risk + governance summary alanları eklendi.
+- `strategy_domain.py`
+  - `GET /admin/risk-orchestrator/policy/queue` endpointine `page` parametresi eklendi.
+- `schemas.py`
+  - `RiskOrchestratorOperationalDashboardResponse` genişletildi (`predictive_risk_signal`, `governance`).
+
+### Test ve doğrulama
+- Testing Agent: `/app/test_reports/iteration_107.json`
+  - Backend: **16 pass / 3 skip**, Frontend: **tam pass** (queue filters, pagination, dashboard widget’ları).
+- Ek doğrulama:
+  - `pytest -q /app/backend/tests/test_risk_orchestrator_p0_p1_p2.py` → **16 passed, 3 skipped**
+  - Frontend automation agent → tüm hedef adımlar PASS.
+  - Backend deep test agent → ana endpointler PASS; requester test hesabı login 401 not edildi.
+
+### Bilinen not
+- `canary.requester@platform.local` test hesabı bu ortamda login veremedi (401). Super admin akışı ile P0/P1/P2 doğrulamaları tamamlandı.
+
 ## 2026-03-23 — Hard-Guard Final Closure (Ownership + Export) ✅
 
 ### Kapatılan son boşluklar
