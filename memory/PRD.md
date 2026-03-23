@@ -1,3 +1,76 @@
+## 2026-03-23 — Strategy Observability P0 Sprint 1 UI (Signal Control + Explainability) ✅
+
+### Kapsam (kullanıcı onayıyla tek iterasyon)
+- P0 tek parça teslim: Top Signals Control, Explainability Drawer, Score Tuning, Rejection Drill-down, Audit görünürlüğü.
+- Role kilidi uygulandı:
+  - `admin`: görüntüle + simulate
+  - `super_admin`: execute / apply / override
+- Mock/seed uyumluluğu korundu; tüm çağrılar backend kontrat endpointleriyle bağlı.
+
+### Frontend tamamlananlar
+- Dosya: `/app/frontend/src/pages/AdminStrategyObservabilityPage.jsx` tamamen yenilendi.
+- **Top Signals Control Layer**
+  - satır + select-all checkbox
+  - `Seçiliyi Simüle Et`
+  - `Seçiliyi Execute Et` (yalnızca super_admin)
+  - `Bulk Simulate Top N`
+  - `Bulk Execute Preview` + `Bulk Execute Confirm` (preview + confirm + reason)
+  - execute butonu yalnızca aynı set için simulation token varsa aktif (simulation-before-execution UI enforce)
+- **Explainability Foundation**
+  - satır bazlı `Explain` aksiyonu
+  - sağ sheet içinde score contribution, factor weights, rule hits, override history, decision log
+- **Score Tuning Control**
+  - threshold + factor weight düzenleme
+  - per-strategy JSON alanı
+  - score preview
+  - score config apply (reason zorunlu, super_admin)
+  - auto-tuning toggle apply (reason zorunlu, super_admin)
+  - manual score override (reason zorunlu, super_admin)
+- **Rejection Analytics Drill-down**
+  - 4 rejection kartı clickable filtre akışı
+  - reason chips, strategy/symbol/reason filtreleri
+  - rejection detail tablosu + Explain/Simulate aksiyonları
+- **Audit Log + Action Feedback**
+  - audit tablosu + limit + refresh
+  - global action feedback banner (`loading/success/error`)
+
+### Enforce edilen kurallar (UI katmanı)
+- Execute öncesi simulation zorunlu (aynı signal set eşleşmesi + preview token)
+- Bulk execute için preview + confirm checkbox + reason zorunlu
+- Apply/override/toggle/execute akışlarında reason zorunlu
+- Role bazlı disable ve görünür geri bildirim
+
+### Endpoint bağlantıları (frontend)
+- `GET /api/admin/strategy/top-signals`
+- `POST /api/admin/strategy/top-signals/simulate`
+- `POST /api/admin/strategy/top-signals/execute`
+- `POST /api/admin/strategy/top-signals/bulk-simulate`
+- `POST /api/admin/strategy/top-signals/bulk-execute`
+- `GET /api/admin/strategy/score-config`
+- `PUT /api/admin/strategy/score-config`
+- `POST /api/admin/strategy/score-preview`
+- `POST /api/admin/strategy/score-override`
+- `POST /api/admin/strategy/score-auto-tuning/toggle`
+- `GET /api/admin/strategy/signals/{signal_id}/explainability`
+- `GET /api/admin/strategy/rejection-analytics`
+- `GET /api/admin/strategy/rejection-analytics/details`
+- `GET /api/admin/strategy/rejection-analytics/reasons`
+- `GET /api/admin/strategy/audit-log`
+- `GET /api/admin/strategy/report`
+- `GET /api/admin/strategy/risk-capital/status`
+
+### Test / doğrulama
+- Frontend lint: ✅ PASS (`AdminStrategyObservabilityPage.jsx`)
+- Frontend build: ✅ PASS (global hook warningları var, mevcut kod tabanından)
+- Screenshot smoke: admin login sayfası açılıyor ✅
+- `auto_frontend_testing_agent`: ❌ **BLOCKED** (backend 502)
+- `deep_testing_backend_v2`: ❌ **BLOCKED** (tüm API endpointleri 502)
+
+### Bilinen açık / temporary mock notları
+- Strategy Observability backend entegrasyonları contract seviyesinde bağlı.
+- Ortamda backend 502 nedeniyle canlı akış E2E doğrulaması bloklu.
+- Slack delivery **MOCKED** (`SENT_MOCKED`), Binance execution **MOCKED**.
+
 ## 2026-03-23 — Deterministic Recommended Actions Katmanı ✅
 
 ### Sprint kapsamı

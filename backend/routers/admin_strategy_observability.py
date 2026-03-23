@@ -264,8 +264,8 @@ def execute_top_signals(
         entity_id=payload.preview_token,
         actor_user_id=current_admin.id,
         actor_role=_role_value(current_admin),
-        reason=payload.reason,
         details={
+            "reason": payload.reason,
             "signal_ids": sorted(payload.signal_ids),
             "preview_token": payload.preview_token,
             "simulation_before_execution": True,
@@ -380,8 +380,7 @@ def bulk_execute_top_signals(
         entity_id=payload.preview_token,
         actor_user_id=current_admin.id,
         actor_role=_role_value(current_admin),
-        reason=payload.reason,
-        details={"signal_ids": signal_ids, "simulation_before_execution": True},
+        details={"reason": payload.reason, "signal_ids": signal_ids, "simulation_before_execution": True},
     )
     db.commit()
     return {
@@ -422,10 +421,11 @@ def update_score_config(
         entity_id="global",
         actor_user_id=current_admin.id,
         actor_role=_role_value(current_admin),
-        reason=payload.reason,
-        before_payload=previous,
-        after_payload=updated,
-        details={"reason": payload.reason},
+        details={
+            "reason": payload.reason,
+            "before_payload": previous,
+            "after_payload": updated,
+        },
     )
     db.commit()
     return {"status": "success", "message": "score_config_updated", "config": updated}
@@ -520,10 +520,12 @@ def score_override(
         entity_id=row.id,
         actor_user_id=current_admin.id,
         actor_role=_role_value(current_admin),
-        reason=payload.reason,
-        before_payload={"adjusted_score": before_adjusted},
-        after_payload={"adjusted_score": after_adjusted},
-        details=override_record,
+        details={
+            "reason": payload.reason,
+            "before_payload": {"adjusted_score": before_adjusted},
+            "after_payload": {"adjusted_score": after_adjusted},
+            **override_record,
+        },
     )
     db.commit()
     db.refresh(row)
@@ -553,10 +555,11 @@ def toggle_score_auto_tuning(
         entity_id="global",
         actor_user_id=current_admin.id,
         actor_role=_role_value(current_admin),
-        reason=payload.reason,
-        before_payload={"auto_tuning_enabled": current.get("auto_tuning_enabled", False)},
-        after_payload={"auto_tuning_enabled": updated.get("auto_tuning_enabled", False)},
-        details={"reason": payload.reason},
+        details={
+            "reason": payload.reason,
+            "before_payload": {"auto_tuning_enabled": current.get("auto_tuning_enabled", False)},
+            "after_payload": {"auto_tuning_enabled": updated.get("auto_tuning_enabled", False)},
+        },
     )
     db.commit()
     return {"status": "success", "message": "auto_tuning_updated", "enabled": bool(payload.enabled)}
@@ -735,7 +738,7 @@ def strategy_audit_log(
                 "action": row.action,
                 "entity_type": row.entity_type,
                 "entity_id": row.entity_id,
-                "reason": row.reason,
+                "reason": (row.details or {}).get("reason"),
                 "actor_user_id": row.actor_user_id,
                 "actor_role": row.actor_role,
                 "created_at": row.created_at.isoformat() if row.created_at else None,
