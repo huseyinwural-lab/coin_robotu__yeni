@@ -1,0 +1,68 @@
+{
+  "overall_result": "PASS",
+  "summary": {
+    "total_tests": 7,
+    "passed": 7,
+    "failed": 0,
+    "success_rate": "100.0%"
+  },
+  "test_results": [
+    {
+      "test": "Admin Authentication",
+      "status": "PASS",
+      "details": "Successfully authenticated as canary.admin@platform.local",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-23T23:56:21.654009"
+    },
+    {
+      "test": "System Cross-Check",
+      "status": "PASS",
+      "details": "is_consistent=true, all required fields present: ['comparison_sources', 'consistency_rules', 'counts']",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-23T23:56:21.718905"
+    },
+    {
+      "test": "Analytics Cross-Check",
+      "status": "PASS",
+      "details": "is_consistent=true, all required fields present: ['comparison_sources', 'consistency_rules', 'counts']",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-23T23:56:21.785044"
+    },
+    {
+      "test": "Checks History",
+      "status": "PASS",
+      "details": "Found flapping_detail with severity + window_sec. Examples: [{'severity': 'LOW', 'window_sec': 300}, {'severity': 'LOW', 'window_sec': 300}, {'severity': 'LOW', 'window_sec': 300}]",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-23T23:56:21.839040"
+    },
+    {
+      "test": "Checks Compare",
+      "status": "PASS",
+      "details": "Found 5 checks with run_count>=3. Examples: [{'id': 'unknown', 'run_count': 8}, {'id': 'unknown', 'run_count': 8}, {'id': 'unknown', 'run_count': 8}]",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-23T23:56:21.894807"
+    },
+    {
+      "test": "Timeline",
+      "status": "PASS",
+      "details": "Found 52 items with both audit_id + request_id. Examples: [{'audit_id': '90090378-8961-4553-9051-cb0beac79728', 'request_id': '34aaa56f-5377-40c8-adb8-d02505a21244'}, {'audit_id': '99d7f864-59d6-4a4c-a8b0-7ea67cd5a82a', 'request_id': '3f12822e-c288-4361-a123-70f055b5b6d0'}, {'audit_id': 'c759c6f5-8595-4ab5-aecf-b510235687ca', 'request_id': '38ef378a-f86f-4d97-92d8-8e5086939536'}]",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-23T23:56:21.958094"
+    },
+    {
+      "test": "History Cleanup",
+      "status": "PASS",
+      "details": "All required fields present: {'cleaned': True, 'history_removed': 0, 'compare_removed': 0}",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-23T23:56:22.023043"
+    }
+  ],
+  "timestamp": "2026-03-23T23:56:22.023269"
+}
