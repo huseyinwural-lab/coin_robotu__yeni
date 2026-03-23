@@ -1,3 +1,78 @@
+## 2026-03-23 — FINAL TASK ORDER (Production Readiness Lock) ✅
+
+### Kapanan kapsam (öncelik sırasıyla)
+1. Playbook Safe Execution — real execution layer + rollback + retry
+2. Export snapshot + audit hard lock
+3. Auto-ack hardening (preview -> run)
+4. Preflight health check güçlendirmesi
+
+### Execution state transition matrisi
+- `preview -> approved` (approve)
+- `approved -> executing` (execute başlangıcı)
+- `executing -> executed` (tüm step’ler başarılı)
+- `executing -> failed` (ilk failed step’te durur)
+- `executed -> rollback_executed` (rollback endpoint)
+- `failed -> approved(new run)` (retry endpoint yeni run oluşturur)
+
+### Retry semantiği (net)
+- Endpoint: `POST /api/admin-phase3/playbook/retry`
+- Sadece `failed` state kabul eder.
+- `reason` zorunlu.
+- Yeni run oluşturur (aynı run continuation değil).
+- `parent_run_id` ile orijinal run’a bağlanır.
+- `retry_attempt` artar.
+
+### Rollback kapsamı ve sınırları
+- Endpoint: `POST /api/admin-phase3/playbook/rollback`
+- Sadece `executed` run için açık.
+- `reason` zorunlu.
+- Step rollback’leri ters sırayla uygulanır.
+- Rollback sonrası run state: `rollback_executed`.
+- `rollback_available` marker’ı olmayan/uygunsuz run’larda rollback bloklanır.
+
+### Mock / Live sınırı
+- Dış entegrasyonlar bilinçli olarak **MOCKED** bırakıldı:
+  - Slack webhook delivery **MOCKED**
+  - Binance futures execution **MOCKED**
+- Bu turda gerçek dış entegrasyon açılmadı (operasyonel/finansal risk izolasyonu).
+
+### Preflight skor bileşenleri
+- Runtime worker health (ana kaynak)
+- DB/migration/table readiness
+- Backlog pressure (`failed_backlog`, queue depth, worker latency)
+- Çıktılar:
+  - `overall_ui_status`: `OK / WARNING / ERROR`
+  - `preflight_score`
+  - `execution_disable` (ERROR ise true)
+  - check list: `execution_engine_readiness`, `queue_job_health`, vb.
+
+### Teknik uygulama özeti
+- Backend
+  - `recovery.py`: approve/execute/rollback/retry alias endpointleri + state machine + step audit + failure_reason + progress alanları
+  - `governance_execution.py`: `step_index`, `total_steps`, `failure_reason`, `parent_run_id`, `retry_attempt`
+  - migration: `20260323_0063_playbook_execution_state_machine.py`
+  - `alerts.py`: auto-ack preview/run hardening + rule-match görünürlüğü + preview token zorlaması
+  - `admin_phase3.py`: export immutable metadata (`snapshot_id`, `snapshot_hash`) + audit_required alanları
+- Frontend
+  - `ExecutionStatesPage.jsx`:
+    - preflight OK/WARNING/ERROR görünümü
+    - ERROR durumunda aksiyon disable
+    - playbook progress bar + step-by-step status + failure highlight
+    - rollback/retry butonları
+    - export snapshot metadata (id/hash)
+
+### Doğrulama
+- Testing agent: `/app/test_reports/iteration_99.json`
+  - Backend: **100% (22/22 PASS)**
+  - Frontend: PASS
+- Ek doğrulama:
+  - `auto_frontend_testing_agent`: FINAL LOCK UI PASS
+  - `deep_testing_backend_v2`: genel PASS; export header notu manuel doğrulamada doğrulandı (`snapshot_id/snapshot_hash/snapshot_at` mevcut)
+
+### Production’a çıkmadan önce kalan tek riskler
+- Dış entegrasyonlar hâlâ MOCKED (bilinçli sınır). Live cutover için ayrı change-control gerekir.
+- Runtime worker sinyali cache tabanlı; çok katı SLO için ek telemetry/heartbeat kanalına bağlanması önerilir.
+
 ## 2026-03-23 — P1 Ek Kapanış: Deterministik Root Cause Hint + Seed İzolasyonu ✅
 
 ### Bu tur kapsamı
