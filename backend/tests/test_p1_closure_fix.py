@@ -206,7 +206,7 @@ class TestDiffJsonFormat:
 
             # Check reason contains delta info (before→after format)
             reason = action_item.get("reason", "")
-            assert reason, f"Reason should not be empty"
+            assert reason, "Reason should not be empty"
             # Reason should contain either "→" or numbers indicating before/after
             assert "→" in reason or any(char.isdigit() for char in reason), f"Reason should contain delta info: {reason}"
 

@@ -1,3 +1,59 @@
+## 2026-03-23 — FINAL P1 Kapanış Fix (Recommended Actions Context + Compare Validation) ✅
+
+### Uygulanan kritik düzeltmeler
+
+#### 1) Recommended Actions Context
+- `diff.json` `recommended_actions` formatı standardize edildi:
+  - `action`: snake_case (`retry_policy_tune`, `guardrail_hardening`, `runbook_review`, `keep_current_policy`)
+  - `severity`: lowercase (`critical`, `warning`, `info`)
+  - `reason`: delta + before→after formatı (örn. `Failures increased 75% (4 → 7)`)
+- Frontend’de action title + alt satır reason ayrımı eklendi.
+
+#### 2) Compare Validation
+- Backend doğrulamaları eklendi:
+  - `compare_enabled=true` ama compare scope boşsa → **400** (`compare scope is required when compare is enabled`)
+  - Primary ve compare snapshot aynıysa → **422** (`Primary and compare snapshots cannot be identical`)
+- Cross-scope compare (correlation vs time_range) serbest bırakıldı.
+- Frontend hata toast eşlemeleri eklendi:
+  - `Karşılaştırma hatası: Aynı snapshot seçilemez`
+  - `Karşılaştırma hatası: Compare Snapshot alanları zorunlu`
+
+#### 3) Action Reason ile Link Context
+- Aksiyon linklerine context query paramları taşındı:
+  - `.../failures?correlation_id=...&reason=high_failure`
+  - `.../idempotency?correlation_id=...&reason=dead_letter_rise`
+  - `.../trace?correlation_id=...&reason=manual_intervention`
+- Hedef sayfalar query paramı otomatik okuyup filtreyi uygular hale getirildi.
+
+#### 4) Diff Summary Güçlendirme
+- Summary satırları before/after/percentage formatına geçirildi:
+  - `FAILED EVENTS: a → b (+x%) 🔴`
+  - `DEAD LETTER: a → b (+x%) ⚠️`
+  - `MANUAL ACTIONS: a → b (-x%) ✅`
+- Backend `before_after` yapısına `events/failed_events/dead_letter/manual_actions` için `before/after/delta/percentage` eklendi.
+
+#### 5) Edge Case Temizliği
+- Boş dataset fallback: geçerli yapı + keep_current_policy
+- Tek snapshot (compare disabled): `diff=None` fallback
+
+### Değişen dosyalar
+- `backend/routers/admin_phase3.py`
+- `backend/schemas.py`
+- `frontend/src/pages/ExecutionStatesPage.jsx`
+- `frontend/src/pages/FailedEventsPage.jsx`
+- `frontend/src/pages/ExecutionIdempotencyPage.jsx`
+- `frontend/src/pages/ExecutionTracePage.jsx`
+- `backend/tests/test_p1_closure_fix.py` (test ajanı)
+
+### Test sonucu
+- `testing_agent`: `/app/test_reports/iteration_95.json`
+  - Backend: **100% (10/10 PASS)**
+  - Frontend: code-review PASS (UI automation auth engeli not edildi)
+  - Kritik issue: yok
+
+### Mock notu
+- Slack/Binance entegrasyonları **MOCKED**
+
 ## 2026-03-23 — UI Finalizasyon + Actionability Sprint ✅
 
 ### Sprint amacı
