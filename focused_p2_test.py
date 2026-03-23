@@ -8,7 +8,7 @@ import requests
 import time
 from datetime import datetime
 
-BASE_URL = "https://execution-recovery.preview.emergentagent.com"
+BASE_URL = "https://exec-tuning.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 def test_escalation_endpoints():

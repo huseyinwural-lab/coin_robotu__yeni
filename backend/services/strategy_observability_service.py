@@ -285,6 +285,7 @@ def get_top_signals(db: Session, *, window: str, top_n: int):
         "selection_cycle_id": latest_cycle[0] if latest_cycle else None,
         "items": [
             {
+                "signal_id": row.id,
                 "symbol": row.symbol,
                 "strategy_id": row.strategy_id,
                 "market_regime": row.market_regime,
@@ -294,6 +295,8 @@ def get_top_signals(db: Session, *, window: str, top_n: int):
                 "selection_rank": row.selection_rank,
                 "trend_strength": row.trend_strength,
                 "relative_volume": row.relative_volume,
+                "rejection_reason": row.rejection_reason,
+                "decision_path": row.decision_path,
                 "timestamp": row.created_at.isoformat() if row.created_at else None,
             }
             for row in rows

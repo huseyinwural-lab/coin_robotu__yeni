@@ -10,7 +10,7 @@ import time
 from typing import Dict, Any, List
 
 # Test Configuration
-BASE_URL = "https://execution-recovery.preview.emergentagent.com"
+BASE_URL = "https://exec-tuning.preview.emergentagent.com"
 SUPER_ADMIN_CREDS = {
     "email": "canary.admin@platform.local",
     "password": "CanaryAdmin123!"

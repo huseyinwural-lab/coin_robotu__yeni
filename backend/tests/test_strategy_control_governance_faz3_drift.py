@@ -18,7 +18,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://execution-recovery.preview.emergentagent.com"
+    BASE_URL = "https://exec-tuning.preview.emergentagent.com"
 
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
 SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"

@@ -18,7 +18,7 @@ import requests
 from datetime import datetime
 
 # Backend URL from environment
-BACKEND_URL = "https://execution-recovery.preview.emergentagent.com/api"
+BACKEND_URL = "https://exec-tuning.preview.emergentagent.com/api"
 
 # Test admin credentials
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")

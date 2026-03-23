@@ -7,7 +7,7 @@ import requests
 import json
 
 def debug_strategy_structure():
-    BASE_URL = "https://execution-recovery.preview.emergentagent.com"
+    BASE_URL = "https://exec-tuning.preview.emergentagent.com"
     
     session = requests.Session()
     session.timeout = 15

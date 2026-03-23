@@ -7,7 +7,7 @@ import time
 import pytest
 import requests
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://execution-recovery.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://exec-tuning.preview.emergentagent.com').rstrip('/')
 API_URL = f"{BASE_URL}/api"
 ADMIN_EMAIL = "admin@platform.local"
 ADMIN_PASSWORD = "Admin12345!"

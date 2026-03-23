@@ -2,7 +2,7 @@
 """
 P1 Backend Validation Test
 Testing conflict/hedge/rebalance flows, deterministic model, compare upgrade, and queue hardening regression
-URL: https://execution-recovery.preview.emergentagent.com
+URL: https://exec-tuning.preview.emergentagent.com
 """
 
 import requests
@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Test configuration
-BASE_URL = "https://execution-recovery.preview.emergentagent.com"
+BASE_URL = "https://exec-tuning.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Test credentials

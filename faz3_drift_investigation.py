@@ -7,7 +7,7 @@ Investigate actual API structure and endpoints
 import requests
 import json
 
-BASE_URL = "https://execution-recovery.preview.emergentagent.com"
+BASE_URL = "https://exec-tuning.preview.emergentagent.com"
 SUPER_ADMIN_CREDS = {
     "email": "canary.admin@platform.local",
     "password": "CanaryAdmin123!"
