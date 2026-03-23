@@ -19,11 +19,15 @@ import requests
 from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
-if not BASE_URL:
-    BASE_URL = "https://hard-guard-layer.preview.emergentagent.com"
+SUPER_ADMIN_EMAIL = os.environ.get("BACKEND_TEST_SUPER_ADMIN_EMAIL", "")
+SUPER_ADMIN_PASSWORD = os.environ.get("BACKEND_TEST_SUPER_ADMIN_PASSWORD", "")
 
-SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
-SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
+INTEGRATION_TEST_BLOCKED = not BASE_URL or not SUPER_ADMIN_EMAIL or not SUPER_ADMIN_PASSWORD
+
+pytestmark = pytest.mark.skipif(
+    INTEGRATION_TEST_BLOCKED,
+    reason="Integration testleri için REACT_APP_BACKEND_URL ve BACKEND_TEST_SUPER_ADMIN_* env gereklidir.",
+)
 
 
 @pytest.fixture(scope="module")
