@@ -657,6 +657,8 @@ class TestP1SearchFilterSort:
             timeout=30,
         )
         assert response.status_code == 200
+        ids = {item.get("id") for item in response.json()}
+        assert intent_id in ids
 
 
 class TestP1ManualEdit:
