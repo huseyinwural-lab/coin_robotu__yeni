@@ -63,12 +63,16 @@
 - Frontend lint: ✅ PASS (`AdminStrategyObservabilityPage.jsx`)
 - Frontend build: ✅ PASS (global hook warningları var, mevcut kod tabanından)
 - Screenshot smoke: admin login sayfası açılıyor ✅
-- `auto_frontend_testing_agent`: ❌ **BLOCKED** (backend 502)
-- `deep_testing_backend_v2`: ❌ **BLOCKED** (tüm API endpointleri 502)
+- `auto_frontend_testing_agent`: ✅ UI element coverage doğrulandı
+- `deep_testing_backend_v2`: ilk turda ❌ blocker; ardından `testing_agent` ile yeniden doğrulama alındı
+- `testing_agent` raporu: `/app/test_reports/iteration_91.json`
+  - Backend: **100% (21/21 PASS)**
+  - Frontend: **100% (UI görünürlük + role/rule kontrolleri PASS)**
+  - Not: DB’de signal event seed az/boş olduğu için full data-path aksiyonları sınırlı test edildi.
 
 ### Bilinen açık / temporary mock notları
 - Strategy Observability backend entegrasyonları contract seviyesinde bağlı.
-- Ortamda backend 502 nedeniyle canlı akış E2E doğrulaması bloklu.
+- Screenshot tool ile login çağrılarında zaman zaman `net::ERR_ABORTED` görüldü; test subagent doğrulamaları PASS.
 - Slack delivery **MOCKED** (`SENT_MOCKED`), Binance execution **MOCKED**.
 
 ## 2026-03-23 — Deterministic Recommended Actions Katmanı ✅
