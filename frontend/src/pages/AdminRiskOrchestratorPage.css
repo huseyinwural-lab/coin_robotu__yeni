@@ -1,0 +1,79 @@
+.risk-enforcement-theme {
+  --risk-bg: #eaf9ee;
+  --risk-bg-soft: #f4fff6;
+  --risk-border: #7ccf98;
+  --risk-text: #12311c;
+  --risk-muted: #2f6045;
+  --background: 120 45% 94%;
+  --foreground: 145 40% 16%;
+  --card: 120 45% 96%;
+  --card-foreground: 145 40% 16%;
+  --popover: 120 45% 97%;
+  --popover-foreground: 145 40% 16%;
+  --muted: 120 28% 90%;
+  --muted-foreground: 145 28% 32%;
+  --input: 120 28% 84%;
+  --border: 131 39% 66%;
+  background: radial-gradient(circle at top left, #f3fff6 0%, #e6f7ea 45%, #ddf3e4 100%);
+  color: var(--risk-text);
+}
+
+.risk-enforcement-theme [class*="bg-slate-"] {
+  background-color: var(--risk-bg-soft) !important;
+}
+
+.risk-enforcement-theme [data-slot="card"] {
+  background: #f2fff5 !important;
+  color: #173725 !important;
+}
+
+.risk-enforcement-theme [data-slot="card"] :not(button):not(svg):not(path) {
+  color: #1b3b29 !important;
+}
+
+.risk-enforcement-theme [class*="text-slate-"] {
+  color: var(--risk-muted) !important;
+}
+
+.risk-enforcement-theme .border,
+.risk-enforcement-theme [class*="border-"] {
+  border-color: var(--risk-border) !important;
+}
+
+.risk-enforcement-theme [data-testid="risk-enforcement-sticky-status"] {
+  background: linear-gradient(90deg, #ecfff1 0%, #e4f9ea 50%, #dbf4e4 100%) !important;
+}
+
+.risk-enforcement-theme h1,
+.risk-enforcement-theme h2,
+.risk-enforcement-theme h3,
+.risk-enforcement-theme p,
+.risk-enforcement-theme span,
+.risk-enforcement-theme label,
+.risk-enforcement-theme div {
+  color: var(--risk-text);
+}
+
+.risk-enforcement-theme input,
+.risk-enforcement-theme textarea,
+.risk-enforcement-theme select {
+  background: #f8fff9 !important;
+  color: #163322 !important;
+  border-color: var(--risk-border) !important;
+}
+
+.risk-enforcement-theme button {
+  border-color: #67bf86;
+}
+
+.risk-enforcement-theme button[data-state="active"],
+.risk-enforcement-theme .bg-primary {
+  background-color: #66c483 !important;
+  color: #0e2a18 !important;
+}
+
+.risk-enforcement-theme pre {
+  background: #eefaf2 !important;
+  color: #183725 !important;
+  border: 1px solid var(--risk-border);
+}

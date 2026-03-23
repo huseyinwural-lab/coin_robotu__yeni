@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
+import "./AdminRiskOrchestratorPage.css";
 
 const policySeed = {
   reference_equity_usd: 10000,
@@ -485,7 +486,7 @@ export const AdminRiskOrchestratorPage = () => {
   const superAdminOnlyTitle = isSuperAdmin ? "" : "Sadece super_admin kullanıcıları çalıştırabilir";
 
   return (
-    <section className="space-y-6 pb-8" data-testid="risk-enforcement-page">
+    <section className="risk-enforcement-theme space-y-6 pb-8" data-testid="risk-enforcement-page">
       <header
         className="sticky top-0 z-10 rounded-xl border bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 p-4 shadow-lg"
         data-testid="risk-enforcement-sticky-status"
