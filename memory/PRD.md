@@ -1,3 +1,32 @@
+## 2026-03-23 — Decision Gate Prod Onay Sertleştirme (EK Faz) ✅
+
+### Uygulanan ek kararlar
+- Approve/Execute semantiği ayrıldı: `Approve = APPROVED`, `Execute = RELEASED`
+- High-risk’te execute için ek confirmation zorunlu
+- Alert state kullanıcı bazlı (`read_at`, `acked_at`, `acked_by`)
+- Eşikler DB-backed admin config endpointi ile yönetilir
+- Feature flag: `execution_decision_gate_enforced`
+
+### Kapanan kritik açıklar
+- **Test kanıtı**: kritik akışlar için kanıt üretildi (39/39 PASS)
+- **Immediate execute semantiği**: aksiyon matrisi netleştirildi, FE/BE uyumlu hale getirildi
+- **Alert UI tüketimi**: alert center + read/ack + deep-link eklendi
+- **Detail-gated decision sertleştirme**: stale/version guard + ack audit event zorunlu
+- **Prod readiness gate**: `/app/memory/PROD_READINESS_GATE.md` oluşturuldu
+
+### Yeni/iyileştirilen endpointler
+- `POST /admin/execution-queue/{intent_id}/execute`
+- `GET/PATCH /admin/execution-queue/config`
+- `GET /admin/execution-queue/alerts`
+- `POST /admin/execution-queue/alerts/{alert_id}/read`
+- `POST /admin/execution-queue/alerts/{alert_id}/ack`
+
+### Test ve doğrulama
+- Local: `pytest -q test_execution_decision_gate_closure.py test_execution_decision_gate_p0_p1_p2.py` → **39 passed**
+- Testing agent: `/app/test_reports/iteration_110.json` → backend+frontend PASS
+- Frontend automation: Decision Gate v2 UI checklist PASS
+- Backend deep regression: 7/7 PASS
+
 ## 2026-03-23 — Execution Queue → Production-Grade Decision Gate (P0→P1→P2) ✅
 
 ### Uygulanan bağlayıcı seçimler
