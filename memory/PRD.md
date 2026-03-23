@@ -1,3 +1,100 @@
+## 2026-03-23 — FINAL SPRINT %100 COMPLETE (P0 + P1) ✅
+
+### Uygulanan kapsam
+
+#### P0-1) State Diagram operasyonel hale getirildi
+- `ExecutionStatesPage.jsx` state diagram artık interaktif:
+  - node click -> sağ detail panel
+  - current execution highlight
+  - state path animation (pulse)
+  - transition count tooltip
+  - node üstünde failure/timeout count
+
+#### P0-2) Alert Intelligence (spam -> akıl)
+- `system_alert_service.py`
+  - execution alert fingerprint dedup güçlendirildi (severity’den bağımsız correlation/entity odaklı)
+  - grouping window desteği (`group_window_seconds`)
+  - INFO escalation -> silent tier (test değilse delivery sessiz)
+- `execution_alert_service.py`
+  - failure aggregation 30s bucket mantığı ile gruplanır
+  - timeout spike grouping window uygulanır
+
+#### P0-3) Timeout & Bottleneck analizi
+- `admin_phase3.py`
+  - `/execution-analytics/state-latency` artık:
+    - `p95_latency_ms`
+    - `slowest_states`
+    - `timeout_distribution`
+    - state bazında `timeout_count`
+- `ExecutionAnalyticsPage.jsx`
+  - SLOWEST STATE kartı
+  - p95 kolonu
+  - timeout distribution görünürlüğü
+
+#### P0-4) Role-based export masking (response layer)
+- `admin_phase3.py`
+  - export bundle response-layer masking eklendi (DB ham veri değişmeden)
+  - profile:
+    - admin/super_admin: correlation full, trace full, payload masked
+    - user: correlation partial, trace summary-only, payload masked
+  - `visibility_profile` metadata export summary’ye yazılıyor
+
+#### P0-5) Alert Delivery hardening (polish)
+- `alert_channel_service.py`
+  - Slack webhook mesaj formatı emoji + block yapısına alındı
+- `execution_alert_service.py`
+  - dashboard/trace absolute URL üretimi garanti altına alındı
+- `admin_phase3.py` delivery summary:
+  - provider health: `last_success`, `last_failure`
+- `AdminExecutionAlertsPage.jsx`:
+  - provider health UI satırı gösteriliyor
+
+---
+
+#### P1-6) Alert Auto-Ack
+- `admin_phase3.py`
+  - `POST /execution-alerts/auto-ack/apply-default`
+  - INFO ve 24h+ alert’leri `seen=true` işaretler
+- `ExecutionAnalyticsPage.jsx`
+  - “Apply INFO >24h Seen” butonu eklendi
+
+#### P1-7) Snapshot Diff Cleanup
+- `admin_phase3.py`
+  - diff payload’a:
+    - `anomaly_groups`
+    - `anomaly_notes_full`
+    - `recommended_actions_full`
+    - `long_diff_collapsed`
+  - compact (max 5) anomaly/action özeti
+- `ExecutionStatesPage.jsx`
+  - anomaly/action collapse-expand toggle
+
+#### P1-8) Execution History Quick Access
+- `admin_phase3.py`
+  - `GET /incident-snapshots/history` (son 5)
+- `ExecutionStatesPage.jsx`
+  - quick access panel + compare prefill butonları
+
+### Değişen ana dosyalar
+- `backend/routers/admin_phase3.py`
+- `backend/services/system_alert_service.py`
+- `backend/services/execution_alert_service.py`
+- `backend/services/alert_channel_service.py`
+- `frontend/src/pages/ExecutionStatesPage.jsx`
+- `frontend/src/pages/ExecutionAnalyticsPage.jsx`
+- `frontend/src/pages/AdminExecutionAlertsPage.jsx`
+
+### Test özeti
+- Testing agent: `/app/test_reports/iteration_102.json`
+  - Backend: **22/22 PASS**
+  - Frontend: **PASS**
+- UI sanity (auto frontend agent): **PASS**
+  - states / analytics / alerts sayfaları regresyonsuz
+
+### Mock notu
+- Slack real webhook URL bu tur sağlanmadı -> delivery path kontrollü **SENT_MOCKED** fallback doğrulandı.
+- Binance execution mimaride **MOCKED**.
+
 ## 2026-03-23 — FINAL BLOCKER RBAC CLOSURE ✅
 
 ### Hard guard eklenen endpointler
