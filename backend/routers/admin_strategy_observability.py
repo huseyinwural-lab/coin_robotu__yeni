@@ -404,6 +404,7 @@ def _serialize_action_timeline_items(
                 "chain_id": chain_id,
                 "parent_event_id": explicit_parent,
                 "chain_ref": chain_id,
+                "is_seed_chain": _is_seed_chain(chain_id, details),
             }
         )
 
@@ -450,6 +451,7 @@ def _serialize_action_timeline_items(
                 "parent_event_id": explicit_parent or fallback_parent,
                 "chain_ref": chain_id,
                 "alert_detail_path": f"/api/admin/action-center/alerts/{row.id}/detail",
+                "is_seed_chain": _is_seed_chain(chain_id, details),
             }
         )
 
@@ -571,6 +573,84 @@ def _flow_stage_for_node(node: dict) -> str:
     return "system_reaction"
 
 
+def _is_seed_chain(chain_id: str | None, payload: dict | None) -> bool:
+    normalized_chain_id = str(chain_id or "").strip().lower()
+    payload_dict = payload if isinstance(payload, dict) else {}
+    explicit_marker = bool(payload_dict.get("is_seed_data")) or bool(payload_dict.get("seed_namespace"))
+    namespace_marker = str(payload_dict.get("data_namespace") or "").strip().lower().startswith("seed")
+    prefixed = normalized_chain_id.startswith("seed::") or normalized_chain_id.startswith("seed-") or normalized_chain_id.startswith("test::")
+    return explicit_marker or namespace_marker or prefixed
+
+
+def _build_root_cause_hint(invalid_reasons: set[str], broken_count: int, root_count: int) -> dict | None:
+    if not invalid_reasons:
+        return None
+
+    reason_signature = ",".join(sorted(invalid_reasons))
+    rules = [
+        (
+            {"seed_chain_hidden"},
+            "seed_chain_hidden",
+            "Bu zincir test/seed namespace içinde işaretli. Operasyon ekranında görmek için seed filtresini bilinçli şekilde açın.",
+        ),
+        (
+            {"cycle_detected"},
+            "graph_cycle_detected",
+            "Parent zincirinde döngü tespit edildi; parent_event_id üretimini tek yönlü olacak şekilde normalize edin.",
+        ),
+        (
+            {"parent_after_child"},
+            "parent_timestamp_order_mismatch",
+            "Parent zamanı child’dan sonra görünüyor; event timestamp kaynağı ve ingestion sırasını tutarlı hale getirin.",
+        ),
+        (
+            {"multiple_roots", "parent_not_found"},
+            "missing_parent_mapping_with_split_roots",
+            "Parent referansı eksik ve zincir birden fazla köke ayrılmış; chain_id + parent_event_id eşlemesini tek kök etrafında yeniden bağlayın.",
+        ),
+        (
+            {"parent_not_found"},
+            "missing_parent_mapping",
+            "Parent event bulunamadı; parent_event_id üretimi ile retention penceresini kontrol edip eksik parent kayıtlarını geri doldurun.",
+        ),
+        (
+            {"self_parent_reference"},
+            "self_parent_reference",
+            "Event kendi parent’ı olarak işaretlenmiş; parent atama kuralında self-reference blokajı ekleyin.",
+        ),
+        (
+            {"missing_manual_anchor"},
+            "missing_manual_anchor",
+            "Sistem reaksiyonu var ama manuel anchor yok; manuel aksiyon kaydının chain başlatma adımını zorunlu hale getirin.",
+        ),
+        (
+            {"detached_node"},
+            "detached_nodes_detected",
+            "Bazı node’lar zincire bağlanamadı; correlation/chain mapping alanlarını normalize edip detached kayıtları yeniden ilişkilendirin.",
+        ),
+    ]
+
+    matched_rule_key = "generic_chain_integrity"
+    matched_hint = "Chain bütünlüğünde kırık tespit edildi; parent-child mapping ve event ingestion sırasını birlikte gözden geçirin."
+    for required_reasons, rule_key, hint in rules:
+        if required_reasons.issubset(invalid_reasons):
+            matched_rule_key = rule_key
+            matched_hint = hint
+            break
+
+    return {
+        "classification": "ÖNERİ (kesin neden değildir)",
+        "deterministic": True,
+        "rule_key": matched_rule_key,
+        "reason_signature": reason_signature,
+        "hint": matched_hint,
+        "metrics": {
+            "broken_links_count": int(broken_count),
+            "root_nodes_count": int(root_count),
+        },
+    }
+
+
 def _enrich_chain_nodes(chain_nodes: list[dict]) -> tuple[list[dict], dict]:
     if not chain_nodes:
         return [], {
@@ -581,6 +661,14 @@ def _enrich_chain_nodes(chain_nodes: list[dict]) -> tuple[list[dict], dict]:
             "root_nodes_count": 0,
             "is_chain_valid": False,
             "invalid_reasons": ["chain_empty"],
+            "root_cause_hint": {
+                "classification": "ÖNERİ (kesin neden değildir)",
+                "deterministic": True,
+                "rule_key": "chain_empty",
+                "reason_signature": "chain_empty",
+                "hint": "Bu chain için görünür event bulunamadı; filtre penceresi, strategy_id ve scope alanlarını kontrol edin.",
+                "metrics": {"broken_links_count": 0, "root_nodes_count": 0},
+            },
             "max_depth": 0,
             "default_view": "summary",
             "lazy_load_recommended": False,
@@ -703,6 +791,7 @@ def _enrich_chain_nodes(chain_nodes: list[dict]) -> tuple[list[dict], dict]:
         "root_nodes_count": len(roots),
         "is_chain_valid": broken_count == 0 and len(invalid_reasons) == 0,
         "invalid_reasons": sorted(invalid_reasons),
+        "root_cause_hint": _build_root_cause_hint(invalid_reasons, broken_count, len(roots)),
         "max_depth": max([int(item.get("causal_depth") or 0) for item in traversed], default=0),
         "default_view": "summary",
         "lazy_load_recommended": len(traversed) > 120,
@@ -1554,6 +1643,7 @@ def strategy_action_impact_timeline(
     time_from: str | None = Query(default=None),
     time_to: str | None = Query(default=None),
     limit: int = Query(default=1000, ge=1, le=2000),
+    include_seed: bool = Query(default=False),
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -1604,6 +1694,11 @@ def strategy_action_impact_timeline(
         strategy_filter=strategy_id,
         signal_strategy_map=signal_strategy_map,
     )
+
+    seed_rows = [item for item in timeline_rows if bool(item.get("is_seed_chain"))]
+    if not include_seed:
+        timeline_rows = [item for item in timeline_rows if not bool(item.get("is_seed_chain"))]
+
     timeline_rows = timeline_rows[:limit]
     manual_count = sum(1 for item in timeline_rows if item.get("event_type") == "manual_action")
     system_count = sum(1 for item in timeline_rows if item.get("event_type") == "system_reaction")
@@ -1667,11 +1762,14 @@ def strategy_action_impact_timeline(
             "time_from": start_at.isoformat(),
             "time_to": end_at.isoformat(),
             "limit": limit,
+            "include_seed": include_seed,
         },
         "summary": {
             "total": len(timeline_rows),
             "manual_action_count": manual_count,
             "system_reaction_count": system_count,
+            "seed_rows_total": len(seed_rows),
+            "seed_rows_filtered": 0 if include_seed else len(seed_rows),
         },
         "kpi_cards": kpi_cards,
         "items": timeline_rows,
@@ -1685,6 +1783,7 @@ def strategy_timeline_chain_detail(
     strategy_id: str | None = Query(default=None),
     time_from: str | None = Query(default=None),
     time_to: str | None = Query(default=None),
+    include_seed: bool = Query(default=False),
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -1721,7 +1820,45 @@ def strategy_timeline_chain_detail(
     )
 
     chain_nodes = [item for item in timeline_rows if str(item.get("chain_id") or "") == chain_id]
-    enriched_nodes, chain_summary = _enrich_chain_nodes(chain_nodes)
+    seed_chain_nodes = [item for item in chain_nodes if bool(item.get("is_seed_chain"))]
+    if seed_chain_nodes and not include_seed:
+        hidden_hint = _build_root_cause_hint({"seed_chain_hidden"}, 0, 0)
+        return {
+            "status": "success",
+            "chain_id": chain_id,
+            "filters": {
+                "window": normalized,
+                "strategy_id": strategy_id,
+                "time_from": start_at.isoformat(),
+                "time_to": end_at.isoformat(),
+                "include_seed": include_seed,
+            },
+            "count": 0,
+            "summary": {
+                "total_nodes": 0,
+                "manual_action_count": 0,
+                "system_reaction_count": 0,
+                "broken_links_count": 0,
+                "root_nodes_count": 0,
+                "is_chain_valid": False,
+                "invalid_reasons": ["seed_chain_hidden"],
+                "root_cause_hint": hidden_hint,
+                "max_depth": 0,
+                "default_view": "summary",
+                "lazy_load_recommended": False,
+                "virtualization_recommended": False,
+                "seed_nodes_filtered": len(seed_chain_nodes),
+            },
+            "nodes": [],
+            "meta": {
+                "seed_chain": True,
+                "seed_chain_hidden": True,
+                "seed_nodes_total": len(seed_chain_nodes),
+            },
+        }
+
+    filtered_chain_nodes = chain_nodes if include_seed else [item for item in chain_nodes if not bool(item.get("is_seed_chain"))]
+    enriched_nodes, chain_summary = _enrich_chain_nodes(filtered_chain_nodes)
 
     return {
         "status": "success",
@@ -1731,10 +1868,16 @@ def strategy_timeline_chain_detail(
             "strategy_id": strategy_id,
             "time_from": start_at.isoformat(),
             "time_to": end_at.isoformat(),
+            "include_seed": include_seed,
         },
         "count": len(enriched_nodes),
         "summary": chain_summary,
         "nodes": enriched_nodes,
+        "meta": {
+            "seed_chain": bool(seed_chain_nodes),
+            "seed_nodes_total": len(seed_chain_nodes),
+            "seed_nodes_filtered": 0 if include_seed else len(seed_chain_nodes),
+        },
     }
 
 

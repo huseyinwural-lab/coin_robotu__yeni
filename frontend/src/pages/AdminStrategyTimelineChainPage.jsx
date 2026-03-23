@@ -22,7 +22,9 @@ export default function AdminStrategyTimelineChainPage() {
   const [showNodes, setShowNodes] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_NODE_COUNT);
   const [onlyBrokenLinks, setOnlyBrokenLinks] = useState(false);
+  const [includeSeed, setIncludeSeed] = useState(false);
   const [expandedMap, setExpandedMap] = useState({});
+  const [meta, setMeta] = useState(null);
 
   const loadChain = useCallback(async () => {
     if (!chainId) {
@@ -36,20 +38,23 @@ export default function AdminStrategyTimelineChainPage() {
         params: {
           window: windowRange,
           strategy_id: strategyId || null,
+          include_seed: includeSeed,
         },
       });
       setNodes(data?.nodes || []);
       setSummary(data?.summary || null);
+      setMeta(data?.meta || null);
       setVisibleCount(INITIAL_VISIBLE_NODE_COUNT);
       setExpandedMap({});
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Chain detail yüklenemedi");
       setNodes([]);
       setSummary(null);
+      setMeta(null);
     } finally {
       setLoading(false);
     }
-  }, [chainId, strategyId, windowRange]);
+  }, [chainId, includeSeed, strategyId, windowRange]);
 
   useEffect(() => {
     loadChain();
@@ -70,6 +75,9 @@ export default function AdminStrategyTimelineChainPage() {
   }, [filteredNodes, showNodes, visibleCount]);
 
   const narrativeText = useMemo(() => {
+    if (summary?.invalid_reasons?.includes("seed_chain_hidden")) {
+      return "Bu zincir test/seed namespace içinde. Gerçek operasyon görünümünde varsayılan olarak gizlenir.";
+    }
     if (!summary || !nodes.length) {
       return "Zincir verisi yok: işlem nedeni veya sistem tepkisi bulunamadı.";
     }
@@ -104,6 +112,11 @@ export default function AdminStrategyTimelineChainPage() {
           <div>
             <h1 className="text-4xl font-black uppercase tracking-tight" data-testid="strategy-timeline-chain-title">Timeline Chain Detail</h1>
             <p className="text-sm" data-testid="strategy-timeline-chain-subtitle">chain_id: {chainId}</p>
+            {!!meta?.seed_chain && (
+              <p className="mt-1 inline-flex rounded border border-amber-700 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900" data-testid="strategy-timeline-chain-seed-badge">
+                TEST/SEED CHAIN
+              </p>
+            )}
           </div>
           <Button
             variant="outline"
@@ -175,6 +188,15 @@ export default function AdminStrategyTimelineChainPage() {
             >
               Hepsini Daralt
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-black bg-white text-black"
+              onClick={() => setIncludeSeed((prev) => !prev)}
+              data-testid="strategy-timeline-chain-seed-toggle-button"
+            >
+              {includeSeed ? "Seed Gizle" : "Seed Göster"}
+            </Button>
           </div>
         </div>
 
@@ -203,6 +225,18 @@ export default function AdminStrategyTimelineChainPage() {
           <div className="mt-3 border border-red-700 bg-red-100 p-2 text-sm text-red-900" data-testid="strategy-timeline-chain-invalid-banner">
             <p className="font-semibold" data-testid="strategy-timeline-chain-invalid-title">⚠️ Chain INVALID</p>
             <p data-testid="strategy-timeline-chain-invalid-reasons">nedenler: {(summary?.invalid_reasons || []).join(", ") || "unknown"}</p>
+          </div>
+        )}
+
+        {!!summary?.root_cause_hint && (
+          <div className="mt-3 border border-black/40 bg-white p-2 text-sm" data-testid="strategy-timeline-chain-root-cause-hint-panel">
+            <p className="font-semibold" data-testid="strategy-timeline-chain-root-cause-hint-title">
+              Deterministik Operasyon Önerisi (kesin neden değil)
+            </p>
+            <p data-testid="strategy-timeline-chain-root-cause-hint-text">{summary?.root_cause_hint?.hint || "-"}</p>
+            <p className="text-xs text-black/70" data-testid="strategy-timeline-chain-root-cause-hint-meta">
+              rule_key: {summary?.root_cause_hint?.rule_key || "-"} | signature: {summary?.root_cause_hint?.reason_signature || "-"}
+            </p>
           </div>
         )}
 
@@ -307,7 +341,11 @@ export default function AdminStrategyTimelineChainPage() {
 
         {showNodes && !loading && filteredNodes.length === 0 && (
           <div className="rounded border border-black/20 bg-zinc-50 p-3 text-center text-sm text-black/70" data-testid="strategy-timeline-chain-empty-state">
-            {onlyBrokenLinks ? "Broken chain bulunamadı." : "Chain node bulunamadı."}
+            {summary?.invalid_reasons?.includes("seed_chain_hidden")
+              ? "Bu zincir seed namespace içinde olduğu için gizlendi. Görmek için 'Seed Göster' açın."
+              : onlyBrokenLinks
+                ? "Broken chain bulunamadı."
+                : "Chain node bulunamadı."}
           </div>
         )}
       </div>
