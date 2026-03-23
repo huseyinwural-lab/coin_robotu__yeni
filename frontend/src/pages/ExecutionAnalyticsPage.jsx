@@ -20,6 +20,8 @@ export const ExecutionAnalyticsPage = () => {
   const [stateLatency, setStateLatency] = useState([]);
   const [failureTrend, setFailureTrend] = useState([]);
   const [failureClasses, setFailureClasses] = useState([]);
+  const [executionAlerts, setExecutionAlerts] = useState([]);
+  const [alertStatusFilter, setAlertStatusFilter] = useState("all");
 
   const filters = useMemo(
     () => ({
@@ -61,15 +63,17 @@ export const ExecutionAnalyticsPage = () => {
     setLoading(true);
     try {
       const query = buildParams();
-      const [summaryRes, stateLatencyRes, failureRes] = await Promise.all([
+      const [summaryRes, stateLatencyRes, failureRes, alertsRes] = await Promise.all([
         apiClient.get(`/admin-phase3/execution-analytics/summary?${query}`),
         apiClient.get(`/admin-phase3/execution-analytics/state-latency?${query}`),
         apiClient.get(`/admin-phase3/execution-analytics/failure-trends?${query}`),
+        apiClient.get("/admin-phase3/execution-alerts", { params: { status_filter: alertStatusFilter, limit: 50 } }),
       ]);
       setSummary(summaryRes.data || null);
       setStateLatency(stateLatencyRes.data?.rows || []);
       setFailureTrend(failureRes.data?.daily_trend || []);
       setFailureClasses(failureRes.data?.top_failure_classes || []);
+      setExecutionAlerts(alertsRes.data || []);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Execution analytics yüklenemedi");
     } finally {
@@ -79,12 +83,30 @@ export const ExecutionAnalyticsPage = () => {
 
   useEffect(() => {
     loadAnalytics();
-  }, [searchParams]);
+  }, [searchParams, alertStatusFilter]);
 
   useEffect(() => {
     const timer = setInterval(loadAnalytics, refreshMs);
     return () => clearInterval(timer);
-  }, [refreshMs, searchParams]);
+  }, [refreshMs, searchParams, alertStatusFilter]);
+
+  const markAlertSeen = async (alertId) => {
+    try {
+      await apiClient.post(`/admin-phase3/execution-alerts/${alertId}/seen`);
+      await loadAnalytics();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Alert seen işlemi başarısız");
+    }
+  };
+
+  const ackAlert = async (alertId) => {
+    try {
+      await apiClient.post(`/admin-phase3/execution-alerts/${alertId}/ack`);
+      await loadAnalytics();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Alert ack işlemi başarısız");
+    }
+  };
 
   const totals = summary?.totals || {};
   const timeoutMetrics = summary?.timeout_metrics || {};
@@ -266,6 +288,57 @@ export const ExecutionAnalyticsPage = () => {
               ))}
               {!failureClasses.length && (
                 <TableRow><TableCell colSpan={2}>Kayıt yok</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <div className="space-y-3 border border-slate-800 bg-slate-900 p-3" data-testid="execution-control-alert-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="execution-control-alert-panel-header">
+          <p className="text-sm font-semibold">Execution Alerts (son 50)</p>
+          <Select value={alertStatusFilter} onValueChange={setAlertStatusFilter}>
+            <SelectTrigger className="w-44" data-testid="execution-control-alert-status-filter-select"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">all</SelectItem>
+              <SelectItem value="open">open</SelectItem>
+              <SelectItem value="ack">ack</SelectItem>
+              <SelectItem value="resolved">resolved</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="overflow-x-auto" data-testid="execution-control-alert-table-wrapper">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>severity</TableHead>
+                <TableHead>alert_type</TableHead>
+                <TableHead>status</TableHead>
+                <TableHead>seen</TableHead>
+                <TableHead>message</TableHead>
+                <TableHead>created_at</TableHead>
+                <TableHead>actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {executionAlerts.map((alert) => (
+                <TableRow key={alert.id} data-testid={`execution-control-alert-row-${alert.id}`}>
+                  <TableCell>{alert.severity}</TableCell>
+                  <TableCell>{alert.alert_type}</TableCell>
+                  <TableCell>{alert.status}</TableCell>
+                  <TableCell>{String(Boolean(alert?.details?.seen))}</TableCell>
+                  <TableCell className="max-w-[360px] truncate">{alert.message}</TableCell>
+                  <TableCell>{alert.created_at}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => markAlertSeen(alert.id)} data-testid={`execution-control-alert-seen-button-${alert.id}`}>Seen</Button>
+                      <Button size="sm" onClick={() => ackAlert(alert.id)} data-testid={`execution-control-alert-ack-button-${alert.id}`}>Ack</Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {!executionAlerts.length && (
+                <TableRow><TableCell colSpan={7}>Alert kaydı yok</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

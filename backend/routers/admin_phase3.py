@@ -30,6 +30,7 @@ from models import (
     IdempotencyCollision,
     RiskExposureGroup,
     StateRebuildLog,
+    SystemAlert,
     User,
 )
 from schemas import (
@@ -60,6 +61,7 @@ from schemas import (
     StateRebuildLogResponse,
     IdempotencyCollisionResolveRequest,
     IdempotencyCollisionResponse,
+    SystemAlertResponse,
 )
 from services.audit_service import create_audit_log
 from services.execution_policy_service import get_policy_for_strategy
@@ -74,6 +76,11 @@ from services.pipeline.correlation_service import build_correlation_matrix
 from services.pipeline.execution_engine import open_paper_position
 from services.pipeline.runtime import pipeline_runtime
 from services.state_rebuild_service import run_state_rebuild
+from services.execution_alert_service import (
+    trigger_execution_state_alert,
+    trigger_idempotency_collision_alert,
+    trigger_timeout_spike_alert,
+)
 
 router = APIRouter(prefix="/admin-phase3", tags=["admin_phase3"])
 
@@ -1552,6 +1559,51 @@ def execution_trace_chain(
     )
 
 
+@router.get("/execution-alerts", response_model=list[SystemAlertResponse])
+def list_execution_alerts(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    status_filter: str = Query(default="all", pattern="^(all|open|ack|resolved)$"),
+    severity: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=50),
+):
+    query = db.query(SystemAlert).filter(SystemAlert.alert_type.ilike("execution_%"))
+    if status_filter != "all":
+        query = query.filter(SystemAlert.status == status_filter)
+    if severity:
+        query = query.filter(SystemAlert.severity == severity.upper())
+    return query.order_by(SystemAlert.last_triggered_at.desc()).limit(limit).all()
+
+
+@router.post("/execution-alerts/{alert_id}/ack", response_model=SystemAlertResponse)
+def ack_execution_alert(alert_id: str, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+    row = db.query(SystemAlert).filter(SystemAlert.id == alert_id, SystemAlert.alert_type.ilike("execution_%")).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert_not_found")
+    row.status = "ack"
+    row.updated_at = datetime.now(timezone.utc)
+    details = dict(row.details or {})
+    details["seen"] = True
+    row.details = details
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.post("/execution-alerts/{alert_id}/seen", response_model=SystemAlertResponse)
+def seen_execution_alert(alert_id: str, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+    row = db.query(SystemAlert).filter(SystemAlert.id == alert_id, SystemAlert.alert_type.ilike("execution_%")).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert_not_found")
+    details = dict(row.details or {})
+    details["seen"] = True
+    row.details = details
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
 @router.post("/incident-snapshots/export")
 def export_incident_snapshot_bundle(
     payload: IncidentSnapshotExportRequest,
@@ -2071,6 +2123,8 @@ def simulate_execution_state_flow(
     event_row.response_payload = event_payload
     db.add(event_row)
 
+    created_collision: IdempotencyCollision | None = None
+
     duplicate_sim = (
         db.query(ExecutionEvent)
         .filter(
@@ -2097,6 +2151,7 @@ def simulate_execution_state_flow(
             created_at=datetime.now(timezone.utc),
         )
         db.add(collision)
+        created_collision = collision
         break
 
     _insert_trace_index(
@@ -2112,6 +2167,26 @@ def simulate_execution_state_flow(
         execution_event_id=event_row.id,
     )
     db.commit()
+
+    try:
+        trigger_execution_state_alert(
+            db,
+            final_state=execution_result["final_state"],
+            correlation_id=corr_id,
+            execution_event_id=event_row.id,
+            symbol=symbol.upper(),
+        )
+        if "timeout" in [str(item).lower() for item in execution_result.get("state_path", [])]:
+            trigger_timeout_spike_alert(
+                db,
+                symbol=symbol.upper(),
+                correlation_id=corr_id,
+                execution_event_id=event_row.id,
+            )
+        if created_collision is not None:
+            trigger_idempotency_collision_alert(db, created_collision)
+    except Exception:
+        pass
 
     create_audit_log(
         db,

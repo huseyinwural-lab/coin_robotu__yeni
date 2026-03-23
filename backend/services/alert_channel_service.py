@@ -122,12 +122,14 @@ def _resolve_config(db: Session | None = None) -> dict:
     env_recipients = _parse_recipients(os.environ.get("TO_EMAIL") or os.environ.get("ALERT_TO"))
     env_telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     env_telegram_chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    env_slack_webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
 
     sendgrid_key = env_sendgrid_key
     sender = env_sender
     recipients = env_recipients
     telegram_token = env_telegram_token
     telegram_chat_id = env_telegram_chat_id
+    slack_webhook_url = env_slack_webhook_url
     source = "environment"
 
     row = _get_config_row(db)
@@ -142,12 +144,14 @@ def _resolve_config(db: Session | None = None) -> dict:
         row_recipients = _parse_recipients(row.alert_to)
         row_telegram_token = decrypt_secret(row.telegram_bot_token_encrypted) if getattr(row, "telegram_bot_token_encrypted", "") else ""
         row_telegram_chat_id = (getattr(row, "telegram_chat_id", "") or "").strip()
+        row_slack_webhook = decrypt_secret(row.slack_webhook_url_encrypted) if getattr(row, "slack_webhook_url_encrypted", "") else ""
 
         sendgrid_key = row_sendgrid_key
         sender = row_sender
         recipients = row_recipients
         telegram_token = row_telegram_token
         telegram_chat_id = row_telegram_chat_id
+        slack_webhook_url = row_slack_webhook
         source = "admin_config"
 
     return {
@@ -156,6 +160,7 @@ def _resolve_config(db: Session | None = None) -> dict:
         "recipients": recipients,
         "telegram_bot_token": telegram_token,
         "telegram_chat_id": telegram_chat_id,
+        "slack_webhook_url": slack_webhook_url,
         "source": source,
     }
 
@@ -206,6 +211,7 @@ def get_alert_config_public(db: Session | None = None) -> dict:
     sendgrid_key = resolved["sendgrid_api_key"]
     telegram_token = resolved["telegram_bot_token"]
     telegram_chat_id = resolved["telegram_chat_id"]
+    slack_webhook_url = resolved["slack_webhook_url"]
     return {
         "source": resolved["source"],
         "alert_from": resolved["sender"] or "",
@@ -215,12 +221,14 @@ def get_alert_config_public(db: Session | None = None) -> dict:
         "has_resend_api_key": bool(sendgrid_key),
         "has_telegram_bot_token": bool(telegram_token),
         "has_telegram_chat_id": bool(telegram_chat_id),
+        "has_slack_webhook_url": bool(slack_webhook_url),
         "test_mode": _test_mode_enabled(),
         "masked": {
             "sendgrid_api_key": _mask_secret(sendgrid_key),
             "resend_api_key": _mask_secret(sendgrid_key),
             "telegram_bot_token": _mask_secret(telegram_token),
             "telegram_chat_id": _mask_secret(telegram_chat_id),
+            "slack_webhook_url": _mask_secret(slack_webhook_url),
         },
     }
 
@@ -261,6 +269,13 @@ def _resend_config(db: Session | None = None) -> dict:
 def _slack_config(db: Session | None = None) -> dict:
     resolved = _resolve_config(db)
     return {
+        "slack_webhook_url": resolved["slack_webhook_url"],
+    }
+
+
+def _telegram_config(db: Session | None = None) -> dict:
+    resolved = _resolve_config(db)
+    return {
         "telegram_bot_token": resolved["telegram_bot_token"],
         "telegram_chat_id": resolved["telegram_chat_id"],
     }
@@ -271,23 +286,26 @@ def channel_status(db: Session | None = None) -> dict:
     slack_cfg = _slack_config(db)
     resolved = _resolve_config(db)
     test_mode = _test_mode_enabled()
+    mock_slack = os.environ.get("ALERT_ALLOW_MOCK_SLACK", "true").strip().lower() in {"1", "true", "yes", "mock"}
 
     email_ready = bool((resend_cfg["api_key"] and resend_cfg["sender"] and resend_cfg["recipients"]) or test_mode)
-    telegram_ready = bool((slack_cfg["telegram_bot_token"] and slack_cfg["telegram_chat_id"]) or test_mode)
+    telegram_ready = bool((resolved["telegram_bot_token"] and resolved["telegram_chat_id"]) or test_mode)
+    slack_ready = bool(slack_cfg["slack_webhook_url"] or test_mode or mock_slack)
 
     return {
         "email": "READY" if email_ready else "CONFIG_MISSING",
         "telegram": "READY" if telegram_ready else "CONFIG_MISSING",
-        "slack": "READY" if telegram_ready else "CONFIG_MISSING",
+        "slack": "READY" if slack_ready else "CONFIG_MISSING",
         "channel_status": {
             "email": "ACTIVE" if email_ready else "DISABLED",
             "telegram": "ACTIVE" if telegram_ready else "DISABLED",
-            "slack": "ACTIVE" if telegram_ready else "DISABLED",
+            "slack": "ACTIVE" if slack_ready else "DISABLED",
         },
-        "channel_status_overall": "READY" if (email_ready or telegram_ready) else "CONFIG_MISSING",
+        "channel_status_overall": "READY" if (email_ready or telegram_ready or slack_ready) else "CONFIG_MISSING",
         "secret_status": {
             "sendgrid": "ready" if email_ready else "missing",
             "telegram": "ready" if telegram_ready else "missing",
+            "slack": "ready" if slack_ready else "missing",
         },
         "dedup_window_seconds": DEDUP_WINDOW_SECONDS,
         "rate_limit_per_min": RATE_LIMIT_PER_MIN,
@@ -360,9 +378,9 @@ def send_email_alert(subject: str, html_content: str, severity: str, db: Session
 
 
 def send_telegram_alert(message: str, severity: str, db: Session | None = None) -> dict:
-    slack_cfg = _slack_config(db)
-    token = slack_cfg["telegram_bot_token"]
-    chat_id = slack_cfg["telegram_chat_id"]
+    telegram_cfg = _telegram_config(db)
+    token = telegram_cfg["telegram_bot_token"]
+    chat_id = telegram_cfg["telegram_chat_id"]
     if not (token and chat_id):
         if _test_mode_enabled():
             return _append_test_sink(
@@ -432,9 +450,73 @@ def send_telegram_alert(message: str, severity: str, db: Session | None = None) 
     return {"status": "FAILED", "reason": last_error, "attempts": max_attempts}
 
 
-def send_slack_alert(message: str, severity: str, db: Session | None = None) -> dict:
-    # Backward-compatible alias. Channel migrated to Telegram for FAZ-5.
-    return send_telegram_alert(message=message, severity=severity, db=db)
+def send_slack_alert(message: str, severity: str, db: Session | None = None, structured_payload: dict | None = None) -> dict:
+    slack_cfg = _slack_config(db)
+    webhook_url = (slack_cfg.get("slack_webhook_url") or "").strip()
+    mock_mode_enabled = os.environ.get("ALERT_ALLOW_MOCK_SLACK", "true").strip().lower() in {"1", "true", "yes", "mock"}
+    if (not webhook_url) or webhook_url.startswith("mock://"):
+        if _test_mode_enabled() or mock_mode_enabled:
+            sink_result = _append_test_sink(
+                "slack",
+                {
+                    "severity": severity,
+                    "message": message,
+                    "mocked": True,
+                    "configured_url": webhook_url,
+                    "structured_payload": structured_payload or {},
+                },
+            )
+            sink_result["status"] = "SENT_MOCKED"
+            return sink_result
+        return {"status": "CONFIG_MISSING", "reason": "missing_slack_webhook_url"}
+
+    allowed, reason = _check_rate_limit("slack", severity)
+    if not allowed:
+        return {"status": "RATE_LIMITED", "reason": reason}
+
+    try:
+        requests = importlib.import_module("requests")
+    except ModuleNotFoundError:
+        return {"status": "LIB_MISSING", "reason": "requests_not_installed"}
+
+    retry_cfg = _retry_config()
+    max_attempts = retry_cfg["max_attempts"]
+    backoff_seconds = retry_cfg["backoff_seconds"]
+    last_error = "unknown"
+
+    payload = structured_payload or {"text": message[:3000]}
+    if not payload.get("text"):
+        payload["text"] = message[:3000]
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            if response.status_code >= 400:
+                last_error = f"slack_http_{response.status_code}"
+                if attempt < max_attempts:
+                    time.sleep(backoff_seconds * attempt)
+                    continue
+                _record_failed_delivery(
+                    db=db,
+                    channel="slack",
+                    reason=last_error,
+                    payload={"severity": severity, "message": message[:400]},
+                    max_retry=max_attempts,
+                )
+                return {"status": "FAILED", "reason": last_error, "attempts": max_attempts}
+            return {"status": "SENT", "attempt": attempt}
+        except Exception as exc:  # pragma: no cover - runtime retry branch
+            last_error = str(exc)
+            if attempt < max_attempts:
+                time.sleep(backoff_seconds * attempt)
+
+    _record_failed_delivery(
+        db=db,
+        channel="slack",
+        reason=last_error,
+        payload={"severity": severity, "message": message[:400]},
+        max_retry=max_attempts,
+    )
+    return {"status": "FAILED", "reason": last_error, "attempts": max_attempts}
 
 
 def build_alert_message(alert_payload: dict) -> dict:
@@ -467,7 +549,37 @@ def build_alert_message(alert_payload: dict) -> dict:
         f"Summary: {message}\n"
         f"Correlation: {correlation_id or '-'}"
     )
-    return {"subject": subject, "html": html_content, "telegram": telegram_message}
+    webhook_payload = details.get("webhook_payload") or {}
+    slack_payload = {
+        "text": f"{subject} - {message}",
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*{subject}*\n{message}",
+                },
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*Service*\n{service}"},
+                    {"type": "mrkdwn", "text": f"*Env*\n{environment}"},
+                    {"type": "mrkdwn", "text": f"*Correlation*\n{correlation_id or '-'}"},
+                    {"type": "mrkdwn", "text": f"*Triggered At*\n{triggered_at}"},
+                ],
+            },
+        ],
+    }
+    if webhook_payload:
+        slack_payload["attachments"] = [
+            {
+                "color": "#dc2626" if severity.upper() == "CRITICAL" else "#f59e0b",
+                "title": "Execution Alert Payload",
+                "text": json.dumps(webhook_payload, ensure_ascii=False),
+            }
+        ]
+    return {"subject": subject, "html": html_content, "telegram": telegram_message, "slack": slack_payload}
 
 
 def dispatch_alert(alert_payload: dict, db: Session | None = None) -> dict:
@@ -475,10 +587,13 @@ def dispatch_alert(alert_payload: dict, db: Session | None = None) -> dict:
     alert_type = alert_payload.get("alert_type", "")
     routing = {
         "INFO": [],
-        "WARNING": ["email"],
-        "CRITICAL": ["email", "telegram"],
+        "WARNING": ["slack"],
+        "CRITICAL": ["slack", "email"],
     }
     channels = routing.get(severity.upper(), [])
+    forced_channels = alert_payload.get("force_channels")
+    if isinstance(forced_channels, list) and forced_channels:
+        channels = [str(item).lower() for item in forced_channels]
     if alert_type == "weekly_ops_report_generated":
         channels = ["email"]
     delivery_status: dict[str, Any] = {}
@@ -500,8 +615,18 @@ def dispatch_alert(alert_payload: dict, db: Session | None = None) -> dict:
         message = build_alert_message(alert_payload)
         delivery_status["telegram"] = send_telegram_alert(message["telegram"], severity, db)
 
-    # backward compatibility field
-    delivery_status["slack"] = delivery_status.get("telegram", {"status": "CHANNEL_DISABLED"})
+    if "slack" not in channels:
+        delivery_status["slack"] = {"status": "CHANNEL_DISABLED"}
+    elif readiness["slack"] != "READY":
+        delivery_status["slack"] = {"status": "CHANNEL_DISABLED", "reason": "config_missing"}
+    else:
+        message = build_alert_message(alert_payload)
+        delivery_status["slack"] = send_slack_alert(
+            message=message["subject"],
+            severity=severity,
+            db=db,
+            structured_payload=message["slack"],
+        )
 
     delivery_status["routing"] = channels
     delivery_status["config"] = channel_status(db)

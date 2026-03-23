@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from models import FailedEvent
+from services.execution_alert_service import trigger_failed_event_alerts
 
 
 def create_failed_event(
@@ -44,6 +45,10 @@ def create_failed_event(
     db.add(failed_event)
     db.commit()
     db.refresh(failed_event)
+    try:
+        trigger_failed_event_alerts(db, failed_event)
+    except Exception:
+        pass
     return failed_event
 
 
@@ -103,6 +108,10 @@ def upsert_failed_event(
     existing.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(existing)
+    try:
+        trigger_failed_event_alerts(db, existing)
+    except Exception:
+        pass
     return existing
 
 
@@ -118,6 +127,10 @@ def mark_failed_event_retry(db: Session, failed_event: FailedEvent, *, actor: st
     failed_event.retry_reason = retry_reason
     db.commit()
     db.refresh(failed_event)
+    try:
+        trigger_failed_event_alerts(db, failed_event)
+    except Exception:
+        pass
     return failed_event
 
 

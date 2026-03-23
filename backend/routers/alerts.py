@@ -16,6 +16,7 @@ from services.alert_channel_service import (
     channel_status,
     get_alert_config_public,
     send_email_alert,
+    send_slack_alert,
     send_telegram_alert,
     upsert_alert_channel_config,
 )
@@ -29,7 +30,7 @@ router = APIRouter(prefix="/admin/system-alerts", tags=["system_alerts"])
 
 
 class AlertTestDeliveryRequest(BaseModel):
-    channel: str = "telegram"
+    channel: str = "slack"
     severity: str = "WARNING"
 
 
@@ -324,7 +325,7 @@ def test_delivery(
 ):
     channel = payload.channel.strip().lower()
     severity = payload.severity.strip().upper()
-    if channel not in {"email", "telegram", "both"}:
+    if channel not in {"email", "slack", "telegram", "both"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_channel")
     if severity not in {"INFO", "WARNING", "CRITICAL"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_severity")
@@ -335,11 +336,14 @@ def test_delivery(
 
     result = {
         "email": {"status": "CHANNEL_DISABLED"},
+        "slack": {"status": "CHANNEL_DISABLED"},
         "telegram": {"status": "CHANNEL_DISABLED"},
     }
     if channel in {"email", "both"}:
         result["email"] = send_email_alert(subject=subject, html_content=html, severity=severity, db=db)
-    if channel in {"telegram", "both"}:
+    if channel in {"slack", "both"}:
+        result["slack"] = send_slack_alert(message=telegram_text, severity=severity, db=db)
+    if channel == "telegram":
         result["telegram"] = send_telegram_alert(message=telegram_text, severity=severity, db=db)
 
     create_audit_log(
