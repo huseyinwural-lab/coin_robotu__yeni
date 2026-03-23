@@ -10,7 +10,7 @@ import time
 from typing import Dict, Any, Tuple
 
 # Test configuration
-BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com/api"
+BASE_URL = "https://gate-control-v2.preview.emergentagent.com/api"
 CREDENTIALS = {
     "super_admin": {
         "email": "canary.admin@platform.local",

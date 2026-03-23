@@ -17,7 +17,7 @@ import os
 from datetime import datetime, timezone
 
 # Base URL from frontend/.env
-BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com"
+BASE_URL = "https://gate-control-v2.preview.emergentagent.com"
 
 # Test credentials
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"

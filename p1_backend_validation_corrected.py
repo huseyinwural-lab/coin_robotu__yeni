@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any, Tuple
 
 # Configuration
-BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com"
+BASE_URL = "https://gate-control-v2.preview.emergentagent.com"
 SUPER_ADMIN_CREDS = {
     "email": "canary.admin@platform.local",
     "password": "CanaryAdmin123!"

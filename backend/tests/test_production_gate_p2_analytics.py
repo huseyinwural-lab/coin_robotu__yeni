@@ -10,7 +10,7 @@ import pytest
 import requests
 from sqlalchemy import create_engine, text
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or "https://deploy-blocker-6.preview.emergentagent.com"
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or "https://gate-control-v2.preview.emergentagent.com"
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("PG_DSN")
 
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
@@ -67,13 +67,13 @@ def test_p2_history_compare_and_flapping(authed_session: requests.Session):
         pg = metadata.get("production_gate_control") or {}
         rows = list(pg.get("check_history") or [])
         now = datetime.now(timezone.utc)
-        alternating = ["PASS", "FAIL", "PASS", "FAIL"]
+        alternating = ["PASS", "FAIL", "PASS", "FAIL", "PASS", "FAIL"]
         for idx, state in enumerate(alternating):
             rows.append(
                 {
                     "check_key": "release_gate_contract",
                     "status": state,
-                    "timestamp": (now - timedelta(minutes=idx * 2)).isoformat(),
+                    "timestamp": (now - timedelta(seconds=idx * 40)).isoformat(),
                     "latency_ms": 10 + idx,
                     "error_code": None if state == "PASS" else "release_gate_blocked",
                     "run_id": f"p2-flap-{idx}",

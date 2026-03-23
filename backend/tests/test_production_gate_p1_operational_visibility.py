@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or "https://deploy-blocker-6.preview.emergentagent.com"
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or "https://gate-control-v2.preview.emergentagent.com"
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
 SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
 

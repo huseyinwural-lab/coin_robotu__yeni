@@ -18,7 +18,7 @@ import requests
 from datetime import datetime
 
 # Backend URL from environment
-BACKEND_URL = "https://deploy-blocker-6.preview.emergentagent.com/api"
+BACKEND_URL = "https://gate-control-v2.preview.emergentagent.com/api"
 
 # Test admin credentials
 ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")

@@ -23,7 +23,7 @@ def get_base_url():
             for line in f:
                 if line.startswith("REACT_APP_BACKEND_URL="):
                     return line.strip().split("=", 1)[1].strip('"').rstrip('/')
-    return "https://deploy-blocker-6.preview.emergentagent.com"
+    return "https://gate-control-v2.preview.emergentagent.com"
 
 BASE_URL = get_base_url()
 

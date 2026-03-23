@@ -94,6 +94,23 @@ ORDER_SCENARIO_TEMPLATES = [
     {"scenario_key": "invalid_zero_qty", "label": "Invalid edge (zero qty)", "side": "buy", "size": 0.0, "size_bucket": "edge"},
 ]
 
+DEFAULT_HARDENING_CONFIG = {
+    "risk_weights": {
+        "fail_rate_weight": 0.4,
+        "flapping_weight": 0.2,
+        "override_rate_weight": 0.3,
+        "stale_weight": 0.1,
+    },
+    "flapping": {
+        "window_sec": 300,
+        "threshold": 3,
+    },
+    "retention": {
+        "raw_days": 7,
+        "cleanup_interval_sec": 3600,
+    },
+}
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -188,6 +205,36 @@ def _normalize_checklist(raw_items: list[dict] | None) -> list[dict]:
     return normalized
 
 
+def _normalize_hardening_config(raw_config: dict | None) -> dict:
+    payload = dict(raw_config or {})
+    normalized = {
+        "risk_weights": {
+            "fail_rate_weight": float((payload.get("risk_weights") or {}).get("fail_rate_weight", DEFAULT_HARDENING_CONFIG["risk_weights"]["fail_rate_weight"])),
+            "flapping_weight": float((payload.get("risk_weights") or {}).get("flapping_weight", DEFAULT_HARDENING_CONFIG["risk_weights"]["flapping_weight"])),
+            "override_rate_weight": float((payload.get("risk_weights") or {}).get("override_rate_weight", DEFAULT_HARDENING_CONFIG["risk_weights"]["override_rate_weight"])),
+            "stale_weight": float((payload.get("risk_weights") or {}).get("stale_weight", DEFAULT_HARDENING_CONFIG["risk_weights"]["stale_weight"])),
+        },
+        "flapping": {
+            "window_sec": max(60, int((payload.get("flapping") or {}).get("window_sec", DEFAULT_HARDENING_CONFIG["flapping"]["window_sec"]))),
+            "threshold": max(2, int((payload.get("flapping") or {}).get("threshold", DEFAULT_HARDENING_CONFIG["flapping"]["threshold"]))),
+        },
+        "retention": {
+            "raw_days": max(1, int((payload.get("retention") or {}).get("raw_days", DEFAULT_HARDENING_CONFIG["retention"]["raw_days"]))),
+            "cleanup_interval_sec": max(300, int((payload.get("retention") or {}).get("cleanup_interval_sec", DEFAULT_HARDENING_CONFIG["retention"]["cleanup_interval_sec"]))),
+        },
+    }
+
+    total_weight = sum(normalized["risk_weights"].values())
+    if total_weight <= 0:
+        normalized["risk_weights"] = dict(DEFAULT_HARDENING_CONFIG["risk_weights"])
+    else:
+        normalized["risk_weights"] = {
+            key: round(float(value) / total_weight, 6)
+            for key, value in normalized["risk_weights"].items()
+        }
+    return normalized
+
+
 def _normalize_store(raw_store: dict | None) -> dict:
     now_iso = _iso(_utcnow())
     store = dict(raw_store or {})
@@ -203,6 +250,9 @@ def _normalize_store(raw_store: dict | None) -> dict:
         "order_scenarios": list(store.get("order_scenarios") or []),
         "check_history": list(store.get("check_history") or []),
         "check_compares": list(store.get("check_compares") or []),
+        "check_history_aggregates": dict(store.get("check_history_aggregates") or {}),
+        "hardening_config": _normalize_hardening_config(store.get("hardening_config") if isinstance(store.get("hardening_config"), dict) else {}),
+        "last_cleanup_at": store.get("last_cleanup_at"),
         "updated_at": store.get("updated_at") or now_iso,
         "updated_by_user_id": store.get("updated_by_user_id"),
         "last_transition": dict(store.get("last_transition") or {}),
@@ -358,9 +408,9 @@ def _normalize_check_history_rows(rows: list[dict]) -> list[dict]:
     return normalized
 
 
-def _detect_flapping_checks(history_rows: list[dict], *, window_minutes: int = 30, transition_threshold: int = 2) -> list[str]:
+def _build_flapping_metrics(history_rows: list[dict], *, window_sec: int, threshold: int) -> dict:
     now = _utcnow()
-    window_start = now - timedelta(minutes=window_minutes)
+    window_start = now - timedelta(seconds=window_sec)
     grouped: dict[str, list[dict]] = {}
 
     for row in history_rows:
@@ -370,7 +420,7 @@ def _detect_flapping_checks(history_rows: list[dict], *, window_minutes: int = 3
         key = str(row.get("check_key") or "unknown_check")
         grouped.setdefault(key, []).append(row)
 
-    flapping: list[str] = []
+    metrics: dict[str, dict] = {}
     for key, rows in grouped.items():
         ordered = sorted(rows, key=lambda item: _parse_dt(item.get("timestamp")) or now)
         transitions = 0
@@ -380,27 +430,49 @@ def _detect_flapping_checks(history_rows: list[dict], *, window_minutes: int = 3
             if prev is not None and status_value != prev and {status_value, prev} <= {"PASS", "FAIL"}:
                 transitions += 1
             prev = status_value
-        if transitions >= transition_threshold:
-            flapping.append(key)
-    return sorted(list(dict.fromkeys(flapping)))
+        is_flapping = transitions >= threshold
+        if not is_flapping:
+            severity = "LOW"
+        elif transitions >= threshold * 2:
+            severity = "HIGH"
+        else:
+            severity = "MEDIUM"
+        metrics[key] = {
+            "is_flapping": is_flapping,
+            "count": transitions,
+            "window_sec": int(window_sec),
+            "severity": severity,
+        }
+    return metrics
 
 
-def _compute_risk_score(
+def _detect_flapping_checks(history_rows: list[dict], *, window_sec: int, threshold: int) -> tuple[list[str], dict]:
+    metrics = _build_flapping_metrics(history_rows, window_sec=window_sec, threshold=threshold)
+    flapping = sorted([key for key, value in metrics.items() if bool(value.get("is_flapping"))])
+    return flapping, metrics
+
+
+def _compute_risk_engine_output(
     *,
-    failing_check_count: int,
-    flapping_count: int,
-    override_active: bool,
-    stale_count: int,
-    recent_override_count: int,
-) -> tuple[int, str]:
-    score = 0
-    score += min(failing_check_count, 5) * 12
-    score += min(flapping_count, 4) * 10
-    score += min(stale_count, 5) * 8
-    score += min(recent_override_count, 5) * 6
-    if override_active:
-        score += 15
-    score = max(0, min(100, score))
+    fail_rate: float,
+    flapping_ratio: float,
+    override_usage: float,
+    stale_ratio: float,
+    weights: dict,
+) -> dict:
+    factors = {
+        "fail_rate": max(0.0, min(1.0, float(fail_rate))),
+        "flapping": max(0.0, min(1.0, float(flapping_ratio))),
+        "override_usage": max(0.0, min(1.0, float(override_usage))),
+        "stale_checks": max(0.0, min(1.0, float(stale_ratio))),
+    }
+    score_float = (
+        factors["fail_rate"] * float(weights.get("fail_rate_weight", 0.4))
+        + factors["flapping"] * float(weights.get("flapping_weight", 0.2))
+        + factors["override_usage"] * float(weights.get("override_rate_weight", 0.3))
+        + factors["stale_checks"] * float(weights.get("stale_weight", 0.1))
+    ) * 100
+    score = int(round(max(0.0, min(100.0, score_float))))
 
     if score >= 70:
         level = "HIGH"
@@ -408,7 +480,25 @@ def _compute_risk_score(
         level = "MEDIUM"
     else:
         level = "LOW"
-    return score, level
+
+    explanation: list[str] = []
+    if factors["fail_rate"] >= 0.35:
+        explanation.append("High fail frequency detected")
+    if factors["flapping"] >= 0.2:
+        explanation.append("Check flapping observed")
+    if factors["override_usage"] >= 0.25:
+        explanation.append("Frequent override usage")
+    if factors["stale_checks"] >= 0.2:
+        explanation.append("Stale checks impacting decision confidence")
+    if len(explanation) == 0:
+        explanation.append("Risk remains low based on current telemetry")
+
+    return {
+        "risk_score": score,
+        "risk_level": level,
+        "factors": factors,
+        "explanation": explanation,
+    }
 
 
 def _build_history_trend_summary(history_rows: list[dict]) -> dict:
@@ -422,6 +512,104 @@ def _build_history_trend_summary(history_rows: list[dict]) -> dict:
         bucket[status_value] += 1
         bucket["total"] += 1
     return grouped
+
+
+def _aggregate_check_history(history_rows: list[dict]) -> dict:
+    hourly: dict[str, dict] = {}
+    daily: dict[str, dict] = {}
+
+    for row in history_rows:
+        key = str(row.get("check_key") or "unknown_check")
+        ts = _parse_dt(row.get("timestamp")) or _utcnow()
+        status_value = str(row.get("status") or "WARN").upper()
+        latency = row.get("latency_ms")
+
+        hour_bucket = ts.strftime("%Y-%m-%dT%H:00:00Z")
+        day_bucket = ts.strftime("%Y-%m-%d")
+
+        hkey = f"{key}::{hour_bucket}"
+        dkey = f"{key}::{day_bucket}"
+
+        for container, bucket_key, bucket_value in [
+            (hourly, hkey, hour_bucket),
+            (daily, dkey, day_bucket),
+        ]:
+            item = container.setdefault(
+                bucket_key,
+                {
+                    "check_key": key,
+                    "bucket": bucket_value,
+                    "pass": 0,
+                    "fail": 0,
+                    "warn": 0,
+                    "count": 0,
+                    "avg_latency_ms": None,
+                },
+            )
+            if status_value == "PASS":
+                item["pass"] += 1
+            elif status_value == "FAIL":
+                item["fail"] += 1
+            else:
+                item["warn"] += 1
+            item["count"] += 1
+
+            if latency is not None:
+                if item["avg_latency_ms"] is None:
+                    item["avg_latency_ms"] = float(latency)
+                else:
+                    item["avg_latency_ms"] = round(((item["avg_latency_ms"] * (item["count"] - 1)) + float(latency)) / item["count"], 3)
+
+    return {
+        "hourly": list(hourly.values()),
+        "daily": list(daily.values()),
+    }
+
+
+def run_history_cleanup_job(db: Session, *, force: bool = False) -> dict:
+    store = _load_store(db)
+    config = dict((store.get("hardening_config") or {}).get("retention") or {})
+    raw_days = max(1, int(config.get("raw_days", 7)))
+    cleanup_interval_sec = max(300, int(config.get("cleanup_interval_sec", 3600)))
+
+    now = _utcnow()
+    last_cleanup_at = _parse_dt(store.get("last_cleanup_at"))
+    if not force and last_cleanup_at and (now - last_cleanup_at).total_seconds() < cleanup_interval_sec:
+        return {
+            "cleaned": False,
+            "reason": "cleanup_interval_not_reached",
+            "last_cleanup_at": _iso(last_cleanup_at),
+            "raw_days": raw_days,
+        }
+
+    cutoff = now - timedelta(days=raw_days)
+
+    history_rows = _normalize_check_history_rows(list(store.get("check_history") or []))
+    compare_rows = list(store.get("check_compares") or [])
+
+    history_before = len(history_rows)
+    compare_before = len(compare_rows)
+
+    history_rows = [row for row in history_rows if (_parse_dt(row.get("timestamp")) or now) >= cutoff]
+    compare_rows = [row for row in compare_rows if (_parse_dt(row.get("timestamp")) or now) >= cutoff]
+
+    store["check_history"] = history_rows
+    store["check_compares"] = compare_rows
+    store["check_history_aggregates"] = _aggregate_check_history(history_rows)
+    store["last_cleanup_at"] = _iso(now)
+    store["updated_at"] = _iso(now)
+
+    _persist_store(db, store=store, actor_user_id=store.get("updated_by_user_id"))
+
+    return {
+        "cleaned": True,
+        "history_removed": max(0, history_before - len(history_rows)),
+        "compare_removed": max(0, compare_before - len(compare_rows)),
+        "remaining_history": len(history_rows),
+        "remaining_compare": len(compare_rows),
+        "raw_days": raw_days,
+        "last_cleanup_at": _iso(now),
+    }
 
 
 def _sync_override_expiry(db: Session, *, store: dict) -> bool:
@@ -482,10 +670,21 @@ def _resolve_status(store: dict) -> dict:
     checklist = _normalize_checklist(store.get("checklist") if isinstance(store.get("checklist"), list) else [])
     checks, failing_keys, running_or_stale_keys = _enrich_checks_with_stale(list(store.get("checks") or []), now)
     history_rows = _normalize_check_history_rows(list(store.get("check_history") or []))
-    flapping_checks = _detect_flapping_checks(history_rows)
+    hardening = _normalize_hardening_config(store.get("hardening_config") if isinstance(store.get("hardening_config"), dict) else {})
+    flapping_checks, flapping_metrics = _detect_flapping_checks(
+        history_rows,
+        window_sec=int(hardening["flapping"]["window_sec"]),
+        threshold=int(hardening["flapping"]["threshold"]),
+    )
 
     for check in checks:
         check["flapping"] = str(check.get("check_key") or "") in flapping_checks
+        check["flapping_detail"] = flapping_metrics.get(str(check.get("check_key") or ""), {
+            "is_flapping": False,
+            "count": 0,
+            "window_sec": int(hardening["flapping"]["window_sec"]),
+            "severity": "LOW",
+        })
 
     checklist_incomplete_keys = [
         str(item.get("item_key") or "")
@@ -538,12 +737,18 @@ def _resolve_status(store: dict) -> dict:
             release_gate_contract = str(check.get("status") or "UNKNOWN")
             break
 
-    risk_score, risk_level = _compute_risk_score(
-        failing_check_count=len(failing_keys),
-        flapping_count=len(flapping_checks),
-        override_active=active_override is not None,
-        stale_count=len(running_or_stale_keys),
-        recent_override_count=recent_override_count,
+    total_checks = max(1, len(checks))
+    fail_rate = len([item for item in checks if str(item.get("status") or "") == "FAIL"]) / total_checks
+    flapping_ratio = len(flapping_checks) / total_checks
+    stale_ratio = len(running_or_stale_keys) / total_checks
+    override_usage = min(1.0, recent_override_count / 1.0)
+
+    risk_payload = _compute_risk_engine_output(
+        fail_rate=fail_rate,
+        flapping_ratio=flapping_ratio,
+        override_usage=override_usage,
+        stale_ratio=stale_ratio,
+        weights=hardening["risk_weights"],
     )
 
     return {
@@ -561,8 +766,11 @@ def _resolve_status(store: dict) -> dict:
         "checklist": checklist,
         "checks": checks,
         "active_override": active_override,
-        "risk_score": risk_score,
-        "risk_level": risk_level,
+        "risk_score": risk_payload["risk_score"],
+        "risk_level": risk_payload["risk_level"],
+        "risk_factors": risk_payload["factors"],
+        "risk_explanation": risk_payload["explanation"],
+        "risk_model_version": "v2-explainable",
         "flapping_checks": flapping_checks,
         "updated_at": _parse_dt(store.get("updated_at")) or now,
         "updated_by_user_id": store.get("updated_by_user_id"),
@@ -986,8 +1194,15 @@ def get_production_gate_checks_history(
     status_filter: str | None = None,
     limit: int = 200,
 ) -> dict:
+    run_history_cleanup_job(db, force=False)
     store = _load_store(db)
     items = _normalize_check_history_rows(list(store.get("check_history") or []))
+    hardening = _normalize_hardening_config(store.get("hardening_config") if isinstance(store.get("hardening_config"), dict) else {})
+    flapping_checks, flapping_metrics = _detect_flapping_checks(
+        items,
+        window_sec=int(hardening["flapping"]["window_sec"]),
+        threshold=int(hardening["flapping"]["threshold"]),
+    )
 
     normalized_key = str(check_key or "").strip().lower() if check_key else None
     normalized_status = str(status_filter or "").strip().upper() if status_filter else None
@@ -1011,7 +1226,13 @@ def get_production_gate_checks_history(
                 "latency_ms": row.get("latency_ms"),
                 "error_code": row.get("error_code"),
                 "run_id": row.get("run_id"),
-                "flapping": bool(row.get("flapping", False)),
+                "flapping": str(row.get("check_key") or "") in flapping_checks,
+                "flapping_detail": flapping_metrics.get(str(row.get("check_key") or ""), {
+                    "is_flapping": False,
+                    "count": 0,
+                    "window_sec": int(hardening["flapping"]["window_sec"]),
+                    "severity": "LOW",
+                }),
             }
         )
 
@@ -1028,20 +1249,13 @@ def get_production_gate_checks_history(
         }
         for item in filtered
     ])
-    flapping_checks = sorted(
-        list(
-            {
-                str(item.get("check_key") or "")
-                for item in filtered
-                if bool(item.get("flapping"))
-            }
-        )
-    )
+    flapping_checks = sorted(list(dict.fromkeys([item.get("check_key") for item in filtered if bool(item.get("flapping"))])))
 
     return {
         "items": filtered,
         "trend_summary": trend_summary,
         "flapping_checks": flapping_checks,
+        "flapping_config": hardening["flapping"],
     }
 
 
@@ -1053,12 +1267,13 @@ def get_production_gate_checks_compare(
     date_to: datetime | None = None,
     limit: int = 200,
 ) -> dict:
+    run_history_cleanup_job(db, force=False)
     store = _load_store(db)
-    rows = list(store.get("check_compares") or [])
+    history_rows = _normalize_check_history_rows(list(store.get("check_history") or []))
     normalized_key = str(check_key or "").strip().lower() if check_key else None
-    filtered: list[dict] = []
 
-    for row in rows:
+    grouped: dict[str, list[dict]] = {}
+    for row in history_rows:
         key = str(row.get("check_key") or "").strip().lower()
         ts = _parse_dt(row.get("timestamp"))
         if normalized_key and key != normalized_key:
@@ -1067,22 +1282,73 @@ def get_production_gate_checks_compare(
             continue
         if date_to and ts and ts > date_to:
             continue
-        filtered.append(
+        grouped.setdefault(key, []).append(row)
+
+    items: list[dict] = []
+    for key, rows in grouped.items():
+        ordered = sorted(rows, key=lambda item: _parse_dt(item.get("timestamp")) or _utcnow(), reverse=True)
+        sample = ordered[: max(3, min(limit, 20))]
+        run_count = len(sample)
+        newest = sample[0]
+        oldest = sample[-1]
+
+        previous_result = str(oldest.get("status") or "WARN").upper()
+        new_result = str(newest.get("status") or "WARN").upper()
+        previous_latency = oldest.get("latency_ms")
+        new_latency = newest.get("latency_ms")
+
+        latency_delta = None
+        if previous_latency is not None and new_latency is not None:
+            latency_delta = round(float(new_latency) - float(previous_latency), 3)
+
+        transitions = 0
+        pass_count = 0
+        prev_status = None
+        for row in reversed(sample):
+            current = str(row.get("status") or "WARN").upper()
+            if current == "PASS":
+                pass_count += 1
+            if prev_status is not None and prev_status != current:
+                transitions += 1
+            prev_status = current
+
+        pass_ratio = pass_count / max(1, run_count)
+        stability_score = round(max(0.0, min(1.0, (1 - (transitions / max(1, run_count - 1))) * 0.5 + pass_ratio * 0.5)), 3)
+        fail_to_pass = previous_result == "FAIL" and new_result == "PASS"
+        enough_runs = run_count >= 3
+        improvement = enough_runs and (fail_to_pass or (latency_delta is not None and latency_delta < 0 and pass_ratio >= 0.67))
+
+        explanation = []
+        if not enough_runs:
+            explanation.append("Minimum 3 run olmadan improvement üretilemez")
+        if fail_to_pass:
+            explanation.append("Fail -> Pass geçişi gözlendi")
+        if latency_delta is not None and latency_delta < 0:
+            explanation.append("Latency iyileşmesi gözlendi")
+        if len(explanation) == 0:
+            explanation.append("Anlamlı remediation iyileşmesi gözlenmedi")
+
+        items.append(
             {
                 "check_key": key,
-                "run_id": str(row.get("run_id") or ""),
-                "timestamp": ts or _utcnow(),
-                "previous_result": str(row.get("previous_result") or "WARN").upper(),
-                "new_result": str(row.get("new_result") or "WARN").upper(),
-                "previous_latency_ms": row.get("previous_latency_ms"),
-                "new_latency_ms": row.get("new_latency_ms"),
-                "latency_delta_ms": row.get("latency_delta_ms"),
-                "state_delta": str(row.get("state_delta") or "WARN->WARN"),
+                "run_id": str(newest.get("run_id") or ""),
+                "timestamp": _parse_dt(newest.get("timestamp")) or _utcnow(),
+                "previous_result": previous_result,
+                "new_result": new_result,
+                "previous_latency_ms": previous_latency,
+                "new_latency_ms": new_latency,
+                "latency_delta_ms": latency_delta,
+                "state_delta": f"{previous_result}->{new_result}",
+                "run_count": run_count,
+                "improvement": bool(improvement),
+                "fail_to_pass": bool(fail_to_pass),
+                "stability_score": stability_score,
+                "explanation": explanation,
             }
         )
 
-    filtered = sorted(filtered, key=lambda item: item.get("timestamp") or _utcnow(), reverse=True)[: max(1, min(limit, 1000))]
-    return {"items": filtered}
+    items = sorted(items, key=lambda item: item.get("timestamp") or _utcnow(), reverse=True)[: max(1, min(limit, 500))]
+    return {"items": items}
 
 
 def get_production_gate_override_analytics(db: Session, *, limit_timeline: int = 100) -> dict:
@@ -1172,27 +1438,6 @@ def get_production_gate_timeline(
     include_all = len(normalized_categories) == 0
 
     items: list[dict] = []
-
-    # Checks timeline from history rows
-    store = _load_store(db)
-    check_history = _normalize_check_history_rows(list(store.get("check_history") or []))
-    if include_all or "checks" in normalized_categories:
-        for row in check_history:
-            ts = _parse_dt(row.get("timestamp"))
-            if date_from and ts and ts < date_from:
-                continue
-            if date_to and ts and ts > date_to:
-                continue
-            items.append(
-                {
-                    "event_type": "CHECK_RUN",
-                    "category": "checks",
-                    "timestamp": ts or _utcnow(),
-                    "title": f"{row.get('check_key')} -> {row.get('status')}",
-                    "details": row,
-                }
-            )
-
     audit_rows = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(2000).all()
     for row in audit_rows:
         details = dict(row.details or {})
@@ -1205,14 +1450,14 @@ def get_production_gate_timeline(
 
         category = None
         event_type = action
-        if "OVERRIDE" in action:
+        if action == "PRODUCTION_GATE_CHECK_EVENT" or "CHECK_RERUN" in action:
+            category = "checks"
+        elif "OVERRIDE" in action:
             category = "overrides"
         elif "MODE" in action:
             category = "mode"
         elif "ACTION_BLOCKED" in action or "ACTION_ALLOWED" in action:
             category = "deploy"
-        elif "CHECK_RERUN" in action:
-            category = "checks"
 
         if category is None:
             continue
@@ -1221,6 +1466,8 @@ def get_production_gate_timeline(
 
         items.append(
             {
+                "audit_id": row.id,
+                "request_id": details.get("request_id"),
                 "event_type": event_type,
                 "category": category,
                 "timestamp": ts,
@@ -1235,6 +1482,76 @@ def get_production_gate_timeline(
 
     items = sorted(items, key=lambda item: item.get("timestamp") or _utcnow(), reverse=True)[: max(1, min(limit, 2000))]
     return {"items": items}
+
+
+def validate_production_gate_analytics_cross_check(db: Session) -> dict:
+    run_history_cleanup_job(db, force=False)
+    store = _load_store(db)
+    retention_days = int((store.get("hardening_config") or {}).get("retention", {}).get("raw_days", 7))
+    cutoff = _utcnow() - timedelta(days=retention_days)
+
+    history_rows = [
+        row
+        for row in _normalize_check_history_rows(list(store.get("check_history") or []))
+        if (_parse_dt(row.get("timestamp")) or _utcnow()) >= cutoff
+    ]
+    history_count = len(history_rows)
+
+    audit_check_rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "PRODUCTION_GATE_CHECK_EVENT")
+        .filter(AuditLog.created_at >= cutoff)
+        .all()
+    )
+    audit_check_count = len(audit_check_rows)
+    audit_run_ids = {str((row.details or {}).get("run_id") or "") for row in audit_check_rows if str((row.details or {}).get("run_id") or "").strip()}
+    history_linked_to_audit = [row for row in history_rows if str(row.get("run_id") or "") in audit_run_ids]
+
+    override_rows_count = db.query(ReleaseGateOverride).filter(ReleaseGateOverride.created_at >= cutoff).count()
+    analytics = get_production_gate_override_analytics(db, limit_timeline=500)
+    analytics_override_count = int(analytics.get("override_count") or 0)
+
+    mismatches: list[dict] = []
+    if len(history_linked_to_audit) != audit_check_count:
+        mismatches.append(
+            {
+                "type": "history_linked_vs_audit_check_events",
+                "history_linked_count": len(history_linked_to_audit),
+                "audit_check_event_count": audit_check_count,
+            }
+        )
+    if override_rows_count != analytics_override_count:
+        mismatches.append(
+            {
+                "type": "override_rows_vs_analytics",
+                "override_rows_count": override_rows_count,
+                "analytics_override_count": analytics_override_count,
+            }
+        )
+
+    return {
+        "is_consistent": len(mismatches) == 0,
+        "mismatches": mismatches,
+        "comparison_sources": {
+            "history_store": "brand_settings.metadata_json.production_gate_control.check_history",
+            "audit_log_check_events": "audit_logs(action=PRODUCTION_GATE_CHECK_EVENT)",
+            "override_rows": "release_gate_overrides",
+            "override_analytics": "get_production_gate_override_analytics()",
+        },
+        "consistency_rules": [
+            "history_linked_count == audit_check_event_count (run_id eşleştirmesi)",
+            "override_rows_count == analytics_override_count",
+        ],
+        "retention_days": retention_days,
+        "counts": {
+            "history_count": history_count,
+            "history_linked_count": len(history_linked_to_audit),
+            "audit_check_event_count": audit_check_count,
+            "audit_run_id_count": len(audit_run_ids),
+            "override_rows_count": override_rows_count,
+            "analytics_override_count": analytics_override_count,
+        },
+    }
 
 
 def _list_audit_history(db: Session, *, limit: int = 30) -> list[dict]:
@@ -1260,6 +1577,7 @@ def _list_audit_history(db: Session, *, limit: int = 30) -> list[dict]:
 
 
 def get_production_gate_status(db: Session, *, refresh_checks: bool = False, audit_limit: int = 30) -> dict:
+    run_history_cleanup_job(db, force=False)
     store = _load_store(db)
     changed = False
 
@@ -1360,9 +1678,20 @@ def rerun_production_gate_checks(
         )
 
     check_history = _normalize_check_history_rows(check_history)
-    flapping_checks = _detect_flapping_checks(check_history)
+    hardening = _normalize_hardening_config(store.get("hardening_config") if isinstance(store.get("hardening_config"), dict) else {})
+    flapping_checks, flapping_metrics = _detect_flapping_checks(
+        check_history,
+        window_sec=int(hardening["flapping"]["window_sec"]),
+        threshold=int(hardening["flapping"]["threshold"]),
+    )
     for row in check_history:
         row["flapping"] = str(row.get("check_key") or "") in flapping_checks
+        row["flapping_detail"] = flapping_metrics.get(str(row.get("check_key") or ""), {
+            "is_flapping": False,
+            "count": 0,
+            "window_sec": int(hardening["flapping"]["window_sec"]),
+            "severity": "LOW",
+        })
 
     store["check_history"] = check_history[-5000:]
     store["check_compares"] = check_compares[-3000:]
@@ -1370,6 +1699,30 @@ def rerun_production_gate_checks(
     store["updated_at"] = _iso(_utcnow())
     store["updated_by_user_id"] = actor_user_id
     store = _persist_store(db, store=store, actor_user_id=actor_user_id)
+
+    recent_history_rows = [row for row in store.get("check_history") or [] if str(row.get("run_id") or "") == run_id]
+    for row in recent_history_rows:
+        create_audit_log(
+            db,
+            action="PRODUCTION_GATE_CHECK_EVENT",
+            entity_type=PRODUCTION_GATE_ENTITY_TYPE,
+            entity_id=str(row.get("check_key") or "global"),
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            severity="warning" if str(row.get("status") or "") in {"FAIL", "WARN"} else "info",
+            details={
+                "previous_state": previous_state,
+                "next_state": str(store.get("state") or "NO_GO"),
+                "reason_code": str(row.get("error_code") or "CHECK_OK").upper(),
+                "reason_text": f"{row.get('check_key')}::{row.get('status')}",
+                "expiry": _iso(_parse_dt((store.get("override") or {}).get("expires_at"))) if store.get("override") else None,
+                "check_key": row.get("check_key"),
+                "status": row.get("status"),
+                "run_id": row.get("run_id"),
+                "latency_ms": row.get("latency_ms"),
+                "flapping": row.get("flapping"),
+            },
+        )
 
     create_audit_log(
         db,
@@ -1707,6 +2060,41 @@ def enforce_production_gate_or_raise(
             "blocked_reason_codes": gate_status.get("blocked_reason_codes") or [],
         },
     )
+
+
+def update_production_gate_hardening_config(
+    db: Session,
+    *,
+    actor_user_id: str,
+    actor_role: str,
+    payload: dict,
+) -> dict:
+    store = _load_store(db)
+    merged = _normalize_hardening_config({
+        **(store.get("hardening_config") or {}),
+        **dict(payload or {}),
+    })
+    store["hardening_config"] = merged
+    store["updated_at"] = _iso(_utcnow())
+    store["updated_by_user_id"] = actor_user_id
+    _persist_store(db, store=store, actor_user_id=actor_user_id)
+
+    create_audit_log(
+        db,
+        action="PRODUCTION_GATE_HARDENING_CONFIG_UPDATED",
+        entity_type=PRODUCTION_GATE_ENTITY_TYPE,
+        entity_id="global",
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        details={
+            "previous_state": str(store.get("state") or "NO_GO"),
+            "next_state": str(store.get("state") or "NO_GO"),
+            "reason_code": "HARDENING_CONFIG",
+            "reason_text": json.dumps(merged),
+            "expiry": _iso(_parse_dt((store.get("override") or {}).get("expires_at"))) if store.get("override") else None,
+        },
+    )
+    return merged
 
 
 def build_production_gate_export(

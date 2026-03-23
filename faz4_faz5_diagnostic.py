@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com"
+BASE_URL = "https://gate-control-v2.preview.emergentagent.com"
 CREDENTIALS = {
     "super_admin": {"email": "canary.admin@platform.local", "password": "CanaryAdmin123!"}
 }

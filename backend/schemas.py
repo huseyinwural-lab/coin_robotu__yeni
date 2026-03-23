@@ -4224,6 +4224,7 @@ class ProductionGateCheckItemResponse(BaseModel):
     remediation_payload: dict = Field(default_factory=dict)
     last_run_at: datetime | None = None
     stale: bool = False
+    flapping_detail: dict = Field(default_factory=dict)
 
 
 class ProductionGateOverrideSummaryResponse(BaseModel):
@@ -4263,6 +4264,9 @@ class ProductionGateStatusResponse(BaseModel):
     active_override: ProductionGateOverrideSummaryResponse | None = None
     risk_score: int = 0
     risk_level: str = "LOW"
+    risk_factors: dict = Field(default_factory=dict)
+    risk_explanation: list[str] = Field(default_factory=list)
+    risk_model_version: str = "v2-explainable"
     flapping_checks: list[str] = Field(default_factory=list)
     updated_at: datetime
     updated_by_user_id: str | None = None
@@ -4391,12 +4395,14 @@ class ProductionGateCheckHistoryItemResponse(BaseModel):
     error_code: str | None = None
     run_id: str
     flapping: bool = False
+    flapping_detail: dict = Field(default_factory=dict)
 
 
 class ProductionGateCheckHistoryResponse(BaseModel):
     items: list[ProductionGateCheckHistoryItemResponse] = Field(default_factory=list)
     trend_summary: dict = Field(default_factory=dict)
     flapping_checks: list[str] = Field(default_factory=list)
+    flapping_config: dict = Field(default_factory=dict)
 
 
 class ProductionGateCheckCompareItemResponse(BaseModel):
@@ -4409,6 +4415,11 @@ class ProductionGateCheckCompareItemResponse(BaseModel):
     new_latency_ms: float | None = None
     latency_delta_ms: float | None = None
     state_delta: str
+    run_count: int = 0
+    improvement: bool = False
+    fail_to_pass: bool = False
+    stability_score: float = 0.0
+    explanation: list[str] = Field(default_factory=list)
 
 
 class ProductionGateCheckCompareResponse(BaseModel):
@@ -4427,6 +4438,8 @@ class ProductionGateOverrideAnalyticsResponse(BaseModel):
 
 
 class ProductionGateTimelineEventResponse(BaseModel):
+    audit_id: str
+    request_id: str | None = None
     event_type: str
     category: str
     timestamp: datetime

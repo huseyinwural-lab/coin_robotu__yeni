@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 # Configuration
-BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com"
+BASE_URL = "https://gate-control-v2.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Test credentials

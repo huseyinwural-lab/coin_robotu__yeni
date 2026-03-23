@@ -86,10 +86,13 @@ from services.production_gate_service import (
     get_production_gate_override_analytics,
     rerun_production_gate_checks,
     revoke_production_gate_override,
+    run_history_cleanup_job,
     run_order_scenario_matrix,
     run_production_gate_api_key_tests,
     set_production_gate_state,
+    update_production_gate_hardening_config,
     update_production_gate_checklist_item,
+    validate_production_gate_analytics_cross_check,
 )
 
 router = APIRouter(prefix="/phase4", tags=["phase4_live"])
@@ -649,6 +652,69 @@ def admin_production_gate_timeline(
         limit=limit,
     )
     return ProductionGateTimelineResponse(**payload)
+
+
+@router.patch("/admin/production-gate/hardening-config")
+def admin_production_gate_update_hardening_config(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    config = update_production_gate_hardening_config(
+        db,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        payload=payload,
+    )
+    return {"status": "ok", "hardening_config": config}
+
+
+@router.post("/admin/production-gate/history/cleanup")
+def admin_production_gate_history_cleanup(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    force: bool = Query(default=False),
+):
+    payload = run_history_cleanup_job(db, force=bool(force))
+    create_audit_log(
+        db,
+        action="PRODUCTION_GATE_HISTORY_CLEANUP",
+        entity_type="production_gate",
+        entity_id="global",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "previous_state": "N/A",
+            "next_state": "N/A",
+            "reason_code": "HISTORY_CLEANUP",
+            "reason_text": "manual_cleanup_trigger",
+            "expiry": None,
+            "cleanup_payload": payload,
+        },
+    )
+    return payload
+
+
+@router.get("/admin/production-gate/analytics/cross-check")
+def admin_production_gate_analytics_cross_check(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    payload = validate_production_gate_analytics_cross_check(db)
+    if not bool(payload.get("is_consistent")):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=payload)
+    return payload
+
+
+@router.get("/admin/production-gate/system/cross-check")
+def admin_production_gate_system_cross_check(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    payload = validate_production_gate_analytics_cross_check(db)
+    if not bool(payload.get("is_consistent")):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=payload)
+    return payload
 
 
 @router.post("/admin/production-gate/checks/rerun", response_model=ProductionGateStatusResponse)

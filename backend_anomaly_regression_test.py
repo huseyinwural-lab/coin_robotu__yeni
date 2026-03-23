@@ -3,7 +3,7 @@
 Backend Regression Test for Phase-1 Anomaly Stabilization
 Testing anomaly event submission with guardrail suppression, cooldown, and validation logic.
 
-Base URL: https://deploy-blocker-6.preview.emergentagent.com
+Base URL: https://gate-control-v2.preview.emergentagent.com
 Test credentials: canary_1774010877@example.com / TestPass123!
 """
 
@@ -13,7 +13,7 @@ import time
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com"
+BASE_URL = "https://gate-control-v2.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 TEST_EMAIL = "canary_1774010877@example.com"
 TEST_PASSWORD = "TestPass123!"

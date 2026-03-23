@@ -16,6 +16,16 @@ export const AdminExecutionReadinessPage = () => {
   const [historyFilterCheckKey, setHistoryFilterCheckKey] = useState("ALL");
   const [historyFilterStatus, setHistoryFilterStatus] = useState("ALL");
   const [timelineFilter, setTimelineFilter] = useState({ checks: true, overrides: true, mode: true, deploy: true });
+  const [flappingWindowSec, setFlappingWindowSec] = useState(300);
+  const [flappingThreshold, setFlappingThreshold] = useState(3);
+  const [riskWeights, setRiskWeights] = useState({
+    fail_rate_weight: 0.4,
+    flapping_weight: 0.2,
+    override_rate_weight: 0.3,
+    stale_weight: 0.1,
+  });
+  const [crossCheckResult, setCrossCheckResult] = useState(null);
+  const [cleanupResult, setCleanupResult] = useState(null);
   const [stateReasonCode, setStateReasonCode] = useState("MANUAL_RISK_ACCEPTANCE");
   const [stateReasonText, setStateReasonText] = useState("Pre-deploy kontroller tamamlandı.");
   const [overrideOpen, setOverrideOpen] = useState(false);
@@ -71,6 +81,10 @@ export const AdminExecutionReadinessPage = () => {
       setCompareData(comparePayload);
       setOverrideAnalytics(analyticsPayload);
       setTimelineData(timelinePayload);
+
+      const flappingConfig = historyData?.flapping_config || {};
+      if (flappingConfig.window_sec) setFlappingWindowSec(Number(flappingConfig.window_sec));
+      if (flappingConfig.threshold) setFlappingThreshold(Number(flappingConfig.threshold));
 
       const nextFailCount = Number(opsData?.active_fail_count || 0);
       if (nextFailCount > previousFailCountRef.current) {
@@ -206,6 +220,42 @@ export const AdminExecutionReadinessPage = () => {
     [runAction]
   );
 
+  const handleHardeningConfigUpdate = useCallback(async () => {
+    await runAction(async () => {
+      await apiClient.patch("/phase4/admin/production-gate/hardening-config", {
+        flapping: {
+          window_sec: Number(flappingWindowSec),
+          threshold: Number(flappingThreshold),
+        },
+        risk_weights: {
+          fail_rate_weight: Number(riskWeights.fail_rate_weight),
+          flapping_weight: Number(riskWeights.flapping_weight),
+          override_rate_weight: Number(riskWeights.override_rate_weight),
+          stale_weight: Number(riskWeights.stale_weight),
+        },
+      });
+    }, "Hardening config güncellendi");
+  }, [flappingWindowSec, flappingThreshold, riskWeights, runAction]);
+
+  const handleRunCleanupJob = useCallback(async () => {
+    await runAction(async () => {
+      const { data } = await apiClient.post("/phase4/admin/production-gate/history/cleanup?force=true");
+      setCleanupResult(data);
+    }, "History cleanup job çalıştı");
+  }, [runAction]);
+
+  const handleRunCrossCheck = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/phase4/admin/production-gate/system/cross-check");
+      setCrossCheckResult(data);
+      toast.success("Cross-check tutarlı");
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      setCrossCheckResult(detail || { is_consistent: false, mismatches: ["unknown"] });
+      toast.error("Cross-check mismatch: FAIL");
+    }
+  }, []);
+
   const handleExportJson = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -330,6 +380,46 @@ export const AdminExecutionReadinessPage = () => {
           <div className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 md:col-span-2" data-testid="admin-production-gate-export-date-to-wrapper">
             <label className="mr-2" data-testid="admin-production-gate-export-date-to-label">date_to</label>
             <input type="datetime-local" value={exportDateTo} onChange={(event) => setExportDateTo(event.target.value)} data-testid="admin-production-gate-export-date-to-input" className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs" />
+          </div>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950 p-3" data-testid="admin-production-gate-hardening-config-panel">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-production-gate-hardening-config-header">
+            <p className="text-xs font-semibold text-slate-200" data-testid="admin-production-gate-hardening-config-title">Hardening Config (Flapping + Risk Weights)</p>
+            <Button variant="outline" onClick={handleHardeningConfigUpdate} disabled={actionLoading} data-testid="admin-production-gate-hardening-config-save-button">Kaydet</Button>
+          </div>
+          <div className="mt-2 grid gap-2 text-xs md:grid-cols-3" data-testid="admin-production-gate-hardening-config-grid">
+            <label className="flex items-center gap-2" data-testid="admin-production-gate-flapping-window-wrapper">window_sec
+              <input type="number" min={60} value={flappingWindowSec} onChange={(event) => setFlappingWindowSec(Number(event.target.value))} className="rounded border border-slate-600 bg-slate-900 px-2 py-1" data-testid="admin-production-gate-flapping-window-input" />
+            </label>
+            <label className="flex items-center gap-2" data-testid="admin-production-gate-flapping-threshold-wrapper">threshold
+              <input type="number" min={2} value={flappingThreshold} onChange={(event) => setFlappingThreshold(Number(event.target.value))} className="rounded border border-slate-600 bg-slate-900 px-2 py-1" data-testid="admin-production-gate-flapping-threshold-input" />
+            </label>
+            <label className="flex items-center gap-2" data-testid="admin-production-gate-risk-weight-fail-wrapper">fail_w
+              <input type="number" step="0.01" min={0} value={riskWeights.fail_rate_weight} onChange={(event) => setRiskWeights((prev) => ({ ...prev, fail_rate_weight: event.target.value }))} className="rounded border border-slate-600 bg-slate-900 px-2 py-1" data-testid="admin-production-gate-risk-weight-fail-input" />
+            </label>
+            <label className="flex items-center gap-2" data-testid="admin-production-gate-risk-weight-flapping-wrapper">flapping_w
+              <input type="number" step="0.01" min={0} value={riskWeights.flapping_weight} onChange={(event) => setRiskWeights((prev) => ({ ...prev, flapping_weight: event.target.value }))} className="rounded border border-slate-600 bg-slate-900 px-2 py-1" data-testid="admin-production-gate-risk-weight-flapping-input" />
+            </label>
+            <label className="flex items-center gap-2" data-testid="admin-production-gate-risk-weight-override-wrapper">override_w
+              <input type="number" step="0.01" min={0} value={riskWeights.override_rate_weight} onChange={(event) => setRiskWeights((prev) => ({ ...prev, override_rate_weight: event.target.value }))} className="rounded border border-slate-600 bg-slate-900 px-2 py-1" data-testid="admin-production-gate-risk-weight-override-input" />
+            </label>
+            <label className="flex items-center gap-2" data-testid="admin-production-gate-risk-weight-stale-wrapper">stale_w
+              <input type="number" step="0.01" min={0} value={riskWeights.stale_weight} onChange={(event) => setRiskWeights((prev) => ({ ...prev, stale_weight: event.target.value }))} className="rounded border border-slate-600 bg-slate-900 px-2 py-1" data-testid="admin-production-gate-risk-weight-stale-input" />
+            </label>
+          </div>
+          <div className="mt-2 text-xs text-slate-300" data-testid="admin-production-gate-risk-explanation-list">
+            {(gate?.risk_explanation || []).map((item, index) => (
+              <p key={`${item}-${index}`} data-testid={`admin-production-gate-risk-explanation-item-${index}`}>• {item}</p>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="admin-production-gate-hardening-ops-actions">
+            <Button variant="outline" onClick={handleRunCleanupJob} disabled={actionLoading} data-testid="admin-production-gate-cleanup-job-button">Cleanup Job Çalıştır</Button>
+            <Button variant="outline" onClick={handleRunCrossCheck} disabled={actionLoading} data-testid="admin-production-gate-cross-check-button">Analytics Cross-Check</Button>
+          </div>
+          <div className="mt-2 text-xs text-slate-300" data-testid="admin-production-gate-hardening-ops-results">
+            <p data-testid="admin-production-gate-cleanup-result">cleanup_result: {cleanupResult ? JSON.stringify(cleanupResult) : "-"}</p>
+            <p data-testid="admin-production-gate-cross-check-result">cross_check_result: {crossCheckResult ? JSON.stringify(crossCheckResult) : "-"}</p>
           </div>
         </div>
       </header>
@@ -608,6 +698,9 @@ export const AdminExecutionReadinessPage = () => {
                 <p data-testid={`admin-production-gate-check-history-item-error-${index}`}>error_code: {row.error_code || "-"}</p>
                 <p data-testid={`admin-production-gate-check-history-item-run-id-${index}`}>run_id: {row.run_id}</p>
                 <p data-testid={`admin-production-gate-check-history-item-flapping-${index}`}>flapping: {row.flapping ? "FLAPPING" : "NO"}</p>
+                <p data-testid={`admin-production-gate-check-history-item-flapping-detail-${index}`}>
+                  flapping_detail: count={row?.flapping_detail?.count ?? 0}, window_sec={row?.flapping_detail?.window_sec ?? "-"}, severity={row?.flapping_detail?.severity || "LOW"}
+                </p>
               </div>
             ))}
             {filteredHistoryItems.length === 0 && (
@@ -631,6 +724,11 @@ export const AdminExecutionReadinessPage = () => {
                 <p className={`${Number(item.latency_delta_ms || 0) < 0 ? "text-emerald-300" : Number(item.latency_delta_ms || 0) > 0 ? "text-red-300" : "text-slate-300"}`} data-testid={`admin-production-gate-compare-item-latency-delta-${index}`}>
                   latency_delta_ms: {item.latency_delta_ms ?? "-"}
                 </p>
+                <p data-testid={`admin-production-gate-compare-item-run-count-${index}`}>run_count: {item.run_count}</p>
+                <p data-testid={`admin-production-gate-compare-item-improvement-${index}`}>improvement: {item.improvement ? "YES" : "NO"}</p>
+                <p data-testid={`admin-production-gate-compare-item-fail-to-pass-${index}`}>fail_to_pass: {item.fail_to_pass ? "YES" : "NO"}</p>
+                <p data-testid={`admin-production-gate-compare-item-stability-${index}`}>stability_score: {item.stability_score}</p>
+                <p data-testid={`admin-production-gate-compare-item-explanation-${index}`}>explanation: {(item.explanation || []).join(" | ")}</p>
               </div>
             ))}
             {(compareData?.items || []).length === 0 && <p className="text-xs text-slate-400" data-testid="admin-production-gate-compare-empty">Compare verisi yok. Rerun sonrası delta burada oluşur.</p>}
@@ -692,6 +790,8 @@ export const AdminExecutionReadinessPage = () => {
                   {item.category === "checks" ? "🧪" : item.category === "overrides" ? "🛡️" : item.category === "mode" ? "🔁" : "🚀"} {item.title}
                 </p>
                 <p data-testid={`admin-production-gate-timeline-item-category-${index}`}>category: {item.category}</p>
+                <p data-testid={`admin-production-gate-timeline-item-audit-id-${index}`}>audit_id: {item.audit_id || "-"}</p>
+                <p data-testid={`admin-production-gate-timeline-item-request-id-${index}`}>request_id: {item.request_id || "-"}</p>
                 <p data-testid={`admin-production-gate-timeline-item-timestamp-${index}`}>timestamp: {item.timestamp}</p>
               </div>
             ))}

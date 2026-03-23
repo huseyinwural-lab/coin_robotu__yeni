@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Execution Decision Gate Backend Regression Check
-Base: https://deploy-blocker-6.preview.emergentagent.com/api
+Base: https://gate-control-v2.preview.emergentagent.com/api
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test Requirements:
@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com/api"
+BASE_URL = "https://gate-control-v2.preview.emergentagent.com/api"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 
