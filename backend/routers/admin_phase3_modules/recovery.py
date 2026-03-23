@@ -610,6 +610,7 @@ def incident_snapshot_playbook_apply(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    ensure_super_admin(current_admin)
     if not payload.confirm:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="confirm_required")
 
@@ -742,6 +743,7 @@ def incident_snapshot_playbook_execute(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    ensure_super_admin(current_admin)
     if not payload.confirm:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="confirm_required")
     reason = ensure_reason(payload.reason, min_length=3)

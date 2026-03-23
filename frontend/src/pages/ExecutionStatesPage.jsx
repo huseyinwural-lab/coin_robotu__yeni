@@ -503,6 +503,10 @@ export const ExecutionStatesPage = () => {
   };
 
   const applyDiffPlaybook = async () => {
+    if (!isSuperAdmin) {
+      toast.error("Super admin required");
+      return;
+    }
     if (!playbookPreflightActionAllowed) {
       toast.error(playbookPreflightBlockReason || "Preflight check blocked");
       return;
@@ -548,7 +552,7 @@ export const ExecutionStatesPage = () => {
       return;
     }
     if (!isSuperAdmin) {
-      toast.error("Playbook approve sadece super_admin için açık");
+      toast.error("Super admin required");
       return;
     }
     if (!playbookRunId) {
@@ -579,6 +583,10 @@ export const ExecutionStatesPage = () => {
   };
 
   const executeDiffPlaybook = async () => {
+    if (!isSuperAdmin) {
+      toast.error("Super admin required");
+      return;
+    }
     if (!playbookPreflightActionAllowed) {
       toast.error(playbookPreflightBlockReason || "Preflight check blocked");
       return;
@@ -1368,8 +1376,8 @@ export const ExecutionStatesPage = () => {
                 <Button
                   size="sm"
                   onClick={() => setPlaybookApplyDialogOpen(true)}
-                  disabled={playbookApplyLoading || !playbookPreview?.preview_token || !playbookConfirmChecked || playbookReason.trim().length < 3 || !playbookPreflightActionAllowed}
-                  title={!playbookPreview?.preview_token ? "Önce preview alınmalı" : !playbookConfirmChecked ? "Confirm zorunlu" : playbookReason.trim().length < 3 ? "Reason en az 3 karakter" : ""}
+                  disabled={playbookApplyLoading || !isSuperAdmin || !playbookPreview?.preview_token || !playbookConfirmChecked || playbookReason.trim().length < 3 || !playbookPreflightActionAllowed}
+                  title={!isSuperAdmin ? "Super admin required" : !playbookPreview?.preview_token ? "Önce preview alınmalı" : !playbookConfirmChecked ? "Confirm zorunlu" : playbookReason.trim().length < 3 ? "Reason en az 3 karakter" : ""}
                   data-testid="execution-control-diff-playbook-apply-button"
                 >
                   Plan Apply (opsiyonel)
@@ -1379,7 +1387,7 @@ export const ExecutionStatesPage = () => {
                   variant="outline"
                   onClick={approveDiffPlaybook}
                   disabled={playbookApproveLoading || !isSuperAdmin || !playbookRunId || !playbookCanApprove || playbookReason.trim().length < 3 || !playbookPreflightActionAllowed}
-                  title={!isSuperAdmin ? "Sadece super_admin approve edebilir" : !playbookCanApprove ? "Approve için preview/planned state gerekli" : ""}
+                  title={!isSuperAdmin ? "Super admin required" : !playbookCanApprove ? "Approve için preview/planned state gerekli" : ""}
                   data-testid="execution-control-diff-playbook-approve-button"
                 >
                   Approve
@@ -1387,8 +1395,8 @@ export const ExecutionStatesPage = () => {
                 <Button
                   size="sm"
                   onClick={() => setPlaybookExecuteDialogOpen(true)}
-                  disabled={playbookExecuteLoading || !playbookRunId || playbookExecutionState !== "approved" || playbookReason.trim().length < 3 || !playbookPreflightActionAllowed}
-                  title={playbookExecutionState !== "approved" ? "Execute için playbook approved olmalı" : ""}
+                  disabled={playbookExecuteLoading || !isSuperAdmin || !playbookRunId || playbookExecutionState !== "approved" || playbookReason.trim().length < 3 || !playbookPreflightActionAllowed}
+                  title={!isSuperAdmin ? "Super admin required" : playbookExecutionState !== "approved" ? "Execute için playbook approved olmalı" : ""}
                   data-testid="execution-control-diff-playbook-execute-button"
                 >
                   Execute
@@ -1514,6 +1522,8 @@ export const ExecutionStatesPage = () => {
                   await applyDiffPlaybook();
                   setPlaybookApplyDialogOpen(false);
                 }}
+                disabled={!isSuperAdmin}
+                title={!isSuperAdmin ? "Super admin required" : ""}
                 data-testid="execution-control-diff-playbook-apply-dialog-confirm-button"
               >
                 Onayla
@@ -1537,6 +1547,8 @@ export const ExecutionStatesPage = () => {
                   await executeDiffPlaybook();
                   setPlaybookExecuteDialogOpen(false);
                 }}
+                disabled={!isSuperAdmin}
+                title={!isSuperAdmin ? "Super admin required" : ""}
                 data-testid="execution-control-diff-playbook-execute-dialog-confirm-button"
               >
                 Execute

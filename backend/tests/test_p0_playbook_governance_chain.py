@@ -158,7 +158,7 @@ class TestPlaybookExecutionChain:
         assert execute_response.status_code == 200
         execute_data = execute_response.json()
         assert execute_data.get("execution_state") == "executed"
-        assert execute_data.get("rollback_state") == "ready"
+        assert execute_data.get("rollback_state") == "rollback_available"
 
     def test_apply_requires_confirm(self, super_admin_token):
         """Apply without confirm should return 422"""
@@ -213,7 +213,7 @@ class TestRoleGuard:
             },
         )
         assert response.status_code == 403
-        assert "super_admin" in response.text.lower()
+        assert "super admin required" in response.text.lower()
 
     def test_admin_cannot_reject_signals(self, admin_token):
         """Admin (non-super) should get 403 on signals/reject"""
@@ -224,6 +224,97 @@ class TestRoleGuard:
         )
         assert response.status_code == 403
         assert "super_admin" in response.text.lower()
+
+    def test_admin_cannot_apply_playbook(self, super_admin_token, admin_token):
+        """Admin (non-super) should get 403 on playbook/apply"""
+        preview_response = requests.post(
+            f"{BASE_URL}/api/admin-phase3/incident-snapshots/playbook/preview",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+            json={
+                "recommended_actions": [{"action": "rbac_apply_test", "severity": "WARNING", "reason": "rbac"}],
+                "anomaly_notes": ["rbac"],
+                "scope": {"chain_id": "rbac_apply_chain"},
+            },
+        )
+        assert preview_response.status_code == 200
+        preview_token = preview_response.json().get("preview_token")
+
+        response = requests.post(
+            f"{BASE_URL}/api/admin-phase3/incident-snapshots/playbook/apply",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "preview_token": preview_token,
+                "confirm": True,
+                "reason": "admin apply denemesi",
+            },
+        )
+        assert response.status_code == 403
+        assert "super admin required" in response.text.lower()
+
+    def test_admin_cannot_execute_playbook(self, super_admin_token, admin_token):
+        """Admin (non-super) should get 403 on playbook/execute even after approve"""
+        preview_response = requests.post(
+            f"{BASE_URL}/api/admin-phase3/incident-snapshots/playbook/preview",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+            json={
+                "recommended_actions": [{"action": "rbac_execute_test", "severity": "WARNING", "reason": "rbac"}],
+                "anomaly_notes": ["rbac"],
+                "scope": {"chain_id": "rbac_execute_chain"},
+            },
+        )
+        assert preview_response.status_code == 200
+        run_id = preview_response.json().get("playbook_run_id")
+
+        approve_response = requests.post(
+            f"{BASE_URL}/api/admin-phase3/playbook/approve",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+            json={"playbook_run_id": run_id, "confirm": True, "reason": "rbac approve"},
+        )
+        assert approve_response.status_code == 200
+
+        execute_response = requests.post(
+            f"{BASE_URL}/api/admin-phase3/playbook/execute",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"playbook_run_id": run_id, "confirm": True, "reason": "admin execute denemesi"},
+        )
+        assert execute_response.status_code == 403
+        assert "super admin required" in execute_response.text.lower()
+
+    def test_super_admin_can_apply_and_execute_playbook(self, super_admin_token):
+        """Super admin should still be able to apply and execute"""
+        preview_response = requests.post(
+            f"{BASE_URL}/api/admin-phase3/incident-snapshots/playbook/preview",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+            json={
+                "recommended_actions": [{"action": "rbac_super_ok", "severity": "INFO", "reason": "rbac"}],
+                "anomaly_notes": ["rbac super"],
+                "scope": {"chain_id": "rbac_super_chain"},
+            },
+        )
+        assert preview_response.status_code == 200
+        preview_token = preview_response.json().get("preview_token")
+        run_id = preview_response.json().get("playbook_run_id")
+
+        apply_response = requests.post(
+            f"{BASE_URL}/api/admin-phase3/incident-snapshots/playbook/apply",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+            json={"preview_token": preview_token, "confirm": True, "reason": "super apply"},
+        )
+        assert apply_response.status_code == 200
+
+        approve_response = requests.post(
+            f"{BASE_URL}/api/admin-phase3/playbook/approve",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+            json={"playbook_run_id": run_id, "confirm": True, "reason": "super approve"},
+        )
+        assert approve_response.status_code == 200
+
+        execute_response = requests.post(
+            f"{BASE_URL}/api/admin-phase3/playbook/execute",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+            json={"playbook_run_id": run_id, "confirm": True, "reason": "super execute"},
+        )
+        assert execute_response.status_code == 200
 
 
 class TestRejectReasonEnforcement:

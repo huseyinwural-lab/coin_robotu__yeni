@@ -20,7 +20,7 @@ def role_value(user: User) -> str:
 
 def ensure_super_admin(user: User) -> None:
     if role_value(user) != "super_admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_required")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin required")
 
 
 def ensure_reason(reason: str, *, field_name: str = "reason", min_length: int = 3) -> str:
