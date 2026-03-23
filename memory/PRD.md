@@ -1,3 +1,57 @@
+## 2026-03-23 — P0 Execution Failure Webhook Alert Sistemi ✅
+
+### Uygulanan kapsam (kullanıcı kararıyla)
+- **P0:** Execution failure webhook alert sistemi
+- Kanal: **Slack (ilk adapter)**
+- Mimari: Generic webhook payload contract + Slack adapter
+- **Diff özelliği P1’e alındı**
+
+### Kapatılan kritik maddeler
+- Trigger rules aktif:
+  - `execution_failed`
+  - `execution_dead_letter`
+  - `execution_retry_max_reached`
+  - `execution_timeout_spike`
+  - `execution_duplicate_collision` (opsiyonel kural)
+- Noise control aktif:
+  - dedup window: 60s
+  - rate limit: 5/dk
+  - aggregation: timeout spike (5+ in 30s), failure aggregation eşiği
+- Payload contract aktif (zorunlu linklerle):
+  - `event_type, severity, correlation_id, execution_event_id, symbol, state, failure_reason, retry_count, max_retry, timestamp, dashboard_url, trace_url`
+- Delivery güvenilirliği:
+  - retry + exponential backoff
+  - failure log + alert-delivery failed event kaydı
+
+### Backend eklenen/yenilenen parçalar
+- Yeni servis: `/app/backend/services/execution_alert_service.py`
+- Güncellenenler:
+  - `/app/backend/services/alert_channel_service.py` (Slack webhook readiness, mock mode, routing)
+  - `/app/backend/services/failed_event_service.py` (dead-letter/retry-max tetikleme)
+  - `/app/backend/routers/admin_phase3.py`
+    - `GET /api/admin-phase3/execution-alerts`
+    - `POST /api/admin-phase3/execution-alerts/{id}/seen`
+    - `POST /api/admin-phase3/execution-alerts/{id}/ack`
+  - `/app/backend/routers/alerts.py` test-delivery Slack desteği
+
+### Frontend
+- `/admin/execution/analytics` içine in-app alert panel eklendi:
+  - son 50 alert
+  - status filtre (`all/open/ack/resolved`)
+  - `Seen` ve `Ack` aksiyonları
+
+### Test ve doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_86.json`
+  - Backend: **100% (16/16 PASS)**
+  - Frontend: **100% PASS**
+- Regresyonlar PASS:
+  - execution analytics endpointleri
+  - incident export temel akışı
+
+### Not
+- Slack delivery bu sprintte **MOCKED** (`SENT_MOCKED`).
+- Binance Futures execution **MOCKED**.
+
 ## 2026-03-22 — Execution Control P1 Tutarlılık Düzeltmeleri (Kapanış Doğrulandı) ✅
 
 ### Kapatılan kritik açıklar
