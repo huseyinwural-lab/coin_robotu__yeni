@@ -1,3 +1,75 @@
+## 2026-03-23 — UI Finalizasyon + Actionability Sprint ✅
+
+### Sprint amacı
+- Diff + anomaly + öneri akışını operasyon cockpit davranışına taşımak.
+
+### Uygulanan görevler
+
+#### 🔴 TASK 1 — Compare UI Netleştirme
+- `ExecutionStatesPage` Incident Snapshot alanı 2 bloklu yapıya geçti:
+  - `Primary Snapshot`
+  - `Compare Snapshot`
+- Compare OFF → ikinci blok gizleniyor.
+- Compare ON → ikinci blok zorunlu; eksikte uyarı + export disable.
+
+#### 🔴 TASK 2 — Recommended Actions Clickable
+- Recommended action mapping uygulandı:
+  - `retry policy tune` → `/admin/execution/failures?correlation_id=...`
+  - `guardrail hardening` → `/admin/execution/idempotency?correlation_id=...`
+  - `runbook review` → `/admin/execution/trace?correlation_id=...`
+  - `keep current policy` → no action
+- Hedef sayfalar query param ile otomatik filtreyi alacak şekilde güncellendi:
+  - `FailedEventsPage`
+  - `ExecutionIdempotencyPage`
+  - `ExecutionTracePage`
+
+#### 🔴 TASK 3 — Export Preview Endpoint
+- Yeni endpoint: `GET /api/admin-phase3/incident-snapshots/preview`
+- Scope/filter değiştikçe preview güncelleniyor.
+- Compare ON olduğunda primary + compare preview birlikte gösteriliyor.
+
+#### 🟡 TASK 4 — Anomaly Before/After
+- Diff payload’a `before_after` bloğu eklendi:
+  - `events`
+  - `failed_events`
+  - `dead_letter`
+  - `manual_actions`
+- UI’da absolute + delta formatına geçildi (örn. `4 → 7 (+75%)`).
+
+#### 🟡 TASK 5 — Severity UI Güçlendirme
+- Severity renklendirme + ikonlar:
+  - CRITICAL → kırmızı + `🔴`
+  - WARNING → amber + `⚠️`
+  - INFO → yeşil ton + `✅`
+
+#### 🟡 TASK 6 — Diff Panel Layout Temizliği
+- Diff panel 3 bölüm halinde net ayrıldı:
+  1. Summary
+  2. Anomalies
+  3. Recommended Actions
+
+#### 🟢 TASK 7 — Küçük UX Fixler
+- `correlation_id` label/placeholder iyileştirildi (`Correlation ID`).
+- Compare/export alanlarında spacing/alignment normalize edildi.
+
+### Değişen dosyalar
+- `frontend/src/pages/ExecutionStatesPage.jsx`
+- `frontend/src/pages/FailedEventsPage.jsx`
+- `frontend/src/pages/ExecutionIdempotencyPage.jsx`
+- `frontend/src/pages/ExecutionTracePage.jsx`
+- `backend/routers/admin_phase3.py`
+- `backend/routers/admin_phase3_modules/export.py`
+
+### Test sonucu
+- `testing_agent` raporu: `/app/test_reports/iteration_94.json`
+  - Backend: **100% (17/17 PASS)**
+  - Frontend: **100% PASS**
+  - Backward compatibility (diff/export) PASS
+
+### Notlar
+- Testing sırasında `export.py` içinde model alan uyumsuzluğu düzeltildi (test ajanı patch).
+- Slack/Binance entegrasyonları **MOCKED** kalmaya devam ediyor.
+
 ## 2026-03-23 — E Turu Tam Paket (A+B+C+D) ✅
 
 ### Kapsam (kullanıcı kilidi)
