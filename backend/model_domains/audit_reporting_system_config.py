@@ -228,11 +228,38 @@ class SystemAlert(Base):
     state_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     delivery_status: Mapped[dict] = mapped_column(JSON, default=dict)
+    delivery_provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    last_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="open")
     occurrences: Mapped[int] = mapped_column(Integer, default=1)
     last_triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExecutionAlertDeliveryAttempt(Base):
+    __tablename__ = "execution_alert_delivery_attempts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    alert_id: Mapped[str] = mapped_column(String, ForeignKey("system_alerts.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(40), default="slack")
+    destination_masked: Mapped[str] = mapped_column(String(255), default="")
+    attempt_no: Mapped[int] = mapped_column(Integer, default=1)
+    request_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    request_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    response_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_body_truncated: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="PENDING")
+    final_status: Mapped[str] = mapped_column(String(30), default="PENDING")
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 class WeeklyReportArchive(Base):
     __tablename__ = "weekly_report_archives"

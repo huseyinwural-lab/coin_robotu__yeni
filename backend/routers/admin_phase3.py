@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy import Text, cast, func, or_
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from models import (
     DecisionTraceCold,
     DecisionTraceHot,
     ExecutionEvent,
+    ExecutionAlertDeliveryAttempt,
     ExecutionIntent,
     ExecutionIntentEvent,
     ExecutionManualAction,
@@ -33,6 +35,12 @@ from models import (
     SystemAlert,
     User,
 )
+from services.alert_channel_service import (
+    deliver_execution_alert,
+    execution_alert_provider_status,
+    process_due_execution_alert_retries,
+)
+from services.system_alert_service import create_system_alert
 from schemas import (
     BacktestResultCardCreate,
     BacktestResultCardResponse,
@@ -1577,6 +1585,8 @@ def list_execution_alerts(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
     status_filter: str = Query(default="all", pattern="^(all|open|ack|resolved)$"),
+    delivery_filter: str = Query(default="all"),
+    include_test: bool = Query(default=True),
     severity: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=50),
 ):
@@ -1585,7 +1595,259 @@ def list_execution_alerts(
         query = query.filter(SystemAlert.status == status_filter)
     if severity:
         query = query.filter(SystemAlert.severity == severity.upper())
-    return query.order_by(SystemAlert.last_triggered_at.desc()).limit(limit).all()
+    rows = query.order_by(SystemAlert.last_triggered_at.desc()).limit(limit * 3).all()
+    filtered = []
+    for row in rows:
+        details = row.details or {}
+        if not include_test and bool(details.get("is_test")):
+            continue
+        delivery_status = str((row.delivery_status or {}).get("status") or "PENDING").upper()
+        if delivery_filter != "all" and delivery_status != delivery_filter.upper():
+            continue
+        filtered.append(row)
+        if len(filtered) >= limit:
+            break
+    return filtered
+
+
+class ExecutionAlertResendRequest(BaseModel):
+    reason: str = Field(..., min_length=3)
+
+
+class ExecutionAlertTestRequest(BaseModel):
+    severity: str = Field(default="INFO")
+    event_type: str = Field(default="execution_test_alert")
+    symbol: str = Field(default="BTCUSDT")
+    state: str = Field(default="failed")
+    failure_reason: str = Field(default="manual_test_alert")
+
+
+@router.get("/execution-alerts/delivery-attempts")
+def list_execution_alert_delivery_attempts(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    status_filter: str = Query(default="all"),
+    alert_id: str | None = Query(default=None),
+    provider: str | None = Query(default=None),
+    is_test: bool | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+):
+    query = db.query(ExecutionAlertDeliveryAttempt).order_by(ExecutionAlertDeliveryAttempt.request_timestamp.desc())
+    if status_filter != "all":
+        query = query.filter(ExecutionAlertDeliveryAttempt.status == status_filter.upper())
+    if alert_id:
+        query = query.filter(ExecutionAlertDeliveryAttempt.alert_id == alert_id)
+    if provider:
+        query = query.filter(ExecutionAlertDeliveryAttempt.provider == provider)
+    if is_test is not None:
+        query = query.filter(ExecutionAlertDeliveryAttempt.is_test == is_test)
+
+    rows = query.limit(limit).all()
+    return {
+        "status": "success",
+        "count": len(rows),
+        "items": [
+            {
+                "id": row.id,
+                "alert_id": row.alert_id,
+                "provider": row.provider,
+                "destination_masked": row.destination_masked,
+                "attempt_no": row.attempt_no,
+                "request_timestamp": row.request_timestamp.isoformat() if row.request_timestamp else None,
+                "response_code": row.response_code,
+                "response_body_truncated": row.response_body_truncated,
+                "status": row.status,
+                "final_status": row.final_status,
+                "next_retry_at": row.next_retry_at.isoformat() if row.next_retry_at else None,
+                "error_code": row.error_code,
+                "error_message": row.error_message,
+                "is_test": bool(row.is_test),
+            }
+            for row in rows
+        ],
+    }
+
+
+@router.get("/execution-alerts/delivery-summary")
+def execution_alert_delivery_summary(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    delivery_rows = (
+        db.query(SystemAlert)
+        .filter(SystemAlert.alert_type.ilike("execution_%"))
+        .order_by(SystemAlert.last_triggered_at.desc())
+        .limit(500)
+        .all()
+    )
+
+    status_counts: dict[str, int] = {}
+    for row in delivery_rows:
+        status_value = str((row.delivery_status or {}).get("status") or "PENDING").upper()
+        status_counts[status_value] = status_counts.get(status_value, 0) + 1
+
+    failed_attempts = (
+        db.query(ExecutionAlertDeliveryAttempt)
+        .filter(ExecutionAlertDeliveryAttempt.status.in_(["FAILED", "DEAD"]))
+        .order_by(ExecutionAlertDeliveryAttempt.request_timestamp.desc())
+        .limit(20)
+        .all()
+    )
+
+    return {
+        "status": "success",
+        "provider": execution_alert_provider_status(),
+        "status_counts": status_counts,
+        "failed_attempts": [
+            {
+                "attempt_id": row.id,
+                "alert_id": row.alert_id,
+                "status": row.status,
+                "provider": row.provider,
+                "destination_masked": row.destination_masked,
+                "response_code": row.response_code,
+                "error_code": row.error_code,
+                "error_message": row.error_message,
+                "request_timestamp": row.request_timestamp.isoformat() if row.request_timestamp else None,
+            }
+            for row in failed_attempts
+        ],
+    }
+
+
+@router.post("/execution-alerts/delivery/retry-due")
+def retry_due_execution_alert_deliveries(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    result = process_due_execution_alert_retries(db, limit=limit)
+    create_audit_log(
+        db,
+        action="execution_alert_retry_due_run",
+        entity_type="execution_alert_delivery",
+        entity_id="retry_due_batch",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "limit": limit,
+            "processed_count": result.get("processed_count"),
+            "items": result.get("items"),
+        },
+    )
+    db.commit()
+    return {
+        "status": "success",
+        **result,
+    }
+
+
+@router.post("/execution-alerts/{alert_id}/resend", response_model=SystemAlertResponse)
+def resend_execution_alert(
+    alert_id: str,
+    payload: ExecutionAlertResendRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = db.query(SystemAlert).filter(SystemAlert.id == alert_id, SystemAlert.alert_type.ilike("execution_%")).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert_not_found")
+
+    reason = str(payload.reason or "").strip()
+    if len(reason) < 3:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="reason_min_3")
+
+    current_status = str((row.delivery_status or {}).get("status") or "").upper()
+    if current_status not in {"FAILED", "DEAD", "RETRY_SCHEDULED", "SENT_MOCKED", "CHANNEL_DISABLED"}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="resend_not_allowed_for_current_status")
+
+    delivery_result = deliver_execution_alert(db, alert=row, is_manual_resend=True)
+    create_audit_log(
+        db,
+        action="execution_alert_resend",
+        entity_type="system_alert",
+        entity_id=row.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "reason": reason,
+            "delivery_result": delivery_result,
+            "delivery_status_before": current_status,
+            "delivery_status_after": delivery_result.get("status"),
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.post("/execution-alerts/test-delivery", response_model=SystemAlertResponse)
+def send_execution_alert_test(
+    payload: ExecutionAlertTestRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    timestamp = datetime.now(timezone.utc).isoformat()
+    correlation_id = f"test_corr_{uuid.uuid4().hex[:8]}"
+    execution_event_id = f"test_evt_{uuid.uuid4().hex[:8]}"
+    webhook_payload = {
+        "version": "1",
+        "event_type": payload.event_type,
+        "severity": payload.severity.lower(),
+        "correlation_id": correlation_id,
+        "execution_event_id": execution_event_id,
+        "symbol": payload.symbol,
+        "state": payload.state,
+        "failure_reason": payload.failure_reason,
+        "retry_count": 0,
+        "max_retry": int(os.environ.get("EXECUTION_ALERT_MAX_RETRY", "5")),
+        "timestamp": timestamp,
+        "dashboard_url": f"/admin/execution/alerts?correlation_id={correlation_id}",
+        "trace_url": f"/admin/execution/trace?correlation_id={correlation_id}",
+        "is_test": True,
+    }
+
+    alert = create_system_alert(
+        db,
+        alert_type=payload.event_type,
+        severity=payload.severity.upper(),
+        message="Execution test alert",
+        details={
+            "summary": "Execution test alert",
+            "event_type": payload.event_type,
+            "correlation_id": correlation_id,
+            "execution_event_id": execution_event_id,
+            "symbol": payload.symbol,
+            "state": payload.state,
+            "failure_reason": payload.failure_reason,
+            "retry_count": 0,
+            "max_retry": int(os.environ.get("EXECUTION_ALERT_MAX_RETRY", "5")),
+            "webhook_payload": webhook_payload,
+            "is_test": True,
+            "seen": False,
+            "triggered_at": timestamp,
+        },
+        entity_key=correlation_id,
+        root_cause_code="TEST_ALERT",
+        state_key=payload.state,
+    )
+    create_audit_log(
+        db,
+        action="execution_alert_test_sent",
+        entity_type="system_alert",
+        entity_id=alert.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "is_test": True,
+            "event_type": payload.event_type,
+            "severity": payload.severity.upper(),
+            "delivery_status": alert.delivery_status,
+        },
+    )
+    db.commit()
+    db.refresh(alert)
+    return alert
 
 
 @router.post("/execution-alerts/{alert_id}/ack", response_model=SystemAlertResponse)

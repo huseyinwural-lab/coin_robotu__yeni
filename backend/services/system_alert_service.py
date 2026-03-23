@@ -6,7 +6,7 @@ import hashlib
 from sqlalchemy.orm import Session
 
 from models import SystemAlert
-from services.alert_channel_service import DEDUP_WINDOW_SECONDS, dispatch_alert
+from services.alert_channel_service import DEDUP_WINDOW_SECONDS, deliver_execution_alert, dispatch_alert
 
 
 def _extract_entity_key(details: dict) -> str | None:
@@ -93,17 +93,21 @@ def create_system_alert(
     db.commit()
     db.refresh(alert)
 
-    delivery_status = dispatch_alert(
-        {
-            "alert_type": alert.alert_type,
-            "severity": alert.severity,
-            "message": alert.message,
-            "details": alert.details,
-            "entity_key": alert.entity_key,
-            "root_cause_code": alert.root_cause_code,
-        },
-        db=db,
-    )
+    if str(alert.alert_type or "").lower().startswith("execution_"):
+        delivery_status = deliver_execution_alert(db, alert=alert)
+    else:
+        delivery_status = dispatch_alert(
+            {
+                "alert_id": alert.id,
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
+                "message": alert.message,
+                "details": alert.details,
+                "entity_key": alert.entity_key,
+                "root_cause_code": alert.root_cause_code,
+            },
+            db=db,
+        )
     alert.delivery_status = delivery_status
     db.commit()
     db.refresh(alert)

@@ -53,6 +53,7 @@ def _build_webhook_payload(
 ) -> dict:
     timestamp = datetime.now(timezone.utc).isoformat()
     return {
+        "version": "1",
         "event_type": event_type,
         "severity": severity.lower(),
         "correlation_id": correlation_id,

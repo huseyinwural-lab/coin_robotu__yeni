@@ -87,6 +87,7 @@ const adminOnlyItems = [
       { to: "/admin/execution/failures", label: "Execution Failures", icon: ShieldAlert, testId: "nav-admin-execution-failures-control-link" },
       { to: "/admin/execution/idempotency", label: "Idempotency Control", icon: KeyRound, testId: "nav-admin-execution-idempotency-control-link" },
       { to: "/admin/execution/trace", label: "Execution Trace", icon: FileText, testId: "nav-admin-execution-trace-control-link" },
+      { to: "/admin/execution/alerts", label: "Execution Alerts Delivery", icon: Activity, testId: "nav-admin-execution-alerts-delivery-link" },
       { to: "/admin/execution/rebuild", label: "Execution Rebuild", icon: Settings2, testId: "nav-admin-execution-rebuild-control-link" },
     ],
   },

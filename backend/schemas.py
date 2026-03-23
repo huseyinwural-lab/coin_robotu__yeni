@@ -543,6 +543,12 @@ class SystemAlertResponse(BaseModel):
     root_cause_code: str | None = None
     state_key: str | None = None
     delivery_status: dict
+    delivery_provider: str | None = None
+    last_attempt_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    attempt_count: int | None = None
+    last_error_code: str | None = None
+    last_error_message: str | None = None
 
 
 class WeeklyReportArchiveResponse(BaseModel):

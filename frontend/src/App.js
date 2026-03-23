@@ -39,6 +39,7 @@ import { ExecutionAnalyticsPage } from "@/pages/ExecutionAnalyticsPage";
 import { ExecutionStatesPage } from "@/pages/ExecutionStatesPage";
 import { ExecutionIdempotencyPage } from "@/pages/ExecutionIdempotencyPage";
 import { ExecutionTracePage } from "@/pages/ExecutionTracePage";
+import { AdminExecutionAlertsPage } from "@/pages/AdminExecutionAlertsPage";
 import { ExposureGroupsPage } from "@/pages/ExposureGroupsPage";
 import { FailedEventsPage } from "@/pages/FailedEventsPage";
 import { HardeningChecklistPage } from "@/pages/HardeningChecklistPage";
@@ -197,6 +198,7 @@ function App() {
             <Route path="execution/failures" element={<FailedEventsPage />} />
             <Route path="execution/idempotency" element={<ExecutionIdempotencyPage />} />
             <Route path="execution/trace" element={<ExecutionTracePage />} />
+            <Route path="execution/alerts" element={<AdminExecutionAlertsPage />} />
             <Route path="execution/rebuild" element={<StateRebuildLogsPage />} />
             <Route path="backtest-cards" element={<BacktestCardsPage />} />
             <Route path="monitoring" element={<MonitoringPage />} />
