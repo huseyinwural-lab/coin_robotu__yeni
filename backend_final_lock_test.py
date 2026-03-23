@@ -13,6 +13,7 @@ import requests
 import json
 import time
 import uuid
+import os
 from datetime import datetime, timezone
 
 # Base URL from frontend/.env
@@ -20,9 +21,9 @@ BASE_URL = "https://execution-safety-hub.preview.emergentagent.com"
 
 # Test credentials
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
-SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
+SUPER_ADMIN_PASSWORD = os.environ.get("BACKEND_TEST_SUPER_ADMIN_PASSWORD", "")
 ADMIN_EMAIL = "canary.requester@platform.local"
-ADMIN_PASSWORD = "CanaryRequester123!"
+ADMIN_PASSWORD = os.environ.get("BACKEND_TEST_ADMIN_PASSWORD", "")
 
 class BackendFinalLockTest:
     def __init__(self):

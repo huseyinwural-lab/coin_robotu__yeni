@@ -279,6 +279,14 @@ def get_top_signals(db: Session, *, window: str, top_n: int):
         .all()
     )
 
+    def _decision_path_for_row(row: StrategyObservabilityEvent):
+        metadata = row.event_metadata or {}
+        if isinstance(metadata, dict):
+            value = metadata.get("decision_path")
+            if value is not None:
+                return value
+        return None
+
     return {
         "window": normalized,
         "top_n": top_n,
@@ -296,7 +304,7 @@ def get_top_signals(db: Session, *, window: str, top_n: int):
                 "trend_strength": row.trend_strength,
                 "relative_volume": row.relative_volume,
                 "rejection_reason": row.rejection_reason,
-                "decision_path": row.decision_path,
+                "decision_path": _decision_path_for_row(row),
                 "timestamp": row.created_at.isoformat() if row.created_at else None,
             }
             for row in rows

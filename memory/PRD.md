@@ -1,3 +1,29 @@
+## 2026-03-23 — Hotfix: Strategy Observability 500 + Workflow Gate Fix ✅
+
+### 1) Strategy observability verisi alınamadı (500) — ÇÖZÜLDÜ
+- Kök neden:
+  - `services/strategy_observability_service.py` içinde `row.decision_path` erişimi vardı.
+  - `StrategyObservabilityEvent` modelinde bu alan yok.
+- Düzeltme:
+  - `decision_path` artık `event_metadata.decision_path` içinden güvenli fallback ile okunuyor.
+- Doğrulama:
+  - `GET /api/admin/strategy/top-signals` artık **200** dönüyor.
+
+### 2) Workflow testleri/gate fail — ÇÖZÜLDÜ
+- Kök neden:
+  - Secret leak guard, root test dosyalarında hardcoded password yakalıyordu:
+    - `backend_final_lock_test.py`
+    - `backend_final_lock_test_corrected.py`
+- Düzeltme:
+  - Şifreler hardcoded yerine env’den okunacak şekilde taşındı:
+    - `BACKEND_TEST_SUPER_ADMIN_PASSWORD`
+    - `BACKEND_TEST_ADMIN_PASSWORD`
+- Doğrulama:
+  - `scripts/ci_secret_leak_guard.sh` sonucu **EXIT:0**
+
+### 3) dump.rdb
+- Kullanıcı talimatına göre bu adımda **dokunulmadı**.
+
 ## 2026-03-23 — FINAL SPRINT %100 COMPLETE (P0 + P1) ✅
 
 ### Uygulanan kapsam
