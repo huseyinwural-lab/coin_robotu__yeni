@@ -1,0 +1,149 @@
+{
+  "test_time": "2026-03-23T20:51:31.484220",
+  "base_url": "https://risk-orchestrator-p0.preview.emergentagent.com/api",
+  "credentials": "canary.admin@platform.local / CanaryAdmin123!",
+  "tests_passed": 7,
+  "tests_failed": 0,
+  "tests": {
+    "approve_execute_separation": {
+      "status": "PASS",
+      "details": {
+        "intent_id": "0ccea540-6364-4b71-8f02-0a8014b3d0e3",
+        "approve_status": 423,
+        "execute_status": 400,
+        "approve_response": "{\"detail\":\"EXECUTION_BLOCKED_BY_READINESS\"}",
+        "execute_response": "{\"detail\":\"intent_not_executable\"}",
+        "endpoints_accessible": true
+      }
+    },
+    "high_risk_execute_confirmation": {
+      "status": "PASS",
+      "details": {
+        "intent_id": "0ccea540-6364-4b71-8f02-0a8014b3d0e3",
+        "status_code": 400,
+        "validation_working": true,
+        "response": "{\"detail\":\"intent_not_executable\"}"
+      }
+    },
+    "detail_ack_stale_version_guards": {
+      "status": "PASS",
+      "details": {
+        "intent_id": "0ccea540-6364-4b71-8f02-0a8014b3d0e3",
+        "detail_accessible": true,
+        "detail_version": "b12731be041f23c8a06617c7bf65afc81561eb08b8438e9ce252de60c735003b",
+        "no_ack_status": 400,
+        "stale_version_status": 400,
+        "guards_working": true
+      }
+    },
+    "alerts_api": {
+      "status": "PASS",
+      "details": {
+        "alerts_count": 4,
+        "alert_id": "73b9bb6f-fc6f-4d5c-9c31-7345dda58f51",
+        "user_state_fields": true,
+        "list_status": 200,
+        "read_status": 200,
+        "ack_status": 200,
+        "sample_alert": {
+          "id": "73b9bb6f-fc6f-4d5c-9c31-7345dda58f51",
+          "alert_type": "execution_queue_high_risk_spike",
+          "severity": "CRITICAL",
+          "message": "Execution queue high-risk intent spike",
+          "details": {
+            "high_risk_count": 71,
+            "grouped_count": 14,
+            "user_states": {
+              "b6ddb78a-d837-483c-bf10-e4cca047cf0e": {
+                "read_at": "2026-03-23T20:44:25.470162+00:00",
+                "acked_at": "2026-03-23T20:44:25.470162+00:00",
+                "acked_by": "b6ddb78a-d837-483c-bf10-e4cca047cf0e"
+              }
+            }
+          },
+          "status": "acked",
+          "read_at": "2026-03-23T20:44:25.470162+00:00",
+          "acked_at": "2026-03-23T20:44:25.470162+00:00",
+          "acked_by": "b6ddb78a-d837-483c-bf10-e4cca047cf0e",
+          "entity_key": "execution_queue",
+          "deep_link": "/admin/execution-queue?intent_id=execution_queue",
+          "created_at": "2026-03-23T20:42:04.515409+00:00"
+        }
+      }
+    },
+    "config_api": {
+      "status": "PASS",
+      "details": {
+        "get_status": 200,
+        "patch_status": 200,
+        "has_required_fields": true,
+        "execution_decision_gate_enforced": true,
+        "thresholds": {
+          "queue_backlog": 100,
+          "high_risk_spike": 5,
+          "reject_spike": 10
+        },
+        "patch_accessible": true
+      }
+    },
+    "queue_control_role_guard": {
+      "status": "PASS",
+      "details": {
+        "state_accessible": true,
+        "has_control_fields": true,
+        "current_state": {
+          "paused": false,
+          "paused_by": "b6ddb78a-d837-483c-bf10-e4cca047cf0e",
+          "paused_reason": "smoke resume",
+          "paused_at": null,
+          "updated_at": "2026-03-23T20:44:22.204196+00:00"
+        },
+        "pause_status": 200,
+        "resume_status": 200,
+        "clear_status": 200,
+        "role_guard_working": true
+      }
+    },
+    "observability_contract": {
+      "status": "PASS",
+      "details": {
+        "observability_status": 200,
+        "rejection_summary_status": 200,
+        "has_queue_data": true,
+        "has_metrics_data": true,
+        "has_control_state": true,
+        "has_ratio_fields": true,
+        "has_rejection_metrics": true,
+        "metrics_keys": [
+          "approval_latency_seconds",
+          "operator_activity",
+          "override_usage",
+          "reject_ratio",
+          "override_ratio",
+          "stale_decision_attempt_count",
+          "unauthorized_action_attempt_count"
+        ],
+        "queue_data": {
+          "total": 222,
+          "queued": 0,
+          "rejected": 7,
+          "released": 14,
+          "by_status": {
+            "CANCELLED": 192,
+            "PREVIEWED": 3,
+            "RELEASED": 14,
+            "REJECTED": 7,
+            "APPROVED": 6
+          }
+        },
+        "control_state": {
+          "paused": false,
+          "paused_by": "b6ddb78a-d837-483c-bf10-e4cca047cf0e",
+          "paused_reason": "Backend validation test",
+          "paused_at": null,
+          "updated_at": "2026-03-23T20:51:33.359816+00:00"
+        }
+      }
+    }
+  }
+}
