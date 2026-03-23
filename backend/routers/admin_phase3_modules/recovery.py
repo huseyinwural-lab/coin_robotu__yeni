@@ -1,13 +1,16 @@
 from datetime import datetime, timezone
+import os
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
 
 from db import get_db
 from deps import require_admin
 from models import PlaybookExecutionRun, PlaybookRollbackMarker, User
+from services.execution_readiness_service import evaluate_execution_readiness
 from routers.admin_phase3_modules.common import (
     ensure_reason,
     ensure_super_admin,
@@ -86,6 +89,120 @@ def _upsert_rollback_marker(
         marker.rollback_payload = rollback_payload
         marker.updated_at = datetime.now(timezone.utc)
     return marker
+
+
+def _normalize_status(value: bool) -> str:
+    return "ready" if value else "blocked"
+
+
+@router.get("/incident-snapshots/playbook/preflight")
+def incident_snapshot_playbook_preflight(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    required_tables = [
+        "playbook_execution_runs",
+        "playbook_rollback_markers",
+        "signal_governance_decisions",
+    ]
+    required_migration = "20260323_0062"
+
+    db_ready = False
+    db_error = None
+    migration_version = None
+    migration_compatible = False
+
+    try:
+        db.execute(text("SELECT 1"))
+        db_ready = True
+    except Exception as exc:
+        db_error = str(exc)
+
+    try:
+        migration_version = db.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar()
+    except Exception as exc:
+        db_error = db_error or str(exc)
+
+    if migration_version:
+        migration_compatible = str(migration_version) >= required_migration
+
+    table_results: dict[str, bool] = {}
+    inspector = inspect(db.bind)
+    available_tables = set(inspector.get_table_names())
+    for table_name in required_tables:
+        table_results[table_name] = table_name in available_tables
+
+    execution_readiness = {}
+    try:
+        execution_readiness = evaluate_execution_readiness(db, user_id=current_admin.id)
+    except Exception as exc:
+        execution_readiness = {
+            "status": "DEGRADED",
+            "mode": "MOCKED",
+            "note": str(exc),
+        }
+
+    slack_mock_enabled = os.environ.get("ALERT_ALLOW_MOCK_SLACK", "true").strip().lower() in {"1", "true", "yes", "mock"}
+    execution_mode = str(execution_readiness.get("mode") or "MOCKED").upper()
+    binance_mocked = execution_mode != "LIVE"
+
+    checks = [
+        {
+            "key": "db_readiness",
+            "label": "DB readiness",
+            "status": _normalize_status(db_ready),
+            "detail": "Database bağlantısı aktif" if db_ready else (db_error or "Database erişilemedi"),
+        },
+        {
+            "key": "migration_compatibility",
+            "label": "Migration compatibility",
+            "status": _normalize_status(migration_compatible),
+            "detail": f"current={migration_version or 'unknown'} required>={required_migration}",
+        },
+        {
+            "key": "table_access",
+            "label": "Playbook/Governance tables",
+            "status": _normalize_status(all(table_results.values())),
+            "detail": ", ".join([f"{name}:{'ok' if exists else 'missing'}" for name, exists in table_results.items()]),
+        },
+        {
+            "key": "integration_readiness",
+            "label": "Integration readiness",
+            "status": "ready",
+            "detail": f"slack={'MOCKED' if slack_mock_enabled else 'LIVE'} | binance={'MOCKED' if binance_mocked else 'LIVE'}",
+        },
+        {
+            "key": "playbook_flow_gate",
+            "label": "Preview/Approve/Execute gate",
+            "status": _normalize_status(db_ready and migration_compatible and all(table_results.values())),
+            "detail": "Flow çalıştırılabilir" if (db_ready and migration_compatible and all(table_results.values())) else "Ön koşullar eksik",
+        },
+    ]
+
+    overall_ready = all(item["status"] == "ready" for item in checks if item["key"] != "integration_readiness")
+
+    return shape_response(
+        message="playbook_preflight_ready" if overall_ready else "playbook_preflight_blocked",
+        overall_state="ready" if overall_ready else "blocked",
+        checked_at=datetime.now(timezone.utc).isoformat(),
+        checks=checks,
+        migration={
+            "current": migration_version,
+            "required": required_migration,
+            "compatible": migration_compatible,
+        },
+        tables=table_results,
+        integration_modes={
+            "slack": "MOCKED" if slack_mock_enabled else "LIVE",
+            "binance": "MOCKED" if binance_mocked else "LIVE",
+            "execution_mode": execution_mode,
+            "execution_status": str(execution_readiness.get("status") or "unknown"),
+        },
+        role_gate={
+            "current_role": str(getattr(current_admin.role, "value", current_admin.role) or "admin"),
+            "approve_allowed": str(getattr(current_admin.role, "value", current_admin.role) or "") == "super_admin",
+        },
+    )
 
 
 @router.post("/incident-snapshots/playbook/preview")

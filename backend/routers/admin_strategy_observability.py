@@ -364,9 +364,11 @@ def _serialize_action_timeline_items(
     signal_strategy_map: dict[str, str],
 ) -> list[dict]:
     timeline: list[dict] = []
-    chain_anchor: dict[str, str] = {}
+    manual_by_chain: dict[str, list[dict]] = {}
 
-    for row in audit_rows:
+    ordered_audit_rows = sorted(audit_rows, key=lambda item: item.created_at or datetime.min.replace(tzinfo=timezone.utc))
+
+    for row in ordered_audit_rows:
         details = row.details or {}
         row_strategy_id = str(details.get("strategy_id") or "").strip() or None
         if not row_strategy_id:
@@ -380,7 +382,14 @@ def _serialize_action_timeline_items(
             continue
 
         chain_id = str(details.get("chain_id") or details.get("preview_token") or details.get("request_id") or row.entity_id or row.id)
-        chain_anchor[chain_id] = row.id
+        manual_by_chain.setdefault(chain_id, []).append(
+            {
+                "event_id": row.id,
+                "timestamp": row.created_at,
+            }
+        )
+
+        explicit_parent = str(details.get("parent_event_id") or details.get("parent_audit_id") or "").strip() or None
 
         timeline.append(
             {
@@ -393,7 +402,7 @@ def _serialize_action_timeline_items(
                 "reason": details.get("reason"),
                 "impact_payload": details.get("state_snapshot") or details.get("after_payload") or details,
                 "chain_id": chain_id,
-                "parent_event_id": None,
+                "parent_event_id": explicit_parent,
                 "chain_ref": chain_id,
             }
         )
@@ -412,6 +421,19 @@ def _serialize_action_timeline_items(
             continue
 
         chain_id = str(details.get("chain_id") or row.entity_key or row.state_key or row.root_cause_code or row.id)
+
+        manual_candidates = manual_by_chain.get(chain_id, [])
+        fallback_parent = None
+        if manual_candidates:
+            if row.created_at:
+                eligible = [item for item in manual_candidates if item.get("timestamp") and item["timestamp"] <= row.created_at]
+                selected = eligible[-1] if eligible else manual_candidates[-1]
+            else:
+                selected = manual_candidates[-1]
+            fallback_parent = str(selected.get("event_id") or "").strip() or None
+
+        explicit_parent = str(details.get("parent_event_id") or details.get("parent_audit_id") or "").strip() or None
+
         timeline.append(
             {
                 "event_id": row.id,
@@ -425,7 +447,7 @@ def _serialize_action_timeline_items(
                 "severity": row.severity,
                 "status": row.status,
                 "chain_id": chain_id,
-                "parent_event_id": chain_anchor.get(chain_id),
+                "parent_event_id": explicit_parent or fallback_parent,
                 "chain_ref": chain_id,
                 "alert_detail_path": f"/api/admin/action-center/alerts/{row.id}/detail",
             }
@@ -433,6 +455,260 @@ def _serialize_action_timeline_items(
 
     timeline.sort(key=lambda item: item.get("timestamp") or "", reverse=True)
     return timeline
+
+
+def _safe_iso_to_dt(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    try:
+        if normalized.endswith("Z"):
+            normalized = normalized.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _safe_to_float(value) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        normalized = str(value).strip()
+        if not normalized:
+            return None
+        return float(normalized)
+    except Exception:
+        return None
+
+
+def _extract_metric_delta(payload: dict, keys: list[str]) -> float | None:
+    if not isinstance(payload, dict):
+        return None
+    for key in keys:
+        value = payload.get(key)
+        numeric_value = _safe_to_float(value)
+        if numeric_value is not None:
+            return numeric_value
+        if isinstance(value, dict):
+            for delta_key in ["delta", "change", "diff", "value_delta"]:
+                delta_value = _safe_to_float(value.get(delta_key))
+                if delta_value is not None:
+                    return delta_value
+            before_value = _safe_to_float(value.get("before"))
+            after_value = _safe_to_float(value.get("after"))
+            if before_value is not None and after_value is not None:
+                return after_value - before_value
+    return None
+
+
+def _delta_label(label: str, delta: float | None) -> str | None:
+    if delta is None:
+        return None
+    if abs(delta) < 1e-9:
+        return f"{label} = (0)"
+    direction = "↑" if delta > 0 else "↓"
+    normalized = round(delta, 4)
+    sign = "+" if normalized > 0 else ""
+    return f"{label} {direction} ({sign}{normalized})"
+
+
+def _build_impact_labels(node: dict) -> list[str]:
+    payload = node.get("impact_payload")
+    if not isinstance(payload, dict):
+        payload = {}
+
+    labels: list[str] = []
+    risk_delta = _extract_metric_delta(
+        payload,
+        ["risk_delta", "risk_change", "var_change", "risk_breaches_delta", "risk_breaches", "realized_risk_drop"],
+    )
+    exposure_delta = _extract_metric_delta(payload, ["exposure_delta", "exposure_change", "notional_exposure_delta"])
+    accepted_delta = _extract_metric_delta(
+        payload,
+        ["selected_signals", "selected_signals_delta", "accepted_signals", "accepted_signals_delta"],
+    )
+    rejected_delta = _extract_metric_delta(
+        payload,
+        ["rejected_signals", "rejected_signals_delta", "reject_signals", "reject_count_delta"],
+    )
+
+    for candidate in [
+        _delta_label("Risk", risk_delta),
+        _delta_label("Exposure", exposure_delta),
+        _delta_label("Signals accepted", accepted_delta),
+        _delta_label("Signals rejected", rejected_delta),
+    ]:
+        if candidate:
+            labels.append(candidate)
+
+    if str(node.get("event_type") or "") == "system_reaction":
+        reaction_status = str(node.get("status") or "").lower()
+        if reaction_status in {"resolved", "closed"}:
+            labels.append("Alert resolved")
+        elif reaction_status:
+            labels.append("Alert triggered")
+
+    return labels or ["Impact etiketi üretilemedi"]
+
+
+def _chain_sort_key(node: dict) -> tuple[datetime, str]:
+    timestamp = _safe_iso_to_dt(node.get("timestamp")) or datetime.min.replace(tzinfo=timezone.utc)
+    return (timestamp, str(node.get("event_id") or ""))
+
+
+def _flow_stage_for_node(node: dict) -> str:
+    event_type = str(node.get("event_type") or "")
+    status_value = str(node.get("status") or "").lower()
+    if event_type == "manual_action":
+        return "manual_action"
+    if event_type == "system_reaction" and status_value in {"resolved", "closed"}:
+        return "impact"
+    return "system_reaction"
+
+
+def _enrich_chain_nodes(chain_nodes: list[dict]) -> tuple[list[dict], dict]:
+    if not chain_nodes:
+        return [], {
+            "total_nodes": 0,
+            "manual_action_count": 0,
+            "system_reaction_count": 0,
+            "broken_links_count": 0,
+            "root_nodes_count": 0,
+            "is_chain_valid": False,
+            "invalid_reasons": ["chain_empty"],
+            "max_depth": 0,
+            "default_view": "summary",
+            "lazy_load_recommended": False,
+            "virtualization_recommended": False,
+        }
+
+    ordered = sorted([dict(item) for item in chain_nodes], key=_chain_sort_key)
+    node_map = {str(item.get("event_id") or ""): item for item in ordered if str(item.get("event_id") or "").strip()}
+    children_map: dict[str, list[dict]] = {}
+    roots: list[dict] = []
+    invalid_reasons: set[str] = set()
+
+    for node in ordered:
+        node_id = str(node.get("event_id") or "").strip()
+        parent_id = str(node.get("parent_event_id") or "").strip() or None
+        node["impact_labels"] = _build_impact_labels(node)
+        node["flow_stage"] = _flow_stage_for_node(node)
+        node["relation_status"] = "root"
+        node["is_broken_link"] = False
+        node["broken_reason"] = None
+
+        if not node_id:
+            node["relation_status"] = "broken_link"
+            node["is_broken_link"] = True
+            node["broken_reason"] = "missing_event_id"
+            invalid_reasons.add("missing_event_id")
+            roots.append(node)
+            continue
+
+        if parent_id is None:
+            roots.append(node)
+            continue
+
+        if parent_id == node_id:
+            node["relation_status"] = "broken_link"
+            node["is_broken_link"] = True
+            node["broken_reason"] = "self_parent_reference"
+            invalid_reasons.add("self_parent_reference")
+            roots.append(node)
+            continue
+
+        parent_node = node_map.get(parent_id)
+        if parent_node is None:
+            node["relation_status"] = "broken_link"
+            node["is_broken_link"] = True
+            node["broken_reason"] = "parent_not_found"
+            invalid_reasons.add("parent_not_found")
+            roots.append(node)
+            continue
+
+        parent_ts = _safe_iso_to_dt(parent_node.get("timestamp"))
+        child_ts = _safe_iso_to_dt(node.get("timestamp"))
+        if parent_ts and child_ts and parent_ts > child_ts:
+            node["relation_status"] = "broken_link"
+            node["is_broken_link"] = True
+            node["broken_reason"] = "parent_after_child"
+            invalid_reasons.add("parent_after_child")
+            roots.append(node)
+            continue
+
+        node["relation_status"] = "linked"
+        children_map.setdefault(parent_id, []).append(node)
+
+    if len(roots) > 1:
+        invalid_reasons.add("multiple_roots")
+
+    visited: set[str] = set()
+    stack: set[str] = set()
+    traversed: list[dict] = []
+
+    def visit(node: dict, depth: int) -> None:
+        node_id = str(node.get("event_id") or "").strip()
+        if not node_id:
+            node["causal_depth"] = depth
+            traversed.append(node)
+            return
+        if node_id in stack:
+            node["relation_status"] = "broken_link"
+            node["is_broken_link"] = True
+            node["broken_reason"] = "cycle_detected"
+            invalid_reasons.add("cycle_detected")
+            return
+        if node_id in visited:
+            return
+        stack.add(node_id)
+        node["causal_depth"] = depth
+        traversed.append(node)
+        for child in sorted(children_map.get(node_id, []), key=_chain_sort_key):
+            visit(child, depth + 1)
+        stack.remove(node_id)
+        visited.add(node_id)
+
+    for root in sorted(roots, key=_chain_sort_key):
+        visit(root, 0)
+
+    for node in ordered:
+        node_id = str(node.get("event_id") or "").strip()
+        if node_id and node_id in visited:
+            continue
+        node["relation_status"] = "broken_link"
+        node["is_broken_link"] = True
+        node["broken_reason"] = node.get("broken_reason") or "detached_node"
+        invalid_reasons.add("detached_node")
+        visit(node, 0)
+
+    for index, node in enumerate(traversed, start=1):
+        node["causal_index"] = index
+
+    manual_count = len([item for item in traversed if str(item.get("event_type") or "") == "manual_action"])
+    system_count = len([item for item in traversed if str(item.get("event_type") or "") == "system_reaction"])
+    broken_count = len([item for item in traversed if bool(item.get("is_broken_link"))])
+    if manual_count == 0 and system_count > 0:
+        invalid_reasons.add("missing_manual_anchor")
+
+    summary = {
+        "total_nodes": len(traversed),
+        "manual_action_count": manual_count,
+        "system_reaction_count": system_count,
+        "broken_links_count": broken_count,
+        "root_nodes_count": len(roots),
+        "is_chain_valid": broken_count == 0 and len(invalid_reasons) == 0,
+        "invalid_reasons": sorted(invalid_reasons),
+        "max_depth": max([int(item.get("causal_depth") or 0) for item in traversed], default=0),
+        "default_view": "summary",
+        "lazy_load_recommended": len(traversed) > 120,
+        "virtualization_recommended": len(traversed) > 500,
+    }
+    return traversed, summary
 
 
 @router.get("/top-signals")
@@ -1277,7 +1553,7 @@ def strategy_action_impact_timeline(
     strategy_id: str | None = Query(default=None),
     time_from: str | None = Query(default=None),
     time_to: str | None = Query(default=None),
-    limit: int = Query(default=300, ge=1, le=1000),
+    limit: int = Query(default=1000, ge=1, le=2000),
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -1301,16 +1577,10 @@ def strategy_action_impact_timeline(
     system_alert_rows = (
         db.query(SystemAlert)
         .filter(
-            SystemAlert.created_at >= start_at,
-            SystemAlert.created_at <= end_at,
-            or_(
-                SystemAlert.alert_type.ilike("%strategy%"),
-                SystemAlert.alert_type.ilike("%breach%"),
-                SystemAlert.root_cause_code.ilike("%breach%"),
-                SystemAlert.entity_key.ilike("%strategy%"),
-            ),
+            SystemAlert.last_triggered_at >= start_at,
+            SystemAlert.last_triggered_at <= end_at,
         )
-        .order_by(SystemAlert.created_at.desc())
+        .order_by(SystemAlert.last_triggered_at.desc())
         .limit(limit)
         .all()
     )
@@ -1451,7 +1721,7 @@ def strategy_timeline_chain_detail(
     )
 
     chain_nodes = [item for item in timeline_rows if str(item.get("chain_id") or "") == chain_id]
-    chain_nodes.sort(key=lambda item: item.get("timestamp") or "")
+    enriched_nodes, chain_summary = _enrich_chain_nodes(chain_nodes)
 
     return {
         "status": "success",
@@ -1462,8 +1732,9 @@ def strategy_timeline_chain_detail(
             "time_from": start_at.isoformat(),
             "time_to": end_at.isoformat(),
         },
-        "count": len(chain_nodes),
-        "nodes": chain_nodes,
+        "count": len(enriched_nodes),
+        "summary": chain_summary,
+        "nodes": enriched_nodes,
     }
 
 
