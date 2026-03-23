@@ -211,7 +211,21 @@ def _select_auto_assignee(
         scored.append((pending_count, assigned_at, candidate))
 
     if not scored:
-        return None
+        fallback_scored: list[tuple[int, datetime, User]] = []
+        for candidate in role_ordered:
+            pending_count = _approver_pending_count(db, approver_id=candidate.id)
+            last_assigned = (
+                db.query(RiskOrchestratorApprovalRequest)
+                .filter(RiskOrchestratorApprovalRequest.assigned_to == candidate.id)
+                .order_by(RiskOrchestratorApprovalRequest.assigned_at.desc())
+                .first()
+            )
+            assigned_at = last_assigned.assigned_at if last_assigned and last_assigned.assigned_at else datetime.fromtimestamp(0, tz=timezone.utc)
+            fallback_scored.append((pending_count, assigned_at, candidate))
+        if not fallback_scored:
+            return None
+        fallback_scored.sort(key=lambda item: (item[0], item[1]))
+        return fallback_scored[0][2]
 
     scored.sort(key=lambda item: (item[0], item[1]))
     return scored[0][2]
@@ -224,9 +238,10 @@ def _assign_approval_request(
     assignee_id: str,
     actor_id: str | None,
     auto_assigned: bool,
+    allow_over_capacity: bool = False,
 ) -> RiskOrchestratorApprovalRequest:
     pending_count = _approver_pending_count(db, approver_id=assignee_id)
-    if pending_count >= APPROVER_PENDING_LIMIT:
+    if pending_count >= APPROVER_PENDING_LIMIT and not allow_over_capacity:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="approver_pending_limit_reached")
 
     request.assigned_to = assignee_id
@@ -237,6 +252,23 @@ def _assign_approval_request(
     request.updated_at = _now()
     db.commit()
     db.refresh(request)
+
+    if pending_count >= APPROVER_PENDING_LIMIT and allow_over_capacity:
+        create_system_alert(
+            db,
+            alert_type="approval_bottleneck",
+            severity="WARNING",
+            message="Critical request assigned over approver pending limit",
+            details={
+                "request_id": request.approval_id,
+                "assigned_to": assignee_id,
+                "pending_count": pending_count,
+                "pending_limit": APPROVER_PENDING_LIMIT,
+            },
+            entity_key=request.approval_id,
+            root_cause_code="critical_over_capacity_assignment",
+            state_key=f"approval_bottleneck_over_capacity_{request.approval_id}",
+        )
 
     _emit_approval_event(
         db,
@@ -889,6 +921,7 @@ def apply_policy_from_simulation(
                     assignee_id=auto_assignee.id,
                     actor_id=actor_id,
                     auto_assigned=True,
+                    allow_over_capacity=True,
                 )
             except HTTPException:
                 create_system_alert(
@@ -1087,6 +1120,21 @@ def process_approval_escalations(db: Session) -> dict:
     for row in rows:
         elapsed = (now_ts - row.created_at).total_seconds()
 
+        if row.assigned_to is None:
+            assignee = _select_auto_assignee(db, requested_by=row.requested_by, classification=row.classification)
+            if assignee is not None:
+                try:
+                    _assign_approval_request(
+                        db,
+                        request=row,
+                        assignee_id=assignee.id,
+                        actor_id=None,
+                        auto_assigned=True,
+                        allow_over_capacity=True,
+                    )
+                except HTTPException:
+                    pass
+
         if elapsed >= 8 * 60 and row.critical_escalated_at is None:
             row.critical_escalated_at = now_ts
             row.escalation_count = int(row.escalation_count or 0) + 1
@@ -1102,20 +1150,6 @@ def process_approval_escalations(db: Session) -> dict:
                 severity="CRITICAL",
             )
             critical_count += 1
-
-            if row.assigned_to is None:
-                assignee = _select_auto_assignee(db, requested_by=row.requested_by, classification=row.classification)
-                if assignee is not None:
-                    try:
-                        _assign_approval_request(
-                            db,
-                            request=row,
-                            assignee_id=assignee.id,
-                            actor_id=None,
-                            auto_assigned=True,
-                        )
-                    except HTTPException:
-                        pass
 
         elif elapsed >= 5 * 60 and row.warning_escalated_at is None:
             row.warning_escalated_at = now_ts
@@ -1647,6 +1681,31 @@ def list_decision_traces(db: Session, *, limit: int = 100) -> list[RiskOrchestra
         .limit(limit)
         .all()
     )
+
+
+def export_decision_traces(db: Session, *, limit: int = 500) -> list[dict]:
+    traces = list_decision_traces(db, limit=limit)
+    payload: list[dict] = []
+    for trace in traces:
+        payload.append(
+            {
+                "trace_id": trace.trace_id,
+                "flow_type": trace.flow_type,
+                "simulation_id": trace.simulation_id,
+                "classification": trace.classification,
+                "risk_score": trace.risk_score,
+                "rule_path": trace.rule_path,
+                "decision_state": trace.decision_state,
+                "requested_by": trace.requested_by,
+                "approver_id": trace.approver_id,
+                "request_key": trace.request_key,
+                "reason_note": trace.reason_note,
+                "approval_note": trace.approval_note,
+                "payload": _jsonify(trace.payload),
+                "created_at": trace.created_at.isoformat() if trace.created_at else None,
+            }
+        )
+    return payload
 
 
 def simulate_revert_to_version(

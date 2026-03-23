@@ -1,7 +1,10 @@
+import csv
+import io
+import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -95,6 +98,7 @@ from services.risk_orchestrator_service import (
     create_manual_override,
     deactivate_manual_override,
     evaluate_pre_trade,
+    export_decision_traces,
     execute_control_action,
     execute_position_intervention,
     get_or_create_policy,
@@ -724,6 +728,58 @@ def admin_risk_policy_decision_traces(
     _ = current_admin
     rows = list_decision_traces(db, limit=limit)
     return [RiskOrchestratorDecisionTraceResponse.model_validate(row) for row in rows]
+
+
+@router.get("/admin/risk-orchestrator/policy/decision-traces/export")
+def admin_risk_policy_decision_traces_export(
+    export_format: str = "json",
+    limit: int = 500,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows = export_decision_traces(db, limit=limit)
+
+    if export_format.lower() == "csv":
+        buffer = io.StringIO()
+        writer = csv.DictWriter(
+            buffer,
+            fieldnames=[
+                "trace_id",
+                "flow_type",
+                "simulation_id",
+                "classification",
+                "risk_score",
+                "rule_path",
+                "decision_state",
+                "requested_by",
+                "approver_id",
+                "request_key",
+                "reason_note",
+                "approval_note",
+                "payload",
+                "created_at",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({**row, "payload": json.dumps(row.get("payload") or {}, ensure_ascii=False)})
+        csv_bytes = buffer.getvalue().encode("utf-8")
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=risk_orchestrator_decision_traces.csv",
+            },
+        )
+
+    return Response(
+        content=json.dumps({"items": rows}, ensure_ascii=False),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": "attachment; filename=risk_orchestrator_decision_traces.json",
+        },
+    )
 
 
 @router.get(

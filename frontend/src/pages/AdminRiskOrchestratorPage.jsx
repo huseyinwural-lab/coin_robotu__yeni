@@ -459,6 +459,29 @@ export const AdminRiskOrchestratorPage = () => {
     }
   };
 
+  const handleExportDecisionTraces = async (format) => {
+    try {
+      const response = await apiClient.get(
+        `/strategy-domain/admin/risk-orchestrator/policy/decision-traces/export?export_format=${format}&limit=1000`,
+        { responseType: "blob" },
+      );
+      const blob = new Blob([response.data], {
+        type: format === "csv" ? "text/csv" : "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `risk_orchestrator_decision_traces.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Decision trace ${format.toUpperCase()} export tamamlandı`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Decision trace export başarısız");
+    }
+  };
+
   const superAdminOnlyTitle = isSuperAdmin ? "" : "Sadece super_admin kullanıcıları çalıştırabilir";
 
   return (
@@ -1224,7 +1247,27 @@ export const AdminRiskOrchestratorPage = () => {
 
         <Card data-testid="risk-decision-trace-card">
           <CardHeader>
-            <CardTitle data-testid="risk-decision-trace-title">Decision Trace</CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle data-testid="risk-decision-trace-title">Decision Trace</CardTitle>
+              <div className="flex gap-2" data-testid="risk-decision-trace-export-actions">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleExportDecisionTraces("json")}
+                  data-testid="risk-decision-trace-export-json-button"
+                >
+                  Export JSON
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleExportDecisionTraces("csv")}
+                  data-testid="risk-decision-trace-export-csv-button"
+                >
+                  Export CSV
+                </Button>
+              </div>
+            </div>
             <CardDescription data-testid="risk-decision-trace-description">
               simulation → score → classification → approval → rule path zinciri
             </CardDescription>
