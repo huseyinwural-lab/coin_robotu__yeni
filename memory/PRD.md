@@ -1,3 +1,59 @@
+## 2026-03-23 — P1 Tam Paket (Risk & Capital Control + Report Detail + Export/Auto-refresh + Action Impact Timeline) ✅
+
+### Kullanıcı onayıyla uygulanan kapsam
+- P1-1 + P1-2 + P1-3 tam paket tek iterasyonda teslim edildi.
+- Action Impact Timeline eklendi (manual action + system reaction zinciri).
+- Rol matrisi korunarak enforce edildi:
+  - `admin`: view/simulate
+  - `super_admin`: apply/override/execute
+
+### Backend (yeni route/endpoint bağları)
+- `GET /api/admin/strategy/risk-capital/status?include_alerts=true`
+- `POST /api/admin/strategy/risk-capital/limits/preview`
+- `POST /api/admin/strategy/risk-capital/limits/apply`
+- `POST /api/admin/strategy/risk-capital/exposure-override/preview`
+- `POST /api/admin/strategy/risk-capital/exposure-override/apply`
+- `GET /api/admin/strategy/risk-capital/breaches`
+- `GET /api/admin/strategy/risk-capital/alerts/{alert_id}/breach-link`
+- `GET /api/admin/strategy/risk-capital/action-log`
+- `GET /api/admin/strategy/observability/strategies`
+- `GET /api/admin/strategy/observability/{strategy_id}/detail`
+- `GET /api/admin/strategy/observability/export?export_format=csv|json`
+- `GET /api/admin/strategy/action-impact-timeline`
+
+### Frontend (tamamlananlar)
+- `AdminStrategyObservabilityPage.jsx`
+  - Risk & Capital Control Layer: limit preview/apply, exposure preview/apply, breach list, linked alert detail panel
+  - Auto-refresh (default ON), CSV/JSON export, detail sayfasına geçiş butonları
+  - Action Impact Timeline paneli (manual/system ayrımı)
+- `AdminStrategyObservabilityDetailPage.jsx` (yeni)
+  - Route: `/admin/strategy/observability/:strategyId`
+  - Zaman filtresi, strategy selector, trend grafikleri, filter-reflecting export, timeline görünümü
+- `App.js`
+  - Yeni detail route bağlantısı
+
+### Enforcement (kilit kurallar)
+- Risk limit değişikliklerinde preview token zorunlu
+- Exposure override için preview + confirm + reason zorunlu
+- Alert detail ile risk breach görünümü endpoint seviyesinde bağlandı (`/alerts/{id}/breach-link`)
+- Export aktif filtreleri response içinde aynen yansıtıyor
+- Auto-refresh default açık
+
+### Test Sonucu
+- `testing_agent`: `/app/test_reports/iteration_92.json`
+  - Backend: **100% (24 passed, 4 skipped - no strategy data)**
+  - Frontend: **100% PASS**
+  - Kritik hata: yok
+- Self-check:
+  - Frontend lint/build PASS
+  - Backend lint PASS
+  - Smoke screenshot PASS (P1 kontrol elemanları görünür)
+
+### Mock / Bilinen boşluklar
+- Slack webhook delivery **MOCKED**
+- Binance Futures execution **MOCKED**
+- Bazı ortamlarda strategy seed sayısı düşük olduğunda detail/timeline veri yoğunluğu sınırlı olabilir
+
 ## 2026-03-23 — Strategy Observability P0 Sprint 1 UI (Signal Control + Explainability) ✅
 
 ### Kapsam (kullanıcı onayıyla tek iterasyon)

@@ -319,7 +319,7 @@ class TestRiskBreaches:
         
         # All returned items should be breached
         for item in data["items"]:
-            assert item.get("is_breached") == True, "only_open should return only breached items"
+            assert item.get("is_breached"), "only_open should return only breached items"
         print(f"✓ Got {data['count']} open breaches")
 
 
