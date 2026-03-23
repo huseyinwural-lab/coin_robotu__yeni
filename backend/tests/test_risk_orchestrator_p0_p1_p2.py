@@ -469,7 +469,7 @@ class TestRiskOrchestratorP0P1P2:
         else:
             detail = force_response.json().get("detail", "")
             assert "stale_simulation" in detail, f"Unexpected 409 reason: {detail}"
-            print(f"P0 Force-apply path verified: expired state rejected due to stale simulation (expected behavior)")
+            print("P0 Force-apply path verified: expired state rejected due to stale simulation (expected behavior)")
 
     # ==================== P1/P2: Dashboard Extensions ====================
 
