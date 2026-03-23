@@ -39,6 +39,9 @@ export const AdminExecutionQueuePage = () => {
   const [rejectionGuidance, setRejectionGuidance] = useState([]);
   const [observability, setObservability] = useState(null);
   const [queueControlState, setQueueControlState] = useState(null);
+  const [decisionGateConfig, setDecisionGateConfig] = useState(null);
+  const [alertItems, setAlertItems] = useState([]);
+  const [alertFilter, setAlertFilter] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [lastLoadedAt, setLastLoadedAt] = useState(null);
@@ -69,6 +72,8 @@ export const AdminExecutionQueuePage = () => {
 
   const [queueControlReason, setQueueControlReason] = useState("");
   const [queueControlLoading, setQueueControlLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [thresholdDraft, setThresholdDraft] = useState({ queue_backlog: 100, high_risk_spike: 5, reject_spike: 10 });
 
   const selectedRow = useMemo(
     () => queueRows.find((item) => item.id === selectedIntentId) || null,
@@ -130,11 +135,13 @@ export const AdminExecutionQueuePage = () => {
       };
       if (searchQuery.trim()) params.search = searchQuery.trim();
 
-      const [queueRes, summaryRes, controlRes, observabilityRes] = await Promise.all([
+      const [queueRes, summaryRes, controlRes, observabilityRes, configRes, alertsRes] = await Promise.all([
         apiClient.get("/admin/execution-queue", { params }),
         apiClient.get("/admin/execution-queue/rejection-summary", { params: { limit: 1000 } }),
         apiClient.get("/admin/execution-queue/control/state"),
         apiClient.get("/admin/execution-queue/observability"),
+        apiClient.get("/admin/execution-queue/config"),
+        apiClient.get("/admin/execution-queue/alerts", { params: { status_filter: alertFilter, limit: 100 } }),
       ]);
 
       setQueueRows(queueRes.data || []);
@@ -144,6 +151,8 @@ export const AdminExecutionQueuePage = () => {
       setRejectionGuidance(summaryRes.data?.guidance || []);
       setQueueControlState(controlRes.data || null);
       setObservability(observabilityRes.data || null);
+      setDecisionGateConfig(configRes.data || null);
+      setAlertItems(alertsRes.data || []);
       setLastLoadedAt(Date.now());
     } catch (error) {
       const message = extractErrorMessage(error, "Execution queue verisi yüklenemedi");
@@ -152,7 +161,7 @@ export const AdminExecutionQueuePage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [riskFilter, searchQuery, sortBy, sortDir, statusFilter, typeFilter]);
+  }, [alertFilter, riskFilter, searchQuery, sortBy, sortDir, statusFilter, typeFilter]);
 
   const loadIntentDetail = useCallback(async (intentId) => {
     try {
@@ -181,6 +190,15 @@ export const AdminExecutionQueuePage = () => {
     }, 12000);
     return () => clearInterval(timer);
   }, [autoRefreshEnabled, load, loadIntentDetail, selectedIntentId]);
+
+  useEffect(() => {
+    if (!decisionGateConfig?.thresholds) return;
+    setThresholdDraft({
+      queue_backlog: Number(decisionGateConfig.thresholds.queue_backlog ?? 100),
+      high_risk_spike: Number(decisionGateConfig.thresholds.high_risk_spike ?? 5),
+      reject_spike: Number(decisionGateConfig.thresholds.reject_spike ?? 10),
+    });
+  }, [decisionGateConfig]);
 
   const openDetail = async (intentId) => {
     setSelectedIntentId(intentId);
@@ -219,7 +237,7 @@ export const AdminExecutionQueuePage = () => {
         reason: decisionReason,
         read_acknowledged: currentReadAck.ack,
         detail_version: selectedDetail?.detail_version,
-        double_confirmation: currentReadAck.highRiskConfirm,
+        double_confirmation: false,
         override_execute: overrideEnabled,
       };
       await apiClient.post(`/admin/execution-queue/${selectedIntentId}/${action}`, payload);
@@ -229,6 +247,48 @@ export const AdminExecutionQueuePage = () => {
       toast.error(extractErrorMessage(error, `Intent ${action} başarısız`));
     } finally {
       setDecisionLoading(false);
+    }
+  };
+
+  const executeApprovedIntent = async () => {
+    if (!selectedIntentId) return;
+    setDecisionLoading(true);
+    try {
+      await apiClient.post(`/admin/execution-queue/${selectedIntentId}/execute`, {
+        reason: decisionReason,
+        detail_version: selectedDetail?.detail_version,
+        execute_confirmation: currentReadAck.highRiskConfirm,
+      });
+      toast.success("Intent execute edildi");
+      await Promise.all([load(), loadIntentDetail(selectedIntentId)]);
+    } catch (error) {
+      toast.error(extractErrorMessage(error, "Execute başarısız"));
+    } finally {
+      setDecisionLoading(false);
+    }
+  };
+
+  const updateDecisionGateConfig = async (patch) => {
+    if (!isSuperAdmin) return;
+    setConfigSaving(true);
+    try {
+      const { data } = await apiClient.patch("/admin/execution-queue/config", patch);
+      setDecisionGateConfig(data || null);
+      toast.success("Decision gate config güncellendi");
+      await load();
+    } catch (error) {
+      toast.error(extractErrorMessage(error, "Config güncelleme başarısız"));
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  const markAlert = async (alertId, action) => {
+    try {
+      await apiClient.post(`/admin/execution-queue/alerts/${alertId}/${action}`);
+      await load();
+    } catch (error) {
+      toast.error(extractErrorMessage(error, `Alert ${action} başarısız`));
     }
   };
 
@@ -387,6 +447,103 @@ export const AdminExecutionQueuePage = () => {
         <div className="border border-amber-500/40 bg-amber-900/20 p-3 text-sm text-amber-100" data-testid="execution-warning-alert">
           Son yenilemede hata: {loadError}
         </div>
+      )}
+
+      <section className="border border-slate-800 bg-slate-900 p-4" data-testid="execution-alert-center-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="execution-alert-center-header-row">
+          <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="execution-alert-center-title">In-App Alert Center</p>
+          <select value={alertFilter} onChange={(event) => setAlertFilter(event.target.value)} className="h-8 rounded border border-slate-700 bg-slate-950 px-2 text-xs" data-testid="execution-alert-filter-select">
+            <option value="all">all</option>
+            <option value="unread">unread</option>
+            <option value="read">read</option>
+            <option value="acked">acked</option>
+          </select>
+        </div>
+        <div className="mt-2 max-h-48 space-y-2 overflow-auto" data-testid="execution-alert-center-list">
+          {alertItems.map((item) => (
+            <article key={item.id} className="rounded border border-slate-700 p-2 text-xs" data-testid={`execution-alert-item-${item.id}`}>
+              <p data-testid={`execution-alert-message-${item.id}`}>
+                [{item.severity}] {item.alert_type} · {item.message}
+              </p>
+              <p className="text-slate-400" data-testid={`execution-alert-meta-${item.id}`}>
+                status={item.status} · read_at={item.read_at || "-"} · acked_at={item.acked_at || "-"}
+              </p>
+              <div className="mt-1 flex flex-wrap gap-2" data-testid={`execution-alert-actions-${item.id}`}>
+                <Button size="sm" variant="outline" onClick={() => markAlert(item.id, "read")} data-testid={`execution-alert-read-button-${item.id}`}>Mark Read</Button>
+                <Button size="sm" variant="outline" onClick={() => markAlert(item.id, "ack")} data-testid={`execution-alert-ack-button-${item.id}`}>Ack</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (item.entity_key && queueRows.some((row) => row.id === item.entity_key)) {
+                      openDetail(item.entity_key);
+                    } else {
+                      toast.info("İlgili intent mevcut listede bulunamadı");
+                    }
+                  }}
+                  data-testid={`execution-alert-open-intent-button-${item.id}`}
+                >
+                  Open Intent
+                </Button>
+              </div>
+            </article>
+          ))}
+          {alertItems.length === 0 && <p className="text-xs text-slate-500" data-testid="execution-alert-empty-text">Alert bulunamadı.</p>}
+        </div>
+      </section>
+
+      {isSuperAdmin && (
+        <section className="border border-slate-800 bg-slate-900 p-4" data-testid="execution-gate-config-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="execution-gate-config-title">Decision Gate Config</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="execution-gate-config-row">
+            <label className="flex items-center gap-2 text-xs" data-testid="execution-gate-enforced-label">
+              <input
+                type="checkbox"
+                checked={Boolean(decisionGateConfig?.execution_decision_gate_enforced)}
+                onChange={(event) =>
+                  updateDecisionGateConfig({ execution_decision_gate_enforced: event.target.checked, thresholds: thresholdDraft })
+                }
+                disabled={configSaving}
+                data-testid="execution-gate-enforced-checkbox"
+              />
+              execution_decision_gate_enforced
+            </label>
+          </div>
+          <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="execution-gate-threshold-grid">
+            <input
+              type="number"
+              value={thresholdDraft.queue_backlog}
+              onChange={(event) => setThresholdDraft((prev) => ({ ...prev, queue_backlog: Number(event.target.value || 0) }))}
+              className="h-8 rounded border border-slate-700 bg-slate-950 px-2 text-xs"
+              data-testid="execution-gate-threshold-queue-backlog-input"
+            />
+            <input
+              type="number"
+              value={thresholdDraft.high_risk_spike}
+              onChange={(event) => setThresholdDraft((prev) => ({ ...prev, high_risk_spike: Number(event.target.value || 0) }))}
+              className="h-8 rounded border border-slate-700 bg-slate-950 px-2 text-xs"
+              data-testid="execution-gate-threshold-high-risk-input"
+            />
+            <input
+              type="number"
+              value={thresholdDraft.reject_spike}
+              onChange={(event) => setThresholdDraft((prev) => ({ ...prev, reject_spike: Number(event.target.value || 0) }))}
+              className="h-8 rounded border border-slate-700 bg-slate-950 px-2 text-xs"
+              data-testid="execution-gate-threshold-reject-spike-input"
+            />
+            <Button
+              variant="outline"
+              disabled={configSaving}
+              onClick={() => updateDecisionGateConfig({ execution_decision_gate_enforced: Boolean(decisionGateConfig?.execution_decision_gate_enforced), thresholds: thresholdDraft })}
+              data-testid="execution-gate-threshold-save-button"
+            >
+              Save Thresholds
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-slate-400" data-testid="execution-gate-thresholds-text">
+            queue_backlog / high_risk_spike / reject_spike
+          </p>
+        </section>
       )}
 
       <section className="border border-slate-800 bg-slate-900 p-4" data-testid="execution-filter-panel">
@@ -660,7 +817,7 @@ export const AdminExecutionQueuePage = () => {
                   onChange={(event) => updateReadAckState({ highRiskConfirm: event.target.checked })}
                   data-testid="execution-intent-decision-high-risk-confirm-checkbox"
                 />
-                High-risk double confirmation
+                Execute confirmation (high-risk için zorunlu)
               </label>
               <label className="flex items-center gap-2 text-xs text-amber-200" data-testid="execution-intent-decision-override-label">
                 <input
@@ -675,6 +832,9 @@ export const AdminExecutionQueuePage = () => {
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2" data-testid="execution-intent-decision-actions-row">
+              <p className="w-full text-xs text-slate-400" data-testid="execution-intent-decision-matrix-text">
+                Matris: Approve = karar/onay. Execute = final icra. High-risk execute için ek onay zorunlu.
+              </p>
               <Button
                 className="bg-emerald-500 text-black hover:bg-emerald-400"
                 onClick={() => executeDecision("approve")}
@@ -682,17 +842,30 @@ export const AdminExecutionQueuePage = () => {
                   decisionLoading
                   || decisionReason.trim().length < 3
                   || !currentReadAck.ack
-                  || (selectedDetail?.risk_payload?.is_high_risk && !currentReadAck.highRiskConfirm)
                   || (overrideEnabled && !isSuperAdmin)
+                  || selectedRow?.status !== "QUEUED"
                 }
                 data-testid="execution-intent-approve-button"
               >
-                Approve + Execute
+                Approve (Queue Release)
+              </Button>
+              <Button
+                className="bg-amber-400 text-black hover:bg-amber-300"
+                onClick={executeApprovedIntent}
+                disabled={
+                  decisionLoading
+                  || decisionReason.trim().length < 3
+                  || selectedRow?.status !== "APPROVED"
+                  || (selectedDetail?.risk_payload?.is_high_risk && !currentReadAck.highRiskConfirm)
+                }
+                data-testid="execution-intent-execute-button"
+              >
+                Execute (Final)
               </Button>
               <Button
                 variant="outline"
                 onClick={() => executeDecision("reject")}
-                disabled={decisionLoading || decisionReason.trim().length < 3 || !currentReadAck.ack}
+                disabled={decisionLoading || decisionReason.trim().length < 3 || !currentReadAck.ack || !["QUEUED", "APPROVED"].includes(selectedRow?.status || "")}
                 data-testid="execution-intent-reject-button"
               >
                 Reject
@@ -700,7 +873,11 @@ export const AdminExecutionQueuePage = () => {
               <Button
                 variant="outline"
                 onClick={() => executeDecision("cancel")}
-                disabled={decisionLoading || decisionReason.trim().length < 3}
+                disabled={
+                  decisionLoading
+                  || decisionReason.trim().length < 3
+                  || !["QUEUED", "REJECTED", "APPROVED", "SUBMITTED", "PREVIEWED"].includes(selectedRow?.status || "")
+                }
                 data-testid="execution-intent-cancel-button"
               >
                 Cancel Intent

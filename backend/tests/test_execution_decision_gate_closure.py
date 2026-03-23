@@ -127,9 +127,19 @@ def build_approve_payload(detail: dict, reason: str) -> dict:
     }
 
 
+def ensure_queue_resumed(base: str, admin: dict) -> None:
+    requests.post(
+        f"{base}/api/admin/execution-queue/control/resume",
+        headers=admin,
+        json={"reason": "test setup resume"},
+        timeout=30,
+    )
+
+
 def test_p0_reason_read_ack_and_stale_version_enforced() -> None:
     base = resolve_base_url()
     admin = admin_headers(base)
+    ensure_queue_resumed(base, admin)
     _, user_id = provision_user(base, admin)
     intent_id = create_queued_intent(user_id)
     detail = fetch_detail(base, admin, intent_id)
@@ -171,6 +181,7 @@ def test_p0_reason_read_ack_and_stale_version_enforced() -> None:
 def test_p0_invalid_transition_and_race_determinism() -> None:
     base = resolve_base_url()
     admin = admin_headers(base)
+    ensure_queue_resumed(base, admin)
     _, user_id = provision_user(base, admin)
     intent_id = create_queued_intent(user_id)
     detail = fetch_detail(base, admin, intent_id)

@@ -1343,9 +1343,11 @@ def approve_execution_intent(
     if detail_version and detail_version != current_detail_version:
         raise ValueError("stale_intent_detail_version")
 
-    risk_payload = build_intent_risk_payload(intent)
-    if risk_payload.get("is_high_risk") and not bool(double_confirmation):
-        raise ValueError("high_risk_double_confirmation_required")
+    detail_payload = build_execution_intent_detail(db, intent)
+    if not detail_payload.get("order_preview") or not detail_payload.get("expected_impact") or not detail_payload.get("risk_payload"):
+        raise ValueError("detail_payload_incomplete_for_ack")
+
+    _ = double_confirmation
 
     if intent.intent_type == "OPEN_POSITION" and not allow_override:
         enforce_execution_guard_or_raise(
@@ -1396,6 +1398,67 @@ def approve_execution_intent(
         reason="execution_approval_granted",
     )
 
+    record_decision_trace(
+        db,
+        user_id=intent.user_id,
+        trace_scope="execution",
+        trace_type="execution_admin_approval",
+        entity_id=intent.id,
+        strategy_code=str(normalized.get("strategy_binding") or "") or None,
+        decision_status="APPROVED",
+        reason_codes=["execution_intent_approved"],
+        portfolio_risk_score=float(intent.risk_score or 0),
+        meta_engine_decision=intent.meta_engine_decision,
+        context_payload={
+            "admin_user_id": admin_user_id,
+            "admin_note": resolved_reason,
+            "intent_token": intent.intent_token,
+            "detail_version": current_detail_version,
+            "override_execute": bool(allow_override),
+        },
+    )
+
+    db.commit()
+    db.refresh(intent)
+    return intent
+
+
+def execute_approved_intent(
+    db: Session,
+    intent_id: str,
+    executor_user_id: str,
+    *,
+    execution_reason: str,
+    execute_confirmation: bool = False,
+    detail_version: str | None = None,
+) -> UserExecutionIntent:
+    intent = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.id == intent_id)
+        .with_for_update()
+        .first()
+    )
+    if intent is None:
+        raise ValueError("intent_not_found")
+    if str(intent.status or "").upper() != "APPROVED":
+        raise ValueError("intent_not_executable")
+
+    reason = str(execution_reason or "").strip()
+    if len(reason) < 3:
+        raise ValueError("decision_reason_required")
+
+    if _is_high_risk_intent(intent) and not bool(execute_confirmation):
+        raise ValueError("high_risk_execute_confirmation_required")
+
+    current_detail_version = _intent_detail_version(intent)
+    if detail_version and detail_version != current_detail_version:
+        raise ValueError("stale_intent_detail_version")
+
+    detail_payload = build_execution_intent_detail(db, intent)
+    if not detail_payload.get("order_preview") or not detail_payload.get("expected_impact") or not detail_payload.get("risk_payload"):
+        raise ValueError("detail_payload_incomplete_for_ack")
+
+    normalized = intent.normalized_order_payload or {}
     try:
         symbol = normalize_symbol(
             normalized.get("symbol") or intent.symbol,
@@ -1431,10 +1494,12 @@ def approve_execution_intent(
     _transition_execution_intent_status(
         intent,
         target_status="RELEASED",
-        actor_user_id=admin_user_id,
+        actor_user_id=executor_user_id,
         reason="execution_order_released",
     )
     intent.released_at = datetime.now(timezone.utc)
+    intent.admin_user_id = executor_user_id
+    intent.admin_note = reason
 
     risk_adjustment_reason = "position_size_adjusted_by_portfolio_risk" if "portfolio_risk_adjusted" in (intent.risk_flags or []) else None
     strategy_override_reason = (
@@ -1449,7 +1514,7 @@ def approve_execution_intent(
         db,
         user_id=intent.user_id,
         trace_scope="execution",
-        trace_type="execution_admin_approval",
+        trace_type="execution_intent_executed",
         entity_id=intent.id,
         strategy_code=strategy_code,
         decision_status="RELEASED",
@@ -1474,12 +1539,12 @@ def approve_execution_intent(
             "intent_type": intent.intent_type,
         },
         context_payload={
-            "admin_user_id": admin_user_id,
-            "admin_note": resolved_reason,
+            "executor_user_id": executor_user_id,
+            "execution_reason": reason,
             "intent_token": intent.intent_token,
             "position_id": intent.position_id,
             "detail_version": current_detail_version,
-            "override_execute": bool(allow_override),
+            "execute_confirmation": bool(execute_confirmation),
         },
     )
 
@@ -1518,13 +1583,6 @@ def approve_execution_intent(
             "intent_token": intent.intent_token,
             "symbol": symbol,
             "position_id": position.id,
-            "strategy_weight": (intent.normalized_order_payload or {}).get("meta_strategy_summary", {}).get(
-                "strategy_weight"
-            ),
-            "allocation_source": (intent.normalized_order_payload or {}).get("meta_strategy_summary", {}).get(
-                "allocation_source"
-            ),
-            "meta_engine_decision": intent.meta_engine_decision,
         },
     )
 
@@ -1865,7 +1923,7 @@ def build_queue_observability_metrics(db: Session, *, days: int = 7) -> dict:
 
     operator_rows = (
         db.query(AuditLog)
-        .filter(AuditLog.entity_type == "execution_intent", AuditLog.created_at >= since)
+        .filter(AuditLog.created_at >= since)
         .order_by(AuditLog.created_at.desc())
         .limit(500)
         .all()
@@ -1878,6 +1936,27 @@ def build_queue_observability_metrics(db: Session, *, days: int = 7) -> dict:
         action_name = str(row.action or "").upper()
         if "OVERRIDE" in action_name:
             override_usage += 1
+
+    rejected_count = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.status == "REJECTED", UserExecutionIntent.updated_at >= since)
+        .count()
+    )
+    approved_count = (
+        db.query(UserExecutionIntent)
+        .filter(UserExecutionIntent.status.in_(["APPROVED", "RELEASED"]), UserExecutionIntent.updated_at >= since)
+        .count()
+    )
+    stale_attempt_count = len([row for row in operator_rows if "STALE" in str(row.action or "").upper() or "stale" in str((row.details or {}).get("reason_code") or "")])
+    unauthorized_attempt_count = len(
+        [
+            row
+            for row in operator_rows
+            if "UNAUTHORIZED" in str(row.action or "").upper()
+            or "override_requires_super_admin" in str((row.details or {}).get("reason_code") or "")
+        ]
+    )
+    decision_denominator = max(approved_count + rejected_count, 1)
 
     return {
         "approval_latency_seconds": {
@@ -1892,6 +1971,10 @@ def build_queue_observability_metrics(db: Session, *, days: int = 7) -> dict:
             for actor, count in sorted(operator_activity.items(), key=lambda item: item[1], reverse=True)[:20]
         ],
         "override_usage": override_usage,
+        "reject_ratio": round(rejected_count / decision_denominator, 4),
+        "override_ratio": round(override_usage / decision_denominator, 4),
+        "stale_decision_attempt_count": stale_attempt_count,
+        "unauthorized_action_attempt_count": unauthorized_attempt_count,
     }
 
 

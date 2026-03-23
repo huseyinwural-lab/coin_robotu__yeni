@@ -144,11 +144,21 @@ def fetch_detail(admin_headers: dict, intent_id: str) -> dict:
     return detail.json()
 
 
+def ensure_queue_resumed(admin_headers: dict) -> None:
+    requests.post(
+        f"{BASE_URL}/api/admin/execution-queue/control/resume",
+        headers=admin_headers,
+        json={"reason": "test setup resume"},
+        timeout=30,
+    )
+
+
 class TestP0DecisionEnforcement:
     """P0: Decision enforcement - reason zorunlu, reason yoksa 400; FE tarafında action disabled"""
     
     def test_approve_without_reason_returns_400(self, admin_headers, test_user_id):
         """Approve without reason should return 400"""
+        ensure_queue_resumed(admin_headers)
         intent_id = create_queued_intent(test_user_id)
         detail = fetch_detail(admin_headers, intent_id)
         
@@ -167,6 +177,7 @@ class TestP0DecisionEnforcement:
     
     def test_reject_without_reason_returns_400(self, admin_headers, test_user_id):
         """Reject without reason should return 400"""
+        ensure_queue_resumed(admin_headers)
         intent_id = create_queued_intent(test_user_id)
         
         response = requests.post(
@@ -179,6 +190,7 @@ class TestP0DecisionEnforcement:
     
     def test_cancel_without_reason_returns_400(self, admin_headers, test_user_id):
         """Cancel without reason should return 400"""
+        ensure_queue_resumed(admin_headers)
         intent_id = create_queued_intent(test_user_id)
         
         response = requests.post(
@@ -191,6 +203,7 @@ class TestP0DecisionEnforcement:
     
     def test_approve_without_read_ack_returns_400(self, admin_headers, test_user_id):
         """Approve without read_acknowledged should return 400"""
+        ensure_queue_resumed(admin_headers)
         intent_id = create_queued_intent(test_user_id)
         detail = fetch_detail(admin_headers, intent_id)
         
@@ -211,14 +224,15 @@ class TestP0HighRiskSafety:
     """P0: High-risk safety - double confirmation zorunlu, risk payload severity+breakdown dönüyor"""
     
     def test_high_risk_approve_without_double_confirmation_returns_400(self, admin_headers, test_user_id):
-        """High-risk intent approve without double_confirmation should return 400"""
+        """High-risk intent için execute aşamasında confirmation zorunlu"""
+        ensure_queue_resumed(admin_headers)
         intent_id = create_queued_intent(test_user_id, high_risk=True)
         detail = fetch_detail(admin_headers, intent_id)
         
         # Verify it's high risk
         assert detail.get("risk_payload", {}).get("is_high_risk") is True
         
-        response = requests.post(
+        approve = requests.post(
             f"{BASE_URL}/api/admin/execution-queue/{intent_id}/approve",
             headers=admin_headers,
             json={
@@ -226,14 +240,29 @@ class TestP0HighRiskSafety:
                 "detail_version": detail.get("detail_version"),
                 "read_acknowledged": True,
                 "double_confirmation": False,
+                "override_execute": True,
             },
             timeout=30,
         )
-        assert response.status_code == 400
-        assert "double" in response.text.lower() or "confirmation" in response.text.lower()
+        assert approve.status_code == 200, approve.text
+        assert approve.json().get("status") == "APPROVED"
+
+        execute = requests.post(
+            f"{BASE_URL}/api/admin/execution-queue/{intent_id}/execute",
+            headers=admin_headers,
+            json={
+                "reason": "execute without confirmation",
+                "detail_version": fetch_detail(admin_headers, intent_id).get("detail_version"),
+                "execute_confirmation": False,
+            },
+            timeout=30,
+        )
+        assert execute.status_code == 400
+        assert "execute_confirmation" in execute.text
     
     def test_high_risk_approve_with_double_confirmation_succeeds(self, admin_headers, test_user_id):
-        """High-risk intent approve with double_confirmation should succeed (with override due to no exchange connection)"""
+        """High-risk flow: approve -> execute(with confirmation)"""
+        ensure_queue_resumed(admin_headers)
         intent_id = create_queued_intent(test_user_id, high_risk=True)
         detail = fetch_detail(admin_headers, intent_id)
         
@@ -252,7 +281,20 @@ class TestP0HighRiskSafety:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data.get("status") == "RELEASED"
+        assert data.get("status") == "APPROVED"
+
+        execute = requests.post(
+            f"{BASE_URL}/api/admin/execution-queue/{intent_id}/execute",
+            headers=admin_headers,
+            json={
+                "reason": "execute with confirmation",
+                "detail_version": fetch_detail(admin_headers, intent_id).get("detail_version"),
+                "execute_confirmation": True,
+            },
+            timeout=30,
+        )
+        assert execute.status_code == 200, execute.text
+        assert execute.json().get("status") == "RELEASED"
     
     def test_risk_payload_contains_severity_and_breakdown(self, admin_headers, test_user_id):
         """Risk payload should contain severity and reason_breakdown"""

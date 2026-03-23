@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from dependencies.execution_guard_dependency import execution_guard_admin_approve_trade_dependency
 from db import get_db, redis_client
 from deps import require_admin, require_super_admin
-from models import AuditLog, User, UserExchangeConnection, UserExecutionIntent
+from models import AuditLog, BrandSetting, SystemAlert, User, UserExchangeConnection, UserExecutionIntent
 from schemas import (
     AdminExecutionQueueBulkDecisionRequest,
     AdminExecutionQueueBulkDecisionResponse,
@@ -19,6 +19,8 @@ from schemas import (
     AdminExecutionQueueDecisionResponse,
     AdminExecutionQueueEditRequest,
     AdminExecutionQueueEditResponse,
+    ExecutionDecisionGateConfigResponse,
+    ExecutionDecisionGateConfigUpdateRequest,
     ExecutionIntentDetailResponse,
     ExecutionIntentHistoryItemResponse,
     ExecutionIntentQueueItemResponse,
@@ -36,6 +38,7 @@ from services.execution_intent_service import (
     build_queue_observability_metrics,
     cancel_execution_intent_by_admin,
     edit_execution_intent_by_admin,
+    execute_approved_intent,
     list_execution_queue,
     queue_status_summary,
     reject_execution_intent,
@@ -60,6 +63,15 @@ from services.live_mode_service import (
 router = APIRouter(prefix="/admin", tags=["admin_execution"])
 QUEUE_CONTROL_STATE_KEY = "execution_queue:control_state:v1"
 BULK_ACTION_LIMIT = 20
+DECISION_GATE_CONFIG_KEY = "execution_decision_gate"
+DEFAULT_DECISION_GATE_CONFIG = {
+    "execution_decision_gate_enforced": True,
+    "thresholds": {
+        "queue_backlog": 100,
+        "high_risk_spike": 5,
+        "reject_spike": 10,
+    },
+}
 
 
 def _queue_control_state() -> dict:
@@ -96,6 +108,89 @@ def _resolve_decision_reason(payload: AdminExecutionQueueDecisionRequest) -> str
     return str(payload.reason or payload.note or "").strip()
 
 
+def _execution_alert_user_state(details: dict, user_id: str) -> dict:
+    states = dict((details or {}).get("user_states") or {})
+    return dict(states.get(user_id) or {})
+
+
+def _set_execution_alert_user_state(details: dict, *, user_id: str, patch: dict) -> dict:
+    details_payload = dict(details or {})
+    states = dict(details_payload.get("user_states") or {})
+    current = dict(states.get(user_id) or {})
+    current.update(patch)
+    states[user_id] = current
+    details_payload["user_states"] = states
+    return details_payload
+
+
+def _log_decision_block(
+    db: Session,
+    *,
+    action: str,
+    intent_id: str | None,
+    actor: User,
+    reason_code: str,
+) -> None:
+    create_audit_log(
+        db,
+        action=f"EXECUTION_DECISION_BLOCKED_{action.upper()}",
+        entity_type="execution_intent",
+        entity_id=intent_id,
+        actor_user_id=actor.id,
+        actor_role=actor.role.value,
+        severity="warning",
+        details={"reason_code": reason_code},
+    )
+
+
+def _decision_gate_config(db: Session) -> dict:
+    brand = db.query(BrandSetting).filter(BrandSetting.id == "default").first()
+    if brand is None:
+        brand = BrandSetting(id="default", metadata_json={})
+        db.add(brand)
+        db.commit()
+        db.refresh(brand)
+
+    metadata = dict(brand.metadata_json or {})
+    config = dict(metadata.get(DECISION_GATE_CONFIG_KEY) or {})
+    merged = {
+        "execution_decision_gate_enforced": bool(
+            config.get("execution_decision_gate_enforced", DEFAULT_DECISION_GATE_CONFIG["execution_decision_gate_enforced"])
+        ),
+        "thresholds": {
+            **DEFAULT_DECISION_GATE_CONFIG["thresholds"],
+            **dict(config.get("thresholds") or {}),
+        },
+    }
+    return merged
+
+
+def _update_decision_gate_config(db: Session, *, patch: dict, actor_user_id: str) -> dict:
+    brand = db.query(BrandSetting).filter(BrandSetting.id == "default").first()
+    if brand is None:
+        brand = BrandSetting(id="default", metadata_json={})
+        db.add(brand)
+        db.commit()
+        db.refresh(brand)
+
+    metadata = dict(brand.metadata_json or {})
+    current = _decision_gate_config(db)
+    updated = {
+        "execution_decision_gate_enforced": bool(
+            patch.get("execution_decision_gate_enforced", current["execution_decision_gate_enforced"])
+        ),
+        "thresholds": {
+            **current["thresholds"],
+            **dict(patch.get("thresholds") or {}),
+        },
+    }
+    metadata[DECISION_GATE_CONFIG_KEY] = updated
+    brand.metadata_json = metadata
+    brand.updated_by_user_id = actor_user_id
+    db.commit()
+    return updated
+
+
 def _resolve_execution_mode_from_intent(row) -> str:
     provider_payload = getattr(row, "execution_provider_payload", None)
     if isinstance(provider_payload, dict) and bool(provider_payload.get("mocked")):
@@ -125,6 +220,7 @@ def execution_queue(
     db: Session = Depends(get_db),
 ):
     _ = current_user
+    thresholds = (_decision_gate_config(db).get("thresholds") or {})
     rows = list_execution_queue(
         db,
         status_filter=status_filter,
@@ -142,7 +238,7 @@ def execution_queue(
     for item in rows:
         if build_intent_risk_payload(item).get("is_high_risk"):
             high_risk_count += 1
-    if len(rows) >= 100:
+    if len(rows) >= int(thresholds.get("queue_backlog", 100)):
         create_system_alert(
             db,
             alert_type="execution_queue_backlog",
@@ -153,7 +249,7 @@ def execution_queue(
             root_cause_code="execution_queue_backlog",
             state_key="execution_queue_backlog",
         )
-    if high_risk_count >= 5:
+    if high_risk_count >= int(thresholds.get("high_risk_spike", 5)):
         create_system_alert(
             db,
             alert_type="execution_queue_high_risk_spike",
@@ -208,6 +304,7 @@ def execution_queue_rejection_summary(
     db: Session = Depends(get_db),
 ):
     _ = current_user
+    thresholds = (_decision_gate_config(db).get("thresholds") or {})
     distribution = rejection_reason_summary(db, limit=limit)
     trend = rejection_reason_trend(db, limit=limit)
     guidance = [
@@ -220,7 +317,7 @@ def execution_queue_rejection_summary(
     ]
 
     reject_spike = sum(item.get("count", 0) for item in distribution[:3])
-    if reject_spike >= 10:
+    if reject_spike >= int(thresholds.get("reject_spike", 10)):
         create_system_alert(
             db,
             alert_type="execution_reject_spike",
@@ -247,15 +344,21 @@ def approve_intent(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    gate_config = _decision_gate_config(db)
+    gate_enforced = bool(gate_config.get("execution_decision_gate_enforced", True))
+
     queue_state = _queue_control_state()
     if queue_state.get("paused") and not bool(payload.override_execute):
+        _log_decision_block(db, action="approve", intent_id=intent_id, actor=current_user, reason_code="execution_queue_paused")
         raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="execution_queue_paused")
 
     decision_reason = _resolve_decision_reason(payload)
     if len(decision_reason) < 3:
+        _log_decision_block(db, action="approve", intent_id=intent_id, actor=current_user, reason_code="decision_reason_required")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="decision_reason_required")
 
     if bool(payload.override_execute) and str(current_user.role.value or "") != "super_admin":
+        _log_decision_block(db, action="approve", intent_id=intent_id, actor=current_user, reason_code="override_requires_super_admin")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="override_requires_super_admin")
 
     try:
@@ -271,13 +374,50 @@ def approve_intent(
         )
     except ExecutionSafetyViolation as exc:
         db.rollback()
+        _log_decision_block(db, action="approve", intent_id=intent_id, actor=current_user, reason_code=str(exc.reason_code))
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
             detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
         ) from exc
     except ValueError as exc:
         db.rollback()
+        _log_decision_block(db, action="approve", intent_id=intent_id, actor=current_user, reason_code=str(exc))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    if bool(payload.read_acknowledged):
+        create_audit_log(
+            db,
+            action="EXECUTION_DETAIL_ACKNOWLEDGED",
+            entity_type="execution_intent",
+            entity_id=row.id,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            details={"detail_version": payload.detail_version},
+        )
+
+    if not gate_enforced:
+        try:
+            row = execute_approved_intent(
+                db,
+                row.id,
+                current_user.id,
+                execution_reason=f"legacy_flow:{decision_reason}",
+                execute_confirmation=True,
+                detail_version=payload.detail_version,
+            )
+            create_audit_log(
+                db,
+                action="EXECUTION_DECISION_GATE_LEGACY_APPROVE_EXECUTE",
+                entity_type="execution_intent",
+                entity_id=row.id,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                severity="warning",
+                details={"reason": decision_reason},
+            )
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     create_audit_log(
         db,
@@ -294,19 +434,10 @@ def approve_intent(
             "override_execute": bool(payload.override_execute),
         },
     )
-    create_audit_log(
-        db,
-        action="EXECUTION_ORDER_RELEASED",
-        entity_type="execution_intent",
-        entity_id=row.id,
-        actor_user_id=current_user.id,
-        actor_role=current_user.role.value,
-        details={"released_at": row.released_at.isoformat() if row.released_at else None},
-    )
     if bool(payload.override_execute):
         create_audit_log(
             db,
-            action="EXECUTION_INTENT_OVERRIDE_EXECUTED",
+            action="EXECUTION_INTENT_OVERRIDE_APPROVED",
             entity_type="execution_intent",
             entity_id=row.id,
             actor_user_id=current_user.id,
@@ -320,6 +451,59 @@ def approve_intent(
         status=row.status,
         admin_note=row.admin_note,
         execution_mode=execution_mode,
+        detail_version=resolve_intent_detail_version(row),
+    )
+
+
+@router.post("/execution-queue/{intent_id}/execute", response_model=AdminExecutionQueueDecisionResponse)
+def execute_intent(
+    intent_id: str,
+    payload: AdminExecutionQueueDecisionRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    queue_state = _queue_control_state()
+    if queue_state.get("paused") and not bool(payload.override_execute):
+        _log_decision_block(db, action="execute", intent_id=intent_id, actor=current_user, reason_code="execution_queue_paused")
+        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="execution_queue_paused")
+
+    decision_reason = _resolve_decision_reason(payload)
+    if len(decision_reason) < 3:
+        _log_decision_block(db, action="execute", intent_id=intent_id, actor=current_user, reason_code="decision_reason_required")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="decision_reason_required")
+
+    try:
+        row = execute_approved_intent(
+            db,
+            intent_id,
+            current_user.id,
+            execution_reason=decision_reason,
+            execute_confirmation=bool(payload.execute_confirmation),
+            detail_version=payload.detail_version,
+        )
+    except ValueError as exc:
+        db.rollback()
+        _log_decision_block(db, action="execute", intent_id=intent_id, actor=current_user, reason_code=str(exc))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="EXECUTION_INTENT_EXECUTED",
+        entity_type="execution_intent",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "reason": decision_reason,
+            "execute_confirmation": bool(payload.execute_confirmation),
+            "detail_version": payload.detail_version,
+        },
+    )
+    return AdminExecutionQueueDecisionResponse(
+        intent_id=row.id,
+        status=row.status,
+        admin_note=row.admin_note,
+        execution_mode=_resolve_execution_mode_from_intent(row),
         detail_version=resolve_intent_detail_version(row),
     )
 
@@ -364,6 +548,7 @@ def reject_intent(
         )
     except ValueError as exc:
         db.rollback()
+        _log_decision_block(db, action="reject", intent_id=intent_id, actor=current_user, reason_code=str(exc))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     create_audit_log(
@@ -404,6 +589,7 @@ def retry_intent(
         row = retry_execution_intent(db, intent_id, current_user.id, admin_note=decision_reason)
     except ValueError as exc:
         db.rollback()
+        _log_decision_block(db, action="retry", intent_id=intent_id, actor=current_user, reason_code=str(exc))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     create_audit_log(
@@ -440,6 +626,7 @@ def cancel_intent_by_admin(
         row = cancel_execution_intent_by_admin(db, intent_id, current_user.id, admin_note=decision_reason)
     except ValueError as exc:
         db.rollback()
+        _log_decision_block(db, action="cancel", intent_id=intent_id, actor=current_user, reason_code=str(exc))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     create_audit_log(
@@ -765,6 +952,131 @@ def execution_queue_observability(
         "metrics": build_queue_observability_metrics(db, days=days),
         "queue_control_state": _queue_control_state(),
     }
+
+
+@router.get("/execution-queue/config", response_model=ExecutionDecisionGateConfigResponse)
+def execution_decision_gate_config(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_user
+    return ExecutionDecisionGateConfigResponse(**_decision_gate_config(db))
+
+
+@router.patch("/execution-queue/config", response_model=ExecutionDecisionGateConfigResponse)
+def update_execution_decision_gate_config(
+    payload: ExecutionDecisionGateConfigUpdateRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    patch_payload = {
+        "execution_decision_gate_enforced": payload.execution_decision_gate_enforced,
+        "thresholds": payload.thresholds or {},
+    }
+    updated = _update_decision_gate_config(db, patch=patch_payload, actor_user_id=current_super_admin.id)
+    create_audit_log(
+        db,
+        action="EXECUTION_DECISION_GATE_CONFIG_UPDATED",
+        entity_type="execution_queue",
+        entity_id="config",
+        actor_user_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        details={"patch": patch_payload, "updated": updated},
+    )
+    return ExecutionDecisionGateConfigResponse(**updated)
+
+
+@router.get("/execution-queue/alerts")
+def list_execution_queue_alerts(
+    status_filter: str = Query(default="all"),
+    limit: int = Query(default=100, ge=1, le=300),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    alert_types = ["execution_queue_backlog", "execution_queue_high_risk_spike", "execution_reject_spike"]
+    query = db.query(SystemAlert).filter(SystemAlert.alert_type.in_(alert_types)).order_by(SystemAlert.created_at.desc())
+    rows = query.limit(limit).all()
+
+    items = []
+    for row in rows:
+        details = dict(row.details or {})
+        state = _execution_alert_user_state(details, current_user.id)
+        item_status = "acked" if state.get("acked_at") else "read" if state.get("read_at") else "unread"
+        if status_filter != "all" and item_status != status_filter:
+            continue
+        items.append(
+            {
+                "id": row.id,
+                "alert_type": row.alert_type,
+                "severity": row.severity,
+                "message": row.message,
+                "details": details,
+                "status": item_status,
+                "read_at": state.get("read_at"),
+                "acked_at": state.get("acked_at"),
+                "acked_by": state.get("acked_by"),
+                "entity_key": row.entity_key,
+                "deep_link": f"/admin/execution-queue?intent_id={row.entity_key}" if row.entity_key else "/admin/execution-queue",
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+        )
+    return items
+
+
+@router.post("/execution-queue/alerts/{alert_id}/read")
+def mark_execution_alert_read(
+    alert_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = db.query(SystemAlert).filter(SystemAlert.id == alert_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert_not_found")
+    row.details = _set_execution_alert_user_state(
+        dict(row.details or {}),
+        user_id=current_user.id,
+        patch={"read_at": datetime.now(timezone.utc).isoformat()},
+    )
+    db.commit()
+    create_audit_log(
+        db,
+        action="EXECUTION_ALERT_MARKED_READ",
+        entity_type="system_alert",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"alert_type": row.alert_type},
+    )
+    return {"status": "ok", "alert_id": row.id}
+
+
+@router.post("/execution-queue/alerts/{alert_id}/ack")
+def ack_execution_alert(
+    alert_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = db.query(SystemAlert).filter(SystemAlert.id == alert_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alert_not_found")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    row.details = _set_execution_alert_user_state(
+        dict(row.details or {}),
+        user_id=current_user.id,
+        patch={
+            "read_at": now_iso,
+            "acked_at": now_iso,
+            "acked_by": current_user.id,
+        },
+    )
+    db.commit()
+    create_audit_log(
+        db,
+        action="EXECUTION_ALERT_ACKED",
+        entity_type="system_alert",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"alert_type": row.alert_type},
+    )
+    return {"status": "ok", "alert_id": row.id}
 
 
 @router.post("/execution-queue/{intent_id}/owner-revalidate", response_model=AdminExecutionIntentOwnerRevalidateResponse)

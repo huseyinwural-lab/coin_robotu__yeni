@@ -3750,6 +3750,7 @@ class AdminExecutionQueueDecisionRequest(BaseModel):
     reason: str = ""
     read_acknowledged: bool = False
     double_confirmation: bool = False
+    execute_confirmation: bool = False
     override_execute: bool = False
     detail_version: str | None = None
 
@@ -3825,6 +3826,16 @@ class AdminExecutionQueueEditResponse(BaseModel):
     status: str
     diff: dict = Field(default_factory=dict)
     detail_version: str | None = None
+
+
+class ExecutionDecisionGateConfigResponse(BaseModel):
+    execution_decision_gate_enforced: bool = True
+    thresholds: dict = Field(default_factory=dict)
+
+
+class ExecutionDecisionGateConfigUpdateRequest(BaseModel):
+    execution_decision_gate_enforced: bool | None = None
+    thresholds: dict = Field(default_factory=dict)
 
 
 class AdminExecutionIntentOwnerRevalidateResponse(BaseModel):

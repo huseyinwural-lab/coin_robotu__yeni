@@ -74,6 +74,18 @@ def build_approve_payload(base: str, admin_headers: dict, intent_id: str, note: 
     }
 
 
+def build_execute_payload(base: str, admin_headers: dict, intent_id: str, reason: str) -> dict:
+    detail = requests.get(f"{base}/api/admin/execution-queue/{intent_id}/detail", headers=admin_headers, timeout=20)
+    detail.raise_for_status()
+    detail_data = detail.json()
+    is_high_risk = bool((detail_data.get("risk_payload") or {}).get("is_high_risk"))
+    return {
+        "reason": reason,
+        "detail_version": detail_data.get("detail_version"),
+        "execute_confirmation": True if is_high_risk else False,
+    }
+
+
 def create_and_release_open_position(base: str, user_headers: dict, admin_headers: dict) -> dict:
     preview_payload = {
         "source_type": "manual",
@@ -116,6 +128,14 @@ def create_and_release_open_position(base: str, user_headers: dict, admin_header
         timeout=20,
     )
     approve.raise_for_status()
+
+    execute = requests.post(
+        f"{base}/api/admin/execution-queue/{intent_id}/execute",
+        headers=admin_headers,
+        json=build_execute_payload(base, admin_headers, intent_id, "execute_open_position"),
+        timeout=20,
+    )
+    execute.raise_for_status()
 
     positions = requests.get(f"{base}/api/user/execution/positions", headers=user_headers, timeout=20)
     positions.raise_for_status()
@@ -177,4 +197,11 @@ def preview_submit_approve_position_action(
         timeout=20,
     )
     approve.raise_for_status()
+    execute = requests.post(
+        f"{base}/api/admin/execution-queue/{intent_id}/execute",
+        headers=admin_headers,
+        json=build_execute_payload(base, admin_headers, intent_id, f"execute_{intent_type.lower()}"),
+        timeout=20,
+    )
+    execute.raise_for_status()
     return preview_data
