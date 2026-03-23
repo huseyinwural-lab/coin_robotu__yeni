@@ -1,16 +1,18 @@
+import csv
+import io
 import json
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
 from deps import require_admin, require_super_admin
-from models import AuditLog, StrategyObservabilityEvent, User
+from models import AuditLog, StrategyObservabilityEvent, SystemAlert, User
 from services.audit_service import create_audit_log
 from services.strategy_observability_service import (
     get_rejection_analytics,
@@ -180,6 +182,190 @@ def _build_simulation_items(rows: list[StrategyObservabilityEvent], score_config
             }
         )
     return items
+
+
+def _safe_parse_iso(raw_value: str | None) -> datetime | None:
+    if not raw_value:
+        return None
+    normalized = str(raw_value).strip()
+    if not normalized:
+        return None
+    try:
+        if normalized.endswith("Z"):
+            normalized = normalized.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _resolve_time_range(window: str, time_from: str | None, time_to: str | None) -> tuple[str, datetime, datetime]:
+    normalized, default_since = parse_window_to_since(window)
+    now = datetime.now(timezone.utc)
+    start_at = _safe_parse_iso(time_from) or default_since
+    end_at = _safe_parse_iso(time_to) or now
+    if end_at < start_at:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="invalid_time_range")
+    return normalized, start_at, end_at
+
+
+def _query_strategy_rows(
+    db: Session,
+    *,
+    strategy_id: str | None,
+    window: str,
+    time_from: str | None,
+    time_to: str | None,
+    limit: int = 1500,
+) -> tuple[str, datetime, datetime, list[StrategyObservabilityEvent]]:
+    normalized, start_at, end_at = _resolve_time_range(window, time_from, time_to)
+    query = db.query(StrategyObservabilityEvent).filter(
+        StrategyObservabilityEvent.created_at >= start_at,
+        StrategyObservabilityEvent.created_at <= end_at,
+    )
+    if strategy_id:
+        query = query.filter(StrategyObservabilityEvent.strategy_id == strategy_id)
+    rows = query.order_by(StrategyObservabilityEvent.created_at.asc()).limit(limit).all()
+    return normalized, start_at, end_at, rows
+
+
+def _build_trend_rows(rows: list[StrategyObservabilityEvent], *, window: str) -> list[dict]:
+    if window == "24h":
+        formatter = "%Y-%m-%d %H:00"
+    else:
+        formatter = "%Y-%m-%d"
+
+    bucket_map: dict[str, dict] = {}
+    for row in rows:
+        if not row.created_at:
+            continue
+        bucket_key = row.created_at.astimezone(timezone.utc).strftime(formatter)
+        bucket = bucket_map.setdefault(
+            bucket_key,
+            {
+                "bucket": bucket_key,
+                "selected_count": 0,
+                "rejected_count": 0,
+                "avg_adjusted_score": 0.0,
+                "avg_base_score": 0.0,
+                "total": 0,
+                "sum_adjusted": 0.0,
+                "sum_base": 0.0,
+            },
+        )
+        bucket["total"] += 1
+        bucket["sum_adjusted"] += float(row.adjusted_score or 0)
+        bucket["sum_base"] += float(row.base_score or 0)
+        if row.event_type == "selected_for_execution":
+            bucket["selected_count"] += 1
+        else:
+            bucket["rejected_count"] += 1
+
+    trend_rows = []
+    for bucket_key in sorted(bucket_map.keys()):
+        bucket = bucket_map[bucket_key]
+        total = max(int(bucket["total"]), 1)
+        trend_rows.append(
+            {
+                "bucket": bucket_key,
+                "selected_count": int(bucket["selected_count"]),
+                "rejected_count": int(bucket["rejected_count"]),
+                "avg_adjusted_score": round(float(bucket["sum_adjusted"]) / total, 4),
+                "avg_base_score": round(float(bucket["sum_base"]) / total, 4),
+            }
+        )
+    return trend_rows
+
+
+def _rows_to_export_payload(rows: list[StrategyObservabilityEvent]) -> list[dict]:
+    return [
+        {
+            "signal_id": row.id,
+            "strategy_id": row.strategy_id,
+            "symbol": row.symbol,
+            "event_type": row.event_type,
+            "market_regime": row.market_regime,
+            "base_score": float(row.base_score or 0),
+            "adjusted_score": float(row.adjusted_score or 0),
+            "score_delta": float(row.score_delta or 0),
+            "selection_rank": row.selection_rank,
+            "rejection_reason": row.rejection_reason,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
+
+
+def _serialize_action_timeline_items(
+    *,
+    audit_rows: list[AuditLog],
+    system_alert_rows: list[SystemAlert],
+    strategy_filter: str | None,
+    signal_strategy_map: dict[str, str],
+) -> list[dict]:
+    timeline: list[dict] = []
+
+    for row in audit_rows:
+        details = row.details or {}
+        row_strategy_id = str(details.get("strategy_id") or "").strip() or None
+        if not row_strategy_id:
+            signal_ids = [str(item) for item in (details.get("signal_ids") or [])]
+            for signal_id in signal_ids:
+                if signal_id in signal_strategy_map:
+                    row_strategy_id = signal_strategy_map[signal_id]
+                    break
+
+        if strategy_filter and row_strategy_id != strategy_filter:
+            continue
+
+        timeline.append(
+            {
+                "event_id": row.id,
+                "event_type": "manual_action",
+                "timestamp": row.created_at.isoformat() if row.created_at else None,
+                "strategy_id": row_strategy_id,
+                "action": row.action,
+                "actor_role": row.actor_role,
+                "reason": details.get("reason"),
+                "impact_hint": details.get("state_snapshot") or details.get("after_payload") or details,
+                "chain_ref": details.get("preview_token") or details.get("request_id") or row.entity_id,
+            }
+        )
+
+    for row in system_alert_rows:
+        details = row.details or {}
+        blob = json.dumps(details, ensure_ascii=False)
+        row_strategy_id = str(details.get("strategy_id") or "").strip() or None
+        if not row_strategy_id:
+            for signal_id, signal_strategy in signal_strategy_map.items():
+                if signal_id in blob:
+                    row_strategy_id = signal_strategy
+                    break
+
+        if strategy_filter and row_strategy_id != strategy_filter:
+            continue
+
+        timeline.append(
+            {
+                "event_id": row.id,
+                "event_type": "system_reaction",
+                "timestamp": row.created_at.isoformat() if row.created_at else None,
+                "strategy_id": row_strategy_id,
+                "action": row.alert_type,
+                "actor_role": "system",
+                "reason": row.message,
+                "impact_hint": details,
+                "severity": row.severity,
+                "status": row.status,
+                "chain_ref": row.entity_key or row.state_key or row.root_cause_code,
+                "alert_detail_path": f"/api/admin/action-center/alerts/{row.id}/detail",
+            }
+        )
+
+    timeline.sort(key=lambda item: item.get("timestamp") or "", reverse=True)
+    return timeline
 
 
 @router.get("/top-signals")
@@ -696,6 +882,246 @@ def rejection_signal_detail(signal_id: str, _: User = Depends(require_admin), db
             "explain": True,
             "retry": True,
         },
+    }
+
+
+@router.get("/observability/strategies")
+def strategy_observability_strategy_list(
+    window: str = Query(default="24h"),
+    time_from: str | None = Query(default=None),
+    time_to: str | None = Query(default=None),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    normalized, start_at, end_at, rows = _query_strategy_rows(
+        db,
+        strategy_id=None,
+        window=window,
+        time_from=time_from,
+        time_to=time_to,
+        limit=5000,
+    )
+    strategy_ids = sorted({str(row.strategy_id) for row in rows if row.strategy_id})
+    return {
+        "window": normalized,
+        "time_from": start_at.isoformat(),
+        "time_to": end_at.isoformat(),
+        "items": strategy_ids,
+        "count": len(strategy_ids),
+    }
+
+
+@router.get("/observability/{strategy_id}/detail")
+def strategy_observability_detail(
+    strategy_id: str,
+    window: str = Query(default="24h"),
+    time_from: str | None = Query(default=None),
+    time_to: str | None = Query(default=None),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    normalized, start_at, end_at, rows = _query_strategy_rows(
+        db,
+        strategy_id=strategy_id,
+        window=window,
+        time_from=time_from,
+        time_to=time_to,
+        limit=5000,
+    )
+
+    selected_rows = [row for row in rows if row.event_type == "selected_for_execution"]
+    rejected_rows = [row for row in rows if row.event_type != "selected_for_execution"]
+    avg_adjusted = round(sum(float(row.adjusted_score or 0) for row in rows) / max(len(rows), 1), 4)
+    avg_base = round(sum(float(row.base_score or 0) for row in rows) / max(len(rows), 1), 4)
+
+    rejection_counts: dict[str, int] = {}
+    symbols_counts: dict[str, int] = {}
+    for row in rows:
+        reason = str(row.rejection_reason or "")
+        if reason:
+            rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
+        symbols_counts[row.symbol] = symbols_counts.get(row.symbol, 0) + 1
+
+    trend_rows = _build_trend_rows(rows, window=normalized)
+    top_symbols = [
+        {"symbol": key, "count": value}
+        for key, value in sorted(symbols_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:20]
+    ]
+    rejection_reasons = [
+        {"reason": key, "count": value}
+        for key, value in sorted(rejection_counts.items(), key=lambda kv: (-kv[1], kv[0]))[:30]
+    ]
+
+    return {
+        "status": "success",
+        "strategy_id": strategy_id,
+        "filters": {
+            "window": normalized,
+            "time_from": start_at.isoformat(),
+            "time_to": end_at.isoformat(),
+        },
+        "summary": {
+            "signals_total": len(rows),
+            "signals_selected": len(selected_rows),
+            "signals_rejected": len(rejected_rows),
+            "avg_adjusted_score": avg_adjusted,
+            "avg_base_score": avg_base,
+        },
+        "trend_rows": trend_rows,
+        "top_symbols": top_symbols,
+        "rejection_reasons": rejection_reasons,
+        "recent_rows": _rows_to_export_payload(rows[-150:]),
+    }
+
+
+@router.get("/observability/export")
+def strategy_observability_export(
+    export_format: Literal["json", "csv"] = Query(default="json"),
+    window: str = Query(default="24h"),
+    strategy_id: str | None = Query(default=None),
+    time_from: str | None = Query(default=None),
+    time_to: str | None = Query(default=None),
+    top_n: int = Query(default=1000, ge=1, le=5000),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    normalized, start_at, end_at, rows = _query_strategy_rows(
+        db,
+        strategy_id=strategy_id,
+        window=window,
+        time_from=time_from,
+        time_to=time_to,
+        limit=top_n,
+    )
+    payload_rows = _rows_to_export_payload(rows)
+    filters_payload = {
+        "window": normalized,
+        "strategy_id": strategy_id,
+        "time_from": start_at.isoformat(),
+        "time_to": end_at.isoformat(),
+        "top_n": top_n,
+    }
+
+    if export_format == "json":
+        return {
+            "status": "success",
+            "export_format": "json",
+            "filters": filters_payload,
+            "count": len(payload_rows),
+            "items": payload_rows,
+        }
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["signal_id", "strategy_id", "symbol", "event_type", "market_regime", "base_score", "adjusted_score", "score_delta", "selection_rank", "rejection_reason", "created_at"])
+    for row in payload_rows:
+        writer.writerow(
+            [
+                row.get("signal_id"),
+                row.get("strategy_id"),
+                row.get("symbol"),
+                row.get("event_type"),
+                row.get("market_regime"),
+                row.get("base_score"),
+                row.get("adjusted_score"),
+                row.get("score_delta"),
+                row.get("selection_rank"),
+                row.get("rejection_reason"),
+                row.get("created_at"),
+            ]
+        )
+
+    filename_strategy = strategy_id or "all"
+    filename = f"observability_{filename_strategy}_{normalized}.csv"
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Observability-Filters": json.dumps(filters_payload, ensure_ascii=False),
+        },
+    )
+
+
+@router.get("/action-impact-timeline")
+def strategy_action_impact_timeline(
+    window: str = Query(default="24h"),
+    strategy_id: str | None = Query(default=None),
+    time_from: str | None = Query(default=None),
+    time_to: str | None = Query(default=None),
+    limit: int = Query(default=300, ge=1, le=1000),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    normalized, start_at, end_at = _resolve_time_range(window, time_from, time_to)
+
+    audit_rows = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.created_at >= start_at,
+            AuditLog.created_at <= end_at,
+            AuditLog.action.like("strategy_%"),
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    system_alert_rows = (
+        db.query(SystemAlert)
+        .filter(
+            SystemAlert.created_at >= start_at,
+            SystemAlert.created_at <= end_at,
+            or_(
+                SystemAlert.alert_type.ilike("%strategy%"),
+                SystemAlert.alert_type.ilike("%breach%"),
+                SystemAlert.root_cause_code.ilike("%breach%"),
+                SystemAlert.entity_key.ilike("%strategy%"),
+            ),
+        )
+        .order_by(SystemAlert.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    signal_ids: set[str] = set()
+    for row in audit_rows:
+        details = row.details or {}
+        for signal_id in details.get("signal_ids") or []:
+            value = str(signal_id or "").strip()
+            if value:
+                signal_ids.add(value)
+
+    signal_strategy_map: dict[str, str] = {}
+    if signal_ids:
+        signal_rows = db.query(StrategyObservabilityEvent).filter(StrategyObservabilityEvent.id.in_(list(signal_ids))).all()
+        signal_strategy_map = {str(item.id): str(item.strategy_id) for item in signal_rows if item.id and item.strategy_id}
+
+    timeline_rows = _serialize_action_timeline_items(
+        audit_rows=audit_rows,
+        system_alert_rows=system_alert_rows,
+        strategy_filter=strategy_id,
+        signal_strategy_map=signal_strategy_map,
+    )
+    timeline_rows = timeline_rows[:limit]
+    manual_count = sum(1 for item in timeline_rows if item.get("event_type") == "manual_action")
+    system_count = sum(1 for item in timeline_rows if item.get("event_type") == "system_reaction")
+
+    return {
+        "status": "success",
+        "filters": {
+            "window": normalized,
+            "strategy_id": strategy_id,
+            "time_from": start_at.isoformat(),
+            "time_to": end_at.isoformat(),
+            "limit": limit,
+        },
+        "summary": {
+            "total": len(timeline_rows),
+            "manual_action_count": manual_count,
+            "system_reaction_count": system_count,
+        },
+        "items": timeline_rows,
     }
 
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +50,7 @@ const safeJsonParse = (rawValue, fallback) => {
 };
 
 export const AdminStrategyObservabilityPage = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const role = String(user?.role || "");
   const isSuperAdmin = role === "super_admin";
@@ -106,6 +108,35 @@ export const AdminStrategyObservabilityPage = () => {
 
   const [report, setReport] = useState(null);
   const [riskCapital, setRiskCapital] = useState(null);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [autoRefreshSeconds, setAutoRefreshSeconds] = useState(30);
+  const [exportStrategyId, setExportStrategyId] = useState("");
+
+  const [riskLimitsDraft, setRiskLimitsDraft] = useState({
+    max_open_risk_pct: "",
+    max_daily_loss_pct: "",
+    max_portfolio_drawdown_pct: "",
+    max_strategy_drawdown_pct: "",
+    max_positions_per_strategy: "",
+    max_sector_exposure_pct: "",
+    max_correlated_positions: "",
+  });
+  const [riskLimitsPreview, setRiskLimitsPreview] = useState(null);
+  const [riskLimitsReason, setRiskLimitsReason] = useState("");
+  const [riskLimitsConfirmChecked, setRiskLimitsConfirmChecked] = useState(false);
+
+  const [exposureOverrideStrategyId, setExposureOverrideStrategyId] = useState("");
+  const [exposureOverrideCapPct, setExposureOverrideCapPct] = useState("20");
+  const [exposureOverridePreview, setExposureOverridePreview] = useState(null);
+  const [exposureOverrideReason, setExposureOverrideReason] = useState("");
+  const [exposureOverrideConfirmChecked, setExposureOverrideConfirmChecked] = useState(false);
+
+  const [riskAlertLinkLoading, setRiskAlertLinkLoading] = useState(false);
+  const [riskAlertLinkDetail, setRiskAlertLinkDetail] = useState(null);
+
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineSummary, setTimelineSummary] = useState(null);
+  const [timelineItems, setTimelineItems] = useState([]);
 
   const [auditLimit, setAuditLimit] = useState(50);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -219,6 +250,45 @@ export const AdminStrategyObservabilityPage = () => {
     setAutoTuningEnabled(Boolean(configPayload?.auto_tuning_enabled));
   }, []);
 
+  const syncRiskForm = useCallback((snapshot) => {
+    const limits = snapshot?.limits || {};
+    setRiskLimitsDraft({
+      max_open_risk_pct: String(limits?.max_open_risk_pct ?? ""),
+      max_daily_loss_pct: String(limits?.max_daily_loss_pct ?? ""),
+      max_portfolio_drawdown_pct: String(limits?.max_portfolio_drawdown_pct ?? ""),
+      max_strategy_drawdown_pct: String(limits?.max_strategy_drawdown_pct ?? ""),
+      max_positions_per_strategy: String(limits?.max_positions_per_strategy ?? ""),
+      max_sector_exposure_pct: String(limits?.max_sector_exposure_pct ?? ""),
+      max_correlated_positions: String(limits?.max_correlated_positions ?? ""),
+    });
+    const allocation = snapshot?.allocation || {};
+    const firstStrategy = Object.keys(allocation)[0] || "";
+    if (firstStrategy && !exposureOverrideStrategyId) {
+      setExposureOverrideStrategyId(firstStrategy);
+    }
+  }, [exposureOverrideStrategyId]);
+
+  const loadActionImpactTimeline = useCallback(async () => {
+    setTimelineLoading(true);
+    try {
+      const { data } = await apiClient.get("/admin/strategy/action-impact-timeline", {
+        params: {
+          window: windowRange,
+          strategy_id: exportStrategyId || null,
+          limit: 120,
+        },
+      });
+      setTimelineSummary(data?.summary || null);
+      setTimelineItems(data?.items || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Action impact timeline alınamadı");
+      setTimelineSummary(null);
+      setTimelineItems([]);
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, [exportStrategyId, windowRange]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -227,7 +297,7 @@ export const AdminStrategyObservabilityPage = () => {
         apiClient.get("/admin/strategy/rejection-analytics", { params: { window: windowRange } }),
         apiClient.get("/admin/strategy/score-metrics", { params: { window: windowRange } }),
         apiClient.get("/admin/strategy/report", { params: { window: windowRange } }),
-        apiClient.get("/admin/strategy/risk-capital/status"),
+        apiClient.get("/admin/strategy/risk-capital/status", { params: { include_alerts: true } }),
         apiClient.get("/admin/strategy/score-config"),
       ]);
 
@@ -249,10 +319,17 @@ export const AdminStrategyObservabilityPage = () => {
         setScoreMetrics(scoreRes.value?.data || null);
       }
       if (reportRes.status === "fulfilled") {
-        setReport(reportRes.value?.data || null);
+        const reportPayload = reportRes.value?.data || null;
+        setReport(reportPayload);
+        const firstActiveStrategy = reportPayload?.active_spot_strategies?.[0];
+        if (!exportStrategyId && firstActiveStrategy) {
+          setExportStrategyId(firstActiveStrategy);
+        }
       }
       if (riskCapitalRes.status === "fulfilled") {
-        setRiskCapital(riskCapitalRes.value?.data || null);
+        const riskPayload = riskCapitalRes.value?.data || null;
+        setRiskCapital(riskPayload);
+        syncRiskForm(riskPayload);
       }
       if (scoreConfigRes.status === "fulfilled") {
         syncScoreForm(scoreConfigRes.value?.data?.config || null);
@@ -262,7 +339,7 @@ export const AdminStrategyObservabilityPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [safeTopN, syncScoreForm, windowRange]);
+  }, [exportStrategyId, safeTopN, syncRiskForm, syncScoreForm, windowRange]);
 
   useEffect(() => {
     loadData();
@@ -279,6 +356,24 @@ export const AdminStrategyObservabilityPage = () => {
   useEffect(() => {
     loadAuditLog();
   }, [loadAuditLog]);
+
+  useEffect(() => {
+    loadActionImpactTimeline();
+  }, [loadActionImpactTimeline]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) {
+      return undefined;
+    }
+    const intervalMs = Math.max(Number(autoRefreshSeconds) || 30, 10) * 1000;
+    const timer = window.setInterval(() => {
+      loadData();
+      loadRejectionDetails();
+      loadAuditLog();
+      loadActionImpactTimeline();
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [autoRefreshEnabled, autoRefreshSeconds, loadActionImpactTimeline, loadAuditLog, loadData, loadRejectionDetails]);
 
   const updateSelectedSignal = (signalId, checked) => {
     setSelectedSignalIds((prev) => {
@@ -587,6 +682,182 @@ export const AdminStrategyObservabilityPage = () => {
     }
   };
 
+  const previewRiskLimits = async () => {
+    setFeedbackLoading("Risk Limits Preview", "Risk limit değişiklikleri preview hesaplanıyor");
+    try {
+      const payload = {
+        max_open_risk_pct: Number(riskLimitsDraft.max_open_risk_pct),
+        max_daily_loss_pct: Number(riskLimitsDraft.max_daily_loss_pct),
+        max_portfolio_drawdown_pct: Number(riskLimitsDraft.max_portfolio_drawdown_pct),
+        max_strategy_drawdown_pct: Number(riskLimitsDraft.max_strategy_drawdown_pct),
+        max_positions_per_strategy: Number(riskLimitsDraft.max_positions_per_strategy),
+        max_sector_exposure_pct: Number(riskLimitsDraft.max_sector_exposure_pct),
+        max_correlated_positions: Number(riskLimitsDraft.max_correlated_positions),
+      };
+      const { data } = await apiClient.post("/admin/strategy/risk-capital/limits/preview", payload);
+      setRiskLimitsPreview(data || null);
+      setRiskLimitsConfirmChecked(false);
+      setFeedbackSuccess("Risk Limits Preview", `Preview hazır. token: ${data?.preview_token || "-"}`);
+      toast.success("Risk limits preview hazır");
+    } catch (error) {
+      const message = error?.response?.data?.detail || "Risk limits preview başarısız";
+      setFeedbackError("Risk Limits Preview", message);
+      toast.error(message);
+    }
+  };
+
+  const applyRiskLimits = async () => {
+    if (!isSuperAdmin) {
+      toast.error("Risk limits apply sadece super_admin için açık");
+      return;
+    }
+    if (!riskLimitsPreview?.preview_token) {
+      toast.error("Önce risk limits preview alınmalı");
+      return;
+    }
+    if (!riskLimitsConfirmChecked) {
+      toast.error("Risk limits apply için confirm zorunlu");
+      return;
+    }
+    if (riskLimitsReason.trim().length < 3) {
+      toast.error("Risk limits reason en az 3 karakter olmalı");
+      return;
+    }
+    setFeedbackLoading("Risk Limits Apply", "Risk limits uygulanıyor");
+    try {
+      await apiClient.post("/admin/strategy/risk-capital/limits/apply", {
+        preview_token: riskLimitsPreview.preview_token,
+        confirm: true,
+        reason: riskLimitsReason.trim(),
+      });
+      setFeedbackSuccess("Risk Limits Apply", "Risk limits başarıyla uygulandı");
+      toast.success("Risk limits uygulandı");
+      setRiskLimitsReason("");
+      setRiskLimitsConfirmChecked(false);
+      setRiskLimitsPreview(null);
+      await Promise.all([loadData(), loadAuditLog(), loadActionImpactTimeline()]);
+    } catch (error) {
+      const message = error?.response?.data?.detail || "Risk limits apply başarısız";
+      setFeedbackError("Risk Limits Apply", message);
+      toast.error(message);
+    }
+  };
+
+  const previewExposureOverride = async () => {
+    if (!exposureOverrideStrategyId) {
+      toast.error("Exposure override için strategy seçin");
+      return;
+    }
+    setFeedbackLoading("Exposure Override Preview", "Exposure override preview hazırlanıyor");
+    try {
+      const { data } = await apiClient.post("/admin/strategy/risk-capital/exposure-override/preview", {
+        strategy_id: exposureOverrideStrategyId,
+        override_cap_pct: Number(exposureOverrideCapPct),
+      });
+      setExposureOverridePreview(data || null);
+      setExposureOverrideConfirmChecked(false);
+      setFeedbackSuccess("Exposure Override Preview", `Preview hazır. token: ${data?.preview_token || "-"}`);
+      toast.success("Exposure override preview hazır");
+    } catch (error) {
+      const message = error?.response?.data?.detail || "Exposure override preview başarısız";
+      setFeedbackError("Exposure Override Preview", message);
+      toast.error(message);
+    }
+  };
+
+  const applyExposureOverride = async () => {
+    if (!isSuperAdmin) {
+      toast.error("Exposure override apply sadece super_admin için açık");
+      return;
+    }
+    if (!exposureOverridePreview?.preview_token) {
+      toast.error("Önce exposure override preview alınmalı");
+      return;
+    }
+    if (!exposureOverrideConfirmChecked) {
+      toast.error("Exposure override apply için confirm zorunlu");
+      return;
+    }
+    if (exposureOverrideReason.trim().length < 3) {
+      toast.error("Exposure override reason en az 3 karakter olmalı");
+      return;
+    }
+    setFeedbackLoading("Exposure Override Apply", "Exposure override uygulanıyor");
+    try {
+      await apiClient.post("/admin/strategy/risk-capital/exposure-override/apply", {
+        preview_token: exposureOverridePreview.preview_token,
+        confirm: true,
+        reason: exposureOverrideReason.trim(),
+      });
+      setFeedbackSuccess("Exposure Override Apply", "Exposure override başarıyla uygulandı");
+      toast.success("Exposure override uygulandı");
+      setExposureOverrideReason("");
+      setExposureOverrideConfirmChecked(false);
+      setExposureOverridePreview(null);
+      await Promise.all([loadData(), loadAuditLog(), loadActionImpactTimeline()]);
+    } catch (error) {
+      const message = error?.response?.data?.detail || "Exposure override apply başarısız";
+      setFeedbackError("Exposure Override Apply", message);
+      toast.error(message);
+    }
+  };
+
+  const loadRiskAlertLink = async (alertId) => {
+    if (!alertId) {
+      return;
+    }
+    setRiskAlertLinkLoading(true);
+    try {
+      const { data } = await apiClient.get(`/admin/strategy/risk-capital/alerts/${alertId}/breach-link`);
+      setRiskAlertLinkDetail(data || null);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Alert-breach link detayı alınamadı");
+      setRiskAlertLinkDetail(null);
+    } finally {
+      setRiskAlertLinkLoading(false);
+    }
+  };
+
+  const exportObservability = async (exportFormat) => {
+    const params = {
+      export_format: exportFormat,
+      window: windowRange,
+      strategy_id: exportStrategyId || null,
+      top_n: 1200,
+    };
+    try {
+      if (exportFormat === "json") {
+        const { data } = await apiClient.get("/admin/strategy/observability/export", { params });
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `observability_${exportStrategyId || "all"}_${windowRange}.json`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(link.href);
+      } else {
+        const response = await apiClient.get("/admin/strategy/observability/export", {
+          params,
+          responseType: "blob",
+        });
+        const contentDisposition = response.headers?.["content-disposition"] || "";
+        const fileNameMatch = /filename="([^"]+)"/.exec(contentDisposition);
+        const filename = fileNameMatch?.[1] || `observability_${exportStrategyId || "all"}_${windowRange}.csv`;
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(response.data);
+        link.download = filename;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(link.href);
+      }
+      toast.success(`${exportFormat.toUpperCase()} export hazırlandı`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || `${exportFormat.toUpperCase()} export başarısız`);
+    }
+  };
+
   const applyRejectionFilters = () => {
     setAppliedRejectionFilters(rejectionFilterDraft);
   };
@@ -665,6 +936,61 @@ export const AdminStrategyObservabilityPage = () => {
         <p className="self-center text-sm text-black" data-testid="strategy-observability-loading-text">
           loading: {String(loading)}
         </p>
+      </div>
+
+      <div className="grid gap-2 border border-black/30 bg-orange-100 p-4 md:grid-cols-6" data-testid="strategy-observability-p1-controls-panel">
+        <div className="flex items-center gap-2" data-testid="strategy-observability-auto-refresh-row">
+          <Switch
+            checked={autoRefreshEnabled}
+            onCheckedChange={(checked) => setAutoRefreshEnabled(Boolean(checked))}
+            data-testid="strategy-observability-auto-refresh-switch"
+          />
+          <span className="text-xs">Auto Refresh</span>
+        </div>
+        <Input
+          type="number"
+          min={10}
+          max={180}
+          value={autoRefreshSeconds}
+          onChange={(event) => setAutoRefreshSeconds(Math.min(Math.max(Number(event.target.value) || 30, 10), 180))}
+          data-testid="strategy-observability-auto-refresh-seconds-input"
+        />
+        <Input
+          value={exportStrategyId}
+          onChange={(event) => setExportStrategyId(event.target.value)}
+          placeholder="export strategy_id (opsiyonel)"
+          data-testid="strategy-observability-export-strategy-input"
+        />
+        <Button
+          variant="outline"
+          className="border-black bg-white text-black"
+          onClick={() => exportObservability("csv")}
+          data-testid="strategy-observability-export-csv-button"
+        >
+          CSV Export
+        </Button>
+        <Button
+          variant="outline"
+          className="border-black bg-white text-black"
+          onClick={() => exportObservability("json")}
+          data-testid="strategy-observability-export-json-button"
+        >
+          JSON Export
+        </Button>
+        <Button
+          className="border border-black bg-black text-orange-300 hover:bg-zinc-800"
+          onClick={() => {
+            const targetStrategy = exportStrategyId || report?.active_spot_strategies?.[0];
+            if (!targetStrategy) {
+              toast.error("Detay sayfası için strategy seçin");
+              return;
+            }
+            navigate(`/admin/strategy/observability/${targetStrategy}`);
+          }}
+          data-testid="strategy-observability-open-detail-page-button"
+        >
+          Report Detail Aç
+        </Button>
       </div>
 
       {actionFeedback.state !== "idle" && (
@@ -782,6 +1108,15 @@ export const AdminStrategyObservabilityPage = () => {
                           data-testid={`top-signals-explain-button-${signalId}`}
                         >
                           Explain
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-black bg-white text-black"
+                          onClick={() => navigate(`/admin/strategy/observability/${item.strategy_id}`)}
+                          data-testid={`top-signals-detail-button-${signalId}`}
+                        >
+                          Detail
                         </Button>
                         <Badge
                           className={rowSimulated ? "border-emerald-700 bg-emerald-100 text-emerald-900" : "border-slate-600 bg-slate-100 text-slate-800"}
@@ -901,6 +1236,23 @@ export const AdminStrategyObservabilityPage = () => {
             <p data-testid="strategy-report-drawdown-by-strategy">
               strategy_drawdown: {JSON.stringify(report?.strategy_drawdown || {})}
             </p>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="strategy-report-strategy-actions-row">
+            {(report?.active_spot_strategies || []).map((strategyCode) => (
+              <Button
+                key={strategyCode}
+                size="sm"
+                variant="outline"
+                className="h-8 border-black bg-white text-black"
+                onClick={() => {
+                  setExportStrategyId(strategyCode);
+                  navigate(`/admin/strategy/observability/${strategyCode}`);
+                }}
+                data-testid={`strategy-report-open-detail-button-${strategyCode}`}
+              >
+                {strategyCode} Detail
+              </Button>
+            ))}
           </div>
         </div>
       </section>
@@ -1254,18 +1606,225 @@ export const AdminStrategyObservabilityPage = () => {
       </section>
 
       <section className="border border-black/25 bg-orange-100 p-4" data-testid="risk-capital-status-panel">
-        <h3 className="text-lg font-bold" data-testid="risk-capital-status-title">Risk & Capital Status</h3>
+        <h3 className="text-lg font-bold" data-testid="risk-capital-status-title">Risk & Capital Status Control Layer</h3>
+        <p className="mt-1 text-xs text-black/70" data-testid="risk-capital-status-description">
+          Risk limit değişikliği için preview zorunlu. Exposure override için reason + preview + confirm zorunlu.
+        </p>
+
         <div className="mt-3 grid gap-2 text-sm md:grid-cols-2" data-testid="risk-capital-status-grid">
           <p data-testid="risk-capital-equity">equity: {riskCapital?.equity ?? 0}</p>
           <p data-testid="risk-capital-open-risk">open_risk_pct: {riskCapital?.open_risk_pct ?? 0}</p>
           <p data-testid="risk-capital-daily-loss">daily_loss: {riskCapital?.daily_loss?.daily_loss_amount ?? 0}</p>
           <p data-testid="risk-capital-portfolio-drawdown">portfolio_drawdown_pct: {riskCapital?.portfolio_drawdown_pct ?? 0}</p>
-          <p className="md:col-span-2" data-testid="risk-capital-allocation-json">
-            allocation: {JSON.stringify(riskCapital?.allocation || {})}
-          </p>
-          <p className="md:col-span-2" data-testid="risk-capital-limits-json">
-            limits: {JSON.stringify(riskCapital?.limits || {})}
-          </p>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-2" data-testid="risk-capital-control-grid">
+          <div className="space-y-2 border border-black/25 bg-white p-3" data-testid="risk-limits-edit-panel">
+            <p className="font-semibold" data-testid="risk-limits-edit-title">Risk Limits Edit</p>
+            <Input value={riskLimitsDraft.max_open_risk_pct} onChange={(event) => setRiskLimitsDraft((prev) => ({ ...prev, max_open_risk_pct: event.target.value }))} placeholder="max_open_risk_pct" data-testid="risk-limits-max-open-risk-input" />
+            <Input value={riskLimitsDraft.max_daily_loss_pct} onChange={(event) => setRiskLimitsDraft((prev) => ({ ...prev, max_daily_loss_pct: event.target.value }))} placeholder="max_daily_loss_pct" data-testid="risk-limits-max-daily-loss-input" />
+            <Input value={riskLimitsDraft.max_portfolio_drawdown_pct} onChange={(event) => setRiskLimitsDraft((prev) => ({ ...prev, max_portfolio_drawdown_pct: event.target.value }))} placeholder="max_portfolio_drawdown_pct" data-testid="risk-limits-max-portfolio-drawdown-input" />
+            <Input value={riskLimitsDraft.max_strategy_drawdown_pct} onChange={(event) => setRiskLimitsDraft((prev) => ({ ...prev, max_strategy_drawdown_pct: event.target.value }))} placeholder="max_strategy_drawdown_pct" data-testid="risk-limits-max-strategy-drawdown-input" />
+            <Input value={riskLimitsDraft.max_positions_per_strategy} onChange={(event) => setRiskLimitsDraft((prev) => ({ ...prev, max_positions_per_strategy: event.target.value }))} placeholder="max_positions_per_strategy" data-testid="risk-limits-max-positions-input" />
+            <Input value={riskLimitsDraft.max_sector_exposure_pct} onChange={(event) => setRiskLimitsDraft((prev) => ({ ...prev, max_sector_exposure_pct: event.target.value }))} placeholder="max_sector_exposure_pct" data-testid="risk-limits-max-sector-exposure-input" />
+            <Input value={riskLimitsDraft.max_correlated_positions} onChange={(event) => setRiskLimitsDraft((prev) => ({ ...prev, max_correlated_positions: event.target.value }))} placeholder="max_correlated_positions" data-testid="risk-limits-max-correlated-input" />
+
+            <Button variant="outline" className="border-black bg-white text-black" onClick={previewRiskLimits} data-testid="risk-limits-preview-button">
+              Risk Limits Preview
+            </Button>
+
+            <p className="text-xs" data-testid="risk-limits-preview-token">preview_token: {riskLimitsPreview?.preview_token || "-"}</p>
+            <p className="text-xs" data-testid="risk-limits-preview-changed-fields">
+              changed_fields: {(riskLimitsPreview?.state_snapshot?.changed_fields || []).join(", ") || "-"}
+            </p>
+
+            <Input
+              value={riskLimitsReason}
+              onChange={(event) => setRiskLimitsReason(event.target.value)}
+              placeholder="risk limits apply reason"
+              data-testid="risk-limits-apply-reason-input"
+            />
+            <div className="flex items-center gap-2" data-testid="risk-limits-confirm-row">
+              <Checkbox
+                checked={riskLimitsConfirmChecked}
+                onCheckedChange={(checked) => setRiskLimitsConfirmChecked(Boolean(checked))}
+                data-testid="risk-limits-apply-confirm-checkbox"
+              />
+              <span className="text-xs">Preview çıktısını kontrol ettim</span>
+            </div>
+            <Button
+              className="border border-black bg-black text-orange-300 hover:bg-zinc-800"
+              onClick={applyRiskLimits}
+              disabled={!isSuperAdmin || !riskLimitsPreview?.preview_token || !riskLimitsConfirmChecked || riskLimitsReason.trim().length < 3}
+              data-testid="risk-limits-apply-button"
+            >
+              Risk Limits Apply
+            </Button>
+          </div>
+
+          <div className="space-y-2 border border-black/25 bg-white p-3" data-testid="risk-exposure-override-panel">
+            <p className="font-semibold" data-testid="risk-exposure-override-title">Exposure Override</p>
+            <select
+              className="h-10 w-full border border-black/40 px-3 text-sm"
+              value={exposureOverrideStrategyId}
+              onChange={(event) => setExposureOverrideStrategyId(event.target.value)}
+              data-testid="risk-exposure-override-strategy-select"
+            >
+              <option value="" data-testid="risk-exposure-override-strategy-option-empty">strategy seçin</option>
+              {Object.keys(riskCapital?.allocation || {}).map((strategyCode) => (
+                <option key={strategyCode} value={strategyCode} data-testid={`risk-exposure-override-strategy-option-${strategyCode}`}>
+                  {strategyCode}
+                </option>
+              ))}
+            </select>
+
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step="0.1"
+              value={exposureOverrideCapPct}
+              onChange={(event) => setExposureOverrideCapPct(event.target.value)}
+              data-testid="risk-exposure-override-cap-input"
+            />
+
+            <Button variant="outline" className="border-black bg-white text-black" onClick={previewExposureOverride} data-testid="risk-exposure-override-preview-button">
+              Exposure Preview
+            </Button>
+            <p className="text-xs" data-testid="risk-exposure-override-preview-token">preview_token: {exposureOverridePreview?.preview_token || "-"}</p>
+
+            <Input
+              value={exposureOverrideReason}
+              onChange={(event) => setExposureOverrideReason(event.target.value)}
+              placeholder="exposure override reason"
+              data-testid="risk-exposure-override-reason-input"
+            />
+            <div className="flex items-center gap-2" data-testid="risk-exposure-override-confirm-row">
+              <Checkbox
+                checked={exposureOverrideConfirmChecked}
+                onCheckedChange={(checked) => setExposureOverrideConfirmChecked(Boolean(checked))}
+                data-testid="risk-exposure-override-confirm-checkbox"
+              />
+              <span className="text-xs">Preview doğrulandı</span>
+            </div>
+            <Button
+              className="border border-black bg-black text-orange-300 hover:bg-zinc-800"
+              onClick={applyExposureOverride}
+              disabled={!isSuperAdmin || !exposureOverridePreview?.preview_token || !exposureOverrideConfirmChecked || exposureOverrideReason.trim().length < 3}
+              data-testid="risk-exposure-override-apply-button"
+            >
+              Exposure Override Apply
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-2" data-testid="risk-breaches-and-alerts-grid">
+          <div className="border border-black/25 bg-white p-3" data-testid="risk-breaches-list-panel">
+            <p className="font-semibold" data-testid="risk-breaches-list-title">Risk Breaches</p>
+            <div className="mt-2 space-y-2" data-testid="risk-breaches-list-items">
+              {(riskCapital?.breaches || []).map((item, index) => (
+                <div key={`${item.breach_code}-${index}`} className="border border-black/20 p-2" data-testid={`risk-breach-item-${index}`}>
+                  <p className="text-xs font-semibold" data-testid={`risk-breach-code-${index}`}>{item.breach_code}</p>
+                  <p className="text-xs" data-testid={`risk-breach-values-${index}`}>
+                    current: {item.current_value} / limit: {item.limit_value}
+                  </p>
+                  <p className="text-xs" data-testid={`risk-breach-status-${index}`}>breached: {String(item.is_breached)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="border border-black/25 bg-white p-3" data-testid="risk-linked-alerts-panel">
+            <p className="font-semibold" data-testid="risk-linked-alerts-title">Linked Alerts</p>
+            <div className="mt-2 flex flex-wrap gap-2" data-testid="risk-linked-alerts-buttons-row">
+              {(riskCapital?.linked_alerts || []).slice(0, 10).map((alert) => (
+                <Button
+                  key={alert.alert_id}
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-black bg-white text-black"
+                  onClick={() => loadRiskAlertLink(alert.alert_id)}
+                  data-testid={`risk-linked-alert-open-button-${alert.alert_id}`}
+                >
+                  {alert.alert_type}
+                </Button>
+              ))}
+            </div>
+
+            <div className="mt-3 border border-black/20 bg-orange-50 p-2" data-testid="risk-linked-alert-detail-panel">
+              <p className="text-xs font-semibold" data-testid="risk-linked-alert-detail-title">Alert Detail ↔ Risk Breach Link</p>
+              <p className="text-xs" data-testid="risk-linked-alert-detail-loading">loading: {String(riskAlertLinkLoading)}</p>
+              <p className="text-xs" data-testid="risk-linked-alert-detail-alert-id">alert_id: {riskAlertLinkDetail?.alert?.alert_id || "-"}</p>
+              <p className="text-xs" data-testid="risk-linked-alert-detail-link-path">
+                alert_detail_path: {riskAlertLinkDetail?.alert_detail_path || "-"}
+              </p>
+              <p className="text-xs" data-testid="risk-linked-alert-detail-breach-count">
+                linked_breach_count: {(riskAlertLinkDetail?.linked_breaches || []).length}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border border-black/30 bg-orange-100 p-4" data-testid="action-impact-timeline-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="action-impact-timeline-header-row">
+          <h3 className="text-lg font-bold" data-testid="action-impact-timeline-title">Action Impact Timeline</h3>
+          <div className="flex items-center gap-2" data-testid="action-impact-timeline-summary-row">
+            <Badge className="border border-black bg-white text-black" data-testid="action-impact-timeline-total-badge">
+              total: {timelineSummary?.total ?? 0}
+            </Badge>
+            <Badge className="border border-black bg-white text-black" data-testid="action-impact-timeline-manual-badge">
+              manual: {timelineSummary?.manual_action_count ?? 0}
+            </Badge>
+            <Badge className="border border-black bg-white text-black" data-testid="action-impact-timeline-system-badge">
+              system: {timelineSummary?.system_reaction_count ?? 0}
+            </Badge>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-black bg-white text-black"
+              onClick={loadActionImpactTimeline}
+              data-testid="action-impact-timeline-refresh-button"
+            >
+              Timeline Yenile
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-3 overflow-x-auto border border-black/25 bg-white" data-testid="action-impact-timeline-table-wrapper">
+          <Table data-testid="action-impact-timeline-table">
+            <TableHeader>
+              <TableRow>
+                <TableHead data-testid="action-impact-timeline-head-time">Time</TableHead>
+                <TableHead data-testid="action-impact-timeline-head-type">Type</TableHead>
+                <TableHead data-testid="action-impact-timeline-head-action">Action</TableHead>
+                <TableHead data-testid="action-impact-timeline-head-strategy">Strategy</TableHead>
+                <TableHead data-testid="action-impact-timeline-head-reason">Reason</TableHead>
+                <TableHead data-testid="action-impact-timeline-head-chain">Chain Ref</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {timelineItems.map((item, index) => (
+                <TableRow key={`${item.event_id}-${index}`} data-testid={`action-impact-timeline-row-${index}`}>
+                  <TableCell className="text-xs" data-testid={`action-impact-timeline-time-${index}`}>
+                    {item.timestamp ? new Date(item.timestamp).toLocaleString() : "-"}
+                  </TableCell>
+                  <TableCell data-testid={`action-impact-timeline-type-${index}`}>{item.event_type}</TableCell>
+                  <TableCell data-testid={`action-impact-timeline-action-${index}`}>{item.action || "-"}</TableCell>
+                  <TableCell data-testid={`action-impact-timeline-strategy-${index}`}>{item.strategy_id || "-"}</TableCell>
+                  <TableCell data-testid={`action-impact-timeline-reason-${index}`}>{item.reason || "-"}</TableCell>
+                  <TableCell data-testid={`action-impact-timeline-chain-${index}`}>{item.chain_ref || "-"}</TableCell>
+                </TableRow>
+              ))}
+              {!timelineLoading && timelineItems.length === 0 && (
+                <TableRow data-testid="action-impact-timeline-empty-row">
+                  <TableCell colSpan={6} className="text-center text-sm text-black/70" data-testid="action-impact-timeline-empty-text">
+                    Timeline verisi bulunamadı.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       </section>
 
