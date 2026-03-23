@@ -1,3 +1,31 @@
+## 2026-03-23 — Diff Anomali Notları (Dar Sprint) ✅
+
+### Sprint kararı
+- Sadece diff anomali notları uygulandı (predictive analytics bu sprintte dışarıda bırakıldı).
+
+### Uygulanan kurallar (deterministic)
+- `diff.json.anomaly_notes` eklendi.
+- `diff_summary.txt` içine `Anomaly Notes` bölümü eklendi.
+- Kural-1: `failed_events delta > %50` → critical risk notu.
+- Kural-2: `dead_letter delta > %50` → critical risk notu.
+- Kural-3: `manual_actions delta > 0` → warning: `operator intervention increased`.
+- Kural-4: negatif delta mesajları deterministic:
+  - failed_events/manual_actions/dead_letter: `improved`
+  - diğer metrikler: `reduced`
+- `count_delta.direction` alanı eklendi (`increased/improved/reduced/unchanged`).
+
+### Regresyon
+- incompatible scope `422` davranışı korunuyor.
+- single snapshot export’ta diff dosyaları üretilmiyor (beklenen davranış).
+
+### Test / doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_88.json`
+  - Backend: **100% (17/17 PASS)**
+
+### Not
+- Slack webhook delivery **MOCKED**.
+- Binance Futures execution **MOCKED**.
+
 ## 2026-03-23 — P1 Incident Snapshot Diff (JSON + İnsan Okunur Özet) ✅
 
 ### Sprint kararı
