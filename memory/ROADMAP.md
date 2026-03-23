@@ -1,5 +1,19 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-23 P2 Faz Sonuçları
+- ✅ Tamamlandı:
+  1. Check history/trend + flapping detection
+  2. Override analytics panel
+  3. Before/after remediation compare
+  4. Incident timeline + category filters
+  5. Dynamic risk scoring badge
+  6. Export V2 (history + analytics + timeline + risk)
+
+## Sonraki Gelişim (P3 öneri)
+1. Predictive risk forecasting (trend-based forward score)
+2. Incident correlation graph (check-fail ↔ override ↔ mode switch)
+3. Team ops workflows (assignment/ack/sla tracking)
+
 ## 2026-03-23 P1 Kapanış Durumu
 - ✅ P1 mandatory closure maddeleri tamamlandı:
   1. Evidence gap (test report + smoke artefact + endpoint/state evidence)

@@ -1,73 +1,117 @@
 {
-  "manifest_version": "1.0",
-  "generated_at": "2026-03-23T23:01:58.828327+00:00",
-  "generated_from_commit": "6b27c365a735cca0427f72706f0dd69d8536bd39",
+  "manifest_version": "2.0",
+  "generated_at": "2026-03-23T23:21:20.916236+00:00",
+  "generated_from_commit": "ecc12188562820467d64f31b705fc43e121e4872",
   "artifacts": [
     {
       "path": "/test_reports/production_gate_p1_evidence.md",
       "absolute_path": "/app/test_reports/production_gate_p1_evidence.md",
       "type": "markdown",
-      "description": "P1 evidence closure summary with mandatory artefact checklist",
-      "commit_hash": "6b27c365a735cca0427f72706f0dd69d8536bd39",
-      "timestamp": "2026-03-23T23:01:58.828327+00:00",
+      "description": "P1 evidence closure summary",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
       "exists": true,
-      "size_bytes": 1790,
-      "chain_position": 0,
-      "prev_chain_hash": "GENESIS",
-      "chain_hash": "901131d838b17aac0f7885b81e03cbdc9f5157a00343d30ab22083685ed1416a"
+      "size_bytes": 1790
     },
     {
       "path": "/test_reports/production_gate_p1_endpoint_state_evidence.json",
       "absolute_path": "/app/test_reports/production_gate_p1_endpoint_state_evidence.json",
       "type": "json",
-      "description": "Detailed endpoint/state transition proof with request-response and before-after states",
-      "commit_hash": "6b27c365a735cca0427f72706f0dd69d8536bd39",
-      "timestamp": "2026-03-23T23:01:58.828327+00:00",
+      "description": "P1 endpoint/state transitions evidence",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
       "exists": true,
-      "size_bytes": 122485,
-      "chain_position": 1,
-      "prev_chain_hash": "901131d838b17aac0f7885b81e03cbdc9f5157a00343d30ab22083685ed1416a",
-      "chain_hash": "d13a1ef5647de11588434788d05850f518f63db5f35458dad22f548c2dd03825"
+      "size_bytes": 122485
     },
     {
       "path": "/test_reports/production_gate_p1_smoke_after_login.jpeg",
       "absolute_path": "/app/test_reports/production_gate_p1_smoke_after_login.jpeg",
       "type": "image/jpeg",
-      "description": "Composite smoke screenshot: NO_GO and GO_WITH_OVERRIDE snapshots with banners",
-      "commit_hash": "6b27c365a735cca0427f72706f0dd69d8536bd39",
-      "timestamp": "2026-03-23T23:01:58.828327+00:00",
+      "description": "P1 composite smoke screenshot",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
       "exists": true,
-      "size_bytes": 535727,
-      "chain_position": 2,
-      "prev_chain_hash": "d13a1ef5647de11588434788d05850f518f63db5f35458dad22f548c2dd03825",
-      "chain_hash": "8b6f0d3fd1ef46df108a334fa84a2166200fad701294780407e5ef184efb2114"
+      "size_bytes": 535727
     },
     {
       "path": "/test_reports/production_gate_p1_backend_pytest.txt",
       "absolute_path": "/app/test_reports/production_gate_p1_backend_pytest.txt",
       "type": "text",
-      "description": "Raw backend pytest output with test names and final pass/fail counts",
-      "commit_hash": "6b27c365a735cca0427f72706f0dd69d8536bd39",
-      "timestamp": "2026-03-23T23:01:58.828327+00:00",
+      "description": "P1 raw backend pytest output",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
       "exists": true,
-      "size_bytes": 3776,
-      "chain_position": 3,
-      "prev_chain_hash": "8b6f0d3fd1ef46df108a334fa84a2166200fad701294780407e5ef184efb2114",
-      "chain_hash": "9c874bd4606c83139611a26ff8ad0cb5b39dcf6c3e299a4e33b4d6e3223070a7"
+      "size_bytes": 3776
     },
     {
       "path": "/test_reports/iteration_113.json",
       "absolute_path": "/app/test_reports/iteration_113.json",
       "type": "json",
-      "description": "Independent iteration report with backend/frontend scenario results",
-      "commit_hash": "6b27c365a735cca0427f72706f0dd69d8536bd39",
-      "timestamp": "2026-03-23T23:01:58.828327+00:00",
+      "description": "P1 independent testing agent report",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
       "exists": true,
-      "size_bytes": 8270,
-      "chain_position": 4,
-      "prev_chain_hash": "9c874bd4606c83139611a26ff8ad0cb5b39dcf6c3e299a4e33b4d6e3223070a7",
-      "chain_hash": "042eb35d8b39e620d92cd73c58b399d955a3d034fe2778097b9f4f4a5121fb55"
+      "size_bytes": 8270
+    },
+    {
+      "path": "/test_reports/production_gate_p2_evidence.md",
+      "absolute_path": "/app/test_reports/production_gate_p2_evidence.md",
+      "type": "markdown",
+      "description": "P2 evidence summary",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
+      "exists": true,
+      "size_bytes": 2392
+    },
+    {
+      "path": "/test_reports/production_gate_p2_timeline.json",
+      "absolute_path": "/app/test_reports/production_gate_p2_timeline.json",
+      "type": "json",
+      "description": "P2 timeline snapshot",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
+      "exists": true,
+      "size_bytes": 91960
+    },
+    {
+      "path": "/test_reports/production_gate_p2_analytics.json",
+      "absolute_path": "/app/test_reports/production_gate_p2_analytics.json",
+      "type": "json",
+      "description": "P2 override analytics + risk snapshot",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
+      "exists": true,
+      "size_bytes": 8043
+    },
+    {
+      "path": "/test_reports/production_gate_p2_compare.json",
+      "absolute_path": "/app/test_reports/production_gate_p2_compare.json",
+      "type": "json",
+      "description": "P2 before/after compare snapshot",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
+      "exists": true,
+      "size_bytes": 7344
+    },
+    {
+      "path": "/test_reports/production_gate_p2_smoke.jpeg",
+      "absolute_path": "/app/test_reports/production_gate_p2_smoke.jpeg",
+      "type": "image/jpeg",
+      "description": "P2 composite smoke screenshot",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
+      "exists": true,
+      "size_bytes": 484770
+    },
+    {
+      "path": "/test_reports/iteration_114.json",
+      "absolute_path": "/app/test_reports/iteration_114.json",
+      "type": "json",
+      "description": "P2 independent testing agent report",
+      "commit_hash": "ecc12188562820467d64f31b705fc43e121e4872",
+      "timestamp": "2026-03-23T23:21:20.916236+00:00",
+      "exists": true,
+      "size_bytes": 4880
     }
-  ],
-  "schema_version": "1.1"
+  ]
 }

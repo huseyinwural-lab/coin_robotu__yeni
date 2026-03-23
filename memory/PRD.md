@@ -1,3 +1,47 @@
+## 2026-03-23 — Production Gate P2 (Derinlik & Analitik) Tamamlandı
+
+### Uygulanan Zorunlu Modüller
+1. **Check History & Trend Engine**
+   - History kayıtları: `check_key, status(PASS/FAIL/WARN), timestamp, latency, error_code, run_id`
+   - API: `GET /api/phase4/admin/production-gate/checks/history`
+   - Filtreler: `check_key, date_from, date_to, status_filter`
+   - Flapping detection: kısa pencerede PASS↔FAIL değişim tespiti (`FLAPPING`)
+
+2. **Override Analytics Panel**
+   - API: `GET /api/phase4/admin/production-gate/override-analytics`
+   - Metrikler: `override_count, override_rate, reason_distribution, top_override_checks, expiry/revoke`
+
+3. **Before/After Remediation Compare**
+   - API: `GET /api/phase4/admin/production-gate/checks/compare`
+   - Alanlar: `previous_result, new_result, latency_delta_ms, state_delta`
+
+4. **Incident Timeline**
+   - API: `GET /api/phase4/admin/production-gate/timeline`
+   - Kategoriler: `checks, overrides, mode, deploy`
+   - UI filtreleri aktif
+
+5. **Flapping & Risk Scoring**
+   - Dinamik risk üretimi: `risk_score(0-100), risk_level(LOW/MEDIUM/HIGH)`
+   - Header risk badge + flapping banner eklendi
+
+6. **Export V2**
+   - `export/raw` payload içine eklendi:
+     - `check_history_snapshot`
+     - `override_analytics_summary`
+     - `timeline_snapshot`
+     - `risk_score/risk_level`
+
+### P2 Artefact Seti
+- `/test_reports/production_gate_p2_evidence.md`
+- `/test_reports/production_gate_p2_timeline.json`
+- `/test_reports/production_gate_p2_analytics.json`
+- `/test_reports/production_gate_p2_compare.json`
+- `/test_reports/production_gate_p2_smoke.jpeg`
+- `/test_reports/iteration_114.json`
+
+### Manifest Güncellemesi
+- `/backend/exports/artifact_manifest.json` P1 + P2 artefact girişleri ile güncellendi.
+
 ## 2026-03-23 — Production Gate P1 Zorunlu Kapanış (Tamamlandı)
 
 ### Evidence Gap Finalizasyonu (Denetlenebilir Kanıt Zinciri)

@@ -1,5 +1,16 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-23 (P2 Analytics Phase)
+### Production Gate Derinlik & Proaktif Karar Katmanı
+- Check history/trend engine + flapping detection eklendi.
+- Override analytics endpointi ve UI paneli eklendi.
+- Before/after remediation compare endpointi ve UI paneli eklendi.
+- Incident timeline endpointi + kategori filtreli UI eklendi.
+- Dinamik risk scoring (`risk_score`, `risk_level`) gate header’a taşındı.
+- Export V2 genişletildi (history/analytics/timeline/risk snapshots).
+- P2 artefact seti üretildi ve manifest güncellendi.
+- Independent test report: `/test_reports/iteration_114.json` (backend/frontend %100 PASS).
+
 ## 2026-03-23 (P1 Closure)
 ### Production Gate Operational Visibility & Evidence
 - Final evidence-chain manifest eklendi: `/app/backend/exports/artifact_manifest.json`.
