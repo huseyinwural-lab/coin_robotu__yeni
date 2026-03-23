@@ -64,6 +64,7 @@ const buildRejectQuery = (filters) => {
 export const AdminRiskOrchestratorPage = () => {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "super_admin";
+  const [activeTab, setActiveTab] = useState("risk-gate");
 
   const [loading, setLoading] = useState(true);
   const [policy, setPolicy] = useState(policySeed);
@@ -97,9 +98,15 @@ export const AdminRiskOrchestratorPage = () => {
   const [autoTriggers, setAutoTriggers] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [approvals, setApprovals] = useState([]);
+  const [decisionTraces, setDecisionTraces] = useState([]);
+  const [approvalNotes, setApprovalNotes] = useState({});
+  const [applyWithOverride, setApplyWithOverride] = useState(false);
+  const [lastApplyResult, setLastApplyResult] = useState(null);
+  const [revertSimulations, setRevertSimulations] = useState({});
 
   const refreshCore = useCallback(async () => {
-    const [policyRes, statusRes, historyRes, overrideRes, positionRes, triggerRes, timelineRes, alertsRes] = await Promise.all([
+    const [policyRes, statusRes, historyRes, overrideRes, positionRes, triggerRes, timelineRes, alertsRes, approvalsRes, tracesRes] = await Promise.all([
       apiClient.get("/strategy-domain/admin/risk-orchestrator/policy"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/status"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/policy/history?limit=20"),
@@ -108,6 +115,8 @@ export const AdminRiskOrchestratorPage = () => {
       apiClient.get("/strategy-domain/admin/risk-orchestrator/auto-trigger-logs?limit=30"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/audit/timeline?limit=40"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/alerts?limit=30"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/policy/approvals?limit=20"),
+      apiClient.get("/strategy-domain/admin/risk-orchestrator/policy/decision-traces?limit=25"),
     ]);
 
     setPolicy(policyRes.data || policySeed);
@@ -118,6 +127,8 @@ export const AdminRiskOrchestratorPage = () => {
     setAutoTriggers(triggerRes.data || []);
     setTimeline(timelineRes.data || []);
     setAlerts(alertsRes.data || []);
+    setApprovals(approvalsRes.data || []);
+    setDecisionTraces(tracesRes.data || []);
   }, []);
 
   const refreshRejects = useCallback(async () => {
@@ -176,34 +187,74 @@ export const AdminRiskOrchestratorPage = () => {
       return;
     }
     try {
-      await apiClient.post("/strategy-domain/admin/risk-orchestrator/policy/apply", {
+      const requestKey = `ui-${simulation.simulation_id}-${user?.id || "unknown"}`;
+      const { data } = await apiClient.post("/strategy-domain/admin/risk-orchestrator/policy/apply", {
         simulation_id: simulation.simulation_id,
         reason_note: applyReason,
         approval_note: applyNote,
         double_confirmed: doubleConfirm,
+        apply_with_override: applyWithOverride,
+        request_key: requestKey,
+        expected_policy_version: status?.policy?.policy_version,
       });
-      toast.success("Policy başarıyla uygulandı.");
+      setLastApplyResult(data);
+      if (data.status === "applied") {
+        toast.success("Policy başarıyla uygulandı.");
+      } else if (data.status === "pending_approval") {
+        toast.info("Policy second approval kuyruğuna alındı.");
+      } else if (data.status === "blocked") {
+        toast.error("CRITICAL gate nedeniyle apply bloklandı.");
+      } else {
+        toast.info(`Apply sonucu: ${data.status}`);
+      }
       setApplyDialogOpen(false);
       setApplyReason("");
       setApplyNote("");
-      setSimulation(null);
+      setDoubleConfirm(false);
       await refreshCore();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Policy apply başarısız");
     }
   };
 
-  const handleRevert = async (versionId) => {
-    if (!isSuperAdmin) return;
+  const handleRevertSimulate = async (versionId) => {
     try {
-      await apiClient.post(`/strategy-domain/admin/risk-orchestrator/policy/revert/${versionId}`, {
-        reason_note: "Tarihçe versiyonundan geri alındı",
+      const { data } = await apiClient.post(
+        `/strategy-domain/admin/risk-orchestrator/policy/revert/${versionId}/simulate`,
+      );
+      setRevertSimulations((prev) => ({ ...prev, [versionId]: data.simulation }));
+      toast.success("Revert impact simulation hazırlandı");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Revert simulation başarısız");
+    }
+  };
+
+  const handleRevertApply = async (versionId) => {
+    if (!isSuperAdmin) return;
+    const simulation = revertSimulations[versionId];
+    if (!simulation?.simulation_id) {
+      toast.error("Önce revert simulation çalıştırın");
+      return;
+    }
+    try {
+      const requestKey = `revert-${simulation.simulation_id}-${user?.id || "unknown"}`;
+      const { data } = await apiClient.post(`/strategy-domain/admin/risk-orchestrator/policy/revert/${versionId}/apply`, {
+        simulation_id: simulation.simulation_id,
+        reason_note: "Revert apply",
         double_confirmed: true,
+        apply_with_override: true,
+        request_key: requestKey,
+        expected_policy_version: status?.policy?.policy_version,
       });
-      toast.success("Policy revert tamamlandı");
+      setLastApplyResult(data);
+      if (data.status === "applied") {
+        toast.success("Revert apply tamamlandı");
+      } else {
+        toast.info(`Revert sonucu: ${data.status}`);
+      }
       await refreshCore();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Revert başarısız");
+      toast.error(error?.response?.data?.detail || "Revert apply başarısız");
     }
   };
 
@@ -298,6 +349,29 @@ export const AdminRiskOrchestratorPage = () => {
     }
   };
 
+  const handleApprovalDecision = async (approvalId, decision) => {
+    const decisionNote = approvalNotes[approvalId] || "operasyon onayı";
+    try {
+      if (decision === "approve") {
+        const { data } = await apiClient.post(
+          `/strategy-domain/admin/risk-orchestrator/policy/approvals/${approvalId}/approve`,
+          { decision_note: decisionNote },
+        );
+        setLastApplyResult(data);
+        toast.success("4-eyes approval onayı işlendi");
+      } else {
+        await apiClient.post(`/strategy-domain/admin/risk-orchestrator/policy/approvals/${approvalId}/reject`, {
+          decision_note: decisionNote,
+        });
+        toast.info("Approval request reddedildi");
+      }
+      setApprovalNotes((prev) => ({ ...prev, [approvalId]: "" }));
+      await refreshCore();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Approval aksiyonu başarısız");
+    }
+  };
+
   const superAdminOnlyTitle = isSuperAdmin ? "" : "Sadece super_admin kullanıcıları çalıştırabilir";
 
   return (
@@ -330,6 +404,24 @@ export const AdminRiskOrchestratorPage = () => {
         </div>
       </header>
 
+      <div className="flex flex-wrap gap-2" data-testid="risk-tabs-row">
+        {[
+          ["risk-gate", "Risk Gate"],
+          ["operations", "Operations"],
+          ["monitoring", "Monitoring"],
+          ["approvals", "Approvals & Trace"],
+        ].map(([tabKey, tabLabel]) => (
+          <Button
+            key={tabKey}
+            variant={activeTab === tabKey ? "default" : "outline"}
+            onClick={() => setActiveTab(tabKey)}
+            data-testid={`risk-tab-button-${tabKey}`}
+          >
+            {tabLabel}
+          </Button>
+        ))}
+      </div>
+
       {loading && (
         <Card data-testid="risk-page-loading-card">
           <CardContent className="pt-6 text-sm text-slate-400" data-testid="risk-page-loading-text">
@@ -339,6 +431,7 @@ export const AdminRiskOrchestratorPage = () => {
       )}
 
       <div className="grid gap-5 xl:grid-cols-2" data-testid="risk-main-grid">
+        {activeTab === "risk-gate" && (
         <Card data-testid="risk-policy-management-card">
           <CardHeader>
             <CardTitle data-testid="risk-policy-management-title">1) Policy Management</CardTitle>
@@ -376,6 +469,14 @@ export const AdminRiskOrchestratorPage = () => {
               >
                 Apply (Double Confirm)
               </Button>
+              <div className="flex items-center gap-2 rounded border px-2" data-testid="risk-apply-with-override-wrapper">
+                <Checkbox
+                  checked={applyWithOverride}
+                  onCheckedChange={(checked) => setApplyWithOverride(checked === true)}
+                  data-testid="risk-apply-with-override-checkbox"
+                />
+                <span className="text-xs">CRITICAL için apply_with_override</span>
+              </div>
             </div>
 
             <div className="rounded-lg border p-3" data-testid="risk-policy-simulation-result-box">
@@ -393,6 +494,12 @@ export const AdminRiskOrchestratorPage = () => {
                   </Badge>
                   <p className="text-xs text-slate-500" data-testid="risk-policy-simulation-id">
                     simulation_id: {simulation.simulation_id}
+                  </p>
+                  <p className="text-xs" data-testid="risk-policy-simulation-score">
+                    risk_score: {simulation.risk_score} · classification: {simulation.classification}
+                  </p>
+                  <p className="text-xs text-slate-500" data-testid="risk-policy-simulation-flow">
+                    flow: {simulation.approval_flow?.rule_path || "-"}
                   </p>
                   <div className="space-y-1" data-testid="risk-policy-diff-list">
                     {Object.entries(simulation.diff_summary?.changed_fields || {}).map(([field, diff]) => (
@@ -429,20 +536,40 @@ export const AdminRiskOrchestratorPage = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={!isSuperAdmin}
-                      title={superAdminOnlyTitle}
-                      onClick={() => handleRevert(version.version_id)}
-                      data-testid={`risk-policy-revert-button-${version.version_id}`}
+                      disabled={false}
+                      onClick={() => handleRevertSimulate(version.version_id)}
+                      data-testid={`risk-policy-revert-simulate-button-${version.version_id}`}
                     >
-                      Revert
+                      Revert Simulate
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!isSuperAdmin || !revertSimulations[version.version_id]}
+                      title={superAdminOnlyTitle}
+                      onClick={() => handleRevertApply(version.version_id)}
+                      data-testid={`risk-policy-revert-apply-button-${version.version_id}`}
+                    >
+                      Revert Apply
+                    </Button>
+                    {revertSimulations[version.version_id] && (
+                      <p
+                        className="w-full text-[11px] text-slate-500"
+                        data-testid={`risk-policy-revert-impact-${version.version_id}`}
+                      >
+                        impact score: {revertSimulations[version.version_id].risk_score} ·
+                        class: {revertSimulations[version.version_id].classification}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {activeTab === "risk-gate" && (
         <Card data-testid="risk-control-actions-card">
           <CardHeader>
             <CardTitle data-testid="risk-control-actions-title">2) Critical Risk Control Actions</CardTitle>
@@ -506,7 +633,9 @@ export const AdminRiskOrchestratorPage = () => {
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {activeTab === "operations" && (
         <Card data-testid="risk-exposure-card">
           <CardHeader>
             <CardTitle data-testid="risk-exposure-title">3) Exposure Control & Manual Override</CardTitle>
@@ -600,7 +729,9 @@ export const AdminRiskOrchestratorPage = () => {
             </div>
           </CardContent>
         </Card>
+        )}
 
+        {activeTab === "operations" && (
         <Card data-testid="risk-intervention-card">
           <CardHeader>
             <CardTitle data-testid="risk-intervention-title">4) Open Position Intervention</CardTitle>
@@ -685,8 +816,10 @@ export const AdminRiskOrchestratorPage = () => {
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
 
+      {activeTab === "monitoring" && (
       <div className="grid gap-5 xl:grid-cols-2" data-testid="risk-bottom-grid">
         <Card data-testid="risk-rejects-card">
           <CardHeader>
@@ -783,7 +916,9 @@ export const AdminRiskOrchestratorPage = () => {
           </CardContent>
         </Card>
       </div>
+      )}
 
+      {activeTab === "monitoring" && (
       <Card data-testid="risk-audit-timeline-card">
         <CardHeader>
           <CardTitle data-testid="risk-audit-timeline-title">7) Audit & Governance Timeline</CardTitle>
@@ -811,6 +946,112 @@ export const AdminRiskOrchestratorPage = () => {
           </div>
         </CardContent>
       </Card>
+      )}
+
+      {activeTab === "approvals" && (
+      <div className="grid gap-5 xl:grid-cols-2" data-testid="risk-approvals-main-grid">
+        <Card data-testid="risk-approval-queue-card">
+          <CardHeader>
+            <CardTitle data-testid="risk-approval-queue-title">4-Eyes Approval Queue</CardTitle>
+            <CardDescription data-testid="risk-approval-queue-description">
+              pending_approval → approved/rejected akışı. Aynı kullanıcı ikinci onay veremez.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded border p-2 text-xs" data-testid="risk-last-apply-result-box">
+              <p data-testid="risk-last-apply-status">last_status: {lastApplyResult?.status || "-"}</p>
+              <p data-testid="risk-last-apply-classification">classification: {lastApplyResult?.classification || "-"}</p>
+              <p data-testid="risk-last-apply-score">risk_score: {lastApplyResult?.risk_score ?? "-"}</p>
+              <p data-testid="risk-last-apply-rule">rule_path: {lastApplyResult?.rule_path || "-"}</p>
+            </div>
+
+            <div className="space-y-2" data-testid="risk-approval-queue-list">
+              {approvals.map((item) => (
+                <div key={item.approval_id} className="rounded border p-2 text-xs" data-testid={`risk-approval-row-${item.approval_id}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span data-testid={`risk-approval-state-${item.approval_id}`}>{item.state}</span>
+                    <Badge
+                      variant={item.classification === "CRITICAL" ? "destructive" : "secondary"}
+                      data-testid={`risk-approval-classification-${item.approval_id}`}
+                    >
+                      {item.classification}
+                    </Badge>
+                  </div>
+                  <p className="mt-1" data-testid={`risk-approval-meta-${item.approval_id}`}>
+                    score: {item.risk_score} · expires: {new Date(item.expires_at).toLocaleString()}
+                  </p>
+                  <p className="text-slate-600" data-testid={`risk-approval-requested-by-${item.approval_id}`}>
+                    requested_by: {item.requested_by} · second_approver: {item.second_approver_id || "-"}
+                  </p>
+
+                  <Textarea
+                    className="mt-2"
+                    value={approvalNotes[item.approval_id] || ""}
+                    onChange={(event) =>
+                      setApprovalNotes((prev) => ({
+                        ...prev,
+                        [item.approval_id]: event.target.value,
+                      }))
+                    }
+                    placeholder="Approval/reject note"
+                    data-testid={`risk-approval-note-input-${item.approval_id}`}
+                  />
+
+                  <div className="mt-2 flex gap-2" data-testid={`risk-approval-actions-${item.approval_id}`}>
+                    <Button
+                      size="sm"
+                      onClick={() => handleApprovalDecision(item.approval_id, "approve")}
+                      disabled={item.state !== "pending_approval"}
+                      data-testid={`risk-approval-approve-button-${item.approval_id}`}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleApprovalDecision(item.approval_id, "reject")}
+                      disabled={item.state !== "pending_approval"}
+                      data-testid={`risk-approval-reject-button-${item.approval_id}`}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="risk-decision-trace-card">
+          <CardHeader>
+            <CardTitle data-testid="risk-decision-trace-title">Decision Trace</CardTitle>
+            <CardDescription data-testid="risk-decision-trace-description">
+              simulation → score → classification → approval → rule path zinciri
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2" data-testid="risk-decision-trace-list">
+            {decisionTraces.map((trace) => (
+              <div
+                key={trace.trace_id}
+                className="rounded border p-2 text-xs"
+                data-testid={`risk-decision-trace-row-${trace.trace_id}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span data-testid={`risk-decision-trace-state-${trace.trace_id}`}>{trace.decision_state}</span>
+                  <span data-testid={`risk-decision-trace-rule-${trace.trace_id}`}>{trace.rule_path}</span>
+                </div>
+                <p data-testid={`risk-decision-trace-score-${trace.trace_id}`}>
+                  {trace.classification} · score: {trace.risk_score}
+                </p>
+                <p className="text-slate-600" data-testid={`risk-decision-trace-meta-${trace.trace_id}`}>
+                  req: {trace.requested_by} · appr: {trace.approver_id || "-"}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+      )}
 
       <Dialog open={applyDialogOpen} onOpenChange={setApplyDialogOpen}>
         <DialogContent data-testid="risk-policy-apply-dialog">
@@ -824,6 +1065,12 @@ export const AdminRiskOrchestratorPage = () => {
           <div className="space-y-3" data-testid="risk-policy-apply-dialog-content">
             <p className="text-xs" data-testid="risk-policy-apply-dialog-simulation-id">
               simulation_id: {simulation?.simulation_id || "-"}
+            </p>
+            <p className="text-xs" data-testid="risk-policy-apply-dialog-gate">
+              risk_score: {simulation?.risk_score ?? "-"} · class: {simulation?.classification || "-"}
+            </p>
+            <p className="text-xs text-slate-500" data-testid="risk-policy-apply-dialog-version-check">
+              expected_policy_version: {status?.policy?.policy_version ?? "-"}
             </p>
             <Textarea
               value={applyReason}

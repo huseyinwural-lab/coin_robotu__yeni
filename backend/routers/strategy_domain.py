@@ -24,7 +24,12 @@ from schemas import (
     RegimeEvaluationResponse,
     RegimeSnapshotResponse,
     RiskOrchestratorAlertResponse,
+    RiskOrchestratorApprovalDecisionRequest,
+    RiskOrchestratorApprovalRequestResponse,
     RiskOrchestratorAnalyticsResponse,
+    RiskOrchestratorDecisionTraceResponse,
+    RiskOrchestratorPolicyApplyResponse,
+    RiskOrchestratorRevertSimulationResponse,
     RiskOrchestratorAuditTimelineItemResponse,
     RiskOrchestratorAutoTriggerLogResponse,
     RiskOrchestratorControlActionRequest,
@@ -66,8 +71,12 @@ from services.audit_service import create_audit_log
 from services.decision_kernel_service import build_context_hash, build_decision_hash, evaluate_decision_context
 from services.regime_classifier_service import classify_regime, is_regime_allowed, persist_regime_snapshot
 from services.risk_orchestrator_service import (
+    apply_revert_from_simulation,
+    approve_policy_approval_request,
     apply_policy_from_simulation,
     build_audit_timeline,
+    list_decision_traces,
+    list_policy_approval_requests,
     build_status_snapshot,
     create_manual_override,
     deactivate_manual_override,
@@ -82,8 +91,9 @@ from services.risk_orchestrator_service import (
     list_policy_history,
     list_risk_alerts,
     list_risk_rejects,
-    revert_policy_to_version,
+    reject_policy_approval_request,
     run_in_trade_supervisor,
+    simulate_revert_to_version,
     simulate_policy_change,
 )
 from services.runtime_execution_service import dispatch_decision_result, process_submission_event_once
@@ -488,7 +498,7 @@ def admin_risk_policy_simulate(
 
 @router.post(
     "/admin/risk-orchestrator/policy/apply",
-    response_model=RiskOrchestratorPolicyResponse,
+    response_model=RiskOrchestratorPolicyApplyResponse,
 )
 def admin_risk_policy_apply(
     payload: RiskOrchestratorPolicyApplyRequest,
@@ -502,9 +512,16 @@ def admin_risk_policy_apply(
         actor_role=current_super_admin.role.value,
         reason_note=payload.reason_note,
         double_confirmed=payload.double_confirmed,
+        apply_with_override=payload.apply_with_override,
         approval_note=payload.approval_note,
+        request_key=payload.request_key,
+        expected_policy_version=payload.expected_policy_version,
     )
-    return _policy_response(result["policy"])
+    response_payload = {
+        **result,
+        "policy": _policy_response(result["policy"]) if result.get("policy") is not None else None,
+    }
+    return RiskOrchestratorPolicyApplyResponse(**response_payload)
 
 
 @router.get(
@@ -524,25 +541,131 @@ def admin_risk_policy_history(
     )
 
 
-@router.post(
-    "/admin/risk-orchestrator/policy/revert/{version_id}",
-    response_model=RiskOrchestratorPolicyResponse,
+@router.get(
+    "/admin/risk-orchestrator/policy/approvals",
+    response_model=list[RiskOrchestratorApprovalRequestResponse],
 )
-def admin_risk_policy_revert(
+def admin_risk_policy_approvals(
+    state: str | None = None,
+    limit: int = 50,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows = list_policy_approval_requests(db, state=state, limit=limit)
+    return [RiskOrchestratorApprovalRequestResponse.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/admin/risk-orchestrator/policy/approvals/{approval_id}/approve",
+    response_model=RiskOrchestratorPolicyApplyResponse,
+)
+def admin_risk_policy_approval_approve(
+    approval_id: str,
+    payload: RiskOrchestratorApprovalDecisionRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = approve_policy_approval_request(
+        db,
+        approval_id=approval_id,
+        actor_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        decision_note=payload.decision_note,
+    )
+    apply_result = result["apply_result"]
+    response_payload = {
+        **apply_result,
+        "policy": _policy_response(apply_result["policy"]) if apply_result.get("policy") is not None else None,
+    }
+    return RiskOrchestratorPolicyApplyResponse(**response_payload)
+
+
+@router.post(
+    "/admin/risk-orchestrator/policy/approvals/{approval_id}/reject",
+    response_model=RiskOrchestratorApprovalRequestResponse,
+)
+def admin_risk_policy_approval_reject(
+    approval_id: str,
+    payload: RiskOrchestratorApprovalDecisionRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = reject_policy_approval_request(
+        db,
+        approval_id=approval_id,
+        actor_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        decision_note=payload.decision_note,
+    )
+    return RiskOrchestratorApprovalRequestResponse.model_validate(row)
+
+
+@router.get(
+    "/admin/risk-orchestrator/policy/decision-traces",
+    response_model=list[RiskOrchestratorDecisionTraceResponse],
+)
+def admin_risk_policy_decision_traces(
+    limit: int = 100,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows = list_decision_traces(db, limit=limit)
+    return [RiskOrchestratorDecisionTraceResponse.model_validate(row) for row in rows]
+
+
+@router.post(
+    "/admin/risk-orchestrator/policy/revert/{version_id}/simulate",
+    response_model=RiskOrchestratorRevertSimulationResponse,
+)
+def admin_risk_policy_revert_simulate(
+    version_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = simulate_revert_to_version(
+        db,
+        version_id=version_id,
+        actor_id=current_admin.id,
+        actor_role=current_admin.role.value,
+    )
+    return RiskOrchestratorRevertSimulationResponse(
+        version_id=result["version_id"],
+        simulation=RiskOrchestratorPolicySimulationResponse(**result["simulation"]),
+    )
+
+
+@router.post(
+    "/admin/risk-orchestrator/policy/revert/{version_id}/apply",
+    response_model=RiskOrchestratorPolicyApplyResponse,
+)
+def admin_risk_policy_revert_apply(
     version_id: str,
     payload: RiskOrchestratorPolicyRevertRequest,
     current_super_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
-    result = revert_policy_to_version(
+    if not payload.simulation_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="revert_simulation_required")
+
+    result = apply_revert_from_simulation(
         db,
         version_id=version_id,
+        simulation_id=payload.simulation_id,
         actor_id=current_super_admin.id,
         actor_role=current_super_admin.role.value,
         reason_note=payload.reason_note,
         double_confirmed=payload.double_confirmed,
+        apply_with_override=payload.apply_with_override,
+        request_key=payload.request_key,
+        expected_policy_version=payload.expected_policy_version,
     )
-    return _policy_response(result["policy"])
+    response_payload = {
+        **result,
+        "policy": _policy_response(result["policy"]) if result.get("policy") is not None else None,
+    }
+    return RiskOrchestratorPolicyApplyResponse(**response_payload)
 
 
 @router.get("/admin/risk-orchestrator/status", response_model=RiskOrchestratorStatusResponse)

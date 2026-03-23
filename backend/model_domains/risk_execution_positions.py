@@ -120,6 +120,50 @@ class RiskOrchestratorAutoTriggerLog(Base):
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
+
+class RiskOrchestratorApprovalRequest(Base):
+    __tablename__ = "risk_orchestrator_approval_requests"
+
+    approval_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    request_key: Mapped[str] = mapped_column(String(160), index=True, unique=True)
+    flow_type: Mapped[str] = mapped_column(String(30), default="apply", index=True)
+    simulation_id: Mapped[str] = mapped_column(String(120), index=True)
+    classification: Mapped[str] = mapped_column(String(20), default="SAFE", index=True)
+    risk_score: Mapped[float] = mapped_column(Float, default=0)
+    state: Mapped[str] = mapped_column(String(30), default="pending_approval", index=True)
+    requested_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    requested_role: Mapped[str] = mapped_column(String(40), default="admin")
+    reason_note: Mapped[str] = mapped_column(Text, default="")
+    override_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    second_approver_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    second_approver_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    context_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    final_decision_trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class RiskOrchestratorDecisionTrace(Base):
+    __tablename__ = "risk_orchestrator_decision_traces"
+
+    trace_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    flow_type: Mapped[str] = mapped_column(String(30), default="apply", index=True)
+    simulation_id: Mapped[str] = mapped_column(String(120), index=True)
+    classification: Mapped[str] = mapped_column(String(20), default="SAFE", index=True)
+    risk_score: Mapped[float] = mapped_column(Float, default=0)
+    rule_path: Mapped[str] = mapped_column(String(120), default="SAFE_DIRECT_APPLY")
+    decision_state: Mapped[str] = mapped_column(String(30), default="applied", index=True)
+    requested_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    approver_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    request_key: Mapped[str] = mapped_column(String(160), index=True)
+    reason_note: Mapped[str] = mapped_column(Text, default="")
+    approval_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
 class RiskPolicy(Base):
     __tablename__ = "risk_policies"
 

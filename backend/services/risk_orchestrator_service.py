@@ -11,10 +11,13 @@ from sqlalchemy.orm import Session
 from models import (
     AdminControl,
     AuditLog,
+    ExecutionMetric,
     ExecutionIntent,
     ExecutionIntentEvent,
     Position,
+    RiskOrchestratorApprovalRequest,
     RiskOrchestratorAutoTriggerLog,
+    RiskOrchestratorDecisionTrace,
     RiskOrchestratorInterventionLog,
     RiskOrchestratorManualOverride,
     RiskOrchestratorPolicy,
@@ -44,6 +47,58 @@ POLICY_FIELDS = [
     "daily_loss_limit_pct",
     "duplicate_suppression_window_seconds",
 ]
+
+RISK_SCORE_WEIGHTS = {
+    "exposure": 0.35,
+    "reject_rate": 0.20,
+    "daily_loss_proximity": 0.20,
+    "concurrent_impact": 0.15,
+    "volatility": 0.10,
+}
+
+APPROVAL_TIMEOUT_MINUTES = 10
+OVERRIDE_EXPIRY_ALERT_MINUTES = 5
+OVERRIDE_ACTIVE_LIMIT = 12
+OVERRIDE_TOTAL_NOTIONAL_LIMIT = 200.0
+
+
+def _clamp(value: float, min_value: float = 0.0, max_value: float = 100.0) -> float:
+    return max(min_value, min(max_value, value))
+
+
+def _classification_from_score(score: float) -> str:
+    if score <= 40:
+        return "SAFE"
+    if score <= 70:
+        return "WARNING"
+    return "CRITICAL"
+
+
+def _approval_flow_from_classification(classification: str) -> dict:
+    if classification == "SAFE":
+        return {
+            "requires_double_confirm": False,
+            "requires_second_approval": False,
+            "default_blocked": False,
+            "rule_path": "SAFE_DIRECT_APPLY",
+        }
+    if classification == "WARNING":
+        return {
+            "requires_double_confirm": True,
+            "requires_second_approval": False,
+            "default_blocked": False,
+            "rule_path": "WARNING_DOUBLE_CONFIRM",
+        }
+    return {
+        "requires_double_confirm": True,
+        "requires_second_approval": True,
+        "default_blocked": True,
+        "rule_path": "CRITICAL_BLOCK_OR_4_EYES_OVERRIDE",
+    }
+
+
+def _current_policy_version(policy: RiskOrchestratorPolicy) -> int:
+    return int(getattr(policy, "policy_version", 1) or 1)
 
 
 def _policy_payload(policy: RiskOrchestratorPolicy) -> dict:
@@ -157,6 +212,206 @@ def _jsonify(value):
     return value
 
 
+def _maintain_override_health(db: Session) -> None:
+    now_ts = _now()
+    soon_ts = now_ts + timedelta(minutes=OVERRIDE_EXPIRY_ALERT_MINUTES)
+    rows = (
+        db.query(RiskOrchestratorManualOverride)
+        .filter(RiskOrchestratorManualOverride.status == "active")
+        .all()
+    )
+
+    touched = False
+    for row in rows:
+        if row.expires_at is None:
+            continue
+        if row.expires_at <= now_ts:
+            row.status = "inactive"
+            row.deactivated_at = now_ts
+            row.updated_at = now_ts
+            touched = True
+            continue
+
+        if row.expires_at <= soon_ts:
+            create_system_alert(
+                db,
+                alert_type="risk_override_expiry_soon",
+                severity="WARNING",
+                message=f"Override yaklaşan süre nedeniyle auto-disable edildi: {row.override_id}",
+                details={
+                    "override_id": row.override_id,
+                    "target_key": row.target_key,
+                    "expires_at": row.expires_at.isoformat(),
+                },
+                entity_key=row.override_id,
+                root_cause_code="override_expiry_soon",
+                state_key=f"risk_override_expiry_soon_{row.override_id}",
+            )
+            row.status = "inactive"
+            row.deactivated_at = now_ts
+            row.updated_at = now_ts
+            touched = True
+
+    if touched:
+        db.commit()
+
+
+def _active_overrides(db: Session) -> list[RiskOrchestratorManualOverride]:
+    _maintain_override_health(db)
+    now_ts = _now()
+    return (
+        db.query(RiskOrchestratorManualOverride)
+        .filter(
+            RiskOrchestratorManualOverride.status == "active",
+            or_(
+                RiskOrchestratorManualOverride.expires_at.is_(None),
+                RiskOrchestratorManualOverride.expires_at > now_ts,
+            ),
+        )
+        .all()
+    )
+
+
+def _compute_risk_score(
+    db: Session,
+    *,
+    baseline_policy: dict,
+    candidate_policy: dict,
+    diff_summary: dict,
+) -> dict:
+    now_ts = _now()
+    changed = diff_summary.get("changed_fields") or {}
+    critical_fields = set(diff_summary.get("critical_fields") or [])
+    loosened_constraints = set(diff_summary.get("loosened_constraints") or [])
+
+    account_before = float(baseline_policy.get("account_max_notional_pct") or 0)
+    account_after = float(candidate_policy.get("account_max_notional_pct") or 0)
+    symbol_before = float(baseline_policy.get("symbol_max_notional_pct") or 0)
+    symbol_after = float(candidate_policy.get("symbol_max_notional_pct") or 0)
+    concurrent_before = float(baseline_policy.get("strategy_max_concurrent_positions") or 1)
+    concurrent_after = float(candidate_policy.get("strategy_max_concurrent_positions") or 1)
+
+    account_delta = max(0.0, ((account_after - max(account_before, 0.1)) / max(account_before, 0.1)) * 100)
+    symbol_delta = max(0.0, ((symbol_after - max(symbol_before, 0.1)) / max(symbol_before, 0.1)) * 100)
+    concurrent_delta = max(0.0, ((concurrent_after - max(concurrent_before, 1.0)) / max(concurrent_before, 1.0)) * 100)
+    exposure_component = _clamp((account_delta * 0.4) + (symbol_delta * 0.35) + (concurrent_delta * 0.25))
+
+    recent_rejects = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "risk_orchestrator_reject", AuditLog.created_at >= now_ts - timedelta(minutes=30))
+        .count()
+    )
+    previous_rejects = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action == "risk_orchestrator_reject",
+            AuditLog.created_at >= now_ts - timedelta(minutes=60),
+            AuditLog.created_at < now_ts - timedelta(minutes=30),
+        )
+        .count()
+    )
+    if previous_rejects == 0:
+        reject_spike_pct = 100.0 if recent_rejects >= 5 else float(recent_rejects) * 20.0
+    else:
+        reject_spike_pct = ((recent_rejects - previous_rejects) / max(previous_rejects, 1)) * 100
+    reject_rate_component = _clamp(max(0.0, reject_spike_pct))
+
+    candidate_equity = max(float(candidate_policy.get("reference_equity_usd") or 0), 1.0)
+    candidate_daily_loss = max(float(candidate_policy.get("daily_loss_limit_pct") or 1), 0.1)
+    loss_abs = (
+        db.query(Position)
+        .filter(Position.status.in_(["open", "OPEN"]), Position.unrealized_pnl < 0)
+        .all()
+    )
+    total_loss_usd = abs(sum(float(item.unrealized_pnl or 0) for item in loss_abs))
+    loss_pct = (total_loss_usd / candidate_equity) * 100
+    proximity = (loss_pct / candidate_daily_loss) * 100
+    daily_loss_component = _clamp(proximity)
+
+    open_by_strategy = build_status_snapshot(db).get("open_intents_by_strategy") or []
+    max_open_strategy = max([int(item.get("open_count") or 0) for item in open_by_strategy], default=0)
+    concurrent_limit = max(int(candidate_policy.get("strategy_max_concurrent_positions") or 1), 1)
+    concurrent_ratio = (max_open_strategy / concurrent_limit) * 100
+    concurrent_component = _clamp(concurrent_ratio)
+
+    recent_vol = (
+        db.query(ExecutionMetric)
+        .filter(ExecutionMetric.created_at >= now_ts - timedelta(hours=1))
+        .order_by(ExecutionMetric.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    if recent_vol:
+        avg_volatility = sum(float(item.volatility_pct or 0) for item in recent_vol) / max(len(recent_vol), 1)
+    else:
+        avg_volatility = 10.0
+    volatility_component = _clamp(avg_volatility * 2.0)
+
+    weighted = (
+        exposure_component * RISK_SCORE_WEIGHTS["exposure"]
+        + reject_rate_component * RISK_SCORE_WEIGHTS["reject_rate"]
+        + daily_loss_component * RISK_SCORE_WEIGHTS["daily_loss_proximity"]
+        + concurrent_component * RISK_SCORE_WEIGHTS["concurrent_impact"]
+        + volatility_component * RISK_SCORE_WEIGHTS["volatility"]
+    )
+
+    active_breaches = (
+        db.query(SystemAlert)
+        .filter(
+            SystemAlert.alert_type.in_(["risk_orchestrator_breach", "daily_loss_limit_hit", "exposure_limit_breach"]),
+            SystemAlert.created_at >= now_ts - timedelta(minutes=30),
+            SystemAlert.status.notin_(["resolved", "RESOLVED"]),
+        )
+        .count()
+    )
+    active_breach_penalty = _clamp(active_breaches * 8, 0, 25)
+
+    active_overrides = _active_overrides(db)
+    total_override_notional = sum(float((item.override_value or {}).get("max_notional_pct") or 0) for item in active_overrides)
+    override_abuse_penalty = 0.0
+    if len(active_overrides) > OVERRIDE_ACTIVE_LIMIT:
+        override_abuse_penalty += min(20, (len(active_overrides) - OVERRIDE_ACTIVE_LIMIT) * 2)
+    if total_override_notional > OVERRIDE_TOTAL_NOTIONAL_LIMIT:
+        override_abuse_penalty += min(20, (total_override_notional - OVERRIDE_TOTAL_NOTIONAL_LIMIT) * 0.2)
+
+    critical_loosen_count = len(critical_fields.intersection(loosened_constraints))
+    critical_change_penalty = min(45.0, critical_loosen_count * 14.0)
+    broad_change_penalty = 10.0 if len(changed) >= 6 else 0.0
+
+    final_score = _clamp(weighted + active_breach_penalty + override_abuse_penalty + critical_change_penalty + broad_change_penalty)
+    classification = _classification_from_score(final_score)
+
+    if active_breaches > 0 and classification == "SAFE":
+        classification = "WARNING"
+        final_score = max(final_score, 45)
+
+    if override_abuse_penalty >= 15 and classification != "CRITICAL":
+        classification = "WARNING"
+        final_score = max(final_score, 55)
+
+    return {
+        "risk_score": round(final_score, 2),
+        "classification": classification,
+        "components": {
+            "exposure": round(exposure_component, 2),
+            "reject_rate": round(reject_rate_component, 2),
+            "daily_loss_proximity": round(daily_loss_component, 2),
+            "concurrent_impact": round(concurrent_component, 2),
+            "volatility": round(volatility_component, 2),
+            "active_breach_penalty": round(active_breach_penalty, 2),
+            "override_abuse_penalty": round(override_abuse_penalty, 2),
+            "critical_change_penalty": round(critical_change_penalty, 2),
+            "broad_change_penalty": round(broad_change_penalty, 2),
+            "recent_rejects": recent_rejects,
+            "previous_rejects": previous_rejects,
+            "active_breaches": active_breaches,
+            "active_override_count": len(active_overrides),
+            "active_override_total_notional_pct": round(total_override_notional, 2),
+            "changed_field_count": len(changed),
+        },
+    }
+
+
 def _ensure_active_override_scope(override: RiskOrchestratorManualOverride) -> bool:
     if override.status != "active":
         return False
@@ -224,7 +479,23 @@ def simulate_policy_change(db: Session, *, actor_id: str, actor_role: str, candi
     baseline = _policy_payload(policy)
     candidate = _normalize_policy_payload(candidate_payload)
     diff = _policy_diff(baseline, candidate)
+    risk_gate = _compute_risk_score(
+        db,
+        baseline_policy=baseline,
+        candidate_policy=candidate,
+        diff_summary=diff,
+    )
+    approval_flow = _approval_flow_from_classification(risk_gate["classification"])
     snapshot = build_status_snapshot(db)
+
+    simulation_metrics = {
+        **diff["metrics"],
+        "baseline_policy_version": _current_policy_version(policy),
+        "risk_score": risk_gate["risk_score"],
+        "classification": risk_gate["classification"],
+        "score_components": risk_gate["components"],
+        "approval_flow": approval_flow,
+    }
 
     simulation = RiskOrchestratorPolicySimulation(
         simulation_id=f"ro-sim-{uuid4().hex[:18]}",
@@ -236,7 +507,7 @@ def simulate_policy_change(db: Session, *, actor_id: str, actor_role: str, candi
         diff_summary=diff,
         impacted_strategies=[row["key"] for row in snapshot["open_intents_by_strategy"][:10]],
         impacted_symbols=[row["key"] for row in snapshot["open_intents_by_symbol"][:10]],
-        metrics=diff["metrics"],
+        metrics=simulation_metrics,
     )
     db.add(simulation)
     db.commit()
@@ -250,6 +521,9 @@ def simulate_policy_change(db: Session, *, actor_id: str, actor_role: str, candi
         "impacted_strategies": simulation.impacted_strategies,
         "impacted_symbols": simulation.impacted_symbols,
         "metrics": simulation.metrics,
+        "risk_score": risk_gate["risk_score"],
+        "classification": risk_gate["classification"],
+        "approval_flow": approval_flow,
         "created_at": simulation.created_at,
     }
 
@@ -262,11 +536,12 @@ def apply_policy_from_simulation(
     actor_role: str,
     reason_note: str,
     double_confirmed: bool,
+    apply_with_override: bool,
     approval_note: str | None,
+    request_key: str | None,
+    expected_policy_version: int | None,
+    flow_type: str = "apply",
 ) -> dict:
-    if not double_confirmed:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="double_confirmation_required")
-
     simulation = (
         db.query(RiskOrchestratorPolicySimulation)
         .filter(RiskOrchestratorPolicySimulation.simulation_id == simulation_id)
@@ -274,6 +549,157 @@ def apply_policy_from_simulation(
     )
     if simulation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="simulation_not_found")
+
+    current_policy = get_or_create_policy(db)
+    current_version = _current_policy_version(current_policy)
+    baseline_version = int((simulation.metrics or {}).get("baseline_policy_version") or current_version)
+
+    if expected_policy_version is not None and current_version != int(expected_policy_version):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="stale_policy_data")
+    if current_version != baseline_version:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="stale_simulation_requires_resimulate")
+
+    candidate_policy = simulation.candidate_policy or {}
+    diff_payload = simulation.diff_summary or _policy_diff(_policy_payload(current_policy), candidate_policy)
+    risk_gate = {
+        "risk_score": float((simulation.metrics or {}).get("risk_score") or 0),
+        "classification": (simulation.metrics or {}).get("classification") or "SAFE",
+        "components": (simulation.metrics or {}).get("score_components") or {},
+    }
+    approval_flow = _approval_flow_from_classification(risk_gate["classification"])
+
+    if approval_flow["requires_double_confirm"] and not double_confirmed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="double_confirmation_required")
+
+    computed_request_key = request_key or f"{flow_type}:{simulation_id}:{actor_id}"
+    existing_approval = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(RiskOrchestratorApprovalRequest.request_key == computed_request_key)
+        .first()
+    )
+    if existing_approval is not None:
+        if existing_approval.state in {"pending_approval", "approved", "rejected", "timeout"}:
+            return {
+                "status": existing_approval.state,
+                "flow_type": existing_approval.flow_type,
+                "simulation_id": simulation_id,
+                "risk_score": existing_approval.risk_score,
+                "classification": existing_approval.classification,
+                "rule_path": "CRITICAL_BLOCK_OR_4_EYES_OVERRIDE",
+                "policy": None,
+                "approval_request_id": existing_approval.approval_id,
+                "decision_trace_id": existing_approval.final_decision_trace_id,
+                "message": "idempotent_replay_existing_approval_state",
+            }
+
+    existing_trace = (
+        db.query(RiskOrchestratorDecisionTrace)
+        .filter(RiskOrchestratorDecisionTrace.request_key == computed_request_key)
+        .order_by(RiskOrchestratorDecisionTrace.created_at.desc())
+        .first()
+    )
+    if existing_trace is not None and existing_trace.decision_state in {"applied", "blocked", "pending_approval", "rejected"}:
+        return {
+            "status": existing_trace.decision_state,
+            "flow_type": existing_trace.flow_type,
+            "simulation_id": existing_trace.simulation_id,
+            "risk_score": float(existing_trace.risk_score or 0),
+            "classification": existing_trace.classification,
+            "rule_path": existing_trace.rule_path,
+            "policy": get_or_create_policy(db) if existing_trace.decision_state == "applied" else None,
+            "approval_request_id": None,
+            "decision_trace_id": existing_trace.trace_id,
+            "message": "idempotent_replay_existing_decision_trace",
+        }
+
+    if approval_flow["default_blocked"] and not apply_with_override:
+        trace = RiskOrchestratorDecisionTrace(
+            trace_id=f"ro-trace-{uuid4().hex[:18]}",
+            flow_type=flow_type,
+            simulation_id=simulation_id,
+            classification=risk_gate["classification"],
+            risk_score=float(risk_gate["risk_score"]),
+            rule_path="CRITICAL_BLOCK_DEFAULT",
+            decision_state="blocked",
+            requested_by=actor_id,
+            approver_id=None,
+            request_key=computed_request_key,
+            reason_note=reason_note,
+            approval_note=approval_note,
+            payload={
+                "score_components": risk_gate["components"],
+                "approval_flow": approval_flow,
+                "apply_with_override": False,
+            },
+        )
+        db.add(trace)
+        db.commit()
+        return {
+            "status": "blocked",
+            "flow_type": flow_type,
+            "simulation_id": simulation_id,
+            "risk_score": float(risk_gate["risk_score"]),
+            "classification": risk_gate["classification"],
+            "rule_path": "CRITICAL_BLOCK_DEFAULT",
+            "policy": None,
+            "approval_request_id": None,
+            "decision_trace_id": trace.trace_id,
+            "message": "critical_policy_blocked_use_apply_with_override_and_4eyes",
+        }
+
+    if approval_flow["requires_second_approval"]:
+        approval_request = RiskOrchestratorApprovalRequest(
+            approval_id=f"ro-appr-{uuid4().hex[:18]}",
+            request_key=computed_request_key,
+            flow_type=flow_type,
+            simulation_id=simulation_id,
+            classification=risk_gate["classification"],
+            risk_score=float(risk_gate["risk_score"]),
+            state="pending_approval",
+            requested_by=actor_id,
+            requested_role=actor_role,
+            reason_note=reason_note,
+            override_used=apply_with_override,
+            expires_at=_now() + timedelta(minutes=APPROVAL_TIMEOUT_MINUTES),
+            context_payload={
+                "approval_flow": approval_flow,
+                "score_components": risk_gate["components"],
+                "approval_note": approval_note,
+            },
+        )
+        trace = RiskOrchestratorDecisionTrace(
+            trace_id=f"ro-trace-{uuid4().hex[:18]}",
+            flow_type=flow_type,
+            simulation_id=simulation_id,
+            classification=risk_gate["classification"],
+            risk_score=float(risk_gate["risk_score"]),
+            rule_path="CRITICAL_PENDING_4_EYES",
+            decision_state="pending_approval",
+            requested_by=actor_id,
+            approver_id=None,
+            request_key=computed_request_key,
+            reason_note=reason_note,
+            approval_note=approval_note,
+            payload={
+                "approval_id": approval_request.approval_id,
+                "score_components": risk_gate["components"],
+            },
+        )
+        db.add(approval_request)
+        db.add(trace)
+        db.commit()
+        return {
+            "status": "pending_approval",
+            "flow_type": flow_type,
+            "simulation_id": simulation_id,
+            "risk_score": float(risk_gate["risk_score"]),
+            "classification": risk_gate["classification"],
+            "rule_path": "CRITICAL_PENDING_4_EYES",
+            "policy": None,
+            "approval_request_id": approval_request.approval_id,
+            "decision_trace_id": trace.trace_id,
+            "message": "waiting_for_second_approval",
+        }
 
     current_policy = get_or_create_policy(db)
     previous_payload = _policy_payload(current_policy)
@@ -286,33 +712,58 @@ def apply_policy_from_simulation(
         approved_by=actor_id,
         approval_note=approval_note,
         reason_note=reason_note,
-        payload=simulation.candidate_policy,
+        payload=candidate_policy,
         simulation_id=simulation.simulation_id,
-        critical_fields=simulation.diff_summary.get("critical_fields") or [],
-        double_confirmed=True,
+        critical_fields=diff_payload.get("critical_fields") or [],
+        double_confirmed=bool(double_confirmed),
         decided_at=_now(),
     )
     db.add(change_request)
 
-    updated_policy = update_policy(db, payload=simulation.candidate_policy)
+    updated_policy = update_policy(db, payload=candidate_policy)
     updated_policy.policy_version = int(getattr(updated_policy, "policy_version", 1) or 1) + 1
 
-    diff_payload = _policy_diff(previous_payload, _policy_payload(updated_policy))
+    final_diff_payload = _policy_diff(previous_payload, _policy_payload(updated_policy))
     version = RiskOrchestratorPolicyVersion(
         version_id=f"ro-pv-{uuid4().hex[:18]}",
         version_no=updated_policy.policy_version,
         policy_payload=_policy_payload(updated_policy),
-        diff_payload=diff_payload,
+        diff_payload=final_diff_payload,
         changed_by=actor_id,
         changed_role=actor_role,
         reason_note=reason_note,
         simulation_id=simulation.simulation_id,
         approval_request_id=change_request.request_id,
     )
+
+    trace = RiskOrchestratorDecisionTrace(
+        trace_id=f"ro-trace-{uuid4().hex[:18]}",
+        flow_type=flow_type,
+        simulation_id=simulation.simulation_id,
+        classification=risk_gate["classification"],
+        risk_score=float(risk_gate["risk_score"]),
+        rule_path=approval_flow["rule_path"],
+        decision_state="applied",
+        requested_by=actor_id,
+        approver_id=actor_id,
+        request_key=computed_request_key,
+        reason_note=reason_note,
+        approval_note=approval_note,
+        payload={
+            "score_components": risk_gate["components"],
+            "change_request_id": change_request.request_id,
+            "version_id": version.version_id,
+            "approval_flow": approval_flow,
+            "apply_with_override": apply_with_override,
+        },
+    )
+
     db.add(version)
+    db.add(trace)
     db.commit()
     db.refresh(updated_policy)
     db.refresh(version)
+    db.refresh(trace)
 
     create_audit_log(
         db,
@@ -326,16 +777,283 @@ def apply_policy_from_simulation(
             "change_request_id": change_request.request_id,
             "version_id": version.version_id,
             "reason_note": reason_note,
+            "risk_score": risk_gate["risk_score"],
+            "classification": risk_gate["classification"],
+            "rule_path": approval_flow["rule_path"],
         },
         severity="high",
     )
 
     return {
+        "status": "applied",
+        "flow_type": flow_type,
+        "simulation_id": simulation.simulation_id,
+        "risk_score": float(risk_gate["risk_score"]),
+        "classification": risk_gate["classification"],
+        "rule_path": approval_flow["rule_path"],
         "policy": updated_policy,
-        "version": version,
-        "change_request": change_request,
+        "approval_request_id": None,
+        "decision_trace_id": trace.trace_id,
+        "message": "policy_applied",
+    }
+
+
+def _expire_stale_approval_requests(db: Session) -> None:
+    now_ts = _now()
+    rows = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(
+            RiskOrchestratorApprovalRequest.state == "pending_approval",
+            RiskOrchestratorApprovalRequest.expires_at < now_ts,
+        )
+        .all()
+    )
+    if not rows:
+        return
+    for row in rows:
+        row.state = "timeout"
+        row.rejected_at = now_ts
+        row.updated_at = now_ts
+    db.commit()
+
+
+def list_policy_approval_requests(db: Session, *, state: str | None = None, limit: int = 50) -> list[RiskOrchestratorApprovalRequest]:
+    _expire_stale_approval_requests(db)
+    query = db.query(RiskOrchestratorApprovalRequest)
+    if state:
+        query = query.filter(RiskOrchestratorApprovalRequest.state == state)
+    return query.order_by(RiskOrchestratorApprovalRequest.created_at.desc()).limit(limit).all()
+
+
+def approve_policy_approval_request(
+    db: Session,
+    *,
+    approval_id: str,
+    actor_id: str,
+    actor_role: str,
+    decision_note: str,
+) -> dict:
+    request = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(RiskOrchestratorApprovalRequest.approval_id == approval_id)
+        .first()
+    )
+    if request is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="approval_request_not_found")
+
+    _expire_stale_approval_requests(db)
+    db.refresh(request)
+
+    if request.state != "pending_approval":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="approval_request_not_pending")
+    if request.requested_by == actor_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="same_user_second_approval_blocked")
+
+    request.state = "approved"
+    request.second_approver_id = actor_id
+    request.second_approver_note = decision_note
+    request.approved_at = _now()
+    request.updated_at = _now()
+    db.commit()
+    db.refresh(request)
+
+    apply_result = apply_policy_from_simulation(
+        db,
+        simulation_id=request.simulation_id,
+        actor_id=request.requested_by,
+        actor_role=request.requested_role,
+        reason_note=request.reason_note,
+        double_confirmed=True,
+        apply_with_override=bool(request.override_used),
+        approval_note=request.second_approver_note,
+        request_key=f"{request.request_key}:finalize",
+        expected_policy_version=None,
+        flow_type=request.flow_type,
+    )
+
+    trace = RiskOrchestratorDecisionTrace(
+        trace_id=f"ro-trace-{uuid4().hex[:18]}",
+        flow_type=request.flow_type,
+        simulation_id=request.simulation_id,
+        classification=request.classification,
+        risk_score=float(request.risk_score or 0),
+        rule_path="CRITICAL_4_EYES_APPROVED",
+        decision_state="approved",
+        requested_by=request.requested_by,
+        approver_id=actor_id,
+        request_key=request.request_key,
+        reason_note=request.reason_note,
+        approval_note=decision_note,
+        payload={
+            "approval_id": request.approval_id,
+            "apply_result": {
+                "status": apply_result.get("status"),
+                "decision_trace_id": apply_result.get("decision_trace_id"),
+            },
+        },
+    )
+    db.add(trace)
+    request.final_decision_trace_id = apply_result.get("decision_trace_id")
+    request.updated_at = _now()
+    db.commit()
+    db.refresh(request)
+
+    return {
+        "approval_request": request,
+        "apply_result": apply_result,
+    }
+
+
+def reject_policy_approval_request(
+    db: Session,
+    *,
+    approval_id: str,
+    actor_id: str,
+    actor_role: str,
+    decision_note: str,
+) -> RiskOrchestratorApprovalRequest:
+    request = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .filter(RiskOrchestratorApprovalRequest.approval_id == approval_id)
+        .first()
+    )
+    if request is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="approval_request_not_found")
+
+    _expire_stale_approval_requests(db)
+    db.refresh(request)
+
+    if request.state != "pending_approval":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="approval_request_not_pending")
+    if request.requested_by == actor_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="same_user_second_approval_blocked")
+
+    request.state = "rejected"
+    request.second_approver_id = actor_id
+    request.second_approver_note = decision_note
+    request.rejected_at = _now()
+    request.updated_at = _now()
+
+    trace = RiskOrchestratorDecisionTrace(
+        trace_id=f"ro-trace-{uuid4().hex[:18]}",
+        flow_type=request.flow_type,
+        simulation_id=request.simulation_id,
+        classification=request.classification,
+        risk_score=float(request.risk_score or 0),
+        rule_path="CRITICAL_4_EYES_REJECTED",
+        decision_state="rejected",
+        requested_by=request.requested_by,
+        approver_id=actor_id,
+        request_key=request.request_key,
+        reason_note=request.reason_note,
+        approval_note=decision_note,
+        payload={"approval_id": request.approval_id},
+    )
+    db.add(trace)
+    request.final_decision_trace_id = trace.trace_id
+    db.commit()
+    db.refresh(request)
+    return request
+
+
+def list_decision_traces(db: Session, *, limit: int = 100) -> list[RiskOrchestratorDecisionTrace]:
+    return (
+        db.query(RiskOrchestratorDecisionTrace)
+        .order_by(RiskOrchestratorDecisionTrace.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def simulate_revert_to_version(
+    db: Session,
+    *,
+    version_id: str,
+    actor_id: str,
+    actor_role: str,
+) -> dict:
+    source = (
+        db.query(RiskOrchestratorPolicyVersion)
+        .filter(RiskOrchestratorPolicyVersion.version_id == version_id)
+        .first()
+    )
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="policy_version_not_found")
+
+    simulation = simulate_policy_change(
+        db,
+        actor_id=actor_id,
+        actor_role=actor_role,
+        candidate_payload=source.policy_payload,
+    )
+    simulation["approval_flow"] = {
+        **simulation.get("approval_flow", {}),
+        "flow_type": "revert",
+        "source_version_id": version_id,
+    }
+    return {
+        "version_id": version_id,
         "simulation": simulation,
     }
+
+
+def apply_revert_from_simulation(
+    db: Session,
+    *,
+    version_id: str,
+    simulation_id: str,
+    actor_id: str,
+    actor_role: str,
+    reason_note: str,
+    double_confirmed: bool,
+    apply_with_override: bool,
+    request_key: str | None,
+    expected_policy_version: int | None,
+) -> dict:
+    source = (
+        db.query(RiskOrchestratorPolicyVersion)
+        .filter(RiskOrchestratorPolicyVersion.version_id == version_id)
+        .first()
+    )
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="policy_version_not_found")
+
+    simulation = (
+        db.query(RiskOrchestratorPolicySimulation)
+        .filter(RiskOrchestratorPolicySimulation.simulation_id == simulation_id)
+        .first()
+    )
+    if simulation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="simulation_not_found")
+
+    if (simulation.candidate_policy or {}) != (source.policy_payload or {}):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="revert_simulation_payload_mismatch")
+
+    result = apply_policy_from_simulation(
+        db,
+        simulation_id=simulation_id,
+        actor_id=actor_id,
+        actor_role=actor_role,
+        reason_note=reason_note,
+        double_confirmed=double_confirmed,
+        apply_with_override=apply_with_override,
+        approval_note="revert_apply",
+        request_key=request_key,
+        expected_policy_version=expected_policy_version,
+        flow_type="revert",
+    )
+
+    if result.get("policy") is not None and result.get("status") == "applied":
+        latest_version = (
+            db.query(RiskOrchestratorPolicyVersion)
+            .order_by(RiskOrchestratorPolicyVersion.created_at.desc())
+            .first()
+        )
+        if latest_version is not None:
+            latest_version.reverted_from_version_id = version_id
+            db.commit()
+
+    return result
 
 
 def list_policy_history(db: Session, *, limit: int = 25) -> dict:
@@ -432,6 +1150,19 @@ def create_manual_override(
     override_value: dict,
     expires_in_minutes: int | None = None,
 ) -> RiskOrchestratorManualOverride:
+    active_overrides = _active_overrides(db)
+    if len(active_overrides) >= OVERRIDE_ACTIVE_LIMIT:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="override_count_limit_reached")
+
+    requested_notional = float((override_value or {}).get("max_notional_pct") or 0)
+    if requested_notional > 100:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="override_notional_too_high")
+
+    projected_total = sum(float((item.override_value or {}).get("max_notional_pct") or 0) for item in active_overrides)
+    projected_total += max(requested_notional, 0)
+    if projected_total > OVERRIDE_TOTAL_NOTIONAL_LIMIT:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="override_total_notional_limit_reached")
+
     expires_at = None
     if expires_in_minutes and expires_in_minutes > 0:
         expires_at = _now() + timedelta(minutes=expires_in_minutes)
@@ -471,6 +1202,7 @@ def create_manual_override(
 
 
 def list_manual_overrides(db: Session, *, active_only: bool = True) -> list[RiskOrchestratorManualOverride]:
+    _maintain_override_health(db)
     query = db.query(RiskOrchestratorManualOverride)
     if active_only:
         now_ts = _now()
@@ -586,6 +1318,7 @@ def _build_exposure_rows(intents: list[ExecutionIntent], *, key_fn) -> list[dict
 
 
 def build_status_snapshot(db: Session) -> dict:
+    _maintain_override_health(db)
     policy = get_or_create_policy(db)
     control = db.query(AdminControl).filter(AdminControl.id == "global").first()
     safety = execution_safety_snapshot(db)
@@ -1111,8 +1844,16 @@ def list_auto_trigger_logs(db: Session, *, limit: int = 50) -> list[RiskOrchestr
 
 
 def list_risk_alerts(db: Session, *, severity: str | None = None, limit: int = 50) -> list[SystemAlert]:
+    _maintain_override_health(db)
     query = db.query(SystemAlert).filter(
-        SystemAlert.alert_type.in_(["risk_orchestrator_breach", "daily_loss_limit_hit", "exposure_limit_breach"])
+        SystemAlert.alert_type.in_(
+            [
+                "risk_orchestrator_breach",
+                "daily_loss_limit_hit",
+                "exposure_limit_breach",
+                "risk_override_expiry_soon",
+            ]
+        )
     )
     if severity:
         query = query.filter(SystemAlert.severity == severity.upper())
@@ -1250,6 +1991,57 @@ def build_audit_timeline(db: Session, *, limit: int = 100) -> list[dict]:
                     "payload": trigger.payload,
                 },
                 "created_at": trigger.created_at,
+            }
+        )
+
+    approvals = (
+        db.query(RiskOrchestratorApprovalRequest)
+        .order_by(RiskOrchestratorApprovalRequest.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    for request in approvals:
+        items.append(
+            {
+                "event_id": request.approval_id,
+                "event_type": "approval_request",
+                "actor_id": request.requested_by,
+                "actor_role": request.requested_role,
+                "status": request.state,
+                "reason_note": request.reason_note,
+                "payload": {
+                    "classification": request.classification,
+                    "risk_score": request.risk_score,
+                    "simulation_id": request.simulation_id,
+                    "second_approver_id": request.second_approver_id,
+                },
+                "created_at": request.created_at,
+            }
+        )
+
+    decision_traces = (
+        db.query(RiskOrchestratorDecisionTrace)
+        .order_by(RiskOrchestratorDecisionTrace.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    for trace in decision_traces:
+        items.append(
+            {
+                "event_id": trace.trace_id,
+                "event_type": "decision_trace",
+                "actor_id": trace.requested_by,
+                "actor_role": None,
+                "status": trace.decision_state,
+                "reason_note": trace.reason_note,
+                "payload": {
+                    "classification": trace.classification,
+                    "risk_score": trace.risk_score,
+                    "rule_path": trace.rule_path,
+                    "approver_id": trace.approver_id,
+                    "request_key": trace.request_key,
+                },
+                "created_at": trace.created_at,
             }
         )
 

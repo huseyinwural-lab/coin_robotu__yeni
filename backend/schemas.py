@@ -1484,6 +1484,9 @@ class RiskOrchestratorPolicySimulationResponse(BaseModel):
     impacted_strategies: list[str]
     impacted_symbols: list[str]
     metrics: dict
+    risk_score: float = 0
+    classification: str = "SAFE"
+    approval_flow: dict = Field(default_factory=dict)
     created_at: datetime
 
 
@@ -1491,7 +1494,71 @@ class RiskOrchestratorPolicyApplyRequest(BaseModel):
     simulation_id: str
     reason_note: str = Field(min_length=3, max_length=1000)
     double_confirmed: bool = False
+    apply_with_override: bool = False
     approval_note: str | None = Field(default=None, max_length=1000)
+    request_key: str | None = Field(default=None, max_length=160)
+    expected_policy_version: int | None = None
+
+
+class RiskOrchestratorPolicyApplyResponse(BaseModel):
+    status: str
+    flow_type: str
+    simulation_id: str
+    risk_score: float
+    classification: str
+    rule_path: str
+    policy: RiskOrchestratorPolicyResponse | None = None
+    approval_request_id: str | None = None
+    decision_trace_id: str | None = None
+    message: str
+
+
+class RiskOrchestratorApprovalRequestResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    approval_id: str
+    request_key: str
+    flow_type: str
+    simulation_id: str
+    classification: str
+    risk_score: float
+    state: str
+    requested_by: str
+    requested_role: str
+    reason_note: str
+    override_used: bool
+    second_approver_id: str | None = None
+    second_approver_note: str | None = None
+    approved_at: datetime | None = None
+    rejected_at: datetime | None = None
+    expires_at: datetime
+    context_payload: dict
+    final_decision_trace_id: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RiskOrchestratorApprovalDecisionRequest(BaseModel):
+    decision_note: str = Field(min_length=3, max_length=1000)
+
+
+class RiskOrchestratorDecisionTraceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    trace_id: str
+    flow_type: str
+    simulation_id: str
+    classification: str
+    risk_score: float
+    rule_path: str
+    decision_state: str
+    requested_by: str
+    approver_id: str | None = None
+    request_key: str
+    reason_note: str
+    approval_note: str | None = None
+    payload: dict
+    created_at: datetime
 
 
 class RiskOrchestratorPolicyVersionResponse(BaseModel):
@@ -1536,7 +1603,16 @@ class RiskOrchestratorPolicyHistoryResponse(BaseModel):
 
 class RiskOrchestratorPolicyRevertRequest(BaseModel):
     reason_note: str = Field(min_length=3, max_length=1000)
-    double_confirmed: bool = False
+    double_confirmed: bool = True
+    apply_with_override: bool = False
+    request_key: str | None = Field(default=None, max_length=160)
+    simulation_id: str | None = None
+    expected_policy_version: int | None = None
+
+
+class RiskOrchestratorRevertSimulationResponse(BaseModel):
+    version_id: str
+    simulation: RiskOrchestratorPolicySimulationResponse
 
 
 class RiskOrchestratorControlActionRequest(BaseModel):
