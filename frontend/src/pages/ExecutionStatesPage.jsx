@@ -44,6 +44,11 @@ export const ExecutionStatesPage = () => {
   const [manualToState, setManualToState] = useState("cancelled");
   const [exportScopeType, setExportScopeType] = useState("correlation_id");
   const [exportScopeValue, setExportScopeValue] = useState("");
+  const [compareEnabled, setCompareEnabled] = useState(false);
+  const [compareScopeType, setCompareScopeType] = useState("correlation_id");
+  const [compareScopeValue, setCompareScopeValue] = useState("");
+  const [compareTimeFrom, setCompareTimeFrom] = useState("");
+  const [compareTimeTo, setCompareTimeTo] = useState("");
 
   const filters = useMemo(
     () => ({
@@ -229,6 +234,10 @@ export const ExecutionStatesPage = () => {
         execution_event_id: null,
         time_from: null,
         time_to: null,
+        compare_correlation_id: null,
+        compare_execution_event_id: null,
+        compare_time_from: null,
+        compare_time_to: null,
       };
 
       if (exportScopeType === "correlation_id") {
@@ -238,6 +247,21 @@ export const ExecutionStatesPage = () => {
       } else {
         body.time_from = filters.time_from || null;
         body.time_to = filters.time_to || null;
+      }
+
+      if (compareEnabled) {
+        if (compareScopeType !== exportScopeType) {
+          toast.error("Export hatası: compare scope türü primary scope ile aynı olmalı");
+          return;
+        }
+        if (compareScopeType === "correlation_id") {
+          body.compare_correlation_id = compareScopeValue.trim() || null;
+        } else if (compareScopeType === "execution_event_id") {
+          body.compare_execution_event_id = compareScopeValue.trim() || null;
+        } else {
+          body.compare_time_from = compareTimeFrom || null;
+          body.compare_time_to = compareTimeTo || null;
+        }
       }
 
       const accessToken = window.localStorage.getItem("token");
@@ -490,6 +514,39 @@ export const ExecutionStatesPage = () => {
           </Select>
           <Input value={exportScopeValue} onChange={(e) => setExportScopeValue(e.target.value)} placeholder="scope value" data-testid="execution-control-incident-export-scope-value-input" />
           <Button onClick={exportIncidentSnapshot} data-testid="execution-control-incident-export-button">Incident Snapshot Export</Button>
+        </div>
+
+        <div className="mt-3 space-y-2" data-testid="execution-control-incident-compare-panel">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCompareEnabled((prev) => !prev)}
+            data-testid="execution-control-incident-compare-toggle-button"
+          >
+            Compare Snapshot {compareEnabled ? "ON" : "OFF"}
+          </Button>
+
+          {compareEnabled && (
+            <div className="grid gap-2 md:grid-cols-3" data-testid="execution-control-incident-compare-fields">
+              <Select value={compareScopeType} onValueChange={setCompareScopeType}>
+                <SelectTrigger data-testid="execution-control-incident-compare-scope-select"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="correlation_id">compare correlation_id</SelectItem>
+                  <SelectItem value="execution_event_id">compare execution_event_id</SelectItem>
+                  <SelectItem value="time_range">compare time_range</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {compareScopeType === "time_range" ? (
+                <>
+                  <Input value={compareTimeFrom} onChange={(e) => setCompareTimeFrom(e.target.value)} placeholder="compare time_from ISO" data-testid="execution-control-incident-compare-time-from-input" />
+                  <Input value={compareTimeTo} onChange={(e) => setCompareTimeTo(e.target.value)} placeholder="compare time_to ISO" data-testid="execution-control-incident-compare-time-to-input" />
+                </>
+              ) : (
+                <Input value={compareScopeValue} onChange={(e) => setCompareScopeValue(e.target.value)} placeholder="compare scope value" data-testid="execution-control-incident-compare-scope-value-input" />
+              )}
+            </div>
+          )}
         </div>
       </div>
     </section>

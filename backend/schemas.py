@@ -738,6 +738,10 @@ class IncidentSnapshotExportRequest(BaseModel):
     execution_event_id: str | None = None
     time_from: str | None = None
     time_to: str | None = None
+    compare_correlation_id: str | None = None
+    compare_execution_event_id: str | None = None
+    compare_time_from: str | None = None
+    compare_time_to: str | None = None
     search: str | None = None
     state: str | None = None
     status: str | None = None

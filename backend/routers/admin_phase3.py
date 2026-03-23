@@ -1604,14 +1604,13 @@ def seen_execution_alert(alert_id: str, _: User = Depends(require_admin), db: Se
     return row
 
 
-@router.post("/incident-snapshots/export")
-def export_incident_snapshot_bundle(
+def _build_incident_snapshot_scope_bundle(
+    db: Session,
     payload: IncidentSnapshotExportRequest,
-    current_admin: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    scope_type, scope_payload = _require_incident_export_scope(payload)
-
+    *,
+    scope_type: str,
+    scope_payload: dict,
+) -> dict:
     filters_ctx = _resolve_execution_analytics_filters(
         state=payload.state,
         source_type=payload.source_type,
@@ -1717,7 +1716,6 @@ def export_incident_snapshot_bundle(
     if filters_ctx["order_id"]:
         token = f"%{str(filters_ctx['order_id']).strip()}%"
         manual_query = manual_query.filter(cast(ExecutionManualAction.details, Text).ilike(token))
-
     manual_rows = manual_query.order_by(ExecutionManualAction.created_at.asc()).all()
 
     collision_query = db.query(IdempotencyCollision).filter(IdempotencyCollision.created_at <= filters_ctx["time_to"])
@@ -1756,7 +1754,6 @@ def export_incident_snapshot_bundle(
                 cast(IdempotencyCollision.duplicate_request, Text).ilike(token),
             )
         )
-
     collision_rows = collision_query.order_by(IdempotencyCollision.created_at.asc()).all()
 
     trace_query = db.query(ExecutionTraceIndex).filter(ExecutionTraceIndex.created_at <= filters_ctx["time_to"])
@@ -1796,7 +1793,6 @@ def export_incident_snapshot_bundle(
     if filters_ctx["order_id"]:
         token = f"%{str(filters_ctx['order_id']).strip()}%"
         trace_query = trace_query.filter(cast(ExecutionTraceIndex.payload, Text).ilike(token))
-
     trace_rows = trace_query.order_by(ExecutionTraceIndex.created_at.asc()).all()
 
     serialized_events = [_serialize_execution_event(row) for row in event_rows]
@@ -1849,6 +1845,87 @@ def export_incident_snapshot_bundle(
         for row in trace_rows
     ]
 
+    row_counts = {
+        "events": len(serialized_events),
+        "transitions": len(serialized_transitions),
+        "failed_events": len(serialized_failures),
+        "manual_actions": len(serialized_manual),
+        "idempotency_collisions": len(serialized_collisions),
+        "trace": len(serialized_trace),
+    }
+
+    return {
+        "filters_ctx": filters_ctx,
+        "scope_type": scope_type,
+        "scope_payload": scope_payload,
+        "events": serialized_events,
+        "transitions": serialized_transitions,
+        "failures": serialized_failures,
+        "manual_actions": serialized_manual,
+        "idempotency_collisions": serialized_collisions,
+        "trace": serialized_trace,
+        "row_counts": row_counts,
+    }
+
+
+@router.post("/incident-snapshots/export")
+def export_incident_snapshot_bundle(
+    payload: IncidentSnapshotExportRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    scope_type, scope_payload = _require_incident_export_scope(payload)
+    primary_bundle = _build_incident_snapshot_scope_bundle(
+        db,
+        payload,
+        scope_type=scope_type,
+        scope_payload=scope_payload,
+    )
+    filters_ctx = primary_bundle["filters_ctx"]
+    serialized_events = primary_bundle["events"]
+    serialized_transitions = primary_bundle["transitions"]
+    serialized_failures = primary_bundle["failures"]
+    serialized_manual = primary_bundle["manual_actions"]
+    serialized_collisions = primary_bundle["idempotency_collisions"]
+    serialized_trace = primary_bundle["trace"]
+
+    compare_bundle = None
+    compare_scope_payload = None
+    compare_scope_type = None
+    if any(
+        [
+            payload.compare_correlation_id,
+            payload.compare_execution_event_id,
+            payload.compare_time_from,
+            payload.compare_time_to,
+        ]
+    ):
+        compare_request = IncidentSnapshotExportRequest(
+            correlation_id=payload.compare_correlation_id,
+            execution_event_id=payload.compare_execution_event_id,
+            time_from=payload.compare_time_from,
+            time_to=payload.compare_time_to,
+            search=payload.search,
+            state=payload.state,
+            status=payload.status,
+            source_type=payload.source_type,
+            symbol=payload.symbol,
+            strategy=payload.strategy,
+            order_id=payload.order_id,
+        )
+        compare_scope_type, compare_scope_payload = _require_incident_export_scope(compare_request)
+        if compare_scope_type != scope_type:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"incompatible_scope: primary={scope_type}, compare={compare_scope_type}",
+            )
+        compare_bundle = _build_incident_snapshot_scope_bundle(
+            db,
+            compare_request,
+            scope_type=compare_scope_type,
+            scope_payload=compare_scope_payload,
+        )
+
     generated_files = [
         "summary.json",
         "trace.json",
@@ -1859,6 +1936,37 @@ def export_incident_snapshot_bundle(
         "idempotency_collisions.csv",
         "README.txt",
     ]
+    diff_json = None
+    diff_summary_text = None
+    if compare_bundle is not None:
+        generated_files.extend(["diff.json", "diff_summary.txt"])
+
+        diff_keys = ["events", "transitions", "failed_events", "manual_actions", "idempotency_collisions"]
+        count_delta = {}
+        summary_lines = ["Snapshot Diff Summary"]
+        for key in diff_keys:
+            current_value = primary_bundle["row_counts"].get(key, 0)
+            compare_value = compare_bundle["row_counts"].get(key, 0)
+            delta = current_value - compare_value
+            trend = "arttı" if delta > 0 else "azaldı" if delta < 0 else "değişmedi"
+            count_delta[key] = {
+                "current": current_value,
+                "compare": compare_value,
+                "delta": delta,
+                "trend": trend,
+            }
+            summary_lines.append(f"- {key}: current={current_value}, compare={compare_value}, delta={delta} ({trend})")
+
+        diff_json = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "scope_comparison": {
+                "primary": {"scope_type": scope_type, "scope_identifiers": scope_payload},
+                "compare": {"scope_type": compare_scope_type, "scope_identifiers": compare_scope_payload},
+            },
+            "count_delta": count_delta,
+        }
+        diff_summary_text = "\n".join(summary_lines) + "\n"
+
     metadata = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "actor": str(current_admin.id),
@@ -1867,15 +1975,21 @@ def export_incident_snapshot_bundle(
         "scope_priority_order": ["correlation_id", "execution_event_id", "time_range"],
         "scope_identifiers": scope_payload,
         "row_counts": {
-            "events": len(serialized_events),
-            "transitions": len(serialized_transitions),
-            "failed_events": len(serialized_failures),
-            "manual_actions": len(serialized_manual),
-            "idempotency_collisions": len(serialized_collisions),
-            "trace": len(serialized_trace),
+            "events": primary_bundle["row_counts"]["events"],
+            "transitions": primary_bundle["row_counts"]["transitions"],
+            "failed_events": primary_bundle["row_counts"]["failed_events"],
+            "manual_actions": primary_bundle["row_counts"]["manual_actions"],
+            "idempotency_collisions": primary_bundle["row_counts"]["idempotency_collisions"],
+            "trace": primary_bundle["row_counts"]["trace"],
         },
         "generated_files": generated_files,
     }
+    if compare_bundle is not None:
+        metadata["compare_scope"] = {
+            "filter_scope": compare_scope_type,
+            "scope_identifiers": compare_scope_payload,
+            "row_counts": compare_bundle["row_counts"],
+        }
     summary_json = {
         **metadata,
         "filters": _serialize_execution_filter_context(filters_ctx),
@@ -1912,6 +2026,9 @@ def export_incident_snapshot_bundle(
         "- manual_actions.csv: manual intervention records\n"
         "- idempotency_collisions.csv: collision records\n"
     )
+    if compare_bundle is not None:
+        readme_text += "- diff.json: two snapshot count delta + scope comparison\n"
+        readme_text += "- diff_summary.txt: operational human-readable summary\n"
 
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, mode="w", compression=zipfile.ZIP_DEFLATED) as bundle:
@@ -1923,6 +2040,9 @@ def export_incident_snapshot_bundle(
         bundle.writestr("manual_actions.csv", manual_csv)
         bundle.writestr("idempotency_collisions.csv", collisions_csv)
         bundle.writestr("README.txt", readme_text)
+        if diff_json is not None and diff_summary_text is not None:
+            bundle.writestr("diff.json", json.dumps(diff_json, ensure_ascii=False, indent=2))
+            bundle.writestr("diff_summary.txt", diff_summary_text)
 
     filename = f"incident_snapshot_{scope_type}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.zip"
     create_audit_log(
