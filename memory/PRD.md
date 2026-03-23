@@ -1,3 +1,77 @@
+## 2026-03-23 — Execution Alerts Delivery: Mock -> Real Webhook Ready (Slack-first) ✅
+
+### Bu tur hedefi
+- Alert üretim/görüntüleme altyapısı korunarak delivery katmanı production-ready hale getirildi.
+- Gerçek webhook URL verilmediği için bu tur doğrulama **mock/disabled kontrollü mod** + state-machine logic seviyesinde tamamlandı.
+
+### P0 tamamlananlar
+1. **Real webhook adapter (Slack-first, provider-agnostic yapı)**
+   - `WebhookDeliveryProvider` + `SlackWebhookProvider`
+   - Timeout/response handling
+   - Config-driven enable/disable ve mock fallback
+
+2. **Delivery state machine**
+   - Durumlar: `PENDING`, `SENT`, `FAILED`, `RETRY_SCHEDULED`, `DEAD`
+   - Her attempt DB’ye yazılıyor (`execution_alert_delivery_attempts`)
+
+3. **Retry + backoff hardening**
+   - Exponential backoff (base=30sn)
+   - max_retry=5
+   - Retryable: network, 429, 5xx
+   - Non-retryable: 400/401/403/404
+
+4. **Secret/config yönetimi**
+   - `EXECUTION_ALERTS_ENABLED`
+   - `EXECUTION_ALERT_PROVIDER`
+   - `EXECUTION_ALERT_WEBHOOK_URL`
+   - `EXECUTION_ALERT_TIMEOUT_SECONDS`
+   - `EXECUTION_ALERT_BACKOFF_BASE_SECONDS`
+   - `EXECUTION_ALERT_MAX_RETRY`
+   - `EXECUTION_ALERT_ALLOW_MOCK`
+   - Webhook URL hiçbir yerde raw gösterilmiyor (masked)
+
+5. **Payload contract v1**
+   - `version=1` + deterministik alan seti
+   - Slack’e insan okunur kısa metin + linklerle iletim
+   - `is_test=true` test alertlerde zorunlu
+
+6. **Delivery observability**
+   - Yeni API’ler:
+     - `GET /api/admin-phase3/execution-alerts/delivery-summary`
+     - `GET /api/admin-phase3/execution-alerts/delivery-attempts`
+     - `POST /api/admin-phase3/execution-alerts/delivery/retry-due`
+   - Yeni UI route: `/admin/execution/alerts`
+
+7. **Manual resend + test alert**
+   - `POST /api/admin-phase3/execution-alerts/{alert_id}/resend`
+   - `POST /api/admin-phase3/execution-alerts/test-delivery`
+   - resend/test için audit log zorunlu
+
+### Veri modeli / migration
+- `system_alerts` yeni alanlar:
+  - `delivery_provider`, `last_attempt_at`, `next_retry_at`, `attempt_count`, `last_error_code`, `last_error_message`
+- Yeni tablo:
+  - `execution_alert_delivery_attempts`
+- Migration:
+  - `20260323_0064_execution_alert_delivery_state_machine.py`
+
+### Güvenlik
+- Destination daima masked saklanır/gösterilir (`destination_masked`)
+- Secret tam hali DB/log/UI’da görünmez
+- Resend/Test için `admin + super_admin` erişimi aktif
+
+### Test özeti
+- Testing agent raporu: `/app/test_reports/iteration_100.json`
+  - Backend: **100% (26/26 PASS)**
+  - Frontend: **100% PASS**
+- Ek doğrulamalar:
+  - `auto_frontend_testing_agent`: PASS
+  - `deep_testing_backend_v2`: PASS
+
+### Mock notu
+- Slack incoming webhook delivery bu tur **MOCKED** (gerçek URL verilmedi)
+- Gerçek webhook smoke test, URL sağlanınca son adımda yapılacak
+
 ## 2026-03-23 — FINAL TASK ORDER (Production Readiness Lock) ✅
 
 ### Kapanan kapsam (öncelik sırasıyla)
