@@ -1,3 +1,60 @@
+## 2026-03-23 — P1 Tamamlandı: Timeline Chain View + Preflight Safety Layer ✅
+
+### P1 kapsamı (kapanan)
+- `/admin/strategy/timeline/:chainId` zincir detayı, ham log listesinden **causal chain** görünümüne yükseltildi.
+- Parent-child kırıkları artık tespit ediliyor; chain invalid olduğunda hem backend summary’de hem UI’da açık uyarı veriliyor.
+- 500+ node senaryosu için varsayılan görünüm **summary mode** + parça parça yükleme (lazy load) + expand/collapse kontrolü eklendi.
+- Impact alanları ham JSON yerine okunur etiketlere çevrildi: `Risk ↑/↓`, `Exposure ↑/↓`, `Signals accepted/rejected`, `Alert triggered/resolved`.
+
+### Zincir doğruluğu / nedensellik
+- Backend `admin_strategy_observability.py` içinde:
+  - Timeline serialization parent referansını explicit parent id + zaman uyumlu fallback ile kuruyor.
+  - Chain enrich aşaması relation_status, causal_index, causal_depth, broken_reason üretiyor.
+  - Invalid sebepler: `parent_not_found`, `parent_after_child`, `self_parent_reference`, `multiple_roots`, `cycle_detected`, `missing_manual_anchor`, `detached_node`.
+
+### UI davranışı (P1 acceptance)
+- `AdminStrategyTimelineChainPage.jsx`:
+  - 5 saniye anlatım paneli (narrative)
+  - KPI kartları (total/manual-system/broken/root-depth)
+  - `Chain INVALID` banner + reason listesi
+  - Node kartları: BROKEN LINK badge, impact label chips, expand/collapse
+  - Performans kontrolü: varsayılan özet görünüm + `Daha Fazla Yükle`
+
+### Drill-down / summary tutarlılığı
+- Action-impact timeline ve chain detail sayımı hizalandı (heavy chain testinde 561 = 561 doğrulandı).
+
+### Küçük hardening işi (P1 sonrası istenen) tamamlandı
+- Yeni endpoint: `GET /api/admin-phase3/incident-snapshots/playbook/preflight`
+  - DB readiness
+  - Migration compatibility
+  - Playbook/governance table erişimi
+  - Mock/live integration readiness (Slack/Binance)
+  - Preview/Approve/Execute flow gate
+- `ExecutionStatesPage.jsx` içine Operational Preflight paneli eklendi:
+  - overall state badge
+  - check kartları
+  - refresh
+  - migration/integration meta
+  - playbook butonlarında preflight gate (ready değilse disabled)
+
+### Bu tur etkilenen dosyalar
+- `backend/routers/admin_strategy_observability.py`
+- `backend/routers/admin_phase3_modules/recovery.py`
+- `frontend/src/pages/AdminStrategyTimelineChainPage.jsx`
+- `frontend/src/pages/ExecutionStatesPage.jsx`
+
+### Doğrulama özeti
+- Self-test + seed veriler:
+  - `p1-heavy-chain-600` (561 node)
+  - `p1-broken-chain-001` (broken parent)
+- Testing agent: `/app/test_reports/iteration_97.json` → backend 24/24 PASS, frontend PASS.
+- `auto_frontend_testing_agent`: 19/19 PASS (UI regression yok)
+- `deep_testing_backend_v2`: 6/6 PASS
+
+### Mock notu
+- Slack webhook delivery **MOCKED**
+- Binance futures execution **MOCKED**
+
 ## 2026-03-23 — GAP CLOSURE P0: PLAYBOOK_PREVIEW 500 RCA + Kalıcı Fix ✅
 
 ### Kök neden (RCA)
