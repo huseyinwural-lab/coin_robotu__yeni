@@ -28,10 +28,17 @@ import requests
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 
 # Test credentials
-SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
-SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
-ADMIN_EMAIL = "canary.requester@platform.local"
-ADMIN_PASSWORD = "CanaryRequester123!"
+SUPER_ADMIN_EMAIL = os.environ.get("BACKEND_TEST_SUPER_ADMIN_EMAIL", "")
+SUPER_ADMIN_PASSWORD = os.environ.get("BACKEND_TEST_SUPER_ADMIN_PASSWORD", "")
+ADMIN_EMAIL = os.environ.get("BACKEND_TEST_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.environ.get("BACKEND_TEST_ADMIN_PASSWORD", "")
+
+INTEGRATION_TEST_BLOCKED = not BASE_URL or not SUPER_ADMIN_EMAIL or not SUPER_ADMIN_PASSWORD
+
+pytestmark = pytest.mark.skipif(
+    INTEGRATION_TEST_BLOCKED,
+    reason="Integration testleri için REACT_APP_BACKEND_URL ve BACKEND_TEST_SUPER_ADMIN_* env gereklidir.",
+)
 
 
 @pytest.fixture(scope="module")
@@ -58,6 +65,8 @@ def super_admin_token(api_client):
 @pytest.fixture(scope="module")
 def admin_token(api_client):
     """Get admin authentication token"""
+    if not ADMIN_EMAIL or not ADMIN_PASSWORD:
+        return None
     response = api_client.post(
         f"{BASE_URL}/api/auth/login",
         json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
