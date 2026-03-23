@@ -1899,8 +1899,37 @@ def _build_snapshot_diff_payload(
     }
 
     percentage_change = {
+        "events": _pct_change(a_counts["events"], b_counts["events"]),
         "failed_events": _pct_change(a_counts["failed_events"], b_counts["failed_events"]),
         "dead_letter": _pct_change(dead_letter_a, dead_letter_b),
+        "manual_actions": _pct_change(a_counts["manual_actions"], b_counts["manual_actions"]),
+    }
+
+    before_after = {
+        "events": {
+            "before": b_counts["events"],
+            "after": a_counts["events"],
+            "delta": counts["events_delta"],
+            "percentage": percentage_change["events"],
+        },
+        "failed_events": {
+            "before": b_counts["failed_events"],
+            "after": a_counts["failed_events"],
+            "delta": counts["failed_events_delta"],
+            "percentage": percentage_change["failed_events"],
+        },
+        "dead_letter": {
+            "before": dead_letter_b,
+            "after": dead_letter_a,
+            "delta": counts["dead_letter_delta"],
+            "percentage": percentage_change["dead_letter"],
+        },
+        "manual_actions": {
+            "before": b_counts["manual_actions"],
+            "after": a_counts["manual_actions"],
+            "delta": counts["manual_actions_delta"],
+            "percentage": percentage_change["manual_actions"],
+        },
     }
 
     anomaly_notes: list[str] = []
@@ -1957,6 +1986,7 @@ def _build_snapshot_diff_payload(
         },
         "counts": counts,
         "percentage_change": percentage_change,
+        "before_after": before_after,
         "anomaly_notes": anomaly_notes,
         "recommended_actions": recommended_actions,
     }

@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 export const ExecutionTracePage = () => {
-  const [correlationId, setCorrelationId] = useState("");
+  const [searchParams] = useSearchParams();
+  const [correlationId, setCorrelationId] = useState(searchParams.get("correlation_id") || "");
   const [trace, setTrace] = useState(null);
 
   const loadTrace = async () => {
     const id = correlationId.trim();
     if (!id) {
-      toast.error("correlation_id girin");
+      toast.error("Correlation ID girin");
       return;
     }
     try {
@@ -22,10 +24,27 @@ export const ExecutionTracePage = () => {
     }
   };
 
+  useEffect(() => {
+    const correlation = searchParams.get("correlation_id") || "";
+    if (!correlation) {
+      return;
+    }
+    setCorrelationId(correlation);
+    const run = async () => {
+      try {
+        const { data } = await apiClient.get(`/admin-phase3/execution-trace/${encodeURIComponent(correlation)}`);
+        setTrace(data);
+      } catch {
+        setTrace(null);
+      }
+    };
+    run();
+  }, [searchParams]);
+
   return (
     <section className="space-y-4" data-testid="execution-control-trace-page">
       <div className="flex flex-wrap gap-2" data-testid="execution-control-trace-search-row">
-        <Input value={correlationId} onChange={(e) => setCorrelationId(e.target.value)} placeholder="correlation_id" data-testid="execution-control-trace-correlation-input" />
+        <Input value={correlationId} onChange={(e) => setCorrelationId(e.target.value)} placeholder="Correlation ID" data-testid="execution-control-trace-correlation-input" />
         <Button onClick={loadTrace} data-testid="execution-control-trace-load-button">Trace Load</Button>
       </div>
 

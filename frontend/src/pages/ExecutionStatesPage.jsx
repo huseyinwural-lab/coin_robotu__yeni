@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,7 @@ const DEFAULT_STATE_STEPS = [
 const readFilter = (sp, key, fallback = "") => sp.get(key) || fallback;
 
 export const ExecutionStatesPage = () => {
+  const navigate = useNavigate();
   const backendUrl = String(process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
   const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState([]);
@@ -50,6 +51,7 @@ export const ExecutionStatesPage = () => {
   const [compareTimeFrom, setCompareTimeFrom] = useState(readFilter(searchParams, "compare_time_from"));
   const [compareTimeTo, setCompareTimeTo] = useState(readFilter(searchParams, "compare_time_to"));
   const [exportPreview, setExportPreview] = useState({ events: 0, failures: 0, transitions: 0 });
+  const [compareExportPreview, setCompareExportPreview] = useState(null);
   const [diffSnapshot, setDiffSnapshot] = useState(null);
   const [diffPreviewLoading, setDiffPreviewLoading] = useState(false);
   const [playbookPreview, setPlaybookPreview] = useState(null);
@@ -174,7 +176,7 @@ export const ExecutionStatesPage = () => {
       return;
     }
     if (!manualCorrelationId.trim()) {
-      toast.error("correlation_id zorunlu");
+      toast.error("Correlation ID zorunlu");
       return;
     }
     if (!manualReason.trim()) {
@@ -292,20 +294,41 @@ export const ExecutionStatesPage = () => {
     if (!body) {
       setDiffSnapshot(null);
       setExportPreview({ events: 0, failures: 0, transitions: 0 });
+      setCompareExportPreview(null);
       return;
     }
 
     setDiffPreviewLoading(true);
     try {
+      const previewParams = {
+        scope_type: exportScopeType,
+        scope_value: body.correlation_id || body.execution_event_id || null,
+        time_from: body.time_from,
+        time_to: body.time_to,
+        compare_scope_type: compareEnabled ? compareScopeType : null,
+        compare_scope_value: compareEnabled ? body.compare_correlation_id || body.compare_execution_event_id || null : null,
+        compare_time_from: compareEnabled ? body.compare_time_from : null,
+        compare_time_to: compareEnabled ? body.compare_time_to : null,
+      };
+      const previewRes = await apiClient.get("/admin-phase3/incident-snapshots/preview", { params: previewParams });
+      setExportPreview(previewRes.data?.preview || { events: 0, failures: 0, transitions: 0 });
+      setCompareExportPreview(previewRes.data?.compare_preview || null);
+
+      if (!compareEnabled) {
+        setDiffSnapshot(null);
+        setPlaybookPreview(null);
+        return;
+      }
+
       const { data } = await apiClient.post("/admin-phase3/incident-snapshots/diff", body);
       const snapshot = data?.state_snapshot || null;
       setDiffSnapshot(snapshot);
-      setExportPreview(snapshot?.preview || { events: 0, failures: 0, transitions: 0 });
       setPlaybookPreview(null);
       setPlaybookConfirmChecked(false);
     } catch (error) {
       setDiffSnapshot(null);
       setPlaybookPreview(null);
+      setCompareExportPreview(null);
       if (showError) {
         toast.error(error?.response?.data?.detail || "Diff preview alınamadı");
       }
@@ -512,11 +535,49 @@ export const ExecutionStatesPage = () => {
   }, [statePath]);
 
   const diffData = diffSnapshot?.diff || null;
+  const beforeAfter = diffData?.before_after || {};
+  const eventsBefore = Number(beforeAfter?.events?.before ?? 0);
+  const eventsAfter = Number(beforeAfter?.events?.after ?? 0);
+  const failedBefore = Number(beforeAfter?.failed_events?.before ?? 0);
+  const failedAfter = Number(beforeAfter?.failed_events?.after ?? 0);
+  const deadBefore = Number(beforeAfter?.dead_letter?.before ?? 0);
+  const deadAfter = Number(beforeAfter?.dead_letter?.after ?? 0);
+  const manualBefore = Number(beforeAfter?.manual_actions?.before ?? 0);
+  const manualAfter = Number(beforeAfter?.manual_actions?.after ?? 0);
+
   const failedPct = Number(diffData?.percentage_change?.failed_events || 0);
   const deadPct = Number(diffData?.percentage_change?.dead_letter || 0);
   const failedDelta = Number(diffData?.counts?.failed_events_delta || 0);
   const deadDelta = Number(diffData?.counts?.dead_letter_delta || 0);
   const manualDelta = Number(diffData?.counts?.manual_actions_delta || 0);
+  const compareReady = !compareEnabled || (
+    compareScopeType === "time_range"
+      ? Boolean(compareTimeFrom && compareTimeTo)
+      : Boolean(compareScopeValue.trim())
+  );
+
+  const resolveRecommendedActionMeta = (item) => {
+    const actionName = String(item?.action || "").toLowerCase();
+    const correlationId = (filters.correlation_id || exportScopeValue || "").trim();
+    if (actionName.includes("retry policy tune")) {
+      return { label: "View Failures", path: `/admin/execution/failures?correlation_id=${encodeURIComponent(correlationId)}` };
+    }
+    if (actionName.includes("guardrail hardening")) {
+      return { label: "View Idempotency", path: `/admin/execution/idempotency?correlation_id=${encodeURIComponent(correlationId)}` };
+    }
+    if (actionName.includes("runbook review")) {
+      return { label: "View Trace", path: `/admin/execution/trace?correlation_id=${encodeURIComponent(correlationId)}` };
+    }
+    return { label: null, path: null };
+  };
+
+  const openRecommendedAction = (item) => {
+    const actionMeta = resolveRecommendedActionMeta(item);
+    if (!actionMeta.path) {
+      return;
+    }
+    navigate(actionMeta.path);
+  };
 
   return (
     <section className="space-y-4" data-testid="execution-control-states-page">
@@ -679,7 +740,7 @@ export const ExecutionStatesPage = () => {
           </div>
 
           <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="execution-control-manual-intervention-panel">
-            <Input placeholder="correlation_id" value={manualCorrelationId} onChange={(e) => setManualCorrelationId(e.target.value)} data-testid="execution-control-manual-correlation-input" />
+            <Input placeholder="Correlation ID" value={manualCorrelationId} onChange={(e) => setManualCorrelationId(e.target.value)} data-testid="execution-control-manual-correlation-input" />
             <Input placeholder="reason" value={manualReason} onChange={(e) => setManualReason(e.target.value)} data-testid="execution-control-manual-reason-input" />
             <Input placeholder="confirmation phrase (prod)" value={manualPhrase} onChange={(e) => setManualPhrase(e.target.value)} data-testid="execution-control-manual-confirmation-input" />
             <Input placeholder="force to_state" value={manualToState} onChange={(e) => setManualToState(e.target.value)} data-testid="execution-control-manual-to-state-input" />
@@ -697,37 +758,12 @@ export const ExecutionStatesPage = () => {
         <p className="text-xs text-slate-400" data-testid="execution-control-incident-export-preview-text">
           {diffPreviewLoading
             ? "Export preview hazırlanıyor..."
-            : `~ ${exportPreview.events || 0} events, ${exportPreview.failures || 0} failures export edilecek`}
+            : compareEnabled && compareExportPreview
+              ? `Primary ~ ${exportPreview.events || 0} events, ${exportPreview.failures || 0} failures | Compare ~ ${compareExportPreview.events || 0} events, ${compareExportPreview.failures || 0} failures`
+              : `~ ${exportPreview.events || 0} events, ${exportPreview.failures || 0} failures export edilecek`}
         </p>
 
-        <div className="mt-2 grid gap-2 md:grid-cols-3">
-          <div>
-            <Label>Scope Type</Label>
-            <Select value={exportScopeType} onValueChange={setExportScopeType}>
-              <SelectTrigger data-testid="execution-control-incident-export-scope-select"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="correlation_id">Correlation ID</SelectItem>
-                <SelectItem value="execution_event_id">Execution Event ID</SelectItem>
-                <SelectItem value="time_range">Time Range</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Scope Value</Label>
-            <Input
-              value={exportScopeValue}
-              onChange={(e) => setExportScopeValue(e.target.value)}
-              placeholder={exportScopeType === "correlation_id" ? "enter correlation id" : "enter scope value"}
-              disabled={exportScopeType === "time_range"}
-              data-testid="execution-control-incident-export-scope-value-input"
-            />
-          </div>
-          <div className="flex items-end">
-            <Button onClick={exportIncidentSnapshot} data-testid="execution-control-incident-export-button">Export Snapshot ZIP</Button>
-          </div>
-        </div>
-
-        <div className="mt-3 space-y-2" data-testid="execution-control-incident-compare-panel">
+        <div className="mt-3 space-y-3" data-testid="execution-control-incident-compare-panel">
           <Button
             variant="outline"
             size="sm"
@@ -737,80 +773,156 @@ export const ExecutionStatesPage = () => {
             Compare Snapshot {compareEnabled ? "ON" : "OFF"}
           </Button>
 
-          {compareEnabled && (
-            <div className="grid gap-2 md:grid-cols-3" data-testid="execution-control-incident-compare-fields">
-              <div>
-                <Label>Compare Scope Type</Label>
-                <Select value={compareScopeType} onValueChange={setCompareScopeType}>
-                  <SelectTrigger data-testid="execution-control-incident-compare-scope-select"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="correlation_id">Correlation ID</SelectItem>
-                    <SelectItem value="execution_event_id">Execution Event ID</SelectItem>
-                    <SelectItem value="time_range">Time Range</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {compareScopeType === "time_range" ? (
-                <>
-                  <div>
-                    <Label>Compare Time From (ISO)</Label>
-                    <Input value={compareTimeFrom} onChange={(e) => setCompareTimeFrom(e.target.value)} placeholder="2026-03-22T00:00:00+00:00" data-testid="execution-control-incident-compare-time-from-input" />
-                  </div>
-                  <div>
-                    <Label>Compare Time To (ISO)</Label>
-                    <Input value={compareTimeTo} onChange={(e) => setCompareTimeTo(e.target.value)} placeholder="2026-03-22T23:59:59+00:00" data-testid="execution-control-incident-compare-time-to-input" />
-                  </div>
-                </>
-              ) : (
+          <div className="grid gap-3 lg:grid-cols-2" data-testid="execution-control-incident-snapshot-cards-grid">
+            <div className="rounded border border-slate-700 bg-black/30 p-3" data-testid="execution-control-incident-primary-snapshot-card">
+              <p className="text-xs font-semibold text-slate-300" data-testid="execution-control-incident-primary-snapshot-label">Primary Snapshot</p>
+              <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="execution-control-incident-primary-fields">
                 <div>
-                  <Label>Compare Scope Value</Label>
-                  <Input value={compareScopeValue} onChange={(e) => setCompareScopeValue(e.target.value)} placeholder="enter compare scope value" data-testid="execution-control-incident-compare-scope-value-input" />
+                  <Label>Scope Type</Label>
+                  <Select value={exportScopeType} onValueChange={setExportScopeType}>
+                    <SelectTrigger data-testid="execution-control-incident-export-scope-select"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="correlation_id">Correlation ID</SelectItem>
+                      <SelectItem value="execution_event_id">Execution Event ID</SelectItem>
+                      <SelectItem value="time_range">Time Range</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
+
+                {exportScopeType === "time_range" ? (
+                  <>
+                    <div>
+                      <Label>Time From (ISO)</Label>
+                      <Input value={filters.time_from} onChange={(e) => updateFilter("time_from", e.target.value)} placeholder="2026-03-22T00:00:00+00:00" data-testid="execution-control-incident-primary-time-from-input" />
+                    </div>
+                    <div>
+                      <Label>Time To (ISO)</Label>
+                      <Input value={filters.time_to} onChange={(e) => updateFilter("time_to", e.target.value)} placeholder="2026-03-22T23:59:59+00:00" data-testid="execution-control-incident-primary-time-to-input" />
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <Label>{exportScopeType === "correlation_id" ? "Correlation ID" : "Execution Event ID"}</Label>
+                    <Input
+                      value={exportScopeValue}
+                      onChange={(e) => setExportScopeValue(e.target.value)}
+                      placeholder={exportScopeType === "correlation_id" ? "enter correlation id" : "enter execution event id"}
+                      data-testid="execution-control-incident-export-scope-value-input"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+
+            {compareEnabled && (
+              <div className="rounded border border-slate-700 bg-black/30 p-3" data-testid="execution-control-incident-compare-snapshot-card">
+                <p className="text-xs font-semibold text-slate-300" data-testid="execution-control-incident-compare-snapshot-label">Compare Snapshot</p>
+                <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="execution-control-incident-compare-fields">
+                  <div>
+                    <Label>Scope Type</Label>
+                    <Select value={compareScopeType} onValueChange={setCompareScopeType}>
+                      <SelectTrigger data-testid="execution-control-incident-compare-scope-select"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="correlation_id">Correlation ID</SelectItem>
+                        <SelectItem value="execution_event_id">Execution Event ID</SelectItem>
+                        <SelectItem value="time_range">Time Range</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {compareScopeType === "time_range" ? (
+                    <>
+                      <div>
+                        <Label>Time From (ISO)</Label>
+                        <Input value={compareTimeFrom} onChange={(e) => setCompareTimeFrom(e.target.value)} placeholder="2026-03-22T00:00:00+00:00" data-testid="execution-control-incident-compare-time-from-input" />
+                      </div>
+                      <div>
+                        <Label>Time To (ISO)</Label>
+                        <Input value={compareTimeTo} onChange={(e) => setCompareTimeTo(e.target.value)} placeholder="2026-03-22T23:59:59+00:00" data-testid="execution-control-incident-compare-time-to-input" />
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <Label>{compareScopeType === "correlation_id" ? "Correlation ID" : "Execution Event ID"}</Label>
+                      <Input value={compareScopeValue} onChange={(e) => setCompareScopeValue(e.target.value)} placeholder="enter compare scope value" data-testid="execution-control-incident-compare-scope-value-input" />
+                    </div>
+                  )}
+                </div>
+                {!compareReady && (
+                  <p className="mt-2 text-xs text-red-400" data-testid="execution-control-incident-compare-required-text">
+                    Compare ON iken Compare Snapshot alanları zorunludur.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2" data-testid="execution-control-incident-export-actions-row">
+            <Button onClick={exportIncidentSnapshot} disabled={!compareReady} data-testid="execution-control-incident-export-button">Export Snapshot ZIP</Button>
+          </div>
         </div>
 
         {compareEnabled && diffData && (
           <div className="mt-3 rounded border border-slate-700 bg-black/30 p-3" data-testid="execution-control-diff-summary-panel">
-            <p className="text-sm font-semibold">Diff Summary</p>
-            <div className="mt-2 grid gap-2 md:grid-cols-3 text-sm">
-              <div className={failedDelta > 0 && failedPct > 50 ? "text-red-400" : failedDelta < 0 ? "text-emerald-400" : "text-slate-300"} data-testid="execution-control-diff-failed-events-summary">
-                FAILED EVENTS: {failedDelta >= 0 ? "+" : ""}{failedPct}% {failedDelta > 0 ? "↑" : failedDelta < 0 ? "↓" : "="} {failedDelta > 0 && failedPct > 50 ? "(CRITICAL)" : failedDelta < 0 ? "(IMPROVED)" : ""}
+            <p className="text-sm font-semibold" data-testid="execution-control-diff-summary-title">Diff Panel</p>
+
+            <div className="mt-2 rounded border border-slate-700 bg-slate-950 p-2" data-testid="execution-control-diff-section-summary">
+              <p className="text-xs font-semibold text-slate-300">1) Summary</p>
+              <div className="mt-2 grid gap-2 md:grid-cols-2 text-xs" data-testid="execution-control-diff-before-after-grid">
+                <p data-testid="execution-control-diff-events-before-after">EVENTS: {eventsBefore} → {eventsAfter} ({eventsAfter - eventsBefore >= 0 ? "+" : ""}{eventsAfter - eventsBefore})</p>
+                <p data-testid="execution-control-diff-failed-before-after">FAILED_EVENTS: {failedBefore} → {failedAfter} ({failedDelta >= 0 ? "+" : ""}{failedDelta}, {failedPct}%)</p>
+                <p data-testid="execution-control-diff-dead-before-after">DEAD_LETTER: {deadBefore} → {deadAfter} ({deadDelta >= 0 ? "+" : ""}{deadDelta}, {deadPct}%)</p>
+                <p data-testid="execution-control-diff-manual-before-after">MANUAL_ACTIONS: {manualBefore} → {manualAfter} ({manualDelta >= 0 ? "+" : ""}{manualDelta})</p>
               </div>
-              <div className={deadDelta > 0 && deadPct > 30 ? "text-amber-400" : deadDelta < 0 ? "text-emerald-400" : "text-slate-300"} data-testid="execution-control-diff-dead-letter-summary">
-                DEAD LETTER: {deadDelta >= 0 ? "+" : ""}{deadPct}% {deadDelta > 0 ? "↑" : deadDelta < 0 ? "↓" : "="}
-              </div>
-              <div className={manualDelta > 0 ? "text-amber-300" : manualDelta < 0 ? "text-emerald-400" : "text-slate-300"} data-testid="execution-control-diff-manual-actions-summary">
-                MANUAL ACTIONS: {manualDelta >= 0 ? "+" : ""}{manualDelta} {manualDelta > 0 ? "↑" : manualDelta < 0 ? "↓" : "="} {manualDelta < 0 ? "(IMPROVED)" : ""}
-              </div>
-            </div>
-            <div className="mt-2 space-y-1 text-xs" data-testid="execution-control-diff-anomaly-notes-list">
-              {(diffData?.anomaly_notes || []).map((note, idx) => (
-                <p key={`${note}-${idx}`} data-testid={`execution-control-diff-anomaly-note-${idx}`}>{note}</p>
-              ))}
-              {!diffData?.anomaly_notes?.length && <p>no anomaly note</p>}
             </div>
 
-            <div className="mt-3 space-y-1 text-xs" data-testid="execution-control-diff-recommended-actions-list">
-              <p className="font-semibold">Recommended Actions:</p>
-              {(diffData?.recommended_actions || []).map((item, idx) => (
-                <p
-                  key={`${item.action}-${idx}`}
-                  className={
-                    item.severity === "CRITICAL"
-                      ? "text-red-400"
-                      : item.severity === "WARNING"
-                        ? "text-amber-300"
-                        : "text-emerald-400"
-                  }
-                  data-testid={`execution-control-diff-recommended-action-${idx}`}
-                >
-                  [{item.severity}] {item.action} ({item.reason})
-                </p>
-              ))}
-              {!diffData?.recommended_actions?.length && <p>[INFO] keep current policy (stable)</p>}
+            <div className="mt-2 rounded border border-slate-700 bg-slate-950 p-2" data-testid="execution-control-diff-section-anomalies">
+              <p className="text-xs font-semibold text-slate-300">2) Anomalies</p>
+              <div className="mt-2 space-y-1 text-xs" data-testid="execution-control-diff-anomaly-notes-list">
+                {(diffData?.anomaly_notes || []).map((note, idx) => (
+                  <p key={`${note}-${idx}`} data-testid={`execution-control-diff-anomaly-note-${idx}`}>{note}</p>
+                ))}
+                {!diffData?.anomaly_notes?.length && <p data-testid="execution-control-diff-anomaly-empty-text">no anomaly note</p>}
+              </div>
+            </div>
+
+            <div className="mt-2 rounded border border-slate-700 bg-slate-950 p-2" data-testid="execution-control-diff-section-recommended-actions">
+              <p className="text-xs font-semibold text-slate-300">3) Recommended Actions</p>
+              <div className="mt-2 space-y-2 text-xs" data-testid="execution-control-diff-recommended-actions-list">
+                {(diffData?.recommended_actions || []).map((item, idx) => {
+                  const severity = String(item?.severity || "INFO").toUpperCase();
+                  const actionMeta = resolveRecommendedActionMeta(item);
+                  const severityStyle = severity === "CRITICAL"
+                    ? "border-red-500 bg-red-950/40 text-red-300"
+                    : severity === "WARNING"
+                      ? "border-amber-500 bg-amber-950/40 text-amber-300"
+                      : "border-emerald-500 bg-emerald-950/40 text-emerald-300";
+                  const icon = severity === "CRITICAL" ? "🔴" : severity === "WARNING" ? "⚠️" : "✅";
+                  return (
+                    <div key={`${item.action}-${idx}`} className={`rounded border p-2 ${severityStyle}`} data-testid={`execution-control-diff-recommended-action-${idx}`}>
+                      <p data-testid={`execution-control-diff-recommended-action-text-${idx}`}>
+                        {icon} [{severity}] {item.action} ({item.reason})
+                      </p>
+                      {actionMeta.path ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2 h-7 border-current bg-transparent"
+                          onClick={() => openRecommendedAction(item)}
+                          data-testid={`execution-control-diff-recommended-action-link-${idx}`}
+                        >
+                          {actionMeta.label}
+                        </Button>
+                      ) : (
+                        <p className="mt-1 text-[11px]" data-testid={`execution-control-diff-recommended-action-no-link-${idx}`}>
+                          no action
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+                {!diffData?.recommended_actions?.length && <p data-testid="execution-control-diff-recommended-actions-empty">✅ [INFO] keep current policy (no action)</p>}
+              </div>
             </div>
 
             <div className="mt-4 border border-slate-700 bg-slate-950 p-3 text-xs" data-testid="execution-control-diff-playbook-panel">

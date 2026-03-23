@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +10,10 @@ import { toast } from "sonner";
 const ACTIONS = ["mark_safe_duplicate", "release_blocked_retry", "suppress_replay", "force_reprocess_new_key"];
 
 export const ExecutionIdempotencyPage = () => {
+  const [searchParams] = useSearchParams();
   const [rows, setRows] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("correlation_id") || "");
   const [selected, setSelected] = useState(null);
 
   const load = async () => {
@@ -31,7 +33,14 @@ export const ExecutionIdempotencyPage = () => {
     load();
     const id = setInterval(load, 10000);
     return () => clearInterval(id);
-  }, [statusFilter]);
+  }, [search, statusFilter]);
+
+  useEffect(() => {
+    const correlationId = searchParams.get("correlation_id") || "";
+    if (correlationId && correlationId !== search) {
+      setSearch(correlationId);
+    }
+  }, [search, searchParams]);
 
   const resolveCollision = async (collision, action) => {
     const reason = window.prompt("Resolve reason", `${action}_${collision.collision_id}`);

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,8 +10,9 @@ import { toast } from "sonner";
 const STATUS_OPTIONS = ["all", "pending", "retrying", "dead", "resolved", "quarantined"];
 
 export const FailedEventsPage = () => {
+  const [searchParams] = useSearchParams();
   const [rows, setRows] = useState([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("correlation_id") || "");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selected, setSelected] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -32,7 +34,14 @@ export const FailedEventsPage = () => {
     load();
     const id = setInterval(load, 10000);
     return () => clearInterval(id);
-  }, [statusFilter]);
+  }, [search, statusFilter]);
+
+  useEffect(() => {
+    const correlationId = searchParams.get("correlation_id") || "";
+    if (correlationId && correlationId !== search) {
+      setSearch(correlationId);
+    }
+  }, [search, searchParams]);
 
   const handleAction = async (id, action) => {
     try {
