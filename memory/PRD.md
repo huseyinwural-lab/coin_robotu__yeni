@@ -1,3 +1,46 @@
+## 2026-03-23 — P1 Ek Kapanış: Deterministik Root Cause Hint + Seed İzolasyonu ✅
+
+### Bu tur kapsamı
+- **Auto Root Cause Hint** eklendi (deterministik, kural tabanlı).
+- **Seed test zincirleri izolasyonu** eklendi (canlı operasyon görünümünden varsayılan olarak filtrelenir).
+
+### 1) Deterministik Root Cause Hint
+- Backend `summary.root_cause_hint` alanı üretir.
+- Üretim mantığı serbest metin tahmini değil; `invalid_reasons` kombinasyonundan kural eşlemesi ile gelir.
+- UI etiketi açıkça ayrıştırıldı: **“Deterministik Operasyon Önerisi (kesin neden değil)”**.
+- Aynı reason kombinasyonu => aynı `rule_key`, aynı `hint` (deterministik davranış doğrulandı).
+
+### 2) Seed zincir izolasyonu (arşivleme/ayırma)
+- Yeni filtre parametresi:
+  - `GET /api/admin/strategy/action-impact-timeline?include_seed=true|false`
+  - `GET /api/admin/strategy/timeline/{chain_id}?include_seed=true|false`
+- Varsayılan: `include_seed=false` (seed veriler canlı görünümde gizlenir).
+- Seed chain detail, include_seed=false iken `seed_chain_hidden` reason ile boş döner.
+- UI’da seed görünümü bilinçli toggle ile açılır: **Seed Göster / Seed Gizle**.
+- Seed zincirler göründüğünde `TEST/SEED CHAIN` badge gösterilir.
+
+### Seed veri işaretleme
+- Mevcut test zincirleri detay payload’ları işaretlendi:
+  - `is_seed_data=true`
+  - `seed_namespace=qa_seed`
+  - `data_namespace=seed`
+- Böylece test verisi gerçek operasyon zinciri gibi görünmez ve filterlenebilir kalır.
+
+### Kabul kriteri durumu
+- ✅ Invalid chain’de tek cümle okunur operasyon önerisi üretiliyor.
+- ✅ Aynı invalid kombinasyon aynı hint’i üretiyor.
+- ✅ Seed zincirleri filterlenebilir ve izole.
+- ✅ Varsayılan canlı görünüm seed test verisinden etkilenmiyor.
+
+### Etkilenen dosyalar
+- `backend/routers/admin_strategy_observability.py`
+- `frontend/src/pages/AdminStrategyTimelineChainPage.jsx`
+
+### Test özeti
+- Testing agent raporu: `/app/test_reports/iteration_98.json`
+  - Backend: **100% (11/11 PASS)**
+  - Frontend: **100% PASS**
+
 ## 2026-03-23 — P1 Tamamlandı: Timeline Chain View + Preflight Safety Layer ✅
 
 ### P1 kapsamı (kapanan)
