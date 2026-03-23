@@ -43,7 +43,7 @@ def _load_policy() -> dict:
     return read_json_config(AUTO_ACK_POLICY_KEY, _default_policy())
 
 
-def _find_policy_matches(db: Session, *, policy: dict) -> list[SystemAlert]:
+def _find_policy_matches(db: Session, *, policy: dict) -> list[dict]:
     threshold_hours = int(policy.get("threshold_hours") or 24)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
     query = db.query(SystemAlert).filter(
@@ -53,7 +53,23 @@ def _find_policy_matches(db: Session, *, policy: dict) -> list[SystemAlert]:
     )
     if policy.get("only_execution_alerts", True):
         query = query.filter(SystemAlert.alert_type.ilike("execution_%"))
-    return query.order_by(SystemAlert.created_at.asc()).limit(500).all()
+    rows = query.order_by(SystemAlert.created_at.asc()).limit(500).all()
+
+    matched: list[dict] = []
+    for row in rows:
+        matched_rules = ["severity_info", "older_than_threshold_hours"]
+        if policy.get("only_execution_alerts", True):
+            matched_rules.append("execution_alert_type")
+        matched.append(
+            {
+                "alert_id": row.id,
+                "severity": row.severity,
+                "alert_type": row.alert_type,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "matched_rules": matched_rules,
+            }
+        )
+    return matched
 
 
 @router.get("/execution-alerts/auto-ack/policy")
@@ -96,10 +112,10 @@ def execution_alerts_auto_ack_policy_update(
 
 
 @router.post("/execution-alerts/auto-ack/run")
+@router.post("/auto-ack/run")
 def execution_alerts_auto_ack_run(
     preview_token: str = Query(...),
     reason: str = Query(default="scheduled_auto_ack"),
-    dry_run: bool = Query(default=False),
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -112,19 +128,34 @@ def execution_alerts_auto_ack_run(
         raise HTTPException(status_code=422, detail="preview_token_invalid_or_expired")
 
     reason_value = ensure_reason(reason, min_length=3)
-    rows = _find_policy_matches(db, policy=policy)
-    matched_ids = [row.id for row in rows]
+    matched_payload = list(preview_payload.get("matched_alerts") or [])
+    matched_ids = [str(item.get("alert_id") or "") for item in matched_payload if str(item.get("alert_id") or "").strip()]
+    if not matched_ids:
+        raise HTTPException(status_code=422, detail="auto_ack_preview_empty")
 
-    if not dry_run:
-        now = datetime.now(timezone.utc)
-        for row in rows:
-            details = dict(row.details or {})
-            details["auto_acked"] = True
-            details["auto_acked_at"] = now.isoformat()
-            details["auto_acked_by"] = "policy"
-            row.details = details
-            row.status = "ack"
-            row.updated_at = now
+    rows = db.query(SystemAlert).filter(SystemAlert.id.in_(matched_ids), SystemAlert.status == "open").all()
+    if not rows:
+        raise HTTPException(status_code=422, detail="auto_ack_no_longer_match")
+
+    now = datetime.now(timezone.utc)
+    acked_ids = []
+    for row in rows:
+        details = dict(row.details or {})
+        details["auto_acked"] = True
+        details["auto_acked_at"] = now.isoformat()
+        details["auto_acked_by"] = "policy"
+        details["auto_acked_preview_token"] = preview_token
+        row.details = details
+        row.status = "ack"
+        row.updated_at = now
+        acked_ids.append(row.id)
+
+    rule_match_counter: dict[str, int] = {}
+    for item in matched_payload:
+        if item.get("alert_id") not in acked_ids:
+            continue
+        for rule_name in item.get("matched_rules") or []:
+            rule_match_counter[rule_name] = rule_match_counter.get(rule_name, 0) + 1
 
     write_audit_event(
         db,
@@ -136,36 +167,44 @@ def execution_alerts_auto_ack_run(
             "reason": reason_value,
             "policy": policy,
             "preview_token": preview_token,
-            "dry_run": dry_run,
-            "matched_count": len(matched_ids),
-            "matched_ids": matched_ids,
+            "matched_count": len(acked_ids),
+            "matched_ids": acked_ids,
+            "matched_rule_counter": rule_match_counter,
         },
         severity="warning",
     )
     db.commit()
 
     return shape_response(
-        message="auto_ack_dry_run_completed" if dry_run else "auto_ack_run_completed",
+        message="auto_ack_run_completed",
         policy=policy,
         preview_token=preview_token,
-        dry_run=dry_run,
-        acked_count=len(matched_ids),
-        ids=matched_ids,
+        acked_count=len(acked_ids),
+        ids=acked_ids,
+        matched_rule_counter=rule_match_counter,
     )
 
 
 @router.post("/execution-alerts/auto-ack/preview")
+@router.post("/auto-ack/preview")
 def execution_alerts_auto_ack_preview(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     policy = _load_policy()
-    rows = _find_policy_matches(db, policy=policy)
-    matched_ids = [row.id for row in rows]
+    matched_alerts = _find_policy_matches(db, policy=policy)
+    matched_ids = [row.get("alert_id") for row in matched_alerts]
+    rule_match_counter: dict[str, int] = {}
+    for item in matched_alerts:
+        for rule_name in item.get("matched_rules") or []:
+            rule_match_counter[rule_name] = rule_match_counter.get(rule_name, 0) + 1
+
     preview_payload = {
         "type": "auto_ack_preview",
         "policy": policy,
         "matched_ids": matched_ids,
+        "matched_alerts": matched_alerts,
+        "rule_match_counter": rule_match_counter,
         "created_by": current_admin.id,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -182,6 +221,7 @@ def execution_alerts_auto_ack_preview(
             "preview_token": preview_token,
             "matched_count": len(matched_ids),
             "matched_ids": matched_ids,
+            "matched_rule_counter": rule_match_counter,
         },
     )
     db.commit()
@@ -192,4 +232,6 @@ def execution_alerts_auto_ack_preview(
         preview_token=preview_token,
         matched_count=len(matched_ids),
         ids=matched_ids,
+        matched_alerts=matched_alerts,
+        matched_rule_counter=rule_match_counter,
     )

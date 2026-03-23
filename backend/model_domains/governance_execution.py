@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
@@ -29,6 +29,11 @@ class PlaybookExecutionRun(Base):
     preview_token: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     chain_id: Mapped[str] = mapped_column(String(120), index=True)
     execution_state: Mapped[str] = mapped_column(String(30), default="preview", index=True)
+    step_index: Mapped[int] = mapped_column(Integer, default=0)
+    total_steps: Mapped[int] = mapped_column(Integer, default=0)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parent_run_id: Mapped[str | None] = mapped_column(String, ForeignKey("playbook_execution_runs.id"), nullable=True, index=True)
+    retry_attempt: Mapped[int] = mapped_column(Integer, default=0)
     steps: Mapped[list[dict]] = mapped_column(JSON, default=list)
     scope_payload: Mapped[dict] = mapped_column(JSON, default=dict)
     approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)

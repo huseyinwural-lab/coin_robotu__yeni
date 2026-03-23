@@ -72,8 +72,12 @@ export const ExecutionStatesPage = () => {
   const [playbookReason, setPlaybookReason] = useState("");
   const [playbookRunId, setPlaybookRunId] = useState("");
   const [playbookExecutionState, setPlaybookExecutionState] = useState("preview");
+  const [playbookRunDetail, setPlaybookRunDetail] = useState(null);
+  const [playbookRunDetailLoading, setPlaybookRunDetailLoading] = useState(false);
   const [playbookApproveLoading, setPlaybookApproveLoading] = useState(false);
   const [playbookExecuteLoading, setPlaybookExecuteLoading] = useState(false);
+  const [playbookRollbackLoading, setPlaybookRollbackLoading] = useState(false);
+  const [playbookRetryLoading, setPlaybookRetryLoading] = useState(false);
   const [playbookApplyDialogOpen, setPlaybookApplyDialogOpen] = useState(false);
   const [playbookExecuteDialogOpen, setPlaybookExecuteDialogOpen] = useState(false);
   const [playbookPreflight, setPlaybookPreflight] = useState(null);
@@ -159,6 +163,14 @@ export const ExecutionStatesPage = () => {
     }
     loadPlaybookPreflight({ silent: true });
   }, [compareEnabled, diffSnapshot?.diff]);
+
+  useEffect(() => {
+    if (!playbookRunId) {
+      setPlaybookRunDetail(null);
+      return;
+    }
+    loadPlaybookRunDetail(playbookRunId, { silent: true });
+  }, [playbookRunId]);
 
   const handleSimulate = async (outcome) => {
     try {
@@ -365,6 +377,7 @@ export const ExecutionStatesPage = () => {
         setPlaybookPreview(null);
         setPlaybookRunId("");
         setPlaybookExecutionState("preview");
+        setPlaybookRunDetail(null);
         return;
       }
 
@@ -374,12 +387,14 @@ export const ExecutionStatesPage = () => {
       setPlaybookPreview(null);
       setPlaybookRunId("");
       setPlaybookExecutionState("preview");
+      setPlaybookRunDetail(null);
       setPlaybookConfirmChecked(false);
     } catch (error) {
       setDiffSnapshot(null);
       setPlaybookPreview(null);
       setPlaybookRunId("");
       setPlaybookExecutionState("preview");
+      setPlaybookRunDetail(null);
       setCompareExportPreview(null);
       if (showError) {
         const detail = String(error?.response?.data?.detail || "");
@@ -416,11 +431,38 @@ export const ExecutionStatesPage = () => {
     }
   };
 
+  const loadPlaybookRunDetail = async (runIdParam = playbookRunId, { silent = true } = {}) => {
+    const targetRunId = String(runIdParam || "").trim();
+    if (!targetRunId) {
+      setPlaybookRunDetail(null);
+      return null;
+    }
+    setPlaybookRunDetailLoading(true);
+    try {
+      const { data } = await apiClient.get(`/admin-phase3/incident-snapshots/playbook/runs/${encodeURIComponent(targetRunId)}`);
+      const runPayload = data?.playbook_run || null;
+      setPlaybookRunDetail(runPayload);
+      if (runPayload?.execution_state) {
+        setPlaybookExecutionState(runPayload.execution_state);
+      }
+      return runPayload;
+    } catch (error) {
+      setPlaybookRunDetail(null);
+      if (!silent) {
+        toast.error(error?.response?.data?.detail || "Playbook run detail alınamadı");
+      }
+      return null;
+    } finally {
+      setPlaybookRunDetailLoading(false);
+    }
+  };
+
   const previewDiffPlaybook = async () => {
-    if (!playbookPreflightReady) {
+    if (!playbookPreflightActionAllowed) {
       const latest = await loadPlaybookPreflight({ silent: true });
-      const latestReady = String(latest?.overall_state || "").toLowerCase() === "ready";
-      if (!latestReady) {
+      const latestState = String(latest?.overall_state || "").toLowerCase();
+      const latestAllowed = Boolean(latest) && latestState !== "error" && latestState !== "blocked";
+      if (!latestAllowed) {
         toast.error(playbookPreflightBlockReason || "Preflight check hazır değil");
         return;
       }
@@ -448,6 +490,9 @@ export const ExecutionStatesPage = () => {
       setPlaybookRunId(data?.playbook_run_id || "");
       setPlaybookExecutionState(data?.execution_state || "preview");
       setPlaybookConfirmChecked(false);
+      if (data?.playbook_run_id) {
+        await loadPlaybookRunDetail(data.playbook_run_id, { silent: true });
+      }
       toast.success("One-click playbook preview hazır");
     } catch (error) {
       setPlaybookPreview(null);
@@ -458,7 +503,7 @@ export const ExecutionStatesPage = () => {
   };
 
   const applyDiffPlaybook = async () => {
-    if (!playbookPreflightReady) {
+    if (!playbookPreflightActionAllowed) {
       toast.error(playbookPreflightBlockReason || "Preflight check blocked");
       return;
     }
@@ -488,6 +533,7 @@ export const ExecutionStatesPage = () => {
       setPlaybookReason("");
       setPlaybookConfirmChecked(false);
       await loadPlaybookPreflight({ silent: true });
+      await loadPlaybookRunDetail(data?.result?.playbook_run_id || playbookRunId, { silent: true });
       await load();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Playbook apply başarısız");
@@ -497,7 +543,7 @@ export const ExecutionStatesPage = () => {
   };
 
   const approveDiffPlaybook = async () => {
-    if (!playbookPreflightReady) {
+    if (!playbookPreflightActionAllowed) {
       toast.error(playbookPreflightBlockReason || "Preflight check blocked");
       return;
     }
@@ -523,6 +569,7 @@ export const ExecutionStatesPage = () => {
       setPlaybookExecutionState(data?.execution_state || "approved");
       toast.success("Playbook approved");
       await loadPlaybookPreflight({ silent: true });
+      await loadPlaybookRunDetail(playbookRunId, { silent: true });
       await load();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Playbook approve başarısız");
@@ -532,7 +579,7 @@ export const ExecutionStatesPage = () => {
   };
 
   const executeDiffPlaybook = async () => {
-    if (!playbookPreflightReady) {
+    if (!playbookPreflightActionAllowed) {
       toast.error(playbookPreflightBlockReason || "Preflight check blocked");
       return;
     }
@@ -551,14 +598,99 @@ export const ExecutionStatesPage = () => {
         confirm: true,
         reason: playbookReason.trim(),
       });
-      setPlaybookExecutionState(data?.execution_state || "executed");
-      toast.success(data?.message || "Playbook execute tamamlandı");
+      const nextState = data?.execution_state || "executed";
+      setPlaybookExecutionState(nextState);
+      if (nextState === "failed") {
+        toast.error(data?.failure_reason || data?.message || "Playbook step failure oluştu");
+      } else {
+        toast.success(data?.message || "Playbook execute tamamlandı");
+      }
       await loadPlaybookPreflight({ silent: true });
+      await loadPlaybookRunDetail(playbookRunId, { silent: true });
       await load();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Playbook execute başarısız");
     } finally {
       setPlaybookExecuteLoading(false);
+    }
+  };
+
+  const rollbackDiffPlaybook = async () => {
+    if (!playbookPreflightActionAllowed) {
+      toast.error(playbookPreflightBlockReason || "Preflight ERROR: rollback kilitli");
+      return;
+    }
+    if (!isSuperAdmin) {
+      toast.error("Rollback sadece super_admin için açık");
+      return;
+    }
+    if (!playbookRunId) {
+      toast.error("Rollback için playbook run gerekli");
+      return;
+    }
+    if (playbookExecutionState !== "executed") {
+      toast.error("Rollback sadece executed state'te açılır");
+      return;
+    }
+    if (playbookReason.trim().length < 3) {
+      toast.error("Rollback reason en az 3 karakter olmalı");
+      return;
+    }
+    setPlaybookRollbackLoading(true);
+    try {
+      const { data } = await apiClient.post("/admin-phase3/incident-snapshots/playbook/rollback", {
+        playbook_run_id: playbookRunId,
+        confirm: true,
+        reason: playbookReason.trim(),
+      });
+      setPlaybookExecutionState(data?.execution_state || "rollback_executed");
+      await loadPlaybookRunDetail(playbookRunId, { silent: true });
+      toast.success(data?.message || "Rollback tamamlandı");
+      await load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Rollback başarısız");
+    } finally {
+      setPlaybookRollbackLoading(false);
+    }
+  };
+
+  const retryFailedPlaybook = async () => {
+    if (!playbookPreflightActionAllowed) {
+      toast.error(playbookPreflightBlockReason || "Preflight ERROR: retry kilitli");
+      return;
+    }
+    if (!isSuperAdmin) {
+      toast.error("Retry sadece super_admin için açık");
+      return;
+    }
+    if (!playbookRunId) {
+      toast.error("Retry için failed playbook run gerekli");
+      return;
+    }
+    if (playbookExecutionState !== "failed") {
+      toast.error("Retry sadece failed state'te açılır");
+      return;
+    }
+    if (playbookReason.trim().length < 3) {
+      toast.error("Retry reason en az 3 karakter olmalı");
+      return;
+    }
+    setPlaybookRetryLoading(true);
+    try {
+      const { data } = await apiClient.post("/admin-phase3/incident-snapshots/playbook/retry", {
+        original_playbook_run_id: playbookRunId,
+        confirm: true,
+        reason: playbookReason.trim(),
+      });
+      const nextRunId = data?.retry_playbook_run_id || "";
+      setPlaybookRunId(nextRunId);
+      setPlaybookExecutionState(data?.execution_state || "approved");
+      await loadPlaybookRunDetail(nextRunId, { silent: true });
+      toast.success(data?.message || "Retry run oluşturuldu");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Retry oluşturulamadı");
+    } finally {
+      setPlaybookRetryLoading(false);
     }
   };
 
@@ -606,6 +738,8 @@ export const ExecutionStatesPage = () => {
       }
 
       const snapshotAt = response.headers.get("x-incident-snapshot-at");
+      const snapshotId = response.headers.get("x-incident-snapshot-id");
+      const snapshotHash = response.headers.get("x-incident-snapshot-hash");
       const rowCount = Number(response.headers.get("x-incident-snapshot-row-count") || 0);
       const filtersRaw = response.headers.get("x-incident-snapshot-filters");
       let parsedFilters = {};
@@ -618,6 +752,8 @@ export const ExecutionStatesPage = () => {
       }
       setLastExportSnapshot({
         timestamp: snapshotAt,
+        snapshot_id: snapshotId,
+        snapshot_hash: snapshotHash,
         row_count: rowCount,
         filters: parsedFilters,
       });
@@ -736,8 +872,19 @@ export const ExecutionStatesPage = () => {
       ? Boolean(compareTimeFrom && compareTimeTo)
       : Boolean(compareScopeValue.trim())
   );
-  const playbookPreflightReady = String(playbookPreflight?.overall_state || "").toLowerCase() === "ready";
-  const playbookPreflightBlockReason = playbookPreflightError || (playbookPreflightReady ? "" : "Preflight check blocked");
+  const playbookPreflightState = String(playbookPreflight?.overall_state || "").toLowerCase();
+  const playbookPreflightUiStatus = String(playbookPreflight?.overall_ui_status || "UNKNOWN").toUpperCase();
+  const playbookPreflightIsError = !playbookPreflight || playbookPreflightState === "error" || playbookPreflightState === "blocked";
+  const playbookPreflightActionAllowed = !playbookPreflightIsError;
+  const playbookPreflightBlockReason = playbookPreflightError || (playbookPreflightIsError ? "Preflight ERROR: kritik sorun var" : "");
+  const playbookCanApprove = ["preview", "planned"].includes(String(playbookExecutionState || ""));
+  const playbookCanRollback = String(playbookExecutionState || "") === "executed";
+  const playbookCanRetry = String(playbookExecutionState || "") === "failed";
+  const playbookStepIndex = Number(playbookRunDetail?.step_index || 0);
+  const playbookTotalSteps = Number(playbookRunDetail?.total_steps || playbookPreview?.steps?.length || 0);
+  const playbookProgressPct = playbookTotalSteps > 0 ? Math.min(100, Math.round((playbookStepIndex / playbookTotalSteps) * 100)) : 0;
+  const playbookFailureReason = playbookRunDetail?.failure_reason || "";
+  const playbookStepsView = playbookRunDetail?.steps || playbookPreview?.steps || [];
 
   const resolveRecommendedActionMeta = (item) => {
     const actionName = String(item?.action || "").toLowerCase();
@@ -968,6 +1115,8 @@ export const ExecutionStatesPage = () => {
         {lastExportSnapshot && (
           <div className="mt-2 rounded border border-slate-700 bg-slate-950 p-2 text-xs" data-testid="execution-control-incident-last-export-panel">
             <p data-testid="execution-control-incident-last-export-timestamp">Export snapshot at: {lastExportSnapshot.timestamp || "-"}</p>
+            <p data-testid="execution-control-incident-last-export-id">snapshot_id: {lastExportSnapshot.snapshot_id || "-"}</p>
+            <p data-testid="execution-control-incident-last-export-hash">snapshot_hash: {lastExportSnapshot.snapshot_hash || "-"}</p>
             <p data-testid="execution-control-incident-last-export-row-count">row_count: {lastExportSnapshot.row_count ?? 0}</p>
             <p data-testid="execution-control-incident-last-export-filters">filters: {JSON.stringify(lastExportSnapshot.filters || {})}</p>
           </div>
@@ -1141,17 +1290,17 @@ export const ExecutionStatesPage = () => {
 
             <div className="mt-4 border border-slate-700 bg-slate-950 p-3 text-xs" data-testid="execution-control-diff-playbook-panel">
               <p className="font-semibold" data-testid="execution-control-diff-playbook-title">One-click Playbook (Preview + Confirm)</p>
-              <p data-testid="execution-control-diff-playbook-note">Safe execution state flow: preview → planned → approved → executed</p>
+              <p data-testid="execution-control-diff-playbook-note">Safe execution state flow: preview → approved → executing → executed/failed → rollback_available → rollback_executed</p>
 
               <div className="mt-2 rounded border border-slate-700 bg-black/40 p-2" data-testid="execution-control-diff-playbook-preflight-panel">
                 <div className="flex flex-wrap items-center justify-between gap-2" data-testid="execution-control-diff-playbook-preflight-header-row">
                   <p className="font-semibold" data-testid="execution-control-diff-playbook-preflight-title">Operational Preflight</p>
                   <div className="flex items-center gap-2" data-testid="execution-control-diff-playbook-preflight-actions-row">
                     <span
-                      className={`rounded border px-2 py-0.5 text-[11px] ${playbookPreflightReady ? "border-emerald-600 bg-emerald-950/40 text-emerald-300" : "border-red-600 bg-red-950/40 text-red-300"}`}
+                      className={`rounded border px-2 py-0.5 text-[11px] ${playbookPreflightUiStatus === "OK" ? "border-emerald-600 bg-emerald-950/40 text-emerald-300" : playbookPreflightUiStatus === "WARNING" ? "border-amber-600 bg-amber-950/40 text-amber-300" : "border-red-600 bg-red-950/40 text-red-300"}`}
                       data-testid="execution-control-diff-playbook-preflight-overall-state"
                     >
-                      {playbookPreflightLoading ? "CHECKING" : (playbookPreflight?.overall_state || "unknown").toUpperCase()}
+                      {playbookPreflightLoading ? "CHECKING" : playbookPreflightUiStatus}
                     </span>
                     <Button
                       size="sm"
@@ -1167,20 +1316,29 @@ export const ExecutionStatesPage = () => {
                 </div>
 
                 <p className="mt-2 text-[11px] text-slate-300" data-testid="execution-control-diff-playbook-preflight-block-reason">
-                  {playbookPreflightReady ? "Preflight hazır: preview/approve/execute güvenlik kapısı açık." : (playbookPreflightBlockReason || "Preflight sonucu bekleniyor")}
+                  {playbookPreflightActionAllowed ? "Preflight OK/WARNING: aksiyon kapısı açık." : (playbookPreflightBlockReason || "Preflight sonucu bekleniyor")}
+                </p>
+
+                <p className="mt-1 text-[11px] text-slate-300" data-testid="execution-control-diff-playbook-preflight-score">
+                  preflight_score: {playbookPreflight?.preflight_score ?? "-"} | queue_depth: {playbookPreflight?.queue_job_metrics?.queue_depth ?? "-"} | failed_backlog: {playbookPreflight?.queue_job_metrics?.failed_backlog ?? "-"}
                 </p>
 
                 <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="execution-control-diff-playbook-preflight-checks-grid">
                   {(playbookPreflight?.checks || []).map((item, idx) => {
-                    const ok = String(item?.status || "").toLowerCase() === "ready";
+                    const statusLabel = String(item?.ui_status || item?.status || "UNKNOWN").toUpperCase();
+                    const tone = statusLabel === "OK"
+                      ? "border-emerald-700 bg-emerald-950/20"
+                      : statusLabel === "WARNING"
+                        ? "border-amber-700 bg-amber-950/20"
+                        : "border-red-700 bg-red-950/20";
                     return (
                       <div
                         key={`${item?.key || "check"}-${idx}`}
-                        className={`rounded border p-2 ${ok ? "border-emerald-700 bg-emerald-950/20" : "border-red-700 bg-red-950/20"}`}
+                        className={`rounded border p-2 ${tone}`}
                         data-testid={`execution-control-diff-playbook-preflight-check-${idx}`}
                       >
                         <p className="font-medium" data-testid={`execution-control-diff-playbook-preflight-check-title-${idx}`}>{item?.label || item?.key || "check"}</p>
-                        <p data-testid={`execution-control-diff-playbook-preflight-check-status-${idx}`}>status: {String(item?.status || "unknown").toUpperCase()}</p>
+                        <p data-testid={`execution-control-diff-playbook-preflight-check-status-${idx}`}>status: {statusLabel}</p>
                         <p className="text-[11px] text-slate-300" data-testid={`execution-control-diff-playbook-preflight-check-detail-${idx}`}>{item?.detail || "-"}</p>
                       </div>
                     );
@@ -1202,7 +1360,7 @@ export const ExecutionStatesPage = () => {
                   size="sm"
                   variant="outline"
                   onClick={previewDiffPlaybook}
-                  disabled={playbookPreviewLoading || !diffData || !playbookPreflightReady}
+                  disabled={playbookPreviewLoading || !diffData || !playbookPreflightActionAllowed}
                   data-testid="execution-control-diff-playbook-preview-button"
                 >
                   Playbook Preview
@@ -1210,18 +1368,18 @@ export const ExecutionStatesPage = () => {
                 <Button
                   size="sm"
                   onClick={() => setPlaybookApplyDialogOpen(true)}
-                  disabled={playbookApplyLoading || !playbookPreview?.preview_token || !playbookConfirmChecked || playbookReason.trim().length < 3 || !playbookPreflightReady}
+                  disabled={playbookApplyLoading || !playbookPreview?.preview_token || !playbookConfirmChecked || playbookReason.trim().length < 3 || !playbookPreflightActionAllowed}
                   title={!playbookPreview?.preview_token ? "Önce preview alınmalı" : !playbookConfirmChecked ? "Confirm zorunlu" : playbookReason.trim().length < 3 ? "Reason en az 3 karakter" : ""}
                   data-testid="execution-control-diff-playbook-apply-button"
                 >
-                  Plan Apply
+                  Plan Apply (opsiyonel)
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={approveDiffPlaybook}
-                  disabled={playbookApproveLoading || !isSuperAdmin || !playbookRunId || playbookExecutionState !== "planned" || playbookReason.trim().length < 3 || !playbookPreflightReady}
-                  title={!isSuperAdmin ? "Sadece super_admin approve edebilir" : playbookExecutionState !== "planned" ? "Önce planned state gerekli" : ""}
+                  disabled={playbookApproveLoading || !isSuperAdmin || !playbookRunId || !playbookCanApprove || playbookReason.trim().length < 3 || !playbookPreflightActionAllowed}
+                  title={!isSuperAdmin ? "Sadece super_admin approve edebilir" : !playbookCanApprove ? "Approve için preview/planned state gerekli" : ""}
                   data-testid="execution-control-diff-playbook-approve-button"
                 >
                   Approve
@@ -1229,11 +1387,29 @@ export const ExecutionStatesPage = () => {
                 <Button
                   size="sm"
                   onClick={() => setPlaybookExecuteDialogOpen(true)}
-                  disabled={playbookExecuteLoading || !playbookRunId || playbookExecutionState !== "approved" || playbookReason.trim().length < 3 || !playbookPreflightReady}
+                  disabled={playbookExecuteLoading || !playbookRunId || playbookExecutionState !== "approved" || playbookReason.trim().length < 3 || !playbookPreflightActionAllowed}
                   title={playbookExecutionState !== "approved" ? "Execute için playbook approved olmalı" : ""}
                   data-testid="execution-control-diff-playbook-execute-button"
                 >
                   Execute
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={rollbackDiffPlaybook}
+                  disabled={playbookRollbackLoading || !playbookCanRollback || playbookReason.trim().length < 3 || !playbookPreflightActionAllowed}
+                  data-testid="execution-control-diff-playbook-rollback-button"
+                >
+                  Rollback
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={retryFailedPlaybook}
+                  disabled={playbookRetryLoading || !playbookCanRetry || playbookReason.trim().length < 3 || !playbookPreflightActionAllowed}
+                  data-testid="execution-control-diff-playbook-retry-button"
+                >
+                  Retry Failed
                 </Button>
               </div>
 
@@ -1244,6 +1420,63 @@ export const ExecutionStatesPage = () => {
               <p data-testid="execution-control-diff-playbook-state">execution_state: {playbookExecutionState || "-"}</p>
               <p data-testid="execution-control-diff-playbook-severity">
                 highest_severity: {playbookPreview?.highest_severity || "-"}
+              </p>
+
+              <div className="mt-2" data-testid="execution-control-diff-playbook-progress-panel">
+                <div className="flex items-center justify-between text-[11px]" data-testid="execution-control-diff-playbook-progress-header-row">
+                  <p data-testid="execution-control-diff-playbook-progress-text">progress: {playbookStepIndex}/{playbookTotalSteps}</p>
+                  <p data-testid="execution-control-diff-playbook-progress-percent">{playbookProgressPct}%</p>
+                </div>
+                <div className="mt-1 h-2 w-full overflow-hidden rounded bg-slate-800" data-testid="execution-control-diff-playbook-progress-track">
+                  <div
+                    className={`h-full ${playbookExecutionState === "failed" ? "bg-red-500" : "bg-emerald-500"}`}
+                    style={{ width: `${playbookProgressPct}%` }}
+                    data-testid="execution-control-diff-playbook-progress-bar"
+                  />
+                </div>
+                {playbookFailureReason ? (
+                  <p className="mt-1 text-red-300" data-testid="execution-control-diff-playbook-failure-reason">
+                    failure_reason: {playbookFailureReason}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="mt-2 grid gap-1" data-testid="execution-control-diff-playbook-steps-list">
+                {playbookStepsView.map((step, idx) => {
+                  const stepNumber = Number(step?.step || idx + 1);
+                  const currentState = String(playbookExecutionState || "");
+                  const isFailedStep = currentState === "failed" && stepNumber === playbookStepIndex;
+                  const isExecutedStep = playbookStepIndex >= stepNumber && ["executed", "rollback_available", "rollback_executed"].includes(currentState);
+                  const statusLabel = isFailedStep
+                    ? "FAILED"
+                    : isExecutedStep
+                      ? "DONE"
+                      : currentState === "executing" && stepNumber === playbookStepIndex
+                        ? "RUNNING"
+                        : "PENDING";
+                  const tone = statusLabel === "FAILED"
+                    ? "border-red-600 bg-red-950/30"
+                    : statusLabel === "DONE"
+                      ? "border-emerald-600 bg-emerald-950/20"
+                      : statusLabel === "RUNNING"
+                        ? "border-amber-600 bg-amber-950/20"
+                        : "border-slate-700 bg-slate-900/40";
+                  return (
+                    <div key={`${step?.action || "step"}-${stepNumber}`} className={`rounded border px-2 py-1 ${tone}`} data-testid={`execution-control-diff-playbook-step-${idx}`}>
+                      <p data-testid={`execution-control-diff-playbook-step-title-${idx}`}>#{stepNumber} {step?.action || "unknown"}</p>
+                      <p className="text-[11px]" data-testid={`execution-control-diff-playbook-step-status-${idx}`}>status: {statusLabel}</p>
+                    </div>
+                  );
+                })}
+                {!playbookStepsView.length && <p data-testid="execution-control-diff-playbook-steps-empty">step list yok</p>}
+              </div>
+
+              <p className="mt-1 text-[11px] text-slate-300" data-testid="execution-control-diff-playbook-retry-semantics">
+                retry_semantics: new_run_with_parent_reference = {playbookRunDetail?.parent_run_id ? "true" : "false"}
+              </p>
+
+              <p className="mt-1 text-[11px] text-slate-300" data-testid="execution-control-diff-playbook-detail-loading">
+                run_detail_loading: {String(playbookRunDetailLoading)}
               </p>
 
               <Input

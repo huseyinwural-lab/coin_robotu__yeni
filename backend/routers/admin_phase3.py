@@ -2137,8 +2137,13 @@ def export_incident_snapshot_bundle(
             scope_b_bundle=compare_bundle,
         )
 
+    snapshot_at = datetime.now(timezone.utc).isoformat()
+    snapshot_id = f"snapshot_{uuid.uuid4().hex[:12]}"
+    export_type = "zip_compare" if compare_bundle is not None else "zip_single"
     metadata = {
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "snapshot_id": snapshot_id,
+        "exported_at": snapshot_at,
+        "export_type": export_type,
         "actor": str(current_admin.id),
         "filter_scope": scope_type,
         "selected_scope_priority": scope_type,
@@ -2163,6 +2168,14 @@ def export_incident_snapshot_bundle(
     summary_json = {
         **metadata,
         "filters": _serialize_execution_filter_context(filters_ctx),
+        "audit_required": {
+            "user": str(current_admin.id),
+            "user_role": current_admin.role.value,
+            "filters": _serialize_execution_filter_context(filters_ctx),
+            "row_count": primary_bundle["row_counts"]["events"],
+            "timestamp": snapshot_at,
+            "export_type": export_type,
+        },
     }
 
     events_csv = _rows_to_csv_text(
@@ -2200,6 +2213,9 @@ def export_incident_snapshot_bundle(
         readme_text += "- diff.json: two snapshot count delta + scope comparison\n"
         readme_text += "- diff_summary.txt: operational human-readable summary\n"
 
+    snapshot_hash_input = json.dumps(summary_json, ensure_ascii=False, sort_keys=True)
+    summary_json["snapshot_hash"] = hashlib.sha256(snapshot_hash_input.encode("utf-8")).hexdigest()
+
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, mode="w", compression=zipfile.ZIP_DEFLATED) as bundle:
         bundle.writestr("summary.json", json.dumps(summary_json, ensure_ascii=False, indent=2))
@@ -2214,7 +2230,7 @@ def export_incident_snapshot_bundle(
             bundle.writestr("diff.json", json.dumps(diff_json, ensure_ascii=False, indent=2))
             bundle.writestr("diff_summary.txt", diff_summary_text)
 
-    filename = f"incident_snapshot_{scope_type}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.zip"
+    filename = f"incident_snapshot_{scope_type}_{datetime.fromisoformat(snapshot_at).strftime('%Y%m%d_%H%M%S')}.zip"
     create_audit_log(
         db,
         action="incident_snapshot_export",
@@ -2222,7 +2238,13 @@ def export_incident_snapshot_bundle(
         entity_id=scope_payload.get("correlation_id") or scope_payload.get("execution_event_id") or "time_range",
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details=summary_json,
+        details={
+            **summary_json,
+            "audit_required": {
+                **summary_json.get("audit_required", {}),
+                "user_email": current_admin.email,
+            },
+        },
     )
     db.commit()
 
@@ -2234,6 +2256,8 @@ def export_incident_snapshot_bundle(
             "X-Incident-Snapshot-Scope": scope_type,
             "X-Incident-Snapshot-Scope-Selected": scope_type,
             "X-Incident-Snapshot-At": metadata["exported_at"],
+            "X-Incident-Snapshot-Id": snapshot_id,
+            "X-Incident-Snapshot-Hash": summary_json["snapshot_hash"],
             "X-Incident-Snapshot-Row-Count": str(primary_bundle["row_counts"]["events"]),
             "X-Incident-Snapshot-Filters": json.dumps(_serialize_execution_filter_context(filters_ctx), ensure_ascii=False),
         },
