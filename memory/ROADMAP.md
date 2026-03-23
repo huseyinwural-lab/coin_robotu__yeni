@@ -1,5 +1,23 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-23 P1 Kapanış Durumu
+- ✅ P1 mandatory closure maddeleri tamamlandı:
+  1. Evidence gap (test report + smoke artefact + endpoint/state evidence)
+  2. API key test control (success/fail, reason, summary, last tested, audit)
+  3. Permission breakdown (exchange bazlı read/write/trade)
+  4. Exchange health görünümü (connection/auth/permission + remediation)
+  5. Mode history
+  6. Order scenario matrix
+  7. Auto-refresh + pause + interval
+  8. FAIL alert visibility + override risk banner
+  9. Filtered JSON export
+  10. Reason-code → runbook linkleme
+
+## Sonraki Faz (P2 - Planlanmış)
+1. Check history / trend / flapping tespiti
+2. Override analytics (sebep dağılımı, sıklık, etki)
+3. Before/after remediation compare (latency ve state transition farkları)
+
 ## 2026-03-23 Update (Production Gate P0)
 - ✅ Tamamlandı:
   1. Backend-first Production Gate state engine (`NO_GO | GO | GO_WITH_OVERRIDE`)

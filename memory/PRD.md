@@ -1,3 +1,58 @@
+## 2026-03-23 — Production Gate P1 Zorunlu Kapanış (Tamamlandı)
+
+### P1 Kapsamında Kapatılan Maddeler
+1. **Evidence Gap** kapatıldı:
+   - `/app/test_reports/production_gate_p1_backend_pytest.txt`
+   - `/app/test_reports/production_gate_p1_endpoint_state_evidence.json`
+   - `/app/test_reports/production_gate_p1_evidence.md`
+   - `/app/test_reports/production_gate_p1_smoke_after_login.jpeg`
+   - Testing agent raporu: `/app/test_reports/iteration_113.json`
+
+2. **API Key Test Control** eklendi:
+   - Endpoint: `POST /api/phase4/admin/production-gate/api-key-tests/run`
+   - UI: Test API Key (all/per exchange), success/fail, fail reason, response summary, last tested at, audit.
+
+3. **Permission Breakdown** eklendi:
+   - Exchange bazlı `read/write/trade` durumları (`PASS|FAIL|UNKNOWN`) UI’da gösteriliyor.
+
+4. **Exchange Bazlı Health** eklendi:
+   - `connection/auth/permission/last_checked/fail_reason/remediation/runbook_ref` alanları UI’da mevcut.
+
+5. **Mode History** eklendi:
+   - Endpoint: `GET /api/phase4/admin/production-gate/mode-history`
+   - UI: from→to, actor, reason, request_id/trace.
+
+6. **Order Scenario Matrix** eklendi:
+   - Endpoint: `POST /api/phase4/admin/production-gate/order-scenarios/rerun`
+   - Senaryolar: BUY/SELL small+medium + invalid edge-case.
+   - UI: status, latency, response/error summary, last run, rerun.
+
+7. **Auto-refresh** eklendi:
+   - Toggle + interval (15/30/60/120s) + pause.
+   - Refresh state göstergesi UI’da aktif.
+
+8. **FAIL Alert Visibility** eklendi:
+   - HARD BLOCK banner
+   - ACTIVE FAIL ALERT banner
+   - New FAIL pulse banner
+   - Override active risk banner
+
+9. **JSON Export Geliştirme** tamamlandı:
+   - Endpoint: `GET /api/phase4/admin/production-gate/export/raw`
+   - Filtreler: `scope=full|summary|audit`, `date_from`, `date_to`
+   - Çıktı: active state summary, checks, checklist, override, audit summary, ops summary.
+
+10. **Reason-Code → Runbook Linkleme** eklendi:
+   - Check, API key test, permission ve exchange health satırlarında `runbook_ref` + remediation gösterimi.
+
+### Test Sonuç Özeti
+- Backend: comprehensive + P1 suite **PASS** (iteration_113, 100% backend).
+- Frontend: P1 UI doğrulaması **PASS** (iteration_113, 100% frontend).
+- Mocked providers: Slack Webhook, Binance (**MOCKED**).
+
+### Sonraki Faz (Planlanmış)
+- P2/Phase-Next: check trend/flapping, override analytics, before/after remediation compare.
+
 ## 2026-03-23 — Production Gate Control Panel (P0) Implementasyon Güncellemesi
 
 ### Tamamlananlar (Backend-first)

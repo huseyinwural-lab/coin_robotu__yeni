@@ -1,5 +1,22 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-23 (P1 Closure)
+### Production Gate Operational Visibility & Evidence
+- Evidence artefact seti eklendi:
+  - `/app/test_reports/production_gate_p1_backend_pytest.txt`
+  - `/app/test_reports/production_gate_p1_endpoint_state_evidence.json`
+  - `/app/test_reports/production_gate_p1_evidence.md`
+  - `/app/test_reports/production_gate_p1_smoke_after_login.jpeg`
+  - `/app/test_reports/iteration_113.json`
+- Backend endpointleri eklendi:
+  - `GET /api/phase4/admin/production-gate/ops-overview`
+  - `POST /api/phase4/admin/production-gate/api-key-tests/run`
+  - `POST /api/phase4/admin/production-gate/order-scenarios/rerun`
+  - `GET /api/phase4/admin/production-gate/mode-history`
+  - `GET /api/phase4/admin/production-gate/export/raw` (scope/date filter)
+- Frontend panel genişletildi: auto-refresh, fail banners, API key test panel, permission breakdown, exchange health, mode history, order scenario matrix, runbook refs, filtreli export.
+- Test sonuçları: iteration_113 backend/frontend %100 PASS.
+
 ## 2026-03-23
 ### Production Gate Control Panel (P0)
 - Backend state engine eklendi: `NO_GO | GO | GO_WITH_OVERRIDE`.
