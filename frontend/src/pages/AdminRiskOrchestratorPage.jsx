@@ -74,6 +74,17 @@ const buildQueueQuery = ({ scope, state, criticalFirst, page }) => {
   return params.toString();
 };
 
+const rejectInsightActionMap = {
+  policy_too_strict: "account_max_notional_pct",
+  symbol_risk_anomaly: "symbol_max_notional_pct",
+  execution_frequency_tuning: "max_order_frequency_per_min",
+};
+
+const deriveQueueSignature = (items) => {
+  const ids = (items || []).map((item) => item.approval_id).filter(Boolean);
+  return ids.join("|");
+};
+
 export const AdminRiskOrchestratorPage = () => {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "super_admin";
@@ -119,11 +130,13 @@ export const AdminRiskOrchestratorPage = () => {
   const [lastApplyResult, setLastApplyResult] = useState(null);
   const [revertSimulations, setRevertSimulations] = useState({});
   const [queueScope, setQueueScope] = useState("all");
-  const [queueState, setQueueState] = useState("pending");
+  const [queueState, setQueueState] = useState("assigned");
   const [criticalFirst, setCriticalFirst] = useState(true);
   const [queuePage, setQueuePage] = useState(1);
   const [queueHasNextPage, setQueueHasNextPage] = useState(false);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [highlightedPolicyField, setHighlightedPolicyField] = useState("");
+  const [queueSignature, setQueueSignature] = useState("");
   const [dashboardData, setDashboardData] = useState(null);
   const [rejectInsights, setRejectInsights] = useState([]);
   const [decisionIntelligence, setDecisionIntelligence] = useState(null);
@@ -141,6 +154,7 @@ export const AdminRiskOrchestratorPage = () => {
     }
     const queueItems = data || [];
     setApprovals(queueItems);
+    setQueueSignature(deriveQueueSignature(queueItems));
     setQueueHasNextPage(queueItems.length >= QUEUE_PAGE_LIMIT);
   }, [criticalFirst, queuePage, queueScope, queueState]);
 
@@ -231,10 +245,31 @@ export const AdminRiskOrchestratorPage = () => {
     return () => clearInterval(timer);
   }, [activeTab, autoRefreshEnabled, refreshCore, refreshQueue]);
 
+  useEffect(() => {
+    if (!highlightedPolicyField) return undefined;
+    const timer = setTimeout(() => setHighlightedPolicyField(""), 5000);
+    return () => clearTimeout(timer);
+  }, [highlightedPolicyField]);
+
   const roleBadge = useMemo(() => {
     if (isSuperAdmin) return "super_admin";
     return user?.role || "admin";
   }, [isSuperAdmin, user?.role]);
+
+  const queueDriftDetected = useMemo(() => {
+    const referenceIds = dashboardData?.cache_health?.queue_reference?.approval_ids || [];
+    const referenceSignature = referenceIds.join("|");
+    const canCompare = queueScope === "all" && queueState === "assigned" && criticalFirst && queuePage === 1;
+    if (!canCompare || !referenceSignature) return false;
+    return queueSignature !== referenceSignature;
+  }, [criticalFirst, dashboardData, queuePage, queueScope, queueSignature, queueState]);
+
+  const handleReviewInsightParameter = (reasonCode) => {
+    const targetField = rejectInsightActionMap[reasonCode] || "account_max_notional_pct";
+    setActiveTab("risk-gate");
+    setHighlightedPolicyField(targetField);
+    toast.info(`İnceleme odağı: ${targetField}`);
+  };
 
   const handleSimulate = async () => {
     try {
@@ -527,6 +562,8 @@ export const AdminRiskOrchestratorPage = () => {
   };
 
   const superAdminOnlyTitle = isSuperAdmin ? "" : "Sadece super_admin kullanıcıları çalıştırabilir";
+  const canRequestPolicyApply = ["super_admin", "admin"].includes(user?.role || "");
+  const applyRoleTitle = canRequestPolicyApply ? "" : "Sadece admin/super_admin kullanıcıları çalıştırabilir";
 
   return (
     <section className="risk-enforcement-theme space-y-6 pb-8" data-testid="risk-enforcement-page">
@@ -604,7 +641,11 @@ export const AdminRiskOrchestratorPage = () => {
           <CardContent className="space-y-4">
             <div className="grid gap-2 sm:grid-cols-2" data-testid="risk-policy-input-grid">
               {Object.keys(policySeed).map((key) => (
-                <div key={key} className="space-y-1" data-testid={`risk-policy-input-wrapper-${key}`}>
+                <div
+                  key={key}
+                  className={`space-y-1 rounded p-1 transition ${highlightedPolicyField === key ? "ring-2 ring-emerald-500" : ""}`}
+                  data-testid={`risk-policy-input-wrapper-${key}`}
+                >
                   <label className="text-xs text-slate-500" data-testid={`risk-policy-input-label-${key}`}>
                     {key}
                   </label>
@@ -625,8 +666,8 @@ export const AdminRiskOrchestratorPage = () => {
               <Button
                 variant="secondary"
                 onClick={() => setApplyDialogOpen(true)}
-                disabled={!isSuperAdmin}
-                title={superAdminOnlyTitle}
+                disabled={!canRequestPolicyApply}
+                title={applyRoleTitle}
                 data-testid="risk-policy-open-apply-dialog-button"
               >
                 Apply (Double Confirm)
@@ -1040,8 +1081,22 @@ export const AdminRiskOrchestratorPage = () => {
                   </p>
                 )}
                 {rejectInsights.map((item) => (
-                  <div key={`${item.rule}-${item.count}`} className="text-xs" data-testid={`risk-reject-insight-row-${item.rule}`}>
-                    <span className="font-medium">{item.rule}</span> · {item.count}x · öneri: {item.suggestion}
+                  <div
+                    key={`${item.rule}-${item.count}`}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-xs"
+                    data-testid={`risk-reject-insight-row-${item.rule}`}
+                  >
+                    <span>
+                      <span className="font-medium">{item.rule}</span> · {item.count}x · öneri: {item.suggestion}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleReviewInsightParameter(item.rule)}
+                      data-testid={`risk-reject-insight-action-${item.rule}`}
+                    >
+                      review this parameter
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -1326,7 +1381,7 @@ export const AdminRiskOrchestratorPage = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => handleForceApply(item.approval_id)}
-                      disabled={!isSuperAdmin || !(["pending", "assigned"].includes(item.state))}
+                      disabled={!isSuperAdmin || !(["expired"].includes(item.state))}
                       data-testid={`risk-approval-force-apply-button-${item.approval_id}`}
                     >
                       Force Apply
@@ -1446,6 +1501,18 @@ export const AdminRiskOrchestratorPage = () => {
             <div className="rounded border p-2 text-xs" data-testid="ct-governance-waiting">
               quorum_waiting: {dashboardData?.governance?.critical_quorum_waiting ?? "-"}
             </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-cache-queue-hit-ratio">
+              cache.queue.hit_ratio: {Number(dashboardData?.cache_health?.queue?.hit_ratio || 0).toFixed(3)}
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-cache-dashboard-hit-ratio">
+              cache.dashboard.hit_ratio: {Number(dashboardData?.cache_health?.dashboard?.hit_ratio || 0).toFixed(3)}
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-cache-queue-latency">
+              queue_refresh_latency_ms: {Number(dashboardData?.cache_health?.queue?.avg_refresh_latency_ms || 0).toFixed(2)}
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-queue-drift-indicator">
+              queue_drift_detected: {queueDriftDetected ? "YES" : "NO"}
+            </div>
           </CardContent>
         </Card>
 
@@ -1465,6 +1532,9 @@ export const AdminRiskOrchestratorPage = () => {
             </div>
             <div className="rounded border p-2 text-xs" data-testid="ct-governance-progress-json">
               <pre>{JSON.stringify(dashboardData?.governance || {}, null, 2)}</pre>
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-cache-health-json">
+              <pre>{JSON.stringify(dashboardData?.cache_health || {}, null, 2)}</pre>
             </div>
           </CardContent>
         </Card>
@@ -1518,8 +1588,8 @@ export const AdminRiskOrchestratorPage = () => {
             </Button>
             <Button
               onClick={handleApply}
-              disabled={!isSuperAdmin || !doubleConfirm || !simulation}
-              title={superAdminOnlyTitle}
+              disabled={!canRequestPolicyApply || !doubleConfirm || !simulation}
+              title={applyRoleTitle}
               data-testid="risk-policy-apply-confirm-button"
             >
               Apply Policy

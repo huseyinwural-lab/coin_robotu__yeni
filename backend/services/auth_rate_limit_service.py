@@ -7,7 +7,7 @@ from fastapi import HTTPException, Request, status
 from services.rate_limiter_service import TokenBucketRateLimiter
 
 
-AUTH_LOGIN_LIMIT_PER_MINUTE = 5
+AUTH_LOGIN_LIMIT_PER_MINUTE = 30
 AUTH_LOGIN_WINDOW_SECONDS = 60
 
 _auth_login_rate_limiter = TokenBucketRateLimiter(

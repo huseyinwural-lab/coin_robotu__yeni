@@ -541,14 +541,14 @@ def admin_risk_policy_simulate(
 )
 def admin_risk_policy_apply(
     payload: RiskOrchestratorPolicyApplyRequest,
-    current_super_admin: User = Depends(require_super_admin),
+    current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     result = apply_policy_from_simulation(
         db,
         simulation_id=payload.simulation_id,
-        actor_id=current_super_admin.id,
-        actor_role=current_super_admin.role.value,
+        actor_id=current_admin.id,
+        actor_role=current_admin.role.value,
         reason_note=payload.reason_note,
         double_confirmed=payload.double_confirmed,
         apply_with_override=payload.apply_with_override,

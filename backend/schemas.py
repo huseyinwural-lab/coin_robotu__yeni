@@ -1594,6 +1594,7 @@ class RiskOrchestratorOperationalDashboardResponse(BaseModel):
     approval_throughput_last_hour: dict
     predictive_risk_signal: dict = Field(default_factory=dict)
     governance: dict = Field(default_factory=dict)
+    cache_health: dict = Field(default_factory=dict)
 
 
 class RiskOrchestratorApprovalDecisionRequest(BaseModel):
