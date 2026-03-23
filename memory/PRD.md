@@ -1,3 +1,101 @@
+## 2026-03-23 — E Turu Tam Paket (A+B+C+D) ✅
+
+### Kapsam (kullanıcı kilidi)
+- A) `admin_phase3.py` modüler refactor
+- B) Diff panel one-click playbook (preview + confirm, non-destructive)
+- C) INFO auto-ack policy (policy matching + audit)
+- D) Action Impact Timeline KPI before/after kartları (absolute + delta, seçili window’a dinamik)
+
+### Modüler refactor çıktısı
+- Yeni modül klasörü: `/app/backend/routers/admin_phase3_modules/`
+  - `analytics.py`
+  - `export.py`
+  - `recovery.py`
+  - `alerts.py`
+  - `common.py`
+- `admin_phase3.py` içinde modül router include edildi:
+  - `analytics_router`, `export_router`, `recovery_router`, `alerts_router`
+
+### Ortak yardımcıların ayrıştırılması (`common.py`)
+- role checks (`role_value`, `ensure_super_admin`)
+- filter/time window parsing (`resolve_time_window`, `parse_iso_datetime`)
+- response shaping (`shape_response`)
+- audit/event helper (`write_audit_event`)
+- preview token helper (`save_preview_payload`, `read_preview_payload`)
+
+### Yeni endpointler
+- `GET /api/admin-phase3/execution-analytics/kpi-before-after`
+- `GET /api/admin-phase3/incident-snapshots/export/filter-options`
+- `POST /api/admin-phase3/incident-snapshots/playbook/preview`
+- `POST /api/admin-phase3/incident-snapshots/playbook/apply`
+- `GET /api/admin-phase3/execution-alerts/auto-ack/policy`
+- `PUT /api/admin-phase3/execution-alerts/auto-ack/policy`
+- `POST /api/admin-phase3/execution-alerts/auto-ack/run`
+
+### One-click playbook kilitleri
+- Destructive execution yok (non-destructive planned mode)
+- Apply için `preview_token + confirm + reason` zorunlu
+- Preview/apply işlemleri audit’e yazılıyor
+
+### INFO auto-ack kilitleri
+- Sadece policy eşleşen alertler:
+  - severity = `INFO`
+  - status = `open`
+  - threshold saatten eski
+  - policy `only_execution_alerts=true` ise `execution_*` alert_type filtreli
+- Dry-run destekli
+- Her run audit’e yazılıyor
+
+### KPI before/after kartları
+- Endpoint: `/api/admin/strategy/action-impact-timeline`
+- Dönen kartlar:
+  - `selected_signals` (before/after/delta)
+  - `rejected_signals` (before/after/delta)
+  - `risk_breaches` (before/after/delta)
+- Seçili window’a dinamik hesap (24h/7d/30d + custom time range)
+
+### Frontend güncellemeleri
+- `ExecutionStatesPage.jsx`
+  - Diff panel içine one-click playbook preview/apply paneli eklendi
+- `ExecutionAnalyticsPage.jsx`
+  - INFO auto-ack policy paneli (enabled, threshold, execution-only, reason, dry-run, save/run)
+- `AdminStrategyObservabilityPage.jsx`
+  - Action Impact Timeline KPI kartları (before/after/delta)
+- `AdminStrategyObservabilityDetailPage.jsx`
+  - Timeline KPI kartları (before/after/delta)
+
+### Eski dosyadan sorumluluk → yeni modül eşlemesi
+- `admin_phase3.py` analytics responsibility → `admin_phase3_modules/analytics.py`
+- `admin_phase3.py` export yardımcı/filter responsibility → `admin_phase3_modules/export.py`
+- Diff recovery/playbook responsibility → `admin_phase3_modules/recovery.py`
+- Execution alert auto-ack policy responsibility → `admin_phase3_modules/alerts.py`
+- Shared helpers → `admin_phase3_modules/common.py`
+
+### Backward compatibility
+- Eski route contract korunmuştur (legacy endpoint smoke test PASS):
+  - `/execution-policies`
+  - `/failed-events`
+  - `/execution-state-transitions/control`
+  - `/execution-analytics/summary`
+  - `/execution-alerts`
+  - `/incident-snapshots/diff`
+
+### Yeni test kapsamı (modül bazında)
+- `backend/tests/test_admin_phase3_modular_refactor.py`
+  - Backward compatibility: 6 test
+  - Playbook endpoints: 5 test
+  - Auto-ack policy endpoints: 5 test
+  - KPI-before-after endpoint: 3 test
+  - Export filter options: 1 test
+  - Strategy action impact timeline KPI: 2 test
+  - Strategy observability strategy list: 1 test
+
+### Doğrulama sonucu
+- `testing_agent`: `/app/test_reports/iteration_93.json`
+  - Backend: **100% (23/23 PASS)**
+  - Frontend: **100% PASS**
+  - Kritik/minor issue: yok
+
 ## 2026-03-23 — P1 Tam Paket (Risk & Capital Control + Report Detail + Export/Auto-refresh + Action Impact Timeline) ✅
 
 ### Kullanıcı onayıyla uygulanan kapsam
