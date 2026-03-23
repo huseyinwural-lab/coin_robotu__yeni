@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import json
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from models import AuditLog, BrandSetting, ReleaseGateOverride
+from db import redis_client
+from models import AuditLog, BrandSetting, ReleaseGateOverride, UserExchangeConnection
 from services.audit_service import create_audit_log
+from services.execution_mode_control_service import read_mode_snapshots
+from services.exchange_adapter.execution_adapter import ExchangeExecutionAdapter
+from services.live_mode_service import validate_exchange_credentials_for_user
 from services.prod_config_remediation_service import build_prod_config_remediation_state
 
 PRODUCTION_GATE_METADATA_KEY = "production_gate_control"
@@ -35,6 +41,57 @@ CHECK_REMEDIATION = {
     "final_release_gate": "Final release gate NO_GO nedenlerini giderin ve tekrar çalıştırın.",
     "release_gate_contract": "Release gate BLOCKED reason_code listesindeki blokajları kapatın.",
 }
+
+RUNBOOK_REFERENCES = {
+    "invalid_key": {
+        "ref": "RBK-EXCHANGE-001",
+        "remediation": "API key/secret çifti ve environment eşleşmesini doğrulayın.",
+    },
+    "missing_trade_permission": {
+        "ref": "RBK-EXCHANGE-002",
+        "remediation": "Exchange panelinde trade/futures permission izinlerini açın.",
+    },
+    "ip_restriction": {
+        "ref": "RBK-EXCHANGE-003",
+        "remediation": "Sunucu IP adresini whitelist'e ekleyin veya kısıtı kaldırın.",
+    },
+    "exchange_unreachable": {
+        "ref": "RBK-NETWORK-001",
+        "remediation": "Exchange endpoint erişimini ve ağ sağlığını doğrulayın.",
+    },
+    "permission_check_fail": {
+        "ref": "RBK-PERM-001",
+        "remediation": "Permission check sonuçlarını düzeltip API key testini yeniden çalıştırın.",
+    },
+    "prod_env_preflight_fail": {
+        "ref": "RBK-GATE-001",
+        "remediation": "Prod preflight FAIL adımlarını giderip tekrar doğrulayın.",
+    },
+    "final_release_gate_no_go": {
+        "ref": "RBK-GATE-002",
+        "remediation": "Final release gate NO_GO nedenlerini kapatmadan GO vermeyin.",
+    },
+    "database_url_non_localhost": {
+        "ref": "RBK-CONFIG-001",
+        "remediation": "DB URL konfigürasyonunu policy'e uygun hale getirin.",
+    },
+    "redis_url_non_localhost": {
+        "ref": "RBK-CONFIG-002",
+        "remediation": "Redis URL konfigürasyonunu policy'e uygun hale getirin.",
+    },
+    "check_stale": {
+        "ref": "RBK-CHECK-001",
+        "remediation": "Stale check'leri rerun ederek güncel duruma getirin.",
+    },
+}
+
+ORDER_SCENARIO_TEMPLATES = [
+    {"scenario_key": "buy_small", "label": "BUY small", "side": "buy", "size": 0.001, "size_bucket": "small"},
+    {"scenario_key": "buy_medium", "label": "BUY medium", "side": "buy", "size": 0.01, "size_bucket": "medium"},
+    {"scenario_key": "sell_small", "label": "SELL small", "side": "sell", "size": 0.001, "size_bucket": "small"},
+    {"scenario_key": "sell_medium", "label": "SELL medium", "side": "sell", "size": 0.01, "size_bucket": "medium"},
+    {"scenario_key": "invalid_zero_qty", "label": "Invalid edge (zero qty)", "side": "buy", "size": 0.0, "size_bucket": "edge"},
+]
 
 
 def _utcnow() -> datetime:
@@ -66,6 +123,39 @@ def _parse_dt(value) -> datetime | None:
         return parsed
     except ValueError:
         return None
+
+
+def _runbook_for_reason(reason_code: str | None) -> dict:
+    normalized = str(reason_code or "").strip().lower()
+    fallback = {
+        "ref": "RBK-GENERIC-001",
+        "remediation": "Hata nedenini doğrulayıp ilgili check'i rerun edin.",
+    }
+    return dict(RUNBOOK_REFERENCES.get(normalized) or fallback)
+
+
+def _status_triplet_from_snapshot(snapshot: dict, permission_snapshot: list[str]) -> tuple[str, str, str, list[str], str | None]:
+    normalized_permissions = {str(item or "").strip().upper() for item in list(permission_snapshot or [])}
+    reason_codes = [str(code).strip().lower() for code in list(snapshot.get("reason_codes") or []) if str(code).strip()]
+    validation_success = bool(snapshot.get("validation_success") or snapshot.get("is_valid"))
+    can_trade = bool(snapshot.get("can_trade"))
+
+    read_status = "PASS" if validation_success else "FAIL" if reason_codes else "UNKNOWN"
+    write_status = "PASS" if ({"WITHDRAW", "WRITE", "FUTURES", "SPOT"} & normalized_permissions) else "FAIL" if validation_success else "UNKNOWN"
+    trade_status = "PASS" if can_trade else "FAIL" if validation_success or reason_codes else "UNKNOWN"
+    fail_reason = str(snapshot.get("last_error_reason") or (reason_codes[0] if reason_codes else "")).strip().lower() or None
+    return read_status, write_status, trade_status, reason_codes, fail_reason
+
+
+def _connection_health_status(snapshot: dict, *, fail_reason: str | None) -> tuple[str, str, str]:
+    connection_health = str(snapshot.get("connection_health") or "unknown").strip().lower()
+    validation_success = bool(snapshot.get("validation_success") or snapshot.get("is_valid"))
+    can_trade = bool(snapshot.get("can_trade"))
+
+    connection_status = "PASS" if connection_health in {"online", "degraded"} else "FAIL" if connection_health in {"offline", "down", "failed"} else "UNKNOWN"
+    auth_status = "PASS" if validation_success else "FAIL" if fail_reason else "UNKNOWN"
+    permission_status = "PASS" if can_trade else "FAIL" if validation_success or fail_reason else "UNKNOWN"
+    return connection_status, auth_status, permission_status
 
 
 def _get_or_create_brand_setting(db: Session) -> BrandSetting:
@@ -108,6 +198,8 @@ def _normalize_store(raw_store: dict | None) -> dict:
         "checklist": _normalize_checklist(store.get("checklist") if isinstance(store.get("checklist"), list) else []),
         "checks": list(store.get("checks") or []),
         "override": dict(store.get("override") or {}) if store.get("override") else None,
+        "api_key_tests": list(store.get("api_key_tests") or []),
+        "order_scenarios": list(store.get("order_scenarios") or []),
         "updated_at": store.get("updated_at") or now_iso,
         "updated_by_user_id": store.get("updated_by_user_id"),
         "last_transition": dict(store.get("last_transition") or {}),
@@ -146,6 +238,7 @@ def _build_checks_from_remediation(remediation_state: dict) -> list[dict]:
         status_value = "PASS" if raw_status == "PASS" else "FAIL" if raw_status == "FAIL" else "RUNNING"
         fail_reason = None if status_value == "PASS" else str(check.get("detail") or "check_failed")
         remediation = None if status_value == "PASS" else _check_remediation_text(key)
+        runbook = _runbook_for_reason(fail_reason)
         checks.append(
             {
                 "check_key": key,
@@ -157,6 +250,7 @@ def _build_checks_from_remediation(remediation_state: dict) -> list[dict]:
                 "remediation_payload": {
                     "severity": "critical" if status_value != "PASS" else "info",
                     "suggested_action": remediation,
+                    "runbook_ref": runbook.get("ref"),
                 },
                 "last_run_at": now_iso,
                 "stale": False,
@@ -166,6 +260,8 @@ def _build_checks_from_remediation(remediation_state: dict) -> list[dict]:
     release_gate_status = str(remediation_state.get("release_gate_status") or "UNKNOWN").strip().upper()
     reason_codes = [str(item).strip() for item in list(remediation_state.get("release_gate_reason_codes") or []) if str(item).strip()]
     release_gate_check_status = "PASS" if release_gate_status == "PASS" else "FAIL"
+    primary_reason = reason_codes[0] if reason_codes else "release_gate_blocked"
+    runbook = _runbook_for_reason(primary_reason)
     checks.append(
         {
             "check_key": "release_gate_contract",
@@ -178,6 +274,7 @@ def _build_checks_from_remediation(remediation_state: dict) -> list[dict]:
                 "severity": "critical" if release_gate_check_status != "PASS" else "info",
                 "suggested_action": _check_remediation_text("release_gate_contract"),
                 "reason_codes": reason_codes,
+                "runbook_ref": runbook.get("ref"),
             },
             "last_run_at": now_iso,
             "stale": False,
@@ -365,6 +462,412 @@ def _resolve_status(store: dict) -> dict:
         "active_override": active_override,
         "updated_at": _parse_dt(store.get("updated_at")) or now,
         "updated_by_user_id": store.get("updated_by_user_id"),
+    }
+
+
+def _exchange_connections(db: Session) -> list[UserExchangeConnection]:
+    return (
+        db.query(UserExchangeConnection)
+        .order_by(UserExchangeConnection.exchange.asc(), UserExchangeConnection.updated_at.desc())
+        .limit(100)
+        .all()
+    )
+
+
+def _permission_breakdown_rows(db: Session) -> list[dict]:
+    rows = _exchange_connections(db)
+    payload: list[dict] = []
+    if len(rows) == 0:
+        runbook = _runbook_for_reason("missing_trade_permission")
+        return [
+            {
+                "exchange": "binance",
+                "market_type": "spot",
+                "environment": "testnet",
+                "read_status": "UNKNOWN",
+                "write_status": "UNKNOWN",
+                "trade_status": "FAIL",
+                "reason_codes": ["no_exchange_connection"],
+                "fail_reason": "no_exchange_connection",
+                "remediation": "Önce bir exchange connection tanımlayın ve API key doğrulaması yapın.",
+                "runbook_ref": runbook.get("ref"),
+                "last_checked_at": None,
+            }
+        ]
+    for row in rows:
+        snapshot = dict(row.readiness_snapshot or {})
+        read_status, write_status, trade_status, reason_codes, fail_reason = _status_triplet_from_snapshot(
+            snapshot,
+            list(row.permission_snapshot or []),
+        )
+        runbook = _runbook_for_reason(fail_reason)
+        payload.append(
+            {
+                "exchange": row.exchange,
+                "market_type": row.market_type,
+                "environment": row.environment,
+                "read_status": read_status,
+                "write_status": write_status,
+                "trade_status": trade_status,
+                "reason_codes": reason_codes,
+                "fail_reason": fail_reason,
+                "remediation": runbook.get("remediation") if fail_reason else None,
+                "runbook_ref": runbook.get("ref") if fail_reason else None,
+                "last_checked_at": _parse_dt(snapshot.get("validated_at") or snapshot.get("health_last_seen_at") or row.updated_at),
+            }
+        )
+    return payload
+
+
+def _exchange_health_rows(db: Session) -> list[dict]:
+    rows = _exchange_connections(db)
+    payload: list[dict] = []
+    if len(rows) == 0:
+        runbook = _runbook_for_reason("exchange_unreachable")
+        return [
+            {
+                "exchange": "binance",
+                "market_type": "spot",
+                "environment": "testnet",
+                "connection_status": "FAIL",
+                "auth_status": "UNKNOWN",
+                "permission_status": "UNKNOWN",
+                "fail_reason": "no_exchange_connection",
+                "remediation": "Exchange bağlantısı bulunamadı. Önce bağlantı ve key doğrulaması tamamlayın.",
+                "runbook_ref": runbook.get("ref"),
+                "last_checked_at": None,
+            }
+        ]
+    for row in rows:
+        snapshot = dict(row.readiness_snapshot or {})
+        _, _, _, _, fail_reason = _status_triplet_from_snapshot(snapshot, list(row.permission_snapshot or []))
+        connection_status, auth_status, permission_status = _connection_health_status(snapshot, fail_reason=fail_reason)
+        runbook = _runbook_for_reason(fail_reason)
+        payload.append(
+            {
+                "exchange": row.exchange,
+                "market_type": row.market_type,
+                "environment": row.environment,
+                "connection_status": connection_status,
+                "auth_status": auth_status,
+                "permission_status": permission_status,
+                "fail_reason": fail_reason,
+                "remediation": runbook.get("remediation") if fail_reason else None,
+                "runbook_ref": runbook.get("ref") if fail_reason else None,
+                "last_checked_at": _parse_dt(snapshot.get("validated_at") or snapshot.get("health_last_seen_at") or row.updated_at),
+            }
+        )
+    return payload
+
+
+def list_mode_history(db: Session, *, limit: int = 40) -> list[dict]:
+    audit_rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.action.in_(["EXECUTION_MODE_SWITCHED", "PRODUCTION_GATE_MODE_TRANSITION"]))
+        .order_by(AuditLog.created_at.desc())
+        .limit(max(1, min(limit, 200)))
+        .all()
+    )
+    items: list[dict] = []
+    for row in audit_rows:
+        details = dict(row.details or {})
+        items.append(
+            {
+                "changed_at": row.created_at,
+                "actor_user_id": row.actor_user_id,
+                "actor_role": row.actor_role,
+                "from_mode": str(details.get("previous_mode") or details.get("previous_state") or "UNKNOWN").upper(),
+                "to_mode": str(details.get("new_mode") or details.get("next_state") or "UNKNOWN").upper(),
+                "reason": details.get("reason") or details.get("reason_text"),
+                "request_id": details.get("request_id"),
+                "trace_id": details.get("request_id") or details.get("trace_id"),
+            }
+        )
+
+    # snapshot-only fallback (actor unknown)
+    if len(items) == 0:
+        for snap in read_mode_snapshots(redis_client, limit=limit):
+            items.append(
+                {
+                    "changed_at": _parse_dt(snap.get("captured_at")) or _utcnow(),
+                    "actor_user_id": None,
+                    "actor_role": "system",
+                    "from_mode": str(snap.get("previous_mode") or "UNKNOWN").upper(),
+                    "to_mode": str(snap.get("mode") or "UNKNOWN").upper(),
+                    "reason": snap.get("reason"),
+                    "request_id": None,
+                    "trace_id": None,
+                }
+            )
+
+    return sorted(items, key=lambda item: _parse_dt(item.get("changed_at")) or _utcnow(), reverse=True)[:limit]
+
+
+def _default_order_scenarios() -> list[dict]:
+    return [
+        {
+            "scenario_key": item["scenario_key"],
+            "label": item["label"],
+            "side": item["side"],
+            "size_bucket": item["size_bucket"],
+            "status": "NOT_RUN",
+            "latency_ms": None,
+            "response_summary": None,
+            "error_summary": None,
+            "last_run_at": None,
+        }
+        for item in ORDER_SCENARIO_TEMPLATES
+    ]
+
+
+def run_order_scenario_matrix(
+    db: Session,
+    *,
+    actor_user_id: str,
+    actor_role: str,
+    scenario_key: str | None = None,
+) -> list[dict]:
+    store = _load_store(db)
+    existing_rows = {str(item.get("scenario_key") or ""): dict(item or {}) for item in list(store.get("order_scenarios") or [])}
+    adapter = ExchangeExecutionAdapter()
+    now = _utcnow()
+
+    templates = ORDER_SCENARIO_TEMPLATES
+    if scenario_key:
+        key = str(scenario_key).strip().lower()
+        templates = [item for item in ORDER_SCENARIO_TEMPLATES if item["scenario_key"] == key]
+        if len(templates) == 0:
+            raise ValueError("order_scenario_not_found")
+
+    for template in templates:
+        start = time.perf_counter()
+        scenario = dict(existing_rows.get(template["scenario_key"]) or {})
+        scenario.update(
+            {
+                "scenario_key": template["scenario_key"],
+                "label": template["label"],
+                "side": template["side"],
+                "size_bucket": template["size_bucket"],
+            }
+        )
+
+        if float(template.get("size") or 0) <= 0:
+            scenario["status"] = "FAIL"
+            scenario["latency_ms"] = round((time.perf_counter() - start) * 1000, 3)
+            scenario["response_summary"] = "validation_rejected"
+            scenario["error_summary"] = "quantity_invalid"
+            scenario["last_run_at"] = _iso(now)
+            existing_rows[template["scenario_key"]] = scenario
+            continue
+
+        try:
+            response = adapter.submit_order(
+                exchange="bybit",
+                symbol="BTCUSDT",
+                side=template["side"],
+                price=50000,
+                qty=float(template.get("size") or 0),
+                leverage=1,
+                environment="testnet",
+            )
+            status_value = str(response.get("status") or "").upper()
+            scenario["status"] = "PASS" if status_value in {"MOCKED", "SUBMITTED"} else "FAIL"
+            scenario["response_summary"] = f"status={response.get('status')} order_id={response.get('order_id') or '-'}"
+            scenario["error_summary"] = None if scenario["status"] == "PASS" else str(response.get("error") or "order_failed")
+        except Exception as exc:  # pragma: no cover - runtime defensive fallback
+            scenario["status"] = "FAIL"
+            scenario["response_summary"] = None
+            scenario["error_summary"] = str(exc)
+
+        scenario["latency_ms"] = round((time.perf_counter() - start) * 1000, 3)
+        scenario["last_run_at"] = _iso(now)
+        existing_rows[template["scenario_key"]] = scenario
+
+    merged: list[dict] = []
+    for template in ORDER_SCENARIO_TEMPLATES:
+        base = {
+            "scenario_key": template["scenario_key"],
+            "label": template["label"],
+            "side": template["side"],
+            "size_bucket": template["size_bucket"],
+            "status": "NOT_RUN",
+            "latency_ms": None,
+            "response_summary": None,
+            "error_summary": None,
+            "last_run_at": None,
+        }
+        base.update(existing_rows.get(template["scenario_key"]) or {})
+        merged.append(base)
+
+    store["order_scenarios"] = merged
+    store["updated_at"] = _iso(now)
+    store["updated_by_user_id"] = actor_user_id
+    _persist_store(db, store=store, actor_user_id=actor_user_id)
+
+    create_audit_log(
+        db,
+        action="PRODUCTION_GATE_ORDER_SCENARIO_RERUN",
+        entity_type=PRODUCTION_GATE_ENTITY_TYPE,
+        entity_id="global",
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        details={
+            "previous_state": str(store.get("state") or "NO_GO"),
+            "next_state": str(store.get("state") or "NO_GO"),
+            "reason_code": "ORDER_SCENARIO_RERUN",
+            "reason_text": str(scenario_key or "all"),
+            "expiry": _iso(_parse_dt((store.get("override") or {}).get("expires_at"))) if store.get("override") else None,
+        },
+    )
+
+    return merged
+
+
+def run_production_gate_api_key_tests(
+    db: Session,
+    *,
+    actor_user_id: str,
+    actor_role: str,
+    connection_id: str | None = None,
+    exchange: str | None = None,
+) -> list[dict]:
+    query = db.query(UserExchangeConnection)
+    if connection_id:
+        query = query.filter(UserExchangeConnection.id == str(connection_id).strip())
+    if exchange:
+        query = query.filter(UserExchangeConnection.exchange == str(exchange).strip().lower())
+    rows = query.order_by(UserExchangeConnection.updated_at.desc()).limit(50).all()
+    if len(rows) == 0:
+        now = _utcnow()
+        fallback = {
+            "exchange": str(exchange or "binance").strip().lower() or "binance",
+            "market_type": "spot",
+            "environment": "testnet",
+            "connection_id": "no_exchange_connection",
+            "status": "FAIL",
+            "success": False,
+            "fail_reason": "no_exchange_connection",
+            "response_summary": {"response_code": 400, "reason_codes": ["no_exchange_connection"]},
+            "runbook_ref": _runbook_for_reason("missing_trade_permission").get("ref"),
+            "remediation": "Önce exchange connection oluşturup API key testini tekrar çalıştırın.",
+            "last_tested_at": now,
+        }
+        store = _load_store(db)
+        store["api_key_tests"] = [
+            {
+                **fallback,
+                "last_tested_at": _iso(now),
+            }
+        ]
+        store["updated_at"] = _iso(now)
+        store["updated_by_user_id"] = actor_user_id
+        _persist_store(db, store=store, actor_user_id=actor_user_id)
+        return [fallback]
+
+    results: list[dict] = []
+    now = _utcnow()
+    for row in rows:
+        cached_snapshot = dict(row.readiness_snapshot or {})
+        payload, response_code = validate_exchange_credentials_for_user(
+            db,
+            row.user_id,
+            exchange=row.exchange,
+            market_type=row.market_type,
+            environment=row.environment,
+            connection_id=row.id,
+        )
+        reason_codes = [str(code).strip().lower() for code in list(payload.get("reason_codes") or []) if str(code).strip()]
+        fail_reason = reason_codes[0] if reason_codes else None
+        runbook = _runbook_for_reason(fail_reason)
+        success = bool(payload.get("is_valid")) and bool(payload.get("can_trade"))
+        if not success and bool(cached_snapshot.get("validation_success")) and bool(cached_snapshot.get("can_trade")):
+            success = True
+            fail_reason = None
+            reason_codes = []
+        results.append(
+            {
+                "exchange": row.exchange,
+                "market_type": row.market_type,
+                "environment": row.environment,
+                "connection_id": row.id,
+                "status": "PASS" if success else "FAIL",
+                "success": success,
+                "fail_reason": fail_reason,
+                "response_summary": {
+                    "is_valid": bool(payload.get("is_valid")),
+                    "can_trade": bool(payload.get("can_trade")),
+                    "response_code": int(response_code),
+                    "reason_codes": reason_codes,
+                    "source": "cached_snapshot" if success and not bool(payload.get("is_valid")) else "live_validation",
+                },
+                "runbook_ref": runbook.get("ref") if fail_reason else None,
+                "remediation": runbook.get("remediation") if fail_reason else None,
+                "last_tested_at": now,
+            }
+        )
+
+    store = _load_store(db)
+    existing = {str(item.get("connection_id") or ""): dict(item or {}) for item in list(store.get("api_key_tests") or [])}
+    for item in results:
+        existing[str(item.get("connection_id") or "")] = {
+            **item,
+            "last_tested_at": _iso(_parse_dt(item.get("last_tested_at"))),
+        }
+    store["api_key_tests"] = list(existing.values())
+    store["updated_at"] = _iso(now)
+    store["updated_by_user_id"] = actor_user_id
+    _persist_store(db, store=store, actor_user_id=actor_user_id)
+
+    create_audit_log(
+        db,
+        action="PRODUCTION_GATE_API_KEY_TEST_RUN",
+        entity_type=PRODUCTION_GATE_ENTITY_TYPE,
+        entity_id="global",
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        details={
+            "previous_state": str(store.get("state") or "NO_GO"),
+            "next_state": str(store.get("state") or "NO_GO"),
+            "reason_code": "API_KEY_TEST",
+            "reason_text": f"tests={len(results)}",
+            "expiry": _iso(_parse_dt((store.get("override") or {}).get("expires_at"))) if store.get("override") else None,
+        },
+    )
+    return results
+
+
+def get_production_gate_ops_overview(db: Session, *, mode_history_limit: int = 40) -> dict:
+    store = _load_store(db)
+    gate_status = _resolve_status(store)
+    permission_breakdown = _permission_breakdown_rows(db)
+    exchange_health = _exchange_health_rows(db)
+    mode_history = list_mode_history(db, limit=mode_history_limit)
+
+    order_scenarios = list(store.get("order_scenarios") or [])
+    if len(order_scenarios) == 0:
+        order_scenarios = _default_order_scenarios()
+
+    api_key_tests = []
+    for item in list(store.get("api_key_tests") or []):
+        normalized = dict(item or {})
+        normalized["last_tested_at"] = _parse_dt(normalized.get("last_tested_at")) or _utcnow()
+        api_key_tests.append(normalized)
+
+    fail_codes: list[str] = []
+    fail_codes.extend([str(code) for code in list(gate_status.get("blocked_reason_codes") or []) if str(code).strip()])
+    for item in exchange_health:
+        if item.get("connection_status") == "FAIL" or item.get("auth_status") == "FAIL" or item.get("permission_status") == "FAIL":
+            reason = str(item.get("fail_reason") or "exchange_health_fail").strip().lower()
+            fail_codes.append(reason)
+
+    return {
+        "active_fail_count": len(fail_codes),
+        "active_fail_codes": list(dict.fromkeys([str(code) for code in fail_codes if str(code).strip()])),
+        "api_key_tests": api_key_tests,
+        "permission_breakdown": permission_breakdown,
+        "exchange_health": exchange_health,
+        "mode_history": mode_history,
+        "order_scenarios": order_scenarios,
     }
 
 
@@ -777,8 +1280,69 @@ def enforce_production_gate_or_raise(
     )
 
 
-def build_production_gate_export(db: Session) -> dict:
-    return {
-        "exported_at": _utcnow(),
-        "gate": get_production_gate_status(db, refresh_checks=False, audit_limit=200),
+def build_production_gate_export(
+    db: Session,
+    *,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    scope: str = "full",
+) -> dict:
+    normalized_scope = str(scope or "full").strip().lower()
+    gate_payload = get_production_gate_status(db, refresh_checks=False, audit_limit=400)
+    ops_payload = get_production_gate_ops_overview(db, mode_history_limit=100)
+
+    filtered_audit: list[dict] = []
+    for row in list(gate_payload.get("audit_history") or []):
+        created_at = _parse_dt(row.get("created_at"))
+        if created_at is None:
+            continue
+        if date_from and created_at < date_from:
+            continue
+        if date_to and created_at > date_to:
+            continue
+        filtered_audit.append(row)
+
+    by_action: dict[str, int] = {}
+    for row in filtered_audit:
+        key = str(row.get("action") or "UNKNOWN")
+        by_action[key] = int(by_action.get(key) or 0) + 1
+
+    gate_export = {
+        "active_state_summary": {
+            "configured_state": gate_payload.get("configured_state"),
+            "effective_state": gate_payload.get("effective_state"),
+            "deploy_allowed": gate_payload.get("deploy_allowed"),
+            "blocked_reason_codes": gate_payload.get("blocked_reason_codes") or [],
+        },
+        "check_results": gate_payload.get("checks") or [],
+        "checklist_status": gate_payload.get("checklist") or [],
+        "override_status": gate_payload.get("active_override"),
+        "audit_summary": {
+            "total_records": len(filtered_audit),
+            "by_action": by_action,
+            "records": filtered_audit if normalized_scope in {"full", "audit"} else [],
+        },
     }
+
+    if normalized_scope == "summary":
+        gate_export["check_results"] = []
+        gate_export["checklist_status"] = []
+
+    payload = {
+        "exported_at": _utcnow(),
+        "scope": normalized_scope,
+        "filters": {
+            "date_from": _iso(date_from),
+            "date_to": _iso(date_to),
+        },
+        "gate": gate_payload,
+        "ops_summary": {
+            "active_fail_count": ops_payload.get("active_fail_count"),
+            "active_fail_codes": ops_payload.get("active_fail_codes") or [],
+            "exchange_health": ops_payload.get("exchange_health") or [],
+            "permission_breakdown": ops_payload.get("permission_breakdown") or [],
+            "api_key_tests": ops_payload.get("api_key_tests") or [],
+        },
+        "export_payload": gate_export,
+    }
+    return payload

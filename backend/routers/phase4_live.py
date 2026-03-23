@@ -31,8 +31,11 @@ from schemas import (
     TestOrderResponse,
     TestnetConnectivityResponse,
     ProductionGateChecklistUpdateRequest,
+    ProductionGateApiKeyTestRunRequest,
     ProductionGateExportResponse,
     ProductionGateModeTransitionRequest,
+    ProductionGateOpsOverviewResponse,
+    ProductionGateOrderScenarioRunRequest,
     ProductionGateOverrideCreateRequest,
     ProductionGateStateUpdateRequest,
     ProductionGateStatusResponse,
@@ -72,8 +75,11 @@ from services.production_gate_service import (
     create_production_gate_override,
     enforce_production_gate_or_raise,
     get_production_gate_status,
+    get_production_gate_ops_overview,
     rerun_production_gate_checks,
     revoke_production_gate_override,
+    run_order_scenario_matrix,
+    run_production_gate_api_key_tests,
     set_production_gate_state,
     update_production_gate_checklist_item,
 )
@@ -498,6 +504,58 @@ def admin_production_gate_status(
     return ProductionGateStatusResponse(**get_production_gate_status(db, refresh_checks=bool(refresh_checks), audit_limit=40))
 
 
+@router.get("/admin/production-gate/ops-overview", response_model=ProductionGateOpsOverviewResponse)
+def admin_production_gate_ops_overview(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return ProductionGateOpsOverviewResponse(**get_production_gate_ops_overview(db, mode_history_limit=60))
+
+
+@router.post("/admin/production-gate/api-key-tests/run", response_model=ProductionGateOpsOverviewResponse)
+def admin_production_gate_run_api_key_tests(
+    request: ProductionGateApiKeyTestRunRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    run_production_gate_api_key_tests(
+        db,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        connection_id=request.connection_id,
+        exchange=request.exchange,
+    )
+    return ProductionGateOpsOverviewResponse(**get_production_gate_ops_overview(db, mode_history_limit=60))
+
+
+@router.post("/admin/production-gate/order-scenarios/rerun", response_model=ProductionGateOpsOverviewResponse)
+def admin_production_gate_run_order_scenarios(
+    request: ProductionGateOrderScenarioRunRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        run_order_scenario_matrix(
+            db,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            scenario_key=request.scenario_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return ProductionGateOpsOverviewResponse(**get_production_gate_ops_overview(db, mode_history_limit=60))
+
+
+@router.get("/admin/production-gate/mode-history")
+def admin_production_gate_mode_history(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=40, ge=5, le=200),
+):
+    payload = get_production_gate_ops_overview(db, mode_history_limit=limit)
+    return payload.get("mode_history") or []
+
+
 @router.post("/admin/production-gate/checks/rerun", response_model=ProductionGateStatusResponse)
 def admin_production_gate_rerun_all(
     current_admin: User = Depends(require_admin),
@@ -672,17 +730,35 @@ def admin_production_gate_mode_transition(
 def admin_production_gate_export(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
+    scope: str = Query(default="full"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
 ):
-    payload = build_production_gate_export(db)
-    return ProductionGateExportResponse(**payload)
+    try:
+        from_dt = datetime.fromisoformat(date_from.replace("Z", "+00:00")) if date_from else None
+        to_dt = datetime.fromisoformat(date_to.replace("Z", "+00:00")) if date_to else None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_export_date_format") from exc
+
+    payload = build_production_gate_export(db, date_from=from_dt, date_to=to_dt, scope=scope)
+    return ProductionGateExportResponse(exported_at=payload["exported_at"], gate=payload["gate"])
 
 
 @router.get("/admin/production-gate/export/raw")
 def admin_production_gate_export_raw(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
+    scope: str = Query(default="full"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
 ):
-    payload = build_production_gate_export(db)
+    try:
+        from_dt = datetime.fromisoformat(date_from.replace("Z", "+00:00")) if date_from else None
+        to_dt = datetime.fromisoformat(date_to.replace("Z", "+00:00")) if date_to else None
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_export_date_format") from exc
+
+    payload = build_production_gate_export(db, date_from=from_dt, date_to=to_dt, scope=scope)
     return payload
 
 

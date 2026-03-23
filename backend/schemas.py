@@ -4293,3 +4293,86 @@ class ProductionGateModeTransitionRequest(BaseModel):
 class ProductionGateExportResponse(BaseModel):
     exported_at: datetime
     gate: ProductionGateStatusResponse
+
+
+class ProductionGateApiKeyTestResultResponse(BaseModel):
+    exchange: str
+    market_type: str
+    environment: str
+    connection_id: str
+    status: str
+    success: bool
+    fail_reason: str | None = None
+    response_summary: dict = Field(default_factory=dict)
+    runbook_ref: str | None = None
+    remediation: str | None = None
+    last_tested_at: datetime
+
+
+class ProductionGatePermissionBreakdownItemResponse(BaseModel):
+    exchange: str
+    market_type: str
+    environment: str
+    read_status: str
+    write_status: str
+    trade_status: str
+    reason_codes: list[str] = Field(default_factory=list)
+    fail_reason: str | None = None
+    remediation: str | None = None
+    runbook_ref: str | None = None
+    last_checked_at: datetime | None = None
+
+
+class ProductionGateExchangeHealthItemResponse(BaseModel):
+    exchange: str
+    market_type: str
+    environment: str
+    connection_status: str
+    auth_status: str
+    permission_status: str
+    fail_reason: str | None = None
+    remediation: str | None = None
+    runbook_ref: str | None = None
+    last_checked_at: datetime | None = None
+
+
+class ProductionGateModeHistoryItemResponse(BaseModel):
+    changed_at: datetime
+    actor_user_id: str | None = None
+    actor_role: str
+    from_mode: str
+    to_mode: str
+    reason: str | None = None
+    request_id: str | None = None
+    trace_id: str | None = None
+
+
+class ProductionGateOrderScenarioItemResponse(BaseModel):
+    scenario_key: str
+    label: str
+    side: str
+    size_bucket: str
+    status: str
+    latency_ms: float | None = None
+    response_summary: str | None = None
+    error_summary: str | None = None
+    last_run_at: datetime | None = None
+
+
+class ProductionGateOpsOverviewResponse(BaseModel):
+    active_fail_count: int
+    active_fail_codes: list[str] = Field(default_factory=list)
+    api_key_tests: list[ProductionGateApiKeyTestResultResponse] = Field(default_factory=list)
+    permission_breakdown: list[ProductionGatePermissionBreakdownItemResponse] = Field(default_factory=list)
+    exchange_health: list[ProductionGateExchangeHealthItemResponse] = Field(default_factory=list)
+    mode_history: list[ProductionGateModeHistoryItemResponse] = Field(default_factory=list)
+    order_scenarios: list[ProductionGateOrderScenarioItemResponse] = Field(default_factory=list)
+
+
+class ProductionGateApiKeyTestRunRequest(BaseModel):
+    connection_id: str | None = None
+    exchange: str | None = None
+
+
+class ProductionGateOrderScenarioRunRequest(BaseModel):
+    scenario_key: str | None = None
