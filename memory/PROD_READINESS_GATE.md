@@ -18,7 +18,7 @@ Sürüm: **Decision Gate v2 Final**
 ## 2) Fresh Test Run Kanıtı (Tekrar Çalıştırıldı)
 
 ### Environment
-- Base URL: `https://risk-orchestrator-p0.preview.emergentagent.com`
+- Base URL: `https://deploy-blocker-6.preview.emergentagent.com`
 - Platform: Linux (aarch64)
 - Python: `Python 3.11.2`
 - Node: `v22.16.0`

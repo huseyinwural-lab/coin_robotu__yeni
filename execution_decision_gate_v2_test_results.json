@@ -1,6 +1,6 @@
 {
   "test_time": "2026-03-23T20:51:31.484220",
-  "base_url": "https://risk-orchestrator-p0.preview.emergentagent.com/api",
+  "base_url": "https://deploy-blocker-6.preview.emergentagent.com/api",
   "credentials": "canary.admin@platform.local / CanaryAdmin123!",
   "tests_passed": 7,
   "tests_failed": 0,

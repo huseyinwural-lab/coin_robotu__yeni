@@ -1,144 +1,156 @@
-<analysis>**original_problem_statement**: 
-Kullanıcı, Execution Control + Recovery Systemin tamamlanmasının ardından, mevcut  ekranının yalnızca bir konfigürasyon (policy) editörü olmaktan çıkarılarak Risk Enforcement + Intervention System (Risk Motoru / Hard-Guard Layer) olarak yeniden tasarlanmasını talep etmiştir. 
+<analysis>**INSTRUCT NEXT AGENT:** KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.
+
+### original_problem_statement: 
+Kullanıcı, sistemdeki mevcut salt okunur (read-only) Execution Readiness ekranının, zorlayıcı, denetlenebilir ve yazma yetkisine sahip bir **Production Gate Control Panel** haline getirilmesini talep etmektedir. Sistem; GO veya süreli GO_WITH_OVERRIDE durumu olmadan herhangi bir deployment veya LIVE aktivasyon işlemini global middleware/backend seviyesinde kesinlikle reddetmelidir. Tüm değişiklikler; kim, ne zaman, neden ve durum geçişlerini içerecek şekilde audit loglarına yazılmalıdır. İşlem adımları P0 (zorunlu blocker), P1 ve P2 olarak belirlenmiş olup ilk olarak P0'ın bitirilmesi hedeflenmektedir.
+
 **PRODUCT REQUIREMENTS:**
-1. **Policy Management:** Validasyon, versiyonlama, diff görünümü, save öncesi zorunlu simülasyon (What-if analizi) ve double-confirm modal.
-2. **Risk Control Actions:** Kill switch, global trading pause ve force risk check entegrasyonu (reason ve audit zorunlu).
-3. **Exposure Control:** Symbol/Strategy exposure listeleri ve reason/expiry ile manuel override.
-4. **In-Trade Supervisor:** Açık pozisyonlara müdahale (reduce, close, block further adds) ve auto-trigger log.
-5. **Risk Rejects:** Filtreleme, detay drawer/modal (drill-down root cause analizi).
-6. **Audit & Governance:** Change history timeline, actor/reason log, revert işlemi.
-7. **Simulation:** Kritik değişiklikler simüle edilmeden uygulanamaz.
-8. **Alerts:** Risk breach alert paneli (info, warning, critical).
+1. **Deploy Block Enforcement:** Gate durumu  veya geçerli bir  değilse, deploy ve live action endpoint'leri global bir middleware/dependency ile kilitlenecek.
+2. **Override Sistemi:** Sadece super_admin kullanabilir, maksimum süre **30 dakika**, geçerli enum (INCIDENT_MITIGATION, THIRD_PARTY_DEGRADATION, HOTFIX_VALIDATED, MANUAL_RISK_ACCEPTANCE) ve text reason zorunludur.
+3. **MOCK -> LIVE Geçişi:** Risk uyarısı, confirmation, reason ve audit ile korunan kontrollü bir geçiş akışı.
+4. **Pre-deploy Checklist:** Arayüzde onaylanmamış checklist varsa  bloklanacak.
+5. **Rerun & Action:** Her check için FAIL nedeni, fix önerisi ve Rerun butonu gösterilecek. Rerun loglanacak.
+6. **Raporlama:** JSON formatında export mandatory.
 
-**User's preferred language**: Turkish (Türkçe)
-**(INSTRUCT NEXT AGENT: KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.)**
+### what currently exists?
+Risk Orchestrator ve Execution Decision Gate (Execution Queue) tamamen hardening aşamalarından geçip, detaylı loglama, high-risk confirm, reason constraint özellikleriyle prod-ready hale getirildi (39/39 Backend test, Frontend onaylı). Ancak **Execution Readiness** (Production Gate) henüz izleme düzeyindedir, kullanıcının son verdiği görevin (Gate Middleware blokajı ve Override sistemi) backend analizine başlanmış fakat kodlaması yapılmamıştır.
 
-**what currently exists?**: 
-Sistem, uçtan uca execution control, playbook state machine (preview -> approve -> execute -> rollback/retry), gerçek Slack webhook delivery (state tracking ve retry mekanizmalı), causality-based timeline view, role-based export masking (admin vs user) ve RBAC guard'ları ile production-ready seviyeye gelmiştir. Son olarak Admin Risk Orchestrator'ın hard-guard mimarisine dönüştürülmesi işine başlanmış ve DB modelleri kodlanmıştır.
+### Last working item
+- **Last item agent was working:** Kullanıcının verdiği son Production Gate Dönüşümü kural setini (Middleware, 30dk override, MOCK->LIVE vb.) uygulamak üzere FastAPI  dosyası ve Gate schema'ları (ReleaseGateOverrideRequest vs.) okunuyordu. P0 kurallarını uygulamak için altyapı incelemesi yapıldı.
+- **Status:** IN PROGRESS
+- **Agent Testing Done:** N
+- **Which testing method agent to use?** Hem  (middleware'in API endpoint'lerini kilitlediğini doğrulamak için) hem de  (UI state'lerini ve check butonlarını doğrulamak için) kullanılmalıdır.
+- **User Testing Done:** N
 
-**Last working item**: 
-    - Last item agent was working: Admin Risk Orchestrator hard-guard katmanı için yeni veritabanı tablolarının (, , ,  vb.)  dosyasına eklenmesi.
-    - Status: IN PROGRESS
-    - Agent Testing Done: N
-    - Which testing method agent to use? Hem backend hem frontend için  kullanılmalıdır (Alembic migration oluşturulup backend API'leri ve UI modülleri yazıldıktan sonra).
-    - User Testing Done: N
-
-**All Pending/In progress Issue list**: 
-  Issue 1: Alembic Migration Eksikliği (Risk Orchestrator) (P0)
-     - Attempted fixes: Yeni modeller eklendi ancak migration komutu henüz çalıştırılmadı.
-     - Next debug checklist: FAILED: No 'script_location' key found in configuration. çalıştırılmalı ve FAILED: No 'script_location' key found in configuration. yapılmalı.
-     - Why fix this issue and what will be achieved with the fix? Veritabanı tabloları oluşmadan backend endpoint'leri 500 hatası verecektir.
-     - Status: NOT STARTED
+### All Pending/In progress Issue list
+  - **Issue 1: Deploy Block Enforcement Middleware (P0) (HIGHEST PRIORITY)**
+     - Attempted fixes: Yok, sadece  incelendi.
+     - Next debug checklist:  veya  içerisine, Gate state'i NO_GO ise deploy/live operasyon (MOCK->LIVE) uçlarını 403/400 ile kestiğinden emin olunacak bir Dependency/Middleware yazılması.
+     - Why fix this issue and what will be achieved with the fix? Kullanıcının temel şartıdır; sistem fail durumundayken hiçbir kod veya sistem canlıya alınamamalıdır.
+     - Status: IN PROGRESS
      - Is recurring issue? N
      - Should Test frontend/backend/both after fix? Backend
      - Blocked on other issue: None
 
-**In progress Task List**: 
-  Task 1: Admin Risk Orchestrator Risk Enforcement + Intervention System (P0)
-     - Where to resume: 'ye eklenen modeller için migration oluştur,  dosyasına Pydantic şemalarını ekle,  içindeki risk orchestrator endpoint'lerini genişlet ve son olarak  sayfasını yeni layout ile (Policy, Control Actions, Exposure, Running Trades vb.) baştan yaz.
-     - What will be achieved with this? Sistem, yanlış konfigürasyonlara ve canlı trading risklerine karşı tam korumalı, audit edilebilen bir hard-guard noktası kazanacak.
-     - Status: IN PROGRESS
-     - Should Test frontend/backend/both after fix? Both
-     - Blocked on something: Veritabanı migration işlemi
+  - **Issue 2: GO_WITH_OVERRIDE Engine ve Expiry Logiği (P0)**
+     - Attempted fixes: Yok.
+     - Next debug checklist: Backend'de aktif override'ın bitiş süresini kontrol eden (max 30 dk) mantık kurulmalı. Enum listesine uygun validation yapılmalı ve revoke mekanizması endpoint'i yazılmalı.
+     - Why fix this issue and what will be achieved with the fix? Acil durum bypass'ının sonsuza kadar açık kalmasını engeller.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? Backend
 
-**Upcoming and Future Tasks**
+### In progress Task List
+  - **Task 1: Production Gate Control Panel Backend Uçlarının Hazırlanması (P0)**
+     - Where to resume:  veya  içerisinde single/all rerun endpointleri, detaylı check fail reason dönecek endpoint'ler, override history ve MOCK->LIVE transition endpointlerinin yazılması.
+     - What will be achieved with this? UI'ın kullanacağı tüm operasyonel write-capable yapı hazır olacak.
+     - Status: IN PROGRESS
+     - Should Test frontend/backend/both after fix? Backend
+     - Blocked on something: None
+
+  - **Task 2: AdminExecutionReadinessPage.jsx Revizyonu (P0)**
+     - Where to resume:  dosyasının, sadece durumu gösteren bir ekrandan çıkarılıp, GO/NO_GO butonları, Override Timer, Pre-deploy checklist ve Rerun Action butonlarını barındıran kontrol paneline dönüştürülmesi.
+     - What will be achieved with this? Kullanıcı Readiness yerine aksiyon alabilir bir gate paneline sahip olacak.
+     - Status: NOT STARTED
+     - Should Test frontend/backend/both after fix? Frontend
+     - Blocked on something: Task 1 (Backend Uçları)
+
+### Upcoming and Future Tasks
     Upcoming Tasks:
-    - P1: Risk Orchestrator için Exposure override, Auto-trigger log, Alert paneli, Revert/rollback.
-    - P2: Auto-refresh, UX polish, Gelişmiş analytics bağlantıları.
+    - P1: Auto-refresh mechanism (interval) for readiness checks. (Frontend)
+    - P1: Export readiness report (JSON) directly from UI. (Frontend/Backend)
+    - P1: Fail alert sistemi ve Exchange detaylı health view gösterimi.
     
     Future Tasks:
-    - P2: Predictive analytics, ML entegrasyonu, advanced forecasting.
-    - P2: Saved filter presets, grouped chain summary UI, rejected→pending reopen.
-    - P2:  (Redis snapshot) dosya boyutu yönetimi ve temizliği (Kullanıcı 3. konuya sonra bakarız diyerek beklemeye aldı).
+    - P2: Check history & trend visualization.
+    - P2: Override analytics and Before/after state comparisons.
 
-**Completed work in this session**
-- Playbook Governance  500 error fix (migration eklendi) (DONE)
-- P1 Timeline Chain View (Causal chain, broken link tespiti, seed izolasyonu) (DONE)
-- P1 Production Readiness Lock (Playbook state machine, rollback, retry, robust export snapshot audit) (DONE)
-- P0 Execution Alerts Real Webhook Delivery (Slack, Retry/Backoff, Dead Letter queue) (DONE)
-- FINAL BLOCKER - RBAC Closure (Apply/Execute için  zorunluluğu backend ve UI'da sağlandı) (DONE)
-- Final Sprint (State Diagram interactivity, Alert Intelligence, Timeout Analytics, Role-based Export Masking) (DONE)
-- Top Signals API  500 error hotfix (DONE)
-- Workflow secret scan fix (Hardcoded test şifreleri temizlendi) (DONE)
+### Completed work in this session
+- **Risk Orchestrator Final Hardening (DONE)**: Invalid transition reject, detail view read-ack (okudum) zorunluluğu, test kanıtlı stale detail_version engeli. 
+- **Immediate Execute ve Approve Ayrımı (DONE)**: Approve yalnızca listeyi onaylayıp 'APPROVED' yapar; Execute ise 'RELEASED' state'ine taşır. High-risk akışlarda double-confirmation eklendi.
+- **PROD_READINESS_GATE.md Kapanışı (DONE)**: 39/39 fresh test runs yapılarak fail archive klasörleri temizlendi ve go/no-go dokümanı oluşturuldu.
+- **Alert UI Entegrasyonu (DONE)**: Sistem hata alarm eşiklerinin DB üzerinden yönetilmesi ve arayüzde unread/read akışının çalışır hale gelmesi sağlandı.
 
-**Earlier issues found/mentioned but not fixed**
-None. Kullanıcının belirttiği tüm anlık hata raporları (top signals 500, test pass/fail) anında çözüldü.
+### Earlier issues found/mentioned but not fixed
+*Tüm eski Execution Queue eksikleri kapatılmış olup, sadece kullanıcının son gönderdiği yeni Execution Readiness - Gate Dönüşümü eksiktir.*
 
-**Known issue recurrence from previous fork**
+### Known issue recurrence from previous fork
   - Issue recurrence in previous fork: None
   - Recurrence count: 0
   - Status: RESOLVED
 
-**Code Architecture**
+### Code Architecture
 
 
-**Key Technical Concepts**
-- **Hard-Guard Risk Motoru:** Risk konfigürasyonu apply edilmeden önce zorunlu simülasyon (what-if) gerektirir.
-- **Playbook State Machine:**  ->  ->  ->  / . Fail durumunda , execute durumunda  yapılabilir.
-- **Role-Based Export Masking:** Admin kullanıcılar correlation_id ve trace detaylarını tam görürken, user rolündekiler kısmi veya maskelenmiş veri görür (Response layer'da maskelenir).
-- **Delivery State Machine:** Webhook alertleri , , , ,  statülerinden geçer. Üstel backoff ile retry mekanizması bulunur.
+### Key Technical Concepts
+- **Strict Gateway Middleware:** Production release akışını kilitleyen, Tüm checkler PASS değilse API seviyesinde 403 at konsepti.
+- **Time-bound Overrides:** Süre bazlı yetkilendirme (override_expiry).
+- **Immutable Audit Trail:** Karar motorundaki her Go, Override, Revoke veya Mode Change eyleminin değiştirilemez logu.
 
-**key DB schema**
-  - Yeni eklenen tablolar (Migration bekleniyor):
-    - 
-    - 
-    - 
-    - 
-    - 
-    - 
+### key DB schema
+  - : User intent verileri, state takibi.
+  - : Queue veya Reject spike metrik alarmları.
+  - *Gate Config:* Çoğunlukla  (metadata_json içerisinde  olarak tutuluyor) üzerinden sağlanıyor.
 
-**changes in tech stack**
-  - None.
+### changes in tech stack
+  - Yok. Redis fallback loglarda in-memory'ye düşüyor uyarısı alınmıştır ancak sistem DB üzerinden operasyonuna devam edebiliyor.
 
-**All files of reference** 
-  -  (Yeni RO modelleri eklendi)
-  -  (RO endpoint'leri burada geliştirilecek)
-  -  (Modellere uygun Pydantic şemaları yazılacak)
-  -  (Komple baştan layout yapılacak)
-  -  &  (Aksiyon entegrasyonu için incelenmeli)
+### All files of reference
+  -  (Yeni middleware buraya veya dependency olarak eklenecek)
+  - 
+  -  (Gate ve mode switch kontrolü)
+  -  (Baştan yazılacak)
+  -  (Enum reason, Request ID vb eklenecek)
 
-**Areas that need refactoring**: 
- dosyası, kullanıcının talep ettiği gibi tek parça panel olmaktan çıkarılıp, sticky status bar, policy management, critical actions, exposure control gibi çoklu modüller içeren kompleks bir panele refactor edilecektir.
+### Areas that need refactoring
+- : Şu an read-only'dir. Tasarımı ve state yönetimi kontrol odaklı (Gate Control) olacak şekilde refactor edilmelidir.
 
-**key api endpoints**
-  - RO için eklenecek/genişletilecek endpointler: , ,  vs.
-  - Mevcut Playbook Execution: 
-  - Mevcut Alert Delivery: 
+### key api endpoints
+  - 
+  - 
+  -  (Revize edilecek)
+  - *To be created:* , 
 
-**Critical Info for New Agent** 
-- **ZORUNLU KURALLAR:** Risk Orchestrator policy değişikliğinden önce simülasyon (what-if) *ZORUNLUDUR*. Kritik işlemler loglanmalı, reason note alınmalı ve actor işlenmelidir. Apply without simulation kapalı olmalıdır.
-- **UI GÜVENLİĞİ:** Execute ve Apply işlemleri  dışındaki kullanıcılara disabled durumdadır ve tooltip ile nedeni açıklanmaktadır. Bu davranış Risk Orchestrator modülünde de kritik eylemler için benimsenmelidir.
-- Ajan en son  dosyasına DB modellerini  ile eklemiş fakat Alembic migration çalıştırmamıştır. İşe migration alarak ve Pydantic modellerini güncelleyerek başlayın.
+### Critical Info for New Agent
+- **Kullanıcının En Katı Kuralı:** Sistem  durumundayken API hiçbir deployment (MOCK->LIVE) aksiyonuna izin **vermemelidir.** Endpoint bazlı koruma yazılacaktır.
+- Override için belirlenen Enum limitlidir: , , , . Text Reason ve Expiry (**max 30 dk**) zorunludur.
+- Checklist UI üzerinde tam pass olmadan GO butonu asla aktif olmayacaktır.
+- Geliştirmeler sonrası test kanıtları üretilmelidir (Block testi, expiry testi, revoke testi vb.)
 
-**documents and test reports created in this job** 
-  -  ile  arası (Backend & UI Playbook, RBAC, Alerts testleri)
-  -  (Secret leak guard raporu)
+### documents and test reports created in this job
+  - 
+  - 
+  - 
+  -  (Fail archive directory)
 
-**Last 10 User Messages and any pending HUMAN messages** 
-1. Kullanıcı Playbook Safe Execution ve RBAC için P0 Final görev emrini verdi. (Yapıldı)
-2. Kullanıcı Execution Alerts: Mocktan Real Webhook Deliveryye geçiş görevini verdi. (Yapıldı)
-3. Kullanıcı FINAL BLOCKER - RBAC Closure diyerek approve/execute için  backend/frontend enforce edilmesini istedi. (Yapıldı)
-4. Kullanıcı FINAL SPRINT (State diagram, Alert grouping, Timeout analizi, Role-based masking) görevini verdi. (Yapıldı)
-5. Kullanıcı 3 adet fix istedi (Top signals 500, Workflow secret fail, RDB size). İlk ikisini yapıp üçüncüsünü bekletme talimatı verdi. (Yapıldı)
-6. Kullanıcı en son: **Admin Risk Orchestrator ekranının Risk Enforcement + Intervention System olarak yeniden tasarlanması** görevini verdi. İçinde Policy, Exposure, Supervisor, Rejects, Simulation ve Audit modülleri bulunuyor. (Ajan DB tablolarını ekleyip durdu).
+### Last 10 User Messages and any pending HUMAN messages
+1. User: EK GÖREV EMRİ ile prod onay sertleştirmesi ve testlerin yapılması talimatını verdi.
+2. Agent:  ile karar seçenekleri sundu.
+3. User: C, A, A, A, A (Approve/Execute ayrı, flag tabanlı, admin config) seçeneklerini bağlayıcı notlarla kitledi.
+4. Agent: Geliştirmeleri tamamlayıp testledi ve işi bitirdi.
+5. User: SON GÖREV EMRİ - Production Readiness Finalizasyonu talimatını verdi. Eski hatalı testlerin arşive taşınmasını ve fresh E2E onay alınmasını istedi.
+6. Agent: Seçenekleri sundu.
+7. User: A, A, B, A diyerek fail arşivlemesini ve PROD_READINESS_GATE.md üretimini talep etti.
+8. Agent: Testleri yapıp, dokümanı hazırlayıp success ile işi kapattı.
+9. User: **🚨 EXECUTION READINESS → PRODUCTION GATE DÖNÜŞÜM EMRİ**. Execution Readiness sayfasını read-only formundan çıkartıp zorlayıcı bir Gate haline getirme emrini verdi (Son mesaj - üzerinde çalışılacak iş).
+10. Agent:  kullandı.
+11. User (Pending): Katı kuralları (Deploy block middleware, 30 min expiry, enum reasons, JSON export, tam checklist onayı) teyit ederek beklememeyi ve derhal kodlamayı emretti. (Ajan analizde kaldı)
 
-**Project Health Check:**
-- Broken: Yok (Tüm 500 hataları çözüldü).
-- Mocked: Slack webhook (Gerçek URL yok, mock modunda). Binance Futures.
+### Project Health Check:
+- Broken: Yok (39/39 Execution Queue testleri başarılı). Ancak Production Gate modülü henüz oluşturulmadı.
+- Mocked: Slack Webhook, Binance. (In-memory cache fallback kullanıyor).
 
-**3rd Party Integrations** 
-- Slack Webhook (MOCKED / Provider Agnostic Delivery yapısı kuruldu)
+### 3rd Party Integrations
+- Slack Webhook (MOCKED / Provider Agnostic)
 - Binance (MOCKED)
 
-**Testing status**
-  - Testing agent used after significant changes: YES (Tüm kritik aşamalarda iterasyon 102'ye kadar tam test yapıldı)
+### Testing status
+  - Testing agent used after significant changes: YES (Önceki tasklarda kullanıldı. Production Gate kodlaması yapılmadığından henüz bu modülde kullanılmadı).
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: , ,  vs.
-  - Known regressions: None.
+  - Test files created: ,  vb.
+  - Known regressions: Yok.
 
-**Credentials to test flow:**
+### Credentials to test flow:
 - Super Admin:  / 
-- Admin (User):  / 
 
-**What agent forgot to execute**
-Ajan, Risk Orchestrator modülü için  dosyasına SQLAlchemy modellerini ekledi ancak iş oturumu sonlandığı için **Alembic migration oluşturmayı, Pydantic şemalarını (schemas.py) yazmayı ve API endpointlerini kurgulamayı** yapamadı. Yeni ajanın öncelikle migration (FAILED: No 'script_location' key found in configuration.) alarak işe başlaması gerekmektedir.</analysis>
+### What agent forgot to execute
+Ajan en son kullanıcının verdiği Execution Readiness - Gate Dönüşümü (Message 784, 787) görevinin detaylarını ve dosyalarını analiz etmeye başlamış ancak kod implementasyonunu (Middleware, Override endpointleri, React refactoring vb.) **henüz gerçekleştirmemiştir.** Yeni ajan direkt olarak P0 listesindeki Deploy Block Enforcement ve Override/Mode Change yapısını kodlamaya başlamalıdır.</analysis>

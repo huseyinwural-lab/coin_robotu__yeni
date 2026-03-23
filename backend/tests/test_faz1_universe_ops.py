@@ -9,7 +9,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://risk-orchestrator-p0.preview.emergentagent.com"
+    BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com"
 
 # Test credentials
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"

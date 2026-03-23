@@ -10,7 +10,7 @@ import time
 from typing import Dict, Any, List
 
 # Test Configuration
-BASE_URL = "https://risk-orchestrator-p0.preview.emergentagent.com"
+BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com"
 SUPER_ADMIN_CREDS = {
     "email": "canary.admin@platform.local",
     "password": "CanaryAdmin123!"

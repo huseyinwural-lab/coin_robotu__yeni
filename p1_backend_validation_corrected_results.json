@@ -8,7 +8,7 @@
   "test_results": [
     {
       "test_name": "Heavy Chain Timeline",
-      "endpoint": "https://risk-orchestrator-p0.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
+      "endpoint": "https://deploy-blocker-6.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
       "status_code": 200,
       "success": true,
       "details": {
@@ -38,7 +38,7 @@
     },
     {
       "test_name": "Broken Chain Timeline",
-      "endpoint": "https://risk-orchestrator-p0.preview.emergentagent.com/api/admin/strategy/timeline/p1-broken-chain-001?window=7d&strategy_id=seed_strategy",
+      "endpoint": "https://deploy-blocker-6.preview.emergentagent.com/api/admin/strategy/timeline/p1-broken-chain-001?window=7d&strategy_id=seed_strategy",
       "status_code": 200,
       "success": true,
       "details": {
@@ -59,7 +59,7 @@
     },
     {
       "test_name": "Role Parity",
-      "endpoint": "https://risk-orchestrator-p0.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
+      "endpoint": "https://deploy-blocker-6.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
       "success": true,
       "details": {
         "super_admin_status": 200,
@@ -108,7 +108,7 @@
     },
     {
       "test_name": "Impact Readability",
-      "endpoint": "https://risk-orchestrator-p0.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
+      "endpoint": "https://deploy-blocker-6.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
       "success": true,
       "details": {
         "nodes_count": 561,
@@ -140,7 +140,7 @@
     },
     {
       "test_name": "Preflight Endpoint",
-      "endpoint": "https://risk-orchestrator-p0.preview.emergentagent.com/api/admin-phase3/incident-snapshots/playbook/preflight",
+      "endpoint": "https://deploy-blocker-6.preview.emergentagent.com/api/admin-phase3/incident-snapshots/playbook/preflight",
       "status_code": 200,
       "success": true,
       "details": {

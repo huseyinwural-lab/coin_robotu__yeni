@@ -7,7 +7,7 @@ import requests
 import json
 
 def debug_strategy_structure():
-    BASE_URL = "https://risk-orchestrator-p0.preview.emergentagent.com"
+    BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com"
     
     session = requests.Session()
     session.timeout = 15

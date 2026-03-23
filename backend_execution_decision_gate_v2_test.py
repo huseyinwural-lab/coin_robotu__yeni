@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Execution Decision Gate v2 Backend Validation
-Base: https://risk-orchestrator-p0.preview.emergentagent.com/api
+Base: https://deploy-blocker-6.preview.emergentagent.com/api
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test Requirements:
@@ -21,7 +21,7 @@ from typing import Dict, Any, List, Optional
 
 class ExecutionDecisionGateV2Tester:
     def __init__(self):
-        self.base_url = "https://risk-orchestrator-p0.preview.emergentagent.com/api"
+        self.base_url = "https://deploy-blocker-6.preview.emergentagent.com/api"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.session = requests.Session()

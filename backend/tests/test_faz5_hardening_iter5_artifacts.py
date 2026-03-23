@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://risk-orchestrator-p0.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://deploy-blocker-6.preview.emergentagent.com").rstrip("/")
 EXPORT_DIR = Path("/app/backend/exports")
 MANIFEST_PATH = EXPORT_DIR / "artifact_manifest.json"
 

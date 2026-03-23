@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Scanner Anomaly Audit Endpoint Validation
-Target: https://risk-orchestrator-p0.preview.emergentagent.com
+Target: https://deploy-blocker-6.preview.emergentagent.com
 Tests: User login, POST /api/user/scanner/runtime/anomaly-event, validation tests, health check
 """
 
@@ -20,7 +20,7 @@ def test_scanner_anomaly_audit():
     4) Optional sanity: /api/health still 200
     """
     
-    BASE_URL = "https://risk-orchestrator-p0.preview.emergentagent.com"
+    BASE_URL = "https://deploy-blocker-6.preview.emergentagent.com"
     USER_EMAIL = "canary_1774010877@example.com"
     USER_PASSWORD = "TestPass123!"
     

@@ -13,7 +13,7 @@ import re
 
 def test_ui_validation():
     """Perform concise UI validation"""
-    url = "https://risk-orchestrator-p0.preview.emergentagent.com"
+    url = "https://deploy-blocker-6.preview.emergentagent.com"
     
     try:
         # Get the landing page
