@@ -1,4 +1,73 @@
 {
-  "schema_version": "1.1",
-  "artifacts": []
+  "manifest_version": "1.0",
+  "generated_at": "2026-03-23T23:01:58.828327+00:00",
+  "generated_from_commit": "6b27c365a735cca0427f72706f0dd69d8536bd39",
+  "artifacts": [
+    {
+      "path": "/test_reports/production_gate_p1_evidence.md",
+      "absolute_path": "/app/test_reports/production_gate_p1_evidence.md",
+      "type": "markdown",
+      "description": "P1 evidence closure summary with mandatory artefact checklist",
+      "commit_hash": "6b27c365a735cca0427f72706f0dd69d8536bd39",
+      "timestamp": "2026-03-23T23:01:58.828327+00:00",
+      "exists": true,
+      "size_bytes": 1790,
+      "chain_position": 0,
+      "prev_chain_hash": "GENESIS",
+      "chain_hash": "901131d838b17aac0f7885b81e03cbdc9f5157a00343d30ab22083685ed1416a"
+    },
+    {
+      "path": "/test_reports/production_gate_p1_endpoint_state_evidence.json",
+      "absolute_path": "/app/test_reports/production_gate_p1_endpoint_state_evidence.json",
+      "type": "json",
+      "description": "Detailed endpoint/state transition proof with request-response and before-after states",
+      "commit_hash": "6b27c365a735cca0427f72706f0dd69d8536bd39",
+      "timestamp": "2026-03-23T23:01:58.828327+00:00",
+      "exists": true,
+      "size_bytes": 122485,
+      "chain_position": 1,
+      "prev_chain_hash": "901131d838b17aac0f7885b81e03cbdc9f5157a00343d30ab22083685ed1416a",
+      "chain_hash": "d13a1ef5647de11588434788d05850f518f63db5f35458dad22f548c2dd03825"
+    },
+    {
+      "path": "/test_reports/production_gate_p1_smoke_after_login.jpeg",
+      "absolute_path": "/app/test_reports/production_gate_p1_smoke_after_login.jpeg",
+      "type": "image/jpeg",
+      "description": "Composite smoke screenshot: NO_GO and GO_WITH_OVERRIDE snapshots with banners",
+      "commit_hash": "6b27c365a735cca0427f72706f0dd69d8536bd39",
+      "timestamp": "2026-03-23T23:01:58.828327+00:00",
+      "exists": true,
+      "size_bytes": 535727,
+      "chain_position": 2,
+      "prev_chain_hash": "d13a1ef5647de11588434788d05850f518f63db5f35458dad22f548c2dd03825",
+      "chain_hash": "8b6f0d3fd1ef46df108a334fa84a2166200fad701294780407e5ef184efb2114"
+    },
+    {
+      "path": "/test_reports/production_gate_p1_backend_pytest.txt",
+      "absolute_path": "/app/test_reports/production_gate_p1_backend_pytest.txt",
+      "type": "text",
+      "description": "Raw backend pytest output with test names and final pass/fail counts",
+      "commit_hash": "6b27c365a735cca0427f72706f0dd69d8536bd39",
+      "timestamp": "2026-03-23T23:01:58.828327+00:00",
+      "exists": true,
+      "size_bytes": 3776,
+      "chain_position": 3,
+      "prev_chain_hash": "8b6f0d3fd1ef46df108a334fa84a2166200fad701294780407e5ef184efb2114",
+      "chain_hash": "9c874bd4606c83139611a26ff8ad0cb5b39dcf6c3e299a4e33b4d6e3223070a7"
+    },
+    {
+      "path": "/test_reports/iteration_113.json",
+      "absolute_path": "/app/test_reports/iteration_113.json",
+      "type": "json",
+      "description": "Independent iteration report with backend/frontend scenario results",
+      "commit_hash": "6b27c365a735cca0427f72706f0dd69d8536bd39",
+      "timestamp": "2026-03-23T23:01:58.828327+00:00",
+      "exists": true,
+      "size_bytes": 8270,
+      "chain_position": 4,
+      "prev_chain_hash": "9c874bd4606c83139611a26ff8ad0cb5b39dcf6c3e299a4e33b4d6e3223070a7",
+      "chain_hash": "042eb35d8b39e620d92cd73c58b399d955a3d034fe2778097b9f4f4a5121fb55"
+    }
+  ],
+  "schema_version": "1.1"
 }

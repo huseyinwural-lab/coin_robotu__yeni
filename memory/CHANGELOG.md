@@ -2,6 +2,9 @@
 
 ## 2026-03-23 (P1 Closure)
 ### Production Gate Operational Visibility & Evidence
+- Final evidence-chain manifest eklendi: `/app/backend/exports/artifact_manifest.json`.
+- Smoke artefact tek dosyada NO_GO + GO_WITH_OVERRIDE state snapshotlarını içerecek şekilde birleşik üretildi.
+- Endpoint/state evidence JSON request/response + state_before/state_after zorunlu formatına güncellendi.
 - Evidence artefact seti eklendi:
   - `/app/test_reports/production_gate_p1_backend_pytest.txt`
   - `/app/test_reports/production_gate_p1_endpoint_state_evidence.json`

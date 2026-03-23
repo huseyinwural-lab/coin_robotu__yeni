@@ -1,5 +1,11 @@
 ## 2026-03-23 — Production Gate P1 Zorunlu Kapanış (Tamamlandı)
 
+### Evidence Gap Finalizasyonu (Denetlenebilir Kanıt Zinciri)
+- Artefact manifest eklendi: `/app/backend/exports/artifact_manifest.json`
+- Manifest alanları doğrulandı: `path, type, description, commit_hash, timestamp` (tüm zorunlu artefact’lar bağlı)
+- Endpoint/state evidence JSON, request/response + state_before/state_after formatına yükseltildi.
+- Smoke artefact birleşik hale getirildi: NO_GO ve GO_WITH_OVERRIDE durumları aynı kanıt dosyasında gösterildi.
+
 ### P1 Kapsamında Kapatılan Maddeler
 1. **Evidence Gap** kapatıldı:
    - `/app/test_reports/production_gate_p1_backend_pytest.txt`
