@@ -17,11 +17,18 @@ import pytest
 import requests
 import json
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://hard-guard-layer.preview.emergentagent.com")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 
 # Test credentials
-SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
-SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
+SUPER_ADMIN_EMAIL = os.environ.get("BACKEND_TEST_SUPER_ADMIN_EMAIL", "")
+SUPER_ADMIN_PASSWORD = os.environ.get("BACKEND_TEST_SUPER_ADMIN_PASSWORD", "")
+
+INTEGRATION_TEST_BLOCKED = not BASE_URL or not SUPER_ADMIN_EMAIL or not SUPER_ADMIN_PASSWORD
+
+pytestmark = pytest.mark.skipif(
+    INTEGRATION_TEST_BLOCKED,
+    reason="Integration testleri için REACT_APP_BACKEND_URL ve BACKEND_TEST_SUPER_ADMIN_* env gereklidir.",
+)
 
 
 @pytest.fixture(scope="module")
@@ -162,7 +169,7 @@ class TestApprovalQueueOwnership:
         
         # All items should have assigned_to = None
         for item in data:
-            assert item.get("assigned_to") is None, f"Unassigned scope should only return items with assigned_to=None"
+            assert item.get("assigned_to") is None, "Unassigned scope should only return items with assigned_to=None"
         
         print(f"✓ Queue list (scope=unassigned): {len(data)} items")
 

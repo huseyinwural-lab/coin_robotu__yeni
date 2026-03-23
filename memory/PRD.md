@@ -1,3 +1,18 @@
+## 2026-03-23 — Hard-Guard Final Closure (Ownership + Export) ✅
+
+### Kapatılan son boşluklar
+- **Decision Trace Export** tamamlandı (backend endpoint + UI butonları):
+  - `GET /policy/decision-traces/export?export_format=json|csv`
+  - Doğru `Content-Type` + `Content-Disposition` ile dosya indirme
+- **CRITICAL ownerless guard** güçlendirildi:
+  - Auto-assign fallback ile kritik queue item’ları ownersız bırakılmıyor
+  - Over-capacity kritik assignment durumunda bottleneck alert üretiliyor
+- **Notification standard payload** eventlerde aynı formatla korunuyor (`request_id`, `risk_score`, `classification`, `actor`, `reason`, `link_to_ui`).
+
+### Doğrulama
+- Testing Agent `iteration_106`: backend **19/19 pass**, frontend sekmeler + export + intelligence + control tower pass.
+- Ek self-test: export JSON/CSV dosya indirme başlıkları ve queue endpointleri doğrulandı.
+
 ## 2026-03-23 — Approval Orchestration + Escalation + Decision Intelligence Layer ✅
 
 ### Uygulanan kapsam (tek bağlı pipeline)
