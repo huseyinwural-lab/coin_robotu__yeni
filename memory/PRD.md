@@ -1,3 +1,55 @@
+## 2026-03-23 — Execution Queue → Production-Grade Decision Gate (P0→P1→P2) ✅
+
+### Uygulanan bağlayıcı seçimler
+- Sıra: **P0 tamamlandı + test**, ardından **P1**, ardından **P2**
+- Karar kilidi: Drawer açılmadan + `okudum` onayı olmadan approve/reject kapalı
+- Queue control: Pause/Resume/Clear sadece `super_admin`
+- Bulk limit: tek seferde max **20** intent
+- Bildirim scope: P2’de sadece uygulama içi alert (system-alert)
+
+### P0 (Prod Blocker) — Tamamlananlar
+- **Decision enforcement:** approve/reject/cancel/retry reason zorunlu (BE 400), FE buton disable kuralları eklendi.
+- **High-risk safety:** severity + reason breakdown + tooltip payload; high-risk için double confirmation zorunlu.
+- **Override control:** override/force execute yalnız super_admin; immutable audit kaydı eklendi.
+- **Intent detail contract:** `/admin/execution-queue/{id}/detail` (order_preview, normalized_payload, metadata, risk_payload, gate_decision, expected_impact).
+- **Audit visibility:** `/admin/execution-queue/{id}/history` endpointi ve UI history paneli eklendi.
+- **State machine strictness:** explicit transition guard (invalid transition hard reject), admin cancel endpointi eklendi.
+- **Stale/race güvenliği:** detail_version kontrolü, stale version reject, row-level lock + deterministic transition.
+- **Reliability:** auto-refresh, stale indicator, `locked/failed/retryable` operational status gösterimi.
+
+### P1 — Tamamlananlar
+- **Bulk operations:** bulk approve/reject/cancel (`max 20`), high-risk bulk extra confirm guard.
+- **Queue controls:** pause/resume/clear global kontrol endpointleri + immutable audit.
+- **Search/filter/sort:** status/risk/type/search/sort parametreleri backend + UI’da aktif.
+- **Reject analytics:** distribution + trend + fix guidance UI paneli.
+- **Manual edit:** intent edit + re-validation + diff + audit endpointi eklendi.
+
+### P2 — Tamamlananlar
+- **Decision support:** expected impact (exposure_before/after, delta, risk_delta, pnl_estimate) detail payload’a eklendi.
+- **In-app alerts:** backlog/high-risk spike/reject spike için system-alert tetik yolları eklendi.
+- **Observability:** `/admin/execution-queue/observability` (approval latency, operator activity, override usage, queue state).
+
+### Değişen ana dosyalar
+- Backend:
+  - `/app/backend/services/execution_intent_service.py`
+  - `/app/backend/routers/admin_execution.py`
+  - `/app/backend/schemas.py`
+- Frontend:
+  - `/app/frontend/src/pages/AdminExecutionQueuePage.jsx`
+- Tests:
+  - `/app/backend/tests/test_execution_decision_gate_closure.py`
+  - `/app/backend/tests/test_execution_decision_gate_p0_p1_p2.py`
+  - `/app/backend/tests/_execution_action_helpers.py`
+
+### Test sonucu
+- Local: `pytest -q test_execution_decision_gate_closure.py test_execution_decision_gate_p0_p1_p2.py` → **39 passed**
+- Testing agent: `/app/test_reports/iteration_109.json` → backend+frontend **PASS**, kritik bug yok
+- Frontend automation: Decision Gate UI checklist **PASS**
+- Backend deep test: 6/6 kontrol **PASS**
+
+### Operasyon notu
+- Slack Webhook ve Binance entegrasyonları **MOCKED** kalmaktadır.
+
 ## 2026-03-23 — Final Hardening / Determinism / Production Readiness Closure ✅
 
 ### Kullanıcı seçimleri (onaylanan)
