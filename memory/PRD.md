@@ -1,3 +1,61 @@
+## 2026-03-23 — FINAL: Incident Snapshot Diff + Anomaly UI Tamamlama ✅
+
+### Kilitlenen kararlar (uygulandı)
+- Yeni endpoint: `POST /api/admin-phase3/incident-snapshots/diff`
+- Mevcut endpoint korundu: `POST /api/admin-phase3/incident-snapshots/export`
+- Scope uyumluluğu strict: mismatch => `422 incompatible_scope`
+- Thresholdlar:
+  - `failed_events > 50%` => `CRITICAL_RISK`
+  - `dead_letter > 30%` => `HIGH_RISK`
+  - `manual_actions > 0` => `OPERATOR_INTERVENTION`
+- `anomaly_notes` formatı: **string[]**
+
+### Backend
+- `/incident-snapshots/diff` response standardı sağlandı:
+  - `status`
+  - `trace_id`
+  - `message`
+  - `state_snapshot`
+- Diff üretimi standartlaştırıldı (ortak helper):
+  - `scope_a`, `scope_b`
+  - `counts` (`events_delta`, `failed_events_delta`, `dead_letter_delta`, `manual_actions_delta`, vb.)
+  - `percentage_change`
+  - `anomaly_notes: string[]`
+- Compare export ZIP içeriği:
+  - `diff.json`
+  - `diff_summary.txt`
+- Compare/export aksiyonlarında audit log üretimi doğrulandı:
+  - `incident_snapshot_diff_preview`
+  - `incident_snapshot_export`
+
+### Frontend (Execution States)
+- Export panel standardizasyonu:
+  - `Correlation ID` label + `enter correlation id` placeholder
+  - Scope/Compare alanları ortak stil ve tutarlı etiket
+- Compare mode gerçek akış:
+  - Compare ON => ikinci scope alanları aktif
+  - Diff preview endpoint ile panel dolumu
+- Diff Summary Panel eklendi (ekrana direkt):
+  - `FAILED EVENTS`, `DEAD LETTER`, `MANUAL ACTIONS`
+  - renk kodları: kırmızı/yeşil/sarı
+- Export Preview eklendi:
+  - `~ X events, Y failures export edilecek`
+
+### Test / doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_89.json`
+  - Backend: **100% (15/15 PASS)**
+  - Frontend: **100% PASS**
+- Kritik kontroller PASS:
+  - scope mismatch `422`
+  - compare ON/OFF davranışı
+  - diff.json formatı
+  - anomaly threshold kuralları
+  - export preview + ui standardizasyonu
+
+### Not
+- Slack webhook delivery **MOCKED**.
+- Binance Futures execution **MOCKED**.
+
 ## 2026-03-23 — Diff Anomali Notları (Dar Sprint) ✅
 
 ### Sprint kararı
