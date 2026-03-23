@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -62,9 +62,12 @@ const buildRejectQuery = (filters) => {
   return params.toString();
 };
 
-const buildQueueQuery = ({ scope, state, criticalFirst }) => {
+const QUEUE_PAGE_LIMIT = 20;
+
+const buildQueueQuery = ({ scope, state, criticalFirst, page }) => {
   const params = new URLSearchParams();
-  params.set("limit", "50");
+  params.set("limit", String(QUEUE_PAGE_LIMIT));
+  params.set("page", String(page || 1));
   params.set("scope", scope);
   params.set("critical_first", criticalFirst ? "true" : "false");
   if (state) params.set("state", state);
@@ -118,13 +121,30 @@ export const AdminRiskOrchestratorPage = () => {
   const [queueScope, setQueueScope] = useState("all");
   const [queueState, setQueueState] = useState("pending");
   const [criticalFirst, setCriticalFirst] = useState(true);
+  const [queuePage, setQueuePage] = useState(1);
+  const [queueHasNextPage, setQueueHasNextPage] = useState(false);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [dashboardData, setDashboardData] = useState(null);
   const [rejectInsights, setRejectInsights] = useState([]);
   const [decisionIntelligence, setDecisionIntelligence] = useState(null);
   const [sweepResult, setSweepResult] = useState(null);
+  const queueRequestSeqRef = useRef(0);
+  const initialLoadDoneRef = useRef(false);
+
+  const refreshQueue = useCallback(async () => {
+    const requestSeq = queueRequestSeqRef.current + 1;
+    queueRequestSeqRef.current = requestSeq;
+    const queueQuery = buildQueueQuery({ scope: queueScope, state: queueState, criticalFirst, page: queuePage });
+    const { data } = await apiClient.get(`/strategy-domain/admin/risk-orchestrator/policy/queue?${queueQuery}`);
+    if (requestSeq !== queueRequestSeqRef.current) {
+      return;
+    }
+    const queueItems = data || [];
+    setApprovals(queueItems);
+    setQueueHasNextPage(queueItems.length >= QUEUE_PAGE_LIMIT);
+  }, [criticalFirst, queuePage, queueScope, queueState]);
 
   const refreshCore = useCallback(async () => {
-    const queueQuery = buildQueueQuery({ scope: queueScope, state: queueState, criticalFirst });
     const [
       policyRes,
       statusRes,
@@ -134,7 +154,6 @@ export const AdminRiskOrchestratorPage = () => {
       triggerRes,
       timelineRes,
       alertsRes,
-      approvalsRes,
       tracesRes,
       dashboardRes,
       insightsRes,
@@ -147,7 +166,6 @@ export const AdminRiskOrchestratorPage = () => {
       apiClient.get("/strategy-domain/admin/risk-orchestrator/auto-trigger-logs?limit=30"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/audit/timeline?limit=40"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/alerts?limit=30"),
-      apiClient.get(`/strategy-domain/admin/risk-orchestrator/policy/queue?${queueQuery}`),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/policy/decision-traces?limit=25"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/operations/dashboard"),
       apiClient.get("/strategy-domain/admin/risk-orchestrator/rejects/insights"),
@@ -161,11 +179,10 @@ export const AdminRiskOrchestratorPage = () => {
     setAutoTriggers(triggerRes.data || []);
     setTimeline(timelineRes.data || []);
     setAlerts(alertsRes.data || []);
-    setApprovals(approvalsRes.data || []);
     setDecisionTraces(tracesRes.data || []);
     setDashboardData(dashboardRes.data || null);
     setRejectInsights(insightsRes.data?.insights || []);
-  }, [criticalFirst, queueScope, queueState]);
+  }, []);
 
   const refreshRejects = useCallback(async () => {
     const query = buildRejectQuery(rejectFilters);
@@ -176,17 +193,43 @@ export const AdminRiskOrchestratorPage = () => {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      await Promise.all([refreshCore(), refreshRejects()]);
+      await Promise.all([refreshCore(), refreshRejects(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Risk Enforcement paneli yüklenemedi");
     } finally {
       setLoading(false);
     }
-  }, [refreshCore, refreshRejects]);
+  }, [refreshCore, refreshQueue, refreshRejects]);
 
   useEffect(() => {
+    if (initialLoadDoneRef.current) return;
+    initialLoadDoneRef.current = true;
     loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    setQueuePage(1);
+  }, [queueScope, queueState, criticalFirst]);
+
+  useEffect(() => {
+    refreshQueue().catch((error) => {
+      toast.error(error?.response?.data?.detail || "Approval queue güncellenemedi");
+    });
+  }, [refreshQueue]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) return undefined;
+    const refreshIntervalMs = activeTab === "approvals" ? 12000 : activeTab === "control-tower" ? 15000 : 25000;
+    const timer = setInterval(() => {
+      if (activeTab === "approvals") {
+        refreshQueue().catch(() => null);
+      } else if (activeTab === "control-tower") {
+        refreshCore().catch(() => null);
+      }
+    }, refreshIntervalMs);
+
+    return () => clearInterval(timer);
+  }, [activeTab, autoRefreshEnabled, refreshCore, refreshQueue]);
 
   const roleBadge = useMemo(() => {
     if (isSuperAdmin) return "super_admin";
@@ -247,7 +290,7 @@ export const AdminRiskOrchestratorPage = () => {
       setApplyReason("");
       setApplyNote("");
       setDoubleConfirm(false);
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Policy apply başarısız");
     }
@@ -288,7 +331,7 @@ export const AdminRiskOrchestratorPage = () => {
       } else {
         toast.info(`Revert sonucu: ${data.status}`);
       }
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Revert apply başarısız");
     }
@@ -308,7 +351,7 @@ export const AdminRiskOrchestratorPage = () => {
       });
       toast.success("Kritik risk aksiyonu işlendi.");
       setControlReasons((prev) => ({ ...prev, [actionType]: "" }));
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Aksiyon çalıştırılamadı");
     }
@@ -327,7 +370,7 @@ export const AdminRiskOrchestratorPage = () => {
       });
       toast.success("Exposure override kaydedildi.");
       setOverrideForm(overrideSeed);
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Override oluşturulamadı");
     }
@@ -339,7 +382,7 @@ export const AdminRiskOrchestratorPage = () => {
         reason_note: "Manual deactivate",
       });
       toast.success("Override pasif hale getirildi");
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Override kapatılamadı");
     }
@@ -350,7 +393,7 @@ export const AdminRiskOrchestratorPage = () => {
       const { data } = await apiClient.post("/strategy-domain/admin/risk-orchestrator/supervisor/run");
       setSupervisor(data);
       toast.success("In-trade supervisor çalıştırıldı");
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Supervisor çalıştırılamadı");
     }
@@ -369,7 +412,7 @@ export const AdminRiskOrchestratorPage = () => {
       });
       toast.success("Pozisyon müdahalesi işlendi");
       setInterventionState((prev) => ({ ...prev, reason_note: "" }));
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Müdahale başarısız");
     }
@@ -402,7 +445,7 @@ export const AdminRiskOrchestratorPage = () => {
         toast.info("Approval request reddedildi");
       }
       setApprovalNotes((prev) => ({ ...prev, [approvalId]: "" }));
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Approval aksiyonu başarısız");
     }
@@ -416,7 +459,7 @@ export const AdminRiskOrchestratorPage = () => {
         auto_assign: autoAssign,
       });
       toast.success(autoAssign ? "Auto-assign tamamlandı" : "Manual assignment tamamlandı");
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Assignment başarısız");
     }
@@ -427,7 +470,7 @@ export const AdminRiskOrchestratorPage = () => {
       const { data } = await apiClient.post("/strategy-domain/admin/risk-orchestrator/policy/queue/sweep");
       setSweepResult(data);
       toast.success("Escalation sweep çalıştırıldı");
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Queue sweep başarısız");
     }
@@ -442,7 +485,7 @@ export const AdminRiskOrchestratorPage = () => {
       );
       setLastApplyResult(data);
       toast.success("Force apply tamamlandı");
-      await refreshCore();
+      await Promise.all([refreshCore(), refreshQueue()]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Force apply başarısız");
     }
@@ -510,6 +553,13 @@ export const AdminRiskOrchestratorPage = () => {
             </Badge>
             <Button variant="outline" onClick={loadAll} data-testid="risk-refresh-all-button">
               Yenile
+            </Button>
+            <Button
+              variant={autoRefreshEnabled ? "default" : "outline"}
+              onClick={() => setAutoRefreshEnabled((prev) => !prev)}
+              data-testid="risk-auto-refresh-toggle-button"
+            >
+              Auto Refresh: {autoRefreshEnabled ? "Açık" : "Kapalı"}
             </Button>
           </div>
         </div>
@@ -1130,6 +1180,32 @@ export const AdminRiskOrchestratorPage = () => {
               </Button>
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-2" data-testid="risk-queue-pagination-row">
+              <p className="text-xs text-slate-500" data-testid="risk-queue-page-indicator">
+                Sayfa: {queuePage} · Kayıt: {approvals.length}
+              </p>
+              <div className="flex gap-2" data-testid="risk-queue-pagination-actions">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={queuePage <= 1}
+                  onClick={() => setQueuePage((prev) => Math.max(1, prev - 1))}
+                  data-testid="risk-queue-prev-page-button"
+                >
+                  Önceki
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!queueHasNextPage}
+                  onClick={() => setQueuePage((prev) => prev + 1)}
+                  data-testid="risk-queue-next-page-button"
+                >
+                  Sonraki
+                </Button>
+              </div>
+            </div>
+
             {sweepResult && (
               <div className="rounded border p-2 text-xs" data-testid="risk-queue-sweep-result">
                 warning: {sweepResult.warning_escalations} · critical: {sweepResult.critical_escalations} · stuck: {sweepResult.stuck_detected}
@@ -1144,6 +1220,11 @@ export const AdminRiskOrchestratorPage = () => {
             </div>
 
             <div className="space-y-2" data-testid="risk-approval-queue-list">
+              {approvals.length === 0 && (
+                <div className="rounded border border-dashed p-3 text-xs text-slate-500" data-testid="risk-approval-queue-empty-state">
+                  Seçili filtrede kayıt bulunamadı.
+                </div>
+              )}
               {approvals.map((item) => (
                 <div key={item.approval_id} className="rounded border p-2 text-xs" data-testid={`risk-approval-row-${item.approval_id}`}>
                   <div className="flex items-center justify-between gap-2">
@@ -1172,6 +1253,10 @@ export const AdminRiskOrchestratorPage = () => {
                   </p>
                   <p className="text-slate-600" data-testid={`risk-approval-requested-by-${item.approval_id}`}>
                     requested_by: {item.requested_by} · assigned_to: {item.assigned_to || "-"} · second_approver: {item.second_approver_id || "-"}
+                  </p>
+                  <p className="text-slate-600" data-testid={`risk-approval-governance-${item.approval_id}`}>
+                    governance: {(item.context_payload?.governance_votes || []).length} vote · weight {item.context_payload?.governance_votes?.reduce((acc, vote) => acc + Number(vote?.weight || 0), 0) || 0}
+                    / {item.context_payload?.governance_policy?.quorum_weight || 3}
                   </p>
 
                   <div className="mt-2 grid gap-2 sm:grid-cols-2" data-testid={`risk-approval-assignment-${item.approval_id}`}>
@@ -1241,7 +1326,7 @@ export const AdminRiskOrchestratorPage = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => handleForceApply(item.approval_id)}
-                      disabled={!isSuperAdmin || !(["pending", "assigned", "expired"].includes(item.state))}
+                      disabled={!isSuperAdmin || !(["pending", "assigned"].includes(item.state))}
                       data-testid={`risk-approval-force-apply-button-${item.approval_id}`}
                     >
                       Force Apply
@@ -1355,6 +1440,12 @@ export const AdminRiskOrchestratorPage = () => {
             <div className="rounded border p-2 text-xs" data-testid="ct-override-usage">
               override_usage: {dashboardData?.override_usage?.active_count ?? "-"} / {Number(dashboardData?.override_usage?.total_notional_pct || 0).toFixed(2)}%
             </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-predictive-score">
+              predictive_score: {Number(dashboardData?.predictive_risk_signal?.predictive_score || 0).toFixed(2)}
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-governance-waiting">
+              quorum_waiting: {dashboardData?.governance?.critical_quorum_waiting ?? "-"}
+            </div>
           </CardContent>
         </Card>
 
@@ -1368,6 +1459,12 @@ export const AdminRiskOrchestratorPage = () => {
             </div>
             <div className="rounded border p-2 text-xs" data-testid="ct-throughput-json">
               <pre>{JSON.stringify(dashboardData?.approval_throughput_last_hour || {}, null, 2)}</pre>
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-predictive-signal-json">
+              <pre>{JSON.stringify(dashboardData?.predictive_risk_signal || {}, null, 2)}</pre>
+            </div>
+            <div className="rounded border p-2 text-xs" data-testid="ct-governance-progress-json">
+              <pre>{JSON.stringify(dashboardData?.governance || {}, null, 2)}</pre>
             </div>
           </CardContent>
         </Card>

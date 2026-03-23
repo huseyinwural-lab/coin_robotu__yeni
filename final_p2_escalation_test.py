@@ -11,7 +11,7 @@ import requests
 import time
 from datetime import datetime
 
-BASE_URL = "https://hard-guard-layer.preview.emergentagent.com"
+BASE_URL = "https://risk-orchestrator-p0.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 def log_result(test_name: str, status: str, details: str = ""):

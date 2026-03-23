@@ -1592,6 +1592,8 @@ class RiskOrchestratorOperationalDashboardResponse(BaseModel):
     override_usage: dict
     risk_score_distribution: dict
     approval_throughput_last_hour: dict
+    predictive_risk_signal: dict = Field(default_factory=dict)
+    governance: dict = Field(default_factory=dict)
 
 
 class RiskOrchestratorApprovalDecisionRequest(BaseModel):

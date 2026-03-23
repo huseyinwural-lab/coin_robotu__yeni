@@ -6,7 +6,7 @@ Setup script to create test users for P2+Escalation testing
 import requests
 import json
 
-BASE_URL = "https://hard-guard-layer.preview.emergentagent.com"
+BASE_URL = "https://risk-orchestrator-p0.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Super admin credentials (already exists)

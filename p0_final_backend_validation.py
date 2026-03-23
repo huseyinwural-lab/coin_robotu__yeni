@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 # Configuration
-BASE_URL = "https://hard-guard-layer.preview.emergentagent.com"
+BASE_URL = "https://risk-orchestrator-p0.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Test credentials

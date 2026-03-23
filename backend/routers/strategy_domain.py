@@ -604,6 +604,7 @@ def admin_risk_policy_queue(
     state: str | None = None,
     critical_first: bool = True,
     limit: int = 100,
+    page: int = 1,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -614,6 +615,7 @@ def admin_risk_policy_queue(
         state=state,
         critical_first=critical_first,
         limit=limit,
+        page=page,
     )
     return [_approval_queue_item_response(item) for item in rows]
 

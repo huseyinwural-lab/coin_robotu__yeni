@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-03-18T23:22:09Z",
-  "base_url": "https://hard-guard-layer.preview.emergentagent.com/api",
+  "base_url": "https://risk-orchestrator-p0.preview.emergentagent.com/api",
   "checks": {
     "postgres_persistence_backup": {
       "status": "FAIL",

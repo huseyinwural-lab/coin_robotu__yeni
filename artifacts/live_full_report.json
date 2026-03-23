@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "base_url": "https://hard-guard-layer.preview.emergentagent.com",
+  "base_url": "https://risk-orchestrator-p0.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",

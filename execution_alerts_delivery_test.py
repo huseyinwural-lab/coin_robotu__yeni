@@ -21,7 +21,7 @@ import sys
 from datetime import datetime
 
 # Backend URL from environment
-BACKEND_URL = "https://hard-guard-layer.preview.emergentagent.com"
+BACKEND_URL = "https://risk-orchestrator-p0.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials
