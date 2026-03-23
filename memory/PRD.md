@@ -1,3 +1,47 @@
+## 2026-03-23 — Deterministic Recommended Actions Katmanı ✅
+
+### Sprint kapsamı
+- Sadece “tek tıkla aksiyon önerisi” katmanı eklendi (dar sprint).
+- Çıktı hem backend (`diff.json`) hem UI panelde gösterilecek şekilde tamamlandı.
+
+### Uygulanan kurallar (deterministic)
+- `failed_events > 50%`:
+  - `retry policy tune` (CRITICAL)
+  - `timeout review` (CRITICAL)
+- `dead_letter > 30%`:
+  - `guardrail hardening` (WARNING)
+  - `validation check` (WARNING)
+- `manual_actions > 0`:
+  - `runbook review` (WARNING)
+  - `automation gap` (WARNING)
+- `idempotency_collisions > 0`:
+  - `idempotency check hardening` (WARNING)
+- negatif delta / improvement:
+  - `keep current policy` (INFO)
+
+### Contract
+- `diff.recommended_actions` eklendi:
+  - `[{ action, severity, reason }]`
+- `diff_summary.txt` içine `Recommended Actions` bölümü eklendi:
+  - `- [SEVERITY] action (reason)` formatı
+
+### Frontend
+- Diff panelde `Recommended Actions` listesi eklendi.
+- Severity renkleri:
+  - CRITICAL → `text-red-400`
+  - WARNING → `text-amber-300`
+  - INFO → `text-emerald-400`
+
+### Test / doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_90.json`
+  - Backend: **100% (11/11 PASS)**
+  - Frontend: **100% PASS**
+- Determinism doğrulandı: aynı inputta aynı sıra/çıktı.
+
+### Not
+- Slack webhook delivery **MOCKED**.
+- Binance Futures execution **MOCKED**.
+
 ## 2026-03-23 — FINAL: Incident Snapshot Diff + Anomaly UI Tamamlama ✅
 
 ### Kilitlenen kararlar (uygulandı)
