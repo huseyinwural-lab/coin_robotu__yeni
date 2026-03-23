@@ -21,9 +21,12 @@ def _frontend_base_url() -> str:
     configured = (os.environ.get("ALERT_FRONTEND_BASE_URL") or "").strip()
     if configured:
         return configured.rstrip("/")
+    emergent_preview = (os.environ.get("REACT_APP_BACKEND_URL") or "").strip()
+    if emergent_preview:
+        return emergent_preview.rstrip("/")
     if settings.cors_origins:
         return settings.cors_origins[0].rstrip("/")
-    return ""
+    return "https://app.local"
 
 
 def _build_ui_url(path: str, *, correlation_id: str | None = None, execution_event_id: str | None = None) -> str:
@@ -84,6 +87,7 @@ def _emit_execution_alert(
     max_retry: int | None = None,
     root_cause_code: str | None = None,
     entity_key: str | None = None,
+    group_window_seconds: int | None = None,
 ) -> None:
     webhook_payload = _build_webhook_payload(
         event_type=event_type,
@@ -114,8 +118,10 @@ def _emit_execution_alert(
             "webhook_payload": webhook_payload,
             "seen": False,
             "triggered_at": webhook_payload["timestamp"],
+            "group_window_seconds": group_window_seconds or EXEC_ALERT_DEDUP_SECONDS,
+            "escalation_tier": severity.lower(),
         },
-        dedupe_window_seconds=EXEC_ALERT_DEDUP_SECONDS,
+        dedupe_window_seconds=group_window_seconds or EXEC_ALERT_DEDUP_SECONDS,
         entity_key=entity_key or correlation_id or execution_event_id or symbol,
         root_cause_code=root_cause_code,
         state_key=state,
@@ -156,6 +162,7 @@ def trigger_execution_state_alert(
             state=normalized_state,
             failure_reason="timeout",
             root_cause_code="execution_timeout",
+            group_window_seconds=EXEC_TIMEOUT_SPIKE_WINDOW_SECONDS,
         )
 
 
@@ -246,6 +253,8 @@ def trigger_failed_event_alerts(db: Session, failed_event: FailedEvent) -> None:
         .count()
     )
     if failure_count >= EXEC_FAILURE_AGG_THRESHOLD:
+        bucket_seconds = max(EXEC_FAILURE_AGG_WINDOW_SECONDS, 1)
+        bucket_marker = int(datetime.now(timezone.utc).timestamp() // bucket_seconds)
         _emit_execution_alert(
             db,
             event_type="execution_failure_aggregation",
@@ -259,7 +268,8 @@ def trigger_failed_event_alerts(db: Session, failed_event: FailedEvent) -> None:
             retry_count=failed_event.retry_count,
             max_retry=failed_event.max_retry,
             root_cause_code="failure_aggregation",
-            entity_key="execution_failure_aggregation",
+            entity_key=f"execution_failure_aggregation:{bucket_marker}",
+            group_window_seconds=EXEC_FAILURE_AGG_WINDOW_SECONDS,
         )
 
 

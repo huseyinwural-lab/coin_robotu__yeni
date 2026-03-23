@@ -84,6 +84,10 @@ export const ExecutionStatesPage = () => {
   const [playbookPreflightLoading, setPlaybookPreflightLoading] = useState(false);
   const [playbookPreflightError, setPlaybookPreflightError] = useState("");
   const [lastExportSnapshot, setLastExportSnapshot] = useState(null);
+  const [selectedDiagramState, setSelectedDiagramState] = useState("");
+  const [showFullDiffNotes, setShowFullDiffNotes] = useState(false);
+  const [showFullDiffActions, setShowFullDiffActions] = useState(false);
+  const [snapshotHistory, setSnapshotHistory] = useState([]);
 
   const filters = useMemo(
     () => ({
@@ -129,6 +133,12 @@ export const ExecutionStatesPage = () => {
       setRows(data?.rows || []);
       setSummary(data?.summary_counts || {});
       setStateCounters(data?.state_counters || {});
+      try {
+        const historyRes = await apiClient.get("/admin-phase3/incident-snapshots/history", { params: { limit: 5 } });
+        setSnapshotHistory(historyRes?.data?.items || []);
+      } catch {
+        setSnapshotHistory([]);
+      }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Execution states yüklenemedi");
     } finally {
@@ -384,6 +394,8 @@ export const ExecutionStatesPage = () => {
       const { data } = await apiClient.post("/admin-phase3/incident-snapshots/diff", body);
       const snapshot = data?.state_snapshot || null;
       setDiffSnapshot(snapshot);
+      setShowFullDiffNotes(false);
+      setShowFullDiffActions(false);
       setPlaybookPreview(null);
       setPlaybookRunId("");
       setPlaybookExecutionState("preview");
@@ -474,8 +486,8 @@ export const ExecutionStatesPage = () => {
     setPlaybookPreviewLoading(true);
     try {
       const { data } = await apiClient.post("/admin-phase3/incident-snapshots/playbook/preview", {
-        recommended_actions: diffSnapshot?.diff?.recommended_actions || [],
-        anomaly_notes: diffSnapshot?.diff?.anomaly_notes || [],
+        recommended_actions: diffSnapshot?.diff?.recommended_actions_full || diffSnapshot?.diff?.recommended_actions || [],
+        anomaly_notes: diffSnapshot?.diff?.anomaly_notes_full || diffSnapshot?.diff?.anomaly_notes || [],
         scope: {
           export_scope_type: exportScopeType,
           export_scope_value: exportScopeValue,
@@ -857,7 +869,50 @@ export const ExecutionStatesPage = () => {
     return [...DEFAULT_STATE_STEPS, ...dynamic];
   }, [statePath]);
 
+  const transitionStatsByState = useMemo(() => {
+    const stats = {};
+    (detail?.transitions || []).forEach((transition) => {
+      const toState = String(transition?.state || "unknown");
+      const latency = Number(transition?.latency_ms || 0);
+      const current = stats[toState] || { transition_count: 0, failure_count: 0, timeout_count: 0, latencies: [] };
+      current.transition_count += 1;
+      if (toState === "failed" || toState === "rejected") {
+        current.failure_count += 1;
+      }
+      if (toState === "timeout") {
+        current.timeout_count += 1;
+      }
+      if (!Number.isNaN(latency) && latency > 0) {
+        current.latencies.push(latency);
+      }
+      stats[toState] = current;
+    });
+
+    Object.keys(stats).forEach((stateName) => {
+      const latencies = stats[stateName].latencies || [];
+      const avg = latencies.length ? latencies.reduce((acc, item) => acc + item, 0) / latencies.length : 0;
+      stats[stateName].avg_latency_ms = Number(avg.toFixed(4));
+      delete stats[stateName].latencies;
+    });
+    return stats;
+  }, [detail?.transitions]);
+
+  useEffect(() => {
+    if (!detail) {
+      setSelectedDiagramState("");
+      return;
+    }
+    setSelectedDiagramState(detail?.execution_event?.state || statePath[statePath.length - 1] || "");
+  }, [detail, statePath]);
+
   const diffData = diffSnapshot?.diff || null;
+  const anomalyNotesFull = diffData?.anomaly_notes_full || diffData?.anomaly_notes || [];
+  const anomalyNotesCompact = diffData?.anomaly_notes || [];
+  const anomalyNotesDisplay = showFullDiffNotes ? anomalyNotesFull : anomalyNotesCompact;
+  const recommendedActionsFull = diffData?.recommended_actions_full || diffData?.recommended_actions || [];
+  const recommendedActionsCompact = diffData?.recommended_actions || [];
+  const recommendedActionsDisplay = showFullDiffActions ? recommendedActionsFull : recommendedActionsCompact;
+  const longDiffCollapsed = Boolean(diffData?.long_diff_collapsed);
   const beforeAfter = diffData?.before_after || {};
   const eventsBefore = Number(beforeAfter?.events?.before ?? 0);
   const eventsAfter = Number(beforeAfter?.events?.after ?? 0);
@@ -1078,21 +1133,42 @@ export const ExecutionStatesPage = () => {
           <p className="text-xs text-slate-400">event_id={selectedEventId} · correlation={detail.execution_event?.correlation_id || "-"}</p>
 
           <div className="mt-3 rounded border border-slate-800 bg-black/20 p-2" data-testid="execution-control-state-diagram-panel">
-            <p className="text-xs text-slate-300">State Diagram (read-only)</p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {diagramSteps.map((step) => {
-                const active = step === detail.current_state;
-                const visited = statePath.includes(step);
-                return (
-                  <span
-                    key={step}
-                    className={`rounded border px-2 py-1 text-[11px] ${active ? "border-cyan-400 text-cyan-200" : visited ? "border-emerald-500/60 text-emerald-200" : "border-slate-700 text-slate-400"}`}
-                    data-testid={`execution-control-state-diagram-node-${step}`}
-                  >
-                    {step}
-                  </span>
-                );
-              })}
+            <p className="text-xs text-slate-300" data-testid="execution-control-state-diagram-title">State Diagram (interactive)</p>
+            <div className="mt-2 grid gap-3 lg:grid-cols-[2fr,1fr]" data-testid="execution-control-state-diagram-content-grid">
+              <div className="flex flex-wrap gap-1" data-testid="execution-control-state-diagram-node-list">
+                {diagramSteps.map((step, index) => {
+                  const active = step === detail.current_state;
+                  const visited = statePath.includes(step);
+                  const selected = step === selectedDiagramState;
+                  const inPath = statePath.includes(step);
+                  const stats = transitionStatsByState[step] || { transition_count: 0, failure_count: 0, timeout_count: 0, avg_latency_ms: 0 };
+                  return (
+                    <button
+                      key={step}
+                      type="button"
+                      onClick={() => setSelectedDiagramState(step)}
+                      title={`transition_count=${stats.transition_count}`}
+                      className={`rounded border px-2 py-1 text-[11px] transition-colors ${active ? "border-cyan-400 text-cyan-200" : visited ? "border-emerald-500/60 text-emerald-200" : "border-slate-700 text-slate-400"} ${selected ? "ring-1 ring-amber-400" : ""} ${inPath ? "animate-pulse" : ""}`}
+                      style={inPath ? { animationDelay: `${index * 80}ms` } : undefined}
+                      data-testid={`execution-control-state-diagram-node-${step}`}
+                    >
+                      <span>{step}</span>
+                      <span className="ml-2 text-[10px] opacity-80" data-testid={`execution-control-state-diagram-node-transition-count-${step}`}>t:{stats.transition_count}</span>
+                      <span className="ml-1 text-[10px] opacity-80" data-testid={`execution-control-state-diagram-node-failure-count-${step}`}>f:{stats.failure_count}</span>
+                      <span className="ml-1 text-[10px] opacity-80" data-testid={`execution-control-state-diagram-node-timeout-count-${step}`}>to:{stats.timeout_count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="rounded border border-slate-700 bg-slate-950 p-2 text-xs" data-testid="execution-control-state-diagram-detail-panel">
+                <p className="font-semibold" data-testid="execution-control-state-diagram-detail-title">state detail: {selectedDiagramState || "-"}</p>
+                <p data-testid="execution-control-state-diagram-detail-current-highlight">current_highlight: {String(selectedDiagramState === detail.current_state)}</p>
+                <p data-testid="execution-control-state-diagram-detail-transition-count">transition_count: {transitionStatsByState[selectedDiagramState]?.transition_count ?? 0}</p>
+                <p data-testid="execution-control-state-diagram-detail-failure-count">failure_count: {transitionStatsByState[selectedDiagramState]?.failure_count ?? 0}</p>
+                <p data-testid="execution-control-state-diagram-detail-timeout-count">timeout_count: {transitionStatsByState[selectedDiagramState]?.timeout_count ?? 0}</p>
+                <p data-testid="execution-control-state-diagram-detail-latency">avg_latency_ms: {transitionStatsByState[selectedDiagramState]?.avg_latency_ms ?? 0}</p>
+              </div>
             </div>
           </div>
 
@@ -1129,6 +1205,34 @@ export const ExecutionStatesPage = () => {
             <p data-testid="execution-control-incident-last-export-filters">filters: {JSON.stringify(lastExportSnapshot.filters || {})}</p>
           </div>
         )}
+
+        <div className="mt-2 rounded border border-slate-700 bg-slate-950 p-2 text-xs" data-testid="execution-control-incident-history-panel">
+          <p className="font-semibold" data-testid="execution-control-incident-history-title">Execution History Quick Access (last 5)</p>
+          <div className="mt-2 flex flex-wrap gap-2" data-testid="execution-control-incident-history-list">
+            {snapshotHistory.map((item, index) => (
+              <Button
+                key={item.audit_id || index}
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const identifiers = item.scope_identifiers || {};
+                  const corr = identifiers.correlation_id || "";
+                  setExportScopeType(item.scope_type || "correlation_id");
+                  setExportScopeValue(corr || identifiers.execution_event_id || "");
+                  if (item.compare_scope_type) {
+                    setCompareEnabled(true);
+                    setCompareScopeType(item.compare_scope_type);
+                    setCompareScopeValue(item.compare_scope_identifiers?.correlation_id || item.compare_scope_identifiers?.execution_event_id || "");
+                  }
+                }}
+                data-testid={`execution-control-incident-history-item-${index}`}
+              >
+                #{index + 1} {item.scope_type || "scope"} · {item.row_count ?? 0}
+              </Button>
+            ))}
+            {!snapshotHistory.length && <p data-testid="execution-control-incident-history-empty">history yok</p>}
+          </div>
+        </div>
 
         <div className="mt-3 space-y-3" data-testid="execution-control-incident-compare-panel">
           <Button
@@ -1244,19 +1348,48 @@ export const ExecutionStatesPage = () => {
             </div>
 
             <div className="mt-2 rounded border border-slate-700 bg-slate-950 p-2" data-testid="execution-control-diff-section-anomalies">
-              <p className="text-xs font-semibold text-slate-300">2) Anomalies</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-300">2) Anomalies</p>
+                {longDiffCollapsed && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6"
+                    onClick={() => setShowFullDiffNotes((prev) => !prev)}
+                    data-testid="execution-control-diff-anomaly-toggle-button"
+                  >
+                    {showFullDiffNotes ? "Collapse" : "Expand"}
+                  </Button>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400" data-testid="execution-control-diff-anomaly-groups">
+                groups={JSON.stringify(diffData?.anomaly_groups || {})}
+              </p>
               <div className="mt-2 space-y-1 text-xs" data-testid="execution-control-diff-anomaly-notes-list">
-                {(diffData?.anomaly_notes || []).map((note, idx) => (
+                {anomalyNotesDisplay.map((note, idx) => (
                   <p key={`${note}-${idx}`} data-testid={`execution-control-diff-anomaly-note-${idx}`}>{note}</p>
                 ))}
-                {!diffData?.anomaly_notes?.length && <p data-testid="execution-control-diff-anomaly-empty-text">no anomaly note</p>}
+                {!anomalyNotesDisplay.length && <p data-testid="execution-control-diff-anomaly-empty-text">no anomaly note</p>}
               </div>
             </div>
 
             <div className="mt-2 rounded border border-slate-700 bg-slate-950 p-2" data-testid="execution-control-diff-section-recommended-actions">
-              <p className="text-xs font-semibold text-slate-300">3) Recommended Actions</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-300">3) Recommended Actions</p>
+                {longDiffCollapsed && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6"
+                    onClick={() => setShowFullDiffActions((prev) => !prev)}
+                    data-testid="execution-control-diff-recommended-toggle-button"
+                  >
+                    {showFullDiffActions ? "Collapse" : "Expand"}
+                  </Button>
+                )}
+              </div>
               <div className="mt-2 space-y-2 text-xs" data-testid="execution-control-diff-recommended-actions-list">
-                {(diffData?.recommended_actions || []).map((item, idx) => {
+                {recommendedActionsDisplay.map((item, idx) => {
                   const severity = String(item?.severity || "info").toUpperCase();
                   const actionMeta = resolveRecommendedActionMeta(item);
                   const actionTitle = formatActionTitle(item?.action);
@@ -1292,7 +1425,7 @@ export const ExecutionStatesPage = () => {
                     </div>
                   );
                 })}
-                {!diffData?.recommended_actions?.length && <p data-testid="execution-control-diff-recommended-actions-empty">✅ [INFO] keep current policy (no action)</p>}
+                {!recommendedActionsDisplay.length && <p data-testid="execution-control-diff-recommended-actions-empty">✅ [INFO] keep current policy (no action)</p>}
               </div>
             </div>
 

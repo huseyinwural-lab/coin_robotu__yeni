@@ -5,7 +5,8 @@ import hashlib
 import csv
 import io
 import zipfile
-from datetime import datetime, timezone
+import math
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import require_admin
 from models import (
+    AuditLog,
     BacktestResultCard,
     BotProfile,
     DecisionTraceCold,
@@ -307,6 +309,91 @@ def _serialize_transition(row: ExecutionStateTransition) -> dict:
         "details": row.details or {},
         "occurred_at": row.occurred_at,
     }
+
+
+def _visibility_profile_for_role(role_value: str | None) -> str:
+    normalized = str(role_value or "").strip().lower()
+    if normalized in {"admin", "super_admin"}:
+        return "admin"
+    return "user"
+
+
+def _mask_payload(value):
+    if isinstance(value, dict):
+        return {key: _mask_payload(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_mask_payload(item) for item in value]
+    if value in (None, ""):
+        return value
+    return "***"
+
+
+def _mask_correlation(value: str | None, visibility_profile: str) -> str | None:
+    if not value:
+        return value
+    normalized = str(value)
+    if visibility_profile == "admin":
+        return normalized
+    keep = 6 if len(normalized) >= 10 else 4
+    return f"***{normalized[-keep:]}"
+
+
+def _apply_export_visibility(bundle: dict, *, visibility_profile: str) -> dict:
+    masked_events = []
+    for row in bundle["events"]:
+        payload = dict(row)
+        payload["correlation_id"] = _mask_correlation(payload.get("correlation_id"), visibility_profile)
+        payload["response_payload"] = _mask_payload(payload.get("response_payload") or {})
+        masked_events.append(payload)
+
+    masked_failures = []
+    for row in bundle["failures"]:
+        payload = dict(row)
+        payload["correlation_id"] = _mask_correlation(payload.get("correlation_id"), visibility_profile)
+        payload["payload"] = _mask_payload(payload.get("payload") or {})
+        payload["error_details"] = _mask_payload(payload.get("error_details") or {})
+        masked_failures.append(payload)
+
+    masked_manual = []
+    for row in bundle["manual_actions"]:
+        payload = dict(row)
+        payload["correlation_id"] = _mask_correlation(payload.get("correlation_id"), visibility_profile)
+        payload["details"] = _mask_payload(payload.get("details") or {})
+        masked_manual.append(payload)
+
+    masked_trace = []
+    for row in bundle["trace"]:
+        payload = dict(row)
+        payload["correlation_id"] = _mask_correlation(payload.get("correlation_id"), visibility_profile)
+        if visibility_profile == "user":
+            payload = {
+                "trace_id": payload.get("trace_id"),
+                "correlation_id": payload.get("correlation_id"),
+                "execution_event_id": payload.get("execution_event_id"),
+                "stage": payload.get("stage"),
+                "created_at": payload.get("created_at"),
+                "summary": "trace_summary_only",
+            }
+        else:
+            payload["payload"] = _mask_payload(payload.get("payload") or {})
+        masked_trace.append(payload)
+
+    return {
+        **bundle,
+        "events": masked_events,
+        "failures": masked_failures,
+        "manual_actions": masked_manual,
+        "trace": masked_trace,
+        "visibility_profile": visibility_profile,
+    }
+
+
+def _p95(values: list[float]) -> float | None:
+    if not values:
+        return None
+    sorted_values = sorted(values)
+    idx = max(0, min(len(sorted_values) - 1, math.ceil(0.95 * len(sorted_values)) - 1))
+    return round(float(sorted_values[idx]), 4)
 
 
 def _state_counter(rows: list[ExecutionStateTransition]) -> dict[str, int]:
@@ -996,6 +1083,7 @@ def _build_execution_analytics_summary(
     state_counter = _state_counter(rows)
     latency_per_state: dict[str, float] = {}
     latency_state_counts: dict[str, int] = {}
+    latency_values_per_state: dict[str, list[float]] = {}
     timeout_count = 0
     retry_count = 0
     fallback_count = 0
@@ -1006,6 +1094,7 @@ def _build_execution_analytics_summary(
         if row.latency_ms is not None:
             latency_per_state[state_name] = latency_per_state.get(state_name, 0.0) + float(row.latency_ms)
             latency_state_counts[state_name] = latency_state_counts.get(state_name, 0) + 1
+            latency_values_per_state.setdefault(state_name, []).append(float(row.latency_ms))
         if state_name == "timeout":
             timeout_count += 1
         if state_name.startswith("retry_"):
@@ -1018,6 +1107,27 @@ def _build_execution_analytics_summary(
     for state_name, total_latency in list(latency_per_state.items()):
         count = max(latency_state_counts.get(state_name, 1), 1)
         latency_per_state[state_name] = round(total_latency / count, 4)
+
+    state_latency_profiles = [
+        {
+            "state": state_name,
+            "avg_latency_ms": latency_per_state.get(state_name, 0),
+            "p95_latency_ms": _p95(latency_values_per_state.get(state_name, [])),
+            "count": latency_state_counts.get(state_name, 0),
+        }
+        for state_name in latency_per_state
+    ]
+    slowest_states = sorted(state_latency_profiles, key=lambda item: float(item.get("avg_latency_ms") or 0), reverse=True)[:5]
+    timeout_distribution = {
+        str(row.from_state or "unknown"): 0
+        for row in rows
+        if str(row.state or "") == "timeout"
+    }
+    for row in rows:
+        if str(row.state or "") != "timeout":
+            continue
+        key = str(row.from_state or "unknown")
+        timeout_distribution[key] = timeout_distribution.get(key, 0) + 1
 
     failure_rows = _failure_rows_with_filters(db, filters_ctx, rows)
 
@@ -1045,6 +1155,10 @@ def _build_execution_analytics_summary(
         timeout_metrics={
             "timeout_count": timeout_count,
             "timeout_rate": round(timeout_count / max(total, 1), 4),
+            "timeout_distribution": [
+                {"from_state": key, "count": value}
+                for key, value in sorted(timeout_distribution.items(), key=lambda item: item[1], reverse=True)
+            ],
         },
         retry_metrics={
             "retry_count": retry_count,
@@ -1055,6 +1169,8 @@ def _build_execution_analytics_summary(
             "failed_or_rejected_count": failed_count,
             "failure_rate": round(failed_count / max(total, 1), 4),
             "dead_letter_count": len([row for row in failure_rows if row.status in {"dead", "quarantined"}]),
+            "slowest_states": slowest_states,
+            "slowest_state": slowest_states[0] if slowest_states else None,
         },
         dead_letter_trend=[
             {"date": key, "count": value}
@@ -1166,19 +1282,35 @@ def execution_analytics_state_latency(
     rows = _transition_rows_with_filters(db, filters_ctx)
 
     stats: dict[str, dict] = {}
+    timeout_distribution: dict[str, int] = {}
     for row in rows:
+        state_name = str(row.state or "unknown")
+        if state_name == "timeout":
+            source_key = str(row.from_state or "unknown")
+            timeout_distribution[source_key] = timeout_distribution.get(source_key, 0) + 1
         if row.latency_ms is None:
             continue
-        key = str(row.state or "unknown")
+        key = state_name
         bucket = stats.setdefault(
             key,
-            {"state": key, "count": 0, "total_latency_ms": 0.0, "min_latency_ms": None, "max_latency_ms": None},
+            {
+                "state": key,
+                "count": 0,
+                "total_latency_ms": 0.0,
+                "min_latency_ms": None,
+                "max_latency_ms": None,
+                "latencies": [],
+                "timeout_count": 0,
+            },
         )
         latency_value = float(row.latency_ms)
         bucket["count"] += 1
         bucket["total_latency_ms"] += latency_value
         bucket["min_latency_ms"] = latency_value if bucket["min_latency_ms"] is None else min(bucket["min_latency_ms"], latency_value)
         bucket["max_latency_ms"] = latency_value if bucket["max_latency_ms"] is None else max(bucket["max_latency_ms"], latency_value)
+        bucket["latencies"].append(latency_value)
+        if state_name == "timeout":
+            bucket["timeout_count"] += 1
 
     result_rows: list[dict] = []
     for item in sorted(stats.values(), key=lambda x: x["state"]):
@@ -1190,8 +1322,12 @@ def execution_analytics_state_latency(
                 "avg_latency_ms": round(item["total_latency_ms"] / count, 4),
                 "min_latency_ms": item["min_latency_ms"],
                 "max_latency_ms": item["max_latency_ms"],
+                "p95_latency_ms": _p95(item["latencies"]),
+                "timeout_count": item.get("timeout_count", 0),
             }
         )
+
+    slowest_states = sorted(result_rows, key=lambda item: float(item.get("avg_latency_ms") or 0), reverse=True)[:5]
 
     return {
         "snapshot_at": filters_ctx["snapshot_at"],
@@ -1201,6 +1337,11 @@ def execution_analytics_state_latency(
             "states": len(result_rows),
         },
         "rows": result_rows,
+        "slowest_states": slowest_states,
+        "timeout_distribution": [
+            {"from_state": key, "count": value}
+            for key, value in sorted(timeout_distribution.items(), key=lambda item: item[1], reverse=True)
+        ],
     }
 
 
@@ -1590,6 +1731,7 @@ def list_execution_alerts(
     severity: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=50),
 ):
+    _auto_ack_info_alerts_seen(db, threshold_hours=24)
     query = db.query(SystemAlert).filter(SystemAlert.alert_type.ilike("execution_%"))
     if status_filter != "all":
         query = query.filter(SystemAlert.status == status_filter)
@@ -1694,9 +1836,41 @@ def execution_alert_delivery_summary(
         .all()
     )
 
+    last_success = (
+        db.query(ExecutionAlertDeliveryAttempt)
+        .filter(ExecutionAlertDeliveryAttempt.status == "SENT")
+        .order_by(ExecutionAlertDeliveryAttempt.request_timestamp.desc())
+        .first()
+    )
+    last_failure = (
+        db.query(ExecutionAlertDeliveryAttempt)
+        .filter(ExecutionAlertDeliveryAttempt.status.in_(["FAILED", "DEAD"]))
+        .order_by(ExecutionAlertDeliveryAttempt.request_timestamp.desc())
+        .first()
+    )
+
     return {
         "status": "success",
         "provider": execution_alert_provider_status(),
+        "provider_health": {
+            "last_success": {
+                "attempt_id": last_success.id,
+                "status": last_success.status,
+                "response_code": last_success.response_code,
+                "request_timestamp": last_success.request_timestamp.isoformat() if last_success.request_timestamp else None,
+            }
+            if last_success
+            else None,
+            "last_failure": {
+                "attempt_id": last_failure.id,
+                "status": last_failure.status,
+                "response_code": last_failure.response_code,
+                "error_code": last_failure.error_code,
+                "request_timestamp": last_failure.request_timestamp.isoformat() if last_failure.request_timestamp else None,
+            }
+            if last_failure
+            else None,
+        },
         "status_counts": status_counts,
         "failed_attempts": [
             {
@@ -1879,12 +2053,95 @@ def seen_execution_alert(alert_id: str, _: User = Depends(require_admin), db: Se
     return row
 
 
+def _auto_ack_info_alerts_seen(db: Session, *, threshold_hours: int = 24) -> int:
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, int(threshold_hours)))
+    rows = (
+        db.query(SystemAlert)
+        .filter(
+            SystemAlert.alert_type.ilike("execution_%"),
+            SystemAlert.severity == "INFO",
+            SystemAlert.created_at <= cutoff,
+        )
+        .all()
+    )
+    updated = 0
+    for row in rows:
+        details = dict(row.details or {})
+        if bool(details.get("seen")):
+            continue
+        details["seen"] = True
+        details["auto_ack_seen_at"] = datetime.now(timezone.utc).isoformat()
+        details["auto_ack_policy"] = "info_24h_seen"
+        row.details = details
+        row.updated_at = datetime.now(timezone.utc)
+        updated += 1
+    return updated
+
+
+@router.post("/execution-alerts/auto-ack/apply-default")
+def apply_default_info_auto_ack(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    updated = _auto_ack_info_alerts_seen(db, threshold_hours=24)
+    create_audit_log(
+        db,
+        action="execution_alert_auto_ack_default",
+        entity_type="system_alert",
+        entity_id="info_24h_seen",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "updated_count": updated,
+            "threshold_hours": 24,
+            "policy": "INFO older than 24h => seen",
+        },
+    )
+    db.commit()
+    return {"status": "success", "updated_count": updated, "threshold_hours": 24}
+
+
+@router.get("/incident-snapshots/history")
+def list_incident_snapshot_history(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=5, ge=1, le=20),
+):
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.action.in_(["incident_snapshot_export", "incident_snapshot_diff_preview"]))
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    items = []
+    for row in rows:
+        details = row.details or {}
+        scope_identifiers = details.get("scope_identifiers") or details.get("scope") or {}
+        compare_scope = details.get("compare_scope") or details.get("scope_b") or {}
+        items.append(
+            {
+                "audit_id": row.id,
+                "action": row.action,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "scope_type": details.get("filter_scope") or details.get("scope_a", {}).get("filter_scope"),
+                "scope_identifiers": scope_identifiers,
+                "compare_scope_type": (compare_scope.get("filter_scope") if isinstance(compare_scope, dict) else None),
+                "compare_scope_identifiers": (compare_scope.get("scope_identifiers") if isinstance(compare_scope, dict) else None),
+                "snapshot_id": details.get("snapshot_id"),
+                "row_count": details.get("row_counts", {}).get("events") if isinstance(details.get("row_counts"), dict) else None,
+            }
+        )
+    return {"status": "success", "items": items}
+
+
 def _build_incident_snapshot_scope_bundle(
     db: Session,
     payload: IncidentSnapshotExportRequest,
     *,
     scope_type: str,
     scope_payload: dict,
+    viewer_role: str,
 ) -> dict:
     filters_ctx = _resolve_execution_analytics_filters(
         state=payload.state,
@@ -2129,7 +2386,7 @@ def _build_incident_snapshot_scope_bundle(
         "trace": len(serialized_trace),
     }
 
-    return {
+    bundle = {
         "filters_ctx": filters_ctx,
         "scope_type": scope_type,
         "scope_payload": scope_payload,
@@ -2141,6 +2398,7 @@ def _build_incident_snapshot_scope_bundle(
         "trace": serialized_trace,
         "row_counts": row_counts,
     }
+    return _apply_export_visibility(bundle, visibility_profile=_visibility_profile_for_role(viewer_role))
 
 
 def _build_snapshot_diff_payload(
@@ -2276,6 +2534,27 @@ def _build_snapshot_diff_payload(
     if not recommended_actions:
         _add_action("keep_current_policy", "info", _format_reason("Failures", b_counts["failed_events"], a_counts["failed_events"], percentage_change["failed_events"]))
 
+    anomaly_groups: dict[str, list[str]] = {
+        "critical": [note for note in anomaly_notes if "CRITICAL" in note],
+        "high": [note for note in anomaly_notes if "HIGH" in note],
+        "info": [note for note in anomaly_notes if "IMPROVED" in note or "increased" in note.lower()],
+    }
+    compact_notes = anomaly_notes[:5]
+    overflow_count = max(0, len(anomaly_notes) - len(compact_notes))
+    if overflow_count > 0:
+        compact_notes.append(f"+{overflow_count} additional anomalies collapsed")
+
+    compact_actions = recommended_actions[:5]
+    action_overflow = max(0, len(recommended_actions) - len(compact_actions))
+    if action_overflow > 0:
+        compact_actions.append(
+            {
+                "action": "collapsed_actions",
+                "severity": "info",
+                "reason": f"{action_overflow} actions collapsed for readability",
+            }
+        )
+
     diff_payload = {
         "scope_a": {
             "filter_scope": scope_a_type,
@@ -2290,8 +2569,12 @@ def _build_snapshot_diff_payload(
         "counts": counts,
         "percentage_change": percentage_change,
         "before_after": before_after,
-        "anomaly_notes": anomaly_notes,
-        "recommended_actions": recommended_actions,
+        "anomaly_notes": compact_notes,
+        "anomaly_notes_full": anomaly_notes,
+        "anomaly_groups": anomaly_groups,
+        "recommended_actions": compact_actions,
+        "recommended_actions_full": recommended_actions,
+        "long_diff_collapsed": bool(overflow_count or action_overflow),
     }
 
     summary_lines = [
@@ -2301,13 +2584,13 @@ def _build_snapshot_diff_payload(
         f"- MANUAL ACTIONS: {counts['manual_actions_delta']} ({'↑' if counts['manual_actions_delta'] > 0 else '↓' if counts['manual_actions_delta'] < 0 else '='})",
         "Anomaly Notes",
     ]
-    if anomaly_notes:
-        summary_lines.extend([f"- {note}" for note in anomaly_notes])
+    if compact_notes:
+        summary_lines.extend([f"- {note}" for note in compact_notes])
     else:
         summary_lines.append("- none")
 
     summary_lines.append("Recommended Actions")
-    for item in recommended_actions:
+    for item in compact_actions:
         summary_lines.append(f"- [{item['severity']}] {item['action']} ({item['reason']})")
     return diff_payload, "\n".join(summary_lines) + "\n"
 
@@ -2324,6 +2607,7 @@ def export_incident_snapshot_bundle(
         payload,
         scope_type=scope_type,
         scope_payload=scope_payload,
+        viewer_role=current_admin.role.value,
     )
     filters_ctx = primary_bundle["filters_ctx"]
     serialized_events = primary_bundle["events"]
@@ -2374,6 +2658,7 @@ def export_incident_snapshot_bundle(
             compare_request,
             scope_type=compare_scope_type,
             scope_payload=compare_scope_payload,
+            viewer_role=current_admin.role.value,
         )
 
     generated_files = [
@@ -2407,6 +2692,7 @@ def export_incident_snapshot_bundle(
         "exported_at": snapshot_at,
         "export_type": export_type,
         "actor": str(current_admin.id),
+        "visibility_profile": primary_bundle.get("visibility_profile"),
         "filter_scope": scope_type,
         "selected_scope_priority": scope_type,
         "scope_priority_order": ["correlation_id", "execution_event_id", "time_range"],
@@ -2538,6 +2824,7 @@ def incident_snapshot_diff_preview(
         payload,
         scope_type=scope_type,
         scope_payload=scope_payload,
+        viewer_role=current_admin.role.value,
     )
 
     compare_fields_present = any(
@@ -2584,6 +2871,7 @@ def incident_snapshot_diff_preview(
             compare_request,
             scope_type=compare_scope_type,
             scope_payload=compare_scope_payload,
+            viewer_role=current_admin.role.value,
         )
         diff_payload, diff_summary = _build_snapshot_diff_payload(
             scope_a_type=scope_type,

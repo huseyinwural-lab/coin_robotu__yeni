@@ -152,6 +152,9 @@ export const AdminExecutionAlertsPage = () => {
         <p data-testid="execution-alerts-provider-retry-line">
           timeout={summary?.provider?.timeout_seconds || "-"}s base_backoff={summary?.provider?.base_backoff_seconds || "-"}s max_retry={summary?.provider?.max_retry || "-"}
         </p>
+        <p className="text-xs" data-testid="execution-alerts-provider-health-line">
+          last_success={summary?.provider_health?.last_success?.request_timestamp || "-"} · last_failure={summary?.provider_health?.last_failure?.request_timestamp || "-"}
+        </p>
         <p className="mt-2 text-xs" data-testid="execution-alerts-status-counts">
           status_counts: {JSON.stringify(summary?.status_counts || {})}
         </p>

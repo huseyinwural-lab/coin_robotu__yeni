@@ -26,7 +26,14 @@ def _extract_state_key(details: dict) -> str | None:
 
 
 def _compute_fingerprint(alert_type: str, severity: str, entity_key: str | None, root_cause_code: str | None) -> str:
-    raw = f"{alert_type}|{severity}|{entity_key or ''}|{root_cause_code or ''}"
+    normalized_type = str(alert_type or "")
+    normalized_entity = str(entity_key or "")
+    normalized_root = str(root_cause_code or "")
+    normalized_severity = str(severity or "")
+    if normalized_type.startswith("execution_") and normalized_entity:
+        raw = f"{normalized_type}|{normalized_entity}|{normalized_root}"
+    else:
+        raw = f"{normalized_type}|{normalized_severity}|{normalized_entity}|{normalized_root}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -43,7 +50,8 @@ def create_system_alert(
     state_key: str | None = None,
 ) -> SystemAlert:
     now = datetime.now(timezone.utc)
-    details = details or {}
+    details = dict(details or {})
+    grouped_window = int(details.get("group_window_seconds") or dedupe_window_seconds or DEDUP_WINDOW_SECONDS)
     entity_key = entity_key or _extract_entity_key(details)
     state_key = state_key or _extract_state_key(details)
 
@@ -65,13 +73,16 @@ def create_system_alert(
         if last_triggered.tzinfo is None:
             last_triggered = last_triggered.replace(tzinfo=timezone.utc)
         delta = now - last_triggered
-        if delta.total_seconds() < dedupe_window_seconds:
+        if delta.total_seconds() < grouped_window:
             existing.occurrences += 1
             existing.last_triggered_at = now
             existing.severity = severity
             existing.message = message or existing.message
-            existing.details = details or existing.details
-            existing.delivery_status = {"status": "DEDUPED", "dedupe_window_seconds": dedupe_window_seconds}
+            merged_details = dict(existing.details or {})
+            merged_details.update(details or {})
+            merged_details["grouped_count"] = int(existing.occurrences or 1)
+            existing.details = merged_details
+            existing.delivery_status = {"status": "DEDUPED", "dedupe_window_seconds": grouped_window}
             db.commit()
             db.refresh(existing)
             return existing
@@ -84,7 +95,10 @@ def create_system_alert(
         entity_key=entity_key,
         root_cause_code=root_cause_code,
         state_key=state_key,
-        details=details,
+        details={
+            **details,
+            "grouped_count": max(int(details.get("grouped_count") or 0), 1),
+        },
         status="open",
         occurrences=1,
         last_triggered_at=now,
@@ -94,7 +108,17 @@ def create_system_alert(
     db.refresh(alert)
 
     if str(alert.alert_type or "").lower().startswith("execution_"):
-        delivery_status = deliver_execution_alert(db, alert=alert)
+        tier = str(alert.severity or "INFO").upper()
+        if tier == "INFO" and not bool((alert.details or {}).get("is_test")):
+            delivery_status = {
+                "status": "SENT",
+                "provider": "slack",
+                "reason": "info_silent_tier",
+                "escalation_tier": "silent",
+                "attempt_no": int(alert.attempt_count or 0),
+            }
+        else:
+            delivery_status = deliver_execution_alert(db, alert=alert)
     else:
         delivery_status = dispatch_alert(
             {

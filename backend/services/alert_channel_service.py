@@ -600,16 +600,38 @@ class SlackWebhookProvider(WebhookDeliveryProvider):
                 "response_body": "requests_not_installed",
             }
 
+        severity = str(payload.get("severity") or "info").lower()
+        emoji = ":large_green_circle:"
+        if severity == "warning":
+            emoji = ":large_orange_circle:"
+        elif severity == "critical":
+            emoji = ":red_circle:"
         text = (
-            f"[{str(payload.get('severity') or '').upper()}] "
-            f"{payload.get('event_type')} | {payload.get('symbol') or '-'} / {payload.get('state') or '-'}\n"
-            f"reason: {payload.get('failure_reason') or '-'}\n"
-            f"corr: {payload.get('correlation_id') or '-'}\n"
-            f"dashboard: {payload.get('dashboard_url') or '-'}\n"
-            f"trace: {payload.get('trace_url') or '-'}"
+            f"{emoji} *Execution Alert* `{str(payload.get('event_type') or '').upper()}`\n"
+            f"*Severity:* {str(payload.get('severity') or '').upper()}\n"
+            f"*Symbol/State:* {payload.get('symbol') or '-'} / {payload.get('state') or '-'}\n"
+            f"*Failure:* {payload.get('failure_reason') or '-'}\n"
+            f"*Correlation:* {payload.get('correlation_id') or '-'}"
         )
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": text,
+                },
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*Dashboard:*\n<{payload.get('dashboard_url') or '-'}|Open>"},
+                    {"type": "mrkdwn", "text": f"*Trace:*\n<{payload.get('trace_url') or '-'}|Open>"},
+                ],
+            },
+        ]
         slack_payload = {
             "text": text,
+            "blocks": blocks,
             **payload,
         }
         try:

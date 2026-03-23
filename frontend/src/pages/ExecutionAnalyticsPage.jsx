@@ -19,6 +19,8 @@ export const ExecutionAnalyticsPage = () => {
   const [refreshMs, setRefreshMs] = useState(10000);
   const [summary, setSummary] = useState(null);
   const [stateLatency, setStateLatency] = useState([]);
+  const [slowestStates, setSlowestStates] = useState([]);
+  const [timeoutDistribution, setTimeoutDistribution] = useState([]);
   const [failureTrend, setFailureTrend] = useState([]);
   const [failureClasses, setFailureClasses] = useState([]);
   const [executionAlerts, setExecutionAlerts] = useState([]);
@@ -79,6 +81,8 @@ export const ExecutionAnalyticsPage = () => {
       ]);
       setSummary(summaryRes.data || null);
       setStateLatency(stateLatencyRes.data?.rows || []);
+      setSlowestStates(stateLatencyRes.data?.slowest_states || summaryRes.data?.failure_metrics?.slowest_states || []);
+      setTimeoutDistribution(stateLatencyRes.data?.timeout_distribution || summaryRes.data?.timeout_metrics?.timeout_distribution || []);
       setFailureTrend(failureRes.data?.daily_trend || []);
       setFailureClasses(failureRes.data?.top_failure_classes || []);
       setExecutionAlerts(alertsRes.data || []);
@@ -171,6 +175,16 @@ export const ExecutionAnalyticsPage = () => {
     }
   };
 
+  const applyDefaultAutoAck = async () => {
+    try {
+      const { data } = await apiClient.post("/admin-phase3/execution-alerts/auto-ack/apply-default");
+      toast.success(`INFO auto-ack (24h seen) uygulandı: ${data?.updated_count ?? 0}`);
+      await loadAnalytics();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Default auto-ack başarısız");
+    }
+  };
+
   const totals = summary?.totals || {};
   const timeoutMetrics = summary?.timeout_metrics || {};
   const retryMetrics = summary?.retry_metrics || {};
@@ -251,7 +265,7 @@ export const ExecutionAnalyticsPage = () => {
         <Button variant="outline" onClick={() => setSearchParams(new URLSearchParams(), { replace: true })} data-testid="execution-control-analytics-clear-filters-button">Temizle</Button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4" data-testid="execution-control-analytics-summary-grid">
+      <div className="grid gap-3 md:grid-cols-5" data-testid="execution-control-analytics-summary-grid">
         <article className="border border-slate-800 bg-slate-900 p-3" data-testid="execution-control-analytics-total-transitions-card">
           <p className="text-xs text-slate-400">total transitions</p>
           <p className="text-lg font-semibold">{totals.transitions || 0}</p>
@@ -268,12 +282,21 @@ export const ExecutionAnalyticsPage = () => {
           <p className="text-xs text-slate-400">failure rate</p>
           <p className="text-lg font-semibold">{failureMetrics.failure_rate || 0}</p>
         </article>
+        <article className="border border-slate-800 bg-slate-900 p-3" data-testid="execution-control-analytics-slowest-state-card">
+          <p className="text-xs text-slate-400">SLOWEST STATE</p>
+          <p className="text-sm font-semibold">
+            {slowestStates[0]?.state || failureMetrics?.slowest_state?.state || "-"}
+            {" "}
+            → {slowestStates[0]?.avg_latency_ms || failureMetrics?.slowest_state?.avg_latency_ms || 0}ms avg
+          </p>
+        </article>
       </div>
 
       <div className="rounded border border-slate-700 bg-slate-950 p-3 text-xs" data-testid="execution-control-analytics-snapshot-meta">
         <p data-testid="execution-control-analytics-snapshot-at">snapshot_at={summary?.snapshot_at || "-"}</p>
         <p data-testid="execution-control-analytics-retry-metrics">retry_count={retryMetrics.retry_count || 0} · retry_success_ratio={retryMetrics.retry_success_ratio || 0} · fallback_usage_rate={retryMetrics.fallback_usage_rate || 0}</p>
         <p data-testid="execution-control-analytics-failure-metrics">failed_or_rejected={failureMetrics.failed_or_rejected_count || 0} · dead_letter={failureMetrics.dead_letter_count || 0}</p>
+        <p data-testid="execution-control-analytics-timeout-distribution">timeout_distribution={JSON.stringify(timeoutDistribution || [])}</p>
         <p data-testid="execution-control-analytics-loading-state">loading={loading ? "true" : "false"}</p>
       </div>
 
@@ -284,8 +307,10 @@ export const ExecutionAnalyticsPage = () => {
               <TableHead>state</TableHead>
               <TableHead>count</TableHead>
               <TableHead>avg_latency_ms</TableHead>
+              <TableHead>p95_latency_ms</TableHead>
               <TableHead>min_latency_ms</TableHead>
               <TableHead>max_latency_ms</TableHead>
+              <TableHead>timeout_count</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -294,12 +319,14 @@ export const ExecutionAnalyticsPage = () => {
                 <TableCell>{row.state}</TableCell>
                 <TableCell>{row.count}</TableCell>
                 <TableCell>{row.avg_latency_ms}</TableCell>
+                <TableCell>{row.p95_latency_ms ?? "-"}</TableCell>
                 <TableCell>{row.min_latency_ms ?? "-"}</TableCell>
                 <TableCell>{row.max_latency_ms ?? "-"}</TableCell>
+                <TableCell>{row.timeout_count ?? 0}</TableCell>
               </TableRow>
             ))}
             {!stateLatency.length && (
-              <TableRow><TableCell colSpan={5}>Kayıt yok</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7}>Kayıt yok</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
@@ -451,6 +478,14 @@ export const ExecutionAnalyticsPage = () => {
               data-testid="execution-control-alert-auto-ack-run-button"
             >
               Run
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={applyDefaultAutoAck}
+              data-testid="execution-control-alert-auto-ack-default-button"
+            >
+              Apply INFO &gt;24h Seen
             </Button>
           </div>
         </div>
