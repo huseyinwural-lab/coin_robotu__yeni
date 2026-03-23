@@ -1,0 +1,162 @@
+{
+  "summary": {
+    "total_tests": 6,
+    "passed_tests": 3,
+    "success_rate": 50.0,
+    "overall_success": false
+  },
+  "test_results": [
+    {
+      "test_name": "Heavy Chain Timeline",
+      "endpoint": "https://execution-safety-hub.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
+      "status_code": 200,
+      "success": true,
+      "details": {
+        "total_nodes": 561,
+        "virtualization_recommended": true,
+        "is_chain_valid": true,
+        "summary_keys": [
+          "total_nodes",
+          "manual_action_count",
+          "system_reaction_count",
+          "broken_links_count",
+          "root_nodes_count",
+          "is_chain_valid",
+          "invalid_reasons",
+          "max_depth",
+          "default_view",
+          "lazy_load_recommended",
+          "virtualization_recommended"
+        ]
+      },
+      "checks": {
+        "status_200": true,
+        "total_nodes_gte_500": true,
+        "virtualization_recommended_true": true,
+        "is_chain_valid_true": true
+      }
+    },
+    {
+      "test_name": "Broken Chain Timeline",
+      "endpoint": "https://execution-safety-hub.preview.emergentagent.com/api/admin/strategy/timeline/p1-broken-chain-001?window=7d&strategy_id=seed_strategy",
+      "status_code": 200,
+      "success": false,
+      "details": {
+        "is_chain_valid": false,
+        "broken_links_count": 0,
+        "invalid_reasons": [],
+        "invalid_reasons_count": 0
+      },
+      "checks": {
+        "status_200": true,
+        "is_chain_valid_false": true,
+        "broken_links_count_gt_0": false,
+        "invalid_reasons_populated": false
+      }
+    },
+    {
+      "test_name": "Role Parity",
+      "endpoint": "https://execution-safety-hub.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
+      "success": true,
+      "details": {
+        "super_admin_status": 200,
+        "admin_status": 200,
+        "super_admin_success": true,
+        "admin_success": true,
+        "summary_keys_match": true,
+        "super_admin_summary_keys": [
+          "manual_action_count",
+          "broken_links_count",
+          "system_reaction_count",
+          "root_nodes_count",
+          "is_chain_valid",
+          "default_view",
+          "invalid_reasons",
+          "lazy_load_recommended",
+          "total_nodes",
+          "max_depth",
+          "virtualization_recommended"
+        ],
+        "admin_summary_keys": [
+          "manual_action_count",
+          "broken_links_count",
+          "system_reaction_count",
+          "root_nodes_count",
+          "is_chain_valid",
+          "default_view",
+          "invalid_reasons",
+          "lazy_load_recommended",
+          "total_nodes",
+          "max_depth",
+          "virtualization_recommended"
+        ]
+      }
+    },
+    {
+      "test_name": "Drill-down Consistency",
+      "success": false,
+      "details": {
+        "timeline_count": 561,
+        "action_impact_count": 0,
+        "counts_match": false,
+        "timeline_status": 200,
+        "action_impact_status": 200
+      }
+    },
+    {
+      "test_name": "Impact Readability",
+      "endpoint": "https://execution-safety-hub.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
+      "success": true,
+      "details": {
+        "nodes_count": 561,
+        "impact_labels_found": true,
+        "sample_impact_labels": [
+          [
+            "Risk \u2193 (-0.12)",
+            "Exposure \u2191 (+0.07)",
+            "Signals accepted \u2191 (+4.0)",
+            "Signals rejected \u2193 (-2.0)"
+          ],
+          [
+            "Risk = (0)",
+            "Exposure \u2193 (-0.04)",
+            "Signals accepted \u2191 (+1.0)",
+            "Signals rejected \u2191 (+1.0)",
+            "Alert resolved"
+          ],
+          [
+            "Risk \u2191 (+0.01)",
+            "Exposure \u2193 (-0.02)",
+            "Signals accepted \u2191 (+1.0)",
+            "Signals rejected \u2191 (+1.0)",
+            "Alert triggered"
+          ]
+        ],
+        "human_readable_count": 24
+      }
+    },
+    {
+      "test_name": "Preflight Endpoint",
+      "endpoint": "https://execution-safety-hub.preview.emergentagent.com/api/admin-phase3/incident-snapshots/playbook/preflight",
+      "status_code": 200,
+      "success": false,
+      "details": {
+        "checks_present": {
+          "db_readiness": false,
+          "migration_compatibility": false,
+          "table_access": false,
+          "integration_readiness": false,
+          "playbook_flow_gate": false
+        },
+        "migration_required_present": true,
+        "migration_current_present": true,
+        "total_checks": 5,
+        "migration_keys": [
+          "current",
+          "required",
+          "compatible"
+        ]
+      }
+    }
+  ]
+}

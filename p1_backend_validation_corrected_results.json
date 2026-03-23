@@ -1,0 +1,232 @@
+{
+  "summary": {
+    "total_tests": 6,
+    "passed_tests": 6,
+    "success_rate": 100.0,
+    "overall_success": true
+  },
+  "test_results": [
+    {
+      "test_name": "Heavy Chain Timeline",
+      "endpoint": "https://execution-safety-hub.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
+      "status_code": 200,
+      "success": true,
+      "details": {
+        "total_nodes": 561,
+        "virtualization_recommended": true,
+        "is_chain_valid": true,
+        "summary_keys": [
+          "total_nodes",
+          "manual_action_count",
+          "system_reaction_count",
+          "broken_links_count",
+          "root_nodes_count",
+          "is_chain_valid",
+          "invalid_reasons",
+          "max_depth",
+          "default_view",
+          "lazy_load_recommended",
+          "virtualization_recommended"
+        ]
+      },
+      "checks": {
+        "status_200": true,
+        "total_nodes_gte_500": true,
+        "virtualization_recommended_true": true,
+        "is_chain_valid_true": true
+      }
+    },
+    {
+      "test_name": "Broken Chain Timeline",
+      "endpoint": "https://execution-safety-hub.preview.emergentagent.com/api/admin/strategy/timeline/p1-broken-chain-001?window=7d&strategy_id=seed_strategy",
+      "status_code": 200,
+      "success": true,
+      "details": {
+        "is_chain_valid": false,
+        "broken_links_count": 1,
+        "invalid_reasons": [
+          "multiple_roots",
+          "parent_not_found"
+        ],
+        "invalid_reasons_count": 2
+      },
+      "checks": {
+        "status_200": true,
+        "is_chain_valid_false": true,
+        "broken_links_count_gt_0": true,
+        "invalid_reasons_populated": true
+      }
+    },
+    {
+      "test_name": "Role Parity",
+      "endpoint": "https://execution-safety-hub.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
+      "success": true,
+      "details": {
+        "super_admin_status": 200,
+        "admin_status": 200,
+        "super_admin_success": true,
+        "admin_success": true,
+        "summary_keys_match": true,
+        "super_admin_summary_keys": [
+          "total_nodes",
+          "is_chain_valid",
+          "system_reaction_count",
+          "manual_action_count",
+          "root_nodes_count",
+          "default_view",
+          "lazy_load_recommended",
+          "virtualization_recommended",
+          "invalid_reasons",
+          "broken_links_count",
+          "max_depth"
+        ],
+        "admin_summary_keys": [
+          "total_nodes",
+          "is_chain_valid",
+          "system_reaction_count",
+          "manual_action_count",
+          "root_nodes_count",
+          "default_view",
+          "lazy_load_recommended",
+          "virtualization_recommended",
+          "invalid_reasons",
+          "broken_links_count",
+          "max_depth"
+        ]
+      }
+    },
+    {
+      "test_name": "Drill-down Consistency",
+      "success": true,
+      "details": {
+        "timeline_count": 561,
+        "action_impact_heavy_chain_events": 561,
+        "action_impact_total_events": 566,
+        "timeline_status": 200,
+        "action_impact_status": 200
+      }
+    },
+    {
+      "test_name": "Impact Readability",
+      "endpoint": "https://execution-safety-hub.preview.emergentagent.com/api/admin/strategy/timeline/p1-heavy-chain-600?window=7d&strategy_id=seed_strategy",
+      "success": true,
+      "details": {
+        "nodes_count": 561,
+        "impact_labels_found": true,
+        "sample_impact_labels": [
+          [
+            "Risk \u2193 (-0.12)",
+            "Exposure \u2191 (+0.07)",
+            "Signals accepted \u2191 (+4.0)",
+            "Signals rejected \u2193 (-2.0)"
+          ],
+          [
+            "Risk = (0)",
+            "Exposure \u2193 (-0.04)",
+            "Signals accepted \u2191 (+1.0)",
+            "Signals rejected \u2191 (+1.0)",
+            "Alert resolved"
+          ],
+          [
+            "Risk \u2191 (+0.01)",
+            "Exposure \u2193 (-0.02)",
+            "Signals accepted \u2191 (+1.0)",
+            "Signals rejected \u2191 (+1.0)",
+            "Alert triggered"
+          ]
+        ],
+        "human_readable_count": 24
+      }
+    },
+    {
+      "test_name": "Preflight Endpoint",
+      "endpoint": "https://execution-safety-hub.preview.emergentagent.com/api/admin-phase3/incident-snapshots/playbook/preflight",
+      "status_code": 200,
+      "success": true,
+      "details": {
+        "response_keys": [
+          "status",
+          "message",
+          "overall_state",
+          "checked_at",
+          "checks",
+          "migration",
+          "tables",
+          "integration_modes",
+          "role_gate"
+        ],
+        "full_response": {
+          "status": "success",
+          "message": "playbook_preflight_ready",
+          "overall_state": "ready",
+          "checked_at": "2026-03-23T11:28:47.654752+00:00",
+          "checks": [
+            {
+              "key": "db_readiness",
+              "label": "DB readiness",
+              "status": "ready",
+              "detail": "Database ba\u011flant\u0131s\u0131 aktif"
+            },
+            {
+              "key": "migration_compatibility",
+              "label": "Migration compatibility",
+              "status": "ready",
+              "detail": "current=20260323_0062 required>=20260323_0062"
+            },
+            {
+              "key": "table_access",
+              "label": "Playbook/Governance tables",
+              "status": "ready",
+              "detail": "playbook_execution_runs:ok, playbook_rollback_markers:ok, signal_governance_decisions:ok"
+            },
+            {
+              "key": "integration_readiness",
+              "label": "Integration readiness",
+              "status": "ready",
+              "detail": "slack=MOCKED | binance=MOCKED"
+            },
+            {
+              "key": "playbook_flow_gate",
+              "label": "Preview/Approve/Execute gate",
+              "status": "ready",
+              "detail": "Flow \u00e7al\u0131\u015ft\u0131r\u0131labilir"
+            }
+          ],
+          "migration": {
+            "current": "20260323_0062",
+            "required": "20260323_0062",
+            "compatible": true
+          },
+          "tables": {
+            "playbook_execution_runs": true,
+            "playbook_rollback_markers": true,
+            "signal_governance_decisions": true
+          },
+          "integration_modes": {
+            "slack": "MOCKED",
+            "binance": "MOCKED",
+            "execution_mode": "MOCKED",
+            "execution_status": "unknown"
+          },
+          "role_gate": {
+            "current_role": "super_admin",
+            "approve_allowed": true
+          }
+        },
+        "checks_found": 0,
+        "checks_present": {
+          "db_readiness": false,
+          "migration_compatibility": false,
+          "table_access": false,
+          "integration_readiness": false,
+          "playbook_flow_gate": false
+        },
+        "migration_fields": [
+          "current",
+          "required",
+          "compatible"
+        ]
+      }
+    }
+  ]
+}
