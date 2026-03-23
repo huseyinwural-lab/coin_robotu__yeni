@@ -1868,6 +1868,86 @@ def _build_incident_snapshot_scope_bundle(
     }
 
 
+def _build_snapshot_diff_payload(
+    *,
+    scope_a_type: str,
+    scope_a_payload: dict,
+    scope_a_bundle: dict,
+    scope_b_type: str,
+    scope_b_payload: dict,
+    scope_b_bundle: dict,
+) -> tuple[dict, str]:
+    a_counts = scope_a_bundle["row_counts"]
+    b_counts = scope_b_bundle["row_counts"]
+
+    dead_letter_a = sum(1 for row in scope_a_bundle["failures"] if str(row.get("status", "")).lower() in {"dead", "quarantined"})
+    dead_letter_b = sum(1 for row in scope_b_bundle["failures"] if str(row.get("status", "")).lower() in {"dead", "quarantined"})
+
+    def _pct_change(current_value: int, compare_value: int) -> int:
+        if compare_value == 0:
+            return 100 if current_value > 0 else 0
+        return int(round(((current_value - compare_value) / compare_value) * 100))
+
+    counts = {
+        "events_delta": a_counts["events"] - b_counts["events"],
+        "transitions_delta": a_counts["transitions"] - b_counts["transitions"],
+        "failed_events_delta": a_counts["failed_events"] - b_counts["failed_events"],
+        "dead_letter_delta": dead_letter_a - dead_letter_b,
+        "manual_actions_delta": a_counts["manual_actions"] - b_counts["manual_actions"],
+        "idempotency_collisions_delta": a_counts["idempotency_collisions"] - b_counts["idempotency_collisions"],
+    }
+
+    percentage_change = {
+        "failed_events": _pct_change(a_counts["failed_events"], b_counts["failed_events"]),
+        "dead_letter": _pct_change(dead_letter_a, dead_letter_b),
+    }
+
+    anomaly_notes: list[str] = []
+    if counts["failed_events_delta"] > 0 and percentage_change["failed_events"] > 50:
+        anomaly_notes.append(f"FAILED_EVENTS increased by {percentage_change['failed_events']}% (CRITICAL_RISK)")
+    elif counts["failed_events_delta"] < 0:
+        anomaly_notes.append("FAILED_EVENTS decreased (IMPROVED)")
+
+    if counts["dead_letter_delta"] > 0 and percentage_change["dead_letter"] > 30:
+        anomaly_notes.append(f"DEAD_LETTER increased by {percentage_change['dead_letter']}% (HIGH_RISK)")
+    elif counts["dead_letter_delta"] < 0:
+        anomaly_notes.append("DEAD_LETTER decreased (IMPROVED)")
+
+    if counts["manual_actions_delta"] > 0:
+        anomaly_notes.append("OPERATOR_INTERVENTION increased")
+    elif counts["manual_actions_delta"] < 0:
+        anomaly_notes.append("MANUAL_ACTIONS decreased (REDUCED)")
+
+    diff_payload = {
+        "scope_a": {
+            "filter_scope": scope_a_type,
+            "scope_identifiers": scope_a_payload,
+            "row_counts": a_counts,
+        },
+        "scope_b": {
+            "filter_scope": scope_b_type,
+            "scope_identifiers": scope_b_payload,
+            "row_counts": b_counts,
+        },
+        "counts": counts,
+        "percentage_change": percentage_change,
+        "anomaly_notes": anomaly_notes,
+    }
+
+    summary_lines = [
+        "Snapshot Diff Summary",
+        f"- FAILED EVENTS: {percentage_change['failed_events']}% ({'↑' if counts['failed_events_delta'] > 0 else '↓' if counts['failed_events_delta'] < 0 else '='})",
+        f"- DEAD LETTER: {percentage_change['dead_letter']}% ({'↑' if counts['dead_letter_delta'] > 0 else '↓' if counts['dead_letter_delta'] < 0 else '='})",
+        f"- MANUAL ACTIONS: {counts['manual_actions_delta']} ({'↑' if counts['manual_actions_delta'] > 0 else '↓' if counts['manual_actions_delta'] < 0 else '='})",
+        "Anomaly Notes",
+    ]
+    if anomaly_notes:
+        summary_lines.extend([f"- {note}" for note in anomaly_notes])
+    else:
+        summary_lines.append("- none")
+    return diff_payload, "\n".join(summary_lines) + "\n"
+
+
 @router.post("/incident-snapshots/export")
 def export_incident_snapshot_bundle(
     payload: IncidentSnapshotExportRequest,
@@ -1940,145 +2020,14 @@ def export_incident_snapshot_bundle(
     diff_summary_text = None
     if compare_bundle is not None:
         generated_files.extend(["diff.json", "diff_summary.txt"])
-
-        diff_keys = ["events", "transitions", "failed_events", "manual_actions", "idempotency_collisions"]
-        count_delta = {}
-        summary_lines = ["Snapshot Diff Summary"]
-        anomaly_notes = []
-
-        def _pct_change(current_value: int, compare_value: int) -> float:
-            if compare_value == 0:
-                return 100.0 if current_value > 0 else 0.0
-            return ((current_value - compare_value) / compare_value) * 100.0
-
-        for key in diff_keys:
-            current_value = primary_bundle["row_counts"].get(key, 0)
-            compare_value = compare_bundle["row_counts"].get(key, 0)
-            delta = current_value - compare_value
-            trend = "arttı" if delta > 0 else "azaldı" if delta < 0 else "değişmedi"
-            if key in {"failed_events", "manual_actions"}:
-                direction = "increased" if delta > 0 else "improved" if delta < 0 else "unchanged"
-            else:
-                direction = "increased" if delta > 0 else "reduced" if delta < 0 else "unchanged"
-            count_delta[key] = {
-                "current": current_value,
-                "compare": compare_value,
-                "delta": delta,
-                "trend": trend,
-                "direction": direction,
-            }
-            summary_lines.append(
-                f"- {key}: current={current_value}, compare={compare_value}, delta={delta} ({trend}, {direction})"
-            )
-
-            if key == "failed_events":
-                pct = _pct_change(current_value, compare_value)
-                if delta > 0 and pct > 50:
-                    anomaly_notes.append(
-                        {
-                            "rule_id": "failed_events_risk_gt_50pct",
-                            "severity": "critical",
-                            "metric": key,
-                            "message": f"risk: failed_events increased by {pct:.2f}%",
-                            "current": current_value,
-                            "compare": compare_value,
-                            "delta": delta,
-                            "pct_change": round(pct, 4),
-                        }
-                    )
-                elif delta < 0:
-                    anomaly_notes.append(
-                        {
-                            "rule_id": "failed_events_negative_delta",
-                            "severity": "info",
-                            "metric": key,
-                            "message": "improved: failed_events reduced",
-                            "current": current_value,
-                            "compare": compare_value,
-                            "delta": delta,
-                            "pct_change": round(pct, 4),
-                        }
-                    )
-
-            if key == "manual_actions":
-                pct = _pct_change(current_value, compare_value)
-                if delta > 0:
-                    anomaly_notes.append(
-                        {
-                            "rule_id": "manual_actions_increased",
-                            "severity": "warning",
-                            "metric": key,
-                            "message": "operator intervention increased",
-                            "current": current_value,
-                            "compare": compare_value,
-                            "delta": delta,
-                            "pct_change": round(pct, 4),
-                        }
-                    )
-                elif delta < 0:
-                    anomaly_notes.append(
-                        {
-                            "rule_id": "manual_actions_negative_delta",
-                            "severity": "info",
-                            "metric": key,
-                            "message": "reduced: operator intervention decreased",
-                            "current": current_value,
-                            "compare": compare_value,
-                            "delta": delta,
-                            "pct_change": round(pct, 4),
-                        }
-                    )
-
-        primary_dead_letter = sum(1 for row in primary_bundle["failures"] if str(row.get("status", "")).lower() in {"dead", "quarantined"})
-        compare_dead_letter = sum(1 for row in compare_bundle["failures"] if str(row.get("status", "")).lower() in {"dead", "quarantined"})
-        dead_letter_delta = primary_dead_letter - compare_dead_letter
-        dead_letter_pct = _pct_change(primary_dead_letter, compare_dead_letter)
-
-        if dead_letter_delta > 0 and dead_letter_pct > 50:
-            anomaly_notes.append(
-                {
-                    "rule_id": "dead_letter_risk_gt_50pct",
-                    "severity": "critical",
-                    "metric": "dead_letter",
-                    "message": f"risk: dead_letter increased by {dead_letter_pct:.2f}%",
-                    "current": primary_dead_letter,
-                    "compare": compare_dead_letter,
-                    "delta": dead_letter_delta,
-                    "pct_change": round(dead_letter_pct, 4),
-                }
-            )
-        elif dead_letter_delta < 0:
-            anomaly_notes.append(
-                {
-                    "rule_id": "dead_letter_negative_delta",
-                    "severity": "info",
-                    "metric": "dead_letter",
-                    "message": "improved: dead_letter reduced",
-                    "current": primary_dead_letter,
-                    "compare": compare_dead_letter,
-                    "delta": dead_letter_delta,
-                    "pct_change": round(dead_letter_pct, 4),
-                }
-            )
-
-        if anomaly_notes:
-            summary_lines.append("Anomaly Notes")
-            for note in anomaly_notes:
-                summary_lines.append(f"- [{note['severity']}] {note['metric']}: {note['message']}")
-        else:
-            summary_lines.append("Anomaly Notes")
-            summary_lines.append("- none")
-
-        diff_json = {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "scope_comparison": {
-                "primary": {"scope_type": scope_type, "scope_identifiers": scope_payload},
-                "compare": {"scope_type": compare_scope_type, "scope_identifiers": compare_scope_payload},
-            },
-            "count_delta": count_delta,
-            "anomaly_notes": anomaly_notes,
-        }
-        diff_summary_text = "\n".join(summary_lines) + "\n"
+        diff_json, diff_summary_text = _build_snapshot_diff_payload(
+            scope_a_type=scope_type,
+            scope_a_payload=scope_payload,
+            scope_a_bundle=primary_bundle,
+            scope_b_type=compare_scope_type,
+            scope_b_payload=compare_scope_payload,
+            scope_b_bundle=compare_bundle,
+        )
 
     metadata = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
@@ -2178,6 +2127,108 @@ def export_incident_snapshot_bundle(
             "X-Incident-Snapshot-Scope-Selected": scope_type,
         },
     )
+
+
+@router.post("/incident-snapshots/diff")
+def incident_snapshot_diff_preview(
+    payload: IncidentSnapshotExportRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    scope_type, scope_payload = _require_incident_export_scope(payload)
+    primary_bundle = _build_incident_snapshot_scope_bundle(
+        db,
+        payload,
+        scope_type=scope_type,
+        scope_payload=scope_payload,
+    )
+
+    compare_enabled = any(
+        [
+            payload.compare_correlation_id,
+            payload.compare_execution_event_id,
+            payload.compare_time_from,
+            payload.compare_time_to,
+        ]
+    )
+
+    diff_payload = None
+    diff_summary = ""
+    compare_scope_payload = None
+    compare_scope_type = None
+
+    if compare_enabled:
+        compare_request = IncidentSnapshotExportRequest(
+            correlation_id=payload.compare_correlation_id,
+            execution_event_id=payload.compare_execution_event_id,
+            time_from=payload.compare_time_from,
+            time_to=payload.compare_time_to,
+            search=payload.search,
+            state=payload.state,
+            status=payload.status,
+            source_type=payload.source_type,
+            symbol=payload.symbol,
+            strategy=payload.strategy,
+            order_id=payload.order_id,
+        )
+        compare_scope_type, compare_scope_payload = _require_incident_export_scope(compare_request)
+        if compare_scope_type != scope_type:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"incompatible_scope: primary={scope_type}, compare={compare_scope_type}",
+            )
+
+        compare_bundle = _build_incident_snapshot_scope_bundle(
+            db,
+            compare_request,
+            scope_type=compare_scope_type,
+            scope_payload=compare_scope_payload,
+        )
+        diff_payload, diff_summary = _build_snapshot_diff_payload(
+            scope_a_type=scope_type,
+            scope_a_payload=scope_payload,
+            scope_a_bundle=primary_bundle,
+            scope_b_type=compare_scope_type,
+            scope_b_payload=compare_scope_payload,
+            scope_b_bundle=compare_bundle,
+        )
+
+    trace_id = str(uuid.uuid4())
+    state_snapshot = {
+        "compare_enabled": compare_enabled,
+        "scope_a": {"filter_scope": scope_type, "scope_identifiers": scope_payload},
+        "scope_b": {"filter_scope": compare_scope_type, "scope_identifiers": compare_scope_payload} if compare_enabled else None,
+        "preview": {
+            "events": primary_bundle["row_counts"]["events"],
+            "failures": primary_bundle["row_counts"]["failed_events"],
+            "transitions": primary_bundle["row_counts"]["transitions"],
+        },
+        "diff": diff_payload,
+        "diff_summary": diff_summary,
+    }
+
+    create_audit_log(
+        db,
+        action="incident_snapshot_diff_preview",
+        entity_type="execution_incident_snapshot",
+        entity_id=scope_payload.get("correlation_id") or scope_payload.get("execution_event_id") or trace_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "trace_id": trace_id,
+            "scope": scope_payload,
+            "compare_scope": compare_scope_payload,
+            "preview": state_snapshot["preview"],
+        },
+    )
+    db.commit()
+
+    return {
+        "status": "success",
+        "trace_id": trace_id,
+        "message": "incident snapshot diff generated",
+        "state_snapshot": state_snapshot,
+    }
 
 
 @router.post("/hardening-checklist/run", response_model=HardeningChecklistRunResponse)

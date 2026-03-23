@@ -44,11 +44,14 @@ export const ExecutionStatesPage = () => {
   const [manualToState, setManualToState] = useState("cancelled");
   const [exportScopeType, setExportScopeType] = useState("correlation_id");
   const [exportScopeValue, setExportScopeValue] = useState("");
-  const [compareEnabled, setCompareEnabled] = useState(false);
-  const [compareScopeType, setCompareScopeType] = useState("correlation_id");
-  const [compareScopeValue, setCompareScopeValue] = useState("");
-  const [compareTimeFrom, setCompareTimeFrom] = useState("");
-  const [compareTimeTo, setCompareTimeTo] = useState("");
+  const [compareEnabled, setCompareEnabled] = useState(readFilter(searchParams, "compare", "false") === "true");
+  const [compareScopeType, setCompareScopeType] = useState(readFilter(searchParams, "compare_scope_type", "correlation_id"));
+  const [compareScopeValue, setCompareScopeValue] = useState(readFilter(searchParams, "compare_scope_value"));
+  const [compareTimeFrom, setCompareTimeFrom] = useState(readFilter(searchParams, "compare_time_from"));
+  const [compareTimeTo, setCompareTimeTo] = useState(readFilter(searchParams, "compare_time_to"));
+  const [exportPreview, setExportPreview] = useState({ events: 0, failures: 0, transitions: 0 });
+  const [diffSnapshot, setDiffSnapshot] = useState(null);
+  const [diffPreviewLoading, setDiffPreviewLoading] = useState(false);
 
   const filters = useMemo(
     () => ({
@@ -220,48 +223,94 @@ export const ExecutionStatesPage = () => {
     return fallback;
   };
 
+  const buildSnapshotRequestBody = ({ silent = false } = {}) => {
+    const body = {
+      search: filters.search || null,
+      state: filters.state !== "all" ? filters.state : null,
+      status: filters.status !== "all" ? filters.status : null,
+      source_type: filters.source_type !== "all" ? filters.source_type : null,
+      symbol: filters.symbol || null,
+      strategy: filters.strategy || null,
+      order_id: filters.order_id || null,
+      correlation_id: null,
+      execution_event_id: null,
+      time_from: null,
+      time_to: null,
+      compare_correlation_id: null,
+      compare_execution_event_id: null,
+      compare_time_from: null,
+      compare_time_to: null,
+    };
+
+    const fail = (message) => {
+      if (!silent) {
+        throw new Error(`Export hatası: ${message}`);
+      }
+      return null;
+    };
+
+    if (exportScopeType === "correlation_id") {
+      const value = exportScopeValue.trim() || filters.correlation_id || "";
+      if (!value) return fail("Correlation ID zorunlu");
+      body.correlation_id = value;
+    } else if (exportScopeType === "execution_event_id") {
+      const value = exportScopeValue.trim() || selectedEventId || "";
+      if (!value) return fail("Execution Event ID zorunlu");
+      body.execution_event_id = value;
+    } else {
+      if (!filters.time_from || !filters.time_to) return fail("Time Range için Time From ve Time To zorunlu");
+      body.time_from = filters.time_from;
+      body.time_to = filters.time_to;
+    }
+
+    if (compareEnabled) {
+      if (compareScopeType !== exportScopeType) {
+        return fail("incompatible_scope: primary ve compare scope type aynı olmalı");
+      }
+      if (compareScopeType === "correlation_id") {
+        if (!compareScopeValue.trim()) return fail("Compare Correlation ID zorunlu");
+        body.compare_correlation_id = compareScopeValue.trim();
+      } else if (compareScopeType === "execution_event_id") {
+        if (!compareScopeValue.trim()) return fail("Compare Execution Event ID zorunlu");
+        body.compare_execution_event_id = compareScopeValue.trim();
+      } else {
+        if (!compareTimeFrom || !compareTimeTo) return fail("Compare Time Range için Time From ve Time To zorunlu");
+        body.compare_time_from = compareTimeFrom;
+        body.compare_time_to = compareTimeTo;
+      }
+    }
+    return body;
+  };
+
+  const loadDiffPreview = async ({ showError = false } = {}) => {
+    const body = buildSnapshotRequestBody({ silent: !showError });
+    if (!body) {
+      setDiffSnapshot(null);
+      setExportPreview({ events: 0, failures: 0, transitions: 0 });
+      return;
+    }
+
+    setDiffPreviewLoading(true);
+    try {
+      const { data } = await apiClient.post("/admin-phase3/incident-snapshots/diff", body);
+      const snapshot = data?.state_snapshot || null;
+      setDiffSnapshot(snapshot);
+      setExportPreview(snapshot?.preview || { events: 0, failures: 0, transitions: 0 });
+    } catch (error) {
+      setDiffSnapshot(null);
+      if (showError) {
+        toast.error(error?.response?.data?.detail || "Diff preview alınamadı");
+      }
+    } finally {
+      setDiffPreviewLoading(false);
+    }
+  };
+
   const exportIncidentSnapshot = async () => {
     try {
-      const body = {
-        search: filters.search || null,
-        state: filters.state !== "all" ? filters.state : null,
-        status: filters.status !== "all" ? filters.status : null,
-        source_type: filters.source_type !== "all" ? filters.source_type : null,
-        symbol: filters.symbol || null,
-        strategy: filters.strategy || null,
-        order_id: filters.order_id || null,
-        correlation_id: null,
-        execution_event_id: null,
-        time_from: null,
-        time_to: null,
-        compare_correlation_id: null,
-        compare_execution_event_id: null,
-        compare_time_from: null,
-        compare_time_to: null,
-      };
-
-      if (exportScopeType === "correlation_id") {
-        body.correlation_id = exportScopeValue.trim() || filters.correlation_id || null;
-      } else if (exportScopeType === "execution_event_id") {
-        body.execution_event_id = exportScopeValue.trim() || selectedEventId || null;
-      } else {
-        body.time_from = filters.time_from || null;
-        body.time_to = filters.time_to || null;
-      }
-
+      const body = buildSnapshotRequestBody({ silent: false });
       if (compareEnabled) {
-        if (compareScopeType !== exportScopeType) {
-          toast.error("Export hatası: compare scope türü primary scope ile aynı olmalı");
-          return;
-        }
-        if (compareScopeType === "correlation_id") {
-          body.compare_correlation_id = compareScopeValue.trim() || null;
-        } else if (compareScopeType === "execution_event_id") {
-          body.compare_execution_event_id = compareScopeValue.trim() || null;
-        } else {
-          body.compare_time_from = compareTimeFrom || null;
-          body.compare_time_to = compareTimeTo || null;
-        }
+        await loadDiffPreview({ showError: true });
       }
 
       const accessToken = window.localStorage.getItem("token");
@@ -316,6 +365,70 @@ export const ExecutionStatesPage = () => {
     }
   };
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadDiffPreview({ showError: false });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [
+    filters.search,
+    filters.state,
+    filters.status,
+    filters.source_type,
+    filters.symbol,
+    filters.strategy,
+    filters.correlation_id,
+    filters.order_id,
+    filters.time_from,
+    filters.time_to,
+    exportScopeType,
+    exportScopeValue,
+    compareEnabled,
+    compareScopeType,
+    compareScopeValue,
+    compareTimeFrom,
+    compareTimeTo,
+    selectedEventId,
+  ]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (compareEnabled) {
+      next.set("compare", "true");
+      next.set("compare_scope_type", compareScopeType);
+      if (compareScopeType === "time_range") {
+        if (compareTimeFrom) next.set("compare_time_from", compareTimeFrom);
+        else next.delete("compare_time_from");
+        if (compareTimeTo) next.set("compare_time_to", compareTimeTo);
+        else next.delete("compare_time_to");
+        next.delete("compare_scope_value");
+      } else {
+        if (compareScopeValue) next.set("compare_scope_value", compareScopeValue);
+        else next.delete("compare_scope_value");
+        next.delete("compare_time_from");
+        next.delete("compare_time_to");
+      }
+    } else {
+      next.delete("compare");
+      next.delete("compare_scope_type");
+      next.delete("compare_scope_value");
+      next.delete("compare_time_from");
+      next.delete("compare_time_to");
+    }
+
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [
+    compareEnabled,
+    compareScopeType,
+    compareScopeValue,
+    compareTimeFrom,
+    compareTimeTo,
+    searchParams,
+    setSearchParams,
+  ]);
+
   const uniqueStates = useMemo(() => {
     const set = new Set(rows.map((row) => row.state).filter(Boolean));
     return ["all", ...Array.from(set)];
@@ -327,60 +440,67 @@ export const ExecutionStatesPage = () => {
     return [...DEFAULT_STATE_STEPS, ...dynamic];
   }, [statePath]);
 
+  const diffData = diffSnapshot?.diff || null;
+  const failedPct = Number(diffData?.percentage_change?.failed_events || 0);
+  const deadPct = Number(diffData?.percentage_change?.dead_letter || 0);
+  const failedDelta = Number(diffData?.counts?.failed_events_delta || 0);
+  const deadDelta = Number(diffData?.counts?.dead_letter_delta || 0);
+  const manualDelta = Number(diffData?.counts?.manual_actions_delta || 0);
+
   return (
     <section className="space-y-4" data-testid="execution-control-states-page">
       <div className="grid gap-3 md:grid-cols-6" data-testid="execution-control-states-filters">
         <div>
-          <Label>search</Label>
+          <Label>Search</Label>
           <Input value={filters.search} onChange={(e) => updateFilter("search", e.target.value)} placeholder="event/correlation/symbol/order" data-testid="execution-control-states-search-input" />
         </div>
         <div>
-          <Label>state</Label>
+          <Label>State</Label>
           <Select value={filters.state || "all"} onValueChange={(v) => updateFilter("state", v)}>
             <SelectTrigger data-testid="execution-control-states-state-select"><SelectValue /></SelectTrigger>
             <SelectContent>{uniqueStates.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div>
-          <Label>status</Label>
+          <Label>Status</Label>
           <Select value={filters.status || "all"} onValueChange={(v) => updateFilter("status", v)}>
             <SelectTrigger data-testid="execution-control-states-status-select"><SelectValue /></SelectTrigger>
             <SelectContent>{STATUS_OPTIONS.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div>
-          <Label>source_type</Label>
+          <Label>Source Type</Label>
           <Select value={filters.source_type || "all"} onValueChange={(v) => updateFilter("source_type", v)}>
             <SelectTrigger data-testid="execution-control-states-source-select"><SelectValue /></SelectTrigger>
             <SelectContent>{SOURCE_OPTIONS.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div>
-          <Label>symbol</Label>
+          <Label>Symbol</Label>
           <Input value={filters.symbol} onChange={(e) => updateFilter("symbol", e.target.value)} data-testid="execution-control-states-symbol-input" />
         </div>
         <div>
-          <Label>strategy</Label>
+          <Label>Strategy</Label>
           <Input value={filters.strategy} onChange={(e) => updateFilter("strategy", e.target.value)} data-testid="execution-control-states-strategy-input" />
         </div>
         <div>
-          <Label>correlation_id</Label>
-          <Input value={filters.correlation_id} onChange={(e) => updateFilter("correlation_id", e.target.value)} data-testid="execution-control-states-correlation-input" />
+          <Label>Correlation ID</Label>
+          <Input value={filters.correlation_id} onChange={(e) => updateFilter("correlation_id", e.target.value)} placeholder="enter correlation id" data-testid="execution-control-states-correlation-input" />
         </div>
         <div>
-          <Label>order_id</Label>
+          <Label>Order ID</Label>
           <Input value={filters.order_id} onChange={(e) => updateFilter("order_id", e.target.value)} data-testid="execution-control-states-order-id-input" />
         </div>
         <div>
-          <Label>time_from (ISO)</Label>
+          <Label>Time From (ISO)</Label>
           <Input value={filters.time_from} onChange={(e) => updateFilter("time_from", e.target.value)} placeholder="2026-03-22T00:00:00+00:00" data-testid="execution-control-states-time-from-input" />
         </div>
         <div>
-          <Label>time_to (ISO)</Label>
+          <Label>Time To (ISO)</Label>
           <Input value={filters.time_to} onChange={(e) => updateFilter("time_to", e.target.value)} placeholder="2026-03-22T23:59:59+00:00" data-testid="execution-control-states-time-to-input" />
         </div>
         <div>
-          <Label>refresh</Label>
+          <Label>Refresh</Label>
           <Select value={String(refreshMs)} onValueChange={(v) => setRefreshMs(Number(v))}>
             <SelectTrigger data-testid="execution-control-states-refresh-select"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -502,18 +622,38 @@ export const ExecutionStatesPage = () => {
       )}
 
       <div className="rounded border border-slate-700 bg-slate-950 p-3" data-testid="execution-control-incident-export-panel">
-        <p className="text-sm font-semibold">Incident Snapshot Export (zip)</p>
+        <p className="text-sm font-semibold">Incident Snapshot Export</p>
+        <p className="text-xs text-slate-400" data-testid="execution-control-incident-export-preview-text">
+          {diffPreviewLoading
+            ? "Export preview hazırlanıyor..."
+            : `~ ${exportPreview.events || 0} events, ${exportPreview.failures || 0} failures export edilecek`}
+        </p>
+
         <div className="mt-2 grid gap-2 md:grid-cols-3">
-          <Select value={exportScopeType} onValueChange={setExportScopeType}>
-            <SelectTrigger data-testid="execution-control-incident-export-scope-select"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="correlation_id">correlation_id</SelectItem>
-              <SelectItem value="execution_event_id">execution_event_id</SelectItem>
-              <SelectItem value="time_range">time_range</SelectItem>
-            </SelectContent>
-          </Select>
-          <Input value={exportScopeValue} onChange={(e) => setExportScopeValue(e.target.value)} placeholder="scope value" data-testid="execution-control-incident-export-scope-value-input" />
-          <Button onClick={exportIncidentSnapshot} data-testid="execution-control-incident-export-button">Incident Snapshot Export</Button>
+          <div>
+            <Label>Scope Type</Label>
+            <Select value={exportScopeType} onValueChange={setExportScopeType}>
+              <SelectTrigger data-testid="execution-control-incident-export-scope-select"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="correlation_id">Correlation ID</SelectItem>
+                <SelectItem value="execution_event_id">Execution Event ID</SelectItem>
+                <SelectItem value="time_range">Time Range</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Scope Value</Label>
+            <Input
+              value={exportScopeValue}
+              onChange={(e) => setExportScopeValue(e.target.value)}
+              placeholder={exportScopeType === "correlation_id" ? "enter correlation id" : "enter scope value"}
+              disabled={exportScopeType === "time_range"}
+              data-testid="execution-control-incident-export-scope-value-input"
+            />
+          </div>
+          <div className="flex items-end">
+            <Button onClick={exportIncidentSnapshot} data-testid="execution-control-incident-export-button">Export Snapshot ZIP</Button>
+          </div>
         </div>
 
         <div className="mt-3 space-y-2" data-testid="execution-control-incident-compare-panel">
@@ -528,26 +668,61 @@ export const ExecutionStatesPage = () => {
 
           {compareEnabled && (
             <div className="grid gap-2 md:grid-cols-3" data-testid="execution-control-incident-compare-fields">
-              <Select value={compareScopeType} onValueChange={setCompareScopeType}>
-                <SelectTrigger data-testid="execution-control-incident-compare-scope-select"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="correlation_id">compare correlation_id</SelectItem>
-                  <SelectItem value="execution_event_id">compare execution_event_id</SelectItem>
-                  <SelectItem value="time_range">compare time_range</SelectItem>
-                </SelectContent>
-              </Select>
+              <div>
+                <Label>Compare Scope Type</Label>
+                <Select value={compareScopeType} onValueChange={setCompareScopeType}>
+                  <SelectTrigger data-testid="execution-control-incident-compare-scope-select"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="correlation_id">Correlation ID</SelectItem>
+                    <SelectItem value="execution_event_id">Execution Event ID</SelectItem>
+                    <SelectItem value="time_range">Time Range</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
               {compareScopeType === "time_range" ? (
                 <>
-                  <Input value={compareTimeFrom} onChange={(e) => setCompareTimeFrom(e.target.value)} placeholder="compare time_from ISO" data-testid="execution-control-incident-compare-time-from-input" />
-                  <Input value={compareTimeTo} onChange={(e) => setCompareTimeTo(e.target.value)} placeholder="compare time_to ISO" data-testid="execution-control-incident-compare-time-to-input" />
+                  <div>
+                    <Label>Compare Time From (ISO)</Label>
+                    <Input value={compareTimeFrom} onChange={(e) => setCompareTimeFrom(e.target.value)} placeholder="2026-03-22T00:00:00+00:00" data-testid="execution-control-incident-compare-time-from-input" />
+                  </div>
+                  <div>
+                    <Label>Compare Time To (ISO)</Label>
+                    <Input value={compareTimeTo} onChange={(e) => setCompareTimeTo(e.target.value)} placeholder="2026-03-22T23:59:59+00:00" data-testid="execution-control-incident-compare-time-to-input" />
+                  </div>
                 </>
               ) : (
-                <Input value={compareScopeValue} onChange={(e) => setCompareScopeValue(e.target.value)} placeholder="compare scope value" data-testid="execution-control-incident-compare-scope-value-input" />
+                <div>
+                  <Label>Compare Scope Value</Label>
+                  <Input value={compareScopeValue} onChange={(e) => setCompareScopeValue(e.target.value)} placeholder="enter compare scope value" data-testid="execution-control-incident-compare-scope-value-input" />
+                </div>
               )}
             </div>
           )}
         </div>
+
+        {compareEnabled && diffData && (
+          <div className="mt-3 rounded border border-slate-700 bg-black/30 p-3" data-testid="execution-control-diff-summary-panel">
+            <p className="text-sm font-semibold">Diff Summary</p>
+            <div className="mt-2 grid gap-2 md:grid-cols-3 text-sm">
+              <div className={failedDelta > 0 && failedPct > 50 ? "text-red-400" : failedDelta < 0 ? "text-emerald-400" : "text-slate-300"} data-testid="execution-control-diff-failed-events-summary">
+                FAILED EVENTS: {failedDelta >= 0 ? "+" : ""}{failedPct}% {failedDelta > 0 ? "↑" : failedDelta < 0 ? "↓" : "="} {failedDelta > 0 && failedPct > 50 ? "(CRITICAL)" : failedDelta < 0 ? "(IMPROVED)" : ""}
+              </div>
+              <div className={deadDelta > 0 && deadPct > 30 ? "text-amber-400" : deadDelta < 0 ? "text-emerald-400" : "text-slate-300"} data-testid="execution-control-diff-dead-letter-summary">
+                DEAD LETTER: {deadDelta >= 0 ? "+" : ""}{deadPct}% {deadDelta > 0 ? "↑" : deadDelta < 0 ? "↓" : "="}
+              </div>
+              <div className={manualDelta > 0 ? "text-amber-300" : manualDelta < 0 ? "text-emerald-400" : "text-slate-300"} data-testid="execution-control-diff-manual-actions-summary">
+                MANUAL ACTIONS: {manualDelta >= 0 ? "+" : ""}{manualDelta} {manualDelta > 0 ? "↑" : manualDelta < 0 ? "↓" : "="} {manualDelta < 0 ? "(IMPROVED)" : ""}
+              </div>
+            </div>
+            <div className="mt-2 space-y-1 text-xs" data-testid="execution-control-diff-anomaly-notes-list">
+              {(diffData?.anomaly_notes || []).map((note, idx) => (
+                <p key={`${note}-${idx}`} data-testid={`execution-control-diff-anomaly-note-${idx}`}>{note}</p>
+              ))}
+              {!diffData?.anomaly_notes?.length && <p>no anomaly note</p>}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
