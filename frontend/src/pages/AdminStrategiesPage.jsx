@@ -1174,20 +1174,24 @@ export const AdminStrategiesPage = () => {
       <div className="space-y-2 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-trend-chart-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-trend-chart-title">Trend + Anomaly Band</p>
         <div className="h-64 w-full" data-testid="admin-strategy-trend-chart-wrapper">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={metricsTrend?.trend_series || []} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="timestamp" hide />
-              <YAxis stroke="#94a3b8" />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", color: "#e2e8f0" }}
-                labelStyle={{ color: "#cbd5e1" }}
-              />
-              <Line type="monotone" dataKey="score_delta" stroke="#f97316" dot={false} name="score_delta" />
-              <Line type="monotone" dataKey="anomaly_upper" stroke="#22c55e" dot={false} name="anomaly_upper" strokeDasharray="5 5" />
-              <Line type="monotone" dataKey="anomaly_lower" stroke="#ef4444" dot={false} name="anomaly_lower" strokeDasharray="5 5" />
-            </LineChart>
-          </ResponsiveContainer>
+          {(metricsTrend?.trend_series || []).length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%" minWidth={320} minHeight={220}>
+              <LineChart data={metricsTrend?.trend_series || []} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="timestamp" hide />
+                <YAxis stroke="#94a3b8" />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", color: "#e2e8f0" }}
+                  labelStyle={{ color: "#cbd5e1" }}
+                />
+                <Line type="monotone" dataKey="score_delta" stroke="#f97316" dot={false} name="score_delta" />
+                <Line type="monotone" dataKey="anomaly_upper" stroke="#22c55e" dot={false} name="anomaly_upper" strokeDasharray="5 5" />
+                <Line type="monotone" dataKey="anomaly_lower" stroke="#ef4444" dot={false} name="anomaly_lower" strokeDasharray="5 5" />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-trend-chart-empty">Trend verisi bulunamadı.</p>
+          )}
         </div>
       </div>
 

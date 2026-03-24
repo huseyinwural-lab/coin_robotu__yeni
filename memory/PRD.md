@@ -1,3 +1,24 @@
+## 2026-03-24 — Ops/Observability UX Enhancement Pack ✅
+
+### Eklenenler
+- Version metrics endpointi genişletildi:
+  - `slippage_p50_bps`, `slippage_p95_bps`
+  - `latency_p50_ms`, `latency_p95_ms`
+  - `quality_correlation`
+  - `version_health_score`
+- Yeni timeseries endpointi:
+  - `GET /strategy-domain/admin/strategies/{strategy_id}/versions/{version_id}/metrics-trend`
+  - `trend_series` + `anomaly_band` (mean/upper/lower/std)
+- Frontend AdminStrategiesPage:
+  - Trend + anomaly band chart paneli
+  - Saved filters (local storage)
+  - Role-based presets (desk/ops/admin)
+  - Version health score kart görünürlüğü
+
+### Test durumu
+- Testing agent raporu: `/app/test_reports/iteration_119.json` (backend 100%, frontend 95+)
+- Düşük öncelikli chart container warning giderildi (empty-state + responsive min bounds).
+
 ## 2026-03-24 — Strategy Control Plane P1/P2 Ops + Observability Tamamlandı ✅
 
 ### Bu turda eklenen ana capability seti
