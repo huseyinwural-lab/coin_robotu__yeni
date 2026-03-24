@@ -125,6 +125,40 @@ def secondary_admin(super_admin_token: str) -> tuple[str, str, str, str]:
 
 
 class TestP0ApprovalBypass:
+    def test_email_otp_login_challenge_rejected(self, super_admin_token: str):
+        _ = super_admin_token
+        bootstrap = requests.post(
+            f"{BASE_URL}/api/auth/mfa/bootstrap/totp/start",
+            json={"email": SUPER_ADMIN_EMAIL, "password": SUPER_ADMIN_PASSWORD},
+            timeout=30,
+        )
+        assert bootstrap.status_code == 200, bootstrap.text
+
+        secret = bootstrap.json().get("totp_secret")
+        verify_bootstrap = requests.post(
+            f"{BASE_URL}/api/auth/mfa/bootstrap/totp/verify",
+            json={"email": SUPER_ADMIN_EMAIL, "password": SUPER_ADMIN_PASSWORD, "code": pyotp.TOTP(secret).now()},
+            timeout=30,
+        )
+        assert verify_bootstrap.status_code in {200, 400}, verify_bootstrap.text
+
+        login = requests.post(
+            f"{BASE_URL}/api/auth/login/admin",
+            json={"email": SUPER_ADMIN_EMAIL, "password": SUPER_ADMIN_PASSWORD},
+            timeout=30,
+        )
+        assert login.status_code == 200, login.text
+        challenge_token = login.json().get("mfa_challenge_token")
+        assert challenge_token, login.text
+
+        verify_email = requests.post(
+            f"{BASE_URL}/api/auth/mfa/challenge/verify",
+            json={"challenge_token": challenge_token, "method": "email", "code": "123456"},
+            timeout=30,
+        )
+        assert verify_email.status_code == 400
+        assert "email_mfa_disabled_for_login" in verify_email.text or "invalid_mfa_method" in verify_email.text
+
     def test_inline_disable_requires_critical_confirmation(self, super_admin_token: str):
         user_id, _, _ = _create_regular_user()
         response = requests.patch(
@@ -160,6 +194,33 @@ class TestP0ApprovalBypass:
         )
         assert approve.status_code == 403
         assert "same_actor_cannot_approve" in approve.text
+
+    def test_legacy_disable_endpoint_always_creates_approval(self, super_admin_token: str):
+        user_id, _, _ = _create_regular_user()
+        disable = requests.post(
+            f"{BASE_URL}/api/admin/users/{user_id}/disable",
+            headers=_headers(super_admin_token),
+            timeout=30,
+        )
+        assert disable.status_code == 200, disable.text
+        data = disable.json()
+        assert data.get("status") == "approval_required"
+        assert data.get("request_id")
+        assert data.get("action_key") in {"disable_user", "disable_admin"}
+
+    def test_legacy_role_escalation_requires_approval(self, super_admin_token: str):
+        user_id, _, _ = _create_regular_user()
+        escalate = requests.patch(
+            f"{BASE_URL}/api/admin/users/{user_id}/role",
+            headers=_headers(super_admin_token),
+            json={"role": "admin"},
+            timeout=30,
+        )
+        assert escalate.status_code == 200, escalate.text
+        data = escalate.json()
+        assert data.get("status") == "approval_required"
+        assert data.get("request_id")
+        assert data.get("action_key") == "grant_privileged_role"
 
 
 class TestP0DeleteLifecycle:

@@ -10,7 +10,7 @@ from deps import require_admin
 from models import User, UserExchangeConnection, UserRole, UserVenueAssignment
 from schemas import UserResponse, UserRoleUpdateRequest, UserStatusUpdateRequest
 from services.audit_service import create_audit_log
-from services.identity_control_service import get_or_create_identity_profile
+from services.identity_control_service import create_approval_request, get_or_create_identity_profile
 from services.password_policy_service import validate_password_policy
 from services.venue_service import ensure_user_venue_assignment
 
@@ -57,6 +57,13 @@ class FuturesLivePathCheckSummaryResponse(BaseModel):
     pass_count: int
     fail_count: int
     items: list[FuturesLivePathCheckItemResponse]
+
+
+class ApprovalRequiredResponse(BaseModel):
+    status: str
+    request_id: str
+    action_key: str
+    user_id: str
 
 
 def _ensure_can_modify(current_admin: User, target: User):
@@ -167,7 +174,7 @@ def create_admin_user(
     return new_admin
 
 
-@router.post("/{user_id}/role", response_model=UserResponse)
+@router.post("/{user_id}/role", response_model=dict)
 def update_user_role_legacy(
     user_id: str,
     payload: UserRoleUpdateRequest,
@@ -177,7 +184,7 @@ def update_user_role_legacy(
     return update_user_role(user_id=user_id, payload=payload, current_admin=current_admin, db=db)
 
 
-@router.patch("/{user_id}/role", response_model=UserResponse)
+@router.patch("/{user_id}/role", response_model=dict)
 def update_user_role(
     user_id: str,
     payload: UserRoleUpdateRequest,
@@ -196,6 +203,40 @@ def update_user_role(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_only")
 
     previous_role = target.role.value
+    role_rank = {
+        UserRole.USER.value: 0,
+        UserRole.OPS.value: 1,
+        UserRole.ADMIN.value: 2,
+        UserRole.SUPER_ADMIN.value: 3,
+    }
+    is_escalation = role_rank.get(role_value, 0) > role_rank.get(previous_role, 0)
+
+    if is_escalation:
+        row = create_approval_request(
+            db,
+            actor=current_admin,
+            action_key="grant_privileged_role",
+            target_user_id=target.id,
+            payload={"role": role_value, "critical_confirmed": True},
+            reason=f"legacy_role_change:{previous_role}->{role_value}",
+        )
+        create_audit_log(
+            db,
+            action="USER_ROLE_CHANGE_APPROVAL_REQUESTED",
+            entity_type="approval_request",
+            entity_id=row.id,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            severity="warning",
+            details={"from": previous_role, "to": role_value, "user_id": target.id, "action_key": row.action_key},
+        )
+        return ApprovalRequiredResponse(
+            status="approval_required",
+            request_id=row.id,
+            action_key=row.action_key,
+            user_id=target.id,
+        ).model_dump()
+
     target.role = UserRole(role_value)
     target.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -211,10 +252,15 @@ def update_user_role(
         severity="info",
         details={"from": previous_role, "to": role_value, "user_id": target.id},
     )
-    return target
+    return {
+        "status": "updated",
+        "user_id": target.id,
+        "role": target.role.value,
+        "approval_required": False,
+    }
 
 
-@router.post("/{user_id}/disable", response_model=UserResponse)
+@router.post("/{user_id}/disable", response_model=dict)
 def disable_user(
     user_id: str,
     current_admin: User = Depends(require_admin),
@@ -228,7 +274,7 @@ def disable_user(
     )
 
 
-@router.post("/{user_id}/enable", response_model=UserResponse)
+@router.post("/{user_id}/enable", response_model=dict)
 def enable_user(
     user_id: str,
     current_admin: User = Depends(require_admin),
@@ -242,7 +288,7 @@ def enable_user(
     )
 
 
-@router.patch("/{user_id}/status", response_model=UserResponse)
+@router.patch("/{user_id}/status", response_model=dict)
 def update_user_status(
     user_id: str,
     payload: UserStatusUpdateRequest,
@@ -259,25 +305,40 @@ def update_user_status(
 
     previous_status = target.status
     new_status = payload.status
-    target.is_active = new_status == "active"
-    target.disabled_at = None if target.is_active else datetime.now(timezone.utc)
-    target.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(target)
+    action_key = None
+    if new_status == "disabled":
+        action_key = "disable_admin" if target.role in {UserRole.ADMIN, UserRole.SUPER_ADMIN} else "disable_user"
+    elif new_status == "active":
+        action_key = "enable_user"
 
-    action = "USER_ENABLED" if target.is_active else "USER_DISABLED"
-    severity = "info" if target.is_active else "warning"
+    if action_key is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_status")
+
+    row = create_approval_request(
+        db,
+        actor=current_admin,
+        action_key=action_key,
+        target_user_id=target.id,
+        payload={"status": new_status, "critical_confirmed": True},
+        reason=f"legacy_status_change:{previous_status}->{new_status}",
+    )
+
     create_audit_log(
         db,
-        action=action,
-        entity_type="user",
-        entity_id=target.id,
+        action="USER_STATUS_CHANGE_APPROVAL_REQUESTED",
+        entity_type="approval_request",
+        entity_id=row.id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        severity=severity,
-        details={"from": previous_status, "to": new_status, "user_id": target.id},
+        severity="warning",
+        details={"from": previous_status, "to": new_status, "user_id": target.id, "action_key": action_key},
     )
-    return target
+    return ApprovalRequiredResponse(
+        status="approval_required",
+        request_id=row.id,
+        action_key=action_key,
+        user_id=target.id,
+    ).model_dump()
 
 
 @router.post("/{user_id}/repair-venue-assignment", response_model=UserVenueRepairResponse)

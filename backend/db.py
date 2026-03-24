@@ -1,14 +1,32 @@
 import logging
+import threading
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 
 import redis
+from fastapi import HTTPException, status
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from core.config import settings
 from core.db_determinism import enforce_postgresql_only
 
 logger = logging.getLogger(__name__)
+
+
+LOCALHOST_DATABASE_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+
+
+@dataclass
+class DatabaseRuntimeState:
+    configured: bool = False
+    url_valid: bool = False
+    initialized: bool = False
+    reachable: bool = False
+    last_error: str | None = None
+    last_checked_at: str | None = None
+    database_url: str | None = None
 
 
 class InMemoryRedis:
@@ -138,17 +156,128 @@ class InMemoryRedis:
         return True
 
 
-def _build_engine():
+_ENGINE_LOCK = threading.Lock()
+_engine_instance: Engine | None = None
+_session_factory: sessionmaker | None = None
+_db_state = DatabaseRuntimeState()
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _mark_db_state(**kwargs) -> None:
+    for key, value in kwargs.items():
+        setattr(_db_state, key, value)
+    _db_state.last_checked_at = _utc_now_iso()
+
+
+def _sanitize_error(exc: Exception) -> str:
+    return str(exc).strip()[:400] or exc.__class__.__name__
+
+
+def _resolve_database_url() -> str:
     database_url = enforce_postgresql_only(settings.database_url, "db_engine")
-    embedded_marker = "sql" + "ite"
-    assert embedded_marker not in database_url.lower(), "DATABASE_URL içinde gömülü db marker olamaz"
+    _mark_db_state(configured=bool(database_url), url_valid=False, database_url=database_url, last_error=None)
+    parsed = make_url(database_url)
 
+    if not parsed.host:
+        raise RuntimeError("database_url_host_missing")
+    if str(parsed.host).strip().lower() in LOCALHOST_DATABASE_HOSTS:
+        raise RuntimeError("database_url_localhost_forbidden")
+    if not parsed.database:
+        raise RuntimeError("database_url_dbname_missing")
+
+    _mark_db_state(url_valid=True, database_url=database_url, last_error=None)
+    return database_url
+
+
+def _create_and_verify_engine(database_url: str) -> Engine:
     connect_args = {"connect_timeout": 5} if database_url.startswith("postgresql") else {}
-    engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args)
-
-    with engine.connect() as connection:
+    candidate_engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args)
+    with candidate_engine.connect() as connection:
         connection.execute(text("SELECT 1"))
-    return engine
+    return candidate_engine
+
+
+def init_db_engine(force: bool = False) -> Engine:
+    global _engine_instance, _session_factory
+
+    if _engine_instance is not None and not force:
+        return _engine_instance
+
+    with _ENGINE_LOCK:
+        if _engine_instance is not None and not force:
+            return _engine_instance
+
+        try:
+            database_url = _resolve_database_url()
+            engine_obj = _create_and_verify_engine(database_url)
+        except Exception as exc:
+            _mark_db_state(initialized=False, reachable=False, last_error=_sanitize_error(exc))
+            logger.error("DATABASE_INIT_FAILED", extra={"reason": _sanitize_error(exc)})
+            raise RuntimeError(_sanitize_error(exc)) from exc
+
+        _engine_instance = engine_obj
+        _session_factory = sessionmaker(autocommit=False, autoflush=False, bind=_engine_instance)
+        _mark_db_state(initialized=True, reachable=True, last_error=None)
+        logger.info("DATABASE_INIT_OK")
+        return _engine_instance
+
+
+def get_engine() -> Engine:
+    return init_db_engine(force=False)
+
+
+class EngineProxy:
+    def __getattr__(self, item):
+        return getattr(get_engine(), item)
+
+    def __repr__(self):
+        if _engine_instance is None:
+            return "<EngineProxy state=uninitialized>"
+        return repr(_engine_instance)
+
+
+engine = EngineProxy()
+
+
+def SessionLocal():
+    global _session_factory
+    if _session_factory is None:
+        init_db_engine(force=False)
+    assert _session_factory is not None
+    return _session_factory()
+
+
+def get_database_runtime_state() -> dict:
+    return asdict(_db_state)
+
+
+def is_database_ready() -> bool:
+    return bool(_db_state.initialized and _db_state.reachable)
+
+
+def verify_database_connection() -> None:
+    db_engine = get_engine()
+    with db_engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+    _mark_db_state(reachable=True, initialized=True, last_error=None)
+
+
+def reset_database_runtime_state_for_tests() -> None:
+    global _engine_instance, _session_factory
+    with _ENGINE_LOCK:
+        _engine_instance = None
+        _session_factory = None
+    _mark_db_state(
+        configured=False,
+        url_valid=False,
+        initialized=False,
+        reachable=False,
+        last_error=None,
+        database_url=None,
+    )
 
 
 def _build_redis_client():
@@ -161,19 +290,19 @@ def _build_redis_client():
         return InMemoryRedis()
 
 
-engine = _build_engine()
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 redis_client = _build_redis_client()
 
-
-def verify_database_connection() -> None:
-    with engine.connect() as connection:
-        connection.execute(text("SELECT 1"))
-
-
 def get_db():
-    db = SessionLocal()
+    try:
+        db = SessionLocal()
+    except Exception as exc:
+        reason = _sanitize_error(exc)
+        logger.error("DATABASE_SESSION_CREATE_FAILED", extra={"reason": reason})
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"database_unavailable:{reason}",
+        ) from exc
     try:
         yield db
     finally:

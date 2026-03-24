@@ -42,24 +42,12 @@ export const MfaSettingsPage = () => {
     refresh();
   }, []);
 
-  const toggleMethod = (method) => {
-    setSettings((prev) => {
-      const methods = new Set(prev.enabled_methods || []);
-      if (methods.has(method)) {
-        methods.delete(method);
-      } else {
-        methods.add(method);
-      }
-      return { ...prev, enabled_methods: Array.from(methods) };
-    });
-  };
-
   const saveSettings = async () => {
     setSaving(true);
     try {
       const payload = {
         is_enabled: Boolean(settings.is_enabled),
-        enabled_methods: settings.enabled_methods || [],
+        enabled_methods: settings.is_enabled ? ["totp"] : [],
       };
       const { data } = await apiClient.put("/auth/mfa/settings", payload);
       setSettings(data);
@@ -132,31 +120,20 @@ export const MfaSettingsPage = () => {
           <input
             type="checkbox"
             checked={Boolean(settings.is_enabled)}
-            onChange={(event) => setSettings((prev) => ({ ...prev, is_enabled: event.target.checked }))}
+            onChange={(event) => setSettings((prev) => ({
+              ...prev,
+              is_enabled: event.target.checked,
+              enabled_methods: event.target.checked ? ["totp"] : [],
+            }))}
             data-testid="mfa-settings-enable-checkbox"
           />
           MFA aktif
         </label>
 
-        <div className="grid gap-2 sm:grid-cols-2" data-testid="mfa-settings-method-grid">
-          <label className="inline-flex items-center gap-2 text-sm" data-testid="mfa-settings-method-email-wrapper">
-            <input
-              type="checkbox"
-              checked={(settings.enabled_methods || []).includes("email")}
-              onChange={() => toggleMethod("email")}
-              data-testid="mfa-settings-method-email-checkbox"
-            />
-            E-posta OTP
-          </label>
-          <label className="inline-flex items-center gap-2 text-sm" data-testid="mfa-settings-method-totp-wrapper">
-            <input
-              type="checkbox"
-              checked={(settings.enabled_methods || []).includes("totp")}
-              onChange={() => toggleMethod("totp")}
-              data-testid="mfa-settings-method-totp-checkbox"
-            />
-            Authenticator (TOTP)
-          </label>
+        <div className="rounded border border-slate-700 bg-slate-950 p-3" data-testid="mfa-settings-method-fixed-card">
+          <p className="text-xs text-slate-300" data-testid="mfa-settings-method-fixed-title">MFA yöntemi sabit</p>
+          <p className="text-xs text-slate-400" data-testid="mfa-settings-method-fixed-value">Authenticator (TOTP) + Backup Code</p>
+          <p className="text-xs text-slate-500" data-testid="mfa-settings-method-fixed-note">Email OTP login MFA akışında kapalıdır.</p>
         </div>
 
         <div className="flex flex-wrap gap-2" data-testid="mfa-settings-actions-row">

@@ -102,7 +102,15 @@ from services.state_rebuild_service import run_state_rebuild
 from services.user_exchange_health_loop import run_exchange_connection_health_loop
 from services.weekly_report_service import run_weekly_report_loop
 from services.db_backup_scheduler_service import run_backup_scheduler_loop
-from db import engine, get_db, redis_client, verify_database_connection
+from db import (
+    engine,
+    get_database_runtime_state,
+    get_db,
+    init_db_engine,
+    is_database_ready,
+    redis_client,
+    verify_database_connection,
+)
 from core.db_determinism import enforce_postgresql_only
 from services.observability_service import (
     QUEUE_SIZE_THRESHOLD,
@@ -119,6 +127,16 @@ weekly_report_task: asyncio.Task | None = None
 exchange_health_task: asyncio.Task | None = None
 backup_scheduler_task: asyncio.Task | None = None
 PROCESS_STARTED_AT = datetime.now(timezone.utc)
+STARTUP_RUNTIME_STATE = {
+    "database_url_valid": False,
+    "migration_ok": False,
+    "database_ready": False,
+    "seed_admin_ok": False,
+    "state_rebuild_ok": False,
+    "pipeline_runtime_ok": False,
+    "background_loops_started": False,
+    "last_error": None,
+}
 # Contract-test compatibility: some tests monkeypatch `server.engine` directly.
 ENGINE_COMPAT = engine
 
@@ -128,21 +146,28 @@ api_router = APIRouter(prefix="/api")
 
 @api_router.get("/health")
 def health_check():
-    return {
-        "status": "ok",
+    db_state = get_database_runtime_state()
+    db_healthy = bool(db_state.get("reachable") and db_state.get("initialized"))
+    process_status = "up" if db_healthy else "degraded"
+    status_code = 200 if db_healthy else 503
+    payload = {
+        "status": "ok" if db_healthy else "degraded",
         "service": "backend-api",
         "checks": {
             "process": {
-                "status": "up",
+                "status": process_status,
                 "uptime_seconds": int((datetime.now(timezone.utc) - PROCESS_STARTED_AT).total_seconds()),
-            }
+            },
+            "database": db_state,
+            "startup": STARTUP_RUNTIME_STATE,
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+    return JSONResponse(status_code=status_code, content=payload)
 
 
 @api_router.get("/ready")
-def readiness_check(db: Session = Depends(get_db)):
+def readiness_check():
     checks: dict[str, dict] = {}
     ready = True
 
@@ -160,23 +185,38 @@ def readiness_check(db: Session = Depends(get_db)):
         ready = False
         checks["redis"] = {"status": "not_ready", "reason": str(exc)[:200]}
 
-    snapshot = collect_observability_snapshot(db)
-    queue_size = int(snapshot.get("queue_size", 0))
-    queue_limit = int(QUEUE_SIZE_THRESHOLD * READY_QUEUE_CRITICAL_FACTOR)
-    if queue_size > queue_limit:
-        ready = False
-        checks["execution_queue"] = {
-            "status": "not_ready",
-            "queue_size": queue_size,
-            "critical_limit": queue_limit,
-            "reason": "queue_pressure",
-        }
+    if is_database_ready():
+        try:
+            from db import SessionLocal
+
+            db = SessionLocal()
+            try:
+                snapshot = collect_observability_snapshot(db)
+            finally:
+                db.close()
+
+            queue_size = int(snapshot.get("queue_size", 0))
+            queue_limit = int(QUEUE_SIZE_THRESHOLD * READY_QUEUE_CRITICAL_FACTOR)
+            if queue_size > queue_limit:
+                ready = False
+                checks["execution_queue"] = {
+                    "status": "not_ready",
+                    "queue_size": queue_size,
+                    "critical_limit": queue_limit,
+                    "reason": "queue_pressure",
+                }
+            else:
+                checks["execution_queue"] = {
+                    "status": "ready",
+                    "queue_size": queue_size,
+                    "critical_limit": queue_limit,
+                }
+        except Exception as exc:
+            ready = False
+            checks["execution_queue"] = {"status": "not_ready", "reason": str(exc)[:200]}
     else:
-        checks["execution_queue"] = {
-            "status": "ready",
-            "queue_size": queue_size,
-            "critical_limit": queue_limit,
-        }
+        ready = False
+        checks["execution_queue"] = {"status": "not_ready", "reason": "database_unavailable"}
 
     override = current_ready_override()
     if override.get("active"):
@@ -194,6 +234,7 @@ def readiness_check(db: Session = Depends(get_db)):
         "status": "ready" if ready else "not_ready",
         "service": "backend-api",
         "checks": checks,
+        "startup": STARTUP_RUNTIME_STATE,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     return JSONResponse(status_code=status_code, content=payload)
@@ -310,41 +351,104 @@ fastapi_app.add_middleware(RequestObservabilityMiddleware)
 
 @fastapi_app.on_event("startup")
 async def startup_event():
+    async def _run_with_retry(task_name: str, func, retries: int = 5, base_delay: float = 1.5) -> bool:
+        last_error = None
+        for attempt in range(1, retries + 1):
+            try:
+                func()
+                logger.info("STARTUP_TASK_OK", extra={"task": task_name, "attempt": attempt})
+                return True
+            except Exception as exc:
+                last_error = str(exc)[:300]
+                logger.warning(
+                    "STARTUP_TASK_RETRY",
+                    extra={
+                        "task": task_name,
+                        "attempt": attempt,
+                        "retries": retries,
+                        "error": last_error,
+                    },
+                )
+                await asyncio.sleep(base_delay * attempt)
+        STARTUP_RUNTIME_STATE["last_error"] = last_error
+        logger.error("STARTUP_TASK_FAILED", extra={"task": task_name, "error": last_error})
+        return False
+
     db_url = os.getenv("DATABASE_URL")
-    enforce_postgresql_only(db_url, "startup")
-    logger.info("DB_ENGINE=postgresql")
-
-    run_alembic_upgrade()
-    verify_database_connection()
-
-    from db import SessionLocal
-
-    seed_default_admin()
-    reliability_policy = load_connection_reliability_policy(force_refresh=True)
-
-    db_session = SessionLocal()
     try:
-        run_state_rebuild(db_session, trigger_source="startup")
-    finally:
-        db_session.close()
-    await pipeline_runtime.start()
+        enforce_postgresql_only(db_url, "startup")
+        STARTUP_RUNTIME_STATE["database_url_valid"] = True
+        logger.info("DB_ENGINE=postgresql")
+    except Exception as exc:
+        STARTUP_RUNTIME_STATE["database_url_valid"] = False
+        STARTUP_RUNTIME_STATE["last_error"] = str(exc)[:300]
+        logger.error("DATABASE_URL_INVALID", extra={"error": str(exc)[:300]})
+
+    STARTUP_RUNTIME_STATE["migration_ok"] = await _run_with_retry("alembic_upgrade", run_alembic_upgrade, retries=5)
+    STARTUP_RUNTIME_STATE["database_ready"] = await _run_with_retry("database_connectivity", verify_database_connection, retries=5)
+    if STARTUP_RUNTIME_STATE["database_ready"]:
+        STARTUP_RUNTIME_STATE["database_ready"] = await _run_with_retry("database_init", init_db_engine, retries=3)
+
+    reliability_policy = {"policy_version": "unknown", "runtime_env": "degraded"}
+    if STARTUP_RUNTIME_STATE["database_ready"]:
+        from db import SessionLocal
+
+        STARTUP_RUNTIME_STATE["seed_admin_ok"] = await _run_with_retry("seed_default_admin", seed_default_admin, retries=3)
+        try:
+            reliability_policy = load_connection_reliability_policy(force_refresh=True)
+        except Exception as exc:
+            STARTUP_RUNTIME_STATE["last_error"] = str(exc)[:300]
+            logger.warning("RELIABILITY_POLICY_LOAD_FAILED", extra={"error": str(exc)[:300]})
+
+        def _state_rebuild_job():
+            db_session = SessionLocal()
+            try:
+                run_state_rebuild(db_session, trigger_source="startup")
+            finally:
+                db_session.close()
+
+        STARTUP_RUNTIME_STATE["state_rebuild_ok"] = await _run_with_retry("state_rebuild", _state_rebuild_job, retries=3)
+    else:
+        logger.error("DATABASE_NOT_READY_STARTUP_DEGRADED")
+
+    if STARTUP_RUNTIME_STATE["database_ready"]:
+        try:
+            await pipeline_runtime.start()
+            STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = True
+        except Exception as exc:
+            STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
+            STARTUP_RUNTIME_STATE["last_error"] = str(exc)[:300]
+            logger.error("PIPELINE_RUNTIME_START_FAILED", extra={"error": str(exc)[:300]})
+    else:
+        STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
+        logger.warning("PIPELINE_RUNTIME_SKIPPED_DATABASE_NOT_READY")
+
     global weekly_report_task, exchange_health_task, backup_scheduler_task
-    weekly_report_task = asyncio.create_task(run_weekly_report_loop(SessionLocal))
-    exchange_health_task = asyncio.create_task(run_exchange_connection_health_loop(SessionLocal))
-    backup_scheduler_task = asyncio.create_task(run_backup_scheduler_loop())
+    if STARTUP_RUNTIME_STATE["database_ready"]:
+        from db import SessionLocal
+
+        weekly_report_task = asyncio.create_task(run_weekly_report_loop(SessionLocal))
+        exchange_health_task = asyncio.create_task(run_exchange_connection_health_loop(SessionLocal))
+        backup_scheduler_task = asyncio.create_task(run_backup_scheduler_loop())
+        STARTUP_RUNTIME_STATE["background_loops_started"] = True
+    else:
+        STARTUP_RUNTIME_STATE["background_loops_started"] = False
+
     logger.info(
-        "Platform startup complete with Phase-3 hardening runtime",
+        "Platform startup complete with runtime status",
         extra={
             "event_type": "platform_startup",
             "policy_version": reliability_policy.get("policy_version"),
             "runtime_env": reliability_policy.get("runtime_env"),
+            "startup_state": STARTUP_RUNTIME_STATE,
         },
     )
 
 
 @fastapi_app.on_event("shutdown")
 async def shutdown_event():
-    await pipeline_runtime.stop()
+    if STARTUP_RUNTIME_STATE.get("pipeline_runtime_ok"):
+        await pipeline_runtime.stop()
     global weekly_report_task, exchange_health_task, backup_scheduler_task
     if weekly_report_task:
         weekly_report_task.cancel()

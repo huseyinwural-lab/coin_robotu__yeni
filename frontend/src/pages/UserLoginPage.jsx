@@ -23,8 +23,13 @@ export const UserLoginPage = () => {
   });
   const [submitting, setSubmitting] = useState(false);
   const [mfaState, setMfaState] = useState(null);
-  const [mfaMethod, setMfaMethod] = useState("totp");
   const [mfaCode, setMfaCode] = useState("");
+
+  const resolveMfaMethod = (rawCode) => {
+    const normalized = String(rawCode || "").trim();
+    const backupLike = normalized.includes("-") || /[A-Za-z]/.test(normalized);
+    return backupLike ? "backup_code" : "totp";
+  };
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -48,7 +53,6 @@ export const UserLoginPage = () => {
         const loginResult = await login({ email: form.email, password: form.password, panel: "user" });
         if (loginResult?.mfaRequired) {
           setMfaState(loginResult);
-          setMfaMethod((loginResult.methods || ["totp"])[0] || "totp");
           setMfaCode("");
           toast.info("MFA doğrulama kodunu giriniz");
           return;
@@ -71,7 +75,7 @@ export const UserLoginPage = () => {
     try {
       await verifyMfaChallenge({
         challengeToken: mfaState.challengeToken,
-        method: mfaMethod,
+        method: resolveMfaMethod(mfaCode),
         code: mfaCode,
       });
       toast.success("MFA doğrulandı");
@@ -145,26 +149,16 @@ export const UserLoginPage = () => {
           {mfaState?.mfaRequired && (
             <div className="space-y-2 rounded border border-slate-300 bg-slate-50 p-3" data-testid="user-login-mfa-panel">
               <p className="text-xs font-semibold uppercase" data-testid="user-login-mfa-title">MFA Doğrulama</p>
-              <p className="text-xs text-slate-600" data-testid="user-login-mfa-methods">Yöntemler: {(mfaState.methods || []).join(", ")}</p>
-              {(mfaState.methods || []).length > 1 && (
-                <select value={mfaMethod} onChange={(event) => setMfaMethod(event.target.value)} className="h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm" data-testid="user-login-mfa-method-select">
-                  {(mfaState.methods || []).map((item) => (
-                    <option key={item} value={item} data-testid={`user-login-mfa-method-option-${item}`}>{item}</option>
-                  ))}
-                </select>
-              )}
+              <p className="text-xs text-slate-600" data-testid="user-login-mfa-methods">Yöntem: Authenticator (TOTP) + Backup Code</p>
               <Input
                 value={mfaCode}
                 onChange={(event) => setMfaCode(event.target.value)}
-                placeholder={mfaMethod === "email" ? "E-posta OTP kodu" : mfaMethod === "backup_code" ? "Backup code" : "Authenticator kodu"}
+                placeholder="Authenticator kodu veya backup code"
                 data-testid="user-login-mfa-code-input"
               />
               <Button type="button" onClick={onVerifyMfa} className="w-full bg-black text-orange-300 hover:bg-zinc-900" data-testid="user-login-mfa-verify-button" disabled={submitting}>
                 {submitting ? "Doğrulanıyor..." : "MFA Doğrula"}
               </Button>
-              {mfaState.emailCodePreview && (
-                <p className="text-xs text-slate-700" data-testid="user-login-mfa-email-code-preview">email otp preview: {mfaState.emailCodePreview}</p>
-              )}
             </div>
           )}
         </form>

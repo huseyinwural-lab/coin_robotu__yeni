@@ -1,0 +1,30 @@
+{
+  "test_time": "2026-03-24T11:17:34.638331",
+  "base_url": "https://identity-control-1.preview.emergentagent.com",
+  "summary": {
+    "runtime_health": "FAIL",
+    "mfa_standard": "PARTIAL",
+    "approval_bypass_guard": "PASS",
+    "bulk_action": "PASS"
+  },
+  "details": {
+    "runtime_health": {
+      "health": false,
+      "ready": true
+    },
+    "mfa_standard": {
+      "admin_login_mfa_challenge": false,
+      "totp_bootstrap_accessible": true,
+      "email_method_blocked": false,
+      "totp_method_accessible": false
+    },
+    "approval_bypass_guard": {
+      "user_registration": true,
+      "identity_endpoints_require_auth": true,
+      "approval_endpoints_require_auth": true
+    },
+    "bulk_action": {
+      "bulk_endpoints_require_auth": true
+    }
+  }
+}

@@ -5,6 +5,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 from core.db_determinism import enforce_postgresql_only
@@ -22,6 +23,12 @@ def _resolve_migration_url() -> str:
         raise RuntimeError("Missing DATABASE_URL for Alembic migration")
 
     normalized_env_url = enforce_postgresql_only(env_url, "alembic_database_url")
+    parsed_env_url = make_url(normalized_env_url)
+    parsed_host = str(parsed_env_url.host or "").strip().lower()
+    if parsed_host in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+        raise RuntimeError("DATABASE_URL localhost host is not allowed")
+    if not parsed_env_url.database:
+        raise RuntimeError("DATABASE_URL database name is missing")
 
     try:
         connect_args = {}

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
 import pyotp
-import resend
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -89,7 +87,7 @@ def get_mfa_settings(db: Session, user_id: str) -> dict:
         "enabled_methods": methods,
         "totp_configured": bool(pref.totp_secret),
         "totp_verified": bool(pref.totp_verified),
-        "email_otp_verified": bool(pref.email_otp_verified),
+        "email_otp_verified": False,
         "backup_codes_remaining": _active_backup_codes_count(db, user_id),
         "updated_at": pref.updated_at,
     }
@@ -181,35 +179,6 @@ def verify_totp_setup(db: Session, *, user_id: str, code: str) -> dict:
     return get_mfa_settings(db, user_id)
 
 
-def _send_email_otp(email: str, code: str) -> str:
-    resend_api_key = os.environ.get("RESEND_API_KEY")
-    sender_email = os.environ.get("PASSWORD_RESET_FROM_EMAIL")
-    to_override = os.environ.get("PASSWORD_RESET_TO_OVERRIDE")
-    to_email = str(to_override or email).strip()
-
-    if not resend_api_key or not sender_email or not to_email:
-        return "PREVIEW"
-
-    resend.api_key = resend_api_key
-    params = {
-        "from": sender_email,
-        "to": [to_email],
-        "subject": "XILO MFA Doğrulama Kodu",
-        "html": (
-            "<div style='font-family:Arial,sans-serif;line-height:1.5'>"
-            "<h3>MFA doğrulama kodu</h3>"
-            f"<p><b>{code}</b></p>"
-            "<p>Kod 10 dakika geçerlidir.</p>"
-            "</div>"
-        ),
-    }
-    try:
-        resend.Emails.send(params)
-    except Exception:
-        return "FAILED"
-    return "SENT"
-
-
 def start_mfa_challenge_if_required(db: Session, *, user: User) -> dict | None:
     pref = _get_or_create_preference(db, user.id)
     methods = _normalize_methods(pref.enabled_methods)
@@ -223,18 +192,13 @@ def start_mfa_challenge_if_required(db: Session, *, user: User) -> dict | None:
 
     challenge_token = secrets.token_urlsafe(32)
     now = _now()
-    email_code = f"{secrets.randbelow(900000) + 100000}"
-    email_delivery_status = "NOT_REQUIRED"
-
-    if "email" in methods:
-        email_delivery_status = _send_email_otp(user.email, email_code)
 
     challenge = AuthMfaChallenge(
         user_id=user.id,
         challenge_token_hash=_hash_token(challenge_token),
         allowed_methods=challenge_methods,
-        email_otp_hash=_hash_token(email_code) if "email" in methods else None,
-        email_delivery_status=email_delivery_status,
+        email_otp_hash=None,
+        email_delivery_status="DISABLED",
         expires_at=now + timedelta(minutes=MFA_CHALLENGE_TTL_MINUTES),
     )
     db.add(challenge)
@@ -245,8 +209,8 @@ def start_mfa_challenge_if_required(db: Session, *, user: User) -> dict | None:
         "mfa_challenge_token": challenge_token,
         "mfa_methods": challenge_methods,
         "mfa_expires_at": challenge.expires_at,
-        "email_delivery_status": email_delivery_status,
-        "email_code_preview": email_code if email_delivery_status != "SENT" and "email" in methods else None,
+        "email_delivery_status": "DISABLED",
+        "email_code_preview": None,
     }
 
 
@@ -276,10 +240,7 @@ def verify_mfa_challenge(db: Session, *, challenge_token: str, method: str, code
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
 
     normalized_code = str(code or "").strip()
-    if normalized_method == "email":
-        if _hash_token(normalized_code) != str(row.email_otp_hash or ""):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_email_otp")
-    elif normalized_method == "totp":
+    if normalized_method == "totp":
         pref = _get_or_create_preference(db, user.id)
         if not pref.totp_secret or not pref.totp_verified:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="totp_not_ready")
@@ -300,6 +261,10 @@ def verify_mfa_challenge(db: Session, *, challenge_token: str, method: str, code
         if backup_row is None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_backup_code")
         backup_row.used_at = now
+    elif normalized_method == "email":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email_mfa_disabled_for_login")
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported_mfa_method")
 
     row.consumed_at = now
     db.commit()
