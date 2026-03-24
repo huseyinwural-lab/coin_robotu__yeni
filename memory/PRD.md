@@ -1,3 +1,26 @@
+## 2026-03-24 — Identity Control Plane P1 UI Stabilization (AdminUsersPage) 🔧
+
+### Bu turda tamamlananlar
+- `AdminUsersPage.jsx` içinde yarım kalan P1 entegrasyonu stabilize edildi; runtime kırığı oluşturan callback/useEffect sıralaması düzeltildi.
+- Aynı sayfaya operasyonel paneller eklendi:
+  - Approval Queue (status filtre + approve/reject)
+  - Approval Policies (enable/disable)
+  - Custom Roles (create/edit/save/clone/archive + seçili kullanıcıya assign)
+  - Invite Lifecycle (status filtre + create/resend/cancel, **MOCKED invite delivery**)
+  - Hard Delete Candidates görünümü
+- User satır aksiyonlarına Strategy Scope ve Bot Scope quick-action eklendi (prompt tabanlı).
+- Yeni eklenen kritik ve etkileşimli öğelere `data-testid` atandı.
+
+### Doğrulama
+- JS lint: `mcp_lint_javascript /app/frontend/src/pages/AdminUsersPage.jsx` ✅ PASS
+- Frontend smoke screenshot: `/admin/users/admins` route açılışı ✅ PASS (boş ekran yok, login form render)
+- `auto_frontend_testing_agent` smoke checklist: ✅ 5/5 PASS
+
+### Ortam Blokeri
+- Backend API şu anda preview ortamında yanıt vermiyor: `/api/*` çağrıları 502 dönüyor.
+- Log kök nedeni: PostgreSQL bağlantısı yok (`localhost:5432 connection refused`), bu nedenle backend process 8001'e bind olamıyor.
+- Etki: AdminUsersPage’in backend’e bağlı canlı akışları (users/approvals/invites API) bu turda uçtan uca doğrulanamadı.
+
 ## 2026-03-24 — Identity + Risk + Trading Control Plane (P0/P1/P2) ✅
 
 ### Hedef dönüşüm
