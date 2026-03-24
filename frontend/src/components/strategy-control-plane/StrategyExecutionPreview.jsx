@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const buildTraceSteps = (preview, bindingPreview) => {
   if (!preview) return [];
@@ -96,6 +96,9 @@ export const StrategyExecutionPreview = ({
         <DialogContent className="max-h-[85vh] max-w-5xl overflow-y-auto border-slate-700 bg-slate-950 text-slate-100" data-testid="admin-strategy-execution-explain-modal">
           <DialogHeader>
             <DialogTitle data-testid="admin-strategy-execution-explain-modal-title">Execution Explain — Adım Adım Trace</DialogTitle>
+            <DialogDescription data-testid="admin-strategy-execution-explain-modal-description">
+              Bu modal, trade üretim veya block nedenini decision’dan order preview’e kadar adım adım açıklar.
+            </DialogDescription>
           </DialogHeader>
 
           {!executionPreviewResult ? (

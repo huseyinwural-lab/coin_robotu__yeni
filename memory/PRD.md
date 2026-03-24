@@ -1,3 +1,56 @@
+## 2026-03-24 — NİHAİ GÖREV EMRİ (Faz 1-2-3) Kapanış ✅
+
+### Faz 1 tamamlandı
+- **Execution Explain derinleştirme**: Toggle paneli yerine `Explain Deep Dive` modal deneyimi eklendi.
+  - Bölümler: decision, input context, selected regime/binding, strategy output, risk checks, execution intent, order preview, blocked reasons, final trace steps.
+  - Final trace adımları 1..8 numaralı ve reason_code eşleşmeleriyle gösteriliyor.
+- **Readiness standardizasyonu**: Version satırına tek-tip badge state eklendi:
+  - `READY`, `BLOCKED`, `NEEDS_VALIDATION`, `NEEDS_DRY_RUN`, `AWAITING_APPROVAL`
+  - Promote butonu state’e bağlı disable + tooltip davranışı gösteriyor.
+- **Concurrency/state consistency test paketi**: `/app/backend/tests/test_strategy_lifecycle_consistency_concurrency.py` genişletildi.
+  - 8 kritik yarış/consistency senaryosu eklendi ve PASS.
+
+### Faz 2 tamamlandı
+- **Hızlı aksiyon modu**: Blocker panelinde tek tık aksiyonlar eklendi:
+  - validate çalıştır, dry-run çalıştır, approval isteği oluştur, diff aç, rollback aç
+- **Audit/approval trail polish**:
+  - Approval trail vurgusu (APPROVAL TRAIL badge)
+  - Event-type badge standardizasyonu
+  - actor / timestamp / target_version alanları sabitlendi
+  - Rollback chain görsel okunurluğu artırıldı
+- **Execution quality anomaly görünürlüğü**:
+  - Backend metrics’e `quality_alerts` + `quality_status` eklendi (slippage percentile, latency percentile, reject spike, false signal spike)
+  - Frontend’de `Execution Quality Alerts` paneli eklendi ve health badge kalite uyarı durumuna bağlandı.
+
+### Faz 3 tamamlandı (Refactor)
+- `AdminStrategiesPage.jsx` aşağıdaki zorunlu bileşenlere bölündü:
+  - `StrategyFiltersBar`
+  - `StrategyBulkActionBar`
+  - `StrategyVersionsPanel`
+  - `StrategyJSONEditor`
+  - `StrategyExecutionPreview`
+  - `StrategyPromotionChecklist`
+  - `StrategyAuditHistory`
+  - `StrategyMetricsPanel`
+- Prop akışı sadeleştirildi, tekrar eden UI logic component seviyesine taşındı, mevcut test id’ler korundu.
+
+### Backend güvenlik/guard ekleri
+- `activate_strategy_version`: archived strategy ve archived lifecycle için aktivasyon engeli
+  - `strategy_archived_cannot_activate`
+  - `stale_version_cannot_activate`
+- `create_strategy_promotion_request`: archived strategy için promote engeli
+  - `strategy_archived_cannot_promote`
+
+### Doğrulama / Test
+- Python lint PASS (`strategy_domain_service.py`, concurrency test file)
+- JS lint PASS (`AdminStrategiesPage.jsx`, yeni strategy-control-plane component’leri)
+- Backend concurrency test paketi: `8 passed`
+- Testing agent raporu: `/app/test_reports/iteration_121.json`
+  - Backend: **100% (8/8)**
+  - Frontend: **100%**
+  - Tüm Faz 1-2-3 kabul kriterleri PASS
+- Küçük erişilebilirlik bulgusu da kapatıldı: Explain modal için `DialogDescription` eklendi.
+
 ## 2026-03-24 — Strategy Control Plane FINAL P0 UI/UX Closure ✅
 
 ### Tamamlanan P0 maddeleri (AdminStrategiesPage)
