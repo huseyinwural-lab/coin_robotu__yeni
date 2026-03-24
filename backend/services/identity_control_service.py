@@ -1035,7 +1035,7 @@ def _purge_user_fk_dependencies(db: Session, *, user_id: str) -> dict[str, int]:
         )
     ).fetchall()
 
-    skipped_tables = {"users", "audit_logs"}
+    skipped_tables = {"users", "audit_logs", "identity_approval_requests"}
     purge_counts: dict[str, int] = {}
     for row in fk_rows:
         table_name = str(row.table_name)
@@ -1048,6 +1048,20 @@ def _purge_user_fk_dependencies(db: Session, *, user_id: str) -> dict[str, int]:
         if deleted_rows > 0:
             purge_counts[f"{table_name}.{column_name}"] = purge_counts.get(f"{table_name}.{column_name}", 0) + deleted_rows
     return purge_counts
+
+
+def _rebind_identity_approval_targets_for_deleted_user(db: Session, *, deleted_user_id: str, fallback_user_id: str) -> int:
+    rows = (
+        db.query(IdentityApprovalRequest)
+        .filter(IdentityApprovalRequest.target_user_id == deleted_user_id)
+        .all()
+    )
+    for row in rows:
+        payload = dict(row.payload or {})
+        payload["deleted_target_user_id"] = deleted_user_id
+        row.payload = payload
+        row.target_user_id = fallback_user_id
+    return len(rows)
 
 
 def _apply_approval_action(db: Session, *, action_key: str, target: User, payload: dict, actor: User) -> None:
@@ -1090,6 +1104,11 @@ def _apply_approval_action(db: Session, *, action_key: str, target: User, payloa
             actor=actor,
             exclude_request_id=str(payload.get("approval_request_id") or "") or None,
         )
+        rebound_approval_rows = _rebind_identity_approval_targets_for_deleted_user(
+            db,
+            deleted_user_id=target.id,
+            fallback_user_id=actor.id,
+        )
         purge_counts = _purge_user_fk_dependencies(db, user_id=target.id)
         create_audit_log(
             db,
@@ -1101,6 +1120,7 @@ def _apply_approval_action(db: Session, *, action_key: str, target: User, payloa
             severity="warning",
             details={
                 "approval_request_id": str(payload.get("approval_request_id") or "") or None,
+                "rebound_approval_rows": rebound_approval_rows,
                 "purge_counts": purge_counts,
             },
         )
