@@ -1,3 +1,42 @@
+## 2026-03-24 — P0 Devam Kapanışı (Delete Lifecycle + Bulk Preview + Approval Impact) ✅
+
+### Tamamlanan kapsam
+- **Gerçek hard delete finalize**: `identity_control_service.py` içinde `hard_delete_user` artık anonymize yerine gerçek purge + user row silme yapıyor.
+  - FK bağımlılıkları purge edildi.
+  - Approval kayıtlarının FK kilidini kırmamak için target rebind mantığı eklendi.
+  - Hard delete finalize audit kaydı tutuluyor.
+- **Restore flow approval-gated**:
+  - `/api/admin/identity/users/{id}/reactivate` artık direkt restore etmiyor.
+  - Her zaman `restore_user` approval request üretip döndürüyor.
+- **Delete lifecycle backend yüzeyi**:
+  - Yeni endpoint: `GET /api/admin/identity/users/deleted-lifecycle`
+  - Dönen alanlar: `deleted_age_days`, `retention_days_remaining`, `risk_score`, `blockers`, restore/hard-delete kararına yardımcı özetler.
+- **Bulk policy-aware preview backend**:
+  - Yeni endpoint: `POST /api/admin/identity/users/bulk-status/preview`
+  - User-level `eligible`, `blockers`, `risk_score`, `risk_badge` + summary (`partial_execution_expected`) dönüyor.
+- **AdminUsersPage P0 UI tamamlamaları**:
+  - Bulk preview panel + execute-after-preview akışı
+  - Deleted lifecycle panel (deleted list + restore req + hard delete req + detail view)
+  - Approval Queue için impact summary + normalized risk score kartı
+  - Hard delete candidate kartlarında retention/risk görünürlüğü
+
+### Runtime / Ops stabilizasyonu
+- Supervisor’a `postgresql` process eklendi ve backend ile birlikte yönetiliyor.
+- Backend health/readiness tekrar **200/ready** seviyesinde doğrulandı.
+- Backend command DB preflight script ile çalışmaya devam ediyor.
+
+### Test doğrulamaları
+- Manual backend E2E:
+  - deleted lifecycle endpoint ✅
+  - restore approval-required ✅
+  - bulk preview risk/blocker ✅
+  - hard delete finalize sonrası kullanıcı row purge ✅
+- `deep_testing_backend_v2` final smoke: ✅ PASS (health/ready + MFA flow + identity endpoints)
+- `auto_frontend_testing_agent` final smoke: ✅ PASS (admin login + MFA panel + testid + console clean)
+
+### Açık notlar
+- Invite mail delivery akışı halen **MOCKED**.
+
 ## 2026-03-24 — FINAL P0 Closure (MFA + Runtime/Postgres + Approval Guard) ✅
 
 ### P0-1) MFA standardı kesin sabitlendi
