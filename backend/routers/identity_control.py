@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -805,7 +805,7 @@ def admin_identity_update_approval_policy(
 @router.post("/approvals/{request_id}/approve")
 def admin_identity_approve(
     request_id: str,
-    payload: ApprovalDecisionPayload,
+    payload: ApprovalDecisionPayload = Body(default_factory=ApprovalDecisionPayload),
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -828,7 +828,7 @@ def admin_identity_approve(
 @router.post("/approvals/{request_id}/reject")
 def admin_identity_reject(
     request_id: str,
-    payload: ApprovalDecisionPayload,
+    payload: ApprovalDecisionPayload = Body(default_factory=ApprovalDecisionPayload),
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
