@@ -1,3 +1,27 @@
+## 2026-03-24 — MFA Policy Revizyonu (Kullanıcı Tercihine Bağlı) ✅
+
+### Kullanıcı talebine göre yapılan değişiklik
+- MFA zorunluluğu kaldırıldı; artık kullanıcılar (admin/super_admin/user dahil) MFA’yı kendi isteğine göre açıp kapatabiliyor.
+- `canary.admin@platform.local` için MFA pasif bırakıldı ve doğrudan login akışı açıldı.
+
+### Teknik değişiklikler
+- `backend/routers/auth.py`
+  - Login akışındaki zorunlu `enforce_admin_totp_policy` kontrolü kaldırıldı.
+- `backend/services/mfa_service.py`
+  - `update_mfa_settings` içindeki admin role bazlı “MFA kapatılamaz” guard’ı kaldırıldı.
+  - Böylece tüm roller için `is_enabled=false` kaydı backend’de kabul edilir hale geldi.
+- DB güncellemesi
+  - `canary.admin@platform.local` kullanıcısında `user_mfa_preferences.is_enabled=false` ve `enabled_methods=[]` olarak set edildi.
+
+### Doğrulama
+- Backend smoke (`deep_testing_backend_v2`):
+  - admin login doğrudan token döndürüyor (`mfa_required=false`) ✅
+  - admin MFA disable settings çağrısı 200 ✅
+  - health 200 ✅
+- Frontend smoke (`auto_frontend_testing_agent`):
+  - canary login sonrası MFA panel açılmadan dashboard’a geçiş ✅
+  - `admin-login-mfa-panel` görünmüyor ✅
+
 ## 2026-03-24 — P0 Devam Kapanışı (Delete Lifecycle + Bulk Preview + Approval Impact) ✅
 
 ### Tamamlanan kapsam
