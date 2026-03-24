@@ -1,3 +1,94 @@
+## 2026-03-24 — Identity + Risk + Trading Control Plane (P0/P1/P2) ✅
+
+### Hedef dönüşüm
+- Eski basic user list yaklaşımı, **Security + Risk + Trading aware Identity Control Layer** yapısına taşındı.
+
+### Backend: yeni merkezi katman
+- Yeni domain modelleri eklendi (`/app/backend/model_domains/identity_control.py`):
+  - `IdentityRolePolicy`, `UserRoleBinding` (permission matrix + custom role binding)
+  - `AuthSession`, `LoginHistoryEvent` (session management + login history/ip/device)
+  - `ApprovalPolicyConfig`, `IdentityApprovalRequest` (two-step approval)
+  - `UserIdentityProfile` (capital limit, trading/kill-switch, grace & eligibility snapshot)
+  - `UserStrategyScope`, `UserBotScope` (strategy/bot mapping)
+  - `UserInviteToken` (invite lifecycle, MOCKED delivery)
+- Migration eklendi: `/app/backend/migrations/versions/20260324_0070_identity_control_plane.py`
+
+### P0 kapatılanlar
+- **TOTP MFA + backup codes**:
+  - Admin login artık MFA challenge pattern ile çalışıyor.
+  - Bootstrap endpoints eklendi: `/api/auth/mfa/bootstrap/totp/start`, `/verify`.
+- **Login protection**:
+  - IP + user rate limit
+  - 5 başarısız deneme sonrası 15dk lock (+ progressive backoff)
+  - başarısız/başarılı login history + audit
+- **Session management**:
+  - `/api/auth/sessions/active`
+  - `/api/auth/sessions/{id}/revoke`
+  - revoked session token guard `deps.get_current_user` içine eklendi.
+- **RBAC + escalation guard**:
+  - custom role oluşturma/atama endpointleri
+  - actor permission setini aşan atama engeli
+- **Two-step approval + critical ops**:
+  - disable/delete user, enable trading, raise capital limit, privileged role grant için approval request zorunluluğu
+  - approver=requester olamaz, super_admin override reason destekli
+  - approval policy config endpointleri eklendi
+- **Super admin protection**:
+  - kritik user aksiyonlarında korunuyor
+- **User-level kill switch**:
+  - `/api/admin/identity/users/{id}/kill-switch`
+- **Eligibility + grace enforcement**:
+  - Kural seti: identity_active, email_verified, risk_profile_assigned, capital_limit_defined, exchange_connected, strategy_scope_assigned, trading_enabled
+  - 7 günlük grace snapshot + non-compliant görünürlüğü
+  - koşullar sağlanmadan `live_trading_eligible=False`
+
+### P1 kapatılanlar
+- **Invite flow (MOCKED adapter)**:
+  - `/api/admin/identity/invites` oluştur/liste
+  - `/api/admin/identity/invites/accept`
+- **Soft delete / reactivation**:
+  - delete path approval üzerinden soft-delete profile’a düşüyor
+  - `/api/admin/identity/users/{id}/reactivate`
+- **Mapping entegrasyonları**:
+  - risk + exchange var olan kaynaklardan eligibility’ye bağlandı
+  - strategy scope endpoint: `/api/admin/identity/users/{id}/strategy-scope`
+  - bot scope endpoint: `/api/admin/identity/users/{id}/bot-scope`
+- **Admin operasyonel kontrol**:
+  - bulk status enable/disable
+  - gelişmiş search/filter/pagination (email/id/exchange/role/status/risk/trading)
+- **User-level observability**:
+  - trade_count, error_rate, avg_execution_quality, trade_history_link
+
+### P2 kapatılanlar (UI kontrol yüzeyi)
+- `AdminUsersPage.jsx` identity control-plane görünümüne taşındı:
+  - inline role/status/trading aksiyonları
+  - bulk seçim + bulk aksiyon bar
+  - validation/feedback toastları
+  - empty-state iyileştirmesi
+  - user row’da risk/trading/exchange/error/eligible göstergeleri
+  - observability kolonları (trade count/error rate/avg quality)
+
+### Yeni router katmanı
+- `/app/backend/routers/identity_control.py` altında merkezi endpointler eklendi:
+  - users list/inline/bulk/kill-switch/reactivate
+  - custom roles + assign
+  - approvals + policies
+  - invites
+  - login-history
+  - strategy/bot scope mapping
+
+### Test & doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_122.json`
+  - backend **100% (20/20 pass, 3 skip)**
+  - frontend **100%**
+- Lokal tekrar: `pytest -q /app/backend/tests/test_identity_control_layer.py` → **20 passed, 3 skipped**
+- Frontend smoke: `/admin/users` sayfasında yeni identity/trading/observability kolonları render doğrulandı.
+
+### MOCKED entegrasyonlar
+- Invite Provider: **MOCKED**
+- Email Verification Provider: **MOCKED**
+- Slack Webhook: **MOCKED**
+- Binance: **MOCKED**
+
 ## 2026-03-24 — NİHAİ GÖREV EMRİ (Faz 1-2-3) Kapanış ✅
 
 ### Faz 1 tamamlandı
