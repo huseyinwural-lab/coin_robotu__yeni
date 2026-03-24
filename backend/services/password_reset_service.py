@@ -1,7 +1,6 @@
 import asyncio
 import hashlib
 import os
-import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -12,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from core.security import hash_password
 from models import User, UserOnboardingProfile
+from services.password_policy_service import validate_password_policy
 
 PASSWORD_RESET_TOKEN_TTL_MINUTES = 15
 
@@ -35,17 +35,7 @@ def _token_hash(raw_token: str) -> str:
 
 
 def validate_password_strength(new_password: str) -> None:
-    password = str(new_password or "")
-    if len(password) < 10:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="password_min_length_10")
-    if not re.search(r"[A-Z]", password):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="password_requires_uppercase")
-    if not re.search(r"[a-z]", password):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="password_requires_lowercase")
-    if not re.search(r"\d", password):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="password_requires_number")
-    if not re.search(r"[^A-Za-z0-9]", password):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="password_requires_symbol")
+    validate_password_policy(new_password, minimum_length=10)
 
 
 def issue_password_reset_token(db: Session, email: str) -> dict:

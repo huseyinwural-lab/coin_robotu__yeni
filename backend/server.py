@@ -47,6 +47,7 @@ from routers import (
     admin_live_trading_dashboard,
     admin_closure,
     admin_users,
+    identity_control,
     alerts,
     audit_logs,
     auth,
@@ -246,6 +247,7 @@ api_router.include_router(symbol_selector.router)
 api_router.include_router(ops_alerts.router)
 api_router.include_router(user_approvals.router)
 api_router.include_router(admin_users.router)
+api_router.include_router(identity_control.router)
 api_router.include_router(admin_universe_monitor.router)
 api_router.include_router(admin_live_trading_dashboard.router)
 api_router.include_router(admin_universe_router.router)

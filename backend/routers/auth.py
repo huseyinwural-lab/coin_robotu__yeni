@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Query, Request
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import logging
@@ -32,14 +34,22 @@ from schemas import (
 from services.audit_service import create_audit_log
 from services.admin_profile_service import change_admin_password, update_admin_profile
 from services.mfa_service import start_mfa_challenge_if_required
+from services.identity_control_service import (
+    enforce_admin_totp_policy,
+    enforce_login_protection,
+    get_or_create_identity_profile,
+    list_active_sessions,
+    record_login_failure,
+    record_login_success,
+    register_auth_session,
+    revoke_session,
+)
 from services.password_reset_service import (
     build_password_reset_link,
     consume_password_reset_token,
     issue_password_reset_token,
     send_password_reset_email,
 )
-from services.auth_rate_limit_service import enforce_login_rate_limit
-
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
@@ -113,12 +123,55 @@ def get_auth_onboarding_status(email: str, db: Session = Depends(get_db)):
 
 def _login_with_policy(
     payload: LocalLoginRequest,
+    request: Request,
+    endpoint_scope: str,
     db: Session,
     target_role: UserRole | None = None,
     allowed_roles: set[UserRole] | None = None,
 ) -> AuthResponse:
-    session = user_login_with_policy(db, payload, target_role=target_role, allowed_roles=allowed_roles)
+    enforce_login_protection(db, request=request, endpoint_scope=endpoint_scope, email=payload.email)
+    try:
+        session = user_login_with_policy(db, payload, target_role=target_role, allowed_roles=allowed_roles)
+    except HTTPException as exc:
+        record_login_failure(
+            db,
+            request=request,
+            endpoint_scope=endpoint_scope,
+            email=payload.email,
+            reason=str(exc.detail),
+            user_id=None,
+        )
+        raise
+
     user = session.user
+    identity_profile = get_or_create_identity_profile(db, user.id)
+    if identity_profile.password_expires_at is not None:
+        expires_at = identity_profile.password_expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires_at:
+            record_login_failure(
+                db,
+                request=request,
+                endpoint_scope=endpoint_scope,
+                email=user.email,
+                reason="password_rotation_required",
+                user_id=user.id,
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="password_rotation_required")
+
+    try:
+        enforce_admin_totp_policy(db, user=user)
+    except HTTPException as exc:
+        record_login_failure(
+            db,
+            request=request,
+            endpoint_scope=endpoint_scope,
+            email=user.email,
+            reason=str(exc.detail),
+            user_id=user.id,
+        )
+        raise
 
     mfa_payload = start_mfa_challenge_if_required(db, user=user)
     if mfa_payload:
@@ -143,6 +196,8 @@ def _login_with_policy(
             email_code_preview=mfa_payload.get("email_code_preview"),
         )
 
+    register_auth_session(db, user=user, access_token=session.access_token, request=request)
+    record_login_success(db, request=request, endpoint_scope=endpoint_scope, email=user.email, user=user)
     create_audit_log(
         db,
         action="user_login",
@@ -157,20 +212,41 @@ def _login_with_policy(
 
 @router.post("/login", response_model=AuthResponse)
 def login(payload: LocalLoginRequest, request: Request, db: Session = Depends(get_db)):
-    enforce_login_rate_limit(request, "login")
-    return _login_with_policy(payload, db)
+    return _login_with_policy(payload, request, "login", db)
 
 
 @router.post("/login/admin", response_model=AuthResponse)
 def admin_login(payload: LocalLoginRequest, request: Request, db: Session = Depends(get_db)):
-    enforce_login_rate_limit(request, "login_admin")
-    return _login_with_policy(payload, db, allowed_roles={UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS})
+    return _login_with_policy(payload, request, "login_admin", db, allowed_roles={UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS})
 
 
 @router.post("/login/user", response_model=AuthResponse)
 def user_login(payload: LocalLoginRequest, request: Request, db: Session = Depends(get_db)):
-    enforce_login_rate_limit(request, "login_user")
-    return _login_with_policy(payload, db, target_role=UserRole.USER)
+    return _login_with_policy(payload, request, "login_user", db, target_role=UserRole.USER)
+
+
+@router.get("/sessions/active")
+def get_active_sessions(
+    user_id: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    items = list_active_sessions(db, actor=current_user, user_id=user_id)
+    return {"items": items, "total": len(items)}
+
+
+class SessionRevokeRequest(BaseModel):
+    reason: str = "manual_revoke"
+
+
+@router.post("/sessions/{session_id}/revoke")
+def revoke_active_session(
+    session_id: str,
+    payload: SessionRevokeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return revoke_session(db, actor=current_user, session_id=session_id, reason=payload.reason)
 
 
 @router.post("/password-reset/request", response_model=PasswordResetRequestResponse)

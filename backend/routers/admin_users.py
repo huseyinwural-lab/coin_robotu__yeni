@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -10,6 +10,8 @@ from deps import require_admin
 from models import User, UserExchangeConnection, UserRole, UserVenueAssignment
 from schemas import UserResponse, UserRoleUpdateRequest, UserStatusUpdateRequest
 from services.audit_service import create_audit_log
+from services.identity_control_service import get_or_create_identity_profile
+from services.password_policy_service import validate_password_policy
 from services.venue_service import ensure_user_venue_assignment
 
 router = APIRouter(prefix="/admin/users", tags=["admin_users"])
@@ -117,6 +119,8 @@ def create_admin_user(
     if current_admin.role == UserRole.OPS:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops_readonly")
 
+    validate_password_policy(payload.password, minimum_length=10)
+
     role_value = payload.role.strip().lower()
     allowed_roles = {UserRole.ADMIN.value, UserRole.OPS.value}
     if current_admin.role == UserRole.SUPER_ADMIN:
@@ -145,6 +149,10 @@ def create_admin_user(
     db.add(new_admin)
     db.commit()
     db.refresh(new_admin)
+    identity_profile = get_or_create_identity_profile(db, new_admin.id)
+    identity_profile.password_changed_at = now
+    identity_profile.password_expires_at = now + timedelta(days=90)
+    db.commit()
 
     create_audit_log(
         db,

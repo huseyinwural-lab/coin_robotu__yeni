@@ -23,6 +23,18 @@ from model_domains.audit_reporting_system_config import (
 )
 from model_domains.auth_users import User, UserOnboardingProfile, UserRole
 from model_domains.security_branding import AuthMfaChallenge, BrandSetting, UserMfaBackupCode, UserMfaPreference
+from model_domains.identity_control import (
+    ApprovalPolicyConfig,
+    AuthSession,
+    IdentityApprovalRequest,
+    IdentityRolePolicy,
+    LoginHistoryEvent,
+    UserBotScope,
+    UserIdentityProfile,
+    UserInviteToken,
+    UserRoleBinding,
+    UserStrategyScope,
+)
 from model_domains.learning_recommendations import (
     FamilyOutcomeMemory,
     LearningDecisionEvent,
@@ -224,4 +236,14 @@ __all__ = [
     "UserMfaBackupCode",
     "AuthMfaChallenge",
     "BrandSetting",
+    "IdentityRolePolicy",
+    "UserRoleBinding",
+    "AuthSession",
+    "LoginHistoryEvent",
+    "ApprovalPolicyConfig",
+    "IdentityApprovalRequest",
+    "UserIdentityProfile",
+    "UserStrategyScope",
+    "UserBotScope",
+    "UserInviteToken",
 ]

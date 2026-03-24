@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from core.security import decode_access_token
 from db import get_db
 from models import User, UserRole
+from services.identity_control_service import is_access_token_revoked
 
 bearer_scheme = HTTPBearer(auto_error=False)
 ADMIN_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}
@@ -27,8 +28,13 @@ def get_current_user(
 ) -> User:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    raw_token = str(credentials.credentials or "").strip()
+    if not raw_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    if is_access_token_revoked(db, access_token=raw_token):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session_revoked")
     try:
-        payload = decode_access_token(credentials.credentials)
+        payload = decode_access_token(raw_token)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 

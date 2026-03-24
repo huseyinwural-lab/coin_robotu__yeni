@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from core.security import create_access_token, hash_password, verify_password
 from models import User, UserOnboardingProfile, UserRole
 from schemas import LoginRequest, RegisterRequest
+from services.identity_control_service import get_or_create_identity_profile
+from services.password_policy_service import validate_password_policy
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
 from services.venue_service import ensure_user_venue_assignment
 
@@ -32,6 +34,7 @@ def _ensure_user_can_login(user: User):
 
 
 def register_user_account(db: Session, payload: RegisterRequest) -> User:
+    validate_password_policy(payload.password, minimum_length=10)
     normalized_email = _normalize_email(payload.email)
     existing_user = db.query(User).filter(User.email == normalized_email).first()
     if existing_user:
@@ -62,6 +65,10 @@ def register_user_account(db: Session, payload: RegisterRequest) -> User:
     db.add(onboarding)
     db.commit()
     db.refresh(user)
+    profile = get_or_create_identity_profile(db, user.id)
+    profile.password_changed_at = datetime.now(timezone.utc)
+    profile.password_expires_at = datetime.now(timezone.utc) + timedelta(days=90)
+    db.commit()
     return user
 
 
