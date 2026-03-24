@@ -1,3 +1,31 @@
+## 2026-03-24 — Strategy Control Plane FINAL P0 UI/UX Closure ✅
+
+### Tamamlanan P0 maddeleri (AdminStrategiesPage)
+- **Promote disable garantisi** güçlendirildi:
+  - Version bazında blocker hesaplama (`validation/compatibility/dry-run/pending request`)
+  - Promote butonunda **physical disabled + tooltip**
+  - Üst seviye uyarı banner’ı + version içi blocker paneli
+- **Owner/Tag filtreleri** tamamlandı:
+  - Owner filter korunarak tag arama state’i form state’inden ayrıldı (`tagSearchText`)
+  - Çoklu tag seçimi + seçili tag chip kaldırma akışı
+  - Tek tag seçiliyse backend `tag` paramı ile filtreleme, çoklu seçiliyse ek client-side daraltma
+- **Bulk Action Bar** operasyonel hale getirildi:
+  - Seçili strategy sayısı banner’ı
+  - "Seçimi Temizle" aksiyonu
+  - Seçim yoksa bulk butonları disabled + tooltip
+- **JSON Editor validation görünürlüğü** hardening:
+  - Validation summary PASS/FAIL + issue count
+  - FAIL durumunda üst banner
+  - Field-level error paneli korunarak submit için disable + tooltip
+- **History/Audit sekmeleri** eklendi:
+  - `Audit Trail` ve `Rollback History` tab geçişi
+  - Audit filtre/export + rollback chain görünümü tab bazlı ayrıştırıldı
+
+### Doğrulama
+- Lint: `mcp_lint_javascript` PASS (`/app/frontend/src/pages/AdminStrategiesPage.jsx`)
+- Testing agent: `/app/test_reports/iteration_120.json` → **frontend P0 maddeleri 100% PASS**
+- Environment notu: Test agent çalışmasında PostgreSQL servis blokajı giderilmiş, backend health yeniden ayakta.
+
 ## 2026-03-24 — Ops/Observability UX Enhancement Pack ✅
 
 ### Eklenenler
