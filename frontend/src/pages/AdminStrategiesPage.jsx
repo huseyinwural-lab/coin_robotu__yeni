@@ -101,7 +101,9 @@ export const AdminStrategiesPage = () => {
   const [savedFilters, setSavedFilters] = useState({});
   const [filterOptions, setFilterOptions] = useState({ owner_names: [], categories: [], tags: [] });
   const [selectedTagFilters, setSelectedTagFilters] = useState([]);
+  const [tagSearchText, setTagSearchText] = useState("");
   const [auditFilters, setAuditFilters] = useState({ eventType: "", user: "", from: "", to: "" });
+  const [auditPanelTab, setAuditPanelTab] = useState("audit");
   const [bulkActionSummary, setBulkActionSummary] = useState(null);
   const [showConfigDiffMode, setShowConfigDiffMode] = useState(false);
   const [showExecutionExplain, setShowExecutionExplain] = useState(false);
@@ -241,6 +243,38 @@ export const AdminStrategiesPage = () => {
 
   const isVersionConfigValid = !parsedVersionConfig.parseError && versionEditorIssues.length === 0;
 
+  const createVersionValidationTooltip = useMemo(() => {
+    if (!selectedStrategyId) {
+      return "Önce strategy seçin";
+    }
+    if (isVersionConfigValid) {
+      return "Config doğrulandı, version oluşturulabilir";
+    }
+    const issueText = versionEditorIssues.slice(0, 3).map((item) => `${item.field}: ${item.message}`).join(" | ");
+    return `Config hatalı. ${issueText || "JSON parse hatası"}`;
+  }, [isVersionConfigValid, selectedStrategyId, versionEditorIssues]);
+
+  const getPromoteBlockers = useCallback(
+    (versionId) => {
+      const lifecycle = lifecycleMap?.[versionId] || {};
+      const blockers = [];
+      if (lifecycle.validation_status !== "PASS") blockers.push("Validation PASS değil");
+      if (lifecycle.compatibility_status !== "PASS") blockers.push("Compatibility PASS değil");
+      if (lifecycle.dry_run_status !== "PASS") blockers.push("Dry-run PASS değil");
+      const hasPendingRequest = (promotionRequests || []).some(
+        (item) => item.strategy_version_id === versionId && String(item.status || "").toLowerCase() === "pending",
+      );
+      if (hasPendingRequest) blockers.push("Bu version için pending promote request var");
+      return blockers;
+    },
+    [lifecycleMap, promotionRequests],
+  );
+
+  const selectedVersionPromoteBlockers = useMemo(() => {
+    if (!selectedActiveVersion) return [];
+    return getPromoteBlockers(selectedActiveVersion.version_id);
+  }, [getPromoteBlockers, selectedActiveVersion]);
+
   const healthStatusBadge = useMemo(() => {
     const score = Number(metricsSummary?.metrics?.version_health_score || 0);
     if (score >= 75) return "GOOD";
@@ -256,7 +290,11 @@ export const AdminStrategiesPage = () => {
         active_only: Boolean(listFilters.active_only),
         production_only: Boolean(listFilters.production_only),
       };
-      delete params.tag;
+      if (selectedTagFilters.length === 1) {
+        params.tag = selectedTagFilters[0];
+      } else {
+        delete params.tag;
+      }
       Object.keys(params).forEach((key) => {
         if (params[key] === "" || params[key] === null || params[key] === undefined) {
           delete params[key];
@@ -346,6 +384,7 @@ export const AdminStrategiesPage = () => {
       page: 1,
     }));
     setSelectedTagFilters([]);
+    setTagSearchText("");
     toast.success("Tüm filtreler temizlendi");
   };
 
@@ -1000,8 +1039,15 @@ export const AdminStrategiesPage = () => {
           <div className="grid gap-3 xl:grid-cols-2" data-testid="admin-strategy-version-editor-grid">
             <div className="space-y-2" data-testid="admin-strategy-version-editor-main">
               <div className={`rounded border p-2 text-xs ${isVersionConfigValid ? "border-emerald-600 text-emerald-300" : "border-red-600 text-red-300"}`} data-testid="admin-strategy-version-validation-summary-banner">
-                {isVersionConfigValid ? "Validation summary: PASS" : "Validation summary: FAIL"}
+                {isVersionConfigValid
+                  ? "Validation summary: PASS"
+                  : `Validation summary: FAIL (${versionEditorIssues.length || 1} issue)`}
               </div>
+              {!isVersionConfigValid && (
+                <div className="rounded border border-red-700 bg-red-950/40 p-2 text-xs text-red-200" data-testid="admin-strategy-version-validation-upper-banner">
+                  Config geçersiz. Save devre dışı. Hataları düzeltmeden yeni version oluşturamazsınız.
+                </div>
+              )}
               <textarea
                 className={`h-44 w-full border bg-slate-950 p-2 text-sm ${isVersionConfigValid ? "border-slate-700" : "border-red-500"}`}
                 value={versionForm.config_json}
@@ -1049,7 +1095,14 @@ export const AdminStrategiesPage = () => {
               </div>
             </div>
           </div>
-          <Button className="bg-orange-500 text-black hover:bg-orange-600" disabled={!selectedStrategyId || !isVersionConfigValid} data-testid="admin-strategy-version-submit-button">Create Version</Button>
+          <Button
+            className="bg-orange-500 text-black hover:bg-orange-600"
+            disabled={!selectedStrategyId || !isVersionConfigValid}
+            title={createVersionValidationTooltip}
+            data-testid="admin-strategy-version-submit-button"
+          >
+            Create Version
+          </Button>
         </form>
       </div>
 
@@ -1112,14 +1165,18 @@ export const AdminStrategiesPage = () => {
               </datalist>
               <Input
                 placeholder="tag search"
-                value={strategyForm.tags_text}
-                onChange={(e) => setStrategyForm((prev) => ({ ...prev, tags_text: e.target.value }))}
+                value={tagSearchText}
+                onChange={(e) => setTagSearchText(e.target.value)}
                 data-testid="admin-strategies-filter-tag-search-input"
               />
             </div>
             <div className="flex flex-wrap gap-2" data-testid="admin-strategies-filter-tag-multiselect">
               {(filterOptions.tags || [])
-                .filter((tag) => (strategyForm.tags_text || "") ? tag.includes(strategyForm.tags_text.toLowerCase()) : true)
+                .filter((tag) => {
+                  const query = String(tagSearchText || "").trim().toLowerCase();
+                  if (!query) return true;
+                  return String(tag || "").toLowerCase().includes(query);
+                })
                 .slice(0, 20)
                 .map((tag) => {
                   const selected = selectedTagFilters.includes(tag);
@@ -1141,6 +1198,22 @@ export const AdminStrategiesPage = () => {
                   );
                 })}
             </div>
+            {selectedTagFilters.length > 0 && (
+              <div className="flex flex-wrap gap-2" data-testid="admin-strategies-selected-tag-chips">
+                {selectedTagFilters.map((tag) => (
+                  <button
+                    key={`selected-${tag}`}
+                    type="button"
+                    className="rounded-full border border-orange-500 px-2 py-1 text-[10px] uppercase tracking-wide text-orange-200"
+                    onClick={() => setSelectedTagFilters((prev) => prev.filter((item) => item !== tag))}
+                    data-testid={`admin-strategies-selected-tag-remove-${tag}`}
+                    title="Tag filtresini kaldır"
+                  >
+                    {tag} ×
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <Input
                 placeholder="sort_by"
@@ -1198,11 +1271,67 @@ export const AdminStrategiesPage = () => {
               </div>
             )}
             <div className="flex flex-wrap gap-2" data-testid="admin-strategies-bulk-actions-row">
-              <Button variant="outline" className="border-red-500 text-red-200" onClick={bulkArchive} data-testid="admin-strategies-bulk-archive-button">Bulk Archive</Button>
-              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={bulkValidate} data-testid="admin-strategies-bulk-validate-button">Bulk Validate</Button>
-              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={bulkDryRun} data-testid="admin-strategies-bulk-dry-run-button">Bulk Dry-Run</Button>
-              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={bulkTag} data-testid="admin-strategies-bulk-tag-button">Bulk Tag/Category</Button>
-              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={bulkAuditExport} data-testid="admin-strategies-bulk-audit-export-button">Bulk Audit Snapshot</Button>
+              <div className="w-full rounded border border-slate-700 bg-slate-950/60 p-2 text-xs" data-testid="admin-strategies-bulk-toolbar-summary-banner">
+                <p data-testid="admin-strategies-bulk-toolbar-selected-count">Seçili strategy: {selectedStrategyIds.length}</p>
+                <button
+                  type="button"
+                  className="mt-1 rounded border border-slate-600 px-2 py-1 text-[11px] text-slate-200"
+                  onClick={() => setSelectedStrategyIds([])}
+                  data-testid="admin-strategies-bulk-toolbar-clear-selection-button"
+                >
+                  Seçimi Temizle
+                </button>
+              </div>
+              <Button
+                variant="outline"
+                className="border-red-500 text-red-200"
+                onClick={bulkArchive}
+                disabled={selectedStrategyIds.length === 0}
+                title={selectedStrategyIds.length === 0 ? "Önce strategy seçin" : "Seçili strategyleri archive et"}
+                data-testid="admin-strategies-bulk-archive-button"
+              >
+                Bulk Archive
+              </Button>
+              <Button
+                variant="outline"
+                className="border-slate-500 text-slate-100"
+                onClick={bulkValidate}
+                disabled={selectedStrategyIds.length === 0}
+                title={selectedStrategyIds.length === 0 ? "Önce strategy seçin" : "Seçili strategyleri validate et"}
+                data-testid="admin-strategies-bulk-validate-button"
+              >
+                Bulk Validate
+              </Button>
+              <Button
+                variant="outline"
+                className="border-slate-500 text-slate-100"
+                onClick={bulkDryRun}
+                disabled={selectedStrategyIds.length === 0}
+                title={selectedStrategyIds.length === 0 ? "Önce strategy seçin" : "Seçili strategylerde dry-run çalıştır"}
+                data-testid="admin-strategies-bulk-dry-run-button"
+              >
+                Bulk Dry-Run
+              </Button>
+              <Button
+                variant="outline"
+                className="border-slate-500 text-slate-100"
+                onClick={bulkTag}
+                disabled={selectedStrategyIds.length === 0}
+                title={selectedStrategyIds.length === 0 ? "Önce strategy seçin" : "Seçili strategylerde tag/category güncelle"}
+                data-testid="admin-strategies-bulk-tag-button"
+              >
+                Bulk Tag/Category
+              </Button>
+              <Button
+                variant="outline"
+                className="border-slate-500 text-slate-100"
+                onClick={bulkAuditExport}
+                disabled={selectedStrategyIds.length === 0}
+                title={selectedStrategyIds.length === 0 ? "Önce strategy seçin" : "Seçili strategyler için audit snapshot al"}
+                data-testid="admin-strategies-bulk-audit-export-button"
+              >
+                Bulk Audit Snapshot
+              </Button>
             </div>
             {bulkActionSummary && (
               <div className="rounded border border-slate-700 p-2 text-xs" data-testid="admin-strategies-bulk-result-panel">
@@ -1277,57 +1406,67 @@ export const AdminStrategiesPage = () => {
           )}
 
           <div className="space-y-2" data-testid="admin-strategy-versions-list">
-            {(detail?.versions || []).map((item) => (
-              <div key={item.version_id} className="space-y-2 border border-slate-700 p-3" data-testid={`admin-strategy-version-row-${item.version_id}`}>
-                <p className="text-sm" data-testid={`admin-strategy-version-number-${item.version_id}`}>v{item.version_number} · schema={item.config_schema_version}</p>
-                <p className="text-xs text-slate-400 break-all" data-testid={`admin-strategy-version-hash-${item.version_id}`}>hash: {item.version_hash}</p>
-                <div className="flex flex-wrap gap-2 text-xs" data-testid={`admin-strategy-version-lifecycle-badges-${item.version_id}`}>
-                  <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-lifecycle-state-${item.version_id}`}>
-                    state: {lifecycleMap[item.version_id]?.lifecycle_state || "draft"}
-                  </span>
-                  <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-validation-status-${item.version_id}`}>
-                    validation: {lifecycleMap[item.version_id]?.validation_status || "pending"}
-                  </span>
-                  <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-dry-run-status-${item.version_id}`}>
-                    dry_run: {lifecycleMap[item.version_id]?.dry_run_status || "pending"}
-                  </span>
-                  <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-production-status-${item.version_id}`}>
-                    production: {String(Boolean(lifecycleMap[item.version_id]?.is_production))}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2" data-testid={`admin-strategy-version-actions-${item.version_id}`}>
-                  <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => validateVersion(item.version_id)} data-testid={`admin-strategy-version-validate-button-${item.version_id}`}>Validate</Button>
-                  <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => runDryRun(item.version_id)} data-testid={`admin-strategy-version-dry-run-button-${item.version_id}`}>Dry-Run</Button>
-                  <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={() => activateVersion(item.version_id)} data-testid={`admin-strategy-version-activate-button-${item.version_id}`}>Activate</Button>
-                  <Button variant="outline" className="border-amber-500 text-amber-200" onClick={() => rollbackVersion(item.version_id)} data-testid={`admin-strategy-version-rollback-button-${item.version_id}`}>Rollback</Button>
-                  <Button variant="outline" className="border-emerald-500 text-emerald-200" onClick={() => runExecutionPreview(item.version_id)} data-testid={`admin-strategy-version-execution-preview-button-${item.version_id}`}>Execution Preview</Button>
-                  <Button
-                    variant="outline"
-                    className="border-blue-500 text-blue-200"
-                    onClick={() => requestPromoteToProduction(item.version_id)}
-                    title={
-                      lifecycleMap[item.version_id]?.validation_status !== "PASS"
-                        ? "Validation PASS değil"
-                        : lifecycleMap[item.version_id]?.compatibility_status !== "PASS"
-                          ? "Compatibility PASS değil"
-                          : lifecycleMap[item.version_id]?.dry_run_status !== "PASS"
-                            ? "Dry-run PASS değil"
-                            : "Promote request oluşturulabilir"
-                    }
-                    disabled={
-                      lifecycleMap[item.version_id]?.validation_status !== "PASS" ||
-                      lifecycleMap[item.version_id]?.compatibility_status !== "PASS" ||
-                      lifecycleMap[item.version_id]?.dry_run_status !== "PASS"
-                    }
-                    data-testid={`admin-strategy-version-promote-request-button-${item.version_id}`}
-                  >
-                    Promote Request
-                  </Button>
-                  <Button variant="outline" className="border-fuchsia-500 text-fuchsia-200" onClick={() => setRolloutStage(item.version_id, "shadow")} data-testid={`admin-strategy-version-shadow-button-${item.version_id}`}>Stage: Shadow</Button>
-                  <Button variant="outline" className="border-fuchsia-500 text-fuchsia-200" onClick={() => setRolloutStage(item.version_id, "canary")} data-testid={`admin-strategy-version-canary-button-${item.version_id}`}>Stage: Canary</Button>
-                </div>
+            {selectedActiveVersion && selectedVersionPromoteBlockers.length > 0 && (
+              <div className="rounded border border-red-700 bg-red-950/40 p-2 text-xs text-red-200" data-testid="admin-strategy-promote-disable-banner">
+                Promote disable: {selectedVersionPromoteBlockers.join(" • ")}
               </div>
-            ))}
+            )}
+            {(detail?.versions || []).map((item) => {
+              const promoteBlockers = getPromoteBlockers(item.version_id);
+              const isPromoteDisabled = promoteBlockers.length > 0;
+              const promoteTooltip = isPromoteDisabled
+                ? `Promote disabled: ${promoteBlockers.join(" | ")}`
+                : "Promote request oluşturulabilir";
+
+              return (
+                <div key={item.version_id} className="space-y-2 border border-slate-700 p-3" data-testid={`admin-strategy-version-row-${item.version_id}`}>
+                  <p className="text-sm" data-testid={`admin-strategy-version-number-${item.version_id}`}>v{item.version_number} · schema={item.config_schema_version}</p>
+                  <p className="text-xs text-slate-400 break-all" data-testid={`admin-strategy-version-hash-${item.version_id}`}>hash: {item.version_hash}</p>
+                  <div className="flex flex-wrap gap-2 text-xs" data-testid={`admin-strategy-version-lifecycle-badges-${item.version_id}`}>
+                    <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-lifecycle-state-${item.version_id}`}>
+                      state: {lifecycleMap[item.version_id]?.lifecycle_state || "draft"}
+                    </span>
+                    <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-validation-status-${item.version_id}`}>
+                      validation: {lifecycleMap[item.version_id]?.validation_status || "pending"}
+                    </span>
+                    <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-dry-run-status-${item.version_id}`}>
+                      dry_run: {lifecycleMap[item.version_id]?.dry_run_status || "pending"}
+                    </span>
+                    <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-production-status-${item.version_id}`}>
+                      production: {String(Boolean(lifecycleMap[item.version_id]?.is_production))}
+                    </span>
+                  </div>
+                  {isPromoteDisabled && (
+                    <div className="rounded border border-red-700 bg-red-950/30 p-2 text-xs text-red-200" data-testid={`admin-strategy-version-promote-blockers-${item.version_id}`}>
+                      {(promoteBlockers || []).map((blocker, idx) => (
+                        <p key={`${item.version_id}-blocker-${idx}`} data-testid={`admin-strategy-version-promote-blocker-item-${item.version_id}-${idx}`}>
+                          • {blocker}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2" data-testid={`admin-strategy-version-actions-${item.version_id}`}>
+                    <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => validateVersion(item.version_id)} data-testid={`admin-strategy-version-validate-button-${item.version_id}`}>Validate</Button>
+                    <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => runDryRun(item.version_id)} data-testid={`admin-strategy-version-dry-run-button-${item.version_id}`}>Dry-Run</Button>
+                    <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={() => activateVersion(item.version_id)} data-testid={`admin-strategy-version-activate-button-${item.version_id}`}>Activate</Button>
+                    <Button variant="outline" className="border-amber-500 text-amber-200" onClick={() => rollbackVersion(item.version_id)} data-testid={`admin-strategy-version-rollback-button-${item.version_id}`}>Rollback</Button>
+                    <Button variant="outline" className="border-emerald-500 text-emerald-200" onClick={() => runExecutionPreview(item.version_id)} data-testid={`admin-strategy-version-execution-preview-button-${item.version_id}`}>Execution Preview</Button>
+                    <Button
+                      variant="outline"
+                      className="border-blue-500 text-blue-200"
+                      onClick={() => requestPromoteToProduction(item.version_id)}
+                      title={promoteTooltip}
+                      disabled={isPromoteDisabled}
+                      data-testid={`admin-strategy-version-promote-request-button-${item.version_id}`}
+                    >
+                      Promote Request
+                    </Button>
+                    <Button variant="outline" className="border-fuchsia-500 text-fuchsia-200" onClick={() => setRolloutStage(item.version_id, "shadow")} data-testid={`admin-strategy-version-shadow-button-${item.version_id}`}>Stage: Shadow</Button>
+                    <Button variant="outline" className="border-fuchsia-500 text-fuchsia-200" onClick={() => setRolloutStage(item.version_id, "canary")} data-testid={`admin-strategy-version-canary-button-${item.version_id}`}>Stage: Canary</Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1691,37 +1830,62 @@ export const AdminStrategiesPage = () => {
 
       <div className="space-y-2 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-audit-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-audit-title">Audit / History</p>
-        <div className="grid gap-2 md:grid-cols-4" data-testid="admin-strategy-audit-filter-row">
-          <Input placeholder="event type" value={auditFilters.eventType} onChange={(e) => setAuditFilters((prev) => ({ ...prev, eventType: e.target.value }))} data-testid="admin-strategy-audit-filter-event-type-input" />
-          <Input placeholder="user" value={auditFilters.user} onChange={(e) => setAuditFilters((prev) => ({ ...prev, user: e.target.value }))} data-testid="admin-strategy-audit-filter-user-input" />
-          <Input type="datetime-local" value={auditFilters.from} onChange={(e) => setAuditFilters((prev) => ({ ...prev, from: e.target.value }))} data-testid="admin-strategy-audit-filter-from-input" />
-          <Input type="datetime-local" value={auditFilters.to} onChange={(e) => setAuditFilters((prev) => ({ ...prev, to: e.target.value }))} data-testid="admin-strategy-audit-filter-to-input" />
+        <div className="flex flex-wrap gap-2" data-testid="admin-strategy-audit-tab-buttons">
+          <Button
+            type="button"
+            variant="outline"
+            className={auditPanelTab === "audit" ? "border-orange-500 text-orange-200" : "border-slate-600 text-slate-200"}
+            onClick={() => setAuditPanelTab("audit")}
+            data-testid="admin-strategy-audit-tab-audit-button"
+          >
+            Audit Trail
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className={auditPanelTab === "history" ? "border-orange-500 text-orange-200" : "border-slate-600 text-slate-200"}
+            onClick={() => setAuditPanelTab("history")}
+            data-testid="admin-strategy-audit-tab-history-button"
+          >
+            Rollback History
+          </Button>
         </div>
-        <div className="flex flex-wrap gap-2" data-testid="admin-strategy-audit-export-actions">
-          <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => exportAuditHistory("json")} data-testid="admin-strategy-audit-export-json-button">Export JSON</Button>
-          <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => exportAuditHistory("csv")} data-testid="admin-strategy-audit-export-csv-button">Export CSV</Button>
-        </div>
-        <div className="space-y-2" data-testid="admin-strategy-audit-list">
-          {filteredTimelineItems.map((item, idx) => (
-            <div key={`${item.audit_id}-${idx}`} className="border border-slate-700 p-2 text-xs" data-testid={`admin-strategy-audit-row-${idx}`}>
-              <p data-testid={`admin-strategy-audit-action-${idx}`}>{item.action}</p>
-              <p className="text-slate-400" data-testid={`admin-strategy-audit-actor-${idx}`}>{item.actor_role || "-"} · {item.actor_user_id || "-"}</p>
-              <p className="text-slate-400" data-testid={`admin-strategy-audit-time-${idx}`}>{item.timestamp}</p>
+        {auditPanelTab === "audit" ? (
+          <>
+            <div className="grid gap-2 md:grid-cols-4" data-testid="admin-strategy-audit-filter-row">
+              <Input placeholder="event type" value={auditFilters.eventType} onChange={(e) => setAuditFilters((prev) => ({ ...prev, eventType: e.target.value }))} data-testid="admin-strategy-audit-filter-event-type-input" />
+              <Input placeholder="user" value={auditFilters.user} onChange={(e) => setAuditFilters((prev) => ({ ...prev, user: e.target.value }))} data-testid="admin-strategy-audit-filter-user-input" />
+              <Input type="datetime-local" value={auditFilters.from} onChange={(e) => setAuditFilters((prev) => ({ ...prev, from: e.target.value }))} data-testid="admin-strategy-audit-filter-from-input" />
+              <Input type="datetime-local" value={auditFilters.to} onChange={(e) => setAuditFilters((prev) => ({ ...prev, to: e.target.value }))} data-testid="admin-strategy-audit-filter-to-input" />
             </div>
-          ))}
-          {filteredTimelineItems.length === 0 && (
-            <p className="text-xs text-slate-400" data-testid="admin-strategy-audit-empty">Audit kaydı yok.</p>
-          )}
-        </div>
-        <div className="space-y-1 border border-slate-700 p-2 text-xs" data-testid="admin-strategy-rollback-chain-panel">
-          <p className="uppercase tracking-wider text-slate-400" data-testid="admin-strategy-rollback-chain-title">Rollback Chain</p>
-          {rollbackChain.map((item, idx) => (
-            <p key={`${item.strategy_version_id}-${idx}`} data-testid={`admin-strategy-rollback-chain-item-${idx}`}>
-              {item.strategy_version_id} ← {item.rolled_back_from_version_id} ({item.lifecycle_state})
-            </p>
-          ))}
-          {rollbackChain.length === 0 && <p data-testid="admin-strategy-rollback-chain-empty">Rollback chain bulunamadı.</p>}
-        </div>
+            <div className="flex flex-wrap gap-2" data-testid="admin-strategy-audit-export-actions">
+              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => exportAuditHistory("json")} data-testid="admin-strategy-audit-export-json-button">Export JSON</Button>
+              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => exportAuditHistory("csv")} data-testid="admin-strategy-audit-export-csv-button">Export CSV</Button>
+            </div>
+            <div className="space-y-2" data-testid="admin-strategy-audit-list">
+              {filteredTimelineItems.map((item, idx) => (
+                <div key={`${item.audit_id}-${idx}`} className="border border-slate-700 p-2 text-xs" data-testid={`admin-strategy-audit-row-${idx}`}>
+                  <p data-testid={`admin-strategy-audit-action-${idx}`}>{item.action}</p>
+                  <p className="text-slate-400" data-testid={`admin-strategy-audit-actor-${idx}`}>{item.actor_role || "-"} · {item.actor_user_id || "-"}</p>
+                  <p className="text-slate-400" data-testid={`admin-strategy-audit-time-${idx}`}>{item.timestamp}</p>
+                </div>
+              ))}
+              {filteredTimelineItems.length === 0 && (
+                <p className="text-xs text-slate-400" data-testid="admin-strategy-audit-empty">Audit kaydı yok.</p>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="space-y-1 border border-slate-700 p-2 text-xs" data-testid="admin-strategy-rollback-chain-panel">
+            <p className="uppercase tracking-wider text-slate-400" data-testid="admin-strategy-rollback-chain-title">Rollback Chain</p>
+            {rollbackChain.map((item, idx) => (
+              <p key={`${item.strategy_version_id}-${idx}`} data-testid={`admin-strategy-rollback-chain-item-${idx}`}>
+                {item.strategy_version_id} ← {item.rolled_back_from_version_id} ({item.lifecycle_state})
+              </p>
+            ))}
+            {rollbackChain.length === 0 && <p data-testid="admin-strategy-rollback-chain-empty">Rollback chain bulunamadı.</p>}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3" data-testid="admin-runtime-views-grid">
