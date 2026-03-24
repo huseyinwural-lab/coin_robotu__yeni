@@ -33,7 +33,7 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.admin_profile_service import change_admin_password, update_admin_profile
-from services.mfa_service import start_mfa_challenge_if_required
+from services.mfa_service import get_mfa_settings, is_mfa_enforcement_required, start_mfa_challenge_if_required
 from services.identity_control_service import (
     enforce_login_protection,
     get_or_create_identity_profile,
@@ -158,6 +158,19 @@ def _login_with_policy(
                 user_id=user.id,
             )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="password_rotation_required")
+
+    if is_mfa_enforcement_required(user_email=user.email, endpoint_scope=endpoint_scope):
+        mfa_settings = get_mfa_settings(db, user.id)
+        if not bool(mfa_settings.get("is_enabled")) or "totp" not in (mfa_settings.get("enabled_methods") or []):
+            record_login_failure(
+                db,
+                request=request,
+                endpoint_scope=endpoint_scope,
+                email=user.email,
+                reason="mfa_enforced_not_configured",
+                user_id=user.id,
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="mfa_enforced_not_configured")
 
     mfa_payload = start_mfa_challenge_if_required(db, user=user)
     if mfa_payload:

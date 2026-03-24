@@ -67,6 +67,7 @@ class BulkStatusRequest(BaseModel):
     action: str | None = None
     reason: str = "bulk_status_change"
     critical_confirmed: bool = False
+    override_reason: str | None = None
 
 
 class InlineUserUpdateRequest(BaseModel):
@@ -76,6 +77,7 @@ class InlineUserUpdateRequest(BaseModel):
     capital_limit: float | None = None
     reason: str = "inline_update"
     critical_confirmed: bool = False
+    override_reason: str | None = None
 
 
 class ApprovalRequestCreatePayload(BaseModel):
@@ -136,11 +138,13 @@ class UserScopePayload(BaseModel):
 
 class ReactivateUserPayload(BaseModel):
     reason: str = "manual_reactivation"
+    override_reason: str | None = None
 
 
 class CriticalActionRequestPayload(BaseModel):
     reason: str
     critical_confirmed: bool = False
+    override_reason: str | None = None
 
 
 class UnlockPolicyPayload(BaseModel):
@@ -266,13 +270,26 @@ def _build_approval_impact_delta(db: Session, *, row: IdentityApprovalRequest) -
         blockers = list(hard_delete_candidate_snapshot(db, user=target).get("blockers") or [])
 
     risk_score = _approval_risk_score(row.action_key)
+    numeric_changes = {}
+    previous_capital = previous.get("capital_limit")
+    desired_capital = desired.get("capital_limit")
+    if isinstance(previous_capital, (int, float)) and isinstance(desired_capital, (int, float)):
+        numeric_changes["capital_limit_delta"] = round(float(desired_capital) - float(previous_capital), 2)
+
+    if row.action_key.startswith("bulk_"):
+        numeric_changes["impacted_users_count"] = impacted_users_count
+
+    baseline_score = 30 + (len(changed_fields) * 3)
+    risk_delta = risk_score - baseline_score
     return {
         "previous": previous,
         "desired": desired,
         "changed_fields": changed_fields,
         "risk_score": risk_score,
+        "risk_delta": risk_delta,
         "risk_level": _approval_risk_level(risk_score),
         "blockers": blockers,
+        "numeric_changes": numeric_changes,
         "impacted_users_count": impacted_users_count,
         "high_risk": risk_score >= 75,
     }
@@ -437,7 +454,7 @@ def admin_identity_user_inline_update(
             actor=current_admin,
             action_key=action_key,
             target_user_id=target.id,
-            payload={"status": payload.status, "critical_confirmed": True},
+            payload={"status": payload.status, "critical_confirmed": True, "override_reason": payload.override_reason},
             reason=payload.reason,
         )
 
@@ -450,7 +467,7 @@ def admin_identity_user_inline_update(
                 actor=current_admin,
                 action_key="grant_privileged_role",
                 target_user_id=target.id,
-                payload={"role": payload.role, "critical_confirmed": True},
+                payload={"role": payload.role, "critical_confirmed": True, "override_reason": payload.override_reason},
                 reason=payload.reason,
             )
         target.role = UserRole(payload.role)
@@ -469,7 +486,7 @@ def admin_identity_user_inline_update(
                 actor=current_admin,
                 action_key="enable_live_trading",
                 target_user_id=target.id,
-                payload={"trading_enabled": True, "critical_confirmed": True},
+                payload={"trading_enabled": True, "critical_confirmed": True, "override_reason": payload.override_reason},
                 reason=payload.reason,
             )
         profile.trading_enabled = False
@@ -482,7 +499,7 @@ def admin_identity_user_inline_update(
             actor=current_admin,
             action_key="raise_capital_limit",
             target_user_id=target.id,
-            payload={"capital_limit": float(payload.capital_limit), "critical_confirmed": True},
+            payload={"capital_limit": float(payload.capital_limit), "critical_confirmed": True, "override_reason": payload.override_reason},
             reason=payload.reason,
         )
 
@@ -554,6 +571,7 @@ def admin_identity_bulk_status(
                     "bulk_action": requested_action,
                     "critical_confirmed": True,
                     "target_status": payload.status,
+                    "override_reason": payload.override_reason,
                 },
                 reason=payload.reason,
             )
@@ -733,7 +751,7 @@ def admin_identity_reactivate_user(
         actor=current_admin,
         action_key="restore_user",
         target_user_id=target.id,
-        payload={"critical_confirmed": True, "reason": payload.reason},
+        payload={"critical_confirmed": True, "reason": payload.reason, "override_reason": payload.override_reason},
         reason=payload.reason,
     )
 
@@ -763,7 +781,7 @@ def admin_identity_hard_delete_request(
         actor=current_admin,
         action_key="hard_delete_user",
         target_user_id=user_id,
-        payload={"critical_confirmed": True, "reason": payload.reason},
+        payload={"critical_confirmed": True, "reason": payload.reason, "override_reason": payload.override_reason},
         reason=payload.reason,
     )
     return {"status": "approval_required", "request_id": row.id, "action_key": row.action_key}
@@ -783,7 +801,7 @@ def admin_identity_soft_delete_request(
         actor=current_admin,
         action_key="soft_delete_user",
         target_user_id=user_id,
-        payload={"critical_confirmed": True, "reason": payload.reason},
+        payload={"critical_confirmed": True, "reason": payload.reason, "override_reason": payload.override_reason},
         reason=payload.reason,
     )
     return {"status": "approval_required", "request_id": row.id, "action_key": row.action_key}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -13,6 +14,32 @@ from models import AuthMfaChallenge, User, UserMfaBackupCode, UserMfaPreference
 
 MFA_ALLOWED_METHODS = {"totp"}
 MFA_CHALLENGE_TTL_MINUTES = 10
+
+
+def is_mfa_enforcement_required(*, user_email: str, endpoint_scope: str) -> bool:
+    mode = str(os.environ.get("MFA_ENFORCEMENT_MODE") or "auto").strip().lower()
+    override_emails = {
+        item.strip().lower()
+        for item in str(os.environ.get("MFA_OPTIONAL_OVERRIDE_EMAILS") or "").split(",")
+        if item.strip()
+    }
+    if str(user_email or "").strip().lower() in override_emails:
+        return False
+    if mode == "enforce":
+        return True
+    if mode == "optional":
+        return False
+
+    runtime_env = str(
+        os.environ.get("APP_ENV")
+        or os.environ.get("ENVIRONMENT")
+        or os.environ.get("RUNTIME_ENV")
+        or ""
+    ).strip().lower()
+    is_production = runtime_env in {"prod", "production"}
+    if endpoint_scope == "admin":
+        return is_production
+    return is_production
 MFA_BACKUP_CODES_DEFAULT_COUNT = 8
 
 

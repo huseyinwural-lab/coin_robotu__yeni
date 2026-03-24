@@ -47,6 +47,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   const [securityDetail, setSecurityDetail] = useState(null);
   const [securityDetailUserId, setSecurityDetailUserId] = useState("");
   const [securityDetailLoading, setSecurityDetailLoading] = useState(false);
+  const [securityDetailError, setSecurityDetailError] = useState("");
   const [observabilityLoading, setObservabilityLoading] = useState(false);
   const [observabilityError, setObservabilityError] = useState("");
   const [activityTimeline, setActivityTimeline] = useState(null);
@@ -196,14 +197,21 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     return { ...basePayload, override_reason: overrideReason.trim() };
   };
 
+  const showInlineDiffPreview = ({ title, field, beforeValue, afterValue }) => {
+    return window.confirm(`${title}\n\nDiff Preview\n${field}: ${String(beforeValue)} -> ${String(afterValue)}\n\nDevam edilsin mi?`);
+  };
+
   const loadSecurityDetail = async (userId) => {
     setSecurityDetailLoading(true);
     setSecurityDetailUserId(userId);
+    setSecurityDetailError("");
     try {
       const { data } = await apiClient.get(`/admin/identity/users/${userId}/security`);
       setSecurityDetail(data);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Security detail yüklenemedi");
+      const message = error?.response?.data?.detail || "Security detail yüklenemedi";
+      setSecurityDetailError(message);
+      toast.error(message);
     } finally {
       setSecurityDetailLoading(false);
     }
@@ -260,6 +268,10 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   };
 
   const updateRole = async (userId, role) => {
+    const current = users.find((item) => item.id === userId);
+    if (!showInlineDiffPreview({ title: "Inline Role Edit", field: "role", beforeValue: current?.role, afterValue: role })) {
+      return;
+    }
     const isHighRisk = ["admin", "super_admin", "ops"].includes(String(role || "").toLowerCase());
     const confirmPayload = getCriticalConfirmation("Rol güncelle", { highRisk: isHighRisk });
     if (!confirmPayload) return;
@@ -268,6 +280,9 @@ export const AdminUsersPage = ({ scope = "user" }) => {
 
   const toggleStatus = async (user) => {
     const nextStatus = user.status === "active" ? "disabled" : "active";
+    if (!showInlineDiffPreview({ title: "Inline Status Edit", field: "status", beforeValue: user.status, afterValue: nextStatus })) {
+      return;
+    }
     const confirmPayload = getCriticalConfirmation(`Kullanıcı ${nextStatus} işlemi`);
     if (!confirmPayload) return;
     await requestInlineUpdate(user.id, { status: nextStatus, ...confirmPayload }, `Kullanıcı ${nextStatus} yapıldı`);
@@ -275,12 +290,28 @@ export const AdminUsersPage = ({ scope = "user" }) => {
 
   const toggleTrading = async (user) => {
     const next = !Boolean(user?.identity_controls?.trading_enabled);
+    if (!showInlineDiffPreview({
+      title: "Inline Trading Edit",
+      field: "trading_enabled",
+      beforeValue: Boolean(user?.identity_controls?.trading_enabled),
+      afterValue: next,
+    })) {
+      return;
+    }
     const confirmPayload = getCriticalConfirmation(next ? "Live trading enable" : "Trading disable", { highRisk: next });
     if (!confirmPayload) return;
     await requestInlineUpdate(user.id, { trading_enabled: next, ...confirmPayload }, `Trading ${next ? "açıldı" : "kapatıldı"}`);
   };
 
   const setKillSwitch = async (user, active) => {
+    if (!showInlineDiffPreview({
+      title: "Inline Kill Switch Edit",
+      field: "kill_switch_active",
+      beforeValue: Boolean(user?.identity_controls?.kill_switch_active),
+      afterValue: active,
+    })) {
+      return;
+    }
     setInlineLoadingMap((prev) => ({ ...prev, [user.id]: true }));
     try {
       await apiClient.post(`/admin/identity/users/${user.id}/kill-switch`, {
@@ -303,6 +334,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       const { data } = await apiClient.post(`/admin/identity/users/${user.id}/soft-delete/request`, {
         reason: confirmPayload.reason,
         critical_confirmed: true,
+        override_reason: confirmPayload.override_reason,
       });
       toast.success(`Soft delete approval request açıldı (${data?.request_id})`);
       await loadUsers();
@@ -320,6 +352,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       const { data } = await apiClient.post(`/admin/identity/users/${user.id}/hard-delete/request`, {
         reason: confirmPayload.reason,
         critical_confirmed: true,
+        override_reason: confirmPayload.override_reason,
       });
       toast.success(`Hard delete approval request açıldı (${data?.request_id})`);
       await loadUsers();
@@ -378,6 +411,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
         status,
         reason: confirmPayload.reason,
         critical_confirmed: true,
+        override_reason: confirmPayload.override_reason,
       });
       toast.success(`Bulk ${status} tamamlandı (success=${data?.success ?? 0})`);
       setBulkExecutionResult(data || null);
@@ -665,6 +699,28 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     loadHardDeleteCandidates();
     loadDeletedLifecycle();
   }, [loadApprovalPolicies, loadCustomRoles, loadInvites, loadHardDeleteCandidates, loadDeletedLifecycle]);
+
+  const renderTrendChart = (trend, testIdPrefix) => {
+    const values = [
+      { key: "24h", value: Number(trend?.["24h"] || 0) },
+      { key: "7d", value: Number(trend?.["7d"] || 0) },
+      { key: "30d", value: Number(trend?.["30d"] || 0) },
+    ];
+    const maxValue = Math.max(...values.map((item) => item.value), 1);
+    return (
+      <div className="space-y-1" data-testid={`${testIdPrefix}-trend-chart`}>
+        {values.map((item) => (
+          <div key={item.key} className="flex items-center gap-2" data-testid={`${testIdPrefix}-trend-row-${item.key}`}>
+            <span className="w-8 text-[10px]">{item.key}</span>
+            <div className="h-2 flex-1 border border-black/15 bg-orange-100">
+              <div className="h-full bg-black" style={{ width: `${Math.max((item.value / maxValue) * 100, item.value > 0 ? 8 : 0)}%` }}></div>
+            </div>
+            <span className="w-8 text-right text-[10px]">{item.value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const toggleSelectAll = () => {
     if (selectedUserIds.length === users.length) {
@@ -1152,12 +1208,16 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                     </p>
                   )}
                   <p data-testid={`admin-users-approval-risk-level-${request.id}`}>risk={request?.impact_delta?.risk_level} ({request?.impact_delta?.risk_score})</p>
+                  <p data-testid={`admin-users-approval-risk-delta-${request.id}`}>risk_delta={request?.impact_delta?.risk_delta ?? 0}</p>
                   <p data-testid={`admin-users-approval-impacted-users-${request.id}`}>impacted_users={request?.impact_delta?.impacted_users_count ?? 1}</p>
                   <p data-testid={`admin-users-approval-delta-role-${request.id}`}>role: {request?.impact_delta?.previous?.role || "-"}{" → "}{request?.impact_delta?.desired?.role || "-"}</p>
                   <p data-testid={`admin-users-approval-delta-trading-${request.id}`}>trading: {String(request?.impact_delta?.previous?.trading_enabled)}{" → "}{String(request?.impact_delta?.desired?.trading_enabled)}</p>
                   <p data-testid={`admin-users-approval-delta-delete-${request.id}`}>delete_state: {request?.impact_delta?.previous?.delete_state || "-"}{" → "}{request?.impact_delta?.desired?.delete_state || "-"}</p>
                   <p data-testid={`admin-users-approval-delta-capital-${request.id}`}>capital_limit: {request?.impact_delta?.previous?.capital_limit ?? "-"}{" → "}{request?.impact_delta?.desired?.capital_limit ?? "-"}</p>
                   <p data-testid={`admin-users-approval-delta-changed-fields-${request.id}`}>changed_fields={(request?.impact_delta?.changed_fields || []).join(", ") || "-"}</p>
+                  <p data-testid={`admin-users-approval-delta-numeric-${request.id}`}>
+                    numeric_changes={Object.entries(request?.impact_delta?.numeric_changes || {}).map(([k, v]) => `${k}:${v}`).join(", ") || "-"}
+                  </p>
                   <p data-testid={`admin-users-approval-delta-blockers-${request.id}`}>blockers={(request?.impact_delta?.blockers || []).join(", ") || "-"}</p>
                 </div>
 
@@ -1547,7 +1607,15 @@ export const AdminUsersPage = ({ scope = "user" }) => {
           </div>
 
           {securityDetailLoading ? (
-            <p className="text-xs" data-testid="admin-users-security-detail-loading">Yükleniyor...</p>
+            <div className="space-y-2" data-testid="admin-users-security-detail-loading-state">
+              <p className="text-xs" data-testid="admin-users-security-detail-loading">Yükleniyor...</p>
+              <div className="h-14 animate-pulse border border-black/10 bg-orange-100" data-testid="admin-users-security-detail-skeleton"></div>
+            </div>
+          ) : securityDetailError ? (
+            <div className="space-y-2" data-testid="admin-users-security-detail-error-state">
+              <p className="text-xs text-red-700" data-testid="admin-users-security-detail-error-text">{securityDetailError}</p>
+              <Button size="sm" variant="outline" onClick={() => loadSecurityDetail(securityDetailUserId)} data-testid="admin-users-security-detail-retry-button">Retry</Button>
+            </div>
           ) : securityDetail ? (
             <div className="space-y-3">
               <div className="grid gap-3 md:grid-cols-2">
@@ -1626,6 +1694,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                       <p data-testid="admin-users-observability-security-severity">severity={securityTelemetry?.normalized_severity || "low"} · risk={securityTelemetry?.normalized_risk_score ?? 0}</p>
                       <p data-testid="admin-users-observability-security-signals">signals={(securityTelemetry?.high_risk_signals || []).map((signal) => signal.signal).join(", ") || "-"}</p>
                       <p data-testid="admin-users-observability-security-mfa-failures">recent_mfa_failures={(securityTelemetry?.recent_mfa_failures || []).length}</p>
+                      {renderTrendChart(securityTelemetry?.failed_login_trend, "admin-users-observability-security")}
                     </div>
 
                     <div className="space-y-1 border border-black/15 p-2 text-xs" data-testid="admin-users-observability-execution-card">
@@ -1634,13 +1703,18 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                       <p data-testid="admin-users-observability-execution-error-count">error_count={executionMetrics?.execution_error_count ?? 0}</p>
                       <p data-testid="admin-users-observability-execution-latency">latency_avg={executionMetrics?.execution_latency_summary?.avg_ms ?? 0}ms · p95={executionMetrics?.execution_latency_summary?.p95_ms ?? 0}ms</p>
                       <p data-testid="admin-users-observability-execution-errors">error_categories={(executionMetrics?.recent_error_categories || []).map((item) => `${item.code}:${item.count}`).join(", ") || "-"}</p>
+                      {renderTrendChart(executionMetrics?.window_summary, "admin-users-observability-execution")}
                     </div>
 
                     <div className="space-y-1 border border-black/15 p-2 text-xs" data-testid="admin-users-observability-trading-card">
                       <p className="font-semibold">Trading Observability</p>
+                      <p data-testid="admin-users-observability-trading-summary-card">
+                        trade_summary_count={(tradingObservability?.recent_trade_count?.["24h"] ?? 0) + (tradingObservability?.recent_trade_count?.["7d"] ?? 0)} · state={Boolean(tradingObservability?.live_trading_status?.trading_enabled) ? "live" : "paused"}
+                      </p>
                       <p data-testid="admin-users-observability-trading-live-status">trading_enabled={String(Boolean(tradingObservability?.live_trading_status?.trading_enabled))} · live_eligible={String(Boolean(tradingObservability?.live_trading_status?.live_trading_eligible))}</p>
                       <p data-testid="admin-users-observability-trading-trade-count">trade_24h={tradingObservability?.recent_trade_count?.["24h"] ?? 0} · trade_7d={tradingObservability?.recent_trade_count?.["7d"] ?? 0}</p>
                       <p data-testid="admin-users-observability-trading-impact">strategy={tradingObservability?.impact_summary?.strategy_scope_count ?? 0} · bot={tradingObservability?.impact_summary?.bot_scope_count ?? 0} · account={tradingObservability?.impact_summary?.account_mapping_count ?? 0}</p>
+                      {renderTrendChart(tradingObservability?.recent_trade_count, "admin-users-observability-trading")}
                       <a href={tradingObservability?.trade_history_link || "#"} className="underline" data-testid="admin-users-observability-trade-history-link">Trade History Link</a>
                     </div>
                   </div>
