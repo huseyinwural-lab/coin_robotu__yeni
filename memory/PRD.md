@@ -1,3 +1,59 @@
+## 2026-03-24 — FINAL P0 Closure (MFA + Runtime/Postgres + Approval Guard) ✅
+
+### P0-1) MFA standardı kesin sabitlendi
+- Login MFA akışında email OTP tamamen devre dışı bırakıldı (`mfa_service.py`): email challenge üretimi kaldırıldı.
+- Challenge doğrulama yalnızca `totp` ve `backup_code` ile çalışır; `email` method artık login için reddedilir.
+- Frontend MFA UI sadeleştirildi:
+  - `AdminLoginPage.jsx` ve `UserLoginPage.jsx` içinde method dropdown kaldırıldı.
+  - Metin sabitlendi: **Authenticator (TOTP) + Backup Code**.
+  - Email MFA seçeneği UI’dan tamamen kaldırıldı.
+- `MfaSettingsPage.jsx` yöntemi sabit gösterir; payload her zaman TOTP odaklı gönderilir.
+
+### P0-2) Runtime / Postgres hardening tamamlandı
+- `db.py` lazy init’e geçirildi:
+  - Import anında DB connect kaldırıldı.
+  - `init_db_engine()` + runtime state (`configured/url_valid/initialized/reachable`) eklendi.
+  - `get_db` başarısız DB durumunda 503 ile anlamlı hata döner.
+- `server.py` startup blokları retry/backoff ile sarıldı:
+  - alembic, connectivity, state rebuild adımları retry’lı.
+  - DB ready değilse servis fake-healthy görünmez; health/readiness doğru raporlar.
+  - DB ready değilse pipeline runtime başlatımı atlanır.
+- `migration_service.py` connection string doğrulaması sertleştirildi (host/dbname kontrolü).
+- Supervisor hardening:
+  - backend için `startretries=10`, log rotation ayarları eklendi.
+  - backend komutu DB preflight scripti (`start_backend_with_db_guard.sh`) üzerinden çalışır.
+  - `wait_for_postgres_ready.py` eklendi (retry/backoff readiness kontrolü).
+  - **Supervisor altında gerçek PostgreSQL process** eklendi (`program:postgresql`).
+- Runtime sonucu:
+  - `/api/health` => 200 + database reachable true
+  - `/api/ready` => 200 ready
+  - Önceki global 502 outage giderildi.
+
+### P0-3) Approval bypass kapanışı güçlendirildi
+- `admin_users.py` legacy bypass kapatıldı:
+  - Legacy disable/enable artık doğrudan execute etmez; approval request üretir.
+  - Role escalation (örn. user→admin) artık approval request üretir.
+- `identity_control.py` approve/reject endpoint’leri body opsiyonel hale getirildi; boş body ile 422 yerine policy guard’a düşer.
+- Same-actor self-approval guard doğrulandı (`same_actor_cannot_approve` 403).
+- Bulk action approval guard doğrulandı (status=`approval_required`, request listesi dolu).
+
+### Doğrulama özeti (manuel + ajan)
+- Backend health/readiness curl testleri: ✅ PASS
+- MFA policy testleri:
+  - email method verify => FAIL (beklenen) ✅
+  - totp verify => PASS ✅
+  - backup_code verify => PASS ✅
+- Approval bypass testleri:
+  - legacy disable/role escalation => approval_required ✅
+  - self-approval => 403 ✅
+  - bulk-status => approval_required + requests_created ✅
+- Frontend smoke:
+  - Admin login MFA panelinde email method select yok ✅
+  - MFA metni doğru ✅
+
+### Not
+- Invite/email gönderim akışı halen **MOCKED** (tasarım gereği).
+
 ## 2026-03-24 — Identity Control Plane P1 UI Stabilization (AdminUsersPage) 🔧
 
 ### Bu turda tamamlananlar
