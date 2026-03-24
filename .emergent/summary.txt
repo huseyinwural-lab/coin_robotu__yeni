@@ -1,136 +1,153 @@
 <analysis>### original_problem_statement
-Kullanıcı, Execution Readiness / Production Gate uygulamasının son hardening işlemlerini başarıyla kapatıp onayladıktan sonra sistemin odak noktasını Strategy Domain kontrol paneline çevirmiştir.
-Mevcut Strategy CRUD panelinin tam bir Strategy Lifecycle + Production Control System haline getirilmesi istenmiştir.
+Kullanıcı, mevcut temel user list yapısının kaldırılarak yerine uçtan uca kapsamlı bir **Identity + Risk + Trading Control Plane** kurulmasını talep etmiştir.
 **PRODUCT REQUIREMENTS:**
-1. **Strategy Version Governance:** Immutable (değiştirilemez) versiyonlar, tek aktif versiyon kuralı, rollback/revert ve diff yetenekleri.
-2. **Validation Layer:** Config schema validation, required field enforcement, runtime compatibility checks.
-3. **Deterministic Evaluation & Replay:** Standart evaluate çıktıları, geçmiş context ile replay, version A/B compare.
-4. **Regime Binding:** Condition -> Strategy priority resolution ve conflict önleme.
-5. **Production Safety Gate:** Draft -> Validated -> Dry_Run_Passed -> Production (approval zorunlu) state machine akışı.
-6. **Execution Explainability:** Strategy kararının signal -> intent -> order -> capital allocation -> risk check adım adım gösterimi (Execution Preview).
-7. **Observability:** Versiyon bazlı hit rate, false signal, drift, execution quality skorları ve trend grafikleri.
-8. **Operational UX (Final Phase):** Listede kapsamlı filtreleme (owner, tag, category), bulk operasyonlar (archive, validate, vs.), gelişmiş JSON Editor (hata gösterme, schema hint), ve History/Audit sekmelerinin UI tarafında tam kullanıma açılması.
+1. **P0 - Kritik (Sistem Güvenliği / Prod Blocker):**
+   - MFA Standardizasyonu (Primary olarak sadece TOTP + Backup Codes, Email OTP sadece recovery için).
+   - Login protection (IP/User rate limit, brute-force lock, progressive backoff).
+   - Session management (aktif session listesi, revoke yeteneği).
+   - Granular RBAC, privilege escalation koruması, custom role altyapısı.
+   - Tüm kritik işlemlerde (delete, disable, live trading enable, vb.) Two-step approval (request -> approve -> execute) zorunluluğu ve bypass'ların kapatılması.
+   - Soft Delete ve Hard Delete (90 gün retention, dependency check) yaşam döngüsü.
+   - Super Admin silinme/disable edilme koruması.
+   - Eligibility Engine: Belirli şartlar (email_verified, risk_profile_assigned, exchange_connected, vb.) sağlanmadan kullanıcının Live Trading Eligible olmasını engelleyen merkezi karar katmanı.
+2. **P1 - Operasyonel Kontrol & Sistem Tamamlama:**
+   - User Lifecycle (Invite, MOCKED email verification, reactivation).
+   - Risk + Trading + Mapping yüzeylerinin UI entegrasyonu.
+   - Policy-aware Bulk Operations.
+   - Approval Queue ve Policy Management ekranları.
+3. **P2 - UX / Control Surface:**
+   - User Activity Metrics, Error Rates görünürlüğü.
+   - Admin UX iyileştirmeleri (inline edit, validation, empty states).
 
 **User's preferred language**: Turkish (INSTRUCT NEXT AGENT: KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.)
 
 ### what currently exists?
-Production Gate P2 tamamen bitmiş ve test edilmiştir (Artifact manifest scripti ile gerçek runtime verileri üretilmektedir). Strategy Control Plane için Backend altyapısı (Sprint 1, 2 ve P1/P2 metrikleri) büyük oranda tamamlanmıştır: Immutable versioning, promotion safety gate tabloları (, ), execution preview, metrics-trend, ve bulk operations endpoint'leri yazılmıştır. Şu anda FINAL GÖREV EMRİ kapsamında  dosyasındaki UI/UX eksiklikleri (Filtreler, JSON Editor hata gösterimleri, Bulk action bar, Audit tab) kodlanmaktadır.
+Önceki faz olan Strategy Control Plane (AdminStrategiesPage, Execution Explain, vs.) 100% tamamlanmış ve test edilmiştir.
+Yeni görev olan Identity Control Plane için **P0 Backend altyapısı tamamen bitmiş ve testleri (51 test) geçmiştir**. TOTP MFA, IP/Rate limiting, 2-step approval, Soft/Hard Delete lifecycle, ve Eligibility Engine backend'e entegre edilmiştir. 
+Şu anda ajan, **P1 Fazı** kapsamında Custom Role Lifecycle, Invite mekanizması ve gelişmiş filtrelemeleri Frontend'e () ve ilgili router'lara bağlama işlemlerini yapmaktadır.
 
 ### Last working item
-- **Last item agent was working:** Kullanıcının son FINAL GÖREV EMRİ doğrultusunda  dosyasına peş peşe UI yamaları (apply_patch) atılıyordu. Backend için filtering ve bulk endpoint'leri eklendi, ancak Frontend arayüzünün bu yeni endpoint'lere bağlanması (owner/tag filtreleri, history & audit sekmesi, bulk selection arayüzü) işlemi sürüyordu.
+- **Last item agent was working:** Ajan, P1 gereksinimleri olan Custom Role Management (rol oluşturma, düzenleme) ve Invite/User Lifecycle UI bileşenlerini  dosyasına eklemek için apply_patch işlemleri yapıyordu. Aynı zamanda backend'deki ilgili router/servis fonksiyonlarını (, ) güncelliyordu.
 - **Status:** IN PROGRESS
-- **Agent Testing Done:** N (Yamalar atılma aşamasındaydı, henüz derleme ve render testi yapılamadı).
-- **Which testing method agent to use?** both (Önce frontend screenshot/terminal linter ile React component hataları giderilmeli, ardından  ve backend curl/testing agent kullanılmalı).
+- **Agent Testing Done:** N (Frontend yama süreci yarıda kaldı, linter veya render testi henüz yapılmadı).
+- **Which testing method agent to use?** both (Önce  ve screenshot aracı ile 'in kırık olup olmadığı kontrol edilmeli, ardından Backend curl ve  kullanılmalı).
 - **User Testing Done:** N
 
 ### All Pending/In progress Issue list
-**Issue 1: AdminStrategiesPage.jsx UI Component Yamalarının Tamamlanması (P0)**
-- **Attempted fixes:** Ajan,  dosyasının boyutunun büyük olması nedeniyle parça parça patch atıyordu ancak işlem yarıda kesildi.
-- **Next debug checklist:**  dosyası incelenmeli. Eksik kalan JSON Editor UX (hata highlight), Bulk Action Bar, History & Audit sekmesi ve Execution Preview derinleştirme UI bileşenlerinin React kodları tamamlanmalı. Dosyada sözdizimi hatası (syntax error) olup olmadığı kontrol edilmeli.
-- **Why fix this issue and what will be achieved with the fix?** Kullanıcının son görevi doğrudan bu UI/UX iyileştirmeleridir. Arayüz hatasız çalışmadan iş teslim edilemez.
+**Issue 1: AdminUsersPage.jsx P1 UI Güncellemelerinin Tamamlanması (P0)**
+- **Attempted fixes:** Ajan,  dosyasına Custom Role, Invite List, ve gelişmiş filtreleme (exchange, status) eklemek için yama yapıyordu. Dosya yarıda kalmış olabilir.
+- **Next debug checklist:**  dosyası incelenmeli. Syntax hatası kontrol edilmeli. Custom Role modal/UI, Invite aksiyonları ve filter state'lerinin eksik kısımları tamamlanmalı.
+- **Why fix this issue and what will be achieved with the fix?** Kimlik kontrol panelinin UI kısmı bitmeden yöneticiler backend'deki yetenekleri kullanamaz. 
 - **Status:** IN PROGRESS
 - **Is recurring issue?** N
 - **Should Test frontend/backend/both after fix?** Frontend
 
 ### In progress Task List
-**Task 1: Operasyonel UI/UX Entegrasyonu (Final Phase)**
-- **Where to resume:**  içerisindeki JSON Editor UX, Bulk Operations, ve Audit Rollback görünürlüğü kısımlarında.
-- **What will be achieved with this?** Operasyon ekibinin sistemi güvenli, hızlı ve 50+ stratejiyi kolayca filtreleyerek/bulk işlem yaparak kullanabilmesi sağlanacak.
+**Task 1: P1 - Control Plane UI Tamamlanması**
+- **Where to resume:**  ve Approval yönetimi ekranları.
+- **What will be achieved with this?** Custom Role yönetimi, Policy-aware Bulk operasyonlar, Approval Queue (onay bekleyen işlemler) ve User detaylarında risk/trading/exchange bağlarının kontrol edilebilir hale gelmesi sağlanacak.
 - **Status:** IN PROGRESS
-- **Should Test frontend/backend/both after fix?** Frontend
+- **Should Test frontend/backend/both after fix?** Both
 - **Blocked on something:** None
 
 ### Upcoming and Future Tasks
 **Upcoming Tasks:**
-- P0: JSON Editor içerisinde schema hint, required field error ve validation summary banner gösterimlerinin tamamlanması.
-- P0: Data Consistency Final Hardening (Race condition: Aynı anda 2 activate çağrısı veya rollback+promote çakışmasını backend'de önlemek için test/guard mekanizmaları doğrulama).
-- P1: Execution Preview ekranına Explain butonu (step-by-step trace açan modal) eklenmesi.
-- P1: One-click promote checklist - herhangi bir doğrulama FAIL ise Promote butonunun physically disabled olması işleminin UI'da garanti edilmesi.
+- P1: Approval Queue ve Policy Management UI (Ayrı bir sayfa veya panel olarak - pending/approved/rejected filtreleri, approver aksiyon paneli, reason zorunluluğu).
+- P1: Risk + Trading + Mapping UI Entegrasyonu (Kullanıcı detayında risk profili, capital limit, exchange bağlantıları, live trading eligibility görünürlüğü ve yönetimi).
+- P1: Policy-aware Bulk Operations UI (Bulk işlemlerin anında uygulanmayıp, etkilenecek kullanıcıları/riskleri gösteren bir preview ekranından geçmesi).
 
 **Future Tasks:**
-- P2: Execution quality için order fill slippage ve latency percentile korelasyon anomalilerinin alert mekanizmasına bağlanması (Önceki tasklarda tartışıldı).
+- P2: User List UI Derinleştirmesi (Satır veya drawer seviyesinde MFA state, risk seviyesi, session count, compliance state gösterimi).
+- P2: Observability Yüzeyleri (Kullanıcı bazlı trade history linki, suspicious login visibility, error rates).
+- P2: UX Hardening (Destructive action'larda kırmızı risk dili, loading skeleton'lar, empty states).
 
 ### Completed work in this session
-- Production Gate P2 Artifact Manifest Script oluşturulması & Mismatch düzeltmeleri (DONE)
-- StrategyVersionLifecycle ve StrategyPromotionRequest veritabanı migration'ları (DONE)
-- Strategy Immutable Versioning, Diff, Rollback, Timeline API'leri (DONE)
-- Strategy Evaluation, Replay ve Compare API'leri (DONE)
-- Promotion Flow (Draft -> Validated -> Dry_Run_Passed -> Production) Backend Korumaları (DONE)
-- Execution Preview (Decision, Signal, Intent, Capital, Risk Trace) Backend Uç Noktası (DONE)
-- Strategy Observability (Metrics, Drift, False Signal, Health Score, Trend Grafikleri) API & UI (DONE)
-- Strategy Bulk Operations Backend Endpoint'leri (Archive, Validate, Dry-run, Tag) (DONE)
+- Strategy Control Plane P1/P2 tamamlandı (Explain modal, Readiness badge, Concurrency testleri) (DONE)
+- Identity Control Layer P0 Backend Hardening (Soft/Hard delete, Approval Bypass kapatılması, TOTP Standardizasyonu) (DONE)
+- Redis bağlantısı yoksa devreye giren InMemoryRedis fallback mekanizması eklendi (DONE)
+- Eligibility Engine backend entegrasyonu (Grace period ve compliance hesaplamaları) (DONE)
+- Session & Login History backend tabloları ve kayıt mantığı (DONE)
 
 ### Earlier issues found/mentioned but not fixed
 None
 
 ### Known issue recurrence from previous fork
-- **Issue recurrence in previous fork:** Gitignore nedeniyle Artifact Manifest dosyalarının eksik görünmesi sorunu.
-- **Recurrence count:** 1 (Önceki fazda çözüldü).
-- **Status:** RESOLVED (Ajan .gitignore dosyasına istisnalar ekleyip çözdü).
+- **Issue recurrence in previous fork:** PostgreSQL connection failure (502 Error / Port 5432)
+- **Recurrence count:** 1 (Bu oturumda çözüldü, ancak preview ortamları ayağa kalkarken yaşanabiliyor. Embedded DB yasaktır, daima Postgres kullanılmalıdır).
+- **Status:** RESOLVED
+- **Issue recurrence in previous fork:** Redis unavailable error.
+- **Recurrence count:** 1
+- **Status:** RESOLVED (Ajan  fallback class'ı yazarak çözdü).
 
 ### Code Architecture
 
 
 ### Key Technical Concepts
-- **Immutable Strategy Versioning:** Strateji config'leri güncellenemez; değişiklikler daima yeni versiyon yaratır.
-- **State Machine Promotion Gate:** Bir strateji versiyonu manuel test (validate) ve dry-run geçmeden asla Production olamaz.
-- **Execution Explainability:** Sinyalin nasıl trade'e dönüştüğünü veya neden risk engeline (reject) takıldığını açıklayan tracing yapısı.
-- **Race-Condition Safe Updates:** DB seviyesinde tek bir aktif versiyon olmasını garanti altına alan kısmi (partial) indeksler ve atomik servis güncellemeleri.
+- **Strict Approval Flow:** Kritik işlemler (disable, delete, limit artırımı) doğrudan çalışmaz. Request açılır, başka bir admin onaylar (Two-step approval).
+- **Central Eligibility Engine:** Bir kullanıcının işlem yapabilmesi için birçok parametreye (email verified, risk profile assigned, vs.) bakar. Şartlar sağlanmazsa sistemde var olsa bile Live Trading Eligible olamaz.
+- **Soft/Hard Delete:** Kullanıcılar anında silinmez. Soft delete ile pasife alınır. 90 günlük retention süresi sonrası ve dependency check'ler (açık pozisyon var mı) yapıldıktan sonra hard delete edilir. Super Admin'ler silinemez.
+- **MFA:** Email OTP auth akışından kaldırıldı. Primary auth kesinlikle TOTP (Authenticator) + Backup kodlarıdır.
 
 ### key DB schema
-- : Temel strateji bilgisi (isim, kod, owner, tags).
-- : Immutable strateji kuralları ve config.
-- : Operational durum (is_active, rollout_stage, validation_status, vs.).
-- : Production onayı için tutulan denetim (audit) log'ları.
+- : Temel kimlik bilgileri, role, is_active, deleted_at.
+- : Aktif login session'ları ve revoke durumu.
+- : Başarılı/Başarısız girişler, IP ve cihaz logları.
+- : Custom role yetkilendirme (permissions) matrisi.
+- : Kritik işlemler için onay bekleyen kuyruk.
 
 ### changes in tech stack
-- Recharts kütüphanesi (Frontend) metrics trend grafikleri için aktif kullanılmaya başlandı.
+- **Redis Mocking:** Ortamda Redis bulunamadığında çökmeyi önlemek için  içerisinde  sınıfı oluşturuldu.
+- **Postgres Enforced:** SQLite kesinlikle yasaklanmış olup (), sistem Postgres üzerinden Alembic migration'ları ile çalışmaktadır.
 
 ### All files of reference
--  (Yeni endpointler)
--  (İş mantığı)
--  (Ana değiştirilen arayüz)
--  (Yeni tablolar)
+-  (Yeni P0/P1 logici burada)
+-  (Yeni control plane API'leri)
+-  (P0 güvenlik testleri)
+-  (Ana frontend dosyası - ŞU AN YAMALANIYOR)
 
 ### Areas that need refactoring
-- : Bu dosya 1700 satırı aşmış durumdadır. Şu anki FINAL GÖREV EMRİ tamamlandıktan ve onaylandıktan sonra ileride component'lere (örn. , ) bölünmesi iyi bir refactoring adımı olacaktır. Ancak şu an öncelik kullanıcının isteklerini mevcut dosyada çalışır hale getirmektir.
+-  dosyası çok büyümeye başlamıştır. Kullanıcının talebi üzerine ilerleyen aşamalarda 'de yapıldığı gibi komponentlere bölünmesi faydalı olacaktır (örn. , ).
 
 ### key api endpoints
 - 
 - 
--  (ve diğer bulk endpointleri)
--  (Filtreleme destekli)
+- 
+- 
+- 
 
 ### Critical Info for New Agent
-- **DİKKAT:** Kullanıcı teknik çalışıyor olmasından ziyade, sistemin hata toleranssız (fail-safe) ve gerçek dünyada kullanılabilir (operasyonel) olmasını talep etmektedir.
-- JSON Editor'de kullanıcı dostu hata mesajları, One-click promote butonunun blokaj mantığı, ve filtrelemelerin doğru çalışması bu teslimin **kabul kriteridir**.
--  içerisindeki işlemler yarım kalmıştır. Devam etmeden önce dosyanın syntax açısından bozuk olup olmadığını linter ile kontrol edin, ardından eksik UI özelliklerini eklemeye devam edin.
-- Tüm iletişimi **TÜRKÇE** yapın.
+- **KULLANICI TALEBİ KESİNDİR:** Kullanıcı P0 (Güvenlik, Delete lifecycle, Approval Bypass kapatılması) işlemlerinin kusursuz çalıştığından emin olmak istemiş ve bunu tamamlatmıştır. Şu an P1 aşamasındayız.
+- Frontend'deki  dosyası ajan tarafından yamalanırken oturum kapanmıştır. **İlk işiniz bu dosyayı linter ile kontrol edip eksik kalan P1 (Custom Role modal, Invite listesi) yamalarını tamamlamak olmalıdır.**
+- Hiçbir kritik işlem (bulk disable dahil) doğrudan API üzerinden çalışmamalı, her zaman  tablosuna düşmeli ve başka bir admin tarafından onaylanmalıdır.
+- Kullanıcı testlerinde TOTP zorunlu kılınmıştır.
 
 ### documents and test reports created in this job
--  -  (Farklı test iterasyon raporları)
 - 
-- 
+-  (P0 Closure test başarı raporu)
 
 ### Last 10 User Messages and any pending HUMAN messages
-- *Mesaj 635 (Son mesaj):* Kullanıcı FINAL GÖREV EMRİ — STRATEGY CONTROL PLANE KAPANIŞ başlığıyla; UI Filtre/Liste (owner, tag), JSON Editor UX Hardening, Audit/Rollback UI Görünürlüğü, Bulk Ops UX, Execution Preview derinleştirmesi ve Promotion Flow son kontrolü (validation fail ise buton disable) taleplerini iletti. Ajan bunları uygulamak üzere backend güncellemelerini yaptı ve React UI yamalarını uygularken oturum sonlandı.
+- *Mesaj 430:* Kullanıcı P0 Eksik Kapatma Emri verdi (Approval Bypass kapat, Delete lifecycle ekle, MFA standardize et).
+- *Mesaj 433:* Kullanıcı kararları kilitledi (Hard delete retention 90 gün, dependency check geniş, TOTP tek auth yöntemi) ve P0 bitmeden başka işe geçme dedi.
+- *Mesaj 538:* Ajan P0'ı bitirip onay istedi, Kullanıcı a (ilerle) dedi. Bunun üzerine ajan P1 (Role Lifecycle ve Invite) geliştirmelerine başladı ve oturum sonlandı.
 
 ### Project Health Check:
-- **Broken:**  dosyasına yamalar atılırken oturum kapandığı için dosya state'i yarım kalmış olabilir. Linter ile kontrol zorunludur.
-- **Mocked:** Slack Webhook, Binance.
+- **Broken:**  dosyasına peş peşe apply_patch atılırken işlem yarıda kaldı. Linter ile syntax kontrolü zorunludur.
+- **Mocked:** Resend Email Provider, Invite servisi (Mocked return), Slack Webhook, Binance, Redis (InMemory).
 
 ### 3rd Party Integrations
 - Slack Webhook (MOCKED)
 - Binance (MOCKED)
+- Resend Email API (P1 Invite için eklendi ancak Mocked çalışıyor)
 
 ### Testing status
-- Testing agent used after significant changes: YES (iteration_119'a kadar kullanıldı, son FINAL emirdeki UI değişiklikleri için HENÜZ KULLANILMADI)
+- Testing agent used after significant changes: YES (iteration_123'te P0 test edildi).
 - Troubleshoot agent used after agent stuck in loop: NO
-- Test files created: Çeşitli backend testleri (örn: ) güncellendi.
+- Test files created: , 
 - Known regressions: Yok.
 
 ### Credentials to test flow:
-- Admin/Super Admin:  / 
+- Admin: 
+- MFA Notu: TOTP zorunludur. Local/Test ortamlarında arka planda MFA disable / bypass edilip edilmediğine test agent raporlarından dikkat ediniz.
 
 ### What agent forgot to execute
-Ajan son görev emrindeki (Mesaj 635) Frontend (UI) güncellemelerini ( dosyasına atılan patch'leri) bitiremeden oturum sonlandı. JSON Editor UX (hata highlight, disable save) geliştirmeleri ve Bulk işlem (checkbox seçimleri vb.) arayüz kodlaması eksik kalmış durumdadır. Lütfen ilk iş bu React dosyasının mevcut bütünlüğünü kontrol edip, ardından eksik UI gereksinimlerini tamamlayın. Data consistency testleri (activate race condition testi) de henüz gerçekleştirilmedi.</analysis>
+Ajan P1 aşamasına (Custom Roles, Invite Lifecycle) geçmişti. Backend tarafına gerekli endpoint'leri ekledi, ancak Frontend tarafında  dosyasına yeni özellikleri (Role Modal, Invite Tab vb.) eklerken oturum sonlandı. Bu sebeple Frontend entegrasyonu ve P1 gereksinimleri (Approval Queue UI, Bulk Operations Policy-Aware UI, Risk Mapping UI) henüz tamamlanmamıştır. İlk olarak yarım kalan React dosyasını düzeltin.</analysis>

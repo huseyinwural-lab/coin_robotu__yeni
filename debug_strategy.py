@@ -7,7 +7,7 @@ import requests
 import json
 
 def debug_strategy_structure():
-    BASE_URL = "https://strategy-version-gov.preview.emergentagent.com"
+    BASE_URL = "https://identity-control-1.preview.emergentagent.com"
     
     session = requests.Session()
     session.timeout = 15

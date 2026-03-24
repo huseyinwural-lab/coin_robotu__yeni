@@ -16,7 +16,7 @@ import time
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://strategy-version-gov.preview.emergentagent.com"
+BASE_URL = "https://identity-control-1.preview.emergentagent.com"
 CREDENTIALS = {
     "super_admin": {"email": "canary.admin@platform.local", "password": "CanaryAdmin123!"},
     "admin_requester": {"email": "canary.requester@platform.local", "password": "CanaryRequester123!"},

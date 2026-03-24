@@ -15,7 +15,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://strategy-version-gov.preview.emergentagent.com")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://identity-control-1.preview.emergentagent.com")
 
 # Credentials for admin login
 ADMIN_EMAIL = "admin@platform.local"

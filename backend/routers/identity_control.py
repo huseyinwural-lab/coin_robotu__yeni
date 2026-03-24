@@ -17,17 +17,26 @@ from services.identity_control_service import (
     CRITICAL_APPROVAL_ACTIONS,
     InviteService,
     assign_custom_role_to_user,
+    archive_custom_role,
+    cancel_invite,
+    clone_custom_role,
     create_custom_role,
     create_invite,
     create_approval_request,
     enforce_permission,
     evaluate_user_eligibility,
     get_or_create_identity_profile,
+    hard_delete_candidate_snapshot,
     list_active_sessions,
     list_identity_users,
+    resend_invite,
+    role_assignment_impact_preview,
+    role_permission_preview,
     reject_request,
     set_kill_switch,
     unlock_user_policy_lock,
+    update_custom_role,
+    expire_invite,
 )
 from services.mfa_service import get_mfa_settings
 
@@ -99,6 +108,17 @@ class CustomRoleCreatePayload(BaseModel):
 
 class AssignRolePayload(BaseModel):
     role_policy_id: str
+
+
+class CustomRoleUpdatePayload(BaseModel):
+    description: str | None = None
+    permissions: list[str] | None = None
+    priority: int | None = Field(default=None, ge=1, le=999)
+    is_privileged: bool | None = None
+
+
+class CustomRoleClonePayload(BaseModel):
+    new_role_key: str
 
 
 class UserScopePayload(BaseModel):
@@ -550,7 +570,89 @@ def admin_identity_custom_role_create(
         "permissions": row.permissions,
         "is_privileged": row.is_privileged,
         "priority": row.priority,
+        "is_active": row.is_active,
     }
+
+
+@router.patch("/roles/custom/{role_policy_id}")
+def admin_identity_custom_role_update(
+    role_policy_id: str,
+    payload: CustomRoleUpdatePayload,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = update_custom_role(
+        db,
+        actor=current_admin,
+        role_policy_id=role_policy_id,
+        description=payload.description,
+        permissions=payload.permissions,
+        priority=payload.priority,
+        is_privileged=payload.is_privileged,
+    )
+    return {
+        "id": row.id,
+        "role_key": row.role_key,
+        "description": row.description,
+        "permissions": row.permissions,
+        "is_privileged": row.is_privileged,
+        "priority": row.priority,
+        "is_active": row.is_active,
+    }
+
+
+@router.post("/roles/custom/{role_policy_id}/archive")
+def admin_identity_custom_role_archive(
+    role_policy_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = archive_custom_role(db, actor=current_admin, role_policy_id=role_policy_id)
+    return {
+        "id": row.id,
+        "role_key": row.role_key,
+        "is_active": row.is_active,
+        "archived_at": row.archived_at,
+    }
+
+
+@router.post("/roles/custom/{role_policy_id}/clone")
+def admin_identity_custom_role_clone(
+    role_policy_id: str,
+    payload: CustomRoleClonePayload,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = clone_custom_role(db, actor=current_admin, role_policy_id=role_policy_id, new_role_key=payload.new_role_key)
+    return {
+        "id": row.id,
+        "role_key": row.role_key,
+        "permissions": row.permissions,
+        "is_privileged": row.is_privileged,
+        "priority": row.priority,
+        "is_active": row.is_active,
+    }
+
+
+@router.get("/roles/custom/{role_policy_id}/permission-preview")
+def admin_identity_custom_role_permission_preview(
+    role_policy_id: str,
+    user_id: str | None = Query(default=None),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.roles.manage")
+    return role_permission_preview(db, role_policy_id=role_policy_id, user_id=user_id)
+
+
+@router.get("/roles/custom/{role_policy_id}/assignment-impact")
+def admin_identity_custom_role_assignment_impact(
+    role_policy_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.roles.manage")
+    return role_assignment_impact_preview(db, role_policy_id=role_policy_id)
 
 
 @router.get("/roles/custom")
@@ -568,6 +670,8 @@ def admin_identity_custom_roles(
                 "permissions": row.permissions,
                 "is_privileged": row.is_privileged,
                 "priority": row.priority,
+                "is_active": row.is_active,
+                "archived_at": row.archived_at,
             }
             for row in rows
         ]
@@ -753,6 +857,35 @@ def admin_identity_create_invite(
     )
 
 
+@router.post("/invites/{invite_id}/resend")
+def admin_identity_resend_invite(
+    invite_id: str,
+    expires_hours: int = Query(default=24, ge=1, le=168),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    service = InviteService()
+    return resend_invite(db, actor=current_admin, invite_id=invite_id, service=service, expires_hours=expires_hours)
+
+
+@router.post("/invites/{invite_id}/cancel")
+def admin_identity_cancel_invite(
+    invite_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return cancel_invite(db, actor=current_admin, invite_id=invite_id)
+
+
+@router.post("/invites/{invite_id}/expire")
+def admin_identity_expire_invite(
+    invite_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return expire_invite(db, actor=current_admin, invite_id=invite_id)
+
+
 @router.post("/invites/accept")
 def admin_identity_accept_invite(payload: InviteAcceptPayload, db: Session = Depends(get_db)):
     from services.identity_control_service import accept_invite
@@ -781,12 +914,33 @@ def admin_identity_invites(
                 "status": row.status,
                 "delivery_status": row.invite_delivery_status,
                 "preview_token": row.invite_preview_token,
+                "resend_count": row.resend_count,
+                "last_sent_at": row.last_sent_at,
+                "cancelled_at": row.cancelled_at,
                 "expires_at": row.expires_at,
                 "accepted_at": row.accepted_at,
             }
             for row in rows
         ]
     }
+
+
+@router.get("/users/hard-delete-candidates")
+def admin_identity_hard_delete_candidates(
+    limit: int = Query(default=200, ge=1, le=500),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.users.read")
+    users = db.query(User).order_by(User.created_at.desc()).limit(limit).all()
+    items = []
+    for user in users:
+        snapshot = hard_delete_candidate_snapshot(db, user=user)
+        deleted_at = snapshot.get("deleted_at")
+        if not deleted_at:
+            continue
+        items.append(snapshot)
+    return {"items": items, "total": len(items)}
 
 
 @router.get("/login-history")

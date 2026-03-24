@@ -735,6 +735,103 @@ def create_custom_role(
     return row
 
 
+def update_custom_role(
+    db: Session,
+    *,
+    actor: User,
+    role_policy_id: str,
+    description: str | None,
+    permissions: list[str] | None,
+    priority: int | None,
+    is_privileged: bool | None,
+) -> IdentityRolePolicy:
+    enforce_permission(db, actor=actor, permission="identity.roles.manage")
+    row = db.query(IdentityRolePolicy).filter(IdentityRolePolicy.id == role_policy_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="role_policy_not_found")
+    if row.is_system:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="system_role_cannot_be_edited")
+    if description is not None:
+        row.description = str(description)[:255]
+    if permissions is not None:
+        row.permissions = sorted({str(item).strip() for item in permissions if str(item).strip()})
+    if priority is not None:
+        row.priority = max(int(priority), 1)
+    if is_privileged is not None:
+        if bool(is_privileged) and "identity.override.super_admin" not in get_effective_permissions(db, actor):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="privilege_escalation_blocked")
+        row.is_privileged = bool(is_privileged)
+    row.updated_at = _utcnow()
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def archive_custom_role(db: Session, *, actor: User, role_policy_id: str) -> IdentityRolePolicy:
+    enforce_permission(db, actor=actor, permission="identity.roles.manage")
+    row = db.query(IdentityRolePolicy).filter(IdentityRolePolicy.id == role_policy_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="role_policy_not_found")
+    if row.is_system:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="system_role_cannot_be_archived")
+    row.is_active = False
+    row.archived_at = _utcnow()
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def clone_custom_role(db: Session, *, actor: User, role_policy_id: str, new_role_key: str) -> IdentityRolePolicy:
+    source = db.query(IdentityRolePolicy).filter(IdentityRolePolicy.id == role_policy_id).first()
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="role_policy_not_found")
+    return create_custom_role(
+        db,
+        actor=actor,
+        role_key=new_role_key,
+        description=f"clone_of:{source.role_key}",
+        permissions=list(source.permissions or []),
+        is_privileged=bool(source.is_privileged),
+        priority=int(source.priority or 100),
+    )
+
+
+def role_permission_preview(db: Session, *, role_policy_id: str, user_id: str | None = None) -> dict:
+    role = db.query(IdentityRolePolicy).filter(IdentityRolePolicy.id == role_policy_id).first()
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="role_policy_not_found")
+    payload = {
+        "role": {
+            "id": role.id,
+            "role_key": role.role_key,
+            "permissions": role.permissions,
+            "is_privileged": role.is_privileged,
+            "priority": role.priority,
+            "is_active": role.is_active,
+        },
+        "effective_permissions_preview": list(role.permissions or []),
+    }
+    if user_id:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is not None:
+            payload["current_user_permissions"] = sorted(get_effective_permissions(db, user))
+    return payload
+
+
+def role_assignment_impact_preview(db: Session, *, role_policy_id: str) -> dict:
+    role = db.query(IdentityRolePolicy).filter(IdentityRolePolicy.id == role_policy_id).first()
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="role_policy_not_found")
+    bindings = db.query(UserRoleBinding).filter(UserRoleBinding.role_policy_id == role_policy_id).all()
+    return {
+        "role_policy_id": role.id,
+        "role_key": role.role_key,
+        "assigned_user_count": len(bindings),
+        "assigned_user_ids": [row.user_id for row in bindings[:200]],
+        "permissions": role.permissions,
+    }
+
+
 def assign_custom_role_to_user(db: Session, *, actor: User, user_id: str, role_policy_id: str) -> UserRoleBinding:
     enforce_permission(db, actor=actor, permission="identity.roles.manage")
     target = db.query(User).filter(User.id == user_id).first()
@@ -850,8 +947,15 @@ def _revoke_all_sessions_for_user(db: Session, *, target_user_id: str, actor: Us
     return len(rows)
 
 
-def _validate_hard_delete_guard(db: Session, *, target: User, actor: User, exclude_request_id: str | None = None) -> None:
-    if actor.id == target.id:
+def _validate_hard_delete_guard(
+    db: Session,
+    *,
+    target: User,
+    actor: User,
+    exclude_request_id: str | None = None,
+    skip_self_check: bool = False,
+) -> None:
+    if not skip_self_check and actor.id == target.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="self_hard_delete_forbidden")
     if target.role == UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_hard_delete_forbidden")
@@ -1145,6 +1249,8 @@ def create_invite(
         token_hash=_token_hash(raw_token),
         invited_role=str(invited_role or "user").strip().lower() or "user",
         invited_by=actor.id,
+        resend_count=0,
+        last_sent_at=_utcnow(),
         expires_at=_utcnow() + timedelta(hours=max(expires_hours, 1)),
     )
     delivery = service.send_invite(email=normalized_email, invite_token=raw_token, role=row.invited_role)
@@ -1172,6 +1278,78 @@ def create_invite(
         "delivery_status": row.invite_delivery_status,
         "preview_token": row.invite_preview_token,
         "expires_at": row.expires_at,
+    }
+
+
+def resend_invite(db: Session, *, actor: User, invite_id: str, service: InviteService, expires_hours: int = 24) -> dict:
+    enforce_permission(db, actor=actor, permission="identity.invite.manage")
+    row = db.query(UserInviteToken).filter(UserInviteToken.id == invite_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="invite_not_found")
+    if row.status != "pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invite_not_pending")
+
+    raw_token = secrets.token_urlsafe(32)
+    row.token_hash = _token_hash(raw_token)
+    row.expires_at = _utcnow() + timedelta(hours=max(expires_hours, 1))
+    row.resend_count = int(row.resend_count or 0) + 1
+    row.last_sent_at = _utcnow()
+    delivery = service.send_invite(email=row.email, invite_token=raw_token, role=row.invited_role)
+    row.invite_delivery_status = delivery.delivery_status
+    row.invite_preview_token = delivery.preview_token
+    db.commit()
+    db.refresh(row)
+    return {
+        "invite_id": row.id,
+        "status": row.status,
+        "delivery_status": row.invite_delivery_status,
+        "preview_token": row.invite_preview_token,
+        "resend_count": row.resend_count,
+        "expires_at": row.expires_at,
+    }
+
+
+def cancel_invite(db: Session, *, actor: User, invite_id: str) -> dict:
+    enforce_permission(db, actor=actor, permission="identity.invite.manage")
+    row = db.query(UserInviteToken).filter(UserInviteToken.id == invite_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="invite_not_found")
+    if row.status not in {"pending", "expired"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invite_cannot_be_cancelled")
+    row.status = "cancelled"
+    row.cancelled_at = _utcnow()
+    db.commit()
+    db.refresh(row)
+    return {"invite_id": row.id, "status": row.status, "cancelled_at": row.cancelled_at}
+
+
+def expire_invite(db: Session, *, actor: User, invite_id: str) -> dict:
+    enforce_permission(db, actor=actor, permission="identity.invite.manage")
+    row = db.query(UserInviteToken).filter(UserInviteToken.id == invite_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="invite_not_found")
+    row.status = "expired"
+    row.expires_at = _utcnow()
+    db.commit()
+    db.refresh(row)
+    return {"invite_id": row.id, "status": row.status, "expires_at": row.expires_at}
+
+
+def hard_delete_candidate_snapshot(db: Session, *, user: User) -> dict:
+    profile = get_or_create_identity_profile(db, user.id)
+    reasons = []
+    eligible = True
+    try:
+        _validate_hard_delete_guard(db, target=user, actor=user, skip_self_check=True)
+    except HTTPException as exc:
+        eligible = False
+        reasons.append(str(exc.detail))
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "deleted_at": profile.deleted_at or profile.soft_deleted_at,
+        "eligible": eligible,
+        "blockers": reasons,
     }
 
 

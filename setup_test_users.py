@@ -6,7 +6,7 @@ Setup script to create test users for P2+Escalation testing
 import requests
 import json
 
-BASE_URL = "https://strategy-version-gov.preview.emergentagent.com"
+BASE_URL = "https://identity-control-1.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Super admin credentials (already exists)

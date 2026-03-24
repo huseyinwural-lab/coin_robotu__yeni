@@ -1,7 +1,7 @@
 {
   "ok": true,
   "mode": "quick",
-  "base_url": "https://strategy-version-gov.preview.emergentagent.com",
+  "base_url": "https://identity-control-1.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",

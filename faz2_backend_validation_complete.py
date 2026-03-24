@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://strategy-version-gov.preview.emergentagent.com"
+BASE_URL = "https://identity-control-1.preview.emergentagent.com"
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
 SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
 OPS_EMAIL = "canary.ops@platform.local"

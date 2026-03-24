@@ -4,7 +4,7 @@ Production Gate P2 Hardening Backend Validation Test
 ====================================================
 
 Turkish Review Request: Production Gate P2 Hardening backend doğrulaması yap.
-Target URL: https://strategy-version-gov.preview.emergentagent.com
+Target URL: https://identity-control-1.preview.emergentagent.com
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test Requirements:
@@ -25,7 +25,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://strategy-version-gov.preview.emergentagent.com"
+BASE_URL = "https://identity-control-1.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 CREDENTIALS = {
     "email": "canary.admin@platform.local",

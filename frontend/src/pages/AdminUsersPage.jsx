@@ -42,6 +42,14 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   const [securityDetail, setSecurityDetail] = useState(null);
   const [securityDetailUserId, setSecurityDetailUserId] = useState("");
   const [securityDetailLoading, setSecurityDetailLoading] = useState(false);
+  const [approvalQueue, setApprovalQueue] = useState([]);
+  const [approvalStatusFilter, setApprovalStatusFilter] = useState("pending");
+  const [approvalPolicies, setApprovalPolicies] = useState([]);
+  const [customRoles, setCustomRoles] = useState([]);
+  const [customRoleForm, setCustomRoleForm] = useState({ role_key: "", description: "", permissions: "", is_privileged: false, priority: 100 });
+  const [invites, setInvites] = useState([]);
+  const [inviteStatusFilter, setInviteStatusFilter] = useState("all");
+  const [hardDeleteCandidates, setHardDeleteCandidates] = useState([]);
 
   useEffect(() => {
     setFilters((prev) => ({
@@ -84,6 +92,17 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
+
+  useEffect(() => {
+    loadApprovalQueue();
+  }, [loadApprovalQueue]);
+
+  useEffect(() => {
+    loadApprovalPolicies();
+    loadCustomRoles();
+    loadInvites();
+    loadHardDeleteCandidates();
+  }, [loadApprovalPolicies, loadCustomRoles, loadInvites, loadHardDeleteCandidates]);
 
   const roleCounts = useMemo(() => {
     return users.reduce((acc, user) => {
@@ -289,6 +308,151 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       toast.error(error?.response?.data?.detail || "Invite oluşturulamadı");
     }
   };
+
+  const loadApprovalQueue = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/admin/identity/approvals", { params: { status_filter: approvalStatusFilter } });
+      setApprovalQueue(data?.items || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Approval queue yüklenemedi");
+    }
+  }, [approvalStatusFilter]);
+
+  const approveRequest = async (requestId) => {
+    const confirmPayload = getCriticalConfirmation("Approval request approve");
+    if (!confirmPayload) return;
+    try {
+      await apiClient.post(`/admin/identity/approvals/${requestId}/approve`, { note: confirmPayload.reason });
+      toast.success("Request approve edildi");
+      await loadApprovalQueue();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Approve başarısız");
+    }
+  };
+
+  const rejectRequest = async (requestId) => {
+    const reason = window.prompt("Reject reason zorunlu:", "policy_reject");
+    if (!reason || !reason.trim()) {
+      toast.error("Reject reason zorunlu");
+      return;
+    }
+    try {
+      await apiClient.post(`/admin/identity/approvals/${requestId}/reject`, { note: reason.trim() });
+      toast.success("Request reject edildi");
+      await loadApprovalQueue();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Reject başarısız");
+    }
+  };
+
+  const loadApprovalPolicies = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/admin/identity/approval-policies");
+      setApprovalPolicies(data?.items || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Approval policy listesi alınamadı");
+    }
+  }, []);
+
+  const toggleApprovalPolicy = async (actionKey, isEnabled) => {
+    try {
+      await apiClient.patch(`/admin/identity/approval-policies/${actionKey}`, { is_enabled: isEnabled });
+      toast.success("Policy güncellendi");
+      await loadApprovalPolicies();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Policy güncellenemedi");
+    }
+  };
+
+  const loadCustomRoles = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/admin/identity/roles/custom");
+      setCustomRoles(data?.items || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Custom roles yüklenemedi");
+    }
+  }, []);
+
+  const createCustomRole = async () => {
+    if (!customRoleForm.role_key.trim()) {
+      toast.error("role_key zorunlu");
+      return;
+    }
+    try {
+      await apiClient.post("/admin/identity/roles/custom", {
+        role_key: customRoleForm.role_key.trim(),
+        description: customRoleForm.description,
+        permissions: customRoleForm.permissions.split(",").map((item) => item.trim()).filter(Boolean),
+        is_privileged: Boolean(customRoleForm.is_privileged),
+        priority: Number(customRoleForm.priority || 100),
+      });
+      toast.success("Custom role oluşturuldu");
+      setCustomRoleForm({ role_key: "", description: "", permissions: "", is_privileged: false, priority: 100 });
+      await loadCustomRoles();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Custom role oluşturulamadı");
+    }
+  };
+
+  const archiveCustomRole = async (roleId) => {
+    try {
+      await apiClient.post(`/admin/identity/roles/custom/${roleId}/archive`);
+      toast.success("Role archive edildi");
+      await loadCustomRoles();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Role archive edilemedi");
+    }
+  };
+
+  const cloneCustomRole = async (roleId, roleKey) => {
+    const cloneKey = window.prompt("Clone role key:", `${roleKey}-clone`);
+    if (!cloneKey || !cloneKey.trim()) return;
+    try {
+      await apiClient.post(`/admin/identity/roles/custom/${roleId}/clone`, { new_role_key: cloneKey.trim() });
+      toast.success("Role clone oluşturuldu");
+      await loadCustomRoles();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Role clone başarısız");
+    }
+  };
+
+  const loadInvites = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/admin/identity/invites", { params: { status_filter: inviteStatusFilter } });
+      setInvites(data?.items || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Invite listesi yüklenemedi");
+    }
+  }, [inviteStatusFilter]);
+
+  const resendInvite = async (inviteId) => {
+    try {
+      await apiClient.post(`/admin/identity/invites/${inviteId}/resend`);
+      toast.success("Invite tekrar gönderildi (MOCKED)");
+      await loadInvites();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Invite resend başarısız");
+    }
+  };
+
+  const cancelInvite = async (inviteId) => {
+    try {
+      await apiClient.post(`/admin/identity/invites/${inviteId}/cancel`);
+      toast.success("Invite cancel edildi");
+      await loadInvites();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Invite cancel başarısız");
+    }
+  };
+
+  const loadHardDeleteCandidates = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/admin/identity/users/hard-delete-candidates", { params: { limit: 200 } });
+      setHardDeleteCandidates(data?.items || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Hard delete candidates yüklenemedi");
+    }
+  }, []);
 
   const toggleSelectAll = () => {
     if (selectedUserIds.length === users.length) {

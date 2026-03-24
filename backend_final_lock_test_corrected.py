@@ -17,7 +17,7 @@ import os
 from datetime import datetime, timezone
 
 # Base URL from frontend/.env
-BASE_URL = "https://strategy-version-gov.preview.emergentagent.com"
+BASE_URL = "https://identity-control-1.preview.emergentagent.com"
 
 # Test credentials
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"

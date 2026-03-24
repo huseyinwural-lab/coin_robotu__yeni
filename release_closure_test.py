@@ -35,7 +35,7 @@ import requests
 from datetime import datetime
 
 # Backend URL from environment
-BACKEND_URL = "https://strategy-version-gov.preview.emergentagent.com/api"
+BACKEND_URL = "https://identity-control-1.preview.emergentagent.com/api"
 
 # Test admin credentials - using the platform.local variant as mentioned in review
 TEST_ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "admin@platform.local")  
@@ -402,7 +402,7 @@ def test_5_frontend_smoke():
     
     # 5A) Landing page accessibility (check if frontend URL is reachable)
     try:
-        frontend_url = "https://strategy-version-gov.preview.emergentagent.com"
+        frontend_url = "https://identity-control-1.preview.emergentagent.com"
         response = requests.get(frontend_url, timeout=10)
         if response.status_code == 200 and len(response.text) > 500:  # Not blank page
             log_test("5A) Landing page accessibility", "PASS", f"Frontend loads: {len(response.text)} chars")

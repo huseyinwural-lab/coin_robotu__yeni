@@ -16,7 +16,7 @@ def _db_context():
     return SessionLocal, RiskOrchestratorApprovalRequest
 
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://strategy-version-gov.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://identity-control-1.preview.emergentagent.com").rstrip("/")
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
 SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
 
