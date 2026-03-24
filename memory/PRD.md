@@ -1,3 +1,52 @@
+## 2026-03-24 — Strategy Control Plane P1/P2 Ops + Observability Tamamlandı ✅
+
+### Bu turda eklenen ana capability seti
+- **Execution Explainability Zinciri**
+  - Yeni endpoint: `POST /strategy-domain/admin/strategies/{strategy_id}/versions/{version_id}/execution-preview`
+  - Zorunlu alanlar aktif: `decision`, `execution_intent`, `order_preview`, `capital_impact`, `risk_checks`, `blocked_reasons`, `explainability_trace`.
+
+- **Version Bazlı Observability Bağlantısı**
+  - Migration: `/app/backend/migrations/versions/20260324_0069_strategy_ops_observability_extensions.py`
+  - `strategy_observability_events` tablosuna `strategy_version_id` eklendi.
+  - Endpointler:
+    - `GET /strategy-domain/admin/strategies/{strategy_id}/versions/{version_id}/metrics`
+    - `GET /strategy-domain/admin/strategies/{strategy_id}/versions/{version_id}/drift-alerts`
+    - `GET /strategy-domain/admin/strategies/{strategy_id}/versions/{version_id}/false-signal-report`
+
+- **Promotion Readiness Checklist**
+  - Endpoint: `GET /strategy-domain/admin/strategies/{strategy_id}/versions/{version_id}/promotion-readiness`
+  - Validation/compatibility/dry-run/pending-request/readiness blokajları tek kartta hesaplanıyor.
+
+- **Operasyonel Liste + Filtreleme + Sıralama**
+  - Strategy modeli genişletildi: `owner_user_id`, `owner_name`, `category`, `tags`, `archived_at`, `last_reviewed_at`.
+  - Endpoint: `GET /strategy-domain/admin/strategies/ops`
+  - Search/filter/sort/pagination + lifecycle/active/prod/validation/category/tag filtreleri aktif.
+
+- **Bulk Operasyonlar**
+  - Endpointler:
+    - `POST /strategy-domain/admin/strategies/bulk/archive`
+    - `POST /strategy-domain/admin/strategies/bulk/validate`
+    - `POST /strategy-domain/admin/strategies/bulk/dry-run`
+    - `POST /strategy-domain/admin/strategies/bulk/tag`
+    - `POST /strategy-domain/admin/strategies/bulk/audit-snapshot`
+
+- **Audit/Export/Timeline Operasyonel Tamamlama**
+  - `GET /strategy-domain/admin/strategies/{strategy_id}/audit-history/export` (json/csv)
+  - `GET /strategy-domain/admin/strategies/{strategy_id}/rollback-chain`
+
+### Frontend (AdminStrategiesPage) genişletmeleri
+- Filter toolbar + bulk action bar
+- Execution Preview paneli
+- Promotion readiness checklist paneli
+- Metrics / drift / false signal summary kartları
+- Version satırlarında execution-preview aksiyonu + promote disable kuralları
+
+### Doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_118.json`
+  - Backend: %100
+  - Frontend: %100
+  - P1/P2 endpoint ve UI element doğrulamaları PASS
+
 ## 2026-03-24 — Strategy Lifecycle + Production Control (Sprint 1 + Sprint 2) ✅
 
 ### Teslim Edilenler (Backend)
