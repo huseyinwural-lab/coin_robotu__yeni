@@ -11,7 +11,7 @@ Test Requirements:
 5) /policy/queue pagination+filters (scope/state/page) returns deterministic results
 6) New closure test files (4 files) pytest results (skip/failed info)
 
-Base URL: https://gate-control-v2.preview.emergentagent.com/api
+Base URL: https://strategy-version-gov.preview.emergentagent.com/api
 Credentials: super_admin canary.admin@platform.local / CanaryAdmin123!
 """
 
@@ -23,7 +23,7 @@ import subprocess
 import os
 
 # Configuration
-BASE_URL = "https://gate-control-v2.preview.emergentagent.com/api"
+BASE_URL = "https://strategy-version-gov.preview.emergentagent.com/api"
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
 SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
 

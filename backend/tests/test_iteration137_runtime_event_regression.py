@@ -13,7 +13,7 @@ import uuid
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://gate-control-v2.preview.emergentagent.com"
+    BASE_URL = "https://strategy-version-gov.preview.emergentagent.com"
 
 # Test credentials from review request
 USER_EMAIL = "user1773706589@example.com"

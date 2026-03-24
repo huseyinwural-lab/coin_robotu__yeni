@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-03-18T23:22:09Z",
-  "base_url": "https://gate-control-v2.preview.emergentagent.com/api",
+  "base_url": "https://strategy-version-gov.preview.emergentagent.com/api",
   "checks": {
     "postgres_persistence_backup": {
       "status": "FAIL",

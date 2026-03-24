@@ -12,7 +12,7 @@ Testing the 7 Kontroller requirements:
 6. Queue control role guard + pause during execute
 7. Observability fields present (reject_ratio/override_ratio/stale/unauthorized)
 
-Base URL: https://gate-control-v2.preview.emergentagent.com/api
+Base URL: https://strategy-version-gov.preview.emergentagent.com/api
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 """
 
@@ -22,7 +22,7 @@ import time
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://gate-control-v2.preview.emergentagent.com/api"
+BASE_URL = "https://strategy-version-gov.preview.emergentagent.com/api"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

@@ -6,7 +6,7 @@ P1 Backend Investigation - Deep dive into failing endpoints
 import requests
 import json
 
-BASE_URL = "https://gate-control-v2.preview.emergentagent.com"
+BASE_URL = "https://strategy-version-gov.preview.emergentagent.com"
 SUPER_ADMIN_CREDS = {
     "email": "canary.admin@platform.local",
     "password": "CanaryAdmin123!"

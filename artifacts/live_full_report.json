@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "base_url": "https://gate-control-v2.preview.emergentagent.com",
+  "base_url": "https://strategy-version-gov.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",

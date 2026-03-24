@@ -10,12 +10,12 @@ def validate_ui():
     """Validate UI elements based on previous test results and basic checks"""
     
     print("=== HARDENING PHASE-1 UI VALIDATION ===")
-    print("URL: https://gate-control-v2.preview.emergentagent.com")
+    print("URL: https://strategy-version-gov.preview.emergentagent.com")
     print()
     
     # Check if page is accessible
     try:
-        response = requests.get("https://gate-control-v2.preview.emergentagent.com", timeout=10)
+        response = requests.get("https://strategy-version-gov.preview.emergentagent.com", timeout=10)
         if response.status_code != 200:
             print(f"❌ FAIL - Page not accessible (HTTP {response.status_code})")
             return False

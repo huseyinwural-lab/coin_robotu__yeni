@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 P0 Playbook Governance Chain Backend Validation
-Target: https://gate-control-v2.preview.emergentagent.com
+Target: https://strategy-version-gov.preview.emergentagent.com
 
 Test Requirements:
 1. POST /api/admin-phase3/incident-snapshots/playbook/preview returns 200 (not 500)
@@ -22,7 +22,7 @@ import time
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://gate-control-v2.preview.emergentagent.com"
+BASE_URL = "https://strategy-version-gov.preview.emergentagent.com"
 SUPER_ADMIN_CREDS = {
     "email": "canary.admin@platform.local",
     "password": "CanaryAdmin123!"

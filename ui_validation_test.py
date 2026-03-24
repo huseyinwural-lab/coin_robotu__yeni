@@ -13,7 +13,7 @@ import re
 
 def test_ui_validation():
     """Perform concise UI validation"""
-    url = "https://gate-control-v2.preview.emergentagent.com"
+    url = "https://strategy-version-gov.preview.emergentagent.com"
     
     try:
         # Get the landing page

@@ -1,156 +1,136 @@
-<analysis>**INSTRUCT NEXT AGENT:** KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.
-
-### original_problem_statement: 
-Kullanıcı, sistemdeki mevcut salt okunur (read-only) Execution Readiness ekranının, zorlayıcı, denetlenebilir ve yazma yetkisine sahip bir **Production Gate Control Panel** haline getirilmesini talep etmektedir. Sistem; GO veya süreli GO_WITH_OVERRIDE durumu olmadan herhangi bir deployment veya LIVE aktivasyon işlemini global middleware/backend seviyesinde kesinlikle reddetmelidir. Tüm değişiklikler; kim, ne zaman, neden ve durum geçişlerini içerecek şekilde audit loglarına yazılmalıdır. İşlem adımları P0 (zorunlu blocker), P1 ve P2 olarak belirlenmiş olup ilk olarak P0'ın bitirilmesi hedeflenmektedir.
-
+<analysis>### original_problem_statement
+Kullanıcı, Execution Readiness / Production Gate uygulamasının son hardening işlemlerini başarıyla kapatıp onayladıktan sonra sistemin odak noktasını Strategy Domain kontrol paneline çevirmiştir.
+Mevcut Strategy CRUD panelinin tam bir Strategy Lifecycle + Production Control System haline getirilmesi istenmiştir.
 **PRODUCT REQUIREMENTS:**
-1. **Deploy Block Enforcement:** Gate durumu  veya geçerli bir  değilse, deploy ve live action endpoint'leri global bir middleware/dependency ile kilitlenecek.
-2. **Override Sistemi:** Sadece super_admin kullanabilir, maksimum süre **30 dakika**, geçerli enum (INCIDENT_MITIGATION, THIRD_PARTY_DEGRADATION, HOTFIX_VALIDATED, MANUAL_RISK_ACCEPTANCE) ve text reason zorunludur.
-3. **MOCK -> LIVE Geçişi:** Risk uyarısı, confirmation, reason ve audit ile korunan kontrollü bir geçiş akışı.
-4. **Pre-deploy Checklist:** Arayüzde onaylanmamış checklist varsa  bloklanacak.
-5. **Rerun & Action:** Her check için FAIL nedeni, fix önerisi ve Rerun butonu gösterilecek. Rerun loglanacak.
-6. **Raporlama:** JSON formatında export mandatory.
+1. **Strategy Version Governance:** Immutable (değiştirilemez) versiyonlar, tek aktif versiyon kuralı, rollback/revert ve diff yetenekleri.
+2. **Validation Layer:** Config schema validation, required field enforcement, runtime compatibility checks.
+3. **Deterministic Evaluation & Replay:** Standart evaluate çıktıları, geçmiş context ile replay, version A/B compare.
+4. **Regime Binding:** Condition -> Strategy priority resolution ve conflict önleme.
+5. **Production Safety Gate:** Draft -> Validated -> Dry_Run_Passed -> Production (approval zorunlu) state machine akışı.
+6. **Execution Explainability:** Strategy kararının signal -> intent -> order -> capital allocation -> risk check adım adım gösterimi (Execution Preview).
+7. **Observability:** Versiyon bazlı hit rate, false signal, drift, execution quality skorları ve trend grafikleri.
+8. **Operational UX (Final Phase):** Listede kapsamlı filtreleme (owner, tag, category), bulk operasyonlar (archive, validate, vs.), gelişmiş JSON Editor (hata gösterme, schema hint), ve History/Audit sekmelerinin UI tarafında tam kullanıma açılması.
+
+**User's preferred language**: Turkish (INSTRUCT NEXT AGENT: KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.)
 
 ### what currently exists?
-Risk Orchestrator ve Execution Decision Gate (Execution Queue) tamamen hardening aşamalarından geçip, detaylı loglama, high-risk confirm, reason constraint özellikleriyle prod-ready hale getirildi (39/39 Backend test, Frontend onaylı). Ancak **Execution Readiness** (Production Gate) henüz izleme düzeyindedir, kullanıcının son verdiği görevin (Gate Middleware blokajı ve Override sistemi) backend analizine başlanmış fakat kodlaması yapılmamıştır.
+Production Gate P2 tamamen bitmiş ve test edilmiştir (Artifact manifest scripti ile gerçek runtime verileri üretilmektedir). Strategy Control Plane için Backend altyapısı (Sprint 1, 2 ve P1/P2 metrikleri) büyük oranda tamamlanmıştır: Immutable versioning, promotion safety gate tabloları (, ), execution preview, metrics-trend, ve bulk operations endpoint'leri yazılmıştır. Şu anda FINAL GÖREV EMRİ kapsamında  dosyasındaki UI/UX eksiklikleri (Filtreler, JSON Editor hata gösterimleri, Bulk action bar, Audit tab) kodlanmaktadır.
 
 ### Last working item
-- **Last item agent was working:** Kullanıcının verdiği son Production Gate Dönüşümü kural setini (Middleware, 30dk override, MOCK->LIVE vb.) uygulamak üzere FastAPI  dosyası ve Gate schema'ları (ReleaseGateOverrideRequest vs.) okunuyordu. P0 kurallarını uygulamak için altyapı incelemesi yapıldı.
+- **Last item agent was working:** Kullanıcının son FINAL GÖREV EMRİ doğrultusunda  dosyasına peş peşe UI yamaları (apply_patch) atılıyordu. Backend için filtering ve bulk endpoint'leri eklendi, ancak Frontend arayüzünün bu yeni endpoint'lere bağlanması (owner/tag filtreleri, history & audit sekmesi, bulk selection arayüzü) işlemi sürüyordu.
 - **Status:** IN PROGRESS
-- **Agent Testing Done:** N
-- **Which testing method agent to use?** Hem  (middleware'in API endpoint'lerini kilitlediğini doğrulamak için) hem de  (UI state'lerini ve check butonlarını doğrulamak için) kullanılmalıdır.
+- **Agent Testing Done:** N (Yamalar atılma aşamasındaydı, henüz derleme ve render testi yapılamadı).
+- **Which testing method agent to use?** both (Önce frontend screenshot/terminal linter ile React component hataları giderilmeli, ardından  ve backend curl/testing agent kullanılmalı).
 - **User Testing Done:** N
 
 ### All Pending/In progress Issue list
-  - **Issue 1: Deploy Block Enforcement Middleware (P0) (HIGHEST PRIORITY)**
-     - Attempted fixes: Yok, sadece  incelendi.
-     - Next debug checklist:  veya  içerisine, Gate state'i NO_GO ise deploy/live operasyon (MOCK->LIVE) uçlarını 403/400 ile kestiğinden emin olunacak bir Dependency/Middleware yazılması.
-     - Why fix this issue and what will be achieved with the fix? Kullanıcının temel şartıdır; sistem fail durumundayken hiçbir kod veya sistem canlıya alınamamalıdır.
-     - Status: IN PROGRESS
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Backend
-     - Blocked on other issue: None
-
-  - **Issue 2: GO_WITH_OVERRIDE Engine ve Expiry Logiği (P0)**
-     - Attempted fixes: Yok.
-     - Next debug checklist: Backend'de aktif override'ın bitiş süresini kontrol eden (max 30 dk) mantık kurulmalı. Enum listesine uygun validation yapılmalı ve revoke mekanizması endpoint'i yazılmalı.
-     - Why fix this issue and what will be achieved with the fix? Acil durum bypass'ının sonsuza kadar açık kalmasını engeller.
-     - Status: NOT STARTED
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Backend
+**Issue 1: AdminStrategiesPage.jsx UI Component Yamalarının Tamamlanması (P0)**
+- **Attempted fixes:** Ajan,  dosyasının boyutunun büyük olması nedeniyle parça parça patch atıyordu ancak işlem yarıda kesildi.
+- **Next debug checklist:**  dosyası incelenmeli. Eksik kalan JSON Editor UX (hata highlight), Bulk Action Bar, History & Audit sekmesi ve Execution Preview derinleştirme UI bileşenlerinin React kodları tamamlanmalı. Dosyada sözdizimi hatası (syntax error) olup olmadığı kontrol edilmeli.
+- **Why fix this issue and what will be achieved with the fix?** Kullanıcının son görevi doğrudan bu UI/UX iyileştirmeleridir. Arayüz hatasız çalışmadan iş teslim edilemez.
+- **Status:** IN PROGRESS
+- **Is recurring issue?** N
+- **Should Test frontend/backend/both after fix?** Frontend
 
 ### In progress Task List
-  - **Task 1: Production Gate Control Panel Backend Uçlarının Hazırlanması (P0)**
-     - Where to resume:  veya  içerisinde single/all rerun endpointleri, detaylı check fail reason dönecek endpoint'ler, override history ve MOCK->LIVE transition endpointlerinin yazılması.
-     - What will be achieved with this? UI'ın kullanacağı tüm operasyonel write-capable yapı hazır olacak.
-     - Status: IN PROGRESS
-     - Should Test frontend/backend/both after fix? Backend
-     - Blocked on something: None
-
-  - **Task 2: AdminExecutionReadinessPage.jsx Revizyonu (P0)**
-     - Where to resume:  dosyasının, sadece durumu gösteren bir ekrandan çıkarılıp, GO/NO_GO butonları, Override Timer, Pre-deploy checklist ve Rerun Action butonlarını barındıran kontrol paneline dönüştürülmesi.
-     - What will be achieved with this? Kullanıcı Readiness yerine aksiyon alabilir bir gate paneline sahip olacak.
-     - Status: NOT STARTED
-     - Should Test frontend/backend/both after fix? Frontend
-     - Blocked on something: Task 1 (Backend Uçları)
+**Task 1: Operasyonel UI/UX Entegrasyonu (Final Phase)**
+- **Where to resume:**  içerisindeki JSON Editor UX, Bulk Operations, ve Audit Rollback görünürlüğü kısımlarında.
+- **What will be achieved with this?** Operasyon ekibinin sistemi güvenli, hızlı ve 50+ stratejiyi kolayca filtreleyerek/bulk işlem yaparak kullanabilmesi sağlanacak.
+- **Status:** IN PROGRESS
+- **Should Test frontend/backend/both after fix?** Frontend
+- **Blocked on something:** None
 
 ### Upcoming and Future Tasks
-    Upcoming Tasks:
-    - P1: Auto-refresh mechanism (interval) for readiness checks. (Frontend)
-    - P1: Export readiness report (JSON) directly from UI. (Frontend/Backend)
-    - P1: Fail alert sistemi ve Exchange detaylı health view gösterimi.
-    
-    Future Tasks:
-    - P2: Check history & trend visualization.
-    - P2: Override analytics and Before/after state comparisons.
+**Upcoming Tasks:**
+- P0: JSON Editor içerisinde schema hint, required field error ve validation summary banner gösterimlerinin tamamlanması.
+- P0: Data Consistency Final Hardening (Race condition: Aynı anda 2 activate çağrısı veya rollback+promote çakışmasını backend'de önlemek için test/guard mekanizmaları doğrulama).
+- P1: Execution Preview ekranına Explain butonu (step-by-step trace açan modal) eklenmesi.
+- P1: One-click promote checklist - herhangi bir doğrulama FAIL ise Promote butonunun physically disabled olması işleminin UI'da garanti edilmesi.
+
+**Future Tasks:**
+- P2: Execution quality için order fill slippage ve latency percentile korelasyon anomalilerinin alert mekanizmasına bağlanması (Önceki tasklarda tartışıldı).
 
 ### Completed work in this session
-- **Risk Orchestrator Final Hardening (DONE)**: Invalid transition reject, detail view read-ack (okudum) zorunluluğu, test kanıtlı stale detail_version engeli. 
-- **Immediate Execute ve Approve Ayrımı (DONE)**: Approve yalnızca listeyi onaylayıp 'APPROVED' yapar; Execute ise 'RELEASED' state'ine taşır. High-risk akışlarda double-confirmation eklendi.
-- **PROD_READINESS_GATE.md Kapanışı (DONE)**: 39/39 fresh test runs yapılarak fail archive klasörleri temizlendi ve go/no-go dokümanı oluşturuldu.
-- **Alert UI Entegrasyonu (DONE)**: Sistem hata alarm eşiklerinin DB üzerinden yönetilmesi ve arayüzde unread/read akışının çalışır hale gelmesi sağlandı.
+- Production Gate P2 Artifact Manifest Script oluşturulması & Mismatch düzeltmeleri (DONE)
+- StrategyVersionLifecycle ve StrategyPromotionRequest veritabanı migration'ları (DONE)
+- Strategy Immutable Versioning, Diff, Rollback, Timeline API'leri (DONE)
+- Strategy Evaluation, Replay ve Compare API'leri (DONE)
+- Promotion Flow (Draft -> Validated -> Dry_Run_Passed -> Production) Backend Korumaları (DONE)
+- Execution Preview (Decision, Signal, Intent, Capital, Risk Trace) Backend Uç Noktası (DONE)
+- Strategy Observability (Metrics, Drift, False Signal, Health Score, Trend Grafikleri) API & UI (DONE)
+- Strategy Bulk Operations Backend Endpoint'leri (Archive, Validate, Dry-run, Tag) (DONE)
 
 ### Earlier issues found/mentioned but not fixed
-*Tüm eski Execution Queue eksikleri kapatılmış olup, sadece kullanıcının son gönderdiği yeni Execution Readiness - Gate Dönüşümü eksiktir.*
+None
 
 ### Known issue recurrence from previous fork
-  - Issue recurrence in previous fork: None
-  - Recurrence count: 0
-  - Status: RESOLVED
+- **Issue recurrence in previous fork:** Gitignore nedeniyle Artifact Manifest dosyalarının eksik görünmesi sorunu.
+- **Recurrence count:** 1 (Önceki fazda çözüldü).
+- **Status:** RESOLVED (Ajan .gitignore dosyasına istisnalar ekleyip çözdü).
 
 ### Code Architecture
 
 
 ### Key Technical Concepts
-- **Strict Gateway Middleware:** Production release akışını kilitleyen, Tüm checkler PASS değilse API seviyesinde 403 at konsepti.
-- **Time-bound Overrides:** Süre bazlı yetkilendirme (override_expiry).
-- **Immutable Audit Trail:** Karar motorundaki her Go, Override, Revoke veya Mode Change eyleminin değiştirilemez logu.
+- **Immutable Strategy Versioning:** Strateji config'leri güncellenemez; değişiklikler daima yeni versiyon yaratır.
+- **State Machine Promotion Gate:** Bir strateji versiyonu manuel test (validate) ve dry-run geçmeden asla Production olamaz.
+- **Execution Explainability:** Sinyalin nasıl trade'e dönüştüğünü veya neden risk engeline (reject) takıldığını açıklayan tracing yapısı.
+- **Race-Condition Safe Updates:** DB seviyesinde tek bir aktif versiyon olmasını garanti altına alan kısmi (partial) indeksler ve atomik servis güncellemeleri.
 
 ### key DB schema
-  - : User intent verileri, state takibi.
-  - : Queue veya Reject spike metrik alarmları.
-  - *Gate Config:* Çoğunlukla  (metadata_json içerisinde  olarak tutuluyor) üzerinden sağlanıyor.
+- : Temel strateji bilgisi (isim, kod, owner, tags).
+- : Immutable strateji kuralları ve config.
+- : Operational durum (is_active, rollout_stage, validation_status, vs.).
+- : Production onayı için tutulan denetim (audit) log'ları.
 
 ### changes in tech stack
-  - Yok. Redis fallback loglarda in-memory'ye düşüyor uyarısı alınmıştır ancak sistem DB üzerinden operasyonuna devam edebiliyor.
+- Recharts kütüphanesi (Frontend) metrics trend grafikleri için aktif kullanılmaya başlandı.
 
 ### All files of reference
-  -  (Yeni middleware buraya veya dependency olarak eklenecek)
-  - 
-  -  (Gate ve mode switch kontrolü)
-  -  (Baştan yazılacak)
-  -  (Enum reason, Request ID vb eklenecek)
+-  (Yeni endpointler)
+-  (İş mantığı)
+-  (Ana değiştirilen arayüz)
+-  (Yeni tablolar)
 
 ### Areas that need refactoring
-- : Şu an read-only'dir. Tasarımı ve state yönetimi kontrol odaklı (Gate Control) olacak şekilde refactor edilmelidir.
+- : Bu dosya 1700 satırı aşmış durumdadır. Şu anki FINAL GÖREV EMRİ tamamlandıktan ve onaylandıktan sonra ileride component'lere (örn. , ) bölünmesi iyi bir refactoring adımı olacaktır. Ancak şu an öncelik kullanıcının isteklerini mevcut dosyada çalışır hale getirmektir.
 
 ### key api endpoints
-  - 
-  - 
-  -  (Revize edilecek)
-  - *To be created:* , 
+- 
+- 
+-  (ve diğer bulk endpointleri)
+-  (Filtreleme destekli)
 
 ### Critical Info for New Agent
-- **Kullanıcının En Katı Kuralı:** Sistem  durumundayken API hiçbir deployment (MOCK->LIVE) aksiyonuna izin **vermemelidir.** Endpoint bazlı koruma yazılacaktır.
-- Override için belirlenen Enum limitlidir: , , , . Text Reason ve Expiry (**max 30 dk**) zorunludur.
-- Checklist UI üzerinde tam pass olmadan GO butonu asla aktif olmayacaktır.
-- Geliştirmeler sonrası test kanıtları üretilmelidir (Block testi, expiry testi, revoke testi vb.)
+- **DİKKAT:** Kullanıcı teknik çalışıyor olmasından ziyade, sistemin hata toleranssız (fail-safe) ve gerçek dünyada kullanılabilir (operasyonel) olmasını talep etmektedir.
+- JSON Editor'de kullanıcı dostu hata mesajları, One-click promote butonunun blokaj mantığı, ve filtrelemelerin doğru çalışması bu teslimin **kabul kriteridir**.
+-  içerisindeki işlemler yarım kalmıştır. Devam etmeden önce dosyanın syntax açısından bozuk olup olmadığını linter ile kontrol edin, ardından eksik UI özelliklerini eklemeye devam edin.
+- Tüm iletişimi **TÜRKÇE** yapın.
 
 ### documents and test reports created in this job
-  - 
-  - 
-  - 
-  -  (Fail archive directory)
+-  -  (Farklı test iterasyon raporları)
+- 
+- 
 
 ### Last 10 User Messages and any pending HUMAN messages
-1. User: EK GÖREV EMRİ ile prod onay sertleştirmesi ve testlerin yapılması talimatını verdi.
-2. Agent:  ile karar seçenekleri sundu.
-3. User: C, A, A, A, A (Approve/Execute ayrı, flag tabanlı, admin config) seçeneklerini bağlayıcı notlarla kitledi.
-4. Agent: Geliştirmeleri tamamlayıp testledi ve işi bitirdi.
-5. User: SON GÖREV EMRİ - Production Readiness Finalizasyonu talimatını verdi. Eski hatalı testlerin arşive taşınmasını ve fresh E2E onay alınmasını istedi.
-6. Agent: Seçenekleri sundu.
-7. User: A, A, B, A diyerek fail arşivlemesini ve PROD_READINESS_GATE.md üretimini talep etti.
-8. Agent: Testleri yapıp, dokümanı hazırlayıp success ile işi kapattı.
-9. User: **🚨 EXECUTION READINESS → PRODUCTION GATE DÖNÜŞÜM EMRİ**. Execution Readiness sayfasını read-only formundan çıkartıp zorlayıcı bir Gate haline getirme emrini verdi (Son mesaj - üzerinde çalışılacak iş).
-10. Agent:  kullandı.
-11. User (Pending): Katı kuralları (Deploy block middleware, 30 min expiry, enum reasons, JSON export, tam checklist onayı) teyit ederek beklememeyi ve derhal kodlamayı emretti. (Ajan analizde kaldı)
+- *Mesaj 635 (Son mesaj):* Kullanıcı FINAL GÖREV EMRİ — STRATEGY CONTROL PLANE KAPANIŞ başlığıyla; UI Filtre/Liste (owner, tag), JSON Editor UX Hardening, Audit/Rollback UI Görünürlüğü, Bulk Ops UX, Execution Preview derinleştirmesi ve Promotion Flow son kontrolü (validation fail ise buton disable) taleplerini iletti. Ajan bunları uygulamak üzere backend güncellemelerini yaptı ve React UI yamalarını uygularken oturum sonlandı.
 
 ### Project Health Check:
-- Broken: Yok (39/39 Execution Queue testleri başarılı). Ancak Production Gate modülü henüz oluşturulmadı.
-- Mocked: Slack Webhook, Binance. (In-memory cache fallback kullanıyor).
+- **Broken:**  dosyasına yamalar atılırken oturum kapandığı için dosya state'i yarım kalmış olabilir. Linter ile kontrol zorunludur.
+- **Mocked:** Slack Webhook, Binance.
 
 ### 3rd Party Integrations
-- Slack Webhook (MOCKED / Provider Agnostic)
+- Slack Webhook (MOCKED)
 - Binance (MOCKED)
 
 ### Testing status
-  - Testing agent used after significant changes: YES (Önceki tasklarda kullanıldı. Production Gate kodlaması yapılmadığından henüz bu modülde kullanılmadı).
-  - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: ,  vb.
-  - Known regressions: Yok.
+- Testing agent used after significant changes: YES (iteration_119'a kadar kullanıldı, son FINAL emirdeki UI değişiklikleri için HENÜZ KULLANILMADI)
+- Troubleshoot agent used after agent stuck in loop: NO
+- Test files created: Çeşitli backend testleri (örn: ) güncellendi.
+- Known regressions: Yok.
 
 ### Credentials to test flow:
-- Super Admin:  / 
+- Admin/Super Admin:  / 
 
 ### What agent forgot to execute
-Ajan en son kullanıcının verdiği Execution Readiness - Gate Dönüşümü (Message 784, 787) görevinin detaylarını ve dosyalarını analiz etmeye başlamış ancak kod implementasyonunu (Middleware, Override endpointleri, React refactoring vb.) **henüz gerçekleştirmemiştir.** Yeni ajan direkt olarak P0 listesindeki Deploy Block Enforcement ve Override/Mode Change yapısını kodlamaya başlamalıdır.</analysis>
+Ajan son görev emrindeki (Mesaj 635) Frontend (UI) güncellemelerini ( dosyasına atılan patch'leri) bitiremeden oturum sonlandı. JSON Editor UX (hata highlight, disable save) geliştirmeleri ve Bulk işlem (checkbox seçimleri vb.) arayüz kodlaması eksik kalmış durumdadır. Lütfen ilk iş bu React dosyasının mevcut bütünlüğünü kontrol edip, ardından eksik UI gereksinimlerini tamamlayın. Data consistency testleri (activate race condition testi) de henüz gerçekleştirilmedi.</analysis>

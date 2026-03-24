@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import asc, desc, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import (
@@ -151,6 +152,15 @@ def get_strategy(db: Session, strategy_id: str) -> StrategyDefinition | None:
     if row is not None:
         _strategy_cache[strategy_id] = (time.time(), strategy_id)
     return row
+
+
+def _get_strategy_for_update(db: Session, strategy_id: str) -> StrategyDefinition | None:
+    return (
+        db.query(StrategyDefinition)
+        .filter(StrategyDefinition.strategy_id == strategy_id)
+        .with_for_update()
+        .first()
+    )
 
 
 def get_version(db: Session, version_id: str) -> StrategyVersion | None:
@@ -405,6 +415,7 @@ def list_strategy_definitions_filtered(
     production_only: bool,
     validation_status: str | None,
     owner_user_id: str | None,
+    owner_name: str | None,
     category: str | None,
     tag: str | None,
     sort_by: str,
@@ -428,6 +439,8 @@ def list_strategy_definitions_filtered(
         query = query.filter(StrategyDefinition.status == status_filter)
     if owner_user_id:
         query = query.filter(StrategyDefinition.owner_user_id == owner_user_id)
+    if owner_name:
+        query = query.filter(StrategyDefinition.owner_name.ilike(f"%{owner_name.strip()}%"))
     if category:
         query = query.filter(StrategyDefinition.category == category)
     if tag:
@@ -560,7 +573,7 @@ def create_strategy_version(
 
 
 def activate_strategy_version(db: Session, *, strategy_id: str, version_id: str) -> StrategyDefinition:
-    strategy = get_strategy(db, strategy_id)
+    strategy = _get_strategy_for_update(db, strategy_id)
     if strategy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
 
@@ -583,7 +596,11 @@ def activate_strategy_version(db: Session, *, strategy_id: str, version_id: str)
     if lifecycle.lifecycle_state == _LIFECYCLE_DRAFT:
         lifecycle.lifecycle_state = _LIFECYCLE_VALIDATED
     lifecycle.updated_at = _now_utc()
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="concurrent_activation_conflict") from exc
     db.refresh(strategy)
     _strategy_cache[strategy.strategy_id] = (time.time(), strategy.strategy_id)
     return strategy
@@ -905,7 +922,7 @@ def rollback_strategy_version(
     actor_user_id: str,
     reason: str,
 ) -> dict[str, Any]:
-    strategy = get_strategy(db, strategy_id)
+    strategy = _get_strategy_for_update(db, strategy_id)
     if strategy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
 
@@ -941,7 +958,11 @@ def rollback_strategy_version(
         target_lifecycle.lifecycle_state = _LIFECYCLE_VALIDATED
     target_lifecycle.updated_at = _now_utc()
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="concurrent_rollback_conflict") from exc
     db.refresh(strategy)
     _strategy_cache[strategy.strategy_id] = (time.time(), strategy.strategy_id)
 
@@ -1210,7 +1231,7 @@ def approve_strategy_promotion_request(
     if bool(request.require_dry_run) and lifecycle.dry_run_status != _VALIDATION_PASS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="dry_run_required_before_promote")
 
-    strategy = get_strategy(db, request.strategy_id)
+    strategy = _get_strategy_for_update(db, request.strategy_id)
     if strategy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
     strategy.active_version_id = request.strategy_version_id
@@ -1231,7 +1252,11 @@ def approve_strategy_promotion_request(
     request.approval_note = str(approval_note or "").strip()
     request.reviewed_at = _now_utc()
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="promotion_activation_conflict") from exc
     db.refresh(request)
     return request
 
@@ -1931,5 +1956,24 @@ def bulk_export_audit_snapshot(
         "strategy_count": len(strategy_ids),
         "format": format_type,
         "items": items,
+    }
+
+
+def get_strategy_filter_options(db: Session) -> dict[str, Any]:
+    rows = db.query(StrategyDefinition).all()
+    owner_names = sorted({str(item.owner_name or "").strip() for item in rows if str(item.owner_name or "").strip()})
+    categories = sorted({str(item.category or "").strip() for item in rows if str(item.category or "").strip()})
+    tags = sorted(
+        {
+            str(tag).strip()
+            for item in rows
+            for tag in (item.tags or [])
+            if str(tag).strip()
+        }
+    )
+    return {
+        "owner_names": owner_names,
+        "categories": categories,
+        "tags": tags,
     }
 

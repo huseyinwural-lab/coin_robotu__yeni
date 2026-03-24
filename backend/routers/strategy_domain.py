@@ -147,6 +147,7 @@ from services.strategy_domain_service import (
     get_latest_regime_binding,
     get_strategy_promotion_readiness,
     get_strategy,
+    get_strategy_filter_options,
     get_strategy_regime_bindings,
     get_strategy_regime_overview,
     get_strategy_timeline,
@@ -396,6 +397,7 @@ def admin_list_strategies(
     production_only: bool = False,
     validation_status: str | None = None,
     owner_user_id: str | None = None,
+    owner_name: str | None = None,
     category: str | None = None,
     tag: str | None = None,
     sort_by: str = "updated_at",
@@ -415,6 +417,7 @@ def admin_list_strategies(
         production_only=production_only,
         validation_status=validation_status,
         owner_user_id=owner_user_id,
+        owner_name=owner_name,
         category=category,
         tag=tag,
         sort_by=sort_by,
@@ -434,6 +437,7 @@ def admin_list_strategies_ops(
     production_only: bool = False,
     validation_status: str | None = None,
     owner_user_id: str | None = None,
+    owner_name: str | None = None,
     category: str | None = None,
     tag: str | None = None,
     sort_by: str = "updated_at",
@@ -453,6 +457,7 @@ def admin_list_strategies_ops(
         production_only=production_only,
         validation_status=validation_status,
         owner_user_id=owner_user_id,
+        owner_name=owner_name,
         category=category,
         tag=tag,
         sort_by=sort_by,
@@ -469,6 +474,12 @@ def admin_list_strategies_ops(
             "has_next": max(1, page) * max(1, min(page_size, 200)) < total,
         },
     }
+
+
+@router.get("/admin/strategies/filter-options")
+def admin_strategy_filter_options(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    return get_strategy_filter_options(db)
 
 
 @router.post("/admin/strategies", response_model=StrategyDefinitionResponse, status_code=status.HTTP_201_CREATED)

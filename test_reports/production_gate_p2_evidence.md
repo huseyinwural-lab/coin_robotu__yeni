@@ -1,7 +1,7 @@
 # Production Gate P2 Evidence Pack
 
 - Generated at: 2026-03-23
-- Base URL: `https://gate-control-v2.preview.emergentagent.com`
+- Base URL: `https://strategy-version-gov.preview.emergentagent.com`
 
 ## Mandatory P2 Artefacts
 - `/test_reports/production_gate_p2_evidence.md`
