@@ -2,6 +2,7 @@ import csv
 import hashlib
 import hmac
 import io
+import os
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -96,12 +97,14 @@ class BinanceCommercialClient:
         self.api_key = api_key
         self.api_secret = api_secret
         self.environment = _normalize_environment(environment)
-        self.spot_base_url = (
+        default_spot_base = (
             "https://testnet.binance.vision" if self.environment == "testnet" else "https://api.binance.com"
         )
-        self.futures_base_url = (
+        default_futures_base = (
             "https://testnet.binancefuture.com" if self.environment == "testnet" else "https://fapi.binance.com"
         )
+        self.spot_base_url = str(os.environ.get("BINANCE_SPOT_BASE_URL") or default_spot_base).strip().rstrip("/")
+        self.futures_base_url = str(os.environ.get("BINANCE_FUTURES_BASE_URL") or default_futures_base).strip().rstrip("/")
         self._price_cache: dict[str, float] = {}
 
     @staticmethod
