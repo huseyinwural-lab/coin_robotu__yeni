@@ -275,13 +275,31 @@ def start_ws_worker(
 
 def stop_ws_worker(*, target_user_id: str, environment: str, market_types: list[str] | None) -> dict:
     env = _normalize_environment(environment)
-    markets = _normalize_market_types(market_types)
-    worker_key = f"{target_user_id}:{env}:{','.join(sorted(markets))}"
-    worker = _WS_WORKERS.get(worker_key)
-    if worker is None:
-        return {"status": "not_found", "worker_key": worker_key}
-    worker.stop()
-    return {"status": "stopped", "worker": worker.status()}
+    if market_types:
+        markets = _normalize_market_types(market_types)
+        worker_key = f"{target_user_id}:{env}:{','.join(sorted(markets))}"
+        worker = _WS_WORKERS.get(worker_key)
+        if worker is None:
+            return {"status": "not_found", "worker_key": worker_key}
+        worker.stop()
+        return {"status": "stopped", "worker": worker.status(), "stopped_count": 1}
+
+    matching = [key for key, worker in _WS_WORKERS.items() if worker.user_id == target_user_id and worker.environment == env]
+    if not matching:
+        return {"status": "not_found", "worker_key": f"{target_user_id}:{env}:*"}
+
+    latest = None
+    for key in matching:
+        worker = _WS_WORKERS.get(key)
+        if worker is None:
+            continue
+        worker.stop()
+        latest = worker
+    return {
+        "status": "stopped",
+        "worker": latest.status() if latest else None,
+        "stopped_count": len(matching),
+    }
 
 
 def ws_worker_status(*, target_user_id: str | None, environment: str | None) -> dict:

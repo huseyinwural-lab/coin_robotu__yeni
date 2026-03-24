@@ -1,0 +1,100 @@
+{
+  "status": "PASS",
+  "total_tests": 11,
+  "passed": 11,
+  "failed": 0,
+  "partial": 0,
+  "skipped": 0,
+  "success_rate": 100.0,
+  "results": [
+    {
+      "test": "Admin Authentication",
+      "status": "PASS",
+      "details": "Successfully authenticated as canary.admin@platform.local",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:22.666911+00:00"
+    },
+    {
+      "test": "Health Check",
+      "status": "PASS",
+      "details": "Health endpoint returns 200 with db.reachable=true",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:22.775862+00:00"
+    },
+    {
+      "test": "Spot+Futures Ingest 451 Blocker",
+      "status": "PASS",
+      "details": "Expected 451 regional restriction detected correctly",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:22.987867+00:00"
+    },
+    {
+      "test": "Futures-Only Ingest",
+      "status": "PASS",
+      "details": "Idempotent duplicates working: first=0, second duplicates=105",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:25.893817+00:00"
+    },
+    {
+      "test": "PnL Latest",
+      "status": "PASS",
+      "details": "Non-empty fee breakdown returned: {'trading_fee_usd': 3.92756152, 'commission_usd': 3.92756152, 'funding_usd': -3.0274975}",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:26.880927+00:00"
+    },
+    {
+      "test": "Reconciliation Futures-Only",
+      "status": "PASS",
+      "details": "Reconciliation successful with drift_within_tolerance=true",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:35.276240+00:00"
+    },
+    {
+      "test": "Live Gate Default (Spot+Futures)",
+      "status": "PASS",
+      "details": "Live gate correctly returns ready=false for spot+futures",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:35.412147+00:00"
+    },
+    {
+      "test": "Live Gate Futures-Only",
+      "status": "PASS",
+      "details": "Live gate correctly returns ready=true for futures-only",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:35.555867+00:00"
+    },
+    {
+      "test": "Export CSV",
+      "status": "PASS",
+      "details": "CSV export successful: 191 rows with proper headers",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:35.722572+00:00"
+    },
+    {
+      "test": "Websocket Worker Lifecycle",
+      "status": "PASS",
+      "details": "Worker lifecycle complete: start->status(ok)->stop(stopped)",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:43.406877+00:00"
+    },
+    {
+      "test": "Export-PnL Consistency",
+      "status": "PASS",
+      "details": "CSV and API PnL consistent: CSV=-27.59654957, API=-27.59654957",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:41:43.407101+00:00"
+    }
+  ],
+  "timestamp": "2026-03-24T16:41:43.407145+00:00"
+}

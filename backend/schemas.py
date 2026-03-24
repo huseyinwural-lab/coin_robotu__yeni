@@ -3365,15 +3365,17 @@ class CommercialP0WsWorkerStartRequest(BaseModel):
 
 
 class CommercialP0WsWorkerStopRequest(BaseModel):
-    target_user_id: str
+    target_user_id: str | None = None
+    target_user_email: str | None = None
     environment: str = "testnet"
-    market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
+    market_types: list[str] = Field(default_factory=list)
 
 
 class CommercialP0WsWorkerResponse(BaseModel):
     status: str
     worker: dict | None = None
     worker_key: str | None = None
+    stopped_count: int | None = None
 
 
 class CommercialP0WsWorkerStatusResponse(BaseModel):

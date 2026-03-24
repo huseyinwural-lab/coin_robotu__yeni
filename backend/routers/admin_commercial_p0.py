@@ -235,13 +235,23 @@ def websocket_worker_start(
 def websocket_worker_stop(
     payload: CommercialP0WsWorkerStopRequest,
     _: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
 ):
     try:
+        resolved_user_id = payload.target_user_id
+        if not resolved_user_id and payload.target_user_email:
+            row = db.query(User).filter(User.email == payload.target_user_email.strip().lower()).first()
+            if row is None:
+                raise ValueError("target_user_not_found")
+            resolved_user_id = row.id
+        if not resolved_user_id:
+            raise ValueError("target_user_not_found")
+
         return CommercialP0WsWorkerResponse(
             **stop_ws_worker(
-                target_user_id=payload.target_user_id,
+                target_user_id=resolved_user_id,
                 environment=payload.environment,
-                market_types=payload.market_types,
+                market_types=payload.market_types or None,
             )
         )
     except Exception as exc:
