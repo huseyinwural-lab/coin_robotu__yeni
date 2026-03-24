@@ -1,17 +1,85 @@
 {
-  "summary": "Production Gate P2 Hardening doğrulama raporu",
-  "generated_at": "2026-03-24T00:25:00Z",
+  "summary": "Production Gate P2 Hardening runtime validation",
+  "generated_at": "2026-03-24T00:25:53.019419+00:00",
+  "generation": "automated",
+  "source": "runtime test execution",
   "status": "PASS",
-  "backend_checks": {
-    "system_cross_check": {
-      "is_consistent": true,
-      "counts": {
-        "history_count": 40,
-        "history_linked_count": 40,
-        "audit_check_event_count": 40
-      }
+  "cross_check": {
+    "is_consistent": true,
+    "mismatches": [],
+    "comparison_sources": {
+      "history_store": "brand_settings.metadata_json.production_gate_control.check_history",
+      "audit_log_check_events": "audit_logs(action=PRODUCTION_GATE_CHECK_EVENT)",
+      "override_rows": "release_gate_overrides",
+      "override_analytics": "get_production_gate_override_analytics()"
     },
-    "compare_items_with_run_count_gte_3": 3,
-    "timeline_items_with_audit_request": 3
+    "consistency_rules": [
+      "history_linked_count == audit_check_event_count (run_id eşleştirmesi)",
+      "override_rows_count == analytics_override_count"
+    ],
+    "retention_days": 7,
+    "counts": {
+      "history_count": 89,
+      "history_linked_count": 89,
+      "audit_check_event_count": 89,
+      "audit_run_id_count": 25,
+      "override_rows_count": 2,
+      "analytics_override_count": 2
+    }
+  },
+  "validation": {
+    "run_id_uuid_format_valid_samples": 15,
+    "run_id_uuid_format_sample_size": 15,
+    "timeline_uuid_items": 111,
+    "compare_items_gte3": 5,
+    "compare_improvements": 1,
+    "flapping_non_low_rows": 23
+  },
+  "flapping_seed": {
+    "seeded_count": 7,
+    "rows": [
+      {
+        "run_id": "run-2e88716a-5aab-41ec-a4d8-516e43ae3114",
+        "request_id": "1108c3e8-0ecd-43cd-b6d0-4c3171bb8284",
+        "status": "PASS",
+        "timestamp": "2026-03-24T00:23:31.741898+00:00"
+      },
+      {
+        "run_id": "run-ff6f7b38-7078-43d2-949d-6f7865ffdcac",
+        "request_id": "1256e0c9-a756-4f16-b9ca-99214f48f271",
+        "status": "FAIL",
+        "timestamp": "2026-03-24T00:23:51.741898+00:00"
+      },
+      {
+        "run_id": "run-424fab77-851f-44f7-b6bb-29a16af6f21d",
+        "request_id": "d68f30b4-ac2b-4012-8b7d-8eedc852e37d",
+        "status": "PASS",
+        "timestamp": "2026-03-24T00:24:11.741898+00:00"
+      },
+      {
+        "run_id": "run-184b8c23-e76e-4f03-b201-a15e958dc6c5",
+        "request_id": "0ecc4cd3-392f-4a49-9b6d-f6638030788b",
+        "status": "FAIL",
+        "timestamp": "2026-03-24T00:24:31.741898+00:00"
+      },
+      {
+        "run_id": "run-00e4d41a-631a-4bc3-bc34-615533a0d770",
+        "request_id": "26d373e2-eb88-4b2c-baba-b476ae39b415",
+        "status": "PASS",
+        "timestamp": "2026-03-24T00:24:51.741898+00:00"
+      },
+      {
+        "run_id": "run-d841f008-6d0c-4c36-bf7b-746b4143588a",
+        "request_id": "f6eb9dbe-1981-4c56-8ace-bb2368dc6edf",
+        "status": "FAIL",
+        "timestamp": "2026-03-24T00:25:11.741898+00:00"
+      },
+      {
+        "run_id": "run-9680c202-c801-4e03-bfac-ed3e6a7d6245",
+        "request_id": "68b584e0-debf-4abc-a146-f397c3083acd",
+        "status": "PASS",
+        "timestamp": "2026-03-24T00:25:31.741898+00:00"
+      }
+    ]
   }
 }

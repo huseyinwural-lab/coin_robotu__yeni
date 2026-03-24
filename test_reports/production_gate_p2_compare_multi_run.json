@@ -1,35 +1,89 @@
 {
-  "generated_at": "2026-03-24T00:25:00Z",
+  "generated_at": "2026-03-24T00:25:53.019419+00:00",
+  "generation": "automated",
+  "source": "runtime test execution",
   "source_endpoint": "/api/phase4/admin/production-gate/checks/compare",
   "checks_with_3plus_runs": [
     "prod_env_resolution",
     "secret_readiness",
-    "prod_env_preflight"
+    "prod_env_preflight",
+    "final_release_gate",
+    "release_gate_contract"
+  ],
+  "improvement_checks": [
+    "secret_readiness"
   ],
   "items": [
     {
       "check_key": "prod_env_resolution",
-      "run_id": "run-sample-1",
-      "run_count": 8,
+      "run_id": "run-bed56621-8217-4cef-85ed-94d768895df0",
+      "timestamp": "2026-03-24T00:25:51.492782Z",
+      "run_count": 16,
       "state_delta": "FAIL->FAIL",
       "previous_result": "FAIL",
       "new_result": "FAIL",
-      "latency_delta_ms": 10.5,
+      "latency_delta_ms": -5.536,
       "stability_score": 0.5,
       "improvement": false,
       "explanation": [
-        "Anlamlı remediation iyileşmesi gözlenmedi"
+        "Latency iyileşmesi gözlendi"
       ]
     },
     {
       "check_key": "secret_readiness",
-      "run_id": "run-sample-1",
-      "run_count": 8,
+      "run_id": "run-bed56621-8217-4cef-85ed-94d768895df0",
+      "timestamp": "2026-03-24T00:25:51.492782Z",
+      "run_count": 18,
       "state_delta": "PASS->PASS",
       "previous_result": "PASS",
       "new_result": "PASS",
-      "latency_delta_ms": 10.5,
+      "latency_delta_ms": -5.536,
       "stability_score": 1.0,
+      "improvement": true,
+      "explanation": [
+        "Latency iyileşmesi gözlendi"
+      ]
+    },
+    {
+      "check_key": "prod_env_preflight",
+      "run_id": "run-bed56621-8217-4cef-85ed-94d768895df0",
+      "timestamp": "2026-03-24T00:25:51.492782Z",
+      "run_count": 16,
+      "state_delta": "FAIL->FAIL",
+      "previous_result": "FAIL",
+      "new_result": "FAIL",
+      "latency_delta_ms": -5.536,
+      "stability_score": 0.5,
+      "improvement": false,
+      "explanation": [
+        "Latency iyileşmesi gözlendi"
+      ]
+    },
+    {
+      "check_key": "final_release_gate",
+      "run_id": "run-bed56621-8217-4cef-85ed-94d768895df0",
+      "timestamp": "2026-03-24T00:25:51.492782Z",
+      "run_count": 16,
+      "state_delta": "FAIL->FAIL",
+      "previous_result": "FAIL",
+      "new_result": "FAIL",
+      "latency_delta_ms": -5.536,
+      "stability_score": 0.5,
+      "improvement": false,
+      "explanation": [
+        "Latency iyileşmesi gözlendi"
+      ]
+    },
+    {
+      "check_key": "release_gate_contract",
+      "run_id": "run-bed56621-8217-4cef-85ed-94d768895df0",
+      "timestamp": "2026-03-24T00:25:51.492782Z",
+      "run_count": 20,
+      "state_delta": "FAIL->FAIL",
+      "previous_result": "FAIL",
+      "new_result": "FAIL",
+      "latency_delta_ms": 12.974,
+      "stability_score": 0.389,
       "improvement": false,
       "explanation": [
         "Anlamlı remediation iyileşmesi gözlenmedi"
