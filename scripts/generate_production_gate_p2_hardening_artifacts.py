@@ -181,13 +181,15 @@ def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
         payload = {"manifest_version": "2.0", "schema_version": "1.1", "artifacts": []}
 
     existing = list(payload.get("artifacts") or [])
+    tracked_files = set(os.popen("git -C /app ls-files").read().splitlines())
 
-    # keep only physically existing artifacts (phantom cleanup)
+    # keep only artifacts that are physically present AND packaged (git-tracked)
     kept: list[dict] = []
     for item in existing:
         rel = str(item.get("path") or "")
         abs_path = APP_ROOT / rel.lstrip("/")
-        if abs_path.exists():
+        rel_git = rel.lstrip("/")
+        if abs_path.exists() and rel_git in tracked_files:
             kept.append(item)
 
     # remove previous versions of required entries
@@ -209,6 +211,8 @@ def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
     for idx, old in enumerate(kept):
         rel = str(old.get("path") or "")
         abs_path = APP_ROOT / rel.lstrip("/")
+        rel_git = rel.lstrip("/")
+        in_package = rel_git in tracked_files and abs_path.exists()
         entry = {
             "path": rel,
             "absolute_path": str(abs_path),
@@ -216,7 +220,7 @@ def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
             "description": str(old.get("description") or "artifact"),
             "commit_hash": str(old.get("commit_hash") or commit_hash),
             "timestamp": str(old.get("timestamp") or now_iso),
-            "exists": abs_path.exists(),
+            "exists": in_package,
             "size_bytes": abs_path.stat().st_size if abs_path.exists() else 0,
             "chain_position": idx,
             "prev_chain_hash": prev_chain_hash,
@@ -227,6 +231,8 @@ def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
 
     for rel_path, file_type, description in required_entries:
         abs_path = APP_ROOT / rel_path.lstrip("/")
+        rel_git = rel_path.lstrip("/")
+        in_package = rel_git in tracked_files and abs_path.exists()
         entry = {
             "path": rel_path,
             "absolute_path": str(abs_path),
@@ -234,7 +240,7 @@ def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
             "description": description,
             "commit_hash": commit_hash,
             "timestamp": now_iso,
-            "exists": abs_path.exists(),
+            "exists": in_package,
             "size_bytes": abs_path.stat().st_size if abs_path.exists() else 0,
             "chain_position": len(artifacts),
             "prev_chain_hash": prev_chain_hash,
