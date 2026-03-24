@@ -252,6 +252,15 @@ class TestP0DeleteLifecycle:
         )
         assert login_after.status_code in {401, 403}
 
+        deleted_lifecycle = requests.get(
+            f"{BASE_URL}/api/admin/identity/users/deleted-lifecycle",
+            headers=_headers(super_admin_token),
+            timeout=30,
+        )
+        assert deleted_lifecycle.status_code == 200, deleted_lifecycle.text
+        ids = {item.get("user_id") for item in deleted_lifecycle.json().get("items", [])}
+        assert user_id in ids
+
     def test_hard_delete_retention_guard(self, super_admin_token: str, secondary_admin: tuple[str, str, str, str]):
         _, _, _, requester_token = secondary_admin
         user_id, _, _ = _create_regular_user()
@@ -304,6 +313,38 @@ class TestP0DeleteLifecycle:
         assert soft_request.status_code == 403
         assert "self_request_not_allowed" in soft_request.text or "super_admin_protected" in soft_request.text
 
+    def test_restore_flow_requires_approval_request(self, super_admin_token: str, secondary_admin: tuple[str, str, str, str]):
+        _, _, _, requester_token = secondary_admin
+        user_id, _, _ = _create_regular_user()
+
+        request_soft = requests.post(
+            f"{BASE_URL}/api/admin/identity/users/{user_id}/soft-delete/request",
+            headers=_headers(requester_token),
+            json={"reason": "prepare restore flow", "critical_confirmed": True},
+            timeout=30,
+        )
+        assert request_soft.status_code == 200, request_soft.text
+        soft_req_id = request_soft.json()["request_id"]
+
+        approve_soft = requests.post(
+            f"{BASE_URL}/api/admin/identity/approvals/{soft_req_id}/approve",
+            headers=_headers(super_admin_token),
+            json={"note": "approve soft delete"},
+            timeout=30,
+        )
+        assert approve_soft.status_code == 200, approve_soft.text
+
+        restore = requests.post(
+            f"{BASE_URL}/api/admin/identity/users/{user_id}/reactivate",
+            headers=_headers(requester_token),
+            json={"reason": "restore request"},
+            timeout=30,
+        )
+        assert restore.status_code == 200, restore.text
+        body = restore.json()
+        assert body.get("status") == "approval_required"
+        assert body.get("action_key") == "restore_user"
+
 
 class TestP0BulkAndSecurity:
     def test_bulk_requires_critical_confirmation(self, super_admin_token: str):
@@ -334,6 +375,26 @@ class TestP0BulkAndSecurity:
         payload = response.json()
         assert payload.get("status") == "approval_required"
         assert len(payload.get("requests_created", [])) >= 1
+
+    def test_bulk_preview_returns_risk_and_blockers(self, super_admin_token: str):
+        user_id, _, _ = _create_regular_user()
+        response = requests.post(
+            f"{BASE_URL}/api/admin/identity/users/bulk-status/preview",
+            headers=_headers(super_admin_token),
+            json={
+                "user_ids": [user_id, "missing-user-id"],
+                "status": "disabled",
+            },
+            timeout=30,
+        )
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload.get("approval_required") is True
+        assert payload.get("summary", {}).get("total") == 2
+        item_map = {item.get("user_id"): item for item in payload.get("items", [])}
+        assert item_map[user_id].get("risk_score") is not None
+        assert item_map["missing-user-id"].get("eligible") is False
+        assert "user_not_found" in item_map["missing-user-id"].get("blockers", [])
 
     def test_session_revoke_blocks_token(self, super_admin_token: str):
         user_id, email, password = _create_regular_user(approve_with_token=super_admin_token)

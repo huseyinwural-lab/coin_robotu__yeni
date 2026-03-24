@@ -53,6 +53,12 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   const [invites, setInvites] = useState([]);
   const [inviteStatusFilter, setInviteStatusFilter] = useState("all");
   const [hardDeleteCandidates, setHardDeleteCandidates] = useState([]);
+  const [deletedLifecycle, setDeletedLifecycle] = useState([]);
+  const [deletedLifecycleLoading, setDeletedLifecycleLoading] = useState(false);
+  const [selectedDeletedLifecycleUser, setSelectedDeletedLifecycleUser] = useState(null);
+  const [bulkPreviewData, setBulkPreviewData] = useState(null);
+  const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
+  const [bulkExecutionResult, setBulkExecutionResult] = useState(null);
 
   useEffect(() => {
     setFilters((prev) => ({
@@ -98,6 +104,30 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       return acc;
     }, {});
   }, [users]);
+
+  const approvalImpactSummary = useMemo(() => {
+    const pendingItems = approvalQueue.filter((item) => item.status === "pending");
+    const impactedUsers = new Set(pendingItems.map((item) => item.target_user_id).filter(Boolean));
+    const riskWeights = {
+      hard_delete_user: 95,
+      soft_delete_user: 85,
+      delete_user: 85,
+      grant_privileged_role: 90,
+      raise_capital_limit: 80,
+      enable_live_trading: 75,
+      disable_admin: 70,
+      disable_user: 60,
+      enable_user: 50,
+      restore_user: 65,
+    };
+    const riskTotal = pendingItems.reduce((acc, item) => acc + (riskWeights[item.action_key] || 45), 0);
+    const normalizedRiskScore = pendingItems.length ? Math.min(100, Math.round(riskTotal / pendingItems.length)) : 0;
+    return {
+      pendingCount: pendingItems.length,
+      impactedUsers: impactedUsers.size,
+      normalizedRiskScore,
+    };
+  }, [approvalQueue]);
 
   const handleCreateAdmin = async () => {
     if (!createForm.email.trim() || !createForm.password.trim()) {
@@ -234,6 +264,8 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       });
       toast.success(`Soft delete approval request açıldı (${data?.request_id})`);
       await loadUsers();
+      await loadHardDeleteCandidates();
+      await loadDeletedLifecycle();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Soft delete request açılamadı");
     }
@@ -249,8 +281,44 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       });
       toast.success(`Hard delete approval request açıldı (${data?.request_id})`);
       await loadUsers();
+      await loadHardDeleteCandidates();
+      await loadDeletedLifecycle();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Hard delete request açılamadı");
+    }
+  };
+
+  const requestRestoreUser = async (userId) => {
+    const confirmPayload = getCriticalConfirmation("Restore user request");
+    if (!confirmPayload) return;
+    try {
+      const { data } = await apiClient.post(`/admin/identity/users/${userId}/reactivate`, {
+        reason: confirmPayload.reason,
+      });
+      toast.success(`Restore approval request açıldı (${data?.request_id})`);
+      await loadApprovalQueue();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Restore request açılamadı");
+    }
+  };
+
+  const previewBulkStatus = async (status) => {
+    if (selectedUserIds.length === 0) {
+      toast.error("Önce kullanıcı seçin");
+      return;
+    }
+    setBulkPreviewLoading(true);
+    setBulkExecutionResult(null);
+    try {
+      const { data } = await apiClient.post("/admin/identity/users/bulk-status/preview", {
+        user_ids: selectedUserIds,
+        status,
+      });
+      setBulkPreviewData({ ...data, requestedStatus: status });
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bulk preview alınamadı");
+    } finally {
+      setBulkPreviewLoading(false);
     }
   };
 
@@ -270,8 +338,12 @@ export const AdminUsersPage = ({ scope = "user" }) => {
         critical_confirmed: true,
       });
       toast.success(`Bulk ${status} tamamlandı (success=${data?.success ?? 0})`);
+      setBulkExecutionResult(data || null);
       setSelectedUserIds([]);
       await loadUsers();
+      await loadApprovalQueue();
+      await loadDeletedLifecycle();
+      await loadHardDeleteCandidates();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Bulk işlem başarısız");
     } finally {
@@ -518,6 +590,18 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     }
   }, []);
 
+  const loadDeletedLifecycle = useCallback(async () => {
+    setDeletedLifecycleLoading(true);
+    try {
+      const { data } = await apiClient.get("/admin/identity/users/deleted-lifecycle", { params: { limit: 200 } });
+      setDeletedLifecycle(data?.items || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Deleted lifecycle yüklenemedi");
+    } finally {
+      setDeletedLifecycleLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
@@ -531,7 +615,8 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     loadCustomRoles();
     loadInvites();
     loadHardDeleteCandidates();
-  }, [loadApprovalPolicies, loadCustomRoles, loadInvites, loadHardDeleteCandidates]);
+    loadDeletedLifecycle();
+  }, [loadApprovalPolicies, loadCustomRoles, loadInvites, loadHardDeleteCandidates, loadDeletedLifecycle]);
 
   const toggleSelectAll = () => {
     if (selectedUserIds.length === users.length) {
@@ -658,12 +743,28 @@ export const AdminUsersPage = ({ scope = "user" }) => {
             Yenile
           </Button>
           <Button
+            className="border border-black bg-yellow-200 text-black hover:bg-yellow-300"
+            onClick={() => previewBulkStatus("disabled")}
+            disabled={bulkPreviewLoading || selectedUserIds.length === 0}
+            data-testid="admin-users-bulk-disable-preview-button"
+          >
+            Preview Disable
+          </Button>
+          <Button
             className="border border-black bg-red-200 text-black hover:bg-red-300"
             onClick={() => applyBulkStatus("disabled")}
             disabled={bulkLoading || selectedUserIds.length === 0}
             data-testid="admin-users-bulk-disable-button"
           >
             Bulk Disable
+          </Button>
+          <Button
+            className="border border-black bg-yellow-200 text-black hover:bg-yellow-300"
+            onClick={() => previewBulkStatus("active")}
+            disabled={bulkPreviewLoading || selectedUserIds.length === 0}
+            data-testid="admin-users-bulk-enable-preview-button"
+          >
+            Preview Enable
           </Button>
           <Button
             className="border border-black bg-emerald-200 text-black hover:bg-emerald-300"
@@ -673,6 +774,22 @@ export const AdminUsersPage = ({ scope = "user" }) => {
           >
             Bulk Enable
           </Button>
+          <Button
+            className="border border-black bg-yellow-200 text-black hover:bg-yellow-300"
+            onClick={() => previewBulkStatus("deleted")}
+            disabled={bulkPreviewLoading || selectedUserIds.length === 0}
+            data-testid="admin-users-bulk-delete-preview-button"
+          >
+            Preview Soft Delete
+          </Button>
+          <Button
+            className="border border-black bg-red-300 text-black hover:bg-red-400"
+            onClick={() => applyBulkStatus("deleted")}
+            disabled={bulkLoading || selectedUserIds.length === 0}
+            data-testid="admin-users-bulk-delete-button"
+          >
+            Bulk Soft Delete
+          </Button>
           <p className="text-sm text-black" data-testid="admin-users-count-text">
             Toplam kullanıcı: {pagination.total}
           </p>
@@ -680,6 +797,11 @@ export const AdminUsersPage = ({ scope = "user" }) => {
             super_admin:{roleCounts.super_admin || 0} · admin:{roleCounts.admin || 0} · ops:{roleCounts.ops || 0} · user:{roleCounts.user || 0}
           </p>
           <p className="text-xs text-black/80" data-testid="admin-users-selected-count-text">Seçili: {selectedUserIds.length}</p>
+          {bulkExecutionResult && (
+            <p className="text-xs text-black/80" data-testid="admin-users-bulk-execution-result-text">
+              partial_execution={String(Boolean((bulkExecutionResult?.failed || []).length > 0))} · requested={bulkExecutionResult?.requested ?? 0} · success={bulkExecutionResult?.success ?? 0}
+            </p>
+          )}
         </div>
 
         <div className="grid gap-2 border border-black/30 bg-orange-50 p-3 md:grid-cols-4" data-testid="admin-users-pagination-panel">
@@ -875,6 +997,57 @@ export const AdminUsersPage = ({ scope = "user" }) => {
         </Table>
       </div>
 
+      {(bulkPreviewData || bulkPreviewLoading) && (
+        <div className="space-y-3 border border-black/30 bg-yellow-50 p-3" data-testid="admin-users-bulk-preview-panel">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-users-bulk-preview-header-row">
+            <h3 className="text-sm font-bold uppercase tracking-wide" data-testid="admin-users-bulk-preview-title">
+              Bulk Preview {bulkPreviewData?.requestedStatus ? `(${bulkPreviewData.requestedStatus})` : ""}
+            </h3>
+            <div className="flex flex-wrap gap-2" data-testid="admin-users-bulk-preview-header-actions">
+              <Button size="sm" variant="outline" onClick={() => setBulkPreviewData(null)} data-testid="admin-users-bulk-preview-close-button">Kapat</Button>
+              <Button
+                size="sm"
+                className="border border-black bg-black text-orange-300 hover:bg-zinc-900"
+                onClick={() => applyBulkStatus(bulkPreviewData?.requestedStatus || "disabled")}
+                disabled={bulkLoading || !bulkPreviewData?.requestedStatus}
+                data-testid="admin-users-bulk-preview-execute-button"
+              >
+                Preview Sonrası Uygula
+              </Button>
+            </div>
+          </div>
+
+          {bulkPreviewLoading ? (
+            <p className="text-xs text-black/70" data-testid="admin-users-bulk-preview-loading-text">Bulk preview hazırlanıyor...</p>
+          ) : (
+            <>
+              <div className="grid gap-2 border border-black/20 bg-white p-2 md:grid-cols-5" data-testid="admin-users-bulk-preview-summary-grid">
+                <p className="text-xs" data-testid="admin-users-bulk-preview-total">total={bulkPreviewData?.summary?.total ?? 0}</p>
+                <p className="text-xs" data-testid="admin-users-bulk-preview-eligible">eligible={bulkPreviewData?.summary?.eligible_count ?? 0}</p>
+                <p className="text-xs" data-testid="admin-users-bulk-preview-blocked">blocked={bulkPreviewData?.summary?.blocked_count ?? 0}</p>
+                <p className="text-xs" data-testid="admin-users-bulk-preview-high-risk">high_risk={bulkPreviewData?.summary?.high_risk_count ?? 0}</p>
+                <p className="text-xs" data-testid="admin-users-bulk-preview-partial">partial_execution_expected={String(Boolean(bulkPreviewData?.summary?.partial_execution_expected))}</p>
+              </div>
+
+              <div className="space-y-2" data-testid="admin-users-bulk-preview-item-list">
+                {(bulkPreviewData?.items || []).map((item) => (
+                  <div key={item.user_id} className="border border-black/20 bg-white p-2" data-testid={`admin-users-bulk-preview-item-${item.user_id}`}>
+                    <p className="text-xs" data-testid={`admin-users-bulk-preview-email-${item.user_id}`}>{item.email || item.user_id}</p>
+                    <p className="text-xs" data-testid={`admin-users-bulk-preview-risk-${item.user_id}`}>
+                      risk_badge={item.risk_badge} · risk_score={item.risk_score}
+                    </p>
+                    <p className="text-xs" data-testid={`admin-users-bulk-preview-eligible-${item.user_id}`}>eligible={String(Boolean(item.eligible))}</p>
+                    <p className="text-xs text-black/80" data-testid={`admin-users-bulk-preview-blockers-${item.user_id}`}>
+                      blockers={(item.blockers || []).join(", ") || "-"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-users-control-panels-grid">
         <div className="space-y-3 border border-black/30 bg-orange-50 p-3" data-testid="admin-users-approval-queue-panel">
           <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-users-approval-queue-header-row">
@@ -892,6 +1065,12 @@ export const AdminUsersPage = ({ scope = "user" }) => {
               </select>
               <Button size="sm" variant="outline" onClick={loadApprovalQueue} data-testid="admin-users-approval-refresh-button">Yenile</Button>
             </div>
+          </div>
+
+          <div className="grid gap-2 border border-black/20 bg-white p-2 md:grid-cols-3" data-testid="admin-users-approval-impact-summary-grid">
+            <p className="text-xs" data-testid="admin-users-approval-impact-pending-count">pending={approvalImpactSummary.pendingCount}</p>
+            <p className="text-xs" data-testid="admin-users-approval-impact-user-count">impacted_users={approvalImpactSummary.impactedUsers}</p>
+            <p className="text-xs" data-testid="admin-users-approval-impact-risk-score">risk_score={approvalImpactSummary.normalizedRiskScore}</p>
           </div>
 
           <div className="space-y-2" data-testid="admin-users-approval-list">
@@ -1207,6 +1386,12 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                 <p className="text-[11px]" data-testid={`admin-users-hard-delete-candidate-eligible-${candidate.user_id}`}>
                   eligible={String(Boolean(candidate.eligible))}
                 </p>
+                <p className="text-[11px]" data-testid={`admin-users-hard-delete-candidate-retention-${candidate.user_id}`}>
+                  retention_days_remaining={candidate.retention_days_remaining ?? 0}
+                </p>
+                <p className="text-[11px]" data-testid={`admin-users-hard-delete-candidate-risk-${candidate.user_id}`}>
+                  risk_score={candidate.risk_score ?? 0}
+                </p>
                 <p className="text-[11px] text-black/75" data-testid={`admin-users-hard-delete-candidate-blockers-${candidate.user_id}`}>
                   blockers={(candidate.blockers || []).join(", ") || "-"}
                 </p>
@@ -1216,8 +1401,64 @@ export const AdminUsersPage = ({ scope = "user" }) => {
               <p className="text-xs text-black/70" data-testid="admin-users-hard-delete-candidates-empty-text">Aday bulunamadı.</p>
             )}
           </div>
+
+          <div className="space-y-2 border border-black/20 bg-white p-2" data-testid="admin-users-deleted-lifecycle-panel">
+            <div className="flex items-center justify-between" data-testid="admin-users-deleted-lifecycle-header-row">
+              <p className="text-xs font-semibold" data-testid="admin-users-deleted-lifecycle-title">Deleted Users Lifecycle</p>
+              <Button size="sm" variant="outline" onClick={loadDeletedLifecycle} data-testid="admin-users-deleted-lifecycle-refresh-button">Yenile</Button>
+            </div>
+
+            {deletedLifecycleLoading ? (
+              <p className="text-xs text-black/70" data-testid="admin-users-deleted-lifecycle-loading-text">Deleted lifecycle yükleniyor...</p>
+            ) : (
+              <div className="space-y-2" data-testid="admin-users-deleted-lifecycle-list">
+                {deletedLifecycle.slice(0, 12).map((item) => (
+                  <div key={item.user_id} className="space-y-1 border border-black/10 p-2" data-testid={`admin-users-deleted-lifecycle-item-${item.user_id}`}>
+                    <p className="text-[11px] font-semibold" data-testid={`admin-users-deleted-lifecycle-email-${item.user_id}`}>{item.email}</p>
+                    <p className="text-[11px]" data-testid={`admin-users-deleted-lifecycle-deleted-at-${item.user_id}`}>deleted_at={item.deleted_at || "-"}</p>
+                    <p className="text-[11px]" data-testid={`admin-users-deleted-lifecycle-retention-${item.user_id}`}>retention_days_remaining={item.retention_days_remaining ?? 0}</p>
+                    <p className="text-[11px]" data-testid={`admin-users-deleted-lifecycle-risk-${item.user_id}`}>risk_score={item.risk_score ?? 0}</p>
+                    <p className="text-[11px] text-black/75" data-testid={`admin-users-deleted-lifecycle-blockers-${item.user_id}`}>
+                      blockers={(item.blockers || []).join(", ") || "-"}
+                    </p>
+                    <div className="flex flex-wrap gap-2" data-testid={`admin-users-deleted-lifecycle-actions-${item.user_id}`}>
+                      <Button size="sm" variant="outline" onClick={() => setSelectedDeletedLifecycleUser(item)} data-testid={`admin-users-deleted-lifecycle-detail-button-${item.user_id}`}>
+                        Detail
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => requestRestoreUser(item.user_id)} data-testid={`admin-users-deleted-lifecycle-restore-button-${item.user_id}`}>
+                        Restore Req
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => requestHardDelete({ id: item.user_id })} data-testid={`admin-users-deleted-lifecycle-hard-delete-button-${item.user_id}`}>
+                        Hard Delete Req
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {deletedLifecycle.length === 0 && (
+                  <p className="text-xs text-black/70" data-testid="admin-users-deleted-lifecycle-empty-text">Deleted kullanıcı bulunamadı.</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {selectedDeletedLifecycleUser && (
+        <div className="space-y-2 border border-black/30 bg-orange-50 p-3" data-testid="admin-users-delete-detail-panel">
+          <div className="flex items-center justify-between" data-testid="admin-users-delete-detail-header-row">
+            <p className="text-sm font-semibold" data-testid="admin-users-delete-detail-title">Delete Detail: {selectedDeletedLifecycleUser.email}</p>
+            <Button variant="outline" onClick={() => setSelectedDeletedLifecycleUser(null)} data-testid="admin-users-delete-detail-close-button">Kapat</Button>
+          </div>
+          <div className="grid gap-2 border border-black/20 bg-white p-2 text-xs" data-testid="admin-users-delete-detail-grid">
+            <p data-testid="admin-users-delete-detail-user-id">user_id: {selectedDeletedLifecycleUser.user_id}</p>
+            <p data-testid="admin-users-delete-detail-deleted-at">deleted_at: {selectedDeletedLifecycleUser.deleted_at || "-"}</p>
+            <p data-testid="admin-users-delete-detail-retention">retention_days_remaining: {selectedDeletedLifecycleUser.retention_days_remaining ?? 0}</p>
+            <p data-testid="admin-users-delete-detail-hard-delete-eligible">eligible_for_hard_delete: {String(Boolean(selectedDeletedLifecycleUser.eligible_for_hard_delete))}</p>
+            <p data-testid="admin-users-delete-detail-risk-score">risk_score: {selectedDeletedLifecycleUser.risk_score ?? 0}</p>
+            <p data-testid="admin-users-delete-detail-blockers">blockers: {(selectedDeletedLifecycleUser.blockers || []).join(", ") || "-"}</p>
+          </div>
+        </div>
+      )}
 
       {securityDetailUserId && (
         <div className="space-y-2 border border-black/30 bg-orange-50 p-3" data-testid="admin-users-security-detail-panel">

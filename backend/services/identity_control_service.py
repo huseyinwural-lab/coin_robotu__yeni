@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from math import ceil
 
 from fastapi import HTTPException, Request, status
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from db import redis_client
@@ -1014,6 +1014,42 @@ def _validate_hard_delete_guard(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hard_delete_blocked_by_scope_dependency")
 
 
+def _purge_user_fk_dependencies(db: Session, *, user_id: str) -> dict[str, int]:
+    fk_rows = db.execute(
+        text(
+            """
+            SELECT tc.table_name, kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+             AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage ccu
+              ON ccu.constraint_name = tc.constraint_name
+             AND ccu.table_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND tc.table_schema = 'public'
+              AND ccu.table_name = 'users'
+              AND ccu.column_name = 'id'
+            ORDER BY tc.table_name
+            """
+        )
+    ).fetchall()
+
+    skipped_tables = {"users", "audit_logs"}
+    purge_counts: dict[str, int] = {}
+    for row in fk_rows:
+        table_name = str(row.table_name)
+        column_name = str(row.column_name)
+        if table_name in skipped_tables:
+            continue
+        delete_stmt = text(f'DELETE FROM "{table_name}" WHERE "{column_name}" = :user_id')
+        result = db.execute(delete_stmt, {"user_id": user_id})
+        deleted_rows = int(result.rowcount or 0)
+        if deleted_rows > 0:
+            purge_counts[f"{table_name}.{column_name}"] = purge_counts.get(f"{table_name}.{column_name}", 0) + deleted_rows
+    return purge_counts
+
+
 def _apply_approval_action(db: Session, *, action_key: str, target: User, payload: dict, actor: User) -> None:
     profile = get_or_create_identity_profile(db, target.id)
     now = _utcnow()
@@ -1054,16 +1090,22 @@ def _apply_approval_action(db: Session, *, action_key: str, target: User, payloa
             actor=actor,
             exclude_request_id=str(payload.get("approval_request_id") or "") or None,
         )
-        profile.hard_deleted_at = now
-        profile.hard_delete_request_id = str(payload.get("approval_request_id") or "") or None
-        profile.trading_enabled = False
-        profile.live_trading_eligible = False
-        target.is_active = False
-        target.disabled_at = now
-        anonymized_suffix = target.id.replace("-", "")[:12]
-        target.email = f"hard-deleted+{anonymized_suffix}@deleted.local"
-        target.role = UserRole.USER
-        _revoke_all_sessions_for_user(db, target_user_id=target.id, actor=actor, reason="hard_deleted")
+        purge_counts = _purge_user_fk_dependencies(db, user_id=target.id)
+        create_audit_log(
+            db,
+            action="IDENTITY_USER_HARD_DELETE_FINALIZED",
+            entity_type="user",
+            entity_id=target.id,
+            actor_user_id=actor.id,
+            actor_role=actor.role.value,
+            severity="warning",
+            details={
+                "approval_request_id": str(payload.get("approval_request_id") or "") or None,
+                "purge_counts": purge_counts,
+            },
+        )
+        db.delete(target)
+        return
     elif action_key == "enable_live_trading":
         if profile.deleted_at is not None or profile.hard_deleted_at is not None or profile.soft_deleted_at is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="deleted_user_cannot_enable_trading")
@@ -1344,11 +1386,23 @@ def hard_delete_candidate_snapshot(db: Session, *, user: User) -> dict:
     except HTTPException as exc:
         eligible = False
         reasons.append(str(exc.detail))
+    deleted_at = profile.deleted_at or profile.soft_deleted_at
+    deleted_age_days = 0
+    retention_days_remaining = 0
+    if deleted_at is not None:
+        baseline = deleted_at if deleted_at.tzinfo else deleted_at.replace(tzinfo=timezone.utc)
+        delta_days = max(int((_utcnow() - baseline).total_seconds() // 86400), 0)
+        deleted_age_days = delta_days
+        retention_days_remaining = max(90 - delta_days, 0)
+
     return {
         "user_id": user.id,
         "email": user.email,
-        "deleted_at": profile.deleted_at or profile.soft_deleted_at,
+        "deleted_at": deleted_at,
+        "deleted_age_days": deleted_age_days,
+        "retention_days_remaining": retention_days_remaining,
         "eligible": eligible,
+        "risk_score": 30 if eligible else min(100, 60 + (len(reasons) * 10)),
         "blockers": reasons,
     }
 

@@ -174,6 +174,19 @@ def _request_if_critical(
     }
 
 
+def _resolve_bulk_action_key(payload: BulkStatusRequest) -> str:
+    requested_action = (payload.action or "").strip().lower()
+    if not requested_action:
+        requested_action = {
+            "disabled": "bulk_disable_users",
+            "active": "bulk_enable_users",
+            "deleted": "bulk_soft_delete_users",
+        }.get(payload.status, "")
+    if requested_action not in {"bulk_disable_users", "bulk_enable_users", "bulk_soft_delete_users", "bulk_restore_users"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_bulk_action")
+    return requested_action
+
+
 @router.get("/users")
 def admin_identity_users(
     search: str | None = Query(default=None),
@@ -372,15 +385,7 @@ def admin_identity_bulk_status(
     if not payload.critical_confirmed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
 
-    requested_action = (payload.action or "").strip().lower()
-    if not requested_action:
-        requested_action = {
-            "disabled": "bulk_disable_users",
-            "active": "bulk_enable_users",
-            "deleted": "bulk_soft_delete_users",
-        }.get(payload.status, "")
-    if requested_action not in {"bulk_disable_users", "bulk_enable_users", "bulk_soft_delete_users", "bulk_restore_users"}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_bulk_action")
+    requested_action = _resolve_bulk_action_key(payload)
 
     success = 0
     failed = []
@@ -446,6 +451,90 @@ def admin_identity_bulk_status(
     }
 
 
+@router.post("/users/bulk-status/preview")
+def admin_identity_bulk_status_preview(
+    payload: BulkStatusRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.users.read")
+    requested_action = _resolve_bulk_action_key(payload)
+
+    user_ids = list(dict.fromkeys([str(item).strip() for item in payload.user_ids if str(item).strip()]))
+    if not user_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_ids_required")
+
+    preview_items = []
+    for user_id in user_ids:
+        target = db.query(User).filter(User.id == user_id).first()
+        if target is None:
+            preview_items.append(
+                {
+                    "user_id": user_id,
+                    "email": None,
+                    "eligible": False,
+                    "approval_required": True,
+                    "risk_score": 100,
+                    "risk_badge": "high",
+                    "blockers": ["user_not_found"],
+                }
+            )
+            continue
+
+        profile = get_or_create_identity_profile(db, target.id)
+        eligibility = evaluate_user_eligibility(db, user=target, grace_days=7, commit=True)
+        blockers: list[str] = []
+
+        if requested_action == "bulk_soft_delete_users" and target.role == UserRole.SUPER_ADMIN:
+            blockers.append("super_admin_protected")
+        if requested_action in {"bulk_enable_users", "bulk_restore_users"} and profile.hard_deleted_at is not None:
+            blockers.append("hard_deleted_user_cannot_be_restored")
+        if requested_action == "bulk_enable_users" and bool(eligibility.get("checks", {}).get("kill_switch_inactive")) is False:
+            blockers.append("kill_switch_active")
+
+        risk_score = 25
+        if blockers:
+            risk_score = min(100, 55 + (len(set(blockers)) * 12))
+
+        risk_badge = "low"
+        if risk_score >= 80:
+            risk_badge = "high"
+        elif risk_score >= 50:
+            risk_badge = "medium"
+
+        preview_items.append(
+            {
+                "user_id": target.id,
+                "email": target.email,
+                "role": target.role.value,
+                "current_status": target.status,
+                "eligible": len(blockers) == 0,
+                "approval_required": True,
+                "risk_score": risk_score,
+                "risk_badge": risk_badge,
+                "blockers": list(dict.fromkeys(blockers)),
+            }
+        )
+
+    blocked_count = len([item for item in preview_items if not item.get("eligible")])
+    total = len(preview_items)
+    eligible_count = total - blocked_count
+    high_risk_count = len([item for item in preview_items if item.get("risk_badge") == "high"])
+
+    return {
+        "action_key": requested_action,
+        "approval_required": True,
+        "items": preview_items,
+        "summary": {
+            "total": total,
+            "eligible_count": eligible_count,
+            "blocked_count": blocked_count,
+            "high_risk_count": high_risk_count,
+            "partial_execution_expected": blocked_count > 0,
+        },
+    }
+
+
 @router.post("/users/{user_id}/kill-switch")
 def admin_identity_kill_switch(
     user_id: str,
@@ -490,23 +579,26 @@ def admin_identity_reactivate_user(
     target = db.query(User).filter(User.id == user_id).first()
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
-    profile = get_or_create_identity_profile(db, user_id)
-    profile.soft_deleted_at = None
-    profile.reactivated_at = datetime.now(timezone.utc)
-    target.is_active = True
-    target.disabled_at = None
-    db.commit()
-    evaluate_user_eligibility(db, user=target, commit=True)
+
+    response = _request_if_critical(
+        db=db,
+        actor=current_admin,
+        action_key="restore_user",
+        target_user_id=target.id,
+        payload={"critical_confirmed": True, "reason": payload.reason},
+        reason=payload.reason,
+    )
+
     create_audit_log(
         db,
-        action="IDENTITY_USER_REACTIVATED",
-        entity_type="user",
-        entity_id=user_id,
+        action="IDENTITY_USER_RESTORE_REQUESTED",
+        entity_type="approval_request",
+        entity_id=response.get("request_id") or user_id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details={"reason": payload.reason},
+        details={"reason": payload.reason, "user_id": user_id, "action_key": "restore_user"},
     )
-    return {"user_id": user_id, "status": "reactivated"}
+    return response
 
 
 @router.post("/users/{user_id}/hard-delete/request")
@@ -940,6 +1032,40 @@ def admin_identity_hard_delete_candidates(
         if not deleted_at:
             continue
         items.append(snapshot)
+    return {"items": items, "total": len(items)}
+
+
+@router.get("/users/deleted-lifecycle")
+def admin_identity_deleted_lifecycle(
+    limit: int = Query(default=200, ge=1, le=500),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.users.read")
+    users = db.query(User).order_by(User.created_at.desc()).limit(limit).all()
+    items: list[dict] = []
+    for user in users:
+        snapshot = hard_delete_candidate_snapshot(db, user=user)
+        if not snapshot.get("deleted_at"):
+            continue
+        eligibility = evaluate_user_eligibility(db, user=user, grace_days=7, commit=True)
+        items.append(
+            {
+                "user_id": user.id,
+                "email": user.email,
+                "role": user.role.value,
+                "status": user.status,
+                "is_active": bool(user.is_active),
+                "deleted_at": snapshot.get("deleted_at"),
+                "deleted_age_days": snapshot.get("deleted_age_days", 0),
+                "retention_days_remaining": snapshot.get("retention_days_remaining", 0),
+                "eligible_for_hard_delete": bool(snapshot.get("eligible")),
+                "risk_score": int(snapshot.get("risk_score") or 0),
+                "blockers": list(snapshot.get("blockers") or []),
+                "live_trading_eligible": bool(eligibility.get("live_trading_eligible")),
+                "trading_enabled": bool(eligibility.get("trading_enabled")),
+            }
+        )
     return {"items": items, "total": len(items)}
 
 
