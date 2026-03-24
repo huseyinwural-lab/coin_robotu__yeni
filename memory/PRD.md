@@ -1,3 +1,48 @@
+## 2026-03-24 — P2 Final Polish (Son %2) ✅
+
+### 1) Session & Login UX hardening
+- Security detail panelinde loading skeleton eklendi.
+- Security detail için retryable error state eklendi.
+- Observability panelinde loading/error/retry state standardı tamamlandı.
+
+### 2) Inline edit diff preview
+- Kritik inline edit aksiyonlarında diff preview eklendi:
+  - role
+  - status
+  - trading_enabled
+  - kill_switch_active
+- İşlem öncesi kullanıcıya “önceki -> yeni” gösterilip ikinci onay alınır.
+
+### 3) Approval impact derinleştirme
+- Approval impact payload genişletildi:
+  - `risk_delta`
+  - `numeric_changes` (örn. capital_limit_delta)
+  - impacted users + blockers + changed fields
+- UI approval diff kartında bu alanlar render edildi.
+
+### 4) Observability chart layer
+- AdminUsersPage observability kartlarına trend chart katmanı eklendi:
+  - failed login trend
+  - execution window trend
+  - trading window trend
+
+### 5) Trade summary card
+- Trading observability kartına kısa trade summary eklendi:
+  - count + live/paused state
+
+### 6) MFA bypass güvenliği (a + c)
+- Controlled override modeli aktif:
+  - `MFA_OPTIONAL_OVERRIDE_EMAILS` allow-list
+  - `MFA_ENFORCEMENT_MODE=auto` + runtime env’e göre enforce kararı
+- Production default enforce, preview/dev’de optional davranış.
+- Canary hesabı allow-list altında bırakıldı ve login sonunda tekrar `mfa_required=false` doğrulandı.
+
+### Test kanıtı
+- `pytest -q tests/test_identity_control_p0_hardening.py -k P1ObservabilityAndApprovalHardening` → **9 passed**
+- `pytest -q tests/test_mfa_enforcement_policy.py` → **5 passed**
+- `auto_frontend_testing_agent` final P2 matrix → PASS
+- Manual/deep backend smoke ile endpoint ve payload doğrulamaları tamamlandı.
+
 ## 2026-03-24 — P1/P2 Operatör Karar Katmanı Genişletmesi ✅
 
 ### P1 — User Observability kapanışı
