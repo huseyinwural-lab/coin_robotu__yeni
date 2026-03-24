@@ -1,3 +1,56 @@
+## 2026-03-24 — P1/P2 Operatör Karar Katmanı Genişletmesi ✅
+
+### P1 — User Observability kapanışı
+- Yeni backend endpointleri eklendi:
+  - `GET /api/admin/identity/users/{id}/activity-timeline`
+  - `GET /api/admin/identity/users/{id}/security-telemetry`
+  - `GET /api/admin/identity/users/{id}/execution-metrics`
+  - `GET /api/admin/identity/users/{id}/trading-observability`
+- Endpointler 24h/7d/30d özetleri, normalized severity/risk ve karar-verilebilir kart payload’ları döner.
+- `AdminUsersPage` içine observability panel kartları eklendi:
+  - activity timeline
+  - security telemetry (failed trend, suspicious signals, MFA failure)
+  - execution/reliability (success rate, error count, latency, error categories)
+  - trading observability (trade count, live trading state, strategy/bot/account etkisi, trade history link)
+- Loading skeleton + retryable error + empty state yüzeyleri observability panelinde işlendi.
+
+### P1 — Approval katı sıkılaştırma
+- Mandatory reason enforce güçlendirildi (`identity_control_service.py`):
+  - request reason min length zorunlu
+  - approval note min length zorunlu
+  - high-risk action’larda `override_reason` zorunlu
+- Approval queue listesine impact delta payload eklendi:
+  - previous vs desired state
+  - changed fields
+  - blockers/dependencies
+  - risk score/level
+  - impacted users count
+- Frontend Approval Queue’de diff/impact kartı + high-risk banner render edildi.
+
+### P1 — Bulk preview derinleştirme
+- Bulk preview summary genişletildi:
+  - impacted/eligible/blocked/high-risk
+  - `risk_score_total`
+  - `blocker_breakdown`
+  - `action_summary`
+  - `partial_execution_expected`
+- UI’da fail olacak satırlar kırmızı blok olarak işaretleniyor.
+
+### P2 — UX hardening ve runtime kanıtı
+- Guarded critical reason promptları: min char + high-risk override_reason prompt.
+- Runtime config kanıtı repo’ya eklendi:
+  - `deploy/supervisor_control_plane.conf`
+  - `deploy/README.md`
+  - (mevcut) `scripts/start_backend_with_db_guard.sh` + wait-for-db akışı
+
+### Test doğrulaması
+- `pytest -q tests/test_identity_control_p0_hardening.py -k "P1ObservabilityAndApprovalHardening"` → **9 passed**
+- `deep_testing_backend_v2` P1/P2 matrix → PASS
+- `auto_frontend_testing_agent` P1/P2 UI matrix → PASS (observability kartları, approval diff kartları, bulk preview summary)
+
+### MFA operasyon notu (canary hesabı)
+- Kullanıcı talebine uygun olarak `canary.admin@platform.local` hesabında MFA tekrar pasif set edildi (`mfa_required=false` direct login).
+
 ## 2026-03-24 — MFA Policy Revizyonu (Kullanıcı Tercihine Bağlı) ✅
 
 ### Kullanıcı talebine göre yapılan değişiklik
