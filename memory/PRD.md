@@ -1,3 +1,30 @@
+## 2026-03-24 — P0.5 Final Closure (Consistency + Validation Tightening) ✅
+
+### Tamamlanan maddeler
+- Observability endpointleri standardize edildi ve tek sözleşmeye alındı:
+  - `GET /api/admin/identity/users/{id}/activity-timeline`
+  - `GET /api/admin/identity/users/{id}/security-telemetry`
+  - `GET /api/admin/identity/users/{id}/execution-metrics`
+  - `GET /api/admin/identity/users/{id}/trading-observability`
+  - Ortak response contract: `status`, `contract_version`, `user_id`, `metric`, `generated_at`, `data`
+- Frontend (`AdminUsersPage.jsx`) yeni observability contract ile birebir uyumlu hale getirildi (`response.data.data` unwrap fallback destekli).
+
+- Request-level reason validation sıkılaştırıldı (`approval` aşamasına gitmeden fail):
+  - Kapsam: disable, delete, restore, role change, trading enable, capital change, bulk request
+  - Hata modeli: `HTTP 400 -> request_reason_too_short`
+  - Uygulanan noktalar: `/approvals/request`, `/users/bulk-status`, `/users/{id}/soft-delete/request`, `/users/{id}/hard-delete/request`, kritik inline request helper.
+
+- MFA bypass audit + UI görünürlüğü eklendi:
+  - Bypass context: allow-list bazlı (`MFA_OPTIONAL_OVERRIDE_EMAILS`)
+  - Login sırasında bypass aktifse audit log: `MFA_ENFORCEMENT_BYPASS_ACTIVE`
+  - Log detayları: `user/email`, `reason=allow_list`, `environment`, `endpoint_scope`
+  - Security detail response’a eklendi: `mfa.bypass_active`, `mfa.bypass_reason`, `mfa.environment`
+  - UI badge eklendi: `MFA bypass active` (`data-testid="admin-users-security-mfa-bypass-active-badge"`)
+
+### Doğrulama sonucu
+- Backend regression: PASS (observability 200 + contract, reason validation 400, contract freeze korunumu)
+- Frontend E2E: PASS (security panel, MFA bypass badge, observability kartları, JS crash yok)
+
 ## 2026-03-24 — Commercial Ops P0 Sprint Başlangıcı (Binance REST + Canonical PnL/Reconciliation) 🚧
 
 ### 2026-03-24 Gece Güncellemesi — P0 Closure Doğrulama (Futures-Only PASS, Spot Regional Blocker)

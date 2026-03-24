@@ -1,5 +1,14 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-24 P0.5 Closure Durumu
+- ✅ Tamamlandı:
+  - Observability endpoint standardizasyonu + frontend uyumu
+  - Request-level reason validation enforcement
+  - MFA bypass audit + UI badge
+  - Endpoint contract freeze korunumu (impact_delta/risk_delta/numeric_changes + bulk preview summary)
+- 🔜 Sonraki net adım:
+  - Spot regional erişim blocker kalkınca Spot+Futures live-gate final PASS (Commercial Ops P0 tam kapanış)
+
 ## 2026-03-24 Commercial Ops P0 (Aktif Sprint)
 - ✅ Tamamlandı (Bu tur):
   1. Canonical trade schema + PnL/Reconciliation domain tabloları

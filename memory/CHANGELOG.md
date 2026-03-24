@@ -1,5 +1,17 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-24 (P0.5 Final Closure)
+### Consistency + Validation Tightening
+- Identity observability endpointleri ortak response contract ile standardize edildi (`status`, `contract_version`, `user_id`, `metric`, `generated_at`, `data`).
+- Frontend AdminUsersPage observability parse katmanı yeni contract ile uyumlu hale getirildi.
+- Request-level reason validation güçlendirildi; kısa reason artık approval’a gitmeden `400 request_reason_too_short` dönüyor (disable/delete/restore/role/trading/capital/bulk).
+- MFA bypass context + audit eklendi:
+  - Login bypass olduğunda `MFA_ENFORCEMENT_BYPASS_ACTIVE` audit log yazılıyor.
+  - Security detail API ve UI’de `MFA bypass active` badge gösteriliyor.
+- Regression testing sonuçları:
+  - Backend: PASS
+  - Frontend: PASS
+
 ## 2026-03-24 (Commercial Ops P0 Kickoff)
 ### Binance REST Ingestion + Canonical PnL/Reconciliation Core
 - Yeni domain tabloları eklendi: `commercial_trades`, `pnl_records`, `exchange_reconciliation_logs`.
