@@ -23,10 +23,13 @@ from services.identity_control_service import (
     enforce_permission,
     evaluate_user_eligibility,
     get_or_create_identity_profile,
+    list_active_sessions,
     list_identity_users,
     reject_request,
     set_kill_switch,
+    unlock_user_policy_lock,
 )
+from services.mfa_service import get_mfa_settings
 
 router = APIRouter(prefix="/admin/identity", tags=["identity-control"])
 
@@ -45,7 +48,9 @@ def _serialize_for_json(obj):
 class BulkStatusRequest(BaseModel):
     user_ids: list[str] = Field(default_factory=list)
     status: str = Field(default="disabled")
+    action: str | None = None
     reason: str = "bulk_status_change"
+    critical_confirmed: bool = False
 
 
 class InlineUserUpdateRequest(BaseModel):
@@ -54,6 +59,7 @@ class InlineUserUpdateRequest(BaseModel):
     trading_enabled: bool | None = None
     capital_limit: float | None = None
     reason: str = "inline_update"
+    critical_confirmed: bool = False
 
 
 class ApprovalRequestCreatePayload(BaseModel):
@@ -105,6 +111,15 @@ class ReactivateUserPayload(BaseModel):
     reason: str = "manual_reactivation"
 
 
+class CriticalActionRequestPayload(BaseModel):
+    reason: str
+    critical_confirmed: bool = False
+
+
+class UnlockPolicyPayload(BaseModel):
+    reason: str = "manual_unlock"
+
+
 class ApprovalPolicyUpdatePayload(BaseModel):
     is_enabled: bool | None = None
     required_approvals: int | None = Field(default=None, ge=1, le=5)
@@ -147,6 +162,7 @@ def admin_identity_users(
     risk_level: str | None = Query(default=None),
     trading_enabled: bool | None = Query(default=None),
     exchange: str | None = Query(default=None),
+    include_deleted: bool = Query(default=False),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=200),
     current_admin: User = Depends(require_admin),
@@ -161,10 +177,69 @@ def admin_identity_users(
         risk_level=risk_level,
         trading_enabled=trading_enabled,
         exchange=exchange,
+        include_deleted=include_deleted,
         page=page,
         page_size=page_size,
     )
     return payload
+
+
+@router.get("/users/{user_id}/security")
+def admin_identity_user_security_detail(
+    user_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.audit.read")
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+
+    profile = get_or_create_identity_profile(db, user_id)
+    sessions = list_active_sessions(db, actor=current_admin, user_id=user_id)
+    login_history = (
+        db.query(LoginHistoryEvent)
+        .filter(LoginHistoryEvent.user_id == user_id)
+        .order_by(LoginHistoryEvent.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    mfa = get_mfa_settings(db, user_id)
+    return {
+        "user_id": user_id,
+        "email": user.email,
+        "mfa": {
+            "is_enabled": mfa.get("is_enabled"),
+            "enabled_methods": mfa.get("enabled_methods"),
+            "totp_configured": mfa.get("totp_configured"),
+            "totp_verified": mfa.get("totp_verified"),
+            "backup_codes_remaining": mfa.get("backup_codes_remaining"),
+        },
+        "security_state": {
+            "policy_locked_until": profile.policy_locked_until,
+            "password_expires_at": profile.password_expires_at,
+            "password_changed_at": profile.password_changed_at,
+            "last_seen_ip": profile.last_seen_ip,
+            "last_seen_device": profile.last_seen_device,
+            "eligible_for_login": profile.eligible_for_login,
+            "eligible_for_ops": profile.eligible_for_ops,
+        },
+        "sessions": sessions,
+        "login_history": [
+            {
+                "id": row.id,
+                "outcome": row.outcome,
+                "failure_reason": row.failure_reason,
+                "ip_address": row.ip_address,
+                "device_fingerprint": row.device_fingerprint,
+                "user_agent": row.user_agent,
+                "attempt_count": row.attempt_count,
+                "lock_until": row.lock_until,
+                "created_at": row.created_at,
+            }
+            for row in login_history
+        ],
+    }
 
 
 @router.patch("/users/{user_id}/inline")
@@ -179,25 +254,34 @@ def admin_identity_user_inline_update(
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
 
-    if payload.status in {"disabled", "deleted"}:
-        action_key = "delete_user" if payload.status == "deleted" else "disable_user"
+    if payload.status in {"disabled", "deleted", "active"}:
+        if not payload.critical_confirmed:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
+        if payload.status == "deleted":
+            action_key = "soft_delete_user"
+        elif payload.status == "active":
+            action_key = "enable_user"
+        else:
+            action_key = "disable_admin" if target.role in {UserRole.ADMIN, UserRole.SUPER_ADMIN} else "disable_user"
         return _request_if_critical(
             db=db,
             actor=current_admin,
             action_key=action_key,
             target_user_id=target.id,
-            payload={"status": payload.status},
+            payload={"status": payload.status, "critical_confirmed": True},
             reason=payload.reason,
         )
 
     if payload.role:
         if payload.role in {UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value}:
+            if not payload.critical_confirmed:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
             return _request_if_critical(
                 db=db,
                 actor=current_admin,
                 action_key="grant_privileged_role",
                 target_user_id=target.id,
-                payload={"role": payload.role},
+                payload={"role": payload.role, "critical_confirmed": True},
                 reason=payload.reason,
             )
         target.role = UserRole(payload.role)
@@ -209,23 +293,27 @@ def admin_identity_user_inline_update(
         target.disabled_at = None
     if payload.trading_enabled is not None:
         if payload.trading_enabled:
+            if not payload.critical_confirmed:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
             return _request_if_critical(
                 db=db,
                 actor=current_admin,
                 action_key="enable_live_trading",
                 target_user_id=target.id,
-                payload={"trading_enabled": True},
+                payload={"trading_enabled": True, "critical_confirmed": True},
                 reason=payload.reason,
             )
         profile.trading_enabled = False
 
     if payload.capital_limit is not None:
+        if not payload.critical_confirmed:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
         return _request_if_critical(
             db=db,
             actor=current_admin,
             action_key="raise_capital_limit",
             target_user_id=target.id,
-            payload={"capital_limit": float(payload.capital_limit)},
+            payload={"capital_limit": float(payload.capital_limit), "critical_confirmed": True},
             reason=payload.reason,
         )
 
@@ -261,8 +349,22 @@ def admin_identity_bulk_status(
     if not user_ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_ids_required")
 
+    if not payload.critical_confirmed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
+
+    requested_action = (payload.action or "").strip().lower()
+    if not requested_action:
+        requested_action = {
+            "disabled": "bulk_disable_users",
+            "active": "bulk_enable_users",
+            "deleted": "bulk_soft_delete_users",
+        }.get(payload.status, "")
+    if requested_action not in {"bulk_disable_users", "bulk_enable_users", "bulk_soft_delete_users", "bulk_restore_users"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_bulk_action")
+
     success = 0
     failed = []
+    requests_created = []
     for user_id in user_ids:
         target = db.query(User).filter(User.id == user_id).first()
         if target is None:
@@ -272,29 +374,56 @@ def admin_identity_bulk_status(
             failed.append({"user_id": user_id, "error": "super_admin_protected"})
             continue
 
-        profile = get_or_create_identity_profile(db, user_id)
-        if payload.status == "disabled":
-            target.is_active = False
-            profile.trading_enabled = False
-        elif payload.status == "active":
-            target.is_active = True
-        else:
-            failed.append({"user_id": user_id, "error": "invalid_status"})
-            continue
-        target.updated_at = datetime.now(timezone.utc)
-        success += 1
+        try:
+            if requested_action == "bulk_disable_users":
+                action_key = "disable_admin" if target.role in {UserRole.ADMIN, UserRole.SUPER_ADMIN} else "disable_user"
+            elif requested_action == "bulk_enable_users":
+                action_key = "enable_user"
+            elif requested_action == "bulk_soft_delete_users":
+                action_key = "soft_delete_user"
+            else:
+                action_key = "restore_user"
 
-    db.commit()
+            req = create_approval_request(
+                db,
+                actor=current_admin,
+                action_key=action_key,
+                target_user_id=target.id,
+                payload={
+                    "bulk_action": requested_action,
+                    "critical_confirmed": True,
+                    "target_status": payload.status,
+                },
+                reason=payload.reason,
+            )
+            requests_created.append({"user_id": target.id, "request_id": req.id, "action_key": action_key})
+            success += 1
+        except Exception as exc:
+            failed.append({"user_id": user_id, "error": str(exc)})
+
     create_audit_log(
         db,
-        action="IDENTITY_BULK_STATUS_UPDATED",
+        action="IDENTITY_BULK_APPROVAL_REQUEST_CREATED",
         entity_type="user",
         entity_id=f"bulk:{len(user_ids)}",
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details={"status": payload.status, "success": success, "failed": failed, "reason": payload.reason},
+        details={
+            "bulk_action": requested_action,
+            "status": payload.status,
+            "success": success,
+            "failed": failed,
+            "requests_created": requests_created,
+            "reason": payload.reason,
+        },
     )
-    return {"requested": len(user_ids), "success": success, "failed": failed}
+    return {
+        "requested": len(user_ids),
+        "success": success,
+        "failed": failed,
+        "requests_created": requests_created,
+        "status": "approval_required",
+    }
 
 
 @router.post("/users/{user_id}/kill-switch")
@@ -305,6 +434,29 @@ def admin_identity_kill_switch(
     db: Session = Depends(get_db),
 ):
     return set_kill_switch(db, actor=current_admin, user_id=user_id, active=payload.active, reason=payload.reason)
+
+
+@router.post("/users/{user_id}/unlock-policy-lock")
+def admin_identity_unlock_policy_lock(
+    user_id: str,
+    payload: UnlockPolicyPayload,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    target = db.query(User).filter(User.id == user_id).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+    result = unlock_user_policy_lock(db, actor=current_admin, target_user=target)
+    create_audit_log(
+        db,
+        action="IDENTITY_POLICY_LOCK_UNLOCK_REQUESTED",
+        entity_type="user",
+        entity_id=user_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"reason": payload.reason},
+    )
+    return result
 
 
 @router.post("/users/{user_id}/reactivate")
@@ -335,6 +487,46 @@ def admin_identity_reactivate_user(
         details={"reason": payload.reason},
     )
     return {"user_id": user_id, "status": "reactivated"}
+
+
+@router.post("/users/{user_id}/hard-delete/request")
+def admin_identity_hard_delete_request(
+    user_id: str,
+    payload: CriticalActionRequestPayload,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if not payload.critical_confirmed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
+    row = create_approval_request(
+        db,
+        actor=current_admin,
+        action_key="hard_delete_user",
+        target_user_id=user_id,
+        payload={"critical_confirmed": True, "reason": payload.reason},
+        reason=payload.reason,
+    )
+    return {"status": "approval_required", "request_id": row.id, "action_key": row.action_key}
+
+
+@router.post("/users/{user_id}/soft-delete/request")
+def admin_identity_soft_delete_request(
+    user_id: str,
+    payload: CriticalActionRequestPayload,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if not payload.critical_confirmed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
+    row = create_approval_request(
+        db,
+        actor=current_admin,
+        action_key="soft_delete_user",
+        target_user_id=user_id,
+        payload={"critical_confirmed": True, "reason": payload.reason},
+        reason=payload.reason,
+    )
+    return {"status": "approval_required", "request_id": row.id, "action_key": row.action_key}
 
 
 @router.post("/roles/custom")

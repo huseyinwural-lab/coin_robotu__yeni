@@ -346,16 +346,15 @@ class TestInlineUpdateWithApproval:
         user = users_response.json()["items"][0]
         user_id = user["id"]
 
-        # Try to set status to active (should work without approval)
+        # status=active artık kritik akışta approval gerektirir
         response = requests.patch(
             f"{BASE_URL}/api/admin/identity/users/{user_id}/inline",
             headers=self.headers,
-            json={"status": "active", "reason": "test_inline_update"},
+            json={"status": "active", "reason": "test_inline_update", "critical_confirmed": True},
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
-        # Should either be updated or require approval
-        assert data.get("status") in ["updated", "approval_required"], f"Unexpected status: {data}"
+        assert data.get("status") == "approval_required", f"Unexpected status: {data}"
         print(f"Inline update status=active: {data.get('status')}")
 
     def test_inline_update_disable_requires_approval(self):
@@ -379,7 +378,7 @@ class TestInlineUpdateWithApproval:
         response = requests.patch(
             f"{BASE_URL}/api/admin/identity/users/{user_id}/inline",
             headers=self.headers,
-            json={"status": "disabled", "reason": "test_disable_approval"},
+            json={"status": "disabled", "reason": "test_disable_approval", "critical_confirmed": True},
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
@@ -524,7 +523,7 @@ class TestApprovalFlow:
             json={
                 "action_key": "disable_user",
                 "target_user_id": user_id,
-                "payload": {},
+                "payload": {"critical_confirmed": True},
                 "reason": "test_approval_request",
             },
         )

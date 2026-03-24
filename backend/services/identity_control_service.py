@@ -31,10 +31,19 @@ from services.rate_limiter_service import TokenBucketRateLimiter
 
 CRITICAL_APPROVAL_ACTIONS = {
     "disable_user",
+    "enable_user",
+    "disable_admin",
     "delete_user",
+    "soft_delete_user",
+    "hard_delete_user",
+    "restore_user",
     "enable_live_trading",
     "raise_capital_limit",
     "grant_privileged_role",
+    "bulk_disable_users",
+    "bulk_enable_users",
+    "bulk_soft_delete_users",
+    "bulk_restore_users",
 }
 
 DEFAULT_ROLE_PERMISSIONS: dict[str, dict] = {
@@ -87,9 +96,29 @@ DEFAULT_APPROVAL_POLICIES: dict[str, dict] = {
         "requester_roles": ["admin", "ops", "super_admin"],
         "approver_roles": ["admin", "super_admin"],
     },
+    "enable_user": {
+        "requester_roles": ["admin", "ops", "super_admin"],
+        "approver_roles": ["admin", "super_admin"],
+    },
+    "disable_admin": {
+        "requester_roles": ["admin", "super_admin"],
+        "approver_roles": ["super_admin"],
+    },
     "delete_user": {
         "requester_roles": ["admin", "super_admin"],
         "approver_roles": ["super_admin"],
+    },
+    "soft_delete_user": {
+        "requester_roles": ["admin", "super_admin"],
+        "approver_roles": ["super_admin"],
+    },
+    "hard_delete_user": {
+        "requester_roles": ["admin", "super_admin"],
+        "approver_roles": ["super_admin"],
+    },
+    "restore_user": {
+        "requester_roles": ["admin", "super_admin"],
+        "approver_roles": ["admin", "super_admin"],
     },
     "enable_live_trading": {
         "requester_roles": ["admin", "ops", "super_admin"],
@@ -102,6 +131,22 @@ DEFAULT_APPROVAL_POLICIES: dict[str, dict] = {
     "grant_privileged_role": {
         "requester_roles": ["admin", "super_admin"],
         "approver_roles": ["super_admin"],
+    },
+    "bulk_disable_users": {
+        "requester_roles": ["admin", "ops", "super_admin"],
+        "approver_roles": ["admin", "super_admin"],
+    },
+    "bulk_enable_users": {
+        "requester_roles": ["admin", "ops", "super_admin"],
+        "approver_roles": ["admin", "super_admin"],
+    },
+    "bulk_soft_delete_users": {
+        "requester_roles": ["admin", "super_admin"],
+        "approver_roles": ["super_admin"],
+    },
+    "bulk_restore_users": {
+        "requester_roles": ["admin", "super_admin"],
+        "approver_roles": ["admin", "super_admin"],
     },
 }
 
@@ -193,6 +238,15 @@ def _seed_approval_policies(db: Session) -> None:
             )
             db.add(row)
             changed = True
+        else:
+            expected_requesters = list(config.get("requester_roles", []))
+            expected_approvers = list(config.get("approver_roles", []))
+            if row.requester_roles != expected_requesters:
+                row.requester_roles = expected_requesters
+                changed = True
+            if row.approver_roles != expected_approvers:
+                row.approver_roles = expected_approvers
+                changed = True
     if changed:
         db.commit()
 
@@ -303,6 +357,16 @@ def record_login_failure(
     fingerprint = resolve_device_fingerprint(request)
     lock_until = _utcnow() + timedelta(seconds=lock_seconds) if lock_seconds > 0 else None
 
+    if lock_seconds > 0:
+        target_user = None
+        if user_id:
+            target_user = db.query(User).filter(User.id == user_id).first()
+        if target_user is None:
+            target_user = db.query(User).filter(User.email == normalized_email).first()
+        if target_user is not None:
+            profile = get_or_create_identity_profile(db, target_user.id)
+            profile.policy_locked_until = lock_until
+
     db.add(
         LoginHistoryEvent(
             email=normalized_email,
@@ -386,6 +450,7 @@ def record_login_success(db: Session, *, request: Request, endpoint_scope: str, 
     profile = get_or_create_identity_profile(db, user.id)
     profile.last_seen_ip = ip
     profile.last_seen_device = fingerprint
+    profile.policy_locked_until = None
     profile.updated_at = _utcnow()
     db.commit()
 
@@ -522,6 +587,11 @@ def evaluate_user_eligibility(db: Session, *, user: User, grace_days: int = 7, c
         or 0
     )
 
+    policy_locked = False
+    if profile.policy_locked_until is not None:
+        lock_until = profile.policy_locked_until if profile.policy_locked_until.tzinfo else profile.policy_locked_until.replace(tzinfo=timezone.utc)
+        policy_locked = _utcnow() < lock_until
+
     checks = {
         "identity_active": bool(user.is_active and profile.soft_deleted_at is None),
         "email_verified": bool(onboarding.email_verified if onboarding else False),
@@ -530,6 +600,9 @@ def evaluate_user_eligibility(db: Session, *, user: User, grace_days: int = 7, c
         "exchange_connected": bool(exchange_count > 0),
         "strategy_scope_assigned": bool(strategy_scope_count > 0),
         "trading_enabled": bool(profile.trading_enabled and not profile.kill_switch_active),
+        "not_deleted": bool(profile.deleted_at is None and profile.hard_deleted_at is None),
+        "not_locked_by_policy": bool(not policy_locked),
+        "not_kill_switched": bool(not profile.kill_switch_active),
     }
 
     all_good = all(checks.values())
@@ -537,10 +610,19 @@ def evaluate_user_eligibility(db: Session, *, user: User, grace_days: int = 7, c
 
     if all_good:
         profile.live_trading_eligible = True
+        profile.eligible_for_login = True
+        profile.eligible_for_ops = True
         profile.non_compliant_since = None
         profile.grace_until = None
     else:
         profile.live_trading_eligible = False
+        profile.eligible_for_login = bool(
+            checks["identity_active"]
+            and checks["email_verified"]
+            and checks["not_deleted"]
+            and checks["not_locked_by_policy"]
+        )
+        profile.eligible_for_ops = bool(profile.eligible_for_login and checks["risk_profile_assigned"])
         if profile.non_compliant_since is None:
             profile.non_compliant_since = now
         if profile.grace_until is None:
@@ -564,6 +646,8 @@ def evaluate_user_eligibility(db: Session, *, user: User, grace_days: int = 7, c
     return {
         "checks": checks,
         "all_requirements_met": all_good,
+        "eligible_for_login": bool(profile.eligible_for_login),
+        "eligible_for_ops": bool(profile.eligible_for_ops),
         "live_trading_eligible": bool(profile.live_trading_eligible),
         "grace_until": profile.grace_until,
         "non_compliant_since": profile.non_compliant_since,
@@ -715,6 +799,13 @@ def create_approval_request(
     actor_role = str(actor.role.value)
     if actor_role not in set(policy.requester_roles or []):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="requester_role_not_allowed")
+    if actor.id == target_user_id and action_key in CRITICAL_APPROVAL_ACTIONS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="self_request_not_allowed")
+    if action_key in CRITICAL_APPROVAL_ACTIONS:
+        if not bool((payload or {}).get("critical_confirmed")):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
+        if not str(reason or "").strip():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_reason_required")
 
     target = db.query(User).filter(User.id == target_user_id).first()
     if target is None:
@@ -748,23 +839,136 @@ def create_approval_request(
     return request_row
 
 
+def _revoke_all_sessions_for_user(db: Session, *, target_user_id: str, actor: User, reason: str) -> int:
+    rows = db.query(AuthSession).filter(AuthSession.user_id == target_user_id, AuthSession.is_revoked.is_(False)).all()
+    now = _utcnow()
+    for row in rows:
+        row.is_revoked = True
+        row.revoked_reason = reason[:255]
+        row.revoked_by = actor.id
+        row.revoked_at = now
+    return len(rows)
+
+
+def _validate_hard_delete_guard(db: Session, *, target: User, actor: User, exclude_request_id: str | None = None) -> None:
+    if actor.id == target.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="self_hard_delete_forbidden")
+    if target.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_hard_delete_forbidden")
+
+    profile = get_or_create_identity_profile(db, target.id)
+    if profile.soft_deleted_at is None and profile.deleted_at is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hard_delete_requires_soft_deleted")
+
+    deleted_at = profile.deleted_at or profile.soft_deleted_at
+    baseline = deleted_at if deleted_at.tzinfo else deleted_at.replace(tzinfo=timezone.utc)
+    if _utcnow() < baseline + timedelta(days=90):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hard_delete_retention_not_completed")
+
+    pending_query = db.query(func.count(IdentityApprovalRequest.id)).filter(
+        IdentityApprovalRequest.target_user_id == target.id,
+        IdentityApprovalRequest.status == "pending",
+    )
+    if exclude_request_id:
+        pending_query = pending_query.filter(IdentityApprovalRequest.id != exclude_request_id)
+    pending_approvals = pending_query.scalar() or 0
+    if pending_approvals > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hard_delete_blocked_by_pending_approvals")
+
+    active_sessions = (
+        db.query(func.count(AuthSession.id))
+        .filter(AuthSession.user_id == target.id, AuthSession.is_revoked.is_(False))
+        .scalar()
+        or 0
+    )
+    if active_sessions > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hard_delete_blocked_by_active_sessions")
+
+    open_exec = (
+        db.query(func.count(ExecutionMetric.id))
+        .filter(
+            ExecutionMetric.user_id == target.id,
+            ExecutionMetric.final_status.in_(["PENDING", "OPEN", "RUNNING", "IN_FLIGHT"]),
+        )
+        .scalar()
+        or 0
+    )
+    if open_exec > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hard_delete_blocked_by_open_execution")
+
+    exchange_count = db.query(func.count(UserExchangeConnection.id)).filter(UserExchangeConnection.user_id == target.id).scalar() or 0
+    if exchange_count > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hard_delete_blocked_by_exchange_dependency")
+
+    risk_exists = db.query(UserRiskSetting).filter(UserRiskSetting.user_id == target.id).first() is not None
+    if risk_exists:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hard_delete_blocked_by_risk_policy_dependency")
+
+    strategy_scope_count = db.query(func.count(UserStrategyScope.id)).filter(UserStrategyScope.user_id == target.id).scalar() or 0
+    bot_scope_count = db.query(func.count(UserBotScope.id)).filter(UserBotScope.user_id == target.id).scalar() or 0
+    if strategy_scope_count > 0 or bot_scope_count > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hard_delete_blocked_by_scope_dependency")
+
+
 def _apply_approval_action(db: Session, *, action_key: str, target: User, payload: dict, actor: User) -> None:
     profile = get_or_create_identity_profile(db, target.id)
     now = _utcnow()
 
-    if action_key == "disable_user":
+    if action_key in {"disable_user", "disable_admin"}:
         target.is_active = False
         target.disabled_at = now
         profile.trading_enabled = False
         profile.live_trading_eligible = False
-    elif action_key == "delete_user":
+        _revoke_all_sessions_for_user(db, target_user_id=target.id, actor=actor, reason="disabled_by_approval")
+    elif action_key in {"enable_user", "restore_user"}:
+        if profile.hard_deleted_at is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="hard_deleted_user_cannot_be_restored")
+        target.is_active = True
+        target.disabled_at = None
+        profile.soft_deleted_at = None
+        profile.deleted_at = None
+        profile.deleted_by = None
+        profile.delete_reason = None
+        profile.delete_request_id = None
+    elif action_key in {"delete_user", "soft_delete_user"}:
         if target.role == UserRole.SUPER_ADMIN:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_protected")
         target.is_active = False
+        target.disabled_at = now
         profile.soft_deleted_at = now
+        profile.deleted_at = now
+        profile.deleted_by = actor.id
+        profile.delete_reason = str(payload.get("reason") or payload.get("delete_reason") or "soft_delete")[:500]
+        profile.delete_request_id = str(payload.get("approval_request_id") or "") or None
         profile.trading_enabled = False
         profile.live_trading_eligible = False
+        _revoke_all_sessions_for_user(db, target_user_id=target.id, actor=actor, reason="soft_deleted")
+    elif action_key == "hard_delete_user":
+        _validate_hard_delete_guard(
+            db,
+            target=target,
+            actor=actor,
+            exclude_request_id=str(payload.get("approval_request_id") or "") or None,
+        )
+        profile.hard_deleted_at = now
+        profile.hard_delete_request_id = str(payload.get("approval_request_id") or "") or None
+        profile.trading_enabled = False
+        profile.live_trading_eligible = False
+        target.is_active = False
+        target.disabled_at = now
+        anonymized_suffix = target.id.replace("-", "")[:12]
+        target.email = f"hard-deleted+{anonymized_suffix}@deleted.local"
+        target.role = UserRole.USER
+        _revoke_all_sessions_for_user(db, target_user_id=target.id, actor=actor, reason="hard_deleted")
     elif action_key == "enable_live_trading":
+        if profile.deleted_at is not None or profile.hard_deleted_at is not None or profile.soft_deleted_at is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="deleted_user_cannot_enable_trading")
+        if profile.kill_switch_active:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="kill_switched_user_cannot_enable_trading")
+        if profile.policy_locked_until is not None:
+            lock_until = profile.policy_locked_until if profile.policy_locked_until.tzinfo else profile.policy_locked_until.replace(tzinfo=timezone.utc)
+            if _utcnow() < lock_until:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="locked_user_cannot_enable_trading")
         profile.trading_enabled = True
     elif action_key == "raise_capital_limit":
         requested_limit = float(payload.get("capital_limit") or 0)
@@ -804,7 +1008,14 @@ def approve_request(db: Session, *, actor: User, request_id: str, approval_note:
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
 
-    _apply_approval_action(db, action_key=row.action_key, target=target, payload=dict(row.payload or {}), actor=actor)
+    if row.action_key in CRITICAL_APPROVAL_ACTIONS and not str(approval_note or "").strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="approval_note_required_for_critical_action")
+
+    action_payload = {
+        **dict(row.payload or {}),
+        "approval_request_id": row.id,
+    }
+    _apply_approval_action(db, action_key=row.action_key, target=target, payload=action_payload, actor=actor)
     row.approval_count += 1
     row.approved_by = actor.id
     row.approval_note = str(approval_note or "")[:500]
@@ -1001,6 +1212,7 @@ def list_identity_users(
     risk_level: str | None,
     trading_enabled: bool | None,
     exchange: str | None,
+    include_deleted: bool,
     page: int,
     page_size: int,
 ) -> dict:
@@ -1022,6 +1234,8 @@ def list_identity_users(
     items = []
     for user in users:
         eligibility = evaluate_user_eligibility(db, user=user, grace_days=7, commit=True)
+        if not include_deleted and not eligibility.get("checks", {}).get("not_deleted", True):
+            continue
         exchange_count = db.query(func.count(UserExchangeConnection.id)).filter(UserExchangeConnection.user_id == user.id).scalar() or 0
         if exchange and exchange.strip():
             has_exchange = (
@@ -1059,6 +1273,8 @@ def list_identity_users(
                     "exchange_connected": bool(exchange_count > 0),
                     "error_state": "high" if failed_trades > 0 else "ok",
                     "live_trading_eligible": bool(eligibility.get("live_trading_eligible")),
+                    "eligible_for_login": bool(eligibility.get("eligible_for_login")),
+                    "eligible_for_ops": bool(eligibility.get("eligible_for_ops")),
                     "compliance_checks": eligibility.get("checks", {}),
                     "non_compliant": not bool(eligibility.get("all_requirements_met")),
                     "grace_until": eligibility.get("grace_until"),
@@ -1085,3 +1301,24 @@ def list_identity_users(
             "pages": max((total + page_size - 1) // page_size, 1),
         },
     }
+
+
+def unlock_user_policy_lock(db: Session, *, actor: User, target_user: User) -> dict:
+    enforce_permission(db, actor=actor, permission="identity.users.write")
+    normalized_email = _normalize_email(target_user.email)
+    for scope in ["login", "login_admin", "login_user", "mfa_verify"]:
+        redis_client.delete(_failure_key(normalized_email, scope))
+        redis_client.delete(_lock_key(normalized_email, scope))
+    profile = get_or_create_identity_profile(db, target_user.id)
+    profile.policy_locked_until = None
+    db.commit()
+    create_audit_log(
+        db,
+        action="IDENTITY_POLICY_LOCK_CLEARED",
+        entity_type="user",
+        entity_id=target_user.id,
+        actor_user_id=actor.id,
+        actor_role=actor.role.value,
+        details={"email": target_user.email},
+    )
+    return {"user_id": target_user.id, "lock_cleared": True}

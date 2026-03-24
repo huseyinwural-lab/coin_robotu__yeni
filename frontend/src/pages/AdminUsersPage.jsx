@@ -39,6 +39,9 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   const [inviteForm, setInviteForm] = useState({ email: "", invited_role: "user" });
   const [bulkLoading, setBulkLoading] = useState(false);
   const [inlineLoadingMap, setInlineLoadingMap] = useState({});
+  const [securityDetail, setSecurityDetail] = useState(null);
+  const [securityDetailUserId, setSecurityDetailUserId] = useState("");
+  const [securityDetailLoading, setSecurityDetailLoading] = useState(false);
 
   useEffect(() => {
     setFilters((prev) => ({
@@ -125,18 +128,77 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     }
   };
 
+  const getCriticalConfirmation = (title) => {
+    const confirmed = window.confirm(`${title}\n\nBu işlem kritik. Devam etmek istiyor musunuz?`);
+    if (!confirmed) return null;
+    const reason = window.prompt("Lütfen işlem gerekçesini yazın (zorunlu):", "operational_control_update");
+    if (!reason || !reason.trim()) {
+      toast.error("Kritik işlem için reason zorunlu");
+      return null;
+    }
+    return { critical_confirmed: true, reason: reason.trim() };
+  };
+
+  const loadSecurityDetail = async (userId) => {
+    setSecurityDetailLoading(true);
+    setSecurityDetailUserId(userId);
+    try {
+      const { data } = await apiClient.get(`/admin/identity/users/${userId}/security`);
+      setSecurityDetail(data);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Security detail yüklenemedi");
+    } finally {
+      setSecurityDetailLoading(false);
+    }
+  };
+
+  const unlockPolicyLock = async (userId) => {
+    const confirmPayload = getCriticalConfirmation("Policy lock kaldır");
+    if (!confirmPayload) return;
+    try {
+      await apiClient.post(`/admin/identity/users/${userId}/unlock-policy-lock`, { reason: confirmPayload.reason });
+      toast.success("Policy lock kaldırıldı");
+      if (securityDetailUserId === userId) {
+        await loadSecurityDetail(userId);
+      }
+      await loadUsers();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Policy unlock başarısız");
+    }
+  };
+
+  const revokeSession = async (sessionId) => {
+    const confirmPayload = getCriticalConfirmation("Session revoke");
+    if (!confirmPayload) return;
+    try {
+      await apiClient.post(`/auth/sessions/${sessionId}/revoke`, { reason: confirmPayload.reason });
+      toast.success("Session revoke edildi");
+      if (securityDetailUserId) {
+        await loadSecurityDetail(securityDetailUserId);
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Session revoke başarısız");
+    }
+  };
+
   const updateRole = async (userId, role) => {
-    await requestInlineUpdate(userId, { role, reason: "inline_role_update" }, "Rol güncellendi");
+    const confirmPayload = getCriticalConfirmation("Rol güncelle");
+    if (!confirmPayload) return;
+    await requestInlineUpdate(userId, { role, ...confirmPayload }, "Rol güncellendi");
   };
 
   const toggleStatus = async (user) => {
     const nextStatus = user.status === "active" ? "disabled" : "active";
-    await requestInlineUpdate(user.id, { status: nextStatus, reason: "inline_status_toggle" }, `Kullanıcı ${nextStatus} yapıldı`);
+    const confirmPayload = getCriticalConfirmation(`Kullanıcı ${nextStatus} işlemi`);
+    if (!confirmPayload) return;
+    await requestInlineUpdate(user.id, { status: nextStatus, ...confirmPayload }, `Kullanıcı ${nextStatus} yapıldı`);
   };
 
   const toggleTrading = async (user) => {
     const next = !Boolean(user?.identity_controls?.trading_enabled);
-    await requestInlineUpdate(user.id, { trading_enabled: next, reason: "inline_trading_toggle" }, `Trading ${next ? "açıldı" : "kapatıldı"}`);
+    const confirmPayload = getCriticalConfirmation(next ? "Live trading enable" : "Trading disable");
+    if (!confirmPayload) return;
+    await requestInlineUpdate(user.id, { trading_enabled: next, ...confirmPayload }, `Trading ${next ? "açıldı" : "kapatıldı"}`);
   };
 
   const setKillSwitch = async (user, active) => {
@@ -155,17 +217,50 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     }
   };
 
+  const requestSoftDelete = async (user) => {
+    const confirmPayload = getCriticalConfirmation("Soft delete request");
+    if (!confirmPayload) return;
+    try {
+      const { data } = await apiClient.post(`/admin/identity/users/${user.id}/soft-delete/request`, {
+        reason: confirmPayload.reason,
+        critical_confirmed: true,
+      });
+      toast.success(`Soft delete approval request açıldı (${data?.request_id})`);
+      await loadUsers();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Soft delete request açılamadı");
+    }
+  };
+
+  const requestHardDelete = async (user) => {
+    const confirmPayload = getCriticalConfirmation("Hard delete request");
+    if (!confirmPayload) return;
+    try {
+      const { data } = await apiClient.post(`/admin/identity/users/${user.id}/hard-delete/request`, {
+        reason: confirmPayload.reason,
+        critical_confirmed: true,
+      });
+      toast.success(`Hard delete approval request açıldı (${data?.request_id})`);
+      await loadUsers();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Hard delete request açılamadı");
+    }
+  };
+
   const applyBulkStatus = async (status) => {
     if (selectedUserIds.length === 0) {
       toast.error("Önce kullanıcı seçin");
       return;
     }
+    const confirmPayload = getCriticalConfirmation(`Bulk ${status} request`);
+    if (!confirmPayload) return;
     setBulkLoading(true);
     try {
       const { data } = await apiClient.post("/admin/identity/users/bulk-status", {
         user_ids: selectedUserIds,
         status,
-        reason: "bulk_admin_action",
+        reason: confirmPayload.reason,
+        critical_confirmed: true,
       });
       toast.success(`Bulk ${status} tamamlandı (success=${data?.success ?? 0})`);
       setSelectedUserIds([]);
@@ -495,11 +590,25 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={() => loadSecurityDetail(user.id)}
+                      data-testid={`admin-users-security-detail-button-${user.id}`}
+                    >
+                      Security Detail
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => setKillSwitch(user, !Boolean(user?.identity_controls?.kill_switch_active))}
                       disabled={Boolean(inlineLoadingMap[user.id])}
                       data-testid={`admin-users-kill-switch-button-${user.id}`}
                     >
                       {user?.identity_controls?.kill_switch_active ? "Kill OFF" : "Kill ON"}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => requestSoftDelete(user)} data-testid={`admin-users-soft-delete-request-button-${user.id}`}>
+                      Soft Delete Req
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => requestHardDelete(user)} data-testid={`admin-users-hard-delete-request-button-${user.id}`}>
+                      Hard Delete Req
                     </Button>
                   </div>
                 </TableCell>
@@ -516,6 +625,55 @@ export const AdminUsersPage = ({ scope = "user" }) => {
           </TableBody>
         </Table>
       </div>
+
+      {securityDetailUserId && (
+        <div className="space-y-2 border border-black/30 bg-orange-50 p-3" data-testid="admin-users-security-detail-panel">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold" data-testid="admin-users-security-detail-title">Security Detail: {securityDetail?.email || securityDetailUserId}</p>
+            <Button variant="outline" onClick={() => setSecurityDetailUserId("")} data-testid="admin-users-security-detail-close-button">Kapat</Button>
+          </div>
+
+          {securityDetailLoading ? (
+            <p className="text-xs" data-testid="admin-users-security-detail-loading">Yükleniyor...</p>
+          ) : securityDetail ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1 border border-black/20 bg-white p-2 text-xs" data-testid="admin-users-security-state-card">
+                <p data-testid="admin-users-security-mfa-enabled">mfa_enabled: {String(Boolean(securityDetail?.mfa?.is_enabled))}</p>
+                <p data-testid="admin-users-security-mfa-methods">methods: {(securityDetail?.mfa?.enabled_methods || []).join(",") || "-"}</p>
+                <p data-testid="admin-users-security-backup-remaining">backup_codes_remaining: {securityDetail?.mfa?.backup_codes_remaining ?? 0}</p>
+                <p data-testid="admin-users-security-policy-lock-until">policy_locked_until: {securityDetail?.security_state?.policy_locked_until || "-"}</p>
+                <p data-testid="admin-users-security-password-expires">password_expires_at: {securityDetail?.security_state?.password_expires_at || "-"}</p>
+                <Button variant="outline" onClick={() => unlockPolicyLock(securityDetailUserId)} data-testid="admin-users-security-unlock-button">Unlock Policy Lock</Button>
+              </div>
+
+              <div className="space-y-1 border border-black/20 bg-white p-2 text-xs" data-testid="admin-users-session-list-card">
+                <p className="font-semibold" data-testid="admin-users-session-list-title">Active Sessions</p>
+                {(securityDetail?.sessions || []).map((session) => (
+                  <div key={session.session_id} className="flex flex-wrap items-center gap-2" data-testid={`admin-users-session-item-${session.session_id}`}>
+                    <span>{session.ip_address || "-"} · {session.device_fingerprint || "-"}</span>
+                    <Button size="sm" variant="outline" onClick={() => revokeSession(session.session_id)} data-testid={`admin-users-session-revoke-button-${session.session_id}`}>
+                      Revoke
+                    </Button>
+                  </div>
+                ))}
+                {(securityDetail?.sessions || []).length === 0 && <p data-testid="admin-users-session-list-empty">Active session yok</p>}
+              </div>
+
+              <div className="space-y-1 border border-black/20 bg-white p-2 text-xs md:col-span-2" data-testid="admin-users-login-history-card">
+                <p className="font-semibold" data-testid="admin-users-login-history-title">Login History</p>
+                {(securityDetail?.login_history || []).slice(0, 10).map((item) => (
+                  <p key={item.id} data-testid={`admin-users-login-history-item-${item.id}`}>
+                    {item.created_at} · {item.outcome} · {item.ip_address || "-"} · {item.failure_reason || "-"}
+                  </p>
+                ))}
+                {(securityDetail?.login_history || []).length === 0 && <p data-testid="admin-users-login-history-empty">Login history yok</p>}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs" data-testid="admin-users-security-detail-empty">Detail bulunamadı.</p>
+          )}
+        </div>
+      )}
     </section>
   );
 };

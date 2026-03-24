@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from core.security import create_access_token
 from models import AuthMfaChallenge, User, UserMfaBackupCode, UserMfaPreference, UserRole
 
-MFA_ALLOWED_METHODS = {"totp", "email"}
+MFA_ALLOWED_METHODS = {"totp"}
 MFA_CHALLENGE_TTL_MINUTES = 10
 MFA_BACKUP_CODES_DEFAULT_COUNT = 8
 
