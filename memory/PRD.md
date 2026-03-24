@@ -1,5 +1,29 @@
 ## 2026-03-24 — Commercial Ops P0 Sprint Başlangıcı (Binance REST + Canonical PnL/Reconciliation) 🚧
 
+### 2026-03-24 Gece Güncellemesi — P0 Closure Doğrulama (Futures-Only PASS, Spot Regional Blocker)
+- Ortam blocker çözüldü:
+  - `/api/health` 200
+  - DB reachable=true
+  - `postgres.internal` geçici hosts map ile ayağa kaldırıldı, backend stabil çalışıyor.
+- `huseyinwural@gmail.com` için testnet akışı doğrulandı (gerçek Binance verisi):
+  - Ingestion (futures): PASS (idempotent duplicate detection aktif)
+  - PnL latest: PASS (realized/unrealized + fee breakdown dolu)
+  - Reconciliation: PASS (`drift_within_tolerance=true`, `drift_tolerance_pct=0.3`)
+  - Data quality: futures freshness hesaplanıyor
+  - Live gate:
+    - default (spot+futures): false
+    - `required_market_types=futures`: true
+- Spot tarafında kalıcı dış bağımlı blocker:
+  - Binance spot endpointleri runtime IP için `451 restricted location` dönüyor.
+  - Bu nedenle tam Spot+Futures gate closure dışsal erişim engeline bağlı.
+- WebSocket worker tamamlandı:
+  - start/status/stop endpointleri eklendi
+  - reconnect + event dedup + canonical trade persist katmanı aktif
+  - stop endpointi email bazlı durdurma desteğiyle harden edildi.
+- Export standardization doğrulandı:
+  - CSV header standard PASS
+  - CSV realized toplamı = PnL engine realized gross (birebir).
+
 ### Bu turda tamamlananlar
 - Yeni P0 veri modeli eklendi:
   - `commercial_trades` (canonical trade schema, spot+futures birleşik)

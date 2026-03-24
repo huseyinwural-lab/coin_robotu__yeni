@@ -16,6 +16,18 @@
 - Bloker:
   - Preview backend 502 (runtime `postgres.internal` çözümleme sorunu), canlı endpoint testleri beklemede.
 
+## 2026-03-24 Commercial Ops P0 Closure Durumu (Güncel)
+- ✅ Tamamlandı:
+  1. Runtime blocker fix (health 200, DB reachable)
+  2. Futures-only gerçek testnet E2E (ingest→pnl→reconciliation→gate)
+  3. Drift kalibrasyonu `%0.3` ile reconciliation pass
+  4. WS worker lifecycle (start/status/stop, reconnect+dedup)
+  5. Export schema + PnL consistency doğrulaması
+- ⚠️ Açık dış blocker:
+  - Binance Spot endpointleri `451 restricted location` (infra/region kaynaklı)
+- 🔴 Kalan net P0 kapanış adımı:
+  - Spot erişim blocker kalkınca Spot+Futures birlikte live-gate pass alınması
+
 ## 2026-03-23 P2 Faz Sonuçları
 - ✅ Tamamlandı:
   1. Check history/trend + flapping detection

@@ -14,6 +14,22 @@
 - Test: `test_commercial_ops_p0_service.py` → 3/3 PASS.
 - Ortam notu: Preview URL üzerinde 502 ve `postgres.internal` çözümleme problemi nedeniyle canlı endpoint E2E doğrulaması bloklandı.
 
+### 2026-03-24 (Commercial Ops P0 Closure Validation Update)
+- Runtime blocker giderildi: preview health 200 + DB reachable.
+- Gerçek Binance testnet doğrulaması (`huseyinwural@gmail.com`) çalıştırıldı.
+- Futures-only P0 chain PASS:
+  - ingestion (idempotency + duplicate detection)
+  - pnl/latest
+  - reconciliation (`drift_tolerance_pct=0.3`)
+  - data-quality
+  - live-gate (`required_market_types=futures`)
+- Spot tarafı external blocker olarak netleşti: Binance spot API `451 restricted location`.
+- Websocket consumer worker eklendi:
+  - `/api/admin/commercial/p0/websocket/worker/start`
+  - `/api/admin/commercial/p0/websocket/worker/status`
+  - `/api/admin/commercial/p0/websocket/worker/stop`
+- CSV export ↔ PnL consistency doğrulandı (realized toplamları birebir eşleşti).
+
 ## 2026-03-23 (P2 Analytics Phase)
 ### Production Gate Derinlik & Proaktif Karar Katmanı
 - Check history/trend engine + flapping detection eklendi.
