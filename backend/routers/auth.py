@@ -33,7 +33,7 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.admin_profile_service import change_admin_password, update_admin_profile
-from services.mfa_service import get_mfa_settings, is_mfa_enforcement_required, start_mfa_challenge_if_required
+from services.mfa_service import get_mfa_enforcement_context, get_mfa_settings, start_mfa_challenge_if_required
 from services.identity_control_service import (
     enforce_login_protection,
     get_or_create_identity_profile,
@@ -159,7 +159,25 @@ def _login_with_policy(
             )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="password_rotation_required")
 
-    if is_mfa_enforcement_required(user_email=user.email, endpoint_scope=endpoint_scope):
+    mfa_context = get_mfa_enforcement_context(user_email=user.email, endpoint_scope=endpoint_scope)
+    if bool(mfa_context.get("bypass_active")):
+        create_audit_log(
+            db,
+            action="MFA_ENFORCEMENT_BYPASS_ACTIVE",
+            entity_type="user",
+            entity_id=user.id,
+            actor_user_id=user.id,
+            actor_role=user.role.value,
+            severity="warning",
+            details={
+                "email": user.email,
+                "reason": mfa_context.get("bypass_reason") or "allow_list",
+                "environment": mfa_context.get("environment") or "unknown",
+                "endpoint_scope": endpoint_scope,
+            },
+        )
+
+    if bool(mfa_context.get("enforcement_required")):
         mfa_settings = get_mfa_settings(db, user.id)
         if not bool(mfa_settings.get("is_enabled")) or "totp" not in (mfa_settings.get("enabled_methods") or []):
             record_login_failure(

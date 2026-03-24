@@ -38,8 +38,9 @@ from services.identity_control_service import (
     unlock_user_policy_lock,
     update_custom_role,
     expire_invite,
+    REQUEST_REASON_MIN_LEN,
 )
-from services.mfa_service import get_mfa_settings
+from services.mfa_service import get_mfa_enforcement_context, get_mfa_settings
 from services.user_observability_service import (
     get_user_activity_timeline,
     get_user_execution_metrics,
@@ -59,6 +60,61 @@ def _serialize_for_json(obj):
     if isinstance(obj, list):
         return [_serialize_for_json(item) for item in obj]
     return obj
+
+
+REQUEST_REASON_ENFORCED_ACTIONS = {
+    "disable_user",
+    "disable_admin",
+    "delete_user",
+    "soft_delete_user",
+    "hard_delete_user",
+    "restore_user",
+    "grant_privileged_role",
+    "enable_live_trading",
+    "raise_capital_limit",
+    "bulk_disable_users",
+    "bulk_enable_users",
+    "bulk_soft_delete_users",
+    "bulk_restore_users",
+}
+
+
+OBSERVABILITY_ROUTE_CONFIG = {
+    "activity_timeline": {
+        "path": "/users/{user_id}/activity-timeline",
+        "loader": lambda db, user_id, limit=120: get_user_activity_timeline(db, user_id=user_id, limit=limit),
+    },
+    "security_telemetry": {
+        "path": "/users/{user_id}/security-telemetry",
+        "loader": lambda db, user_id, limit=120: get_user_security_telemetry(db, user_id=user_id),
+    },
+    "execution_metrics": {
+        "path": "/users/{user_id}/execution-metrics",
+        "loader": lambda db, user_id, limit=120: get_user_execution_metrics(db, user_id=user_id),
+    },
+    "trading_observability": {
+        "path": "/users/{user_id}/trading-observability",
+        "loader": lambda db, user_id, limit=120: get_user_trading_observability(db, user_id=user_id),
+    },
+}
+
+
+def _enforce_request_reason_min_len(action_key: str, reason: str | None) -> None:
+    if action_key not in REQUEST_REASON_ENFORCED_ACTIONS:
+        return
+    if len(str(reason or "").strip()) < int(REQUEST_REASON_MIN_LEN):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="request_reason_too_short")
+
+
+def _observability_contract(*, user_id: str, metric: str, payload: dict) -> dict:
+    return {
+        "status": "ok",
+        "contract_version": "identity_observability_v1",
+        "user_id": user_id,
+        "metric": metric,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "data": _serialize_for_json(payload),
+    }
 
 
 class BulkStatusRequest(BaseModel):
@@ -169,6 +225,8 @@ def _request_if_critical(
 ) -> dict:
     if action_key not in CRITICAL_APPROVAL_ACTIONS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_action_required")
+
+    _enforce_request_reason_min_len(action_key, reason)
 
     request_payload = dict(payload or {})
     if action_key in HIGH_RISK_REASON_ACTIONS:
@@ -346,6 +404,7 @@ def admin_identity_user_security_detail(
         .all()
     )
     mfa = get_mfa_settings(db, user_id)
+    mfa_enforcement = get_mfa_enforcement_context(user_email=user.email, endpoint_scope="login")
     return {
         "user_id": user_id,
         "email": user.email,
@@ -355,6 +414,10 @@ def admin_identity_user_security_detail(
             "totp_configured": mfa.get("totp_configured"),
             "totp_verified": mfa.get("totp_verified"),
             "backup_codes_remaining": mfa.get("backup_codes_remaining"),
+            "bypass_active": bool(mfa_enforcement.get("bypass_active")),
+            "bypass_reason": mfa_enforcement.get("bypass_reason"),
+            "enforcement_required": bool(mfa_enforcement.get("enforcement_required")),
+            "environment": mfa_enforcement.get("environment"),
         },
         "security_state": {
             "policy_locked_until": profile.policy_locked_until,
@@ -383,49 +446,31 @@ def admin_identity_user_security_detail(
     }
 
 
-@router.get("/users/{user_id}/activity-timeline")
-def admin_identity_user_activity_timeline(
-    user_id: str,
-    limit: int = Query(default=120, ge=1, le=300),
-    current_admin: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    enforce_permission(db, actor=current_admin, permission="identity.users.read")
-    payload = get_user_activity_timeline(db, user_id=user_id, limit=limit)
-    return _serialize_for_json(payload)
+def _make_observability_endpoint(metric_key: str, loader):
+    def endpoint(
+        user_id: str,
+        limit: int = Query(default=120, ge=1, le=300),
+        current_admin: User = Depends(require_admin),
+        db: Session = Depends(get_db),
+    ):
+        enforce_permission(db, actor=current_admin, permission="identity.users.read")
+        user_exists = db.query(User.id).filter(User.id == user_id).first() is not None
+        if not user_exists:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+        payload = loader(db, user_id, limit)
+        return _observability_contract(user_id=user_id, metric=metric_key, payload=payload)
+
+    endpoint.__name__ = f"admin_identity_observability_{metric_key}"
+    return endpoint
 
 
-@router.get("/users/{user_id}/security-telemetry")
-def admin_identity_user_security_telemetry(
-    user_id: str,
-    current_admin: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    enforce_permission(db, actor=current_admin, permission="identity.users.read")
-    payload = get_user_security_telemetry(db, user_id=user_id)
-    return _serialize_for_json(payload)
-
-
-@router.get("/users/{user_id}/execution-metrics")
-def admin_identity_user_execution_metrics(
-    user_id: str,
-    current_admin: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    enforce_permission(db, actor=current_admin, permission="identity.users.read")
-    payload = get_user_execution_metrics(db, user_id=user_id)
-    return _serialize_for_json(payload)
-
-
-@router.get("/users/{user_id}/trading-observability")
-def admin_identity_user_trading_observability(
-    user_id: str,
-    current_admin: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    enforce_permission(db, actor=current_admin, permission="identity.users.read")
-    payload = get_user_trading_observability(db, user_id=user_id)
-    return _serialize_for_json(payload)
+for metric_key, config in OBSERVABILITY_ROUTE_CONFIG.items():
+    router.add_api_route(
+        config["path"],
+        _make_observability_endpoint(metric_key, config["loader"]),
+        methods=["GET"],
+        name=f"admin_identity_observability_{metric_key}",
+    )
 
 
 @router.patch("/users/{user_id}/inline")
@@ -539,6 +584,7 @@ def admin_identity_bulk_status(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
 
     requested_action = _resolve_bulk_action_key(payload)
+    _enforce_request_reason_min_len(requested_action, payload.reason)
 
     success = 0
     failed = []
@@ -776,6 +822,7 @@ def admin_identity_hard_delete_request(
 ):
     if not payload.critical_confirmed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
+    _enforce_request_reason_min_len("hard_delete_user", payload.reason)
     row = create_approval_request(
         db,
         actor=current_admin,
@@ -796,6 +843,7 @@ def admin_identity_soft_delete_request(
 ):
     if not payload.critical_confirmed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
+    _enforce_request_reason_min_len("soft_delete_user", payload.reason)
     row = create_approval_request(
         db,
         actor=current_admin,
@@ -957,6 +1005,7 @@ def admin_identity_create_approval_request(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    _enforce_request_reason_min_len(payload.action_key, payload.reason)
     row = create_approval_request(
         db,
         actor=current_admin,

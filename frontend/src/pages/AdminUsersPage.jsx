@@ -227,10 +227,11 @@ export const AdminUsersPage = ({ scope = "user" }) => {
         apiClient.get(`/admin/identity/users/${userId}/execution-metrics`),
         apiClient.get(`/admin/identity/users/${userId}/trading-observability`),
       ]);
-      setActivityTimeline(activityRes?.data || null);
-      setSecurityTelemetry(telemetryRes?.data || null);
-      setExecutionMetrics(executionRes?.data || null);
-      setTradingObservability(tradingRes?.data || null);
+      const unwrap = (response) => response?.data?.data || response?.data || null;
+      setActivityTimeline(unwrap(activityRes));
+      setSecurityTelemetry(unwrap(telemetryRes));
+      setExecutionMetrics(unwrap(executionRes));
+      setTradingObservability(unwrap(tradingRes));
     } catch (error) {
       setObservabilityError(error?.response?.data?.detail || "Observability yüklenemedi");
     } finally {
@@ -1623,6 +1624,11 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                   <p data-testid="admin-users-security-mfa-enabled">mfa_enabled: {String(Boolean(securityDetail?.mfa?.is_enabled))}</p>
                   <p data-testid="admin-users-security-mfa-methods">methods: {(securityDetail?.mfa?.enabled_methods || []).join(",") || "-"}</p>
                   <p data-testid="admin-users-security-backup-remaining">backup_codes_remaining: {securityDetail?.mfa?.backup_codes_remaining ?? 0}</p>
+                  {Boolean(securityDetail?.mfa?.bypass_active) && (
+                    <p className="font-semibold text-amber-700" data-testid="admin-users-security-mfa-bypass-active-badge">
+                      MFA bypass active ({securityDetail?.mfa?.bypass_reason || "allow_list"})
+                    </p>
+                  )}
                   <p data-testid="admin-users-security-policy-lock-until">policy_locked_until: {securityDetail?.security_state?.policy_locked_until || "-"}</p>
                   <p data-testid="admin-users-security-password-expires">password_expires_at: {securityDetail?.security_state?.password_expires_at || "-"}</p>
                   <Button variant="outline" onClick={() => unlockPolicyLock(securityDetailUserId)} data-testid="admin-users-security-unlock-button">Unlock Policy Lock</Button>

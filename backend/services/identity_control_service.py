@@ -57,6 +57,7 @@ MANDATORY_REASON_ACTIONS = {
     "raise_capital_limit",
     "grant_privileged_role",
     "bulk_disable_users",
+    "bulk_enable_users",
     "bulk_soft_delete_users",
     "bulk_restore_users",
 }

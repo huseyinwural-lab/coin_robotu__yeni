@@ -1,0 +1,66 @@
+{
+  "observability_endpoints": {
+    "activity-timeline": {
+      "status": "PASS",
+      "http_code": 200,
+      "has_required_fields": true,
+      "data_size": 32438
+    },
+    "security-telemetry": {
+      "status": "PASS",
+      "http_code": 200,
+      "has_required_fields": true,
+      "data_size": 1541
+    },
+    "execution-metrics": {
+      "status": "PASS",
+      "http_code": 200,
+      "has_required_fields": true,
+      "data_size": 283
+    },
+    "trading-observability": {
+      "status": "PASS",
+      "http_code": 200,
+      "has_required_fields": true,
+      "data_size": 407
+    }
+  },
+  "reason_validation": {
+    "disable_user_approval_request": {
+      "status": "FAIL",
+      "http_code": 422,
+      "expected": 400,
+      "response": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\",\"action_key\"],\"msg\":\"Field required\",\"input\":{\"action_type\":\"disable_user\",\"target_user_id\":\"fbf2bf63-7f27-43ce-820b-23839bd3b2b4\",\"reason\":\"bad\"},\"url\":\"htt"
+    },
+    "bulk_status": {
+      "status": "FAIL",
+      "http_code": 400,
+      "validation_triggered": false,
+      "error_code": "critical_confirmation_required"
+    },
+    "soft_delete_request": {
+      "status": "FAIL",
+      "http_code": 400,
+      "validation_triggered": false,
+      "error_code": "critical_confirmation_required"
+    },
+    "hard_delete_request": {
+      "status": "FAIL",
+      "http_code": 400,
+      "validation_triggered": false,
+      "error_code": "critical_confirmation_required"
+    }
+  },
+  "mfa_bypass_audit": {
+    "mfa_bypassed_on_login": true,
+    "audit_log_found": false,
+    "security_payload_correct": true,
+    "overall_status": "PASS"
+  },
+  "contract_freeze": {
+    "approvals_contract": "PASS",
+    "bulk_preview_contract": "FAIL",
+    "overall_status": "FAIL"
+  },
+  "overall_status": "FAIL"
+}

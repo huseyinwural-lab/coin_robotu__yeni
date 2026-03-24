@@ -441,8 +441,12 @@ class TestP1ObservabilityAndApprovalHardening:
             timeout=30,
         )
         assert activity.status_code == 200, activity.text
-        assert "items" in activity.json()
-        assert "summary" in activity.json()
+        activity_payload = activity.json()
+        assert activity_payload.get("status") == "ok"
+        assert activity_payload.get("metric") == "activity_timeline"
+        assert "generated_at" in activity_payload
+        assert "items" in (activity_payload.get("data") or {})
+        assert "summary" in (activity_payload.get("data") or {})
 
         telemetry = requests.get(
             f"{BASE_URL}/api/admin/identity/users/{user_id}/security-telemetry",
@@ -450,8 +454,11 @@ class TestP1ObservabilityAndApprovalHardening:
             timeout=30,
         )
         assert telemetry.status_code == 200, telemetry.text
-        assert "failed_login_trend" in telemetry.json()
-        assert "normalized_severity" in telemetry.json()
+        telemetry_payload = telemetry.json()
+        assert telemetry_payload.get("status") == "ok"
+        assert telemetry_payload.get("metric") == "security_telemetry"
+        assert "failed_login_trend" in (telemetry_payload.get("data") or {})
+        assert "normalized_severity" in (telemetry_payload.get("data") or {})
 
         execution = requests.get(
             f"{BASE_URL}/api/admin/identity/users/{user_id}/execution-metrics",
@@ -459,7 +466,10 @@ class TestP1ObservabilityAndApprovalHardening:
             timeout=30,
         )
         assert execution.status_code == 200, execution.text
-        assert "execution_success_rate" in execution.json()
+        execution_payload = execution.json()
+        assert execution_payload.get("status") == "ok"
+        assert execution_payload.get("metric") == "execution_metrics"
+        assert "execution_success_rate" in (execution_payload.get("data") or {})
 
         trading = requests.get(
             f"{BASE_URL}/api/admin/identity/users/{user_id}/trading-observability",
@@ -467,7 +477,10 @@ class TestP1ObservabilityAndApprovalHardening:
             timeout=30,
         )
         assert trading.status_code == 200, trading.text
-        assert "impact_summary" in trading.json()
+        trading_payload = trading.json()
+        assert trading_payload.get("status") == "ok"
+        assert trading_payload.get("metric") == "trading_observability"
+        assert "impact_summary" in (trading_payload.get("data") or {})
 
     def test_mandatory_reason_enforced_for_request(self, super_admin_token: str):
         user_id, _, _ = _create_regular_user()
@@ -479,6 +492,36 @@ class TestP1ObservabilityAndApprovalHardening:
                 "target_user_id": user_id,
                 "payload": {"critical_confirmed": True},
                 "reason": "short",
+            },
+            timeout=30,
+        )
+        assert response.status_code == 400
+        assert "request_reason_too_short" in response.text
+
+    def test_bulk_request_short_reason_fails_before_approval(self, super_admin_token: str):
+        user_id, _, _ = _create_regular_user()
+        response = requests.post(
+            f"{BASE_URL}/api/admin/identity/users/bulk-status",
+            headers=_headers(super_admin_token),
+            json={
+                "user_ids": [user_id],
+                "status": "disabled",
+                "reason": "short",
+                "critical_confirmed": True,
+            },
+            timeout=30,
+        )
+        assert response.status_code == 400
+        assert "request_reason_too_short" in response.text
+
+    def test_soft_delete_short_reason_fails_before_approval(self, super_admin_token: str):
+        user_id, _, _ = _create_regular_user()
+        response = requests.post(
+            f"{BASE_URL}/api/admin/identity/users/{user_id}/soft-delete/request",
+            headers=_headers(super_admin_token),
+            json={
+                "reason": "short",
+                "critical_confirmed": True,
             },
             timeout=30,
         )

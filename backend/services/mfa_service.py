@@ -16,30 +16,54 @@ MFA_ALLOWED_METHODS = {"totp"}
 MFA_CHALLENGE_TTL_MINUTES = 10
 
 
-def is_mfa_enforcement_required(*, user_email: str, endpoint_scope: str) -> bool:
+def _runtime_environment() -> str:
+    return str(
+        os.environ.get("APP_ENV")
+        or os.environ.get("ENVIRONMENT")
+        or os.environ.get("RUNTIME_ENV")
+        or ""
+    ).strip().lower()
+
+
+def get_mfa_enforcement_context(*, user_email: str, endpoint_scope: str) -> dict:
     mode = str(os.environ.get("MFA_ENFORCEMENT_MODE") or "auto").strip().lower()
     override_emails = {
         item.strip().lower()
         for item in str(os.environ.get("MFA_OPTIONAL_OVERRIDE_EMAILS") or "").split(",")
         if item.strip()
     }
-    if str(user_email or "").strip().lower() in override_emails:
-        return False
-    if mode == "enforce":
-        return True
-    if mode == "optional":
-        return False
-
-    runtime_env = str(
-        os.environ.get("APP_ENV")
-        or os.environ.get("ENVIRONMENT")
-        or os.environ.get("RUNTIME_ENV")
-        or ""
-    ).strip().lower()
+    normalized_email = str(user_email or "").strip().lower()
+    runtime_env = _runtime_environment()
     is_production = runtime_env in {"prod", "production"}
-    if endpoint_scope == "admin":
-        return is_production
-    return is_production
+
+    if mode == "enforce":
+        base_required = True
+    elif mode == "optional":
+        base_required = False
+    else:
+        base_required = is_production
+
+    bypass_active = normalized_email in override_emails
+    enforcement_required = base_required and not bypass_active
+    return {
+        "enforcement_required": bool(enforcement_required),
+        "bypass_active": bool(bypass_active),
+        "bypass_reason": "allow_list" if bypass_active else None,
+        "environment": runtime_env or "unknown",
+        "mode": mode,
+        "endpoint_scope": endpoint_scope,
+    }
+
+
+def is_mfa_enforcement_required(*, user_email: str, endpoint_scope: str) -> bool:
+    return bool(
+        get_mfa_enforcement_context(
+            user_email=user_email,
+            endpoint_scope=endpoint_scope,
+        ).get("enforcement_required")
+    )
+
+
 MFA_BACKUP_CODES_DEFAULT_COUNT = 8
 
 
