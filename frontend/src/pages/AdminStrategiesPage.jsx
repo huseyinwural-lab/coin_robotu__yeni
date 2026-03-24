@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,36 @@ const buildRegimeContext = (versionId = "", versionHash = "", variant = "allowed
   };
 };
 
+const roleFilterPresets = {
+  desk: {
+    status_filter: "active",
+    lifecycle_state: "production",
+    validation_status: "PASS",
+    sort_by: "updated_at",
+    sort_order: "desc",
+    active_only: true,
+    production_only: true,
+  },
+  ops: {
+    status_filter: "active",
+    lifecycle_state: "dry_run_passed",
+    validation_status: "PASS",
+    sort_by: "updated_at",
+    sort_order: "desc",
+    active_only: false,
+    production_only: false,
+  },
+  admin: {
+    status_filter: "",
+    lifecycle_state: "",
+    validation_status: "",
+    sort_by: "updated_at",
+    sort_order: "desc",
+    active_only: false,
+    production_only: false,
+  },
+};
+
 export const AdminStrategiesPage = () => {
   const [loading, setLoading] = useState(true);
   const [strategies, setStrategies] = useState([]);
@@ -60,10 +91,13 @@ export const AdminStrategiesPage = () => {
   const [compareSelection, setCompareSelection] = useState({ version_a_id: "", version_b_id: "" });
   const [executionPreviewResult, setExecutionPreviewResult] = useState(null);
   const [metricsSummary, setMetricsSummary] = useState(null);
+  const [metricsTrend, setMetricsTrend] = useState(null);
   const [driftSummary, setDriftSummary] = useState(null);
   const [falseSignalSummary, setFalseSignalSummary] = useState(null);
   const [promotionReadiness, setPromotionReadiness] = useState(null);
   const [selectedStrategyIds, setSelectedStrategyIds] = useState([]);
+  const [savedFilterName, setSavedFilterName] = useState("");
+  const [savedFilters, setSavedFilters] = useState({});
   const [listFilters, setListFilters] = useState({
     search: "",
     status_filter: "",
@@ -133,6 +167,46 @@ export const AdminStrategiesPage = () => {
     }
   }, [listFilters, selectedStrategyId]);
 
+  const loadSavedFilters = useCallback(() => {
+    try {
+      const raw = window.localStorage.getItem("strategy_control_saved_filters");
+      if (!raw) {
+        setSavedFilters({});
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setSavedFilters(parsed && typeof parsed === "object" ? parsed : {});
+    } catch {
+      setSavedFilters({});
+    }
+  }, []);
+
+  const saveCurrentFilterSet = () => {
+    const name = savedFilterName.trim();
+    if (!name) {
+      toast.error("Filtre set adı girin");
+      return;
+    }
+    const next = { ...savedFilters, [name]: listFilters };
+    setSavedFilters(next);
+    window.localStorage.setItem("strategy_control_saved_filters", JSON.stringify(next));
+    toast.success(`Filtre seti kaydedildi: ${name}`);
+  };
+
+  const applySavedFilterSet = (name) => {
+    const preset = savedFilters[name];
+    if (!preset) return;
+    setListFilters((prev) => ({ ...prev, ...preset, page: 1 }));
+    toast.success(`Saved filter uygulandı: ${name}`);
+  };
+
+  const applyRolePreset = (roleKey) => {
+    const preset = roleFilterPresets[roleKey];
+    if (!preset) return;
+    setListFilters((prev) => ({ ...prev, ...preset, page: 1 }));
+    toast.success(`Role preset uygulandı: ${roleKey}`);
+  };
+
   const loadDetail = useCallback(async (strategyId) => {
     if (!strategyId) return;
     try {
@@ -155,6 +229,10 @@ export const AdminStrategiesPage = () => {
   useEffect(() => {
     loadStrategies();
   }, [loadStrategies]);
+
+  useEffect(() => {
+    loadSavedFilters();
+  }, [loadSavedFilters]);
 
   useEffect(() => {
     if (selectedStrategyId) {
@@ -444,13 +522,17 @@ export const AdminStrategiesPage = () => {
   const loadVersionObservability = useCallback(async () => {
     if (!selectedStrategyId || !selectedActiveVersion) return;
     try {
-      const [metricsRes, driftRes, falseRes, readinessRes] = await Promise.all([
+      const [metricsRes, trendRes, driftRes, falseRes, readinessRes] = await Promise.all([
         apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${selectedActiveVersion.version_id}/metrics`),
+        apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${selectedActiveVersion.version_id}/metrics-trend`, {
+          params: { points: 80 },
+        }),
         apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${selectedActiveVersion.version_id}/drift-alerts`),
         apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${selectedActiveVersion.version_id}/false-signal-report`),
         apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${selectedActiveVersion.version_id}/promotion-readiness`),
       ]);
       setMetricsSummary(metricsRes.data || null);
+      setMetricsTrend(trendRes.data || null);
       setDriftSummary(driftRes.data || null);
       setFalseSignalSummary(falseRes.data || null);
       setPromotionReadiness(readinessRes.data || null);
@@ -787,7 +869,34 @@ export const AdminStrategiesPage = () => {
               <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => setListFilters((prev) => ({ ...prev, active_only: !prev.active_only }))} data-testid="admin-strategies-filter-active-toggle-button">active_only: {String(Boolean(listFilters.active_only))}</Button>
               <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => setListFilters((prev) => ({ ...prev, production_only: !prev.production_only }))} data-testid="admin-strategies-filter-production-toggle-button">production_only: {String(Boolean(listFilters.production_only))}</Button>
               <Button variant="outline" className="border-slate-500 text-slate-100" onClick={loadStrategies} data-testid="admin-strategies-filter-apply-button">Apply Filters</Button>
+              <Button variant="outline" className="border-sky-500 text-sky-200" onClick={() => applyRolePreset("desk")} data-testid="admin-strategies-role-preset-desk-button">Preset: Desk</Button>
+              <Button variant="outline" className="border-sky-500 text-sky-200" onClick={() => applyRolePreset("ops")} data-testid="admin-strategies-role-preset-ops-button">Preset: Ops</Button>
+              <Button variant="outline" className="border-sky-500 text-sky-200" onClick={() => applyRolePreset("admin")} data-testid="admin-strategies-role-preset-admin-button">Preset: Admin</Button>
             </div>
+            <div className="grid grid-cols-2 gap-2" data-testid="admin-strategies-saved-filter-row">
+              <Input
+                placeholder="saved filter name"
+                value={savedFilterName}
+                onChange={(e) => setSavedFilterName(e.target.value)}
+                data-testid="admin-strategies-saved-filter-name-input"
+              />
+              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={saveCurrentFilterSet} data-testid="admin-strategies-saved-filter-save-button">Save Current Filter</Button>
+            </div>
+            {Object.keys(savedFilters).length > 0 && (
+              <div className="flex flex-wrap gap-2" data-testid="admin-strategies-saved-filter-buttons">
+                {Object.keys(savedFilters).map((key) => (
+                  <Button
+                    key={key}
+                    variant="outline"
+                    className="border-slate-500 text-slate-100"
+                    onClick={() => applySavedFilterSet(key)}
+                    data-testid={`admin-strategies-saved-filter-apply-${key}`}
+                  >
+                    {key}
+                  </Button>
+                ))}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2" data-testid="admin-strategies-bulk-actions-row">
               <Button variant="outline" className="border-red-500 text-red-200" onClick={bulkArchive} data-testid="admin-strategies-bulk-archive-button">Bulk Archive</Button>
               <Button variant="outline" className="border-slate-500 text-slate-100" onClick={bulkValidate} data-testid="admin-strategies-bulk-validate-button">Bulk Validate</Button>
@@ -1044,6 +1153,9 @@ export const AdminStrategiesPage = () => {
               <p data-testid="admin-strategy-metrics-pnl">pnl_contribution: {metricsSummary?.metrics?.pnl_contribution ?? "-"}</p>
               <p data-testid="admin-strategy-metrics-execution-quality">execution_quality: {metricsSummary?.metrics?.execution_quality ?? "-"}</p>
               <p data-testid="admin-strategy-metrics-drift-alerts">drift_alerts: {metricsSummary?.metrics?.drift_alerts ?? "-"}</p>
+              <p data-testid="admin-strategy-metrics-slippage-p95">slippage_p95_bps: {metricsSummary?.metrics?.slippage_p95_bps ?? "-"}</p>
+              <p data-testid="admin-strategy-metrics-latency-p95">latency_p95_ms: {metricsSummary?.metrics?.latency_p95_ms ?? "-"}</p>
+              <p data-testid="admin-strategy-metrics-health-score">version_health_score: {metricsSummary?.metrics?.version_health_score ?? "-"}</p>
             </div>
           ) : (
             <p className="text-xs text-slate-400" data-testid="admin-strategy-metrics-summary-empty">Metrics yok.</p>
@@ -1056,6 +1168,26 @@ export const AdminStrategiesPage = () => {
           <p className="text-xs" data-testid="admin-strategy-false-allow-rate">false_allow_rate: {falseSignalSummary?.false_allow_rate ?? "-"}</p>
           <p className="text-xs" data-testid="admin-strategy-false-reject-rate">false_reject_rate: {falseSignalSummary?.false_reject_rate ?? "-"}</p>
           <p className="text-xs" data-testid="admin-strategy-signal-quality">signal_quality_last_50: {falseSignalSummary?.signal_quality_last_50 ?? "-"}</p>
+        </div>
+      </div>
+
+      <div className="space-y-2 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-trend-chart-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-trend-chart-title">Trend + Anomaly Band</p>
+        <div className="h-64 w-full" data-testid="admin-strategy-trend-chart-wrapper">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={metricsTrend?.trend_series || []} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey="timestamp" hide />
+              <YAxis stroke="#94a3b8" />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", color: "#e2e8f0" }}
+                labelStyle={{ color: "#cbd5e1" }}
+              />
+              <Line type="monotone" dataKey="score_delta" stroke="#f97316" dot={false} name="score_delta" />
+              <Line type="monotone" dataKey="anomaly_upper" stroke="#22c55e" dot={false} name="anomaly_upper" strokeDasharray="5 5" />
+              <Line type="monotone" dataKey="anomaly_lower" stroke="#ef4444" dot={false} name="anomaly_lower" strokeDasharray="5 5" />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 

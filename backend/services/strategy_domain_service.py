@@ -106,6 +106,20 @@ def _safe_int(value: Any, default: int) -> int:
         return int(default)
 
 
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    sorted_values = sorted(values)
+    if len(sorted_values) == 1:
+        return round(sorted_values[0], 6)
+    rank = max(0.0, min(1.0, percentile / 100.0)) * (len(sorted_values) - 1)
+    low_index = int(rank)
+    high_index = min(low_index + 1, len(sorted_values) - 1)
+    weight = rank - low_index
+    value = sorted_values[low_index] * (1 - weight) + sorted_values[high_index] * weight
+    return round(value, 6)
+
+
 def _flatten_payload(payload: Any, prefix: str = "") -> dict[str, Any]:
     if isinstance(payload, dict):
         result: dict[str, Any] = {}
@@ -1477,10 +1491,41 @@ def get_strategy_version_metrics(db: Session, *, strategy_id: str, version_id: s
         sum(_safe_float((event.payload or {}).get("paper_pnl"), 0.0) for event in event_rows),
         6,
     )
+    slippage_values = [_safe_float((event.payload or {}).get("slippage_bps"), 0.0) for event in event_rows]
+    latency_values = [_safe_float((event.payload or {}).get("latency_ms"), 0.0) for event in event_rows]
+
+    slippage_p50 = _percentile(slippage_values, 50)
+    slippage_p95 = _percentile(slippage_values, 95)
+    latency_p50 = _percentile(latency_values, 50)
+    latency_p95 = _percentile(latency_values, 95)
 
     hit_rate = round((passes / total_obs) * 100, 2) if total_obs > 0 else 0.0
     block_reject_rate = round(((rejects + rejected_intents) / max(total_obs + total_intents, 1)) * 100, 2)
     execution_quality = round((executed_intents / max(total_intents, 1)) * 100, 2) if total_intents > 0 else 0.0
+    false_allow_rate = _safe_float(getattr(perf_snapshot, "false_allow_rate", 0.0), 0.0)
+    false_reject_rate = _safe_float(getattr(perf_snapshot, "false_reject_rate", 0.0), 0.0)
+
+    slippage_penalty = min(20.0, max(0.0, slippage_p95 / 5.0))
+    latency_penalty = min(20.0, max(0.0, latency_p95 / 20.0))
+    drift_penalty = min(20.0, float(drift_alerts) * 2.0)
+    false_penalty = min(20.0, false_allow_rate + false_reject_rate)
+    health_score = round(
+        max(
+            0.0,
+            min(
+                100.0,
+                (hit_rate * 0.35)
+                + (execution_quality * 0.35)
+                + ((100.0 - block_reject_rate) * 0.1)
+                + ((100.0 - false_allow_rate - false_reject_rate) * 0.2)
+                - slippage_penalty
+                - latency_penalty
+                - drift_penalty
+                - false_penalty,
+            ),
+        ),
+        2,
+    )
 
     return {
         "strategy_id": strategy_id,
@@ -1493,11 +1538,88 @@ def get_strategy_version_metrics(db: Session, *, strategy_id: str, version_id: s
         "metrics": {
             "hit_rate": hit_rate,
             "block_reject_rate": block_reject_rate,
-            "false_allow_rate": _safe_float(getattr(perf_snapshot, "false_allow_rate", 0.0), 0.0),
-            "false_reject_rate": _safe_float(getattr(perf_snapshot, "false_reject_rate", 0.0), 0.0),
+            "false_allow_rate": false_allow_rate,
+            "false_reject_rate": false_reject_rate,
             "pnl_contribution": pnl_contribution,
             "execution_quality": execution_quality,
             "drift_alerts": drift_alerts,
+            "slippage_p50_bps": slippage_p50,
+            "slippage_p95_bps": slippage_p95,
+            "latency_p50_ms": latency_p50,
+            "latency_p95_ms": latency_p95,
+            "version_health_score": health_score,
+            "quality_correlation": {
+                "slippage_to_execution_quality": round(max(0.0, execution_quality - slippage_p95), 4),
+                "latency_to_execution_quality": round(max(0.0, execution_quality - (latency_p95 / 10.0)), 4),
+            },
+        },
+    }
+
+
+def get_strategy_version_metrics_timeseries(
+    db: Session,
+    *,
+    strategy_id: str,
+    version_id: str,
+    points: int = 60,
+) -> dict[str, Any]:
+    rows = (
+        db.query(StrategyObservabilityEvent)
+        .filter(
+            StrategyObservabilityEvent.strategy_id == strategy_id,
+            StrategyObservabilityEvent.strategy_version_id == version_id,
+        )
+        .order_by(StrategyObservabilityEvent.created_at.asc())
+        .limit(max(points, 10))
+        .all()
+    )
+
+    series = []
+    for row in rows:
+        delta = _safe_float(row.score_delta, 0.0)
+        pnl = _safe_float(row.pnl_5m, 0.0)
+        rejection = 1 if bool(row.rejection_reason) else 0
+        series.append(
+            {
+                "timestamp": row.created_at.isoformat() if row.created_at else None,
+                "score_delta": delta,
+                "pnl_5m": pnl,
+                "rejection": rejection,
+            }
+        )
+
+    score_values = [_safe_float(item.get("score_delta"), 0.0) for item in series]
+    if score_values:
+        mean_score = sum(score_values) / len(score_values)
+        variance = sum((value - mean_score) ** 2 for value in score_values) / len(score_values)
+        std_score = variance ** 0.5
+    else:
+        mean_score = 0.0
+        std_score = 0.0
+    upper_band = round(mean_score + (2 * std_score), 6)
+    lower_band = round(mean_score - (2 * std_score), 6)
+
+    trend_payload = [
+        {
+            **item,
+            "mean_score": round(mean_score, 6),
+            "anomaly_upper": upper_band,
+            "anomaly_lower": lower_band,
+            "is_anomaly": _safe_float(item.get("score_delta"), 0.0) > upper_band
+            or _safe_float(item.get("score_delta"), 0.0) < lower_band,
+        }
+        for item in series
+    ]
+
+    return {
+        "strategy_id": strategy_id,
+        "strategy_version_id": version_id,
+        "trend_series": trend_payload,
+        "anomaly_band": {
+            "mean_score": round(mean_score, 6),
+            "upper": upper_band,
+            "lower": lower_band,
+            "std_dev": round(std_score, 6),
         },
     }
 

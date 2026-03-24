@@ -154,6 +154,7 @@ from services.strategy_domain_service import (
     get_strategy_version_diff,
     get_strategy_version_false_signal_report,
     get_strategy_version_metrics,
+    get_strategy_version_metrics_timeseries,
     get_strategy_rollback_chain,
     get_version,
     get_version_lifecycle,
@@ -815,6 +816,23 @@ def admin_strategy_version_metrics(
 ):
     _ = current_admin
     return get_strategy_version_metrics(db, strategy_id=strategy_id, version_id=version_id)
+
+
+@router.get("/admin/strategies/{strategy_id}/versions/{version_id}/metrics-trend")
+def admin_strategy_version_metrics_trend(
+    strategy_id: str,
+    version_id: str,
+    points: int = 60,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return get_strategy_version_metrics_timeseries(
+        db,
+        strategy_id=strategy_id,
+        version_id=version_id,
+        points=max(10, min(points, 500)),
+    )
 
 
 @router.get("/admin/strategies/{strategy_id}/versions/{version_id}/drift-alerts")
