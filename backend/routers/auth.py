@@ -35,7 +35,6 @@ from services.audit_service import create_audit_log
 from services.admin_profile_service import change_admin_password, update_admin_profile
 from services.mfa_service import start_mfa_challenge_if_required
 from services.identity_control_service import (
-    enforce_admin_totp_policy,
     enforce_login_protection,
     get_or_create_identity_profile,
     list_active_sessions,
@@ -159,19 +158,6 @@ def _login_with_policy(
                 user_id=user.id,
             )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="password_rotation_required")
-
-    try:
-        enforce_admin_totp_policy(db, user=user)
-    except HTTPException as exc:
-        record_login_failure(
-            db,
-            request=request,
-            endpoint_scope=endpoint_scope,
-            email=user.email,
-            reason=str(exc.detail),
-            user_id=user.id,
-        )
-        raise
 
     mfa_payload = start_mfa_challenge_if_required(db, user=user)
     if mfa_payload:

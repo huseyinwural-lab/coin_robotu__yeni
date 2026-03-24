@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.security import create_access_token
-from models import AuthMfaChallenge, User, UserMfaBackupCode, UserMfaPreference, UserRole
+from models import AuthMfaChallenge, User, UserMfaBackupCode, UserMfaPreference
 
 MFA_ALLOWED_METHODS = {"totp"}
 MFA_CHALLENGE_TTL_MINUTES = 10
@@ -117,7 +117,6 @@ def regenerate_backup_codes(db: Session, *, user_id: str, count: int = MFA_BACKU
 
 def update_mfa_settings(db: Session, user_id: str, *, is_enabled: bool, enabled_methods: list[str]) -> dict:
     pref = _get_or_create_preference(db, user_id)
-    user = db.query(User).filter(User.id == user_id).first()
     methods = _normalize_methods(enabled_methods)
 
     if is_enabled and not methods:
@@ -128,12 +127,6 @@ def update_mfa_settings(db: Session, user_id: str, *, is_enabled: bool, enabled_
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="totp_setup_required")
         if not pref.totp_verified:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="totp_verify_required")
-
-    if user is not None and user.role in {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}:
-        if not is_enabled:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="admin_totp_mfa_required")
-        if "totp" not in methods:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="admin_totp_mfa_required")
 
     pref.enabled_methods = methods
     pref.is_enabled = bool(is_enabled and len(methods) > 0)
