@@ -398,6 +398,14 @@ def create_strategy_version(
         .order_by(StrategyVersion.version_number.desc())
         .first()
     )
+
+    if latest is not None:
+        same_config = canonical_json(latest.config_json or {}) == canonical_json(config_json or {})
+        same_schema = str(latest.config_schema_version) == str(config_schema_version)
+        if same_config and same_schema:
+            _version_cache[latest.version_id] = (time.time(), latest.version_id)
+            return latest
+
     next_version = (latest.version_number + 1) if latest else 1
     version_hash = build_version_hash(
         config_json=config_json,

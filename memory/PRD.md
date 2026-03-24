@@ -1,3 +1,44 @@
+## 2026-03-24 — Strategy Lifecycle + Production Control (Sprint 1 + Sprint 2) ✅
+
+### Teslim Edilenler (Backend)
+- **Version Governance**: immutable version modeli korunarak `rollback`, `diff`, `timeline`, `lifecycle` ve `control-plane` endpointleri eklendi.
+- **Validation Layer**: version create sırasında schema + runtime compatibility zorunlu doğrulama eklendi; hatalar deterministic formatta (`field`, `error_code`, `message`) dönüyor.
+- **Deterministic Evaluate/Replay/Compare**: yeni `evaluate-standard`, `replay`, `compare` endpointleri eklendi; `PASS/BLOCK`, `SCORE`, `REASON_CODES`, `DECISION_HASH` sözleşmesi aktif.
+- **Regime Binding Resolution**: priority bazlı çözüm + `resolved-binding-preview` endpointi eklendi.
+- **Production Safety Gate**: `validate -> dry-run -> promote-request -> approve/reject -> production` akışı eklendi; shadow/canary opsiyonel stage endpointi eklendi.
+- **Audit/History**: strategy bazlı `audit-history` ve `versions/timeline` endpointleri ile lifecycle event görünürlüğü sağlandı.
+
+### Teslim Edilenler (DB/Migration)
+- Yeni migration: `/app/backend/migrations/versions/20260324_0068_strategy_lifecycle_production_gate.py`
+- Yeni tablolar:
+  - `strategy_version_lifecycle`
+  - `strategy_promotion_requests`
+- DB garantileri:
+  - strategy başına tek active version (partial unique index)
+  - strategy başına tek production version (partial unique index)
+  - version->lifecycle tekillik (unique)
+  - promotion workflow için referential integrity
+
+### Teslim Edilenler (Frontend)
+- `/admin/strategies` sayfası lifecycle control-plane olarak genişletildi:
+  - version lifecycle badge’leri
+  - validate / dry-run / activate / rollback / promote request aksiyonları
+  - shadow/canary stage aksiyonları
+  - compare A/B + diff + replay + evaluate-standard panelleri
+  - binding preview paneli
+  - promotion request onay/red paneli
+  - audit/history paneli
+
+### Doğrulama
+- Manuel API akış testleri: create/version/validate/dry-run/activate/diff/rollback/evaluate-standard/replay/compare/binding-preview/promote/approve/lifecycle/timeline => PASS.
+- Testing agent raporu: `/app/test_reports/iteration_117.json` (backend 27/28, frontend 100%).
+- Low issue kapatıldı: aynı config tekrar create edildiğinde yeni version açmak yerine mevcut version döndürme (idempotent create).
+
+### Kalan Backlog (Sonraki Faz)
+- Strategy->Execution linkin daha derin görselleştirilmesi (intent/order preview alanını genişletme)
+- Version bazlı observability metrik kartları (hit/reject/false signal/pnl/drift)
+- Strategy liste ekranı için 50+ kayıt operasyonu (search/filter/sort/bulk)
+
 ## 2026-03-24 — FINAL KAPANIŞ EMRİ Uygulaması (Artefact Güvenilirliği + Manifest Gerçekliği) ✅
 
 ### Uygulanan Zorunlu Düzeltmeler
