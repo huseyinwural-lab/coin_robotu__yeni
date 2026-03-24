@@ -3292,7 +3292,8 @@ class CommercialP0ReconciliationRequest(BaseModel):
     start_ts: str | None = None
     end_ts: str | None = None
     limit_per_symbol: int = Field(default=500, ge=1, le=1000)
-    drift_tolerance_usd: float = Field(default=5.0, gt=0)
+    drift_tolerance_usd: float | None = Field(default=None, gt=0)
+    drift_tolerance_pct: float | None = Field(default=0.3, gt=0)
 
 
 class CommercialP0ReconciliationResponse(BaseModel):
@@ -3310,6 +3311,7 @@ class CommercialP0ReconciliationResponse(BaseModel):
     position_drift_usd: float
     pnl_drift_usd: float
     drift_tolerance_usd: float
+    drift_tolerance_pct: float | None = None
     drift_within_tolerance: bool
     freshness_seconds: int | None = None
     missing_data_alert: bool
@@ -3332,6 +3334,7 @@ class CommercialP0LiveGateResponse(BaseModel):
     user_id: str
     user_email: str
     environment: str
+    required_market_types: list[str] = Field(default_factory=list)
     controls: dict = Field(default_factory=dict)
     live_transition_ready: bool
     evidence: dict = Field(default_factory=dict)
@@ -3352,6 +3355,31 @@ class CommercialP0WebsocketBootstrapResponse(BaseModel):
     streams: dict = Field(default_factory=dict)
     note: str
     generated_at: str
+
+
+class CommercialP0WsWorkerStartRequest(BaseModel):
+    target_user_id: str | None = None
+    target_user_email: str | None = None
+    environment: str = "testnet"
+    market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
+
+
+class CommercialP0WsWorkerStopRequest(BaseModel):
+    target_user_id: str
+    environment: str = "testnet"
+    market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
+
+
+class CommercialP0WsWorkerResponse(BaseModel):
+    status: str
+    worker: dict | None = None
+    worker_key: str | None = None
+
+
+class CommercialP0WsWorkerStatusResponse(BaseModel):
+    status: str
+    workers: list[dict] = Field(default_factory=list)
+    count: int = 0
 
 
 class LearningImpactSimulationRequest(BaseModel):

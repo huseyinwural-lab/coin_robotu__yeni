@@ -4,7 +4,7 @@ import hmac
 import io
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import httpx
@@ -14,7 +14,8 @@ from core.users.user_exchange_connector import decrypt_exchange_secret
 from models import CommercialTrade, ExchangeReconciliationLog, PnlRecord, User, UserExchangeConnection
 
 STABLE_QUOTES = ("USDT", "USTC", "BUSD", "USDC", "FDUSD", "USD")
-DEFAULT_START_MS = int(datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
+DEFAULT_WINDOW_DAYS = 7
+MAX_FUTURES_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
 
 def _now() -> datetime:
@@ -61,6 +62,23 @@ def _dt_to_ms(dt: datetime | None, fallback: int) -> int:
     if dt is None:
         return fallback
     return int(dt.timestamp() * 1000)
+
+
+def _default_start_ms() -> int:
+    return int((_now() - timedelta(days=DEFAULT_WINDOW_DAYS)).timestamp() * 1000)
+
+
+def _iter_windows(start_ms: int, end_ms: int, max_span_ms: int) -> list[tuple[int, int]]:
+    if end_ms <= start_ms:
+        return [(start_ms, end_ms)]
+    windows: list[tuple[int, int]] = []
+    cursor = int(start_ms)
+    final = int(end_ms)
+    while cursor <= final:
+        chunk_end = min(cursor + max_span_ms - 1, final)
+        windows.append((cursor, chunk_end))
+        cursor = chunk_end + 1
+    return windows
 
 
 def _extract_assets(symbol: str) -> tuple[str, str]:
@@ -461,7 +479,7 @@ def run_rest_trade_ingestion(
     )
     client = BinanceCommercialClient(api_key=api_key, api_secret=api_secret, environment=env)
 
-    start_ms = _dt_to_ms(_parse_iso(start_ts), DEFAULT_START_MS)
+    start_ms = _dt_to_ms(_parse_iso(start_ts), _default_start_ms())
     end_ms = _dt_to_ms(_parse_iso(end_ts), int(_now().timestamp() * 1000))
 
     inserted = 0
@@ -504,29 +522,30 @@ def run_rest_trade_ingestion(
         else:
             futures_symbols = clean_symbols or [None]
             for symbol in futures_symbols:
-                trades = client.fetch_futures_trades(
-                    symbol=symbol,
-                    start_time_ms=start_ms,
-                    end_time_ms=end_ms,
-                    limit=max(1, min(limit_per_symbol, 1000)),
-                )
-                market_fetched += len(trades)
-                for raw in trades:
-                    normalized_symbol = str(raw.get("symbol") or symbol or "").upper()
-                    row = _build_futures_trade_row(
-                        user_id=user.id,
-                        connection_id=connection_id,
-                        environment=env,
-                        symbol=normalized_symbol,
-                        payload=raw,
-                        client=client,
-                        source=source,
+                for chunk_start, chunk_end in _iter_windows(start_ms, end_ms, MAX_FUTURES_WINDOW_MS):
+                    trades = client.fetch_futures_trades(
+                        symbol=symbol,
+                        start_time_ms=chunk_start,
+                        end_time_ms=chunk_end,
+                        limit=max(1, min(limit_per_symbol, 1000)),
                     )
-                    if _trade_exists(db, row):
-                        market_duplicate += 1
-                        continue
-                    db.add(row)
-                    market_inserted += 1
+                    market_fetched += len(trades)
+                    for raw in trades:
+                        normalized_symbol = str(raw.get("symbol") or symbol or "").upper()
+                        row = _build_futures_trade_row(
+                            user_id=user.id,
+                            connection_id=connection_id,
+                            environment=env,
+                            symbol=normalized_symbol,
+                            payload=raw,
+                            client=client,
+                            source=source,
+                        )
+                        if _trade_exists(db, row):
+                            market_duplicate += 1
+                            continue
+                        db.add(row)
+                        market_inserted += 1
 
         market_summary[market] = {
             "fetched": market_fetched,
@@ -631,7 +650,7 @@ def compute_and_persist_pnl(
     realized_gross = sum(_safe_float(item.realized_pnl_usd) for item in trades)
     commission_usd = sum(_safe_float(item.commission_usd) for item in trades)
 
-    start_ms = _dt_to_ms(start_dt, DEFAULT_START_MS)
+    start_ms = _dt_to_ms(start_dt, _default_start_ms())
     end_ms = _dt_to_ms(end_dt, int(_now().timestamp() * 1000))
     funding_income_rows = client.fetch_futures_funding_income(start_time_ms=start_ms, end_time_ms=end_ms)
     funding_usd = 0.0
@@ -738,7 +757,8 @@ def run_exchange_reconciliation(
     start_ts: str | None,
     end_ts: str | None,
     limit_per_symbol: int,
-    drift_tolerance_usd: float,
+    drift_tolerance_usd: float | None,
+    drift_tolerance_pct: float | None,
 ) -> dict:
     env = _normalize_environment(environment)
     markets = _normalize_market_types(market_types)
@@ -754,7 +774,7 @@ def run_exchange_reconciliation(
 
     start_dt = _parse_iso(start_ts)
     end_dt = _parse_iso(end_ts)
-    start_ms = _dt_to_ms(start_dt, DEFAULT_START_MS)
+    start_ms = _dt_to_ms(start_dt, _default_start_ms())
     end_ms = _dt_to_ms(end_dt, int(_now().timestamp() * 1000))
 
     latest_trade = (
@@ -803,21 +823,22 @@ def run_exchange_reconciliation(
         else:
             futures_symbols = clean_symbols or [None]
             for symbol in futures_symbols:
-                for raw in client.fetch_futures_trades(
-                    symbol=symbol,
-                    start_time_ms=start_ms,
-                    end_time_ms=end_ms,
-                    limit=max(1, min(limit_per_symbol, 1000)),
-                ):
-                    exchange_trade_ids.add(f"futures:{raw.get('id')}")
-                    pnl_amount = _safe_float(raw.get("realizedPnl"), 0.0)
-                    exchange_realized_usd += _asset_amount_to_usd(
-                        client,
-                        amount=pnl_amount,
-                        asset="USDT",
-                        quote_asset="USDT",
-                        executed_price=1.0,
-                    )
+                for chunk_start, chunk_end in _iter_windows(start_ms, end_ms, MAX_FUTURES_WINDOW_MS):
+                    for raw in client.fetch_futures_trades(
+                        symbol=symbol,
+                        start_time_ms=chunk_start,
+                        end_time_ms=chunk_end,
+                        limit=max(1, min(limit_per_symbol, 1000)),
+                    ):
+                        exchange_trade_ids.add(f"futures:{raw.get('id')}")
+                        pnl_amount = _safe_float(raw.get("realizedPnl"), 0.0)
+                        exchange_realized_usd += _asset_amount_to_usd(
+                            client,
+                            amount=pnl_amount,
+                            asset="USDT",
+                            quote_asset="USDT",
+                            executed_price=1.0,
+                        )
 
     internal_ids = set(internal_id_counts.keys())
     missing_ids = sorted(list(exchange_trade_ids - internal_ids))
@@ -861,10 +882,17 @@ def run_exchange_reconciliation(
     except Exception:
         balance_drift_usd = 0.0
 
+    pct_value = _safe_float(drift_tolerance_pct, 0.0)
+    if pct_value > 0:
+        tolerance_base = max(abs(exchange_realized_usd), abs(internal_realized_usd), 1.0)
+        effective_tolerance_usd = max(tolerance_base * (pct_value / 100.0), 0.01)
+    else:
+        effective_tolerance_usd = max(_safe_float(drift_tolerance_usd, 5.0), 0.01)
+
     missing_data_alert = bool((freshness_seconds is not None and freshness_seconds > 900) or missing_trade_count > 0)
     drift_within_tolerance = (
-        abs(pnl_drift_usd) <= drift_tolerance_usd
-        and abs(position_drift_usd) <= drift_tolerance_usd
+        abs(pnl_drift_usd) <= effective_tolerance_usd
+        and abs(position_drift_usd) <= effective_tolerance_usd
         and missing_trade_count == 0
     )
 
@@ -886,7 +914,7 @@ def run_exchange_reconciliation(
         balance_drift_usd=round(balance_drift_usd, 8),
         position_drift_usd=round(position_drift_usd, 8),
         pnl_drift_usd=round(pnl_drift_usd, 8),
-        drift_tolerance_usd=round(max(_safe_float(drift_tolerance_usd, 5.0), 0.01), 8),
+        drift_tolerance_usd=round(effective_tolerance_usd, 8),
         drift_within_tolerance=drift_within_tolerance,
         freshness_seconds=freshness_seconds,
         missing_data_alert=missing_data_alert,
@@ -896,6 +924,7 @@ def run_exchange_reconciliation(
             "markets": markets,
             "internal_realized_usd": round(internal_realized_usd, 8),
             "exchange_realized_usd": round(exchange_realized_usd, 8),
+            "drift_tolerance_pct": pct_value if pct_value > 0 else None,
         },
         created_at=_now(),
     )
@@ -918,6 +947,7 @@ def run_exchange_reconciliation(
         "position_drift_usd": log.position_drift_usd,
         "pnl_drift_usd": log.pnl_drift_usd,
         "drift_tolerance_usd": log.drift_tolerance_usd,
+        "drift_tolerance_pct": pct_value if pct_value > 0 else None,
         "drift_within_tolerance": bool(log.drift_within_tolerance),
         "freshness_seconds": log.freshness_seconds,
         "missing_data_alert": bool(log.missing_data_alert),
@@ -995,8 +1025,10 @@ def get_live_transition_gate(
     target_user_id: str | None,
     target_user_email: str | None,
     environment: str,
+    required_market_types: list[str] | None,
 ) -> dict:
     env = _normalize_environment(environment)
+    markets = _normalize_market_types(required_market_types)
     user, _, _, _ = _resolve_user_and_credentials(
         db,
         target_user_id=target_user_id,
@@ -1004,12 +1036,31 @@ def get_live_transition_gate(
         environment=env,
     )
 
-    latest_trade = (
-        db.query(CommercialTrade)
-        .filter(CommercialTrade.user_id == user.id, CommercialTrade.exchange == "binance", CommercialTrade.environment == env)
-        .order_by(CommercialTrade.ingested_at.desc())
-        .first()
-    )
+    latest_trade = None
+    market_ingest_coverage: dict[str, bool] = {}
+    for market in markets:
+        market_latest = (
+            db.query(CommercialTrade)
+            .filter(
+                CommercialTrade.user_id == user.id,
+                CommercialTrade.exchange == "binance",
+                CommercialTrade.environment == env,
+                CommercialTrade.market_type == market,
+            )
+            .order_by(CommercialTrade.ingested_at.desc())
+            .first()
+        )
+        market_ingest_coverage[market] = market_latest is not None
+        if latest_trade is None and market_latest is not None:
+            latest_trade = market_latest
+
+    if latest_trade is None:
+        latest_trade = (
+            db.query(CommercialTrade)
+            .filter(CommercialTrade.user_id == user.id, CommercialTrade.exchange == "binance", CommercialTrade.environment == env)
+            .order_by(CommercialTrade.ingested_at.desc())
+            .first()
+        )
     latest_pnl = (
         db.query(PnlRecord)
         .filter(PnlRecord.user_id == user.id, PnlRecord.exchange == "binance", PnlRecord.environment == env)
@@ -1023,19 +1074,27 @@ def get_live_transition_gate(
         .first()
     )
 
-    ingest_ok = latest_trade is not None
-    pnl_ok = latest_pnl is not None and int(latest_pnl.trade_count or 0) > 0
-    reconcile_ok = latest_reconciliation is not None and bool(latest_reconciliation.drift_within_tolerance)
+    ingest_ok = all(market_ingest_coverage.values()) if market_ingest_coverage else latest_trade is not None
+    pnl_ok = latest_pnl is not None and int(latest_pnl.trade_count or 0) > 0 and ingest_ok
+    reconcile_scope_ok = False
+    if latest_reconciliation is not None:
+        if len(markets) > 1:
+            reconcile_scope_ok = str(latest_reconciliation.market_type or "") == "all"
+        else:
+            reconcile_scope_ok = str(latest_reconciliation.market_type or "") in {"all", markets[0]}
+    reconcile_ok = latest_reconciliation is not None and bool(latest_reconciliation.drift_within_tolerance) and reconcile_scope_ok
 
     return {
         "status": "ok",
         "user_id": user.id,
         "user_email": user.email,
         "environment": env,
+        "required_market_types": markets,
         "controls": {
             "trade_ingest_ok": ingest_ok,
             "pnl_ok": pnl_ok,
             "reconciliation_ok": reconcile_ok,
+            "market_ingest_coverage": market_ingest_coverage,
         },
         "live_transition_ready": bool(ingest_ok and pnl_ok and reconcile_ok),
         "evidence": {

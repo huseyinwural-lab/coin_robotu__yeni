@@ -15,6 +15,10 @@ from schemas import (
     CommercialP0ReconciliationResponse,
     CommercialP0WebsocketBootstrapRequest,
     CommercialP0WebsocketBootstrapResponse,
+    CommercialP0WsWorkerResponse,
+    CommercialP0WsWorkerStartRequest,
+    CommercialP0WsWorkerStatusResponse,
+    CommercialP0WsWorkerStopRequest,
 )
 from services.commercial_ops_p0_service import (
     bootstrap_user_websocket_streams,
@@ -25,6 +29,7 @@ from services.commercial_ops_p0_service import (
     run_exchange_reconciliation,
     run_rest_trade_ingestion,
 )
+from services.commercial_ops_ws_worker import start_ws_worker, stop_ws_worker, ws_worker_status
 
 router = APIRouter(prefix="/admin/commercial/p0", tags=["admin_commercial_p0"])
 
@@ -135,6 +140,7 @@ def run_reconciliation(
                 end_ts=payload.end_ts,
                 limit_per_symbol=payload.limit_per_symbol,
                 drift_tolerance_usd=payload.drift_tolerance_usd,
+                drift_tolerance_pct=payload.drift_tolerance_pct,
             )
         )
     except Exception as exc:
@@ -167,6 +173,7 @@ def live_gate(
     target_user_id: str | None = Query(default=None),
     target_user_email: str | None = Query(default=None),
     environment: str = Query(default="testnet"),
+    required_market_types: list[str] = Query(default=["spot", "futures"]),
     _: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
@@ -177,6 +184,7 @@ def live_gate(
                 target_user_id=target_user_id,
                 target_user_email=target_user_email,
                 environment=environment,
+                required_market_types=required_market_types,
             )
         )
     except Exception as exc:
@@ -201,6 +209,52 @@ def websocket_bootstrap(
         )
     except Exception as exc:
         raise _to_http_error(exc) from exc
+
+
+@router.post("/websocket/worker/start", response_model=CommercialP0WsWorkerResponse)
+def websocket_worker_start(
+    payload: CommercialP0WsWorkerStartRequest,
+    _: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return CommercialP0WsWorkerResponse(
+            **start_ws_worker(
+                db,
+                target_user_id=payload.target_user_id,
+                target_user_email=payload.target_user_email,
+                environment=payload.environment,
+                market_types=payload.market_types,
+            )
+        )
+    except Exception as exc:
+        raise _to_http_error(exc) from exc
+
+
+@router.post("/websocket/worker/stop", response_model=CommercialP0WsWorkerResponse)
+def websocket_worker_stop(
+    payload: CommercialP0WsWorkerStopRequest,
+    _: User = Depends(require_super_admin),
+):
+    try:
+        return CommercialP0WsWorkerResponse(
+            **stop_ws_worker(
+                target_user_id=payload.target_user_id,
+                environment=payload.environment,
+                market_types=payload.market_types,
+            )
+        )
+    except Exception as exc:
+        raise _to_http_error(exc) from exc
+
+
+@router.get("/websocket/worker/status", response_model=CommercialP0WsWorkerStatusResponse)
+def websocket_worker_status(
+    target_user_id: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+    _: User = Depends(require_super_admin),
+):
+    return CommercialP0WsWorkerStatusResponse(**ws_worker_status(target_user_id=target_user_id, environment=environment))
 
 
 @router.get("/trades/export.csv")
