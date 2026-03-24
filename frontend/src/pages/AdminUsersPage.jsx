@@ -11,6 +11,8 @@ import { apiClient } from "@/lib/api";
 const adminRoleOptions = ["super_admin", "admin", "ops"];
 const statusOptions = ["all", "active", "disabled"];
 const riskLevelOptions = ["all", "high", "medium", "low", "unassigned"];
+const approvalStatusOptions = ["pending", "approved", "rejected", "all"];
+const inviteStatusOptions = ["all", "pending", "accepted", "cancelled", "expired"];
 
 export const AdminUsersPage = ({ scope = "user" }) => {
   const { user: currentUser } = useAuth();
@@ -47,6 +49,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   const [approvalPolicies, setApprovalPolicies] = useState([]);
   const [customRoles, setCustomRoles] = useState([]);
   const [customRoleForm, setCustomRoleForm] = useState({ role_key: "", description: "", permissions: "", is_privileged: false, priority: 100 });
+  const [customRoleDraftMap, setCustomRoleDraftMap] = useState({});
   const [invites, setInvites] = useState([]);
   const [inviteStatusFilter, setInviteStatusFilter] = useState("all");
   const [hardDeleteCandidates, setHardDeleteCandidates] = useState([]);
@@ -88,21 +91,6 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       setLoading(false);
     }
   }, [filters, isAdminScope]);
-
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
-
-  useEffect(() => {
-    loadApprovalQueue();
-  }, [loadApprovalQueue]);
-
-  useEffect(() => {
-    loadApprovalPolicies();
-    loadCustomRoles();
-    loadInvites();
-    loadHardDeleteCandidates();
-  }, [loadApprovalPolicies, loadCustomRoles, loadInvites, loadHardDeleteCandidates]);
 
   const roleCounts = useMemo(() => {
     return users.reduce((acc, user) => {
@@ -304,6 +292,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       });
       toast.success(`Invite oluşturuldu (${data?.delivery_status})`);
       setInviteForm({ email: "", invited_role: inviteForm.invited_role });
+      await loadInvites();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Invite oluşturulamadı");
     }
@@ -416,6 +405,81 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     }
   };
 
+  const saveCustomRoleUpdate = async (roleId) => {
+    const draft = customRoleDraftMap[roleId];
+    if (!draft) return;
+    try {
+      await apiClient.patch(`/admin/identity/roles/custom/${roleId}`, {
+        description: draft.description,
+        permissions: String(draft.permissions || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        priority: Number(draft.priority || 100),
+        is_privileged: Boolean(draft.is_privileged),
+      });
+      toast.success("Custom role güncellendi");
+      setCustomRoleDraftMap((prev) => {
+        const next = { ...prev };
+        delete next[roleId];
+        return next;
+      });
+      await loadCustomRoles();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Custom role güncellenemedi");
+    }
+  };
+
+  const bindCustomRoleToSelectedUser = async (rolePolicyId) => {
+    if (selectedUserIds.length !== 1) {
+      toast.error("Custom role atamak için listeden tam 1 kullanıcı seçin");
+      return;
+    }
+    try {
+      await apiClient.post(`/admin/identity/users/${selectedUserIds[0]}/assign-custom-role`, { role_policy_id: rolePolicyId });
+      toast.success("Custom role kullanıcıya atandı");
+      await loadUsers();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Custom role atama başarısız");
+    }
+  };
+
+  const addStrategyScope = async (userId) => {
+    const strategyCode = window.prompt("Strategy code girin (zorunlu):", "");
+    if (!strategyCode || !strategyCode.trim()) {
+      toast.error("strategy_code zorunlu");
+      return;
+    }
+    try {
+      await apiClient.post(`/admin/identity/users/${userId}/strategy-scope`, {
+        strategy_code: strategyCode.trim(),
+        is_enabled: true,
+      });
+      toast.success("Strategy scope eklendi");
+      await loadUsers();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Strategy scope eklenemedi");
+    }
+  };
+
+  const addBotScope = async (userId) => {
+    const botProfileId = window.prompt("Bot profile id girin (zorunlu):", "");
+    if (!botProfileId || !botProfileId.trim()) {
+      toast.error("bot_profile_id zorunlu");
+      return;
+    }
+    try {
+      await apiClient.post(`/admin/identity/users/${userId}/bot-scope`, {
+        bot_profile_id: botProfileId.trim(),
+        is_enabled: true,
+      });
+      toast.success("Bot scope eklendi");
+      await loadUsers();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bot scope eklenemedi");
+    }
+  };
+
   const loadInvites = useCallback(async () => {
     try {
       const { data } = await apiClient.get("/admin/identity/invites", { params: { status_filter: inviteStatusFilter } });
@@ -453,6 +517,21 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       toast.error(error?.response?.data?.detail || "Hard delete candidates yüklenemedi");
     }
   }, []);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
+
+  useEffect(() => {
+    loadApprovalQueue();
+  }, [loadApprovalQueue]);
+
+  useEffect(() => {
+    loadApprovalPolicies();
+    loadCustomRoles();
+    loadInvites();
+    loadHardDeleteCandidates();
+  }, [loadApprovalPolicies, loadCustomRoles, loadInvites, loadHardDeleteCandidates]);
 
   const toggleSelectAll = () => {
     if (selectedUserIds.length === users.length) {
@@ -774,6 +853,12 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                     <Button size="sm" variant="outline" onClick={() => requestHardDelete(user)} data-testid={`admin-users-hard-delete-request-button-${user.id}`}>
                       Hard Delete Req
                     </Button>
+                    <Button size="sm" variant="outline" onClick={() => addStrategyScope(user.id)} data-testid={`admin-users-add-strategy-scope-button-${user.id}`}>
+                      Add Strategy Scope
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => addBotScope(user.id)} data-testid={`admin-users-add-bot-scope-button-${user.id}`}>
+                      Add Bot Scope
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -788,6 +873,350 @@ export const AdminUsersPage = ({ scope = "user" }) => {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-users-control-panels-grid">
+        <div className="space-y-3 border border-black/30 bg-orange-50 p-3" data-testid="admin-users-approval-queue-panel">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-users-approval-queue-header-row">
+            <h3 className="text-sm font-bold uppercase tracking-wide" data-testid="admin-users-approval-queue-title">Approval Queue</h3>
+            <div className="flex flex-wrap items-center gap-2" data-testid="admin-users-approval-queue-controls">
+              <select
+                className="border border-black/40 bg-white px-2 py-1 text-xs"
+                value={approvalStatusFilter}
+                onChange={(event) => setApprovalStatusFilter(event.target.value)}
+                data-testid="admin-users-approval-status-filter-select"
+              >
+                {approvalStatusOptions.map((statusValue) => (
+                  <option key={statusValue} value={statusValue}>{statusValue}</option>
+                ))}
+              </select>
+              <Button size="sm" variant="outline" onClick={loadApprovalQueue} data-testid="admin-users-approval-refresh-button">Yenile</Button>
+            </div>
+          </div>
+
+          <div className="space-y-2" data-testid="admin-users-approval-list">
+            {approvalQueue.map((request) => (
+              <div key={request.id} className="space-y-2 border border-black/20 bg-white p-2" data-testid={`admin-users-approval-item-${request.id}`}>
+                <p className="text-xs" data-testid={`admin-users-approval-action-${request.id}`}>{request.action_key}</p>
+                <p className="text-xs" data-testid={`admin-users-approval-target-${request.id}`}>target: {request.target_user_id}</p>
+                <p className="text-xs" data-testid={`admin-users-approval-meta-${request.id}`}>
+                  status={request.status} · approvals={request.approval_count}/{request.required_approvals}
+                </p>
+                <p className="text-xs text-black/80" data-testid={`admin-users-approval-reason-${request.id}`}>reason: {request.request_reason || "-"}</p>
+                <div className="flex flex-wrap gap-2" data-testid={`admin-users-approval-actions-${request.id}`}>
+                  <Button
+                    size="sm"
+                    className="border border-black bg-emerald-200 text-black hover:bg-emerald-300"
+                    onClick={() => approveRequest(request.id)}
+                    disabled={request.status !== "pending"}
+                    data-testid={`admin-users-approval-approve-button-${request.id}`}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="border border-black bg-red-200 text-black hover:bg-red-300"
+                    onClick={() => rejectRequest(request.id)}
+                    disabled={request.status !== "pending"}
+                    data-testid={`admin-users-approval-reject-button-${request.id}`}
+                  >
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {approvalQueue.length === 0 && (
+              <p className="text-xs text-black/70" data-testid="admin-users-approval-empty-text">Filtreye uygun approval request bulunamadı.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3 border border-black/30 bg-orange-50 p-3" data-testid="admin-users-approval-policy-panel">
+          <div className="flex items-center justify-between" data-testid="admin-users-approval-policy-header-row">
+            <h3 className="text-sm font-bold uppercase tracking-wide" data-testid="admin-users-approval-policy-title">Approval Policies</h3>
+            <Button size="sm" variant="outline" onClick={loadApprovalPolicies} data-testid="admin-users-approval-policy-refresh-button">Yenile</Button>
+          </div>
+
+          <div className="space-y-2" data-testid="admin-users-approval-policy-list">
+            {approvalPolicies.map((policy) => (
+              <div key={policy.action_key} className="flex flex-wrap items-center justify-between gap-2 border border-black/20 bg-white p-2" data-testid={`admin-users-policy-item-${policy.action_key}`}>
+                <div className="space-y-1" data-testid={`admin-users-policy-metadata-${policy.action_key}`}>
+                  <p className="text-xs font-semibold">{policy.action_key}</p>
+                  <p className="text-[11px] text-black/75" data-testid={`admin-users-policy-approvals-${policy.action_key}`}>
+                    required_approvals={policy.required_approvals}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => toggleApprovalPolicy(policy.action_key, !policy.is_enabled)}
+                  data-testid={`admin-users-policy-toggle-button-${policy.action_key}`}
+                >
+                  {policy.is_enabled ? "Disable" : "Enable"}
+                </Button>
+              </div>
+            ))}
+            {approvalPolicies.length === 0 && (
+              <p className="text-xs text-black/70" data-testid="admin-users-approval-policy-empty-text">Approval policy bulunamadı.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3 border border-black/30 bg-orange-50 p-3" data-testid="admin-users-custom-role-panel">
+          <div className="flex items-center justify-between" data-testid="admin-users-custom-role-header-row">
+            <h3 className="text-sm font-bold uppercase tracking-wide" data-testid="admin-users-custom-role-title">Custom Roles</h3>
+            <Button size="sm" variant="outline" onClick={loadCustomRoles} data-testid="admin-users-custom-role-refresh-button">Yenile</Button>
+          </div>
+
+          <div className="grid gap-2 border border-black/20 bg-white p-3 md:grid-cols-2" data-testid="admin-users-custom-role-create-grid">
+            <Input
+              value={customRoleForm.role_key}
+              onChange={(event) => setCustomRoleForm((prev) => ({ ...prev, role_key: event.target.value }))}
+              placeholder="role_key"
+              data-testid="admin-users-custom-role-key-input"
+            />
+            <Input
+              value={customRoleForm.description}
+              onChange={(event) => setCustomRoleForm((prev) => ({ ...prev, description: event.target.value }))}
+              placeholder="description"
+              data-testid="admin-users-custom-role-description-input"
+            />
+            <Input
+              value={customRoleForm.permissions}
+              onChange={(event) => setCustomRoleForm((prev) => ({ ...prev, permissions: event.target.value }))}
+              placeholder="permissions (virgülle)"
+              data-testid="admin-users-custom-role-permissions-input"
+            />
+            <Input
+              type="number"
+              value={String(customRoleForm.priority)}
+              onChange={(event) => setCustomRoleForm((prev) => ({ ...prev, priority: Number(event.target.value || 100) }))}
+              placeholder="priority"
+              data-testid="admin-users-custom-role-priority-input"
+            />
+            <label className="flex items-center gap-2 text-xs" data-testid="admin-users-custom-role-privileged-label">
+              <input
+                type="checkbox"
+                checked={Boolean(customRoleForm.is_privileged)}
+                onChange={(event) => setCustomRoleForm((prev) => ({ ...prev, is_privileged: event.target.checked }))}
+                data-testid="admin-users-custom-role-privileged-checkbox"
+              />
+              is_privileged
+            </label>
+            <Button
+              className="border border-black bg-black text-orange-400 hover:bg-zinc-800"
+              onClick={createCustomRole}
+              data-testid="admin-users-custom-role-create-button"
+            >
+              Custom Role Oluştur
+            </Button>
+          </div>
+
+          <div className="space-y-2" data-testid="admin-users-custom-role-list">
+            {customRoles.map((role) => {
+              const draft = customRoleDraftMap[role.id];
+              return (
+                <div key={role.id} className="space-y-2 border border-black/20 bg-white p-2" data-testid={`admin-users-custom-role-item-${role.id}`}>
+                  <p className="text-xs font-semibold" data-testid={`admin-users-custom-role-key-${role.id}`}>{role.role_key}</p>
+                  <p className="text-[11px] text-black/75" data-testid={`admin-users-custom-role-status-${role.id}`}>
+                    active={String(Boolean(role.is_active))} · privileged={String(Boolean(role.is_privileged))}
+                  </p>
+                  <p className="text-[11px] text-black/75" data-testid={`admin-users-custom-role-permissions-${role.id}`}>
+                    permissions: {(role.permissions || []).join(", ") || "-"}
+                  </p>
+
+                  {draft ? (
+                    <div className="grid gap-2 md:grid-cols-2" data-testid={`admin-users-custom-role-edit-grid-${role.id}`}>
+                      <Input
+                        value={draft.description}
+                        onChange={(event) => setCustomRoleDraftMap((prev) => ({
+                          ...prev,
+                          [role.id]: { ...prev[role.id], description: event.target.value },
+                        }))}
+                        placeholder="description"
+                        data-testid={`admin-users-custom-role-edit-description-input-${role.id}`}
+                      />
+                      <Input
+                        value={draft.permissions}
+                        onChange={(event) => setCustomRoleDraftMap((prev) => ({
+                          ...prev,
+                          [role.id]: { ...prev[role.id], permissions: event.target.value },
+                        }))}
+                        placeholder="permissions"
+                        data-testid={`admin-users-custom-role-edit-permissions-input-${role.id}`}
+                      />
+                      <Input
+                        type="number"
+                        value={String(draft.priority)}
+                        onChange={(event) => setCustomRoleDraftMap((prev) => ({
+                          ...prev,
+                          [role.id]: { ...prev[role.id], priority: Number(event.target.value || 100) },
+                        }))}
+                        placeholder="priority"
+                        data-testid={`admin-users-custom-role-edit-priority-input-${role.id}`}
+                      />
+                      <label className="flex items-center gap-2 text-xs" data-testid={`admin-users-custom-role-edit-privileged-label-${role.id}`}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(draft.is_privileged)}
+                          onChange={(event) => setCustomRoleDraftMap((prev) => ({
+                            ...prev,
+                            [role.id]: { ...prev[role.id], is_privileged: event.target.checked },
+                          }))}
+                          data-testid={`admin-users-custom-role-edit-privileged-checkbox-${role.id}`}
+                        />
+                        is_privileged
+                      </label>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-2" data-testid={`admin-users-custom-role-actions-${role.id}`}>
+                    {!draft ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCustomRoleDraftMap((prev) => ({
+                          ...prev,
+                          [role.id]: {
+                            description: role.description || "",
+                            permissions: (role.permissions || []).join(", "),
+                            priority: Number(role.priority || 100),
+                            is_privileged: Boolean(role.is_privileged),
+                          },
+                        }))}
+                        data-testid={`admin-users-custom-role-edit-button-${role.id}`}
+                      >
+                        Edit
+                      </Button>
+                    ) : (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => saveCustomRoleUpdate(role.id)} data-testid={`admin-users-custom-role-save-button-${role.id}`}>
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setCustomRoleDraftMap((prev) => {
+                            const next = { ...prev };
+                            delete next[role.id];
+                            return next;
+                          })}
+                          data-testid={`admin-users-custom-role-cancel-edit-button-${role.id}`}
+                        >
+                          Cancel
+                        </Button>
+                      </>
+                    )}
+
+                    <Button size="sm" variant="outline" onClick={() => cloneCustomRole(role.id, role.role_key)} data-testid={`admin-users-custom-role-clone-button-${role.id}`}>
+                      Clone
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => archiveCustomRole(role.id)} data-testid={`admin-users-custom-role-archive-button-${role.id}`}>
+                      Archive
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => bindCustomRoleToSelectedUser(role.id)} data-testid={`admin-users-custom-role-bind-button-${role.id}`}>
+                      Seçili Kullanıcıya Ata
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+            {customRoles.length === 0 && (
+              <p className="text-xs text-black/70" data-testid="admin-users-custom-role-empty-text">Custom role bulunamadı.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3 border border-black/30 bg-orange-50 p-3" data-testid="admin-users-invite-and-delete-panel">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-users-invite-header-row">
+            <h3 className="text-sm font-bold uppercase tracking-wide" data-testid="admin-users-invite-title">Invite Lifecycle</h3>
+            <div className="flex items-center gap-2" data-testid="admin-users-invite-controls">
+              <select
+                className="border border-black/40 bg-white px-2 py-1 text-xs"
+                value={inviteStatusFilter}
+                onChange={(event) => setInviteStatusFilter(event.target.value)}
+                data-testid="admin-users-invite-status-filter-select"
+              >
+                {inviteStatusOptions.map((statusValue) => (
+                  <option key={statusValue} value={statusValue}>{statusValue}</option>
+                ))}
+              </select>
+              <Button size="sm" variant="outline" onClick={loadInvites} data-testid="admin-users-invite-refresh-button">Yenile</Button>
+            </div>
+          </div>
+
+          <div className="grid gap-2 border border-black/20 bg-white p-3 md:grid-cols-3" data-testid="admin-users-invite-create-grid">
+            <Input
+              value={inviteForm.email}
+              onChange={(event) => setInviteForm((prev) => ({ ...prev, email: event.target.value }))}
+              placeholder="invite email"
+              data-testid="admin-users-invite-panel-email-input"
+            />
+            <select
+              className="border border-black/40 bg-white px-2 py-2 text-xs"
+              value={inviteForm.invited_role}
+              onChange={(event) => setInviteForm((prev) => ({ ...prev, invited_role: event.target.value }))}
+              data-testid="admin-users-invite-panel-role-select"
+            >
+              <option value="user">user</option>
+              <option value="ops">ops</option>
+              <option value="admin">admin</option>
+            </select>
+            <Button
+              className="border border-black bg-sky-200 text-black hover:bg-sky-300"
+              onClick={createInvite}
+              data-testid="admin-users-invite-panel-create-button"
+            >
+              Invite Oluştur (MOCKED)
+            </Button>
+          </div>
+
+          <div className="space-y-2" data-testid="admin-users-invite-list">
+            {invites.map((invite) => (
+              <div key={invite.id} className="space-y-1 border border-black/20 bg-white p-2" data-testid={`admin-users-invite-item-${invite.id}`}>
+                <p className="text-xs font-semibold" data-testid={`admin-users-invite-email-${invite.id}`}>{invite.email}</p>
+                <p className="text-[11px] text-black/75" data-testid={`admin-users-invite-meta-${invite.id}`}>
+                  role={invite.invited_role} · status={invite.status} · delivery={invite.delivery_status}
+                </p>
+                <p className="text-[11px] text-black/75" data-testid={`admin-users-invite-preview-token-${invite.id}`}>
+                  preview_token={invite.preview_token || "-"}
+                </p>
+                <div className="flex flex-wrap gap-2" data-testid={`admin-users-invite-actions-${invite.id}`}>
+                  <Button size="sm" variant="outline" onClick={() => resendInvite(invite.id)} data-testid={`admin-users-invite-resend-button-${invite.id}`}>
+                    Resend
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => cancelInvite(invite.id)} data-testid={`admin-users-invite-cancel-button-${invite.id}`}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {invites.length === 0 && (
+              <p className="text-xs text-black/70" data-testid="admin-users-invite-empty-text">Invite bulunamadı.</p>
+            )}
+          </div>
+
+          <div className="space-y-2 border border-black/20 bg-white p-2" data-testid="admin-users-hard-delete-candidates-panel">
+            <div className="flex items-center justify-between" data-testid="admin-users-hard-delete-candidates-header-row">
+              <p className="text-xs font-semibold" data-testid="admin-users-hard-delete-candidates-title">Hard Delete Candidates</p>
+              <Button size="sm" variant="outline" onClick={loadHardDeleteCandidates} data-testid="admin-users-hard-delete-candidates-refresh-button">Yenile</Button>
+            </div>
+            {hardDeleteCandidates.slice(0, 10).map((candidate) => (
+              <div key={candidate.user_id} className="border border-black/10 p-2" data-testid={`admin-users-hard-delete-candidate-item-${candidate.user_id}`}>
+                <p className="text-[11px]" data-testid={`admin-users-hard-delete-candidate-email-${candidate.user_id}`}>{candidate.email}</p>
+                <p className="text-[11px]" data-testid={`admin-users-hard-delete-candidate-eligible-${candidate.user_id}`}>
+                  eligible={String(Boolean(candidate.eligible))}
+                </p>
+                <p className="text-[11px] text-black/75" data-testid={`admin-users-hard-delete-candidate-blockers-${candidate.user_id}`}>
+                  blockers={(candidate.blockers || []).join(", ") || "-"}
+                </p>
+              </div>
+            ))}
+            {hardDeleteCandidates.length === 0 && (
+              <p className="text-xs text-black/70" data-testid="admin-users-hard-delete-candidates-empty-text">Aday bulunamadı.</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {securityDetailUserId && (
