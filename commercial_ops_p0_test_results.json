@@ -1,0 +1,110 @@
+{
+  "status": "PASS",
+  "total_tests": 12,
+  "passed": 11,
+  "failed": 0,
+  "partial": 1,
+  "skipped": 0,
+  "success_rate": 91.66666666666666,
+  "spot_451_detected": true,
+  "futures_working": true,
+  "results": [
+    {
+      "test": "Admin Authentication",
+      "status": "PASS",
+      "details": "Successfully authenticated as canary.admin@platform.local",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:24:52.250710+00:00"
+    },
+    {
+      "test": "Health Check",
+      "status": "PASS",
+      "details": "Health endpoint returns 200 with db.reachable=true",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:24:52.393801+00:00"
+    },
+    {
+      "test": "Spot+Futures Ingest 451 Blocker",
+      "status": "PASS",
+      "details": "Expected 451 regional restriction detected: {\"detail\":\"binance_request_failed:451:0:Service unavailable from a restricted location according to 'b. Eligibility' in https://www.binance.com/en/terms. Please contact customer service if you believe you received this message in error.\"}",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:24:52.602423+00:00"
+    },
+    {
+      "test": "Futures-Only Ingest",
+      "status": "PASS",
+      "details": "First run inserted 0, second run found 105 duplicates. Idempotency working.",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:24:56.277124+00:00"
+    },
+    {
+      "test": "PnL Latest",
+      "status": "PASS",
+      "details": "PnL data populated: realized={'gross_usd': -27.59654957, 'net_usd': -34.55160859}, unrealized={'gross_usd': -79.95871247, 'net_usd': -79.95871247}, fees={'trading_fee_usd': 3.92756152, 'commission_usd': 3.92756152, 'funding_usd': -3.0274975}",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:24:57.153178+00:00"
+    },
+    {
+      "test": "Reconciliation Futures-Only",
+      "status": "PASS",
+      "details": "Reconciliation successful: missing=0, duplicate=0, drift_within_tolerance=True",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:25:05.777684+00:00"
+    },
+    {
+      "test": "Data Quality",
+      "status": "PASS",
+      "details": "Data quality check successful: futures_freshness=443 seconds",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:25:05.912097+00:00"
+    },
+    {
+      "test": "Live Gate Default (Spot+Futures)",
+      "status": "PASS",
+      "details": "Live gate correctly returns ready=false when spot+futures required (spot missing due to 451 blocker)",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:25:06.044964+00:00"
+    },
+    {
+      "test": "Live Gate Futures-Only",
+      "status": "PASS",
+      "details": "Live gate correctly returns ready=true when only futures required",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:25:06.158901+00:00"
+    },
+    {
+      "test": "Export CSV",
+      "status": "PASS",
+      "details": "CSV export successful: 191 rows with standard headers",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:25:06.304893+00:00"
+    },
+    {
+      "test": "Websocket Worker Lifecycle",
+      "status": "PARTIAL",
+      "details": "Worker start/status OK but stop failed: 422: {\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"target_user_id\"],\"msg\":\"Input should be a valid string\",\"input\":null,\"url\":\"https://errors.pydantic.dev/2.12/v/string_type\"}]}",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:25:08.536068+00:00"
+    },
+    {
+      "test": "Export-PnL Consistency",
+      "status": "PASS",
+      "details": "CSV and API PnL consistent: CSV=-27.59654957, API=-27.59654957, diff=0.00000000",
+      "expected": "",
+      "actual": "",
+      "timestamp": "2026-03-24T16:25:08.536324+00:00"
+    }
+  ],
+  "timestamp": "2026-03-24T16:25:08.536383+00:00"
+}

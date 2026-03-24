@@ -109,30 +109,54 @@ class BinanceCommercialClient:
         return hmac.new(secret.encode(), query_string.encode(), hashlib.sha256).hexdigest()
 
     def _signed_request(self, *, method: str, base_url: str, endpoint: str, params: dict | None = None) -> dict | list:
-        raw_params = {**(params or {})}
-        raw_params["timestamp"] = int(time.time() * 1000)
-        raw_params["recvWindow"] = 5000
-        query_string = urlencode(raw_params)
-        signature = self._sign(self.api_secret, query_string)
-        url = f"{base_url}{endpoint}?{query_string}&signature={signature}"
-        with httpx.Client(timeout=20.0) as client:
-            response = client.request(method, url, headers={"X-MBX-APIKEY": self.api_key})
-        payload = response.json() if response.content else {}
-        if response.status_code >= 400:
-            code = payload.get("code") if isinstance(payload, dict) else None
-            msg = payload.get("msg") if isinstance(payload, dict) else "binance_error"
-            raise ValueError(f"binance_request_failed:{response.status_code}:{code}:{msg}")
-        return payload
+        for attempt in range(3):
+            raw_params = {**(params or {})}
+            raw_params["timestamp"] = int(time.time() * 1000)
+            raw_params["recvWindow"] = 60000
+            query_string = urlencode(raw_params)
+            signature = self._sign(self.api_secret, query_string)
+            url = f"{base_url}{endpoint}?{query_string}&signature={signature}"
+            try:
+                with httpx.Client(timeout=20.0) as client:
+                    response = client.request(method, url, headers={"X-MBX-APIKEY": self.api_key})
+            except httpx.HTTPError as exc:
+                if attempt >= 2:
+                    raise ValueError(f"binance_transport_error:{exc}") from exc
+                time.sleep(0.7 * (attempt + 1))
+                continue
+
+            payload = response.json() if response.content else {}
+            if response.status_code in {429, 500, 502, 503, 504} and attempt < 2:
+                time.sleep(0.7 * (attempt + 1))
+                continue
+            if response.status_code >= 400:
+                code = payload.get("code") if isinstance(payload, dict) else None
+                msg = payload.get("msg") if isinstance(payload, dict) else "binance_error"
+                raise ValueError(f"binance_request_failed:{response.status_code}:{code}:{msg}")
+            return payload
+        raise ValueError("binance_request_failed:unknown")
 
     def _api_key_request(self, *, method: str, base_url: str, endpoint: str) -> dict:
-        with httpx.Client(timeout=15.0) as client:
-            response = client.request(method, f"{base_url}{endpoint}", headers={"X-MBX-APIKEY": self.api_key})
-        payload = response.json() if response.content else {}
-        if response.status_code >= 400:
-            code = payload.get("code") if isinstance(payload, dict) else None
-            msg = payload.get("msg") if isinstance(payload, dict) else "binance_error"
-            raise ValueError(f"binance_request_failed:{response.status_code}:{code}:{msg}")
-        return payload
+        for attempt in range(3):
+            try:
+                with httpx.Client(timeout=15.0) as client:
+                    response = client.request(method, f"{base_url}{endpoint}", headers={"X-MBX-APIKEY": self.api_key})
+            except httpx.HTTPError as exc:
+                if attempt >= 2:
+                    raise ValueError(f"binance_transport_error:{exc}") from exc
+                time.sleep(0.5 * (attempt + 1))
+                continue
+
+            payload = response.json() if response.content else {}
+            if response.status_code in {429, 500, 502, 503, 504} and attempt < 2:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            if response.status_code >= 400:
+                code = payload.get("code") if isinstance(payload, dict) else None
+                msg = payload.get("msg") if isinstance(payload, dict) else "binance_error"
+                raise ValueError(f"binance_request_failed:{response.status_code}:{code}:{msg}")
+            return payload
+        raise ValueError("binance_request_failed:unknown")
 
     def fetch_spot_trades(
         self,
@@ -849,7 +873,12 @@ def run_exchange_reconciliation(
 
     position_drift_usd = 0.0
     if "futures" in markets:
-        exchange_positions = {str(item.get("symbol") or "").upper(): _safe_float(item.get("positionAmt"), 0.0) for item in client.fetch_futures_position_risk()}
+        exchange_position_rows = client.fetch_futures_position_risk()
+        if clean_symbols:
+            allowed_symbols = {item.upper() for item in clean_symbols}
+            exchange_position_rows = [row for row in exchange_position_rows if str(row.get("symbol") or "").upper() in allowed_symbols]
+        exchange_positions = {str(item.get("symbol") or "").upper(): _safe_float(item.get("positionAmt"), 0.0) for item in exchange_position_rows}
+        exchange_marks = {str(item.get("symbol") or "").upper(): _safe_float(item.get("markPrice"), 0.0) for item in exchange_position_rows}
         internal_positions: dict[str, float] = defaultdict(float)
         for row in internal_trades:
             if row.market_type != "futures":
@@ -858,23 +887,25 @@ def run_exchange_reconciliation(
             internal_positions[str(row.symbol).upper()] += multiplier * _safe_float(row.executed_qty)
         for symbol in set(exchange_positions.keys()) | set(internal_positions.keys()):
             diff_qty = abs(exchange_positions.get(symbol, 0.0) - internal_positions.get(symbol, 0.0))
-            mark_price = client.get_spot_price(symbol)
+            mark_price = exchange_marks.get(symbol, 0.0)
             position_drift_usd += diff_qty * mark_price
 
     balance_drift_usd = 0.0
     try:
-        spot_account = client.fetch_spot_account()
-        futures_account = client.fetch_futures_account()
         spot_total = 0.0
-        for item in (spot_account.get("balances") or []):
-            asset = str(item.get("asset") or "").upper()
-            amount = _safe_float(item.get("free"), 0.0) + _safe_float(item.get("locked"), 0.0)
-            if amount <= 0:
-                continue
-            if asset in STABLE_QUOTES:
-                spot_total += amount
-            else:
-                spot_total += amount * client.get_spot_price(f"{asset}USDT")
+        if "spot" in markets:
+            spot_account = client.fetch_spot_account()
+            for item in (spot_account.get("balances") or []):
+                asset = str(item.get("asset") or "").upper()
+                amount = _safe_float(item.get("free"), 0.0) + _safe_float(item.get("locked"), 0.0)
+                if amount <= 0:
+                    continue
+                if asset in STABLE_QUOTES:
+                    spot_total += amount
+                else:
+                    spot_total += amount * client.get_spot_price(f"{asset}USDT")
+
+        futures_account = client.fetch_futures_account() if "futures" in markets else {}
         futures_wallet = _safe_float(futures_account.get("totalWalletBalance"), 0.0)
         exchange_equity = spot_total + futures_wallet
         internal_net = sum(_safe_float(item.realized_pnl_usd) for item in internal_trades) - sum(_safe_float(item.commission_usd) for item in internal_trades)
