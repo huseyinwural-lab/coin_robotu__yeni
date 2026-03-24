@@ -32,6 +32,7 @@ def test_normalize_market_types_deduplicates():
 
 def test_extract_assets_for_stable_quotes():
     assert _extract_assets("BTCUSDT") == ("BTC", "USDT")
+    assert _extract_assets("TRXUSTC") == ("TRX", "USTC")
     assert _extract_assets("ETHBUSD") == ("ETH", "BUSD")
 
 

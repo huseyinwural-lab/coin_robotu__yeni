@@ -66,6 +66,31 @@ def run_rest_ingestion(
         raise _to_http_error(exc) from exc
 
 
+@router.post("/ingest/binance", response_model=CommercialP0IngestionResponse)
+def run_rest_ingestion_alias(
+    payload: CommercialP0IngestionRequest,
+    _: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return CommercialP0IngestionResponse(
+            **run_rest_trade_ingestion(
+                db,
+                target_user_id=payload.target_user_id,
+                target_user_email=payload.target_user_email,
+                environment=payload.environment,
+                market_types=payload.market_types,
+                symbols=payload.symbols,
+                start_ts=payload.start_ts,
+                end_ts=payload.end_ts,
+                limit_per_symbol=payload.limit_per_symbol,
+                source="rest",
+            )
+        )
+    except Exception as exc:
+        raise _to_http_error(exc) from exc
+
+
 @router.get("/pnl/latest", response_model=CommercialP0PnlResponse)
 def build_latest_pnl(
     target_user_id: str | None = Query(default=None),
@@ -180,6 +205,36 @@ def websocket_bootstrap(
 
 @router.get("/trades/export.csv")
 def export_canonical_trades_csv(
+    target_user_id: str | None = Query(default=None),
+    target_user_email: str | None = Query(default=None),
+    environment: str = Query(default="testnet"),
+    market_type: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    start_ts: str | None = Query(default=None),
+    end_ts: str | None = Query(default=None),
+    _: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        payload, filename = export_standardized_trades_csv(
+            db,
+            target_user_id=target_user_id,
+            target_user_email=target_user_email,
+            environment=environment,
+            market_type=market_type,
+            symbol=symbol,
+            start_ts=start_ts,
+            end_ts=end_ts,
+        )
+    except Exception as exc:
+        raise _to_http_error(exc) from exc
+
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(iter([payload]), media_type="text/csv", headers=headers)
+
+
+@router.get("/export/csv")
+def export_canonical_trades_csv_alias(
     target_user_id: str | None = Query(default=None),
     target_user_email: str | None = Query(default=None),
     environment: str = Query(default="testnet"),

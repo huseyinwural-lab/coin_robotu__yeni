@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from core.users.user_exchange_connector import decrypt_exchange_secret
 from models import CommercialTrade, ExchangeReconciliationLog, PnlRecord, User, UserExchangeConnection
 
-STABLE_QUOTES = {"USDT", "BUSD", "USDC", "FDUSD", "USD"}
+STABLE_QUOTES = ("USDT", "USTC", "BUSD", "USDC", "FDUSD", "USD")
 DEFAULT_START_MS = int(datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
 
 
