@@ -1,3 +1,42 @@
+## 2026-03-24 — Commercial Ops P0 Sprint Başlangıcı (Binance REST + Canonical PnL/Reconciliation) 🚧
+
+### Bu turda tamamlananlar
+- Yeni P0 veri modeli eklendi:
+  - `commercial_trades` (canonical trade schema, spot+futures birleşik)
+  - `pnl_records` (single-source PnL snapshots)
+  - `exchange_reconciliation_logs` (drift + freshness + data quality)
+- Alembic migration eklendi: `20260324_0073_commercial_ops_p0_trade_pnl_reconciliation.py`
+- Yeni P0 backend servis katmanı eklendi: `services/commercial_ops_p0_service.py`
+  - Binance REST historical ingestion (spot/futures)
+  - Canonical dedupe (user+scope+exchange_trade_id)
+  - PnL engine (realized/unrealized, gross/net, fee breakdown)
+  - Reconciliation (trade/pnl/position/balance drift)
+  - Data quality snapshot (freshness + missing data alarm)
+  - Standardized CSV export (tek canonical şema)
+  - WebSocket bootstrap (listenKey + ws URL hazırlığı)
+- Yeni admin endpoint grubu eklendi: `/api/admin/commercial/p0/*`
+  - `POST /ingestion/rest-run`
+  - `GET /pnl/latest`
+  - `POST /reconciliation/run`
+  - `GET /data-quality`
+  - `GET /live-gate`
+  - `POST /websocket/bootstrap`
+  - `GET /trades/export.csv`
+
+### Test durumu
+- Unit test: `pytest -q /app/backend/tests/test_commercial_ops_p0_service.py` → **3 passed**
+- Lint: yeni/edilen backend dosyaları için **pass**
+- `deep_testing_backend_v2` sonucu: **ENV BLOCKER**
+  - Preview URL `https://binance-reconcile.preview.emergentagent.com` üzerinde `/api/health` dahil 502
+  - Kök neden (lokal teşhis): `postgres.internal` bu runtime’da çözümlenmiyor (`Name or service not known`)
+  - Bu nedenle canlı endpoint E2E/curl doğrulaması bu turda tamamlanamadı.
+
+### Kalan P0 işler (sıradaki adım)
+- REST ingest sonrası **websocket consumer worker** (user-data stream event ingestion)
+- Reconciliation tolerans metriklerinin operasyonel eşiklerle final kalibrasyonu
+- `huseyinwural@gmail.com` üzerinde testnet tam akış (ingest → pnl → reconciliation → live-gate)
+- Testnet 3/3 kontrol geçince live geçiş prosedürü
+
 ## 2026-03-24 — P2 Final Polish (Son %2) ✅
 
 ### 1) Session & Login UX hardening

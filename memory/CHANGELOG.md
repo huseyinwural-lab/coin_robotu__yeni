@@ -1,5 +1,19 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-24 (Commercial Ops P0 Kickoff)
+### Binance REST Ingestion + Canonical PnL/Reconciliation Core
+- Yeni domain tabloları eklendi: `commercial_trades`, `pnl_records`, `exchange_reconciliation_logs`.
+- Alembic migration eklendi: `20260324_0073_commercial_ops_p0_trade_pnl_reconciliation.py`.
+- Yeni servis: `commercial_ops_p0_service.py`:
+  - Spot+Futures REST ingestion (canonical dedupe)
+  - PnL engine (realized/unrealized, gross/net, fee breakdown)
+  - Reconciliation (trade/position/pnl/balance drift)
+  - Data quality snapshot + live transition gate
+  - Standardized CSV export + websocket bootstrap
+- Yeni endpoint seti: `/api/admin/commercial/p0/*`.
+- Test: `test_commercial_ops_p0_service.py` → 3/3 PASS.
+- Ortam notu: Preview URL üzerinde 502 ve `postgres.internal` çözümleme problemi nedeniyle canlı endpoint E2E doğrulaması bloklandı.
+
 ## 2026-03-23 (P2 Analytics Phase)
 ### Production Gate Derinlik & Proaktif Karar Katmanı
 - Check history/trend engine + flapping detection eklendi.

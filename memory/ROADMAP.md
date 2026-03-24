@@ -1,5 +1,21 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-24 Commercial Ops P0 (Aktif Sprint)
+- ✅ Tamamlandı (Bu tur):
+  1. Canonical trade schema + PnL/Reconciliation domain tabloları
+  2. Binance REST ingestion endpointleri (Spot + Futures)
+  3. PnL engine (gross/net + fee breakdown)
+  4. Reconciliation loglama (drift + tolerance)
+  5. Data quality + live transition gate + CSV standard export
+  6. WebSocket bootstrap endpointi (listenKey/ws URL)
+- 🔴 P0 Kalan:
+  1. WebSocket consumer worker ile gerçek zamanlı trade ingestion
+  2. `huseyinwural@gmail.com` üzerinde testnet tam E2E doğrulama
+  3. Drift tolerans kalibrasyonu ve reconciliation doğruluk tuning
+  4. Testnet 3/3 kontrol sonrası controlled live geçişi
+- Bloker:
+  - Preview backend 502 (runtime `postgres.internal` çözümleme sorunu), canlı endpoint testleri beklemede.
+
 ## 2026-03-23 P2 Faz Sonuçları
 - ✅ Tamamlandı:
   1. Check history/trend + flapping detection
