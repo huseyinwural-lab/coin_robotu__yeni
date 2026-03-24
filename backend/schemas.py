@@ -3242,6 +3242,118 @@ class AdminCommercialTotalPnlResponse(BaseModel):
     calendar_month: CommercialCalendarMonthPnlResponse
 
 
+class CommercialP0IngestionRequest(BaseModel):
+    target_user_id: str | None = None
+    target_user_email: str | None = None
+    environment: str = "testnet"
+    market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
+    symbols: list[str] = Field(default_factory=list)
+    start_ts: str | None = None
+    end_ts: str | None = None
+    limit_per_symbol: int = Field(default=500, ge=1, le=1000)
+
+
+class CommercialP0IngestionResponse(BaseModel):
+    status: str
+    user_id: str
+    user_email: str
+    environment: str
+    market_types: list[str]
+    symbols: list[str]
+    time_window: dict = Field(default_factory=dict)
+    fetched: int
+    inserted: int
+    duplicate: int
+    market_summary: dict = Field(default_factory=dict)
+    source: str
+    generated_at: str
+
+
+class CommercialP0PnlResponse(BaseModel):
+    status: str
+    user_id: str
+    user_email: str
+    environment: str
+    trade_count: int
+    realized: dict = Field(default_factory=dict)
+    unrealized: dict = Field(default_factory=dict)
+    fee_breakdown: dict = Field(default_factory=dict)
+    net_total_usd: float
+    record_id: str
+    as_of: str | None = None
+
+
+class CommercialP0ReconciliationRequest(BaseModel):
+    target_user_id: str | None = None
+    target_user_email: str | None = None
+    environment: str = "testnet"
+    market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
+    symbols: list[str] = Field(default_factory=list)
+    start_ts: str | None = None
+    end_ts: str | None = None
+    limit_per_symbol: int = Field(default=500, ge=1, le=1000)
+    drift_tolerance_usd: float = Field(default=5.0, gt=0)
+
+
+class CommercialP0ReconciliationResponse(BaseModel):
+    status: str
+    log_id: str
+    user_id: str
+    user_email: str
+    environment: str
+    markets: list[str]
+    internal_trade_count: int
+    exchange_trade_count: int
+    missing_trade_count: int
+    duplicate_trade_count: int
+    balance_drift_usd: float
+    position_drift_usd: float
+    pnl_drift_usd: float
+    drift_tolerance_usd: float
+    drift_within_tolerance: bool
+    freshness_seconds: int | None = None
+    missing_data_alert: bool
+    created_at: str | None = None
+
+
+class CommercialP0DataQualityResponse(BaseModel):
+    status: str
+    user_id: str
+    user_email: str
+    environment: str
+    freshness_seconds: dict = Field(default_factory=dict)
+    missing_data_alert: bool
+    market_alerts: dict = Field(default_factory=dict)
+    latest_reconciliation: dict = Field(default_factory=dict)
+
+
+class CommercialP0LiveGateResponse(BaseModel):
+    status: str
+    user_id: str
+    user_email: str
+    environment: str
+    controls: dict = Field(default_factory=dict)
+    live_transition_ready: bool
+    evidence: dict = Field(default_factory=dict)
+
+
+class CommercialP0WebsocketBootstrapRequest(BaseModel):
+    target_user_id: str | None = None
+    target_user_email: str | None = None
+    environment: str = "testnet"
+    market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
+
+
+class CommercialP0WebsocketBootstrapResponse(BaseModel):
+    status: str
+    user_id: str
+    user_email: str
+    environment: str
+    streams: dict = Field(default_factory=dict)
+    note: str
+    generated_at: str
+
+
 class LearningImpactSimulationRequest(BaseModel):
     strategy_id: str | None = None
     family: str | None = None

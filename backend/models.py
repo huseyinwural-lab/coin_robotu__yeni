@@ -125,6 +125,7 @@ from model_domains.governance_execution import (
     PlaybookExecutionRun,
     PlaybookRollbackMarker,
 )
+from model_domains.commercial_ops import CommercialTrade, PnlRecord, ExchangeReconciliationLog
 
 _ = immutability_listeners
 
@@ -246,4 +247,7 @@ __all__ = [
     "UserStrategyScope",
     "UserBotScope",
     "UserInviteToken",
+    "CommercialTrade",
+    "PnlRecord",
+    "ExchangeReconciliationLog",
 ]
