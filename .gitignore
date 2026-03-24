@@ -54,6 +54,17 @@ test_reports/*
 !test_reports/production_gate_p2_timeline_audit_match.json
 !test_reports/production_gate_p2_compare_multi_run.json
 !test_reports/iteration_115.json
+!test_reports/production_gate_p1_evidence.md
+!test_reports/production_gate_p1_endpoint_state_evidence.json
+!test_reports/production_gate_p1_smoke_after_login.jpeg
+!test_reports/production_gate_p1_backend_pytest.txt
+!test_reports/iteration_113.json
+!test_reports/production_gate_p2_evidence.md
+!test_reports/production_gate_p2_timeline.json
+!test_reports/production_gate_p2_analytics.json
+!test_reports/production_gate_p2_compare.json
+!test_reports/production_gate_p2_smoke.jpeg
+!test_reports/iteration_114.json
 -e 
 # Environment files
 *.env

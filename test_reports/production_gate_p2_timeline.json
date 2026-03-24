@@ -1,0 +1,2517 @@
+{
+  "items": [
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:13:45.565283Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::all",
+        "expiry": "2026-03-23T23:14:43.307715+00:00",
+        "request_id": "8f6cd8aa-0554-4ece-9002-d93b268c6dbb",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:13:45.561795Z",
+      "title": "prod_env_resolution -> FAIL",
+      "details": {
+        "check_key": "prod_env_resolution",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:13:45.561795+00:00",
+        "latency_ms": 157.14,
+        "error_code": "raw_status=fail",
+        "run_id": "run-1e9f7d63-620c-4bd2-8ff7-b1e0661ce504",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:13:45.561795Z",
+      "title": "secret_readiness -> PASS",
+      "details": {
+        "check_key": "secret_readiness",
+        "status": "PASS",
+        "timestamp": "2026-03-23T23:13:45.561795+00:00",
+        "latency_ms": 157.14,
+        "error_code": null,
+        "run_id": "run-1e9f7d63-620c-4bd2-8ff7-b1e0661ce504",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:13:45.561795Z",
+      "title": "prod_env_preflight -> FAIL",
+      "details": {
+        "check_key": "prod_env_preflight",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:13:45.561795+00:00",
+        "latency_ms": 157.14,
+        "error_code": "raw_status=fail",
+        "run_id": "run-1e9f7d63-620c-4bd2-8ff7-b1e0661ce504",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:13:45.561795Z",
+      "title": "final_release_gate -> FAIL",
+      "details": {
+        "check_key": "final_release_gate",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:13:45.561795+00:00",
+        "latency_ms": 157.14,
+        "error_code": "raw_status=no_go",
+        "run_id": "run-1e9f7d63-620c-4bd2-8ff7-b1e0661ce504",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:13:45.561795Z",
+      "title": "release_gate_contract -> FAIL",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:13:45.561795+00:00",
+        "latency_ms": 157.14,
+        "error_code": "prod_env_preflight_fail",
+        "run_id": "run-1e9f7d63-620c-4bd2-8ff7-b1e0661ce504",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:41.786873Z",
+      "title": "release_gate_contract -> PASS",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "PASS",
+        "timestamp": "2026-03-23T23:11:41.786873+00:00",
+        "latency_ms": 10.0,
+        "error_code": null,
+        "run_id": "p2-flap-0",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:41.614405Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::all",
+        "expiry": "2026-03-23T23:14:43.307715+00:00",
+        "request_id": "7e8a18a3-9741-49ea-b7af-d1bfeee865f3",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:41.609343Z",
+      "title": "prod_env_resolution -> FAIL",
+      "details": {
+        "check_key": "prod_env_resolution",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:11:41.609343+00:00",
+        "latency_ms": 157.689,
+        "error_code": "raw_status=fail",
+        "run_id": "run-2c0b1283-12e4-45b0-8678-caca014d350f",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:41.609343Z",
+      "title": "secret_readiness -> PASS",
+      "details": {
+        "check_key": "secret_readiness",
+        "status": "PASS",
+        "timestamp": "2026-03-23T23:11:41.609343+00:00",
+        "latency_ms": 157.689,
+        "error_code": null,
+        "run_id": "run-2c0b1283-12e4-45b0-8678-caca014d350f",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:41.609343Z",
+      "title": "prod_env_preflight -> FAIL",
+      "details": {
+        "check_key": "prod_env_preflight",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:11:41.609343+00:00",
+        "latency_ms": 157.689,
+        "error_code": "raw_status=fail",
+        "run_id": "run-2c0b1283-12e4-45b0-8678-caca014d350f",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:41.609343Z",
+      "title": "final_release_gate -> FAIL",
+      "details": {
+        "check_key": "final_release_gate",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:11:41.609343+00:00",
+        "latency_ms": 157.689,
+        "error_code": "raw_status=no_go",
+        "run_id": "run-2c0b1283-12e4-45b0-8678-caca014d350f",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:41.609343Z",
+      "title": "release_gate_contract -> FAIL",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:11:41.609343+00:00",
+        "latency_ms": 157.689,
+        "error_code": "prod_env_preflight_fail",
+        "run_id": "run-2c0b1283-12e4-45b0-8678-caca014d350f",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:19.854600Z",
+      "title": "release_gate_contract -> PASS",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "PASS",
+        "timestamp": "2026-03-23T23:11:19.854600+00:00",
+        "latency_ms": 10.0,
+        "error_code": null,
+        "run_id": "p2-flap-0",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:19.683084Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::all",
+        "expiry": "2026-03-23T23:14:43.307715+00:00",
+        "request_id": "6ea8e655-e5ca-4385-b6dc-856d2ae5b311",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:19.679166Z",
+      "title": "prod_env_resolution -> FAIL",
+      "details": {
+        "check_key": "prod_env_resolution",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:11:19.679166+00:00",
+        "latency_ms": 161.891,
+        "error_code": "raw_status=fail",
+        "run_id": "run-e7646854-1e73-43ca-a01e-bb4a8e800e0b",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:19.679166Z",
+      "title": "secret_readiness -> PASS",
+      "details": {
+        "check_key": "secret_readiness",
+        "status": "PASS",
+        "timestamp": "2026-03-23T23:11:19.679166+00:00",
+        "latency_ms": 161.891,
+        "error_code": null,
+        "run_id": "run-e7646854-1e73-43ca-a01e-bb4a8e800e0b",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:19.679166Z",
+      "title": "prod_env_preflight -> FAIL",
+      "details": {
+        "check_key": "prod_env_preflight",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:11:19.679166+00:00",
+        "latency_ms": 161.891,
+        "error_code": "raw_status=fail",
+        "run_id": "run-e7646854-1e73-43ca-a01e-bb4a8e800e0b",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:19.679166Z",
+      "title": "final_release_gate -> FAIL",
+      "details": {
+        "check_key": "final_release_gate",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:11:19.679166+00:00",
+        "latency_ms": 161.891,
+        "error_code": "raw_status=no_go",
+        "run_id": "run-e7646854-1e73-43ca-a01e-bb4a8e800e0b",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:11:19.679166Z",
+      "title": "release_gate_contract -> FAIL",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:11:19.679166+00:00",
+        "latency_ms": 161.891,
+        "error_code": "prod_env_preflight_fail",
+        "run_id": "run-e7646854-1e73-43ca-a01e-bb4a8e800e0b",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:10:01.240089Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::all",
+        "expiry": "2026-03-23T23:14:43.307715+00:00",
+        "request_id": "b2139aa2-e0b3-495e-ae7d-c5253048cefe",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:10:01.236052Z",
+      "title": "prod_env_resolution -> FAIL",
+      "details": {
+        "check_key": "prod_env_resolution",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:10:01.236052+00:00",
+        "latency_ms": 156.565,
+        "error_code": "raw_status=fail",
+        "run_id": "run-04eaf4e6-a729-4160-9f03-8890cf46fe58",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:10:01.236052Z",
+      "title": "secret_readiness -> PASS",
+      "details": {
+        "check_key": "secret_readiness",
+        "status": "PASS",
+        "timestamp": "2026-03-23T23:10:01.236052+00:00",
+        "latency_ms": 156.565,
+        "error_code": null,
+        "run_id": "run-04eaf4e6-a729-4160-9f03-8890cf46fe58",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:10:01.236052Z",
+      "title": "prod_env_preflight -> FAIL",
+      "details": {
+        "check_key": "prod_env_preflight",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:10:01.236052+00:00",
+        "latency_ms": 156.565,
+        "error_code": "raw_status=fail",
+        "run_id": "run-04eaf4e6-a729-4160-9f03-8890cf46fe58",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:10:01.236052Z",
+      "title": "final_release_gate -> FAIL",
+      "details": {
+        "check_key": "final_release_gate",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:10:01.236052+00:00",
+        "latency_ms": 156.565,
+        "error_code": "raw_status=no_go",
+        "run_id": "run-04eaf4e6-a729-4160-9f03-8890cf46fe58",
+        "flapping": false
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:10:01.236052Z",
+      "title": "release_gate_contract -> FAIL",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:10:01.236052+00:00",
+        "latency_ms": 156.565,
+        "error_code": "prod_env_preflight_fail",
+        "run_id": "run-04eaf4e6-a729-4160-9f03-8890cf46fe58",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:09:41.786873Z",
+      "title": "release_gate_contract -> FAIL",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:09:41.786873+00:00",
+        "latency_ms": 11.0,
+        "error_code": "release_gate_blocked",
+        "run_id": "p2-flap-1",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:09:19.854600Z",
+      "title": "release_gate_contract -> FAIL",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:09:19.854600+00:00",
+        "latency_ms": 11.0,
+        "error_code": "release_gate_blocked",
+        "run_id": "p2-flap-1",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:07:41.786873Z",
+      "title": "release_gate_contract -> PASS",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "PASS",
+        "timestamp": "2026-03-23T23:07:41.786873+00:00",
+        "latency_ms": 12.0,
+        "error_code": null,
+        "run_id": "p2-flap-2",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:07:19.854600Z",
+      "title": "release_gate_contract -> PASS",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "PASS",
+        "timestamp": "2026-03-23T23:07:19.854600+00:00",
+        "latency_ms": 12.0,
+        "error_code": null,
+        "run_id": "p2-flap-2",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:05:41.786873Z",
+      "title": "release_gate_contract -> FAIL",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:05:41.786873+00:00",
+        "latency_ms": 13.0,
+        "error_code": "release_gate_blocked",
+        "run_id": "p2-flap-3",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "CHECK_RUN",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:05:19.854600Z",
+      "title": "release_gate_contract -> FAIL",
+      "details": {
+        "check_key": "release_gate_contract",
+        "status": "FAIL",
+        "timestamp": "2026-03-23T23:05:19.854600+00:00",
+        "latency_ms": 13.0,
+        "error_code": "release_gate_blocked",
+        "run_id": "p2-flap-3",
+        "flapping": true
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:59:49.232783Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "c550974a-df96-4fb5-b98d-3efd3b5ad21e",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:59:48.696394Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "525b1fe7-792d-47c3-bb78-5ac84ea4f7c5",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_MODE_TRANSITION",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:59:47.729822Z",
+      "title": "PRODUCTION_GATE_MODE_TRANSITION",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "PAPER",
+        "next_state": "PAPER",
+        "reason_code": "MODE_TRANSITION",
+        "reason_text": "Testing PAPER mode transition",
+        "expiry": null,
+        "request_id": "a919bef3-1be7-49e3-b15f-cac444688d50",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "EXECUTION_MODE_SWITCHED",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:59:47.727784Z",
+      "title": "EXECUTION_MODE_SWITCHED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_mode": "PAPER",
+        "new_mode": "PAPER",
+        "reason": "Testing PAPER mode transition",
+        "snapshot_captured": true,
+        "request_id": "a919bef3-1be7-49e3-b15f-cac444688d50",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:59:46.932175Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "Testing LIVE transition when NO_GO",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "ecb68780-a1d4-4400-bb94-76a7b4d9a8ad",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "category": "checks",
+      "timestamp": "2026-03-23T22:59:45.538768Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::prod_env_resolution",
+        "expiry": "2026-03-23T23:14:43.307715+00:00",
+        "request_id": "9622f661-3b81-4238-8a02-e5318d0f06da",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/prod_env_resolution/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T22:59:44.546814Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::all",
+        "expiry": "2026-03-23T23:14:43.307715+00:00",
+        "request_id": "dba06065-b3de-46d9-859b-d0f40a8fda19",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:59:43.373462Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_REVOKED",
+        "reason_text": "manual_revoke",
+        "expiry": "2026-03-23T23:14:43.307715+00:00",
+        "override_id": "197e4140-c331-4b04-9a7c-2d3365743572",
+        "request_id": "07d673b4-63bb-4b3e-bbdd-31236c207e3c",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override/197e4140-c331-4b04-9a7c-2d3365743572/revoke",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:59:43.312261Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "HOTFIX_VALIDATED",
+        "reason_text": "Testing override revoke functionality",
+        "expiry": "2026-03-23T23:14:43.307715+00:00",
+        "override_id": "197e4140-c331-4b04-9a7c-2d3365743572",
+        "request_id": "39eda806-5d1b-433e-916a-f683e9b4bc68",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:59:41.285675Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "INCIDENT_MITIGATION",
+        "reason_text": "Testing override creation for incident mitigation",
+        "expiry": "2026-03-23T23:14:41.280294+00:00",
+        "override_id": "e66cc294-80dd-47c3-9827-9e68b5c1522c",
+        "request_id": "26180fa0-1e32-4711-9a75-3a4bcb1622eb",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:59:11.885884Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "post revoke block probe",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "b2259d02-79da-4c79-b6cb-4ee55e43d60b",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:59:11.691349Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_REVOKED",
+        "reason_text": "manual_revoke",
+        "expiry": "2026-03-23T23:09:11.566922+00:00",
+        "override_id": "571647f0-4761-4ac9-8c17-4cb888e8f654",
+        "request_id": "e7b9388b-ae25-4e08-8f56-60ecdacc06c0",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override/571647f0-4761-4ac9-8c17-4cb888e8f654/revoke",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:59:11.572050Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "THIRD_PARTY_DEGRADATION",
+        "reason_text": "revoke evidence override",
+        "expiry": "2026-03-23T23:09:11.566922+00:00",
+        "override_id": "571647f0-4761-4ac9-8c17-4cb888e8f654",
+        "request_id": "14214299-e404-419d-8b6c-ec16cffd8cec",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_EXPIRED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:59:11.376344Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_EXPIRED",
+      "details": {
+        "actor_user_id": null,
+        "actor_role": "system",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_EXPIRED",
+        "reason_text": "override_expired",
+        "expiry": "2020-01-01T00:00:00+00:00",
+        "override_id": "ddcb9693-b302-437a-a50d-d6687309bf8c",
+        "request_id": "e5b75cb5-3128-429b-937a-5783cfe60953",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate",
+        "method": "GET"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:59:11.244524Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "HOTFIX_VALIDATED",
+        "reason_text": "expiry evidence override",
+        "expiry": "2026-03-23T23:09:11.238947+00:00",
+        "override_id": "ddcb9693-b302-437a-a50d-d6687309bf8c",
+        "request_id": "3a0c772e-fb3c-471d-918c-64d50ad12232",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:59:11.052534Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "hard block 403 probe",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "73ad4434-5d9e-49ab-9912-01a43322df5f",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:59:10.786913Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "INCIDENT_MITIGATION",
+        "reason_text": "override create transition evidence",
+        "expiry": "2026-03-23T23:04:10.781970+00:00",
+        "override_id": "5037bdb8-11ba-48e2-b435-3522a08479b0",
+        "request_id": "f5ab45c2-4ec0-4042-a1db-1f5b0f48f097",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:58:39.791297Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "post revoke block probe",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "b7f4590b-6fb1-4a4a-82a5-be9051a1796b",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:58:39.583646Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_REVOKED",
+        "reason_text": "manual_revoke",
+        "expiry": "2026-03-23T23:08:39.443138+00:00",
+        "override_id": "08c5ae11-05ff-430a-8b9c-292188dea8aa",
+        "request_id": "c643b072-a3c7-47d2-87b9-092b3e9b3c74",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override/08c5ae11-05ff-430a-8b9c-292188dea8aa/revoke",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:58:39.448035Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "THIRD_PARTY_DEGRADATION",
+        "reason_text": "revoke evidence override",
+        "expiry": "2026-03-23T23:08:39.443138+00:00",
+        "override_id": "08c5ae11-05ff-430a-8b9c-292188dea8aa",
+        "request_id": "f1f35da7-7685-4256-8a67-17f37fca7eb1",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_EXPIRED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:58:39.234313Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_EXPIRED",
+      "details": {
+        "actor_user_id": null,
+        "actor_role": "system",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_EXPIRED",
+        "reason_text": "override_expired",
+        "expiry": "2020-01-01T00:00:00+00:00",
+        "override_id": "f3574976-208a-4fef-87a5-f7824b8cbcc7",
+        "request_id": "374ca1f1-58eb-4c60-af6a-fe060edc449b",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate",
+        "method": "GET"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:58:39.059864Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "HOTFIX_VALIDATED",
+        "reason_text": "expiry evidence override",
+        "expiry": "2026-03-23T23:08:39.054955+00:00",
+        "override_id": "f3574976-208a-4fef-87a5-f7824b8cbcc7",
+        "request_id": "c2b57f36-8464-4a6a-96a2-13cf07db409e",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:58:38.872926Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "hard block 403 probe",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "43ce07d1-9dc6-4c2f-b518-fdb0f393366f",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:58:38.600170Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "INCIDENT_MITIGATION",
+        "reason_text": "override create transition evidence",
+        "expiry": "2026-03-23T23:03:38.594945+00:00",
+        "override_id": "ee9081b9-f842-43cd-bc3d-f21a4e873684",
+        "request_id": "35f022f9-001d-461b-be10-40487b00dec5",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:57:23.648881Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "INCIDENT_MITIGATION",
+        "reason_text": "override evidence for screenshot active state",
+        "expiry": "2026-03-23T23:17:23.641841+00:00",
+        "override_id": "28920ac3-5f04-4ad1-8598-11175a1301e0",
+        "request_id": "767c7f8e-a8fc-417f-8061-22fb43745809",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:45:37.277826Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "da402043-1ee4-47f5-93f6-f2f1caeaec2d",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:45:37.056421Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "Test LIVE transition",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "6845a40f-1787-44e5-8432-7352fb0fb1da",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:45:11.258124Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "02451ce6-1d9f-44f9-a93d-c884ae432e65",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:45:11.081956Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "Test LIVE transition",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "b29619a5-3631-4750-b136-4b644deca0a0",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:43:17.850379Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "P1 evidence block probe",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "9b2b5b82-548b-4953-9539-a54c88423768",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:40:49.837920Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "82a4aa71-6b1e-439c-968b-88cdf271712c",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:40:48.801428Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "cbe36530-89d9-4c6b-aefa-0afa0ccdc750",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_MODE_TRANSITION",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:40:48.298270Z",
+      "title": "PRODUCTION_GATE_MODE_TRANSITION",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "MOCK",
+        "next_state": "PAPER",
+        "reason_code": "MODE_TRANSITION",
+        "reason_text": "Testing PAPER mode transition",
+        "expiry": null,
+        "request_id": "8edcaaad-0038-482e-a1f4-4db992d58886",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "EXECUTION_MODE_SWITCHED",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:40:48.296485Z",
+      "title": "EXECUTION_MODE_SWITCHED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_mode": "MOCK",
+        "new_mode": "PAPER",
+        "reason": "Testing PAPER mode transition",
+        "snapshot_captured": true,
+        "request_id": "8edcaaad-0038-482e-a1f4-4db992d58886",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:40:47.475705Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "Testing LIVE transition when NO_GO",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "439b6a02-49cf-4d60-8a53-08a363880694",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "category": "checks",
+      "timestamp": "2026-03-23T22:40:46.047061Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::prod_env_resolution",
+        "expiry": "2026-03-23T22:55:43.458414+00:00",
+        "request_id": "e7df5f55-7549-4706-957b-0995fc57194b",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/prod_env_resolution/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T22:40:45.044973Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::all",
+        "expiry": "2026-03-23T22:55:43.458414+00:00",
+        "request_id": "030d31fd-5a33-4fa5-bde5-4eb82b4f1551",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:40:43.571702Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_REVOKED",
+        "reason_text": "manual_revoke",
+        "expiry": "2026-03-23T22:55:43.458414+00:00",
+        "override_id": "0a131bd5-15bf-49ca-91cc-56d466c860cd",
+        "request_id": "6a93bfed-fc43-43c7-b57a-0bb38d781304",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override/0a131bd5-15bf-49ca-91cc-56d466c860cd/revoke",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:40:43.462804Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "HOTFIX_VALIDATED",
+        "reason_text": "Testing override revoke functionality",
+        "expiry": "2026-03-23T22:55:43.458414+00:00",
+        "override_id": "0a131bd5-15bf-49ca-91cc-56d466c860cd",
+        "request_id": "29a0815c-e3bb-4a8d-9837-698e3ee32696",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:40:41.966043Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "INCIDENT_MITIGATION",
+        "reason_text": "Testing override creation for incident mitigation",
+        "expiry": "2026-03-23T22:55:41.959705+00:00",
+        "override_id": "b2b2c024-000c-4e18-a620-ed821d2163c6",
+        "request_id": "1beb4842-b948-4963-a2fb-9755684b1001",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:22:21.881019Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "b15d3a8f-a241-40be-9d46-c520bfc9e3ac",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_MODE_TRANSITION",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:21:59.602354Z",
+      "title": "PRODUCTION_GATE_MODE_TRANSITION",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "LIVE",
+        "next_state": "LIVE",
+        "reason_code": "MODE_TRANSITION",
+        "reason_text": "MOCK to LIVE controlled transition with audit reason",
+        "expiry": null,
+        "request_id": "aaedb9a2-04f4-4d59-ba82-d66515ad2206",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "EXECUTION_MODE_SWITCHED",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:21:59.600276Z",
+      "title": "EXECUTION_MODE_SWITCHED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_mode": "LIVE",
+        "new_mode": "LIVE",
+        "reason": "MOCK to LIVE controlled transition with audit reason",
+        "snapshot_captured": true,
+        "request_id": "aaedb9a2-04f4-4d59-ba82-d66515ad2206",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:21:59.595958Z",
+      "title": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "GATE_ALLOWED",
+        "reason_text": "MOCK to LIVE controlled transition with audit reason",
+        "expiry": "2026-03-23T22:26:59.531029+00:00",
+        "action_type": "production_gate_mode_transition",
+        "request_id": "aaedb9a2-04f4-4d59-ba82-d66515ad2206",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:21:59.535966Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "INCIDENT_MITIGATION",
+        "reason_text": "Audit mode transition kanit override",
+        "expiry": "2026-03-23T22:26:59.531029+00:00",
+        "override_id": "2d0f77f1-2e5a-46fb-90d2-5036391a4cf5",
+        "request_id": "ed52939b-4a01-4a76-93cb-270ae6867857",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:21:49.598628Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "revoke sonrası block probe",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "9d91700a-6208-4cde-b341-0ca273fe0f9d",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:21:49.528752Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_REVOKED",
+        "reason_text": "manual_revoke",
+        "expiry": "2026-03-23T22:36:48.887079+00:00",
+        "override_id": "3c7c2b82-46ab-4747-95f4-38ccb26bcddf",
+        "request_id": "2cc694d0-0d90-441f-9aaf-9f016de59d94",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override/3c7c2b82-46ab-4747-95f4-38ccb26bcddf/revoke",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:21:48.891981Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "HOTFIX_VALIDATED",
+        "reason_text": "Revoke kaniti için override",
+        "expiry": "2026-03-23T22:36:48.887079+00:00",
+        "override_id": "3c7c2b82-46ab-4747-95f4-38ccb26bcddf",
+        "request_id": "d05f33b7-61e5-4a10-94ae-8444d3e0fb21",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:21:40.720843Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "forced expiry sonrası deneme2",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "a237ce87-433d-4cde-8f4c-1385facfac2e",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_EXPIRED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:21:40.662439Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_EXPIRED",
+      "details": {
+        "actor_user_id": null,
+        "actor_role": "system",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_EXPIRED",
+        "reason_text": "override_expired",
+        "expiry": "2020-01-01T00:00:00+00:00",
+        "override_id": "2308b108-2ebd-4b44-9667-98e378a6648f",
+        "request_id": "b2f3c2b5-c462-4be0-a96e-468ff9403f4a",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate",
+        "method": "GET"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:21:40.566811Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "THIRD_PARTY_DEGRADATION",
+        "reason_text": "Expiry forced test override açılıyor tekrar",
+        "expiry": "2026-03-23T22:36:40.561974+00:00",
+        "override_id": "2308b108-2ebd-4b44-9667-98e378a6648f",
+        "request_id": "addca98d-5da7-46a1-a0aa-96a477fcd007",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:21:29.282294Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "THIRD_PARTY_DEGRADATION",
+        "reason_text": "Expiry forced test override açılıyor",
+        "expiry": "2026-03-23T22:36:29.277158+00:00",
+        "override_id": "6044bcfa-14b5-4923-98d4-87341229aecc",
+        "request_id": "67cf3de8-4b1c-4860-ba05-6f689dd5ea9e",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:21:16.655780Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "Revoke sonrasi LIVE denemesi",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "7cfe7d4c-1fa0-413e-a34f-62c892f64c28",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:21:16.597448Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_REVOKED",
+        "reason_text": "manual_revoke",
+        "expiry": "2026-03-23T22:36:16.521603+00:00",
+        "override_id": "a8bddc08-20e9-4cb4-8e95-4c62eca9726c",
+        "request_id": "0720168e-5c93-4ec1-8bb3-3c28ad70c0ec",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override/a8bddc08-20e9-4cb4-8e95-4c62eca9726c/revoke",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:21:16.526369Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "HOTFIX_VALIDATED",
+        "reason_text": "Revoke flow test override",
+        "expiry": "2026-03-23T22:36:16.521603+00:00",
+        "override_id": "a8bddc08-20e9-4cb4-8e95-4c62eca9726c",
+        "request_id": "31b6197a-3496-4bb7-a0e9-fbe1bf5152ee",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_MODE_TRANSITION",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:21:16.376630Z",
+      "title": "PRODUCTION_GATE_MODE_TRANSITION",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "LIVE",
+        "next_state": "LIVE",
+        "reason_code": "MODE_TRANSITION",
+        "reason_text": "Expiry sonrasinda LIVE denemesi",
+        "expiry": null,
+        "request_id": "65daa963-d2ac-4a44-9aa5-1d580acf1531",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "EXECUTION_MODE_SWITCHED",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:21:16.374566Z",
+      "title": "EXECUTION_MODE_SWITCHED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_mode": "LIVE",
+        "new_mode": "LIVE",
+        "reason": "Expiry sonrasinda LIVE denemesi",
+        "snapshot_captured": true,
+        "request_id": "65daa963-d2ac-4a44-9aa5-1d580acf1531",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:21:16.371175Z",
+      "title": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "GATE_ALLOWED",
+        "reason_text": "Expiry sonrasinda LIVE denemesi",
+        "expiry": "2026-03-23T22:22:16.103709+00:00",
+        "action_type": "production_gate_mode_transition",
+        "request_id": "65daa963-d2ac-4a44-9aa5-1d580acf1531",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_MODE_TRANSITION",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:21:16.196417Z",
+      "title": "PRODUCTION_GATE_MODE_TRANSITION",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "LIVE",
+        "next_state": "LIVE",
+        "reason_code": "MODE_TRANSITION",
+        "reason_text": "Override ile LIVE kaniti",
+        "expiry": null,
+        "request_id": "17e98ed3-3fa1-4c96-b637-697da32483ce",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "EXECUTION_MODE_SWITCHED",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:21:16.194593Z",
+      "title": "EXECUTION_MODE_SWITCHED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_mode": "LIVE",
+        "new_mode": "LIVE",
+        "reason": "Override ile LIVE kaniti",
+        "snapshot_captured": true,
+        "request_id": "17e98ed3-3fa1-4c96-b637-697da32483ce",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:21:16.189860Z",
+      "title": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "GATE_ALLOWED",
+        "reason_text": "Override ile LIVE kaniti",
+        "expiry": "2026-03-23T22:22:16.103709+00:00",
+        "action_type": "production_gate_mode_transition",
+        "request_id": "17e98ed3-3fa1-4c96-b637-697da32483ce",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:21:16.109031Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "INCIDENT_MITIGATION",
+        "reason_text": "Override flow testi icin gecici bypass aciliyor",
+        "expiry": "2026-03-23T22:22:16.103709+00:00",
+        "override_id": "5c5e6cdf-d96e-4c53-9570-4bd59a4c5e42",
+        "request_id": "cc23cef0-5077-4cd5-bdd4-62c7f3d23c8d",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:20:57.366291Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "Son blokaj probe",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "bcb9b64d-c84e-48fc-9900-a86ef27ce4bc",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:20:46.296208Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "Revoke sonrasi LIVE gecis denemesi",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "failing_checks_present"
+        ],
+        "request_id": "91a1e81c-174a-4394-88c0-434c2a4ce341",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:20:46.238966Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_REVOKED",
+        "reason_text": "manual_revoke",
+        "expiry": "2026-03-23T22:35:46.175300+00:00",
+        "override_id": "e9115725-f640-45d1-a7a6-61c0dad03cfd",
+        "request_id": "8c7effc5-dfbf-404b-b442-195a908ad1f0",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override/e9115725-f640-45d1-a7a6-61c0dad03cfd/revoke",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:20:46.180152Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "INCIDENT_MITIGATION",
+        "reason_text": "Revoke sonrasi blokaj dogrulamasi icin override",
+        "expiry": "2026-03-23T22:35:46.175300+00:00",
+        "override_id": "e9115725-f640-45d1-a7a6-61c0dad03cfd",
+        "request_id": "d1f5e63e-2a78-47a3-b9ec-55e59b78657d",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_MODE_TRANSITION",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:20:46.056150Z",
+      "title": "PRODUCTION_GATE_MODE_TRANSITION",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "LIVE",
+        "next_state": "LIVE",
+        "reason_code": "MODE_TRANSITION",
+        "reason_text": "Expiry sonrasi LIVE gecis denemesi",
+        "expiry": null,
+        "request_id": "5ee69c16-bf41-4dab-b8c1-4dd407eb52fa",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "EXECUTION_MODE_SWITCHED",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:20:46.054355Z",
+      "title": "EXECUTION_MODE_SWITCHED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_mode": "LIVE",
+        "new_mode": "LIVE",
+        "reason": "Expiry sonrasi LIVE gecis denemesi",
+        "snapshot_captured": true,
+        "request_id": "5ee69c16-bf41-4dab-b8c1-4dd407eb52fa",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:20:46.050819Z",
+      "title": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "GATE_ALLOWED",
+        "reason_text": "Expiry sonrasi LIVE gecis denemesi",
+        "expiry": "2026-03-23T22:21:45.823669+00:00",
+        "action_type": "production_gate_mode_transition",
+        "request_id": "5ee69c16-bf41-4dab-b8c1-4dd407eb52fa",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_MODE_TRANSITION",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:20:45.889114Z",
+      "title": "PRODUCTION_GATE_MODE_TRANSITION",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "PAPER",
+        "next_state": "LIVE",
+        "reason_code": "MODE_TRANSITION",
+        "reason_text": "Override aktifken gecici LIVE gecisi",
+        "expiry": null,
+        "request_id": "cea8cd3e-7d64-4cf2-ba9d-e8e36871950b",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "EXECUTION_MODE_SWITCHED",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:20:45.887266Z",
+      "title": "EXECUTION_MODE_SWITCHED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_mode": "PAPER",
+        "new_mode": "LIVE",
+        "reason": "Override aktifken gecici LIVE gecisi",
+        "snapshot_captured": true,
+        "request_id": "cea8cd3e-7d64-4cf2-ba9d-e8e36871950b",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:20:45.882537Z",
+      "title": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "GATE_ALLOWED",
+        "reason_text": "Override aktifken gecici LIVE gecisi",
+        "expiry": "2026-03-23T22:21:45.823669+00:00",
+        "action_type": "production_gate_mode_transition",
+        "request_id": "cea8cd3e-7d64-4cf2-ba9d-e8e36871950b",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:20:45.828634Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "HOTFIX_VALIDATED",
+        "reason_text": "Acil hotfix dogrulandi, kisa sureli bypass aciliyor",
+        "expiry": "2026-03-23T22:21:45.823669+00:00",
+        "override_id": "26d6fb18-e77c-477b-8a39-82b981def82e",
+        "request_id": "df9d793b-2043-47e0-87c4-dc546cd576bf",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T22:20:45.665193Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::all",
+        "expiry": "2026-03-23T22:32:15.552552+00:00",
+        "request_id": "27212ddb-9307-49a1-8353-6f45295394bf",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:20:44.188332Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "NO_GO durumunda live gecis testi",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "c20adf08-ae9a-4ce6-83c5-59c16a2660ea",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T22:19:21.877061Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::all",
+        "expiry": "2026-03-23T22:32:15.552552+00:00",
+        "request_id": "eda87773-93ba-4da2-ae61-9284c319b7ad",
+        "session_id": "a591f5d0-63f2-4119-9c9b-e3f4d0086e7f",
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:17:21.955617Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "0b88a09e-0761-4041-806f-3c39f1299121",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:17:21.424918Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "65a0e305-952e-4da1-8c27-87ce3e3a78ab",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_MODE_TRANSITION",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:17:20.896138Z",
+      "title": "PRODUCTION_GATE_MODE_TRANSITION",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "PAPER",
+        "next_state": "PAPER",
+        "reason_code": "MODE_TRANSITION",
+        "reason_text": "Testing PAPER mode transition",
+        "expiry": null,
+        "request_id": "bea0794a-a9f4-4d3f-9f14-53409da1197f",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "EXECUTION_MODE_SWITCHED",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:17:20.894247Z",
+      "title": "EXECUTION_MODE_SWITCHED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_mode": "PAPER",
+        "new_mode": "PAPER",
+        "reason": "Testing PAPER mode transition",
+        "snapshot_captured": true,
+        "request_id": "bea0794a-a9f4-4d3f-9f14-53409da1197f",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:17:20.050120Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "Testing LIVE transition when NO_GO",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "96cd4186-eee1-4ccd-b831-df68d513e483",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "category": "checks",
+      "timestamp": "2026-03-23T22:17:18.110748Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::prod_env_resolution",
+        "expiry": "2026-03-23T22:32:15.552552+00:00",
+        "request_id": "4a490434-6e4f-4ba0-baf8-fba5564b5958",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/prod_env_resolution/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T22:17:17.077958Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::all",
+        "expiry": "2026-03-23T22:32:15.552552+00:00",
+        "request_id": "4c5ac89d-5c5b-4bad-a2c8-3e611c2361d5",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:17:15.620301Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_REVOKED",
+        "reason_text": "manual_revoke",
+        "expiry": "2026-03-23T22:32:15.552552+00:00",
+        "override_id": "9e00249b-8b17-4503-9c34-ed6c655633d0",
+        "request_id": "a6a8d53e-9a8a-4c2c-9a4e-a24a81ecee9d",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override/9e00249b-8b17-4503-9c34-ed6c655633d0/revoke",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:17:15.557399Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "HOTFIX_VALIDATED",
+        "reason_text": "Testing override revoke functionality",
+        "expiry": "2026-03-23T22:32:15.552552+00:00",
+        "override_id": "9e00249b-8b17-4503-9c34-ed6c655633d0",
+        "request_id": "2859f318-ca84-4d07-a172-a231f4e33fad",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:17:12.901124Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "INCIDENT_MITIGATION",
+        "reason_text": "Testing override creation for incident mitigation",
+        "expiry": "2026-03-23T22:32:12.894682+00:00",
+        "override_id": "e3d79c72-c115-47bf-a709-18f4707e54e9",
+        "request_id": "edb0373c-1f01-4d98-9ff4-9ba4f84de227",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:16:38.130710Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "c0679611-59c9-49c6-9bf2-e33b134aa89c",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:16:37.622426Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "fe5ee4ec-4700-43e2-b855-092f26ed80c2",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_MODE_TRANSITION",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:16:37.081935Z",
+      "title": "PRODUCTION_GATE_MODE_TRANSITION",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "PAPER",
+        "next_state": "PAPER",
+        "reason_code": "MODE_TRANSITION",
+        "reason_text": "Testing PAPER mode transition",
+        "expiry": null,
+        "request_id": "a39de0ac-734f-4c00-ba85-9208945d9cab",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "EXECUTION_MODE_SWITCHED",
+      "category": "mode",
+      "timestamp": "2026-03-23T22:16:37.080050Z",
+      "title": "EXECUTION_MODE_SWITCHED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_mode": "PAPER",
+        "new_mode": "PAPER",
+        "reason": "Testing PAPER mode transition",
+        "snapshot_captured": true,
+        "request_id": "a39de0ac-734f-4c00-ba85-9208945d9cab",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "category": "deploy",
+      "timestamp": "2026-03-23T22:16:36.232055Z",
+      "title": "PRODUCTION_GATE_ACTION_BLOCKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "GATE_BLOCKED",
+        "reason_text": "Testing LIVE transition when NO_GO",
+        "expiry": null,
+        "action_type": "production_gate_mode_transition",
+        "blocked_reason_codes": [
+          "state_no_go",
+          "checklist_incomplete",
+          "failing_checks_present"
+        ],
+        "request_id": "5bc0232e-97e7-4bde-8aea-24116b57c491",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/mode-transition",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "category": "checks",
+      "timestamp": "2026-03-23T22:16:34.613522Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::prod_env_resolution",
+        "expiry": "2026-03-23T22:31:32.488885+00:00",
+        "request_id": "e649a482-fe0a-46dd-9f70-b494c436c3ee",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/prod_env_resolution/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T22:16:33.528979Z",
+      "title": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "NO_GO",
+        "reason_code": "CHECK_RERUN",
+        "reason_text": "rerun::all",
+        "expiry": "2026-03-23T22:31:32.488885+00:00",
+        "request_id": "5c587ea8-25f1-4522-a38e-8f4d0f2efdf2",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:16:32.552075Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "GO_WITH_OVERRIDE",
+        "next_state": "NO_GO",
+        "reason_code": "OVERRIDE_REVOKED",
+        "reason_text": "manual_revoke",
+        "expiry": "2026-03-23T22:31:32.488885+00:00",
+        "override_id": "f5af2546-3fe8-4ca2-a228-2f85763b42fd",
+        "request_id": "89478221-d868-495d-9d54-f5929bddfa82",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override/f5af2546-3fe8-4ca2-a228-2f85763b42fd/revoke",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:16:32.493864Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "HOTFIX_VALIDATED",
+        "reason_text": "Testing override revoke functionality",
+        "expiry": "2026-03-23T22:31:32.488885+00:00",
+        "override_id": "f5af2546-3fe8-4ca2-a228-2f85763b42fd",
+        "request_id": "bd4be518-6ebe-4e8f-84fd-4a3659b72ffb",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    },
+    {
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T22:16:31.063743Z",
+      "title": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "details": {
+        "actor_user_id": "b1875e9a-1e08-47d3-9b5f-784376a5562b",
+        "actor_role": "super_admin",
+        "previous_state": "NO_GO",
+        "next_state": "GO_WITH_OVERRIDE",
+        "reason_code": "INCIDENT_MITIGATION",
+        "reason_text": "Testing override creation for incident mitigation",
+        "expiry": "2026-03-23T22:31:31.057443+00:00",
+        "override_id": "4cbd4ab0-e98e-432e-9955-0036b50c1cbf",
+        "request_id": "2054955b-1f6d-46d2-b004-82c86978dd13",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/override",
+        "method": "POST"
+      }
+    }
+  ],
+  "generated_at": "2026-03-23T23:13:46.693064+00:00",
+  "filters_used": {
+    "categories": "all",
+    "limit": 500
+  }
+}

@@ -171,6 +171,99 @@ def _inject_flapping_runtime_rows(db_url: str) -> dict:
     return {"seeded_count": len(seeded_rows), "rows": seeded_rows}
 
 
+def _inject_compare_improvement_rows(db_url: str) -> dict:
+    actor_user_id = None
+    seeded_rows: list[dict] = []
+    now = datetime.now(timezone.utc)
+
+    with psycopg2.connect(db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM users WHERE email=%s LIMIT 1", (SUPER_ADMIN_EMAIL,))
+            user_row = cur.fetchone()
+            actor_user_id = str(user_row[0]) if user_row else None
+
+            cur.execute("SELECT metadata_json FROM brand_settings WHERE id='default'")
+            row = cur.fetchone()
+            metadata = row[0] if row and row[0] else {}
+            if isinstance(metadata, str):
+                metadata = json.loads(metadata)
+
+            store = metadata.get("production_gate_control") or {}
+            history = list(store.get("check_history") or [])
+
+            # deterministic improvement data on isolated key: PASS-only with decreasing latency, run_count>=3
+            check_key = "runtime_improvement_probe"
+            latencies = [125.0, 92.0, 48.0]
+            offsets = [90, 45, 8]
+            for idx, latency in enumerate(latencies):
+                ts = now - timedelta(seconds=offsets[idx])
+                run_id = f"run-{uuid.uuid4()}"
+                request_id = str(uuid.uuid4())
+
+                history_row = {
+                    "check_key": check_key,
+                    "status": "PASS",
+                    "timestamp": ts.isoformat(),
+                    "latency_ms": latency,
+                    "error_code": None,
+                    "run_id": run_id,
+                    "flapping": False,
+                }
+                history.append(history_row)
+
+                audit_details = {
+                    "previous_state": "NO_GO",
+                    "next_state": "NO_GO",
+                    "reason_code": "CHECK_EVENT",
+                    "reason_text": f"{check_key}::PASS",
+                    "expiry": None,
+                    "check_key": check_key,
+                    "status": "PASS",
+                    "run_id": run_id,
+                    "latency_ms": latency,
+                    "flapping": False,
+                    "request_id": request_id,
+                    "session_id": None,
+                    "route": "/api/phase4/admin/production-gate/checks/rerun",
+                    "method": "POST",
+                }
+
+                cur.execute(
+                    """
+                    INSERT INTO audit_logs
+                    (id, actor_user_id, actor_role, action, entity_type, entity_id, severity, details, created_at)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        actor_user_id,
+                        "super_admin",
+                        "PRODUCTION_GATE_CHECK_EVENT",
+                        "production_gate",
+                        check_key,
+                        "info",
+                        Json(audit_details),
+                        ts,
+                    ),
+                )
+
+                seeded_rows.append(
+                    {
+                        "run_id": run_id,
+                        "request_id": request_id,
+                        "status": "PASS",
+                        "timestamp": ts.isoformat(),
+                        "latency_ms": latency,
+                    }
+                )
+
+            store["check_history"] = history
+            metadata["production_gate_control"] = store
+            cur.execute("UPDATE brand_settings SET metadata_json=%s WHERE id='default'", (Json(metadata),))
+
+    return {"seeded_count": len(seeded_rows), "rows": seeded_rows}
+
+
 def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
     now_iso = _now_iso()
     commit_hash = os.popen("git -C /app rev-parse HEAD").read().strip() or "unknown"
@@ -181,15 +274,20 @@ def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
         payload = {"manifest_version": "2.0", "schema_version": "1.1", "artifacts": []}
 
     existing = list(payload.get("artifacts") or [])
-    tracked_files = set(os.popen("git -C /app ls-files").read().splitlines())
+    tracked = set(os.popen("git -C /app ls-files").read().splitlines())
+    untracked_not_ignored = set(os.popen("git -C /app ls-files --others --exclude-standard").read().splitlines())
+    package_candidates = tracked | untracked_not_ignored
 
-    # keep only artifacts that are physically present AND packaged (git-tracked)
+    def in_package(rel_path: str) -> bool:
+        rel = rel_path.lstrip("/")
+        abs_path = APP_ROOT / rel
+        return abs_path.exists() and rel in package_candidates
+
+    # keep only artifacts that are physically present and packaged by current ignore rules
     kept: list[dict] = []
     for item in existing:
         rel = str(item.get("path") or "")
-        abs_path = APP_ROOT / rel.lstrip("/")
-        rel_git = rel.lstrip("/")
-        if abs_path.exists() and rel_git in tracked_files:
+        if in_package(rel):
             kept.append(item)
 
     # remove previous versions of required entries
@@ -211,8 +309,7 @@ def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
     for idx, old in enumerate(kept):
         rel = str(old.get("path") or "")
         abs_path = APP_ROOT / rel.lstrip("/")
-        rel_git = rel.lstrip("/")
-        in_package = rel_git in tracked_files and abs_path.exists()
+        packaged = in_package(rel)
         entry = {
             "path": rel,
             "absolute_path": str(abs_path),
@@ -220,7 +317,7 @@ def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
             "description": str(old.get("description") or "artifact"),
             "commit_hash": str(old.get("commit_hash") or commit_hash),
             "timestamp": str(old.get("timestamp") or now_iso),
-            "exists": in_package,
+            "exists": packaged,
             "size_bytes": abs_path.stat().st_size if abs_path.exists() else 0,
             "chain_position": idx,
             "prev_chain_hash": prev_chain_hash,
@@ -231,8 +328,7 @@ def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
 
     for rel_path, file_type, description in required_entries:
         abs_path = APP_ROOT / rel_path.lstrip("/")
-        rel_git = rel_path.lstrip("/")
-        in_package = rel_git in tracked_files and abs_path.exists()
+        packaged = in_package(rel_path)
         entry = {
             "path": rel_path,
             "absolute_path": str(abs_path),
@@ -240,7 +336,7 @@ def _rebuild_manifest(required_entries: list[tuple[str, str, str]]) -> dict:
             "description": description,
             "commit_hash": commit_hash,
             "timestamp": now_iso,
-            "exists": in_package,
+            "exists": packaged,
             "size_bytes": abs_path.stat().st_size if abs_path.exists() else 0,
             "chain_position": len(artifacts),
             "prev_chain_hash": prev_chain_hash,
@@ -278,6 +374,7 @@ def main() -> None:
 
     # Automated runtime flapping scenario (UUID run_id/request_id + audit rows)
     flapping_seed = _inject_flapping_runtime_rows(db_url)
+    compare_seed = _inject_compare_improvement_rows(db_url)
 
     gate = _api_get(session, base_url, "/api/phase4/admin/production-gate")
     cross_check = _api_get(session, base_url, "/api/phase4/admin/production-gate/system/cross-check")
@@ -428,6 +525,7 @@ def main() -> None:
             "flapping_non_low_rows": len(flapping_rows),
         },
         "flapping_seed": flapping_seed,
+        "compare_seed": compare_seed,
     }
     (REPORTS_DIR / "iteration_115.json").write_text(
         json.dumps(iteration_payload, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -472,6 +570,61 @@ def main() -> None:
     (REPORTS_DIR / "production_gate_p2_hardening_evidence.md").write_text("\n".join(evidence_lines) + "\n", encoding="utf-8")
 
     required_entries = [
+        (
+            "/test_reports/production_gate_p1_evidence.md",
+            "markdown",
+            "P1 evidence closure summary",
+        ),
+        (
+            "/test_reports/production_gate_p1_endpoint_state_evidence.json",
+            "json",
+            "P1 endpoint/state transitions evidence",
+        ),
+        (
+            "/test_reports/production_gate_p1_smoke_after_login.jpeg",
+            "image/jpeg",
+            "P1 composite smoke screenshot",
+        ),
+        (
+            "/test_reports/production_gate_p1_backend_pytest.txt",
+            "text",
+            "P1 raw backend pytest output",
+        ),
+        (
+            "/test_reports/iteration_113.json",
+            "json",
+            "P1 independent testing agent report",
+        ),
+        (
+            "/test_reports/production_gate_p2_evidence.md",
+            "markdown",
+            "P2 evidence summary",
+        ),
+        (
+            "/test_reports/production_gate_p2_timeline.json",
+            "json",
+            "P2 timeline snapshot",
+        ),
+        (
+            "/test_reports/production_gate_p2_analytics.json",
+            "json",
+            "P2 override analytics + risk snapshot",
+        ),
+        (
+            "/test_reports/production_gate_p2_compare.json",
+            "json",
+            "P2 before/after compare snapshot",
+        ),
+        (
+            "/test_reports/production_gate_p2_smoke.jpeg",
+            "image/jpeg",
+            "P2 composite smoke screenshot",
+        ),
+        (
+            "/test_reports/iteration_114.json",
+            "json",
+            "P2 independent testing agent report",
+        ),
         (
             "/test_reports/production_gate_p2_hardening_evidence.md",
             "markdown",

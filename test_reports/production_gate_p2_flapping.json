@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-24T00:25:53.019419+00:00",
+  "generated_at": "2026-03-24T00:35:31.396603+00:00",
   "generation": "automated",
   "source": "runtime test execution",
   "source_endpoint": "/api/phase4/admin/production-gate/checks/history",
@@ -12,9 +12,306 @@
     {
       "check_key": "release_gate_contract",
       "status": "FAIL",
+      "run_id": "run-4fad3e5b-2312-4c13-af6f-be1f2b9a03e7",
+      "timestamp": "2026-03-24T00:35:30.794067Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-4102377d-97d1-48f0-b76f-d37ab6672dc5",
+      "timestamp": "2026-03-24T00:35:29.964899Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-d5e14d92-754b-4409-bebf-f16ab4e797a5",
+      "timestamp": "2026-03-24T00:35:29.146273Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-82582052-8da0-4bc4-b167-27edc1307f86",
+      "timestamp": "2026-03-24T00:35:28.066161Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-c73fd131-3148-472a-ad2d-bd0a7947be41",
+      "timestamp": "2026-03-24T00:35:11.040023Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-fabd692b-dbcc-420d-a010-b9d30af50035",
+      "timestamp": "2026-03-24T00:35:10.744228Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-4f912bb0-521b-437a-8fad-d8f3675b29cf",
+      "timestamp": "2026-03-24T00:35:09.415786Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-aa9c343a-3f71-41aa-9c15-e0d8c133a312",
+      "timestamp": "2026-03-24T00:35:08.439751Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-3a337f8f-f90e-44d6-a20a-59ad5607845a",
+      "timestamp": "2026-03-24T00:35:07.541009Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-8630e363-54f3-4820-adb7-19a7cf74e48a",
+      "timestamp": "2026-03-24T00:34:51.040023Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-9049e5ff-2f43-401c-9ef1-b82dc7977ad3",
+      "timestamp": "2026-03-24T00:34:50.987793Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-ebcb069d-c686-4edd-88bc-66fbffe5c182",
+      "timestamp": "2026-03-24T00:34:36.737557Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-eabc2984-96dd-4471-a466-bf611ae4642d",
+      "timestamp": "2026-03-24T00:34:35.825525Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-971f37b9-b889-4c67-a52f-ffa558d62194",
+      "timestamp": "2026-03-24T00:34:34.887701Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-eec7f040-9c24-45b2-9933-8d27915638f4",
+      "timestamp": "2026-03-24T00:34:33.546740Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-9eee870f-00cf-40b4-9d19-7233ea253e92",
+      "timestamp": "2026-03-24T00:34:31.040023Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-658358d8-7dab-4cdc-8878-c51d8dd11ccd",
+      "timestamp": "2026-03-24T00:34:30.987793Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-9af964d0-46a7-4851-8c8f-70eab01a165f",
+      "timestamp": "2026-03-24T00:34:16.975202Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-6577eafc-518e-4d72-a1c9-faa37baad811",
+      "timestamp": "2026-03-24T00:34:11.040023Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-5abd0197-7901-447a-b1dc-bb3a9d446d2f",
+      "timestamp": "2026-03-24T00:34:10.987793Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-b9ba4aa8-36b8-43a7-b8b6-012ef586620c",
+      "timestamp": "2026-03-24T00:33:56.975202Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-726e9cee-1654-445f-b067-c61769280125",
+      "timestamp": "2026-03-24T00:33:51.040023Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-40900c12-5abe-42c7-a13d-77cb5792125d",
+      "timestamp": "2026-03-24T00:33:50.987793Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-1f82bee1-bf03-4a4a-b3a1-d61d67cc5993",
+      "timestamp": "2026-03-24T00:33:36.975202Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-2c4aebd3-3e10-4b45-ba7d-44cc450c4fa1",
+      "timestamp": "2026-03-24T00:33:31.040023Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-6af3ceff-9716-4bc6-954c-e3efef1130d0",
+      "timestamp": "2026-03-24T00:33:30.987793Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-b2c58acc-58d8-4af2-b412-6e53fd29ee6d",
+      "timestamp": "2026-03-24T00:33:16.975202Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-6e5ce5c1-bc5b-4f34-88d4-6ffc13ac94b5",
+      "timestamp": "2026-03-24T00:33:11.040023Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-486c40fc-edd1-4ee9-bceb-5dccc4fc7cf0",
+      "timestamp": "2026-03-24T00:33:10.987793Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-2558b109-188e-469a-aecd-a6fc8129fa4b",
+      "timestamp": "2026-03-24T00:32:56.975202Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-625c9d71-86d4-4a5b-9c87-87d893e395e0",
+      "timestamp": "2026-03-24T00:32:50.987793Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-e72cf3ef-196a-4416-88ca-7fbc12f2bfe4",
+      "timestamp": "2026-03-24T00:32:36.975202Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "PASS",
+      "run_id": "run-625757e5-cb0e-4e68-a368-eb5b39e96166",
+      "timestamp": "2026-03-24T00:32:16.975202Z",
+      "count": 21,
+      "window_sec": 300,
+      "severity": "HIGH"
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
       "run_id": "run-bed56621-8217-4cef-85ed-94d768895df0",
       "timestamp": "2026-03-24T00:25:51.492782Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -23,7 +320,7 @@
       "status": "FAIL",
       "run_id": "run-c2486909-e296-49cd-b292-e37db342ba63",
       "timestamp": "2026-03-24T00:25:50.615734Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -32,7 +329,7 @@
       "status": "FAIL",
       "run_id": "run-e5e12345-2ebc-40ae-a30c-8f6baf09fff5",
       "timestamp": "2026-03-24T00:25:49.813353Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -41,7 +338,7 @@
       "status": "FAIL",
       "run_id": "run-cd3bb28c-c323-44d7-97e2-b7c313353266",
       "timestamp": "2026-03-24T00:25:49.011938Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -50,7 +347,7 @@
       "status": "PASS",
       "run_id": "run-9680c202-c801-4e03-bfac-ed3e6a7d6245",
       "timestamp": "2026-03-24T00:25:31.741898Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -59,7 +356,7 @@
       "status": "FAIL",
       "run_id": "run-d841f008-6d0c-4c36-bf7b-746b4143588a",
       "timestamp": "2026-03-24T00:25:11.741898Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -68,7 +365,7 @@
       "status": "PASS",
       "run_id": "run-00e4d41a-631a-4bc3-bc34-615533a0d770",
       "timestamp": "2026-03-24T00:24:51.741898Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -77,7 +374,7 @@
       "status": "FAIL",
       "run_id": "run-184b8c23-e76e-4f03-b201-a15e958dc6c5",
       "timestamp": "2026-03-24T00:24:31.741898Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -86,7 +383,7 @@
       "status": "PASS",
       "run_id": "run-424fab77-851f-44f7-b6bb-29a16af6f21d",
       "timestamp": "2026-03-24T00:24:11.741898Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -95,7 +392,7 @@
       "status": "FAIL",
       "run_id": "run-ff6f7b38-7078-43d2-949d-6f7865ffdcac",
       "timestamp": "2026-03-24T00:23:51.741898Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -104,7 +401,7 @@
       "status": "FAIL",
       "run_id": "run-fd5c76b6-cc71-4df5-a5aa-bac99e9ee3fb",
       "timestamp": "2026-03-24T00:23:50.794354Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -113,7 +410,7 @@
       "status": "FAIL",
       "run_id": "run-7b2a774c-f5ee-46e2-8810-eb5267ed35ad",
       "timestamp": "2026-03-24T00:23:49.703472Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -122,7 +419,7 @@
       "status": "FAIL",
       "run_id": "run-1fd690b3-da82-4714-ac6a-762f47b51323",
       "timestamp": "2026-03-24T00:23:48.901695Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -131,7 +428,7 @@
       "status": "FAIL",
       "run_id": "run-2e291388-ae9f-4378-b940-1b2a2a6edff3",
       "timestamp": "2026-03-24T00:23:47.734085Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -140,7 +437,7 @@
       "status": "PASS",
       "run_id": "run-2e88716a-5aab-41ec-a4d8-516e43ae3114",
       "timestamp": "2026-03-24T00:23:31.741898Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -149,7 +446,7 @@
       "status": "FAIL",
       "run_id": "run-1ea81c49-5ec1-4530-b3a2-123dc075235f",
       "timestamp": "2026-03-23T23:42:49.080756Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -158,7 +455,7 @@
       "status": "FAIL",
       "run_id": "run-4fd5e514-54bf-465b-a9be-00faf9e713f0",
       "timestamp": "2026-03-23T23:42:48.081554Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -167,7 +464,7 @@
       "status": "FAIL",
       "run_id": "run-811af836-918b-4485-8be5-6ac75fa3c088",
       "timestamp": "2026-03-23T23:42:46.988992Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -176,7 +473,7 @@
       "status": "FAIL",
       "run_id": "run-0822c0b5-ac53-49f9-b681-b4efbab67eac",
       "timestamp": "2026-03-23T23:42:46.136033Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -185,7 +482,7 @@
       "status": "FAIL",
       "run_id": "run-1d0c7497-32eb-4315-928c-8e722b2875b1",
       "timestamp": "2026-03-23T23:42:14.964409Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -194,7 +491,7 @@
       "status": "FAIL",
       "run_id": "run-9fa92184-7ca2-4b2f-b8c0-53c5da17c475",
       "timestamp": "2026-03-23T23:42:13.562177Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -203,7 +500,7 @@
       "status": "FAIL",
       "run_id": "run-63d15d3b-48ef-462e-9be6-0138318d2c74",
       "timestamp": "2026-03-23T23:42:12.609350Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     },
@@ -212,7 +509,7 @@
       "status": "FAIL",
       "run_id": "run-e8545e23-3afa-44aa-8cdc-f468906d0b6c",
       "timestamp": "2026-03-23T23:42:11.461380Z",
-      "count": 7,
+      "count": 21,
       "window_sec": 300,
       "severity": "HIGH"
     }

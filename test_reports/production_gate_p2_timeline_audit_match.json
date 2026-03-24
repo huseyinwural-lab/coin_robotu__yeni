@@ -1,10 +1,955 @@
 {
-  "generated_at": "2026-03-24T00:25:53.019419+00:00",
+  "generated_at": "2026-03-24T00:35:31.396603+00:00",
   "generation": "automated",
   "source": "runtime test execution",
   "source_endpoint": "/api/phase4/admin/production-gate/timeline",
-  "items_count": 111,
+  "items_count": 216,
   "items": [
+    {
+      "audit_id": "fdea10be-70f5-49ad-acad-7c8fd499b01d",
+      "request_id": "11ca5f3a-02d0-4c54-b16a-84d2d58bece5",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:30.810406Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "838caa05-355f-4964-8c9a-b84c9dc2564f",
+      "request_id": "11ca5f3a-02d0-4c54-b16a-84d2d58bece5",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:30.808959Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-4fad3e5b-2312-4c13-af6f-be1f2b9a03e7"
+    },
+    {
+      "audit_id": "b6002635-f1d8-4060-a2fe-695a8c9e663e",
+      "request_id": "11ca5f3a-02d0-4c54-b16a-84d2d58bece5",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:30.807500Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-4fad3e5b-2312-4c13-af6f-be1f2b9a03e7"
+    },
+    {
+      "audit_id": "e2174a74-3b42-4a9d-ae52-94c5d99bba4a",
+      "request_id": "11ca5f3a-02d0-4c54-b16a-84d2d58bece5",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:30.806144Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-4fad3e5b-2312-4c13-af6f-be1f2b9a03e7"
+    },
+    {
+      "audit_id": "4dd315a8-6e64-49ea-936c-4da0072bde23",
+      "request_id": "11ca5f3a-02d0-4c54-b16a-84d2d58bece5",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:30.804822Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-4fad3e5b-2312-4c13-af6f-be1f2b9a03e7"
+    },
+    {
+      "audit_id": "96a0f8be-7463-4881-9f08-93449d06dc94",
+      "request_id": "11ca5f3a-02d0-4c54-b16a-84d2d58bece5",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:30.803104Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-4fad3e5b-2312-4c13-af6f-be1f2b9a03e7"
+    },
+    {
+      "audit_id": "e37303e4-fae0-496a-85f6-ceff066bff50",
+      "request_id": "dfc9bd6d-8ebb-440c-a5e8-062da318f4ce",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.982737Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "edc03cec-47ba-4675-9667-4823ef798569",
+      "request_id": "dfc9bd6d-8ebb-440c-a5e8-062da318f4ce",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.981171Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-4102377d-97d1-48f0-b76f-d37ab6672dc5"
+    },
+    {
+      "audit_id": "1e7d9022-d1e9-4036-afc1-63ec88258ad0",
+      "request_id": "dfc9bd6d-8ebb-440c-a5e8-062da318f4ce",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.979155Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-4102377d-97d1-48f0-b76f-d37ab6672dc5"
+    },
+    {
+      "audit_id": "3800f003-4952-4a34-98bb-5c42565a15ac",
+      "request_id": "dfc9bd6d-8ebb-440c-a5e8-062da318f4ce",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.977061Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-4102377d-97d1-48f0-b76f-d37ab6672dc5"
+    },
+    {
+      "audit_id": "57633f99-6dde-4d6d-a2ab-799309d8caa2",
+      "request_id": "dfc9bd6d-8ebb-440c-a5e8-062da318f4ce",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.975554Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-4102377d-97d1-48f0-b76f-d37ab6672dc5"
+    },
+    {
+      "audit_id": "8750a7ce-618c-4178-bd50-80d34a8eedc2",
+      "request_id": "dfc9bd6d-8ebb-440c-a5e8-062da318f4ce",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.973792Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-4102377d-97d1-48f0-b76f-d37ab6672dc5"
+    },
+    {
+      "audit_id": "589c8ca6-6c37-482e-af5d-c13ce6edd3dc",
+      "request_id": "b030f0b6-e98b-4c7d-be31-34d6c3470296",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.161359Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "2641b00a-df9e-4982-b067-0fc4c62c9a7f",
+      "request_id": "b030f0b6-e98b-4c7d-be31-34d6c3470296",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.160130Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-d5e14d92-754b-4409-bebf-f16ab4e797a5"
+    },
+    {
+      "audit_id": "c9767043-f5fe-471b-b30c-d4a87b750b9e",
+      "request_id": "b030f0b6-e98b-4c7d-be31-34d6c3470296",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.158783Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-d5e14d92-754b-4409-bebf-f16ab4e797a5"
+    },
+    {
+      "audit_id": "37b66e83-cadf-4ac4-a5b4-42d0074c072a",
+      "request_id": "b030f0b6-e98b-4c7d-be31-34d6c3470296",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.157354Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-d5e14d92-754b-4409-bebf-f16ab4e797a5"
+    },
+    {
+      "audit_id": "32e014d4-3e55-4d30-bd0a-c3c36b279290",
+      "request_id": "b030f0b6-e98b-4c7d-be31-34d6c3470296",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.155914Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-d5e14d92-754b-4409-bebf-f16ab4e797a5"
+    },
+    {
+      "audit_id": "508df8df-89a5-4322-93da-cbefe28d22fb",
+      "request_id": "b030f0b6-e98b-4c7d-be31-34d6c3470296",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:29.154392Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-d5e14d92-754b-4409-bebf-f16ab4e797a5"
+    },
+    {
+      "audit_id": "e112671e-4d3f-432d-ad11-f1f3fdcf952d",
+      "request_id": "b23c596a-81e7-45a3-bc5d-af78094242e0",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:28.086324Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "9993e7a3-8d31-4a04-83c5-4fd62197e8cd",
+      "request_id": "b23c596a-81e7-45a3-bc5d-af78094242e0",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:28.084462Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-82582052-8da0-4bc4-b167-27edc1307f86"
+    },
+    {
+      "audit_id": "3ff84de4-fd5d-4679-858d-2a2b045cce52",
+      "request_id": "b23c596a-81e7-45a3-bc5d-af78094242e0",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:28.081884Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-82582052-8da0-4bc4-b167-27edc1307f86"
+    },
+    {
+      "audit_id": "174e5579-4c71-4ffc-aa10-5ec03faba887",
+      "request_id": "b23c596a-81e7-45a3-bc5d-af78094242e0",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:28.079911Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-82582052-8da0-4bc4-b167-27edc1307f86"
+    },
+    {
+      "audit_id": "cba84416-feee-466a-aa66-9db8a79dddff",
+      "request_id": "b23c596a-81e7-45a3-bc5d-af78094242e0",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:28.077955Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-82582052-8da0-4bc4-b167-27edc1307f86"
+    },
+    {
+      "audit_id": "66bbc394-4907-4b0d-801d-722888385cf7",
+      "request_id": "b23c596a-81e7-45a3-bc5d-af78094242e0",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:28.075949Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-82582052-8da0-4bc4-b167-27edc1307f86"
+    },
+    {
+      "audit_id": "f22b6874-6d43-414e-bb19-21b71582459a",
+      "request_id": "7694f36f-c096-4d74-95fa-45cc30d781dc",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:26.629369Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "2f47aeea-41f4-4e6b-a306-1a5fceeb3b5a",
+      "request_id": "7694f36f-c096-4d74-95fa-45cc30d781dc",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:26.624413Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-e61234ee-95fd-4725-b786-4ab3b732586b"
+    },
+    {
+      "audit_id": "75991a8f-f80f-4b9f-8773-e7044c5d2d93",
+      "request_id": "a24cc279-453d-4869-b26e-9fc43561ae3b",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:23.056398Z",
+      "check_key": "runtime_improvement_probe",
+      "run_id": "run-1e1e521e-398c-4a29-b278-12adada05078"
+    },
+    {
+      "audit_id": "04233a4f-df98-4fda-bbc6-0f3c04424c7d",
+      "request_id": "e96dc345-8e44-4faf-821d-2a468bb82ae6",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:11.040023Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-c73fd131-3148-472a-ad2d-bd0a7947be41"
+    },
+    {
+      "audit_id": "5b3a071b-5dd5-4366-bf4f-cec05af4f439",
+      "request_id": "8ef40a29-983e-46c3-b758-102c45296100",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:10.760979Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "6946d0eb-09b1-400a-81da-3903b9db0a1d",
+      "request_id": "8ef40a29-983e-46c3-b758-102c45296100",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:10.759609Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-fabd692b-dbcc-420d-a010-b9d30af50035"
+    },
+    {
+      "audit_id": "2f9619e8-1524-415b-974b-8df5b3ed2e35",
+      "request_id": "8ef40a29-983e-46c3-b758-102c45296100",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:10.758182Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-fabd692b-dbcc-420d-a010-b9d30af50035"
+    },
+    {
+      "audit_id": "53739d36-adcb-4ac2-9df2-ed73c8bfd0e7",
+      "request_id": "8ef40a29-983e-46c3-b758-102c45296100",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:10.756774Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-fabd692b-dbcc-420d-a010-b9d30af50035"
+    },
+    {
+      "audit_id": "ab72f94f-53a9-4486-b9ec-edea6a74228d",
+      "request_id": "8ef40a29-983e-46c3-b758-102c45296100",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:10.755207Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-fabd692b-dbcc-420d-a010-b9d30af50035"
+    },
+    {
+      "audit_id": "cef25b89-b6ac-4f1f-8c6c-819ef034c3f8",
+      "request_id": "8ef40a29-983e-46c3-b758-102c45296100",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:10.753096Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-fabd692b-dbcc-420d-a010-b9d30af50035"
+    },
+    {
+      "audit_id": "7b74db53-97d9-4159-8922-364fc6eaf7bb",
+      "request_id": "93a23f04-18ff-4b44-a7df-6ee9964ac0fc",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:09.476006Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "a8d9cbf4-9b0e-4bca-b069-ddf11e7331b6",
+      "request_id": "93a23f04-18ff-4b44-a7df-6ee9964ac0fc",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:09.467067Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-4f912bb0-521b-437a-8fad-d8f3675b29cf"
+    },
+    {
+      "audit_id": "6178a7b1-01c7-4512-a528-35c6a0329a84",
+      "request_id": "93a23f04-18ff-4b44-a7df-6ee9964ac0fc",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:09.458077Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-4f912bb0-521b-437a-8fad-d8f3675b29cf"
+    },
+    {
+      "audit_id": "84f7b405-a4e7-4980-83e0-be88696f7bb0",
+      "request_id": "93a23f04-18ff-4b44-a7df-6ee9964ac0fc",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:09.449050Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-4f912bb0-521b-437a-8fad-d8f3675b29cf"
+    },
+    {
+      "audit_id": "fd3b075c-5a73-4161-a21c-17637104cfea",
+      "request_id": "93a23f04-18ff-4b44-a7df-6ee9964ac0fc",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:09.439875Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-4f912bb0-521b-437a-8fad-d8f3675b29cf"
+    },
+    {
+      "audit_id": "3d0dc8d7-f25e-46a6-97b0-7838d7dd652b",
+      "request_id": "93a23f04-18ff-4b44-a7df-6ee9964ac0fc",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:09.430747Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-4f912bb0-521b-437a-8fad-d8f3675b29cf"
+    },
+    {
+      "audit_id": "6f052a12-e5ed-4570-89bc-7843b958487a",
+      "request_id": "89d4fec7-7d5e-49b2-9066-0efd1fa72387",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:08.453070Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "43a9e3a3-d316-430e-b5d3-aadcc11b61f3",
+      "request_id": "89d4fec7-7d5e-49b2-9066-0efd1fa72387",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:08.451666Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-aa9c343a-3f71-41aa-9c15-e0d8c133a312"
+    },
+    {
+      "audit_id": "265c9ccb-8bd1-4e5f-963c-9be8492b25e5",
+      "request_id": "89d4fec7-7d5e-49b2-9066-0efd1fa72387",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:08.450342Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-aa9c343a-3f71-41aa-9c15-e0d8c133a312"
+    },
+    {
+      "audit_id": "04bd325d-01a3-4770-8ba8-d78b168f5f48",
+      "request_id": "89d4fec7-7d5e-49b2-9066-0efd1fa72387",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:08.448732Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-aa9c343a-3f71-41aa-9c15-e0d8c133a312"
+    },
+    {
+      "audit_id": "1f0b84be-6a24-4116-aef5-1e97720abf6d",
+      "request_id": "89d4fec7-7d5e-49b2-9066-0efd1fa72387",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:08.446969Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-aa9c343a-3f71-41aa-9c15-e0d8c133a312"
+    },
+    {
+      "audit_id": "cae2cef4-8eef-49ab-a922-9669b5d1835e",
+      "request_id": "89d4fec7-7d5e-49b2-9066-0efd1fa72387",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:08.445434Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-aa9c343a-3f71-41aa-9c15-e0d8c133a312"
+    },
+    {
+      "audit_id": "31fe3bfe-032c-4733-8c12-50f003ac445a",
+      "request_id": "1384c84a-3c26-41be-9e62-cef7282c18f8",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:07.554794Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "1be9d794-f6eb-4476-94f6-a9353709c545",
+      "request_id": "1384c84a-3c26-41be-9e62-cef7282c18f8",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:07.553654Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-3a337f8f-f90e-44d6-a20a-59ad5607845a"
+    },
+    {
+      "audit_id": "a440576f-22df-4b02-9e18-1c479e607d08",
+      "request_id": "1384c84a-3c26-41be-9e62-cef7282c18f8",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:07.552419Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-3a337f8f-f90e-44d6-a20a-59ad5607845a"
+    },
+    {
+      "audit_id": "32bf8450-3680-4019-8be7-c08044a20af3",
+      "request_id": "1384c84a-3c26-41be-9e62-cef7282c18f8",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:07.551088Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-3a337f8f-f90e-44d6-a20a-59ad5607845a"
+    },
+    {
+      "audit_id": "6a6762e4-541b-4759-a7c3-f79642cb5e13",
+      "request_id": "1384c84a-3c26-41be-9e62-cef7282c18f8",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:07.549585Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-3a337f8f-f90e-44d6-a20a-59ad5607845a"
+    },
+    {
+      "audit_id": "558a0799-2481-4a28-8804-ade78e333f3a",
+      "request_id": "1384c84a-3c26-41be-9e62-cef7282c18f8",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:07.547970Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-3a337f8f-f90e-44d6-a20a-59ad5607845a"
+    },
+    {
+      "audit_id": "f2fc66d6-c9f8-4780-b018-38b8c37ceca3",
+      "request_id": "3fed8525-bbb9-4aef-bc14-7316e155074f",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:06.629666Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "beddc220-b4f6-4af3-8dab-5d7d946a4f7e",
+      "request_id": "3fed8525-bbb9-4aef-bc14-7316e155074f",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:06.627629Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-70f7105f-d22d-433a-bf3e-35974ddeb16e"
+    },
+    {
+      "audit_id": "c63f9366-c7d7-4295-8a42-037bb9a048b0",
+      "request_id": "ad646407-26bd-46f4-a441-4eeafc06cfa7",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:35:03.003056Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-ad97220a-e2c1-4b73-ad8b-d589a12fbbcf"
+    },
+    {
+      "audit_id": "9ab66c30-a50f-4ec0-9e64-a081ec349dea",
+      "request_id": "497f4d01-50c3-458b-9f89-d4d2a7a254fd",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:51.040023Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-8630e363-54f3-4820-adb7-19a7cf74e48a"
+    },
+    {
+      "audit_id": "ba1be1ad-1464-4e31-b84a-d8cd82bfbf7d",
+      "request_id": "173da841-b81a-448a-812a-93b7592407ce",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:50.987793Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-9049e5ff-2f43-401c-9ef1-b82dc7977ad3"
+    },
+    {
+      "audit_id": "a68cb481-2663-4c53-8386-d3e8f1da435a",
+      "request_id": "6ab3693f-b883-4464-a210-dbcf8221341c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:46.056398Z",
+      "check_key": "runtime_improvement_probe",
+      "run_id": "run-b2f5e38c-1a51-4c6d-b844-3da04100db92"
+    },
+    {
+      "audit_id": "0e01214e-fd5e-40e7-8d60-3928d8b57a45",
+      "request_id": "04eac68c-55e7-48a4-9322-d19d9960f5be",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:36.750501Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "936e5acf-653d-4237-a233-6d5667c45c40",
+      "request_id": "04eac68c-55e7-48a4-9322-d19d9960f5be",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:36.749103Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-ebcb069d-c686-4edd-88bc-66fbffe5c182"
+    },
+    {
+      "audit_id": "dc45859c-6873-4e52-ab02-0e6950722e08",
+      "request_id": "04eac68c-55e7-48a4-9322-d19d9960f5be",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:36.747762Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-ebcb069d-c686-4edd-88bc-66fbffe5c182"
+    },
+    {
+      "audit_id": "46f4dd3c-fbc8-4816-a0bc-4de904ce93df",
+      "request_id": "04eac68c-55e7-48a4-9322-d19d9960f5be",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:36.746227Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-ebcb069d-c686-4edd-88bc-66fbffe5c182"
+    },
+    {
+      "audit_id": "fba22515-61e6-415b-9446-3ce57495e3de",
+      "request_id": "04eac68c-55e7-48a4-9322-d19d9960f5be",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:36.744599Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-ebcb069d-c686-4edd-88bc-66fbffe5c182"
+    },
+    {
+      "audit_id": "2ecc3f75-33f5-4698-be5e-d5839de18aa0",
+      "request_id": "04eac68c-55e7-48a4-9322-d19d9960f5be",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:36.742864Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-ebcb069d-c686-4edd-88bc-66fbffe5c182"
+    },
+    {
+      "audit_id": "e9b6fc11-71e8-42dd-b317-7ac40d7cf2e1",
+      "request_id": "c399ac17-d71b-4566-b25e-1a5fdc34f9f1",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:35.839049Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "1d65687d-3cb3-4e0a-bb65-b2c1b56d979d",
+      "request_id": "c399ac17-d71b-4566-b25e-1a5fdc34f9f1",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:35.837630Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-eabc2984-96dd-4471-a466-bf611ae4642d"
+    },
+    {
+      "audit_id": "7ea848bc-d8a2-4cca-9eb2-74b5d4729d53",
+      "request_id": "c399ac17-d71b-4566-b25e-1a5fdc34f9f1",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:35.836289Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-eabc2984-96dd-4471-a466-bf611ae4642d"
+    },
+    {
+      "audit_id": "2b102173-ac63-43be-9762-2ab6c5a2a38d",
+      "request_id": "c399ac17-d71b-4566-b25e-1a5fdc34f9f1",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:35.834777Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-eabc2984-96dd-4471-a466-bf611ae4642d"
+    },
+    {
+      "audit_id": "f8ee3ec7-7e52-46cd-a1fb-0efc753751d7",
+      "request_id": "c399ac17-d71b-4566-b25e-1a5fdc34f9f1",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:35.833210Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-eabc2984-96dd-4471-a466-bf611ae4642d"
+    },
+    {
+      "audit_id": "b0fa6c5a-1cfa-4a7a-8ff2-9d76c25685cc",
+      "request_id": "c399ac17-d71b-4566-b25e-1a5fdc34f9f1",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:35.831370Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-eabc2984-96dd-4471-a466-bf611ae4642d"
+    },
+    {
+      "audit_id": "19dd4c54-10a0-40fa-ae33-eda5b166be7b",
+      "request_id": "ef5577db-b2d2-4d07-a787-703feb61bd1c",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:34.901344Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "ef3c434d-7011-48e2-b0a1-4064a991c446",
+      "request_id": "ef5577db-b2d2-4d07-a787-703feb61bd1c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:34.899862Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-971f37b9-b889-4c67-a52f-ffa558d62194"
+    },
+    {
+      "audit_id": "ec613234-f8c2-44b5-89b5-8700523f6f4e",
+      "request_id": "ef5577db-b2d2-4d07-a787-703feb61bd1c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:34.898490Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-971f37b9-b889-4c67-a52f-ffa558d62194"
+    },
+    {
+      "audit_id": "93c1126a-0e7c-47d2-acfc-ecbae9e84787",
+      "request_id": "ef5577db-b2d2-4d07-a787-703feb61bd1c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:34.896991Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-971f37b9-b889-4c67-a52f-ffa558d62194"
+    },
+    {
+      "audit_id": "69920903-b973-42ac-ac23-84066802081c",
+      "request_id": "ef5577db-b2d2-4d07-a787-703feb61bd1c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:34.895258Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-971f37b9-b889-4c67-a52f-ffa558d62194"
+    },
+    {
+      "audit_id": "1714d070-215d-4caa-9f98-4c9ab09b9491",
+      "request_id": "ef5577db-b2d2-4d07-a787-703feb61bd1c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:34.893387Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-971f37b9-b889-4c67-a52f-ffa558d62194"
+    },
+    {
+      "audit_id": "19a58ff5-4c92-45fa-b4e7-0ca2634564ad",
+      "request_id": "5a162918-123c-4f4a-8011-5997e674629c",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:33.605525Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "0b40e1ee-0851-4264-945b-5226f160433d",
+      "request_id": "5a162918-123c-4f4a-8011-5997e674629c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:33.596940Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-eec7f040-9c24-45b2-9933-8d27915638f4"
+    },
+    {
+      "audit_id": "6316e18d-4065-4e56-97e6-7c83de0ff3c6",
+      "request_id": "5a162918-123c-4f4a-8011-5997e674629c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:33.588202Z",
+      "check_key": "final_release_gate",
+      "run_id": "run-eec7f040-9c24-45b2-9933-8d27915638f4"
+    },
+    {
+      "audit_id": "fb9bd904-193f-45e8-b777-3f87f2119e09",
+      "request_id": "5a162918-123c-4f4a-8011-5997e674629c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:33.583032Z",
+      "check_key": "prod_env_preflight",
+      "run_id": "run-eec7f040-9c24-45b2-9933-8d27915638f4"
+    },
+    {
+      "audit_id": "a3fc09b3-8f91-4177-abe0-b4e9f86078e5",
+      "request_id": "5a162918-123c-4f4a-8011-5997e674629c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:33.569947Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-eec7f040-9c24-45b2-9933-8d27915638f4"
+    },
+    {
+      "audit_id": "b37254da-08c4-466e-a51a-94c9d46866d6",
+      "request_id": "5a162918-123c-4f4a-8011-5997e674629c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:33.564302Z",
+      "check_key": "prod_env_resolution",
+      "run_id": "run-eec7f040-9c24-45b2-9933-8d27915638f4"
+    },
+    {
+      "audit_id": "9a00134a-3613-497a-a05c-ad4f48a0ff7b",
+      "request_id": "b2e5d960-ccab-48b2-96f3-7599bfb6b94e",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_SINGLE",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:32.879268Z",
+      "check_key": null,
+      "run_id": null
+    },
+    {
+      "audit_id": "d62ff8f1-ae6e-49fa-b199-553de920f6b2",
+      "request_id": "b2e5d960-ccab-48b2-96f3-7599bfb6b94e",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:32.877485Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-7673f793-9552-4f93-b96c-c4e4d7a0ff06"
+    },
+    {
+      "audit_id": "8e911f04-02f5-4497-ae8f-be37dd2f7072",
+      "request_id": "b10e6973-8176-4371-8ed8-1f4d2f84af9a",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:31.040023Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-9eee870f-00cf-40b4-9d19-7233ea253e92"
+    },
+    {
+      "audit_id": "bf8d4d16-0215-43b6-9544-7d785fd29a6f",
+      "request_id": "29221dab-e1e1-4ddd-ac87-55cd87b6ee5a",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:30.987793Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-658358d8-7dab-4cdc-8878-c51d8dd11ccd"
+    },
+    {
+      "audit_id": "24ef216b-613d-43cb-bb54-80f7520e2160",
+      "request_id": "d7434936-9a31-4c3e-85ef-d00a039177a4",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:26.003056Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-f9e3864d-d938-4fba-98c7-809a8cf025a2"
+    },
+    {
+      "audit_id": "345adee7-09b7-4ff7-a8d1-3207e3ca773f",
+      "request_id": "d629d632-dc68-46ef-bc3a-8391f6bdf1ba",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:16.975202Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-9af964d0-46a7-4851-8c8f-70eab01a165f"
+    },
+    {
+      "audit_id": "b9b48da5-ce35-45e8-9dc3-f070d10bc47e",
+      "request_id": "b2ba3450-37ce-41d6-8cfa-ded76bed14fc",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:11.040023Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-6577eafc-518e-4d72-a1c9-faa37baad811"
+    },
+    {
+      "audit_id": "967a2362-8bbf-476a-84d0-338914f7c34d",
+      "request_id": "a57a7fce-4bcd-4fc3-85c8-a7f42844931f",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:10.987793Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-5abd0197-7901-447a-b1dc-bb3a9d446d2f"
+    },
+    {
+      "audit_id": "cbe05700-b9d4-44ad-9081-595307ed4f19",
+      "request_id": "50838dc1-4f70-4236-ad74-e267f583b576",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:34:01.056398Z",
+      "check_key": "runtime_improvement_probe",
+      "run_id": "run-c934b683-907e-49ad-a8af-ba24e011ba87"
+    },
+    {
+      "audit_id": "21aa6dfe-29e2-43e0-ac99-f2cf9242f9b4",
+      "request_id": "d4c9d072-0668-4d40-8ade-fa47f9ed4f1e",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:33:56.975202Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-b9ba4aa8-36b8-43a7-b8b6-012ef586620c"
+    },
+    {
+      "audit_id": "3dcb3ee2-3062-434f-8138-7bcdb8150217",
+      "request_id": "b3f3e0fe-e422-41e2-b998-b4966d6f0b9c",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:33:51.040023Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-726e9cee-1654-445f-b067-c61769280125"
+    },
+    {
+      "audit_id": "6aa00417-bf4b-4004-9262-1ddbdcafbed4",
+      "request_id": "284e8084-4fca-4b74-b5f1-9bed3d3d09ea",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:33:50.987793Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-40900c12-5abe-42c7-a13d-77cb5792125d"
+    },
+    {
+      "audit_id": "2fd39bff-882b-4031-9e1e-ea37447d2e03",
+      "request_id": "ca172ebc-286c-4585-b709-0ed754dcc1f0",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:33:41.003056Z",
+      "check_key": "secret_readiness",
+      "run_id": "run-2d71c8e5-016f-4d5b-9aaf-44a16574c836"
+    },
+    {
+      "audit_id": "fbf996ea-2156-44a7-af6d-e583ea2a6ee4",
+      "request_id": "171719d4-54d7-451d-86e4-fa0d739d5776",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:33:36.975202Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-1f82bee1-bf03-4a4a-b3a1-d61d67cc5993"
+    },
+    {
+      "audit_id": "72dde7fd-a29e-4ad4-8fa7-38da5a456ced",
+      "request_id": "414f1b66-e954-45c3-ba82-f5176b17ec7d",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:33:31.040023Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-2c4aebd3-3e10-4b45-ba7d-44cc450c4fa1"
+    },
+    {
+      "audit_id": "abd24219-ef8d-4ec8-8f10-36641c9b9e24",
+      "request_id": "2ed40c34-7d27-41b4-87ce-2f60efba9225",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:33:30.987793Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-6af3ceff-9716-4bc6-954c-e3efef1130d0"
+    },
+    {
+      "audit_id": "c3ee1e91-f5f2-40d8-bf66-a0334e998a5c",
+      "request_id": "01572f9a-749d-40de-b4ed-d42e723a5b1a",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:33:16.975202Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-b2c58acc-58d8-4af2-b412-6e53fd29ee6d"
+    },
+    {
+      "audit_id": "76e27a2c-5d40-4ac7-ad1c-a0c8992239e4",
+      "request_id": "60d4f784-809d-40a1-9359-c2be621d76c8",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:33:11.040023Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-6e5ce5c1-bc5b-4f34-88d4-6ffc13ac94b5"
+    },
+    {
+      "audit_id": "8e1c2334-d50a-46ec-bc30-8d0c8aebad27",
+      "request_id": "376d6365-8ed7-4fa4-ad9f-4262cbe2a2d8",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:33:10.987793Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-486c40fc-edd1-4ee9-bceb-5dccc4fc7cf0"
+    },
+    {
+      "audit_id": "37a23fb9-ee6b-4979-8bc8-dec6ba489134",
+      "request_id": "7336474a-4003-4f7a-8da3-8cfb363ae01b",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:32:56.975202Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-2558b109-188e-469a-aecd-a6fc8129fa4b"
+    },
+    {
+      "audit_id": "00758e1c-b0e5-4062-b05e-619e5b278827",
+      "request_id": "48d5beb4-75b7-4fe4-8d02-73d3de6a7ac2",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:32:50.987793Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-625c9d71-86d4-4a5b-9c87-87d893e395e0"
+    },
+    {
+      "audit_id": "e1852e3d-aeb6-410c-aff3-f689a2377d6d",
+      "request_id": "d6cf0375-6bdf-4663-9f70-d78f68999b70",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:32:36.975202Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-e72cf3ef-196a-4416-88ca-7fbc12f2bfe4"
+    },
+    {
+      "audit_id": "aecbd020-0893-4063-83fa-d3a64ece52c4",
+      "request_id": "1307b1fe-5fd7-42f3-b803-86f3f27d6f3d",
+      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
+      "category": "checks",
+      "timestamp": "2026-03-24T00:32:16.975202Z",
+      "check_key": "release_gate_contract",
+      "run_id": "run-625757e5-cb0e-4e68-a368-eb5b39e96166"
+    },
     {
       "audit_id": "95eee2b6-921e-421f-8527-7c66cbae5cbc",
       "request_id": "3d173eb9-c63e-4f20-b622-78c49038bece",
@@ -859,150 +1804,6 @@
       "timestamp": "2026-03-23T23:42:13.571435Z",
       "check_key": "release_gate_contract",
       "run_id": "run-9fa92184-7ca2-4b2f-b8c0-53c5da17c475"
-    },
-    {
-      "audit_id": "fe315c18-202a-4469-b968-d37c9686766a",
-      "request_id": "d8fe6b9a-3008-447d-b941-75072406c919",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:13.569750Z",
-      "check_key": "final_release_gate",
-      "run_id": "run-9fa92184-7ca2-4b2f-b8c0-53c5da17c475"
-    },
-    {
-      "audit_id": "dc06a627-c105-422c-ba8d-6df83bd0e241",
-      "request_id": "d8fe6b9a-3008-447d-b941-75072406c919",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:13.568087Z",
-      "check_key": "prod_env_preflight",
-      "run_id": "run-9fa92184-7ca2-4b2f-b8c0-53c5da17c475"
-    },
-    {
-      "audit_id": "ff8ee881-42dc-47a6-9836-c72bae698369",
-      "request_id": "d8fe6b9a-3008-447d-b941-75072406c919",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:13.566633Z",
-      "check_key": "secret_readiness",
-      "run_id": "run-9fa92184-7ca2-4b2f-b8c0-53c5da17c475"
-    },
-    {
-      "audit_id": "61639b41-2d7f-4578-9cf6-ab6c63ffa9c9",
-      "request_id": "d8fe6b9a-3008-447d-b941-75072406c919",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:13.565300Z",
-      "check_key": "prod_env_resolution",
-      "run_id": "run-9fa92184-7ca2-4b2f-b8c0-53c5da17c475"
-    },
-    {
-      "audit_id": "57d13e0f-174d-483f-a8ef-6083612f2705",
-      "request_id": "bccdcaba-b31e-4cfd-985b-b92e65885d86",
-      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:12.619255Z",
-      "check_key": null,
-      "run_id": null
-    },
-    {
-      "audit_id": "7b244977-ce07-4661-8999-e256a7fa622d",
-      "request_id": "bccdcaba-b31e-4cfd-985b-b92e65885d86",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:12.618011Z",
-      "check_key": "release_gate_contract",
-      "run_id": "run-63d15d3b-48ef-462e-9be6-0138318d2c74"
-    },
-    {
-      "audit_id": "ef90c7f8-5419-4f5f-970d-6388228ec43c",
-      "request_id": "bccdcaba-b31e-4cfd-985b-b92e65885d86",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:12.616701Z",
-      "check_key": "final_release_gate",
-      "run_id": "run-63d15d3b-48ef-462e-9be6-0138318d2c74"
-    },
-    {
-      "audit_id": "a4771bb1-8bbe-4d13-9840-ce97d183855b",
-      "request_id": "bccdcaba-b31e-4cfd-985b-b92e65885d86",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:12.615356Z",
-      "check_key": "prod_env_preflight",
-      "run_id": "run-63d15d3b-48ef-462e-9be6-0138318d2c74"
-    },
-    {
-      "audit_id": "71b6ab45-6b2d-4ec6-9734-a031a77ae6fd",
-      "request_id": "bccdcaba-b31e-4cfd-985b-b92e65885d86",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:12.614132Z",
-      "check_key": "secret_readiness",
-      "run_id": "run-63d15d3b-48ef-462e-9be6-0138318d2c74"
-    },
-    {
-      "audit_id": "ef1b49f8-28f0-4382-ac1b-1b1305907b9a",
-      "request_id": "bccdcaba-b31e-4cfd-985b-b92e65885d86",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:12.612797Z",
-      "check_key": "prod_env_resolution",
-      "run_id": "run-63d15d3b-48ef-462e-9be6-0138318d2c74"
-    },
-    {
-      "audit_id": "92f454f5-69d9-4c0a-8f7c-3ff2dbfe015f",
-      "request_id": "6426ca23-c164-4891-b3f6-8a1196c96fce",
-      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:11.472965Z",
-      "check_key": null,
-      "run_id": null
-    },
-    {
-      "audit_id": "af4d457c-55a0-4537-8ecb-914a0b82710d",
-      "request_id": "6426ca23-c164-4891-b3f6-8a1196c96fce",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:11.471507Z",
-      "check_key": "release_gate_contract",
-      "run_id": "run-e8545e23-3afa-44aa-8cdc-f468906d0b6c"
-    },
-    {
-      "audit_id": "8d11c03d-25ed-4b80-a053-a75a93f912f1",
-      "request_id": "6426ca23-c164-4891-b3f6-8a1196c96fce",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:11.470000Z",
-      "check_key": "final_release_gate",
-      "run_id": "run-e8545e23-3afa-44aa-8cdc-f468906d0b6c"
-    },
-    {
-      "audit_id": "b2d80cc1-8508-4803-91e7-ab08746d01af",
-      "request_id": "6426ca23-c164-4891-b3f6-8a1196c96fce",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:11.468393Z",
-      "check_key": "prod_env_preflight",
-      "run_id": "run-e8545e23-3afa-44aa-8cdc-f468906d0b6c"
-    },
-    {
-      "audit_id": "ab24831f-b930-4196-8b94-fda6ca49a648",
-      "request_id": "6426ca23-c164-4891-b3f6-8a1196c96fce",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:11.466895Z",
-      "check_key": "secret_readiness",
-      "run_id": "run-e8545e23-3afa-44aa-8cdc-f468906d0b6c"
-    },
-    {
-      "audit_id": "8f720480-b90e-454b-8ad8-30c610a3b1bf",
-      "request_id": "6426ca23-c164-4891-b3f6-8a1196c96fce",
-      "event_type": "PRODUCTION_GATE_CHECK_EVENT",
-      "category": "checks",
-      "timestamp": "2026-03-23T23:42:11.465312Z",
-      "check_key": "prod_env_resolution",
-      "run_id": "run-e8545e23-3afa-44aa-8cdc-f468906d0b6c"
     }
   ]
 }
