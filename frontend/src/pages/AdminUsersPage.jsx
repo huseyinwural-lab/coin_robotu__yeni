@@ -13,6 +13,9 @@ const statusOptions = ["all", "active", "disabled"];
 const riskLevelOptions = ["all", "high", "medium", "low", "unassigned"];
 const approvalStatusOptions = ["pending", "approved", "rejected", "all"];
 const inviteStatusOptions = ["all", "pending", "accepted", "cancelled", "expired"];
+const HIGH_RISK_ACTION_KEYS = new Set(["hard_delete_user", "soft_delete_user", "grant_privileged_role", "enable_live_trading", "raise_capital_limit", "bulk_soft_delete_users"]);
+const REQUEST_REASON_MIN_LEN = 12;
+const OVERRIDE_REASON_MIN_LEN = 16;
 
 export const AdminUsersPage = ({ scope = "user" }) => {
   const { user: currentUser } = useAuth();
@@ -44,6 +47,12 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   const [securityDetail, setSecurityDetail] = useState(null);
   const [securityDetailUserId, setSecurityDetailUserId] = useState("");
   const [securityDetailLoading, setSecurityDetailLoading] = useState(false);
+  const [observabilityLoading, setObservabilityLoading] = useState(false);
+  const [observabilityError, setObservabilityError] = useState("");
+  const [activityTimeline, setActivityTimeline] = useState(null);
+  const [securityTelemetry, setSecurityTelemetry] = useState(null);
+  const [executionMetrics, setExecutionMetrics] = useState(null);
+  const [tradingObservability, setTradingObservability] = useState(null);
   const [approvalQueue, setApprovalQueue] = useState([]);
   const [approvalStatusFilter, setApprovalStatusFilter] = useState("pending");
   const [approvalPolicies, setApprovalPolicies] = useState([]);
@@ -165,15 +174,26 @@ export const AdminUsersPage = ({ scope = "user" }) => {
     }
   };
 
-  const getCriticalConfirmation = (title) => {
+  const getCriticalConfirmation = (title, options = {}) => {
     const confirmed = window.confirm(`${title}\n\nBu işlem kritik. Devam etmek istiyor musunuz?`);
     if (!confirmed) return null;
     const reason = window.prompt("Lütfen işlem gerekçesini yazın (zorunlu):", "operational_control_update");
-    if (!reason || !reason.trim()) {
-      toast.error("Kritik işlem için reason zorunlu");
+    if (!reason || reason.trim().length < REQUEST_REASON_MIN_LEN) {
+      toast.error(`Reason en az ${REQUEST_REASON_MIN_LEN} karakter olmalı`);
       return null;
     }
-    return { critical_confirmed: true, reason: reason.trim() };
+
+    const basePayload = { critical_confirmed: true, reason: reason.trim() };
+    if (!options.highRisk) {
+      return basePayload;
+    }
+
+    const overrideReason = window.prompt("High-risk action için override reason yazın (zorunlu):", reason.trim());
+    if (!overrideReason || overrideReason.trim().length < OVERRIDE_REASON_MIN_LEN) {
+      toast.error(`Override reason en az ${OVERRIDE_REASON_MIN_LEN} karakter olmalı`);
+      return null;
+    }
+    return { ...basePayload, override_reason: overrideReason.trim() };
   };
 
   const loadSecurityDetail = async (userId) => {
@@ -186,6 +206,27 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       toast.error(error?.response?.data?.detail || "Security detail yüklenemedi");
     } finally {
       setSecurityDetailLoading(false);
+    }
+  };
+
+  const loadUserObservability = async (userId) => {
+    setObservabilityLoading(true);
+    setObservabilityError("");
+    try {
+      const [activityRes, telemetryRes, executionRes, tradingRes] = await Promise.all([
+        apiClient.get(`/admin/identity/users/${userId}/activity-timeline`, { params: { limit: 120 } }),
+        apiClient.get(`/admin/identity/users/${userId}/security-telemetry`),
+        apiClient.get(`/admin/identity/users/${userId}/execution-metrics`),
+        apiClient.get(`/admin/identity/users/${userId}/trading-observability`),
+      ]);
+      setActivityTimeline(activityRes?.data || null);
+      setSecurityTelemetry(telemetryRes?.data || null);
+      setExecutionMetrics(executionRes?.data || null);
+      setTradingObservability(tradingRes?.data || null);
+    } catch (error) {
+      setObservabilityError(error?.response?.data?.detail || "Observability yüklenemedi");
+    } finally {
+      setObservabilityLoading(false);
     }
   };
 
@@ -219,7 +260,8 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   };
 
   const updateRole = async (userId, role) => {
-    const confirmPayload = getCriticalConfirmation("Rol güncelle");
+    const isHighRisk = ["admin", "super_admin", "ops"].includes(String(role || "").toLowerCase());
+    const confirmPayload = getCriticalConfirmation("Rol güncelle", { highRisk: isHighRisk });
     if (!confirmPayload) return;
     await requestInlineUpdate(userId, { role, ...confirmPayload }, "Rol güncellendi");
   };
@@ -233,7 +275,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
 
   const toggleTrading = async (user) => {
     const next = !Boolean(user?.identity_controls?.trading_enabled);
-    const confirmPayload = getCriticalConfirmation(next ? "Live trading enable" : "Trading disable");
+    const confirmPayload = getCriticalConfirmation(next ? "Live trading enable" : "Trading disable", { highRisk: next });
     if (!confirmPayload) return;
     await requestInlineUpdate(user.id, { trading_enabled: next, ...confirmPayload }, `Trading ${next ? "açıldı" : "kapatıldı"}`);
   };
@@ -255,7 +297,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   };
 
   const requestSoftDelete = async (user) => {
-    const confirmPayload = getCriticalConfirmation("Soft delete request");
+    const confirmPayload = getCriticalConfirmation("Soft delete request", { highRisk: true });
     if (!confirmPayload) return;
     try {
       const { data } = await apiClient.post(`/admin/identity/users/${user.id}/soft-delete/request`, {
@@ -272,7 +314,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   };
 
   const requestHardDelete = async (user) => {
-    const confirmPayload = getCriticalConfirmation("Hard delete request");
+    const confirmPayload = getCriticalConfirmation("Hard delete request", { highRisk: true });
     if (!confirmPayload) return;
     try {
       const { data } = await apiClient.post(`/admin/identity/users/${user.id}/hard-delete/request`, {
@@ -327,7 +369,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       toast.error("Önce kullanıcı seçin");
       return;
     }
-    const confirmPayload = getCriticalConfirmation(`Bulk ${status} request`);
+    const confirmPayload = getCriticalConfirmation(`Bulk ${status} request`, { highRisk: status === "deleted" });
     if (!confirmPayload) return;
     setBulkLoading(true);
     try {
@@ -380,10 +422,16 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   }, [approvalStatusFilter]);
 
   const approveRequest = async (requestId) => {
-    const confirmPayload = getCriticalConfirmation("Approval request approve");
+    const requestRow = approvalQueue.find((item) => item.id === requestId);
+    const confirmPayload = getCriticalConfirmation("Approval request approve", {
+      highRisk: HIGH_RISK_ACTION_KEYS.has(requestRow?.action_key),
+    });
     if (!confirmPayload) return;
     try {
-      await apiClient.post(`/admin/identity/approvals/${requestId}/approve`, { note: confirmPayload.reason });
+      await apiClient.post(`/admin/identity/approvals/${requestId}/approve`, {
+        note: confirmPayload.reason,
+        override_reason: confirmPayload.override_reason,
+      });
       toast.success("Request approve edildi");
       await loadApprovalQueue();
     } catch (error) {
@@ -392,9 +440,9 @@ export const AdminUsersPage = ({ scope = "user" }) => {
   };
 
   const rejectRequest = async (requestId) => {
-    const reason = window.prompt("Reject reason zorunlu:", "policy_reject");
-    if (!reason || !reason.trim()) {
-      toast.error("Reject reason zorunlu");
+    const reason = window.prompt("Reject reason zorunlu (min 12):", "policy_reject_reason");
+    if (!reason || reason.trim().length < REQUEST_REASON_MIN_LEN) {
+      toast.error(`Reject reason en az ${REQUEST_REASON_MIN_LEN} karakter olmalı`);
       return;
     }
     try {
@@ -955,7 +1003,10 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => loadSecurityDetail(user.id)}
+                      onClick={async () => {
+                        await loadSecurityDetail(user.id);
+                        await loadUserObservability(user.id);
+                      }}
                       data-testid={`admin-users-security-detail-button-${user.id}`}
                     >
                       Security Detail
@@ -1027,11 +1078,22 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                 <p className="text-xs" data-testid="admin-users-bulk-preview-blocked">blocked={bulkPreviewData?.summary?.blocked_count ?? 0}</p>
                 <p className="text-xs" data-testid="admin-users-bulk-preview-high-risk">high_risk={bulkPreviewData?.summary?.high_risk_count ?? 0}</p>
                 <p className="text-xs" data-testid="admin-users-bulk-preview-partial">partial_execution_expected={String(Boolean(bulkPreviewData?.summary?.partial_execution_expected))}</p>
+                <p className="text-xs" data-testid="admin-users-bulk-preview-risk-total">risk_score_total={bulkPreviewData?.summary?.risk_score_total ?? 0}</p>
+                <p className="text-xs md:col-span-2" data-testid="admin-users-bulk-preview-blocker-breakdown">
+                  blocker_breakdown={Object.entries(bulkPreviewData?.summary?.blocker_breakdown || {}).map(([k, v]) => `${k}:${v}`).join(" | ") || "-"}
+                </p>
+                <p className="text-xs md:col-span-2" data-testid="admin-users-bulk-preview-action-summary">
+                  action_summary={bulkPreviewData?.summary?.action_summary?.action_key || "-"} · impacted={bulkPreviewData?.summary?.action_summary?.impacted_users_count ?? 0}
+                </p>
               </div>
 
               <div className="space-y-2" data-testid="admin-users-bulk-preview-item-list">
                 {(bulkPreviewData?.items || []).map((item) => (
-                  <div key={item.user_id} className="border border-black/20 bg-white p-2" data-testid={`admin-users-bulk-preview-item-${item.user_id}`}>
+                  <div
+                    key={item.user_id}
+                    className={`border p-2 ${item.eligible ? "border-emerald-300 bg-white" : "border-red-300 bg-red-50"}`}
+                    data-testid={`admin-users-bulk-preview-item-${item.user_id}`}
+                  >
                     <p className="text-xs" data-testid={`admin-users-bulk-preview-email-${item.user_id}`}>{item.email || item.user_id}</p>
                     <p className="text-xs" data-testid={`admin-users-bulk-preview-risk-${item.user_id}`}>
                       risk_badge={item.risk_badge} · risk_score={item.risk_score}
@@ -1082,6 +1144,23 @@ export const AdminUsersPage = ({ scope = "user" }) => {
                   status={request.status} · approvals={request.approval_count}/{request.required_approvals}
                 </p>
                 <p className="text-xs text-black/80" data-testid={`admin-users-approval-reason-${request.id}`}>reason: {request.request_reason || "-"}</p>
+
+                <div className="space-y-1 border border-black/10 bg-orange-50 p-2 text-xs" data-testid={`admin-users-approval-diff-card-${request.id}`}>
+                  {request?.impact_delta?.high_risk && (
+                    <p className="bg-red-200 px-1 py-0.5 text-[11px] font-semibold" data-testid={`admin-users-approval-risk-banner-${request.id}`}>
+                      HIGH-RISK ACTION
+                    </p>
+                  )}
+                  <p data-testid={`admin-users-approval-risk-level-${request.id}`}>risk={request?.impact_delta?.risk_level} ({request?.impact_delta?.risk_score})</p>
+                  <p data-testid={`admin-users-approval-impacted-users-${request.id}`}>impacted_users={request?.impact_delta?.impacted_users_count ?? 1}</p>
+                  <p data-testid={`admin-users-approval-delta-role-${request.id}`}>role: {request?.impact_delta?.previous?.role || "-"}{" → "}{request?.impact_delta?.desired?.role || "-"}</p>
+                  <p data-testid={`admin-users-approval-delta-trading-${request.id}`}>trading: {String(request?.impact_delta?.previous?.trading_enabled)}{" → "}{String(request?.impact_delta?.desired?.trading_enabled)}</p>
+                  <p data-testid={`admin-users-approval-delta-delete-${request.id}`}>delete_state: {request?.impact_delta?.previous?.delete_state || "-"}{" → "}{request?.impact_delta?.desired?.delete_state || "-"}</p>
+                  <p data-testid={`admin-users-approval-delta-capital-${request.id}`}>capital_limit: {request?.impact_delta?.previous?.capital_limit ?? "-"}{" → "}{request?.impact_delta?.desired?.capital_limit ?? "-"}</p>
+                  <p data-testid={`admin-users-approval-delta-changed-fields-${request.id}`}>changed_fields={(request?.impact_delta?.changed_fields || []).join(", ") || "-"}</p>
+                  <p data-testid={`admin-users-approval-delta-blockers-${request.id}`}>blockers={(request?.impact_delta?.blockers || []).join(", ") || "-"}</p>
+                </div>
+
                 <div className="flex flex-wrap gap-2" data-testid={`admin-users-approval-actions-${request.id}`}>
                   <Button
                     size="sm"
@@ -1470,37 +1549,102 @@ export const AdminUsersPage = ({ scope = "user" }) => {
           {securityDetailLoading ? (
             <p className="text-xs" data-testid="admin-users-security-detail-loading">Yükleniyor...</p>
           ) : securityDetail ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1 border border-black/20 bg-white p-2 text-xs" data-testid="admin-users-security-state-card">
-                <p data-testid="admin-users-security-mfa-enabled">mfa_enabled: {String(Boolean(securityDetail?.mfa?.is_enabled))}</p>
-                <p data-testid="admin-users-security-mfa-methods">methods: {(securityDetail?.mfa?.enabled_methods || []).join(",") || "-"}</p>
-                <p data-testid="admin-users-security-backup-remaining">backup_codes_remaining: {securityDetail?.mfa?.backup_codes_remaining ?? 0}</p>
-                <p data-testid="admin-users-security-policy-lock-until">policy_locked_until: {securityDetail?.security_state?.policy_locked_until || "-"}</p>
-                <p data-testid="admin-users-security-password-expires">password_expires_at: {securityDetail?.security_state?.password_expires_at || "-"}</p>
-                <Button variant="outline" onClick={() => unlockPolicyLock(securityDetailUserId)} data-testid="admin-users-security-unlock-button">Unlock Policy Lock</Button>
+            <div className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1 border border-black/20 bg-white p-2 text-xs" data-testid="admin-users-security-state-card">
+                  <p data-testid="admin-users-security-mfa-enabled">mfa_enabled: {String(Boolean(securityDetail?.mfa?.is_enabled))}</p>
+                  <p data-testid="admin-users-security-mfa-methods">methods: {(securityDetail?.mfa?.enabled_methods || []).join(",") || "-"}</p>
+                  <p data-testid="admin-users-security-backup-remaining">backup_codes_remaining: {securityDetail?.mfa?.backup_codes_remaining ?? 0}</p>
+                  <p data-testid="admin-users-security-policy-lock-until">policy_locked_until: {securityDetail?.security_state?.policy_locked_until || "-"}</p>
+                  <p data-testid="admin-users-security-password-expires">password_expires_at: {securityDetail?.security_state?.password_expires_at || "-"}</p>
+                  <Button variant="outline" onClick={() => unlockPolicyLock(securityDetailUserId)} data-testid="admin-users-security-unlock-button">Unlock Policy Lock</Button>
+                </div>
+
+                <div className="space-y-1 border border-black/20 bg-white p-2 text-xs" data-testid="admin-users-session-list-card">
+                  <p className="font-semibold" data-testid="admin-users-session-list-title">Active Sessions</p>
+                  {(securityDetail?.sessions || []).map((session) => (
+                    <div key={session.session_id} className="flex flex-wrap items-center gap-2" data-testid={`admin-users-session-item-${session.session_id}`}>
+                      <span>{session.ip_address || "-"} · {session.device_fingerprint || "-"}</span>
+                      <Button size="sm" variant="outline" onClick={() => revokeSession(session.session_id)} data-testid={`admin-users-session-revoke-button-${session.session_id}`}>
+                        Revoke
+                      </Button>
+                    </div>
+                  ))}
+                  {(securityDetail?.sessions || []).length === 0 && <p data-testid="admin-users-session-list-empty">Active session yok</p>}
+                </div>
+
+                <div className="space-y-1 border border-black/20 bg-white p-2 text-xs md:col-span-2" data-testid="admin-users-login-history-card">
+                  <p className="font-semibold" data-testid="admin-users-login-history-title">Login History</p>
+                  {(securityDetail?.login_history || []).slice(0, 10).map((item) => (
+                    <p key={item.id} data-testid={`admin-users-login-history-item-${item.id}`}>
+                      {item.created_at} · {item.outcome} · {item.ip_address || "-"} · {item.failure_reason || "-"}
+                    </p>
+                  ))}
+                  {(securityDetail?.login_history || []).length === 0 && <p data-testid="admin-users-login-history-empty">Login history yok</p>}
+                </div>
               </div>
 
-              <div className="space-y-1 border border-black/20 bg-white p-2 text-xs" data-testid="admin-users-session-list-card">
-                <p className="font-semibold" data-testid="admin-users-session-list-title">Active Sessions</p>
-                {(securityDetail?.sessions || []).map((session) => (
-                  <div key={session.session_id} className="flex flex-wrap items-center gap-2" data-testid={`admin-users-session-item-${session.session_id}`}>
-                    <span>{session.ip_address || "-"} · {session.device_fingerprint || "-"}</span>
-                    <Button size="sm" variant="outline" onClick={() => revokeSession(session.session_id)} data-testid={`admin-users-session-revoke-button-${session.session_id}`}>
-                      Revoke
-                    </Button>
+              <div className="space-y-2 border border-black/25 bg-white p-2" data-testid="admin-users-observability-panel">
+                <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-users-observability-header-row">
+                  <p className="text-xs font-semibold" data-testid="admin-users-observability-title">User Observability</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => loadUserObservability(securityDetailUserId)}
+                    data-testid="admin-users-observability-refresh-button"
+                  >
+                    Yenile
+                  </Button>
+                </div>
+
+                {observabilityLoading ? (
+                  <div className="grid gap-2 md:grid-cols-2" data-testid="admin-users-observability-skeleton-grid">
+                    <div className="h-20 animate-pulse border border-black/10 bg-orange-100" data-testid="admin-users-observability-skeleton-1"></div>
+                    <div className="h-20 animate-pulse border border-black/10 bg-orange-100" data-testid="admin-users-observability-skeleton-2"></div>
+                    <div className="h-20 animate-pulse border border-black/10 bg-orange-100" data-testid="admin-users-observability-skeleton-3"></div>
+                    <div className="h-20 animate-pulse border border-black/10 bg-orange-100" data-testid="admin-users-observability-skeleton-4"></div>
                   </div>
-                ))}
-                {(securityDetail?.sessions || []).length === 0 && <p data-testid="admin-users-session-list-empty">Active session yok</p>}
-              </div>
+                ) : observabilityError ? (
+                  <div className="space-y-2" data-testid="admin-users-observability-error-state">
+                    <p className="text-xs text-red-700" data-testid="admin-users-observability-error-text">{observabilityError}</p>
+                    <Button size="sm" variant="outline" onClick={() => loadUserObservability(securityDetailUserId)} data-testid="admin-users-observability-retry-button">Retry</Button>
+                  </div>
+                ) : (
+                  <div className="grid gap-2 md:grid-cols-2" data-testid="admin-users-observability-grid">
+                    <div className="space-y-1 border border-black/15 p-2 text-xs" data-testid="admin-users-observability-activity-card">
+                      <p className="font-semibold">Activity Timeline</p>
+                      <p data-testid="admin-users-observability-activity-summary">24h={activityTimeline?.summary?.["24h"] ?? 0} · 7d={activityTimeline?.summary?.["7d"] ?? 0} · 30d={activityTimeline?.summary?.["30d"] ?? 0}</p>
+                      {(activityTimeline?.items || []).slice(0, 5).map((item, idx) => (
+                        <p key={`${item.timestamp}-${idx}`} data-testid={`admin-users-observability-activity-item-${idx}`}>{item.timestamp} · {item.event} · {item.severity}</p>
+                      ))}
+                      {(activityTimeline?.items || []).length === 0 && <p data-testid="admin-users-observability-activity-empty">Activity empty state</p>}
+                    </div>
 
-              <div className="space-y-1 border border-black/20 bg-white p-2 text-xs md:col-span-2" data-testid="admin-users-login-history-card">
-                <p className="font-semibold" data-testid="admin-users-login-history-title">Login History</p>
-                {(securityDetail?.login_history || []).slice(0, 10).map((item) => (
-                  <p key={item.id} data-testid={`admin-users-login-history-item-${item.id}`}>
-                    {item.created_at} · {item.outcome} · {item.ip_address || "-"} · {item.failure_reason || "-"}
-                  </p>
-                ))}
-                {(securityDetail?.login_history || []).length === 0 && <p data-testid="admin-users-login-history-empty">Login history yok</p>}
+                    <div className="space-y-1 border border-black/15 p-2 text-xs" data-testid="admin-users-observability-security-card">
+                      <p className="font-semibold">Security Telemetry</p>
+                      <p data-testid="admin-users-observability-security-failed-trend">failed_24h={securityTelemetry?.failed_login_trend?.["24h"] ?? 0} · suspicious={String(Boolean(securityTelemetry?.ip_device_anomaly_summary?.suspicious))}</p>
+                      <p data-testid="admin-users-observability-security-severity">severity={securityTelemetry?.normalized_severity || "low"} · risk={securityTelemetry?.normalized_risk_score ?? 0}</p>
+                      <p data-testid="admin-users-observability-security-signals">signals={(securityTelemetry?.high_risk_signals || []).map((signal) => signal.signal).join(", ") || "-"}</p>
+                      <p data-testid="admin-users-observability-security-mfa-failures">recent_mfa_failures={(securityTelemetry?.recent_mfa_failures || []).length}</p>
+                    </div>
+
+                    <div className="space-y-1 border border-black/15 p-2 text-xs" data-testid="admin-users-observability-execution-card">
+                      <p className="font-semibold">Execution & Reliability</p>
+                      <p data-testid="admin-users-observability-execution-success-rate">success_rate={executionMetrics?.execution_success_rate ?? 0}%</p>
+                      <p data-testid="admin-users-observability-execution-error-count">error_count={executionMetrics?.execution_error_count ?? 0}</p>
+                      <p data-testid="admin-users-observability-execution-latency">latency_avg={executionMetrics?.execution_latency_summary?.avg_ms ?? 0}ms · p95={executionMetrics?.execution_latency_summary?.p95_ms ?? 0}ms</p>
+                      <p data-testid="admin-users-observability-execution-errors">error_categories={(executionMetrics?.recent_error_categories || []).map((item) => `${item.code}:${item.count}`).join(", ") || "-"}</p>
+                    </div>
+
+                    <div className="space-y-1 border border-black/15 p-2 text-xs" data-testid="admin-users-observability-trading-card">
+                      <p className="font-semibold">Trading Observability</p>
+                      <p data-testid="admin-users-observability-trading-live-status">trading_enabled={String(Boolean(tradingObservability?.live_trading_status?.trading_enabled))} · live_eligible={String(Boolean(tradingObservability?.live_trading_status?.live_trading_eligible))}</p>
+                      <p data-testid="admin-users-observability-trading-trade-count">trade_24h={tradingObservability?.recent_trade_count?.["24h"] ?? 0} · trade_7d={tradingObservability?.recent_trade_count?.["7d"] ?? 0}</p>
+                      <p data-testid="admin-users-observability-trading-impact">strategy={tradingObservability?.impact_summary?.strategy_scope_count ?? 0} · bot={tradingObservability?.impact_summary?.bot_scope_count ?? 0} · account={tradingObservability?.impact_summary?.account_mapping_count ?? 0}</p>
+                      <a href={tradingObservability?.trade_history_link || "#"} className="underline" data-testid="admin-users-observability-trade-history-link">Trade History Link</a>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (

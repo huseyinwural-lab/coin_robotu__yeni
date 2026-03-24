@@ -46,6 +46,34 @@ CRITICAL_APPROVAL_ACTIONS = {
     "bulk_restore_users",
 }
 
+MANDATORY_REASON_ACTIONS = {
+    "disable_user",
+    "disable_admin",
+    "delete_user",
+    "soft_delete_user",
+    "hard_delete_user",
+    "restore_user",
+    "enable_live_trading",
+    "raise_capital_limit",
+    "grant_privileged_role",
+    "bulk_disable_users",
+    "bulk_soft_delete_users",
+    "bulk_restore_users",
+}
+
+HIGH_RISK_REASON_ACTIONS = {
+    "hard_delete_user",
+    "soft_delete_user",
+    "grant_privileged_role",
+    "enable_live_trading",
+    "raise_capital_limit",
+    "bulk_soft_delete_users",
+}
+
+REQUEST_REASON_MIN_LEN = 12
+APPROVAL_REASON_MIN_LEN = 8
+OVERRIDE_REASON_MIN_LEN = 16
+
 DEFAULT_ROLE_PERMISSIONS: dict[str, dict] = {
     "super_admin": {
         "priority": 1,
@@ -157,6 +185,55 @@ USER_RATE_LIMITER = TokenBucketRateLimiter(key_prefix="auth_user_login", capacit
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _normalized_reason(value: str | None) -> str:
+    return str(value or "").strip()
+
+
+def _require_reason(value: str | None, *, min_len: int, detail: str) -> str:
+    normalized = _normalized_reason(value)
+    if len(normalized) < int(min_len):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+    return normalized
+
+
+def _validate_request_reason_requirements(action_key: str, *, reason: str | None, payload: dict | None) -> tuple[str, str | None]:
+    normalized_reason = _normalized_reason(reason)
+    override_reason = _normalized_reason((payload or {}).get("override_reason") or (payload or {}).get("approval_reason"))
+
+    if action_key in MANDATORY_REASON_ACTIONS:
+        normalized_reason = _require_reason(
+            normalized_reason,
+            min_len=REQUEST_REASON_MIN_LEN,
+            detail="request_reason_too_short",
+        )
+    if action_key in HIGH_RISK_REASON_ACTIONS:
+        override_reason = _require_reason(
+            override_reason,
+            min_len=OVERRIDE_REASON_MIN_LEN,
+            detail="override_reason_required_for_high_risk_action",
+        )
+    return normalized_reason, (override_reason or None)
+
+
+def _validate_approval_reason_requirements(*, action_key: str, approval_note: str | None, override_reason: str | None) -> tuple[str, str | None]:
+    normalized_note = _normalized_reason(approval_note)
+    normalized_override = _normalized_reason(override_reason)
+
+    if action_key in MANDATORY_REASON_ACTIONS:
+        normalized_note = _require_reason(
+            normalized_note,
+            min_len=APPROVAL_REASON_MIN_LEN,
+            detail="approval_note_too_short",
+        )
+    if action_key in HIGH_RISK_REASON_ACTIONS:
+        normalized_override = _require_reason(
+            normalized_override,
+            min_len=OVERRIDE_REASON_MIN_LEN,
+            detail="override_reason_required_for_high_risk_action",
+        )
+    return normalized_note, (normalized_override or None)
 
 
 def _token_hash(raw: str) -> str:
@@ -901,8 +978,12 @@ def create_approval_request(
     if action_key in CRITICAL_APPROVAL_ACTIONS:
         if not bool((payload or {}).get("critical_confirmed")):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_confirmation_required")
-        if not str(reason or "").strip():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_reason_required")
+
+    normalized_reason, normalized_override_reason = _validate_request_reason_requirements(
+        action_key,
+        reason=reason,
+        payload=payload,
+    )
 
     target = db.query(User).filter(User.id == target_user_id).first()
     if target is None:
@@ -910,12 +991,16 @@ def create_approval_request(
     if target.role == UserRole.SUPER_ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_protected")
 
+    request_payload = dict(payload or {})
+    if normalized_override_reason:
+        request_payload["override_reason"] = normalized_override_reason
+
     request_row = IdentityApprovalRequest(
         action_key=action_key,
         target_user_id=target_user_id,
-        payload=dict(payload or {}),
+        payload=request_payload,
         status="pending",
-        request_reason=str(reason or "")[:500],
+        request_reason=normalized_reason[:500],
         requested_by=actor.id,
         required_approvals=max(int(policy.required_approvals or 1), 1),
     )
@@ -1174,8 +1259,11 @@ def approve_request(db: Session, *, actor: User, request_id: str, approval_note:
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
 
-    if row.action_key in CRITICAL_APPROVAL_ACTIONS and not str(approval_note or "").strip():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="approval_note_required_for_critical_action")
+    normalized_note, normalized_override = _validate_approval_reason_requirements(
+        action_key=row.action_key,
+        approval_note=approval_note,
+        override_reason=override_reason,
+    )
 
     action_payload = {
         **dict(row.payload or {}),
@@ -1184,16 +1272,16 @@ def approve_request(db: Session, *, actor: User, request_id: str, approval_note:
     _apply_approval_action(db, action_key=row.action_key, target=target, payload=action_payload, actor=actor)
     row.approval_count += 1
     row.approved_by = actor.id
-    row.approval_note = str(approval_note or "")[:500]
+    row.approval_note = normalized_note[:500]
     row.reviewed_at = _utcnow()
 
     if row.approval_count >= max(int(row.required_approvals or 1), 1):
         row.status = "approved"
 
-    if actor.role == UserRole.SUPER_ADMIN and override_reason:
+    if normalized_override:
         row.payload = {
             **dict(row.payload or {}),
-            "super_admin_override_reason": str(override_reason)[:500],
+            "approval_override_reason": normalized_override[:500],
         }
 
     db.commit()

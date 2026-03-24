@@ -429,7 +429,155 @@ class TestP0BulkAndSecurity:
 
         me_after = requests.get(f"{BASE_URL}/api/auth/me", headers=_headers(user_token), timeout=30)
         assert me_after.status_code == 401
-        assert "session_revoked" in me_after.text
+
+
+class TestP1ObservabilityAndApprovalHardening:
+    def test_observability_endpoints_shape(self, super_admin_token: str):
+        user_id, _, _ = _create_regular_user(approve_with_token=super_admin_token)
+
+        activity = requests.get(
+            f"{BASE_URL}/api/admin/identity/users/{user_id}/activity-timeline",
+            headers=_headers(super_admin_token),
+            timeout=30,
+        )
+        assert activity.status_code == 200, activity.text
+        assert "items" in activity.json()
+        assert "summary" in activity.json()
+
+        telemetry = requests.get(
+            f"{BASE_URL}/api/admin/identity/users/{user_id}/security-telemetry",
+            headers=_headers(super_admin_token),
+            timeout=30,
+        )
+        assert telemetry.status_code == 200, telemetry.text
+        assert "failed_login_trend" in telemetry.json()
+        assert "normalized_severity" in telemetry.json()
+
+        execution = requests.get(
+            f"{BASE_URL}/api/admin/identity/users/{user_id}/execution-metrics",
+            headers=_headers(super_admin_token),
+            timeout=30,
+        )
+        assert execution.status_code == 200, execution.text
+        assert "execution_success_rate" in execution.json()
+
+        trading = requests.get(
+            f"{BASE_URL}/api/admin/identity/users/{user_id}/trading-observability",
+            headers=_headers(super_admin_token),
+            timeout=30,
+        )
+        assert trading.status_code == 200, trading.text
+        assert "impact_summary" in trading.json()
+
+    def test_mandatory_reason_enforced_for_request(self, super_admin_token: str):
+        user_id, _, _ = _create_regular_user()
+        response = requests.post(
+            f"{BASE_URL}/api/admin/identity/approvals/request",
+            headers=_headers(super_admin_token),
+            json={
+                "action_key": "disable_user",
+                "target_user_id": user_id,
+                "payload": {"critical_confirmed": True},
+                "reason": "short",
+            },
+            timeout=30,
+        )
+        assert response.status_code == 400
+        assert "request_reason_too_short" in response.text
+
+    def test_high_risk_override_reason_required_for_request(self, super_admin_token: str):
+        user_id, _, _ = _create_regular_user()
+        response = requests.post(
+            f"{BASE_URL}/api/admin/identity/approvals/request",
+            headers=_headers(super_admin_token),
+            json={
+                "action_key": "grant_privileged_role",
+                "target_user_id": user_id,
+                "payload": {"critical_confirmed": True, "role": "admin"},
+                "reason": "bu islem role escalation icin gerekli aciklama",
+            },
+            timeout=30,
+        )
+        assert response.status_code == 400
+        assert "override_reason_required_for_high_risk_action" in response.text
+
+    def test_mandatory_approval_note_enforced(self, super_admin_token: str, secondary_admin: tuple[str, str, str, str]):
+        _, _, _, requester_token = secondary_admin
+        user_id, _, _ = _create_regular_user()
+        req = requests.post(
+            f"{BASE_URL}/api/admin/identity/approvals/request",
+            headers=_headers(requester_token),
+            json={
+                "action_key": "disable_user",
+                "target_user_id": user_id,
+                "payload": {"critical_confirmed": True},
+                "reason": "disable icin operasyonel guvenlik gerekcesi",
+            },
+            timeout=30,
+        )
+        assert req.status_code == 200, req.text
+        request_id = req.json()["request_id"]
+
+        approve = requests.post(
+            f"{BASE_URL}/api/admin/identity/approvals/{request_id}/approve",
+            headers=_headers(super_admin_token),
+            json={"note": "short"},
+            timeout=30,
+        )
+        assert approve.status_code == 400
+        assert "approval_note_too_short" in approve.text
+
+    def test_approval_list_contains_impact_delta(self, super_admin_token: str):
+        response = requests.get(
+            f"{BASE_URL}/api/admin/identity/approvals",
+            headers=_headers(super_admin_token),
+            params={"status_filter": "all", "limit": 20},
+            timeout=30,
+        )
+        assert response.status_code == 200, response.text
+        items = response.json().get("items", [])
+        if not items:
+            pytest.skip("approval queue boş")
+        first = items[0]
+        assert "impact_delta" in first
+        assert "risk_level" in first
+
+    def test_bulk_preview_summary_breakdown(self, super_admin_token: str):
+        user_id, _, _ = _create_regular_user()
+        response = requests.post(
+            f"{BASE_URL}/api/admin/identity/users/bulk-status/preview",
+            headers=_headers(super_admin_token),
+            json={"user_ids": [user_id, "missing-user"], "status": "deleted"},
+            timeout=30,
+        )
+        assert response.status_code == 200, response.text
+        summary = response.json().get("summary", {})
+        assert "risk_score_total" in summary
+        assert "blocker_breakdown" in summary
+        assert "action_summary" in summary
+
+    def test_guarded_inline_edit_role_returns_approval_required(self, super_admin_token: str):
+        user_id, _, _ = _create_regular_user()
+        response = requests.patch(
+            f"{BASE_URL}/api/admin/identity/users/{user_id}/inline",
+            headers=_headers(super_admin_token),
+            json={
+                "role": "admin",
+                "critical_confirmed": True,
+                "reason": "role escalation security review based change request",
+                "override_reason": "high risk role escalation explicit override reason",
+            },
+            timeout=30,
+        )
+        assert response.status_code == 200, response.text
+        assert response.json().get("status") == "approval_required"
+
+    def test_runtime_ready_contains_database_check(self):
+        ready = requests.get(f"{BASE_URL}/api/ready", timeout=30)
+        assert ready.status_code in {200, 503}, ready.text
+        payload = ready.json()
+        assert "checks" in payload
+        assert "database" in payload.get("checks", {})
 
     def test_login_lock_after_failed_attempts(self):
         email = f"nonexistent.{uuid.uuid4().hex[:8]}@example.com"

@@ -15,6 +15,7 @@ from services.audit_service import create_audit_log
 from services.identity_control_service import (
     ApprovalService,
     CRITICAL_APPROVAL_ACTIONS,
+    HIGH_RISK_REASON_ACTIONS,
     InviteService,
     assign_custom_role_to_user,
     archive_custom_role,
@@ -39,6 +40,12 @@ from services.identity_control_service import (
     expire_invite,
 )
 from services.mfa_service import get_mfa_settings
+from services.user_observability_service import (
+    get_user_activity_timeline,
+    get_user_execution_metrics,
+    get_user_security_telemetry,
+    get_user_trading_observability,
+)
 
 router = APIRouter(prefix="/admin/identity", tags=["identity-control"])
 
@@ -158,12 +165,18 @@ def _request_if_critical(
 ) -> dict:
     if action_key not in CRITICAL_APPROVAL_ACTIONS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="critical_action_required")
+
+    request_payload = dict(payload or {})
+    if action_key in HIGH_RISK_REASON_ACTIONS:
+        if not str(request_payload.get("override_reason") or request_payload.get("approval_reason") or "").strip():
+            request_payload["override_reason"] = str(reason or "")
+
     row = create_approval_request(
         db,
         actor=actor,
         action_key=action_key,
         target_user_id=target_user_id,
-        payload=payload,
+        payload=request_payload,
         reason=reason,
     )
     return {
@@ -185,6 +198,84 @@ def _resolve_bulk_action_key(payload: BulkStatusRequest) -> str:
     if requested_action not in {"bulk_disable_users", "bulk_enable_users", "bulk_soft_delete_users", "bulk_restore_users"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_bulk_action")
     return requested_action
+
+
+def _approval_risk_score(action_key: str) -> int:
+    score_map = {
+        "hard_delete_user": 95,
+        "soft_delete_user": 88,
+        "delete_user": 88,
+        "grant_privileged_role": 90,
+        "raise_capital_limit": 82,
+        "enable_live_trading": 75,
+        "restore_user": 70,
+        "bulk_soft_delete_users": 85,
+        "bulk_disable_users": 75,
+    }
+    return score_map.get(action_key, 45)
+
+
+def _approval_risk_level(score: int) -> str:
+    if score >= 85:
+        return "critical"
+    if score >= 65:
+        return "high"
+    if score >= 40:
+        return "medium"
+    return "low"
+
+
+def _build_approval_impact_delta(db: Session, *, row: IdentityApprovalRequest) -> dict:
+    payload = dict(row.payload or {})
+    target = db.query(User).filter(User.id == row.target_user_id).first()
+    profile = get_or_create_identity_profile(db, row.target_user_id) if target else None
+
+    previous = {
+        "role": target.role.value if target else None,
+        "status": target.status if target else None,
+        "trading_enabled": bool(profile.trading_enabled) if profile else None,
+        "capital_limit": float(profile.capital_limit or 0) if profile else None,
+        "delete_state": "hard_deleted" if profile and profile.hard_deleted_at else "soft_deleted" if profile and profile.deleted_at else "active",
+    }
+    desired = dict(previous)
+
+    if row.action_key in {"disable_user", "disable_admin", "bulk_disable_users"}:
+        desired["status"] = "disabled"
+    if row.action_key in {"enable_user", "restore_user", "bulk_enable_users", "bulk_restore_users"}:
+        desired["status"] = "active"
+        desired["delete_state"] = "active"
+    if row.action_key in {"delete_user", "soft_delete_user", "bulk_soft_delete_users"}:
+        desired["status"] = "deleted"
+        desired["delete_state"] = "soft_deleted"
+    if row.action_key == "hard_delete_user":
+        desired["delete_state"] = "hard_deleted"
+    if row.action_key == "grant_privileged_role":
+        desired["role"] = payload.get("role")
+    if row.action_key == "enable_live_trading":
+        desired["trading_enabled"] = True
+    if row.action_key == "raise_capital_limit":
+        desired["capital_limit"] = payload.get("capital_limit")
+
+    changed_fields = [
+        key for key in ["role", "status", "trading_enabled", "capital_limit", "delete_state"] if previous.get(key) != desired.get(key)
+    ]
+
+    impacted_users_count = len(payload.get("user_ids") or []) if row.action_key.startswith("bulk_") else 1
+    blockers = []
+    if target and row.action_key in {"hard_delete_user", "soft_delete_user", "delete_user", "restore_user"}:
+        blockers = list(hard_delete_candidate_snapshot(db, user=target).get("blockers") or [])
+
+    risk_score = _approval_risk_score(row.action_key)
+    return {
+        "previous": previous,
+        "desired": desired,
+        "changed_fields": changed_fields,
+        "risk_score": risk_score,
+        "risk_level": _approval_risk_level(risk_score),
+        "blockers": blockers,
+        "impacted_users_count": impacted_users_count,
+        "high_risk": risk_score >= 75,
+    }
 
 
 @router.get("/users")
@@ -273,6 +364,51 @@ def admin_identity_user_security_detail(
             for row in login_history
         ],
     }
+
+
+@router.get("/users/{user_id}/activity-timeline")
+def admin_identity_user_activity_timeline(
+    user_id: str,
+    limit: int = Query(default=120, ge=1, le=300),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.users.read")
+    payload = get_user_activity_timeline(db, user_id=user_id, limit=limit)
+    return _serialize_for_json(payload)
+
+
+@router.get("/users/{user_id}/security-telemetry")
+def admin_identity_user_security_telemetry(
+    user_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.users.read")
+    payload = get_user_security_telemetry(db, user_id=user_id)
+    return _serialize_for_json(payload)
+
+
+@router.get("/users/{user_id}/execution-metrics")
+def admin_identity_user_execution_metrics(
+    user_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.users.read")
+    payload = get_user_execution_metrics(db, user_id=user_id)
+    return _serialize_for_json(payload)
+
+
+@router.get("/users/{user_id}/trading-observability")
+def admin_identity_user_trading_observability(
+    user_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.users.read")
+    payload = get_user_trading_observability(db, user_id=user_id)
+    return _serialize_for_json(payload)
 
 
 @router.patch("/users/{user_id}/inline")
@@ -520,6 +656,11 @@ def admin_identity_bulk_status_preview(
     total = len(preview_items)
     eligible_count = total - blocked_count
     high_risk_count = len([item for item in preview_items if item.get("risk_badge") == "high"])
+    risk_score_total = int(sum(int(item.get("risk_score") or 0) for item in preview_items))
+    blocker_counter: dict[str, int] = {}
+    for item in preview_items:
+        for blocker in item.get("blockers") or []:
+            blocker_counter[blocker] = blocker_counter.get(blocker, 0) + 1
 
     return {
         "action_key": requested_action,
@@ -530,6 +671,13 @@ def admin_identity_bulk_status_preview(
             "eligible_count": eligible_count,
             "blocked_count": blocked_count,
             "high_risk_count": high_risk_count,
+            "risk_score_total": risk_score_total,
+            "blocker_breakdown": blocker_counter,
+            "action_summary": {
+                "action_key": requested_action,
+                "approval_required": True,
+                "impacted_users_count": total,
+            },
             "partial_execution_expected": blocked_count > 0,
         },
     }
@@ -819,8 +967,10 @@ def admin_identity_list_approvals(
     if status_filter and status_filter != "all":
         query = query.filter(IdentityApprovalRequest.status == status_filter)
     rows = query.order_by(IdentityApprovalRequest.created_at.desc()).limit(limit).all()
-    return {
-        "items": [
+    items = []
+    for row in rows:
+        impact_delta = _build_approval_impact_delta(db, row=row)
+        items.append(
             {
                 "id": row.id,
                 "action_key": row.action_key,
@@ -831,10 +981,13 @@ def admin_identity_list_approvals(
                 "approval_count": row.approval_count,
                 "request_reason": row.request_reason,
                 "created_at": row.created_at,
+                "impact_delta": impact_delta,
+                "risk_level": impact_delta.get("risk_level"),
+                "risk_score": impact_delta.get("risk_score"),
+                "impacted_users_count": impact_delta.get("impacted_users_count"),
             }
-            for row in rows
-        ]
-    }
+        )
+    return {"items": items}
 
 
 @router.get("/approval-policies")
