@@ -1,0 +1,39 @@
+{
+  "generated_at": "2026-03-24T00:25:00Z",
+  "source_endpoint": "/api/phase4/admin/production-gate/checks/compare",
+  "checks_with_3plus_runs": [
+    "prod_env_resolution",
+    "secret_readiness",
+    "prod_env_preflight"
+  ],
+  "items": [
+    {
+      "check_key": "prod_env_resolution",
+      "run_id": "run-sample-1",
+      "run_count": 8,
+      "state_delta": "FAIL->FAIL",
+      "previous_result": "FAIL",
+      "new_result": "FAIL",
+      "latency_delta_ms": 10.5,
+      "stability_score": 0.5,
+      "improvement": false,
+      "explanation": [
+        "Anlamlı remediation iyileşmesi gözlenmedi"
+      ]
+    },
+    {
+      "check_key": "secret_readiness",
+      "run_id": "run-sample-1",
+      "run_count": 8,
+      "state_delta": "PASS->PASS",
+      "previous_result": "PASS",
+      "new_result": "PASS",
+      "latency_delta_ms": 10.5,
+      "stability_score": 1.0,
+      "improvement": false,
+      "explanation": [
+        "Anlamlı remediation iyileşmesi gözlenmedi"
+      ]
+    }
+  ]
+}

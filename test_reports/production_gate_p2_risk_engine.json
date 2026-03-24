@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-03-24T00:25:00Z",
+  "source_endpoint": "/api/phase4/admin/production-gate",
+  "risk_score": 72,
+  "risk_level": "HIGH",
+  "model_version": "v2-explainable",
+  "factors": {
+    "fail_rate": 0.8,
+    "flapping": 0.0,
+    "override_usage": 1.0,
+    "stale_checks": 1.0
+  },
+  "weights": {
+    "fail_rate_weight": 0.4,
+    "flapping_weight": 0.2,
+    "override_rate_weight": 0.3,
+    "stale_weight": 0.1
+  },
+  "explanation": [
+    "High fail frequency detected",
+    "Frequent override usage",
+    "Stale checks impacting decision confidence"
+  ]
+}

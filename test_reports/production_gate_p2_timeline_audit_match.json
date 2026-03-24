@@ -1,0 +1,28 @@
+{
+  "generated_at": "2026-03-24T00:25:00Z",
+  "source_endpoint": "/api/phase4/admin/production-gate/timeline",
+  "items_count": 3,
+  "items": [
+    {
+      "audit_id": "90090378-8961-4553-9051-cb0beac79728",
+      "request_id": "34aaa56f-5377-40c8-adb8-d02505a21244",
+      "event_type": "PRODUCTION_GATE_OVERRIDE_REVOKED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T23:42:49.534968Z"
+    },
+    {
+      "audit_id": "99d7f864-59d6-4a4c-a8b0-7ea67cd5a82a",
+      "request_id": "3f12822e-c288-4361-a123-70f055b5b6d0",
+      "event_type": "PRODUCTION_GATE_OVERRIDE_CREATED",
+      "category": "overrides",
+      "timestamp": "2026-03-23T23:42:49.409012Z"
+    },
+    {
+      "audit_id": "c759c6f5-8595-4ab5-aecf-b510235687ca",
+      "request_id": "38ef378a-f86f-4d97-92d8-8e5086939536",
+      "event_type": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+      "category": "checks",
+      "timestamp": "2026-03-23T23:42:49.093354Z"
+    }
+  ]
+}

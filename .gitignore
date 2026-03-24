@@ -48,6 +48,12 @@ artifacts/release_state/*
 test_reports/*
 !test_reports/iteration_34.json
 !test_reports/iteration_37.json
+!test_reports/production_gate_p2_hardening_evidence.md
+!test_reports/production_gate_p2_risk_engine.json
+!test_reports/production_gate_p2_flapping.json
+!test_reports/production_gate_p2_timeline_audit_match.json
+!test_reports/production_gate_p2_compare_multi_run.json
+!test_reports/iteration_115.json
 -e 
 # Environment files
 *.env

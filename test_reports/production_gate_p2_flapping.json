@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-03-24T00:25:00Z",
+  "source_endpoint": "/api/phase4/admin/production-gate/checks/history",
+  "window": 300,
+  "threshold": 3,
+  "flapping_checks": [],
+  "rows": [
+    {
+      "check_key": "prod_env_resolution",
+      "status": "FAIL",
+      "run_id": "run-sample-1",
+      "timestamp": "2026-03-24T00:20:00Z",
+      "window_sec": 300,
+      "threshold": 3,
+      "count": 0,
+      "severity": "LOW",
+      "is_flapping": false
+    },
+    {
+      "check_key": "release_gate_contract",
+      "status": "FAIL",
+      "run_id": "run-sample-2",
+      "timestamp": "2026-03-24T00:22:00Z",
+      "window_sec": 300,
+      "threshold": 3,
+      "count": 1,
+      "severity": "LOW",
+      "is_flapping": false
+    }
+  ]
+}

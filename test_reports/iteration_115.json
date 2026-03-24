@@ -1,0 +1,17 @@
+{
+  "summary": "Production Gate P2 Hardening doğrulama raporu",
+  "generated_at": "2026-03-24T00:25:00Z",
+  "status": "PASS",
+  "backend_checks": {
+    "system_cross_check": {
+      "is_consistent": true,
+      "counts": {
+        "history_count": 40,
+        "history_linked_count": 40,
+        "audit_check_event_count": 40
+      }
+    },
+    "compare_items_with_run_count_gte_3": 3,
+    "timeline_items_with_audit_request": 3
+  }
+}
