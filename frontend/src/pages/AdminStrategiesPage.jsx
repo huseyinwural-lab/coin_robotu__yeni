@@ -50,6 +50,14 @@ export const AdminStrategiesPage = () => {
   const [strategies, setStrategies] = useState([]);
   const [selectedStrategyId, setSelectedStrategyId] = useState("");
   const [detail, setDetail] = useState(null);
+  const [timelineItems, setTimelineItems] = useState([]);
+  const [diffResult, setDiffResult] = useState(null);
+  const [bindingPreview, setBindingPreview] = useState(null);
+  const [promotionRequests, setPromotionRequests] = useState([]);
+  const [standardDecisionResult, setStandardDecisionResult] = useState(null);
+  const [replayResult, setReplayResult] = useState(null);
+  const [compareResult, setCompareResult] = useState(null);
+  const [compareSelection, setCompareSelection] = useState({ version_a_id: "", version_b_id: "" });
 
   const [strategyForm, setStrategyForm] = useState(strategySeed);
   const [versionForm, setVersionForm] = useState(versionSeed);
@@ -75,6 +83,8 @@ export const AdminStrategiesPage = () => {
     [detail],
   );
 
+  const lifecycleMap = useMemo(() => detail?.version_lifecycle_map || {}, [detail]);
+
   const loadStrategies = useCallback(async () => {
     setLoading(true);
     try {
@@ -93,11 +103,15 @@ export const AdminStrategiesPage = () => {
   const loadDetail = useCallback(async (strategyId) => {
     if (!strategyId) return;
     try {
-      const { data } = await apiClient.get(`/strategy-domain/admin/strategies/${strategyId}`);
+      const { data } = await apiClient.get(`/strategy-domain/admin/strategies/${strategyId}/control-plane`);
       setDetail(data);
       const activeVersion = data?.versions?.find((item) => item.version_id === data?.strategy?.active_version_id) || data?.versions?.[0];
       if (activeVersion) {
         setKernelContextText(JSON.stringify(kernelContextSeed(activeVersion.version_id, activeVersion.version_hash), null, 2));
+        setCompareSelection((prev) => ({
+          version_a_id: prev.version_a_id || activeVersion.version_id,
+          version_b_id: prev.version_b_id || activeVersion.version_id,
+        }));
       }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Strategy detayı yüklenemedi");
@@ -178,6 +192,198 @@ export const AdminStrategiesPage = () => {
     }
   };
 
+  const evaluateKernelStandard = async () => {
+    try {
+      const payload = JSON.parse(kernelContextText);
+      const { data } = await apiClient.post("/strategy-domain/admin/kernel/evaluate-standard", payload);
+      setStandardDecisionResult(data);
+      toast.success("Standard evaluate tamamlandı");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Standard evaluate başarısız");
+    }
+  };
+
+  const validateVersion = async (versionId) => {
+    try {
+      await apiClient.post(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${versionId}/validate`, { force: false });
+      toast.success("Version validation tamamlandı");
+      await loadDetail(selectedStrategyId);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Validation başarısız");
+    }
+  };
+
+  const runDryRun = async (versionId) => {
+    try {
+      const payload = JSON.parse(kernelContextText);
+      await apiClient.post(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${versionId}/dry-run`, {
+        context_snapshot: payload,
+      });
+      toast.success("Dry-run tamamlandı");
+      await loadDetail(selectedStrategyId);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Dry-run başarısız");
+    }
+  };
+
+  const rollbackVersion = async (versionId) => {
+    try {
+      await apiClient.post(`/strategy-domain/admin/strategies/${selectedStrategyId}/rollback`, {
+        target_version_id: versionId,
+        reason: "manual_ui_rollback",
+      });
+      toast.success("Rollback tamamlandı");
+      await loadDetail(selectedStrategyId);
+      await loadStrategies();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Rollback başarısız");
+    }
+  };
+
+  const setRolloutStage = async (versionId, stage) => {
+    try {
+      await apiClient.post(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${versionId}/stage`, {
+        rollout_stage: stage,
+      });
+      toast.success("Rollout stage güncellendi");
+      await loadDetail(selectedStrategyId);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Rollout stage güncellenemedi");
+    }
+  };
+
+  const runVersionDiff = async () => {
+    if (!compareSelection.version_a_id || !compareSelection.version_b_id) {
+      toast.error("Diff için iki version seçin");
+      return;
+    }
+    try {
+      const { data } = await apiClient.post(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/diff`, {
+        from_version_id: compareSelection.version_a_id,
+        to_version_id: compareSelection.version_b_id,
+      });
+      setDiffResult(data);
+      toast.success("Version diff üretildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Diff üretilemedi");
+    }
+  };
+
+  const replayLastContext = async () => {
+    if (!selectedActiveVersion) {
+      toast.error("Aktif version yok");
+      return;
+    }
+    try {
+      const payload = JSON.parse(kernelContextText);
+      const { data } = await apiClient.post("/strategy-domain/admin/kernel/replay", {
+        strategy_version_id: selectedActiveVersion.version_id,
+        context_snapshot: payload,
+      });
+      setReplayResult(data);
+      toast.success("Replay tamamlandı");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Replay başarısız");
+    }
+  };
+
+  const compareVersions = async () => {
+    if (!compareSelection.version_a_id || !compareSelection.version_b_id) {
+      toast.error("Compare için version A/B seçin");
+      return;
+    }
+    try {
+      const payload = JSON.parse(kernelContextText);
+      const { data } = await apiClient.post("/strategy-domain/admin/kernel/compare", {
+        version_a_id: compareSelection.version_a_id,
+        version_b_id: compareSelection.version_b_id,
+        context_snapshot: payload,
+      });
+      setCompareResult(data);
+      toast.success("Version compare tamamlandı");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Compare başarısız");
+    }
+  };
+
+  const loadTimeline = useCallback(async () => {
+    if (!selectedStrategyId) return;
+    try {
+      const { data } = await apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/audit-history`, {
+        params: { limit: 80 },
+      });
+      setTimelineItems(data?.items || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Audit timeline yüklenemedi");
+    }
+  }, [selectedStrategyId]);
+
+  const loadBindingPreview = useCallback(async () => {
+    if (!selectedActiveVersion) {
+      setBindingPreview(null);
+      return;
+    }
+    try {
+      const { data } = await apiClient.get("/strategy-domain/admin/regime/resolved-binding-preview", {
+        params: {
+          strategy_version_id: selectedActiveVersion.version_id,
+          regime_label: "trend_up",
+        },
+      });
+      setBindingPreview(data);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Binding preview yüklenemedi");
+    }
+  }, [selectedActiveVersion]);
+
+  const loadPromotionRequests = useCallback(async () => {
+    if (!selectedStrategyId) return;
+    try {
+      const { data } = await apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/promotion-requests`, {
+        params: { limit: 40 },
+      });
+      setPromotionRequests(data?.items || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Promotion request listesi yüklenemedi");
+    }
+  }, [selectedStrategyId]);
+
+  const requestPromoteToProduction = async (versionId) => {
+    try {
+      await apiClient.post(`/strategy-domain/admin/strategies/${selectedStrategyId}/promote-request`, {
+        strategy_version_id: versionId,
+        request_note: "UI promote request",
+        require_validation: true,
+        require_dry_run: true,
+        requested_stage: null,
+      });
+      toast.success("Promote request oluşturuldu");
+      await loadPromotionRequests();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Promote request başarısız");
+    }
+  };
+
+  const approvePromote = async (requestId) => {
+    try {
+      await apiClient.post(`/strategy-domain/admin/promotion-requests/${requestId}/approve`, { note: "approved_from_ui" });
+      toast.success("Promote onaylandı");
+      await Promise.all([loadPromotionRequests(), loadDetail(selectedStrategyId), loadStrategies()]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Promote onayı başarısız");
+    }
+  };
+
+  const rejectPromote = async (requestId) => {
+    try {
+      await apiClient.post(`/strategy-domain/admin/promotion-requests/${requestId}/reject`, { note: "rejected_from_ui" });
+      toast.success("Promote request reddedildi");
+      await loadPromotionRequests();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Promote reject başarısız");
+    }
+  };
+
   const loadRuntimeViews = useCallback(async () => {
     try {
       const [intentsRes, hotRes, coldRes] = await Promise.all([
@@ -216,6 +422,18 @@ export const AdminStrategiesPage = () => {
   useEffect(() => {
     loadRegimeData();
   }, [loadRegimeData]);
+
+  useEffect(() => {
+    loadTimeline();
+  }, [loadTimeline]);
+
+  useEffect(() => {
+    loadBindingPreview();
+  }, [loadBindingPreview]);
+
+  useEffect(() => {
+    loadPromotionRequests();
+  }, [loadPromotionRequests]);
 
   const dispatchRuntime = async () => {
     if (!selectedStrategyId) {
@@ -378,10 +596,32 @@ export const AdminStrategiesPage = () => {
 
           <div className="space-y-2" data-testid="admin-strategy-versions-list">
             {(detail?.versions || []).map((item) => (
-              <div key={item.version_id} className="border border-slate-700 p-3" data-testid={`admin-strategy-version-row-${item.version_id}`}>
+              <div key={item.version_id} className="space-y-2 border border-slate-700 p-3" data-testid={`admin-strategy-version-row-${item.version_id}`}>
                 <p className="text-sm" data-testid={`admin-strategy-version-number-${item.version_id}`}>v{item.version_number} · schema={item.config_schema_version}</p>
                 <p className="text-xs text-slate-400 break-all" data-testid={`admin-strategy-version-hash-${item.version_id}`}>hash: {item.version_hash}</p>
-                <Button className="mt-2 bg-orange-500 text-black hover:bg-orange-600" onClick={() => activateVersion(item.version_id)} data-testid={`admin-strategy-version-activate-button-${item.version_id}`}>Activate Version</Button>
+                <div className="flex flex-wrap gap-2 text-xs" data-testid={`admin-strategy-version-lifecycle-badges-${item.version_id}`}>
+                  <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-lifecycle-state-${item.version_id}`}>
+                    state: {lifecycleMap[item.version_id]?.lifecycle_state || "draft"}
+                  </span>
+                  <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-validation-status-${item.version_id}`}>
+                    validation: {lifecycleMap[item.version_id]?.validation_status || "pending"}
+                  </span>
+                  <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-dry-run-status-${item.version_id}`}>
+                    dry_run: {lifecycleMap[item.version_id]?.dry_run_status || "pending"}
+                  </span>
+                  <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-production-status-${item.version_id}`}>
+                    production: {String(Boolean(lifecycleMap[item.version_id]?.is_production))}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2" data-testid={`admin-strategy-version-actions-${item.version_id}`}>
+                  <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => validateVersion(item.version_id)} data-testid={`admin-strategy-version-validate-button-${item.version_id}`}>Validate</Button>
+                  <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => runDryRun(item.version_id)} data-testid={`admin-strategy-version-dry-run-button-${item.version_id}`}>Dry-Run</Button>
+                  <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={() => activateVersion(item.version_id)} data-testid={`admin-strategy-version-activate-button-${item.version_id}`}>Activate</Button>
+                  <Button variant="outline" className="border-amber-500 text-amber-200" onClick={() => rollbackVersion(item.version_id)} data-testid={`admin-strategy-version-rollback-button-${item.version_id}`}>Rollback</Button>
+                  <Button variant="outline" className="border-blue-500 text-blue-200" onClick={() => requestPromoteToProduction(item.version_id)} data-testid={`admin-strategy-version-promote-request-button-${item.version_id}`}>Promote Request</Button>
+                  <Button variant="outline" className="border-fuchsia-500 text-fuchsia-200" onClick={() => setRolloutStage(item.version_id, "shadow")} data-testid={`admin-strategy-version-shadow-button-${item.version_id}`}>Stage: Shadow</Button>
+                  <Button variant="outline" className="border-fuchsia-500 text-fuchsia-200" onClick={() => setRolloutStage(item.version_id, "canary")} data-testid={`admin-strategy-version-canary-button-${item.version_id}`}>Stage: Canary</Button>
+                </div>
               </div>
             ))}
           </div>
@@ -391,7 +631,29 @@ export const AdminStrategiesPage = () => {
       <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-kernel-evaluate-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-kernel-evaluate-title">Deterministic Kernel Evaluate</p>
         <textarea className="h-52 w-full border border-slate-700 bg-slate-950 p-2 text-sm" value={kernelContextText} onChange={(e) => setKernelContextText(e.target.value)} data-testid="admin-kernel-context-textarea" />
-        <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={evaluateKernel} data-testid="admin-kernel-evaluate-button">Evaluate Context</Button>
+        <div className="flex flex-wrap gap-2" data-testid="admin-kernel-evaluate-actions">
+          <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={evaluateKernel} data-testid="admin-kernel-evaluate-button">Evaluate Context</Button>
+          <Button variant="outline" className="border-orange-500 text-orange-200" onClick={evaluateKernelStandard} data-testid="admin-kernel-evaluate-standard-button">Evaluate Standard</Button>
+          <Button variant="outline" className="border-slate-500 text-slate-100" onClick={replayLastContext} data-testid="admin-kernel-replay-button">Replay Last Context</Button>
+          <Button variant="outline" className="border-slate-500 text-slate-100" onClick={compareVersions} data-testid="admin-kernel-compare-button">Compare A/B</Button>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2" data-testid="admin-version-compare-selectors">
+          <Input
+            placeholder="version_a_id"
+            value={compareSelection.version_a_id}
+            onChange={(e) => setCompareSelection((prev) => ({ ...prev, version_a_id: e.target.value }))}
+            data-testid="admin-version-compare-a-input"
+          />
+          <Input
+            placeholder="version_b_id"
+            value={compareSelection.version_b_id}
+            onChange={(e) => setCompareSelection((prev) => ({ ...prev, version_b_id: e.target.value }))}
+            data-testid="admin-version-compare-b-input"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2" data-testid="admin-version-diff-actions">
+          <Button variant="outline" className="border-slate-500 text-slate-100" onClick={runVersionDiff} data-testid="admin-version-diff-run-button">Run Version Diff</Button>
+        </div>
         <div className="flex flex-wrap gap-2" data-testid="admin-runtime-actions-row">
           <Button className="bg-emerald-500 text-black hover:bg-emerald-600" onClick={dispatchRuntime} data-testid="admin-runtime-dispatch-button">Dispatch Runtime</Button>
           <Button variant="outline" className="border-slate-500 text-slate-200" onClick={runWorkerOnce} data-testid="admin-runtime-worker-run-once-button">Worker Run Once</Button>
@@ -405,6 +667,49 @@ export const AdminStrategiesPage = () => {
             <p className="text-sm" data-testid="admin-kernel-result-risk-score">risk_score: {decisionResult.risk_score}</p>
             <p className="text-xs text-slate-400 break-all" data-testid="admin-kernel-result-context-hash">context_hash: {decisionResult.context_hash}</p>
             <p className="text-xs text-slate-400 break-all" data-testid="admin-kernel-result-decision-hash">decision_hash: {decisionResult.decision_hash}</p>
+          </div>
+        )}
+
+        {standardDecisionResult && (
+          <div className="border border-slate-700 p-3" data-testid="admin-kernel-standard-result-card">
+            <p className="text-sm" data-testid="admin-kernel-standard-result">result: {standardDecisionResult.result || standardDecisionResult.PASS_BLOCK}</p>
+            <p className="text-sm" data-testid="admin-kernel-standard-score">score: {standardDecisionResult.score ?? standardDecisionResult.SCORE}</p>
+            <p className="text-xs text-slate-400 break-all" data-testid="admin-kernel-standard-reasons">
+              reason_codes: {(standardDecisionResult.reason_codes || standardDecisionResult.REASON_CODES || []).join(", ")}
+            </p>
+            <p className="text-xs text-slate-400 break-all" data-testid="admin-kernel-standard-decision-hash">
+              decision_hash: {standardDecisionResult.decision_hash || standardDecisionResult.DECISION_HASH}
+            </p>
+          </div>
+        )}
+
+        {replayResult && (
+          <div className="border border-slate-700 p-3" data-testid="admin-kernel-replay-result-card">
+            <p className="text-sm" data-testid="admin-kernel-replay-deterministic">deterministic: {String(Boolean(replayResult.deterministic))}</p>
+            <p className="text-xs text-slate-400 break-all" data-testid="admin-kernel-replay-hash">
+              replay_hash: {replayResult?.output?.decision_hash || replayResult?.decision_hash_recheck}
+            </p>
+          </div>
+        )}
+
+        {compareResult && (
+          <div className="border border-slate-700 p-3" data-testid="admin-kernel-compare-result-card">
+            <p className="text-sm" data-testid="admin-kernel-compare-action-changed">action_changed: {String(Boolean(compareResult?.output_diff?.action_changed))}</p>
+            <p className="text-sm" data-testid="admin-kernel-compare-result-changed">result_changed: {String(Boolean(compareResult?.output_diff?.result_changed))}</p>
+            <p className="text-sm" data-testid="admin-kernel-compare-score-delta">score_delta: {compareResult?.output_diff?.score_delta}</p>
+          </div>
+        )}
+
+        {diffResult && (
+          <div className="border border-slate-700 p-3" data-testid="admin-version-diff-result-card">
+            <p className="text-sm" data-testid="admin-version-diff-count">difference_count: {diffResult?.difference_count}</p>
+            <div className="space-y-1 text-xs text-slate-300" data-testid="admin-version-diff-list">
+              {(diffResult?.differences || []).slice(0, 10).map((item, idx) => (
+                <p key={`${item.field}-${idx}`} data-testid={`admin-version-diff-item-${idx}`}>
+                  {item.field}: {JSON.stringify(item.from)} → {JSON.stringify(item.to)}
+                </p>
+              ))}
+            </div>
           </div>
         )}
 
@@ -525,6 +830,61 @@ export const AdminStrategiesPage = () => {
                 </div>
               ))}
           </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-strategy-ops-grid">
+        <div className="space-y-2 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-binding-preview-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-binding-preview-title">Resolved Binding Preview</p>
+          {bindingPreview ? (
+            <div className="space-y-1 text-xs" data-testid="admin-strategy-binding-preview-content">
+              <p data-testid="admin-strategy-binding-preview-regime">regime: {bindingPreview.regime_label}</p>
+              <p data-testid="admin-strategy-binding-preview-winner">winner_binding_id: {bindingPreview.winner_binding_id || "-"}</p>
+              <p data-testid="admin-strategy-binding-preview-priority">winner_priority: {bindingPreview.winner_priority ?? "-"}</p>
+              <p data-testid="admin-strategy-binding-preview-conflict">has_conflict: {String(Boolean(bindingPreview.has_conflict))}</p>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-binding-preview-empty">Preview verisi yok.</p>
+          )}
+        </div>
+
+        <div className="space-y-2 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-promotion-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-promotion-title">Promotion Requests</p>
+          <div className="space-y-2" data-testid="admin-strategy-promotion-list">
+            {promotionRequests.map((item) => (
+              <div key={item.request_id} className="border border-slate-700 p-2" data-testid={`admin-strategy-promotion-row-${item.request_id}`}>
+                <p className="text-xs" data-testid={`admin-strategy-promotion-version-${item.request_id}`}>version: {item.strategy_version_id}</p>
+                <p className="text-xs text-slate-400" data-testid={`admin-strategy-promotion-status-${item.request_id}`}>status: {item.status}</p>
+                <div className="mt-2 flex flex-wrap gap-2" data-testid={`admin-strategy-promotion-actions-${item.request_id}`}>
+                  <Button variant="outline" className="border-emerald-500 text-emerald-200" onClick={() => approvePromote(item.request_id)} data-testid={`admin-strategy-promotion-approve-${item.request_id}`}>
+                    Approve
+                  </Button>
+                  <Button variant="outline" className="border-red-500 text-red-200" onClick={() => rejectPromote(item.request_id)} data-testid={`admin-strategy-promotion-reject-${item.request_id}`}>
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {promotionRequests.length === 0 && (
+              <p className="text-xs text-slate-400" data-testid="admin-strategy-promotion-empty">Promotion request yok.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-audit-panel">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-audit-title">Audit / History</p>
+        <div className="space-y-2" data-testid="admin-strategy-audit-list">
+          {timelineItems.map((item, idx) => (
+            <div key={`${item.audit_id}-${idx}`} className="border border-slate-700 p-2 text-xs" data-testid={`admin-strategy-audit-row-${idx}`}>
+              <p data-testid={`admin-strategy-audit-action-${idx}`}>{item.action}</p>
+              <p className="text-slate-400" data-testid={`admin-strategy-audit-actor-${idx}`}>{item.actor_role || "-"} · {item.actor_user_id || "-"}</p>
+              <p className="text-slate-400" data-testid={`admin-strategy-audit-time-${idx}`}>{item.timestamp}</p>
+            </div>
+          ))}
+          {timelineItems.length === 0 && (
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-audit-empty">Audit kaydı yok.</p>
+          )}
         </div>
       </div>
 

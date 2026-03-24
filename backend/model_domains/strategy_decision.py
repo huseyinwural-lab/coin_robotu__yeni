@@ -140,6 +140,50 @@ class StrategyVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     version_hash: Mapped[str] = mapped_column(String(128), index=True)
 
+
+class StrategyVersionLifecycle(Base):
+    __tablename__ = "strategy_version_lifecycle"
+
+    lifecycle_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    strategy_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_definitions.strategy_id"), index=True)
+    strategy_version_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_versions.version_id"), unique=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_production: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    lifecycle_state: Mapped[str] = mapped_column(String(30), default="draft", index=True)
+    validation_status: Mapped[str] = mapped_column(String(20), default="pending")
+    validation_errors_json: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    compatibility_status: Mapped[str] = mapped_column(String(20), default="pending")
+    compatibility_report_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    dry_run_status: Mapped[str] = mapped_column(String(20), default="pending")
+    dry_run_report_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    rollout_stage: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    promoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rolled_back_from_version_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class StrategyPromotionRequest(Base):
+    __tablename__ = "strategy_promotion_requests"
+
+    request_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    strategy_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_definitions.strategy_id"), index=True)
+    strategy_version_id: Mapped[str] = mapped_column(String, ForeignKey("strategy_versions.version_id"), index=True)
+    requested_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    requested_role: Mapped[str] = mapped_column(String(40), default="admin")
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    request_note: Mapped[str] = mapped_column(Text, default="")
+    approval_note: Mapped[str] = mapped_column(Text, default="")
+    require_validation: Mapped[bool] = mapped_column(Boolean, default=True)
+    require_dry_run: Mapped[bool] = mapped_column(Boolean, default=True)
+    requested_stage: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    rejected_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: utcnow() + timedelta(hours=24), index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
 class StrategyRegimeBinding(Base):
     __tablename__ = "strategy_regime_bindings"
 

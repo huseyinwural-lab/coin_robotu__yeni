@@ -103,6 +103,8 @@ from model_domains.strategy_decision import (
     StrategyObservabilityEvent,
     StrategyRegimeBinding,
     StrategyTemplate,
+    StrategyPromotionRequest,
+    StrategyVersionLifecycle,
     StrategyVersion,
     UserDecisionTrace,
 )
@@ -138,6 +140,8 @@ __all__ = [
     "UserDecisionTrace",
     "StrategyObservabilityEvent",
     "StrategyDefinition",
+    "StrategyPromotionRequest",
+    "StrategyVersionLifecycle",
     "StrategyVersion",
     "SignalGovernanceDecision",
     "PlaybookExecutionRun",

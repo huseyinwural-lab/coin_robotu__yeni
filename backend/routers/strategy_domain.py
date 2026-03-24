@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -16,7 +16,9 @@ from models import (
     ExecutionIntent,
     ExecutionIntentEvent,
     FailedEvent,
+    StrategyPromotionRequest,
     StrategyDefinition,
+    StrategyVersionLifecycle,
     StrategyVersion,
     User,
 )
@@ -126,16 +128,32 @@ from services.runtime_ops_service import (
 from services.risk_orchestrator_analytics_service import compute_risk_analytics
 from services.strategy_domain_service import (
     activate_strategy_version,
+    approve_strategy_promotion_request,
     archive_strategy,
+    compare_strategy_versions,
     create_strategy_definition,
+    create_strategy_promotion_request,
     create_strategy_regime_binding,
     create_strategy_version,
+    evaluate_strategy_context_standard,
     get_active_strategy_set,
     get_latest_regime_binding,
     get_strategy,
     get_strategy_regime_bindings,
     get_strategy_regime_overview,
+    get_strategy_timeline,
+    get_strategy_version_diff,
     get_version,
+    get_version_lifecycle,
+    list_strategy_promotion_requests,
+    list_strategy_version_lifecycles,
+    reject_strategy_promotion_request,
+    replay_strategy_context,
+    resolve_strategy_binding_preview,
+    rollback_strategy_version,
+    run_strategy_version_dry_run,
+    set_strategy_rollout_stage,
+    validate_strategy_version_config,
 )
 
 
@@ -237,6 +255,94 @@ def _approval_queue_item_response(item) -> RiskOrchestratorApprovalQueueItemResp
     )
 
 
+class StrategyVersionValidationRequest(BaseModel):
+    force: bool = Field(default=False)
+
+
+class StrategyVersionDryRunRequest(BaseModel):
+    context_snapshot: dict | None = None
+
+
+class StrategyVersionDiffRequest(BaseModel):
+    from_version_id: str
+    to_version_id: str
+
+
+class StrategyRollbackRequest(BaseModel):
+    target_version_id: str
+    reason: str = "manual_rollback"
+
+
+class StrategyReplayRequest(BaseModel):
+    strategy_version_id: str
+    context_snapshot: dict
+
+
+class StrategyCompareRequest(BaseModel):
+    version_a_id: str
+    version_b_id: str
+    context_snapshot: dict
+
+
+class StrategyPromoteRequest(BaseModel):
+    strategy_version_id: str
+    request_note: str = ""
+    require_validation: bool = True
+    require_dry_run: bool = True
+    requested_stage: str | None = None
+
+
+class StrategyPromotionDecisionRequest(BaseModel):
+    note: str = ""
+
+
+class StrategyRolloutStageRequest(BaseModel):
+    rollout_stage: str | None = None
+
+
+def _lifecycle_response(item: StrategyVersionLifecycle) -> dict:
+    return {
+        "lifecycle_id": item.lifecycle_id,
+        "strategy_id": item.strategy_id,
+        "strategy_version_id": item.strategy_version_id,
+        "is_active": bool(item.is_active),
+        "is_production": bool(item.is_production),
+        "lifecycle_state": item.lifecycle_state,
+        "validation_status": item.validation_status,
+        "validation_errors": item.validation_errors_json or [],
+        "compatibility_status": item.compatibility_status,
+        "compatibility_report": item.compatibility_report_json or {},
+        "dry_run_status": item.dry_run_status,
+        "dry_run_report": item.dry_run_report_json or {},
+        "rollout_stage": item.rollout_stage,
+        "promoted_at": item.promoted_at,
+        "rolled_back_from_version_id": item.rolled_back_from_version_id,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+
+
+def _promotion_request_response(item: StrategyPromotionRequest) -> dict:
+    return {
+        "request_id": item.request_id,
+        "strategy_id": item.strategy_id,
+        "strategy_version_id": item.strategy_version_id,
+        "requested_by": item.requested_by,
+        "requested_role": item.requested_role,
+        "status": item.status,
+        "request_note": item.request_note,
+        "approval_note": item.approval_note,
+        "require_validation": bool(item.require_validation),
+        "require_dry_run": bool(item.require_dry_run),
+        "requested_stage": item.requested_stage,
+        "approved_by": item.approved_by,
+        "rejected_by": item.rejected_by,
+        "created_at": item.created_at,
+        "expires_at": item.expires_at,
+        "reviewed_at": item.reviewed_at,
+    }
+
+
 @router.get("/admin/strategies", response_model=list[StrategyDefinitionResponse])
 def admin_list_strategies(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _ = current_admin
@@ -287,6 +393,62 @@ def admin_get_strategy_detail(strategy_id: str, current_admin: User = Depends(re
     )
 
 
+@router.get("/admin/strategies/{strategy_id}/control-plane")
+def admin_strategy_control_plane(strategy_id: str, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    strategy = get_strategy(db, strategy_id)
+    if strategy is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
+
+    versions = (
+        db.query(StrategyVersion)
+        .filter(StrategyVersion.strategy_id == strategy_id)
+        .order_by(StrategyVersion.version_number.desc())
+        .all()
+    )
+    lifecycles = list_strategy_version_lifecycles(db, strategy_id)
+    lifecycle_map = {item.strategy_version_id: item for item in lifecycles}
+    active_lifecycle = next((item for item in lifecycles if bool(item.is_active)), None)
+    production_lifecycle = next((item for item in lifecycles if bool(item.is_production)), None)
+    pending_requests = list_strategy_promotion_requests(
+        db,
+        strategy_id=strategy_id,
+        status_filter="pending",
+        requester_user_id=current_admin.id,
+        is_super_admin=current_admin.role.value == "super_admin",
+        limit=20,
+    )
+
+    return {
+        "strategy": StrategyDefinitionResponse.model_validate(strategy),
+        "versions": [StrategyVersionResponse.model_validate(item).model_dump() for item in versions],
+        "lifecycles": [_lifecycle_response(item) for item in lifecycles],
+        "active_version_id": strategy.active_version_id,
+        "active_lifecycle": _lifecycle_response(active_lifecycle) if active_lifecycle else None,
+        "production_lifecycle": _lifecycle_response(production_lifecycle) if production_lifecycle else None,
+        "pending_promotion_requests": [_promotion_request_response(item) for item in pending_requests],
+        "version_lifecycle_map": {
+            item.version_id: _lifecycle_response(lifecycle_map[item.version_id])
+            for item in versions
+            if item.version_id in lifecycle_map
+        },
+    }
+
+
+@router.get("/admin/strategies/{strategy_id}/lifecycle")
+def admin_strategy_lifecycle(strategy_id: str, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    strategy = get_strategy(db, strategy_id)
+    if strategy is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
+    lifecycles = list_strategy_version_lifecycles(db, strategy_id)
+    return {
+        "strategy_id": strategy_id,
+        "items": [_lifecycle_response(item) for item in lifecycles],
+        "active_version_id": strategy.active_version_id,
+    }
+
+
 @router.post("/admin/strategies/{strategy_id}/versions", response_model=StrategyVersionResponse, status_code=status.HTTP_201_CREATED)
 def admin_create_strategy_version(
     strategy_id: str,
@@ -313,6 +475,182 @@ def admin_create_strategy_version(
     return row
 
 
+@router.post("/admin/strategies/{strategy_id}/versions/{version_id}/validate")
+def admin_validate_strategy_version(
+    strategy_id: str,
+    version_id: str,
+    payload: StrategyVersionValidationRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = payload
+    result = validate_strategy_version_config(
+        db,
+        strategy_id=strategy_id,
+        version_id=version_id,
+        actor_user_id=current_admin.id,
+    )
+    create_audit_log(
+        db,
+        action="strategy_version_validated",
+        entity_type="strategy_version",
+        entity_id=version_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "strategy_id": strategy_id,
+            "validation_status": result.get("validation_status"),
+            "compatibility_status": result.get("compatibility_status"),
+            "issues": result.get("issues"),
+        },
+    )
+    return result
+
+
+@router.post("/admin/strategies/{strategy_id}/versions/{version_id}/dry-run")
+def admin_dry_run_strategy_version(
+    strategy_id: str,
+    version_id: str,
+    payload: StrategyVersionDryRunRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = run_strategy_version_dry_run(
+        db,
+        strategy_id=strategy_id,
+        version_id=version_id,
+        actor_user_id=current_admin.id,
+        context_payload=payload.context_snapshot,
+    )
+    create_audit_log(
+        db,
+        action="strategy_version_dry_run",
+        entity_type="strategy_version",
+        entity_id=version_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "strategy_id": strategy_id,
+            "dry_run_status": result.get("dry_run_status"),
+            "lifecycle_state": result.get("lifecycle_state"),
+            "decision_hash": ((result.get("report") or {}).get("output") or {}).get("decision_hash"),
+        },
+    )
+    return result
+
+
+@router.post("/admin/strategies/{strategy_id}/versions/{version_id}/stage")
+def admin_set_strategy_rollout_stage(
+    strategy_id: str,
+    version_id: str,
+    payload: StrategyRolloutStageRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    lifecycle = set_strategy_rollout_stage(
+        db,
+        strategy_id=strategy_id,
+        strategy_version_id=version_id,
+        rollout_stage=payload.rollout_stage,
+    )
+    create_audit_log(
+        db,
+        action="strategy_rollout_stage_set",
+        entity_type="strategy_version",
+        entity_id=version_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "strategy_id": strategy_id,
+            "rollout_stage": lifecycle.rollout_stage,
+            "lifecycle_state": lifecycle.lifecycle_state,
+        },
+    )
+    return _lifecycle_response(lifecycle)
+
+
+@router.post("/admin/strategies/{strategy_id}/versions/diff")
+def admin_strategy_version_diff(
+    strategy_id: str,
+    payload: StrategyVersionDiffRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return get_strategy_version_diff(
+        db,
+        strategy_id=strategy_id,
+        from_version_id=payload.from_version_id,
+        to_version_id=payload.to_version_id,
+    )
+
+
+@router.get("/admin/strategies/{strategy_id}/versions/timeline")
+def admin_strategy_version_timeline(
+    strategy_id: str,
+    limit: int = 200,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return {
+        "strategy_id": strategy_id,
+        "items": get_strategy_timeline(db, strategy_id=strategy_id, limit=max(20, min(limit, 500))),
+    }
+
+
+@router.get("/admin/strategies/{strategy_id}/audit-history")
+def admin_strategy_audit_history(
+    strategy_id: str,
+    limit: int = 200,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return {
+        "strategy_id": strategy_id,
+        "items": get_strategy_timeline(db, strategy_id=strategy_id, limit=max(20, min(limit, 500))),
+    }
+
+
+@router.post("/admin/strategies/{strategy_id}/rollback")
+def admin_strategy_rollback(
+    strategy_id: str,
+    payload: StrategyRollbackRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = rollback_strategy_version(
+        db,
+        strategy_id=strategy_id,
+        target_version_id=payload.target_version_id,
+        actor_user_id=current_admin.id,
+        reason=payload.reason,
+    )
+    create_audit_log(
+        db,
+        action="strategy_version_rolled_back",
+        entity_type="strategy_definition",
+        entity_id=strategy_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={
+            "strategy_id": strategy_id,
+            "from_version_id": result.get("previous_active_version_id"),
+            "to_version_id": result.get("current_active_version_id"),
+            "reason": payload.reason,
+        },
+    )
+    strategy = result.get("strategy")
+    return {
+        "strategy": StrategyDefinitionResponse.model_validate(strategy).model_dump() if strategy else None,
+        "previous_active_version_id": result.get("previous_active_version_id"),
+        "current_active_version_id": result.get("current_active_version_id"),
+        "reason": result.get("reason"),
+    }
+
+
 @router.post("/admin/strategies/{strategy_id}/activate/{version_id}", response_model=StrategyDefinitionResponse)
 def admin_activate_strategy_version(
     strategy_id: str,
@@ -331,6 +669,124 @@ def admin_activate_strategy_version(
         details={"active_version_id": strategy.active_version_id},
     )
     return strategy
+
+
+@router.post("/admin/strategies/{strategy_id}/promote-request")
+def admin_create_strategy_promote_request(
+    strategy_id: str,
+    payload: StrategyPromoteRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    request = create_strategy_promotion_request(
+        db,
+        strategy_id=strategy_id,
+        strategy_version_id=payload.strategy_version_id,
+        requested_by=current_admin.id,
+        requested_role=current_admin.role.value,
+        request_note=payload.request_note,
+        require_validation=payload.require_validation,
+        require_dry_run=payload.require_dry_run,
+        requested_stage=payload.requested_stage,
+    )
+    create_audit_log(
+        db,
+        action="strategy_promote_requested",
+        entity_type="strategy_promotion_request",
+        entity_id=request.request_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "strategy_id": strategy_id,
+            "strategy_version_id": request.strategy_version_id,
+            "requested_stage": request.requested_stage,
+            "require_validation": bool(request.require_validation),
+            "require_dry_run": bool(request.require_dry_run),
+        },
+    )
+    return _promotion_request_response(request)
+
+
+@router.get("/admin/strategies/{strategy_id}/promotion-requests")
+def admin_list_strategy_promote_requests(
+    strategy_id: str,
+    status_filter: str | None = None,
+    limit: int = 100,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    rows = list_strategy_promotion_requests(
+        db,
+        strategy_id=strategy_id,
+        status_filter=status_filter,
+        requester_user_id=current_admin.id,
+        is_super_admin=current_admin.role.value == "super_admin",
+        limit=max(1, min(limit, 300)),
+    )
+    return {
+        "strategy_id": strategy_id,
+        "items": [_promotion_request_response(item) for item in rows],
+    }
+
+
+@router.post("/admin/promotion-requests/{request_id}/approve")
+def admin_approve_strategy_promote_request(
+    request_id: str,
+    payload: StrategyPromotionDecisionRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    request = approve_strategy_promotion_request(
+        db,
+        request_id=request_id,
+        approved_by_user_id=current_super_admin.id,
+        approval_note=payload.note,
+    )
+    create_audit_log(
+        db,
+        action="strategy_promoted",
+        entity_type="strategy_promotion_request",
+        entity_id=request_id,
+        actor_user_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        severity="warning",
+        details={
+            "strategy_id": request.strategy_id,
+            "strategy_version_id": request.strategy_version_id,
+            "status": request.status,
+        },
+    )
+    return _promotion_request_response(request)
+
+
+@router.post("/admin/promotion-requests/{request_id}/reject")
+def admin_reject_strategy_promote_request(
+    request_id: str,
+    payload: StrategyPromotionDecisionRequest,
+    current_super_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    request = reject_strategy_promotion_request(
+        db,
+        request_id=request_id,
+        rejected_by_user_id=current_super_admin.id,
+        rejection_note=payload.note,
+    )
+    create_audit_log(
+        db,
+        action="strategy_promotion_rejected",
+        entity_type="strategy_promotion_request",
+        entity_id=request_id,
+        actor_user_id=current_super_admin.id,
+        actor_role=current_super_admin.role.value,
+        severity="warning",
+        details={
+            "strategy_id": request.strategy_id,
+            "strategy_version_id": request.strategy_version_id,
+            "status": request.status,
+        },
+    )
+    return _promotion_request_response(request)
 
 
 @router.post("/admin/strategies/{strategy_id}/archive", response_model=StrategyDefinitionResponse)
@@ -418,6 +874,140 @@ def admin_evaluate_kernel(
     return DecisionResultResponse(decision_id=str(uuid.uuid4()), **decision)
 
 
+@router.post("/admin/kernel/evaluate-standard")
+def admin_evaluate_kernel_standard(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    try:
+        context = DecisionContextInput.model_validate(payload)
+    except ValidationError as exc:
+        return {
+            "result": "BLOCK",
+            "PASS_BLOCK": "BLOCK",
+            "score": 0.0,
+            "SCORE": 0.0,
+            "reason_codes": ["validation_error"],
+            "REASON_CODES": ["validation_error"],
+            "decision_hash": build_decision_hash({"validation_error": True, "payload": payload}),
+            "DECISION_HASH": build_decision_hash({"validation_error": True, "payload": payload}),
+            "validation_issues": [{"message": str(exc)}],
+        }
+
+    version = get_version(db, context.strategy_version_id)
+    context_payload = context.model_dump()
+    if version is None:
+        result = {
+            "result": "BLOCK",
+            "score": 0.0,
+            "reason_codes": ["strategy_version_not_found"],
+            "decision_hash": build_decision_hash({"strategy_version_not_found": context.strategy_version_id}),
+            "decision_trace": {"strategy_version_id": context.strategy_version_id},
+        }
+        return {**result, "PASS_BLOCK": result["result"], "SCORE": result["score"], "REASON_CODES": result["reason_codes"], "DECISION_HASH": result["decision_hash"]}
+
+    if version.version_hash != context.strategy_version_hash:
+        result = {
+            "result": "BLOCK",
+            "score": 0.0,
+            "reason_codes": ["strategy_version_hash_mismatch"],
+            "decision_hash": build_decision_hash(
+                {
+                    "strategy_version_id": context.strategy_version_id,
+                    "received_hash": context.strategy_version_hash,
+                    "actual_hash": version.version_hash,
+                }
+            ),
+            "decision_trace": {
+                "strategy_version_id": context.strategy_version_id,
+                "received_hash": context.strategy_version_hash,
+                "actual_hash": version.version_hash,
+            },
+        }
+        return {**result, "PASS_BLOCK": result["result"], "SCORE": result["score"], "REASON_CODES": result["reason_codes"], "DECISION_HASH": result["decision_hash"]}
+
+    result = evaluate_strategy_context_standard(strategy_version=version, context_payload=context_payload)
+    create_audit_log(
+        db,
+        action="strategy_kernel_evaluate_standard",
+        entity_type="strategy_version",
+        entity_id=version.version_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "strategy_id": version.strategy_id,
+            "strategy_version_id": version.version_id,
+            "result": result.get("result"),
+            "score": result.get("score"),
+            "decision_hash": result.get("decision_hash"),
+        },
+    )
+    return {
+        **result,
+        "PASS_BLOCK": result.get("result"),
+        "SCORE": result.get("score"),
+        "REASON_CODES": result.get("reason_codes"),
+        "DECISION_HASH": result.get("decision_hash"),
+    }
+
+
+@router.post("/admin/kernel/replay")
+def admin_replay_strategy_context(
+    payload: StrategyReplayRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = replay_strategy_context(
+        db,
+        strategy_version_id=payload.strategy_version_id,
+        context_snapshot=payload.context_snapshot,
+    )
+    create_audit_log(
+        db,
+        action="strategy_replay_executed",
+        entity_type="strategy_version",
+        entity_id=payload.strategy_version_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "strategy_version_id": payload.strategy_version_id,
+            "deterministic": bool(result.get("deterministic")),
+            "decision_hash": ((result.get("output") or {}).get("decision_hash")),
+        },
+    )
+    return result
+
+
+@router.post("/admin/kernel/compare")
+def admin_compare_strategy_versions(
+    payload: StrategyCompareRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = compare_strategy_versions(
+        db,
+        version_a_id=payload.version_a_id,
+        version_b_id=payload.version_b_id,
+        context_snapshot=payload.context_snapshot,
+    )
+    create_audit_log(
+        db,
+        action="strategy_compare_executed",
+        entity_type="strategy_definition",
+        entity_id=result.get("strategy_id") or payload.version_a_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "version_a_id": payload.version_a_id,
+            "version_b_id": payload.version_b_id,
+            "output_diff": result.get("output_diff"),
+        },
+    )
+    return result
+
+
 @router.get("/admin/regime/overview/{strategy_id}", response_model=StrategyRegimeOverviewResponse)
 def admin_regime_overview(strategy_id: str, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _ = current_admin
@@ -471,6 +1061,23 @@ def admin_create_regime_binding(
         },
     )
     return StrategyRegimeBindingResponse.model_validate(row)
+
+
+@router.get("/admin/regime/resolved-binding-preview")
+def admin_resolved_binding_preview(
+    strategy_id: str | None = None,
+    strategy_version_id: str | None = None,
+    regime_label: str = "neutral",
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return resolve_strategy_binding_preview(
+        db,
+        strategy_id=strategy_id,
+        strategy_version_id=strategy_version_id,
+        regime_label=regime_label,
+    )
 
 
 @router.post("/admin/regime/evaluate", response_model=RegimeEvaluationResponse)
