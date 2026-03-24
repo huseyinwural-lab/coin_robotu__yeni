@@ -576,6 +576,8 @@ def activate_strategy_version(db: Session, *, strategy_id: str, version_id: str)
     strategy = _get_strategy_for_update(db, strategy_id)
     if strategy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
+    if str(strategy.status or "").lower() == "archived":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="strategy_archived_cannot_activate")
 
     version = get_version(db, version_id)
     if version is None or version.strategy_id != strategy_id:
@@ -584,6 +586,8 @@ def activate_strategy_version(db: Session, *, strategy_id: str, version_id: str)
     lifecycle = get_version_lifecycle(db, version_id)
     if lifecycle is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="strategy_version_lifecycle_missing")
+    if str(lifecycle.lifecycle_state or "").lower() == _LIFECYCLE_ARCHIVED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="stale_version_cannot_activate")
     if lifecycle.validation_status != _VALIDATION_PASS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="validation_required_before_activation")
     if lifecycle.compatibility_status != _VALIDATION_PASS:
@@ -1142,6 +1146,8 @@ def create_strategy_promotion_request(
     strategy = get_strategy(db, strategy_id)
     if strategy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
+    if str(strategy.status or "").lower() == "archived":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="strategy_archived_cannot_promote")
 
     version = get_version(db, strategy_version_id)
     if version is None or version.strategy_id != strategy_id:
@@ -1552,6 +1558,94 @@ def get_strategy_version_metrics(db: Session, *, strategy_id: str, version_id: s
         2,
     )
 
+    quality_alerts: list[dict[str, Any]] = []
+
+    def _append_quality_alert(*, key: str, severity: str, value: float, threshold: float, message: str) -> None:
+        quality_alerts.append(
+            {
+                "key": key,
+                "severity": severity,
+                "value": round(float(value), 4),
+                "threshold": round(float(threshold), 4),
+                "message": message,
+            }
+        )
+
+    if slippage_p95 >= 35:
+        _append_quality_alert(
+            key="slippage_percentile",
+            severity="CRITICAL",
+            value=slippage_p95,
+            threshold=35,
+            message="Slippage P95 kritik eşik üstünde",
+        )
+    elif slippage_p95 >= 20:
+        _append_quality_alert(
+            key="slippage_percentile",
+            severity="WARNING",
+            value=slippage_p95,
+            threshold=20,
+            message="Slippage P95 warning eşiği üstünde",
+        )
+
+    if latency_p95 >= 3000:
+        _append_quality_alert(
+            key="latency_percentile",
+            severity="CRITICAL",
+            value=latency_p95,
+            threshold=3000,
+            message="Latency P95 kritik eşik üstünde",
+        )
+    elif latency_p95 >= 1500:
+        _append_quality_alert(
+            key="latency_percentile",
+            severity="WARNING",
+            value=latency_p95,
+            threshold=1500,
+            message="Latency P95 warning eşiği üstünde",
+        )
+
+    if block_reject_rate >= 55:
+        _append_quality_alert(
+            key="reject_spike",
+            severity="CRITICAL",
+            value=block_reject_rate,
+            threshold=55,
+            message="Reject oranında spike tespit edildi",
+        )
+    elif block_reject_rate >= 35:
+        _append_quality_alert(
+            key="reject_spike",
+            severity="WARNING",
+            value=block_reject_rate,
+            threshold=35,
+            message="Reject oranı warning eşiği üstünde",
+        )
+
+    false_signal_spike = false_allow_rate + false_reject_rate
+    if false_signal_spike >= 25:
+        _append_quality_alert(
+            key="false_signal_spike",
+            severity="CRITICAL",
+            value=false_signal_spike,
+            threshold=25,
+            message="False signal oranında kritik spike",
+        )
+    elif false_signal_spike >= 15:
+        _append_quality_alert(
+            key="false_signal_spike",
+            severity="WARNING",
+            value=false_signal_spike,
+            threshold=15,
+            message="False signal oranı warning eşiği üstünde",
+        )
+
+    quality_status = "GOOD"
+    if any(item.get("severity") == "CRITICAL" for item in quality_alerts):
+        quality_status = "CRITICAL"
+    elif any(item.get("severity") == "WARNING" for item in quality_alerts):
+        quality_status = "WARNING"
+
     return {
         "strategy_id": strategy_id,
         "strategy_version_id": version_id,
@@ -1573,6 +1667,8 @@ def get_strategy_version_metrics(db: Session, *, strategy_id: str, version_id: s
             "latency_p50_ms": latency_p50,
             "latency_p95_ms": latency_p95,
             "version_health_score": health_score,
+            "quality_status": quality_status,
+            "quality_alerts": quality_alerts,
             "quality_correlation": {
                 "slippage_to_execution_quality": round(max(0.0, execution_quality - slippage_p95), 4),
                 "latency_to_execution_quality": round(max(0.0, execution_quality - (latency_p95 / 10.0)), 4),
