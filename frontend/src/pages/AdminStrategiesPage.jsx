@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 
-const strategySeed = { name: "", code: "", description: "" };
+const strategySeed = { name: "", code: "", description: "", owner_name: "", category: "general", tags_text: "" };
 
 const versionSeed = {
   config_schema_version: "1.0",
@@ -58,6 +58,25 @@ export const AdminStrategiesPage = () => {
   const [replayResult, setReplayResult] = useState(null);
   const [compareResult, setCompareResult] = useState(null);
   const [compareSelection, setCompareSelection] = useState({ version_a_id: "", version_b_id: "" });
+  const [executionPreviewResult, setExecutionPreviewResult] = useState(null);
+  const [metricsSummary, setMetricsSummary] = useState(null);
+  const [driftSummary, setDriftSummary] = useState(null);
+  const [falseSignalSummary, setFalseSignalSummary] = useState(null);
+  const [promotionReadiness, setPromotionReadiness] = useState(null);
+  const [selectedStrategyIds, setSelectedStrategyIds] = useState([]);
+  const [listFilters, setListFilters] = useState({
+    search: "",
+    status_filter: "",
+    lifecycle_state: "",
+    validation_status: "",
+    category: "",
+    sort_by: "updated_at",
+    sort_order: "desc",
+    page: 1,
+    page_size: 50,
+    active_only: false,
+    production_only: false,
+  });
 
   const [strategyForm, setStrategyForm] = useState(strategySeed);
   const [versionForm, setVersionForm] = useState(versionSeed);
@@ -88,17 +107,31 @@ export const AdminStrategiesPage = () => {
   const loadStrategies = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await apiClient.get("/strategy-domain/admin/strategies");
-      setStrategies(data || []);
-      if (!selectedStrategyId && data?.length) {
-        setSelectedStrategyId(data[0].strategy_id);
+      const params = {
+        ...listFilters,
+        active_only: Boolean(listFilters.active_only),
+        production_only: Boolean(listFilters.production_only),
+      };
+      Object.keys(params).forEach((key) => {
+        if (params[key] === "" || params[key] === null || params[key] === undefined) {
+          delete params[key];
+        }
+      });
+      const { data } = await apiClient.get("/strategy-domain/admin/strategies/ops", { params });
+      const items = data?.items || [];
+      setStrategies(items);
+      if (items?.length) {
+        const hasSelected = items.some((item) => item.strategy_id === selectedStrategyId);
+        if (!hasSelected) {
+          setSelectedStrategyId(items[0].strategy_id);
+        }
       }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Strategy listesi yüklenemedi");
     } finally {
       setLoading(false);
     }
-  }, [selectedStrategyId]);
+  }, [listFilters, selectedStrategyId]);
 
   const loadDetail = useCallback(async (strategyId) => {
     if (!strategyId) return;
@@ -132,7 +165,17 @@ export const AdminStrategiesPage = () => {
   const createStrategy = async (event) => {
     event.preventDefault();
     try {
-      await apiClient.post("/strategy-domain/admin/strategies", strategyForm);
+      await apiClient.post("/strategy-domain/admin/strategies", {
+        name: strategyForm.name,
+        code: strategyForm.code,
+        description: strategyForm.description,
+        owner_name: strategyForm.owner_name || null,
+        category: strategyForm.category || "general",
+        tags: (strategyForm.tags_text || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      });
       toast.success("Strategy definition oluşturuldu");
       setStrategyForm(strategySeed);
       await loadStrategies();
@@ -384,6 +427,124 @@ export const AdminStrategiesPage = () => {
     }
   };
 
+  const runExecutionPreview = async (versionId) => {
+    try {
+      const payload = JSON.parse(kernelContextText);
+      const { data } = await apiClient.post(
+        `/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${versionId}/execution-preview`,
+        { context_snapshot: payload },
+      );
+      setExecutionPreviewResult(data);
+      toast.success("Execution preview üretildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Execution preview başarısız");
+    }
+  };
+
+  const loadVersionObservability = useCallback(async () => {
+    if (!selectedStrategyId || !selectedActiveVersion) return;
+    try {
+      const [metricsRes, driftRes, falseRes, readinessRes] = await Promise.all([
+        apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${selectedActiveVersion.version_id}/metrics`),
+        apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${selectedActiveVersion.version_id}/drift-alerts`),
+        apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${selectedActiveVersion.version_id}/false-signal-report`),
+        apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${selectedActiveVersion.version_id}/promotion-readiness`),
+      ]);
+      setMetricsSummary(metricsRes.data || null);
+      setDriftSummary(driftRes.data || null);
+      setFalseSignalSummary(falseRes.data || null);
+      setPromotionReadiness(readinessRes.data || null);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Observability/readiness yüklenemedi");
+    }
+  }, [selectedActiveVersion, selectedStrategyId]);
+
+  const bulkArchive = async () => {
+    if (selectedStrategyIds.length === 0) {
+      toast.error("Bulk işlem için strategy seçin");
+      return;
+    }
+    try {
+      await apiClient.post("/strategy-domain/admin/strategies/bulk/archive", { strategy_ids: selectedStrategyIds });
+      toast.success("Bulk archive tamamlandı");
+      setSelectedStrategyIds([]);
+      await loadStrategies();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bulk archive başarısız");
+    }
+  };
+
+  const bulkValidate = async () => {
+    if (selectedStrategyIds.length === 0) {
+      toast.error("Bulk işlem için strategy seçin");
+      return;
+    }
+    try {
+      await apiClient.post("/strategy-domain/admin/strategies/bulk/validate", { strategy_ids: selectedStrategyIds });
+      toast.success("Bulk validate tamamlandı");
+      await Promise.all([loadStrategies(), loadDetail(selectedStrategyId)]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bulk validate başarısız");
+    }
+  };
+
+  const bulkDryRun = async () => {
+    if (selectedStrategyIds.length === 0) {
+      toast.error("Bulk işlem için strategy seçin");
+      return;
+    }
+    try {
+      const payload = JSON.parse(kernelContextText);
+      await apiClient.post("/strategy-domain/admin/strategies/bulk/dry-run", {
+        strategy_ids: selectedStrategyIds,
+        context_snapshot: payload,
+      });
+      toast.success("Bulk dry-run tamamlandı");
+      await Promise.all([loadStrategies(), loadDetail(selectedStrategyId)]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bulk dry-run başarısız");
+    }
+  };
+
+  const bulkTag = async () => {
+    if (selectedStrategyIds.length === 0) {
+      toast.error("Bulk işlem için strategy seçin");
+      return;
+    }
+    try {
+      await apiClient.post("/strategy-domain/admin/strategies/bulk/tag", {
+        strategy_ids: selectedStrategyIds,
+        category: strategyForm.category || null,
+        tags: (strategyForm.tags_text || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        owner_name: strategyForm.owner_name || null,
+      });
+      toast.success("Bulk tag/category güncellendi");
+      await loadStrategies();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bulk tag başarısız");
+    }
+  };
+
+  const bulkAuditExport = async () => {
+    if (selectedStrategyIds.length === 0) {
+      toast.error("Bulk işlem için strategy seçin");
+      return;
+    }
+    try {
+      const { data } = await apiClient.post("/strategy-domain/admin/strategies/bulk/audit-snapshot", {
+        strategy_ids: selectedStrategyIds,
+        format_type: "json",
+        limit_per_strategy: 200,
+      });
+      toast.success(`Bulk audit snapshot hazır (${data?.strategy_count || 0} strategy)`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bulk audit export başarısız");
+    }
+  };
+
   const loadRuntimeViews = useCallback(async () => {
     try {
       const [intentsRes, hotRes, coldRes] = await Promise.all([
@@ -434,6 +595,10 @@ export const AdminStrategiesPage = () => {
   useEffect(() => {
     loadPromotionRequests();
   }, [loadPromotionRequests]);
+
+  useEffect(() => {
+    loadVersionObservability();
+  }, [loadVersionObservability]);
 
   const dispatchRuntime = async () => {
     if (!selectedStrategyId) {
@@ -552,6 +717,9 @@ export const AdminStrategiesPage = () => {
           <Input placeholder="name" value={strategyForm.name} onChange={(e) => setStrategyForm((prev) => ({ ...prev, name: e.target.value }))} data-testid="admin-strategy-create-name-input" required />
           <Input placeholder="code (unique)" value={strategyForm.code} onChange={(e) => setStrategyForm((prev) => ({ ...prev, code: e.target.value }))} data-testid="admin-strategy-create-code-input" required />
           <Input placeholder="description" value={strategyForm.description} onChange={(e) => setStrategyForm((prev) => ({ ...prev, description: e.target.value }))} data-testid="admin-strategy-create-description-input" />
+          <Input placeholder="owner_name" value={strategyForm.owner_name} onChange={(e) => setStrategyForm((prev) => ({ ...prev, owner_name: e.target.value }))} data-testid="admin-strategy-create-owner-input" />
+          <Input placeholder="category" value={strategyForm.category} onChange={(e) => setStrategyForm((prev) => ({ ...prev, category: e.target.value }))} data-testid="admin-strategy-create-category-input" />
+          <Input placeholder="tags (comma separated)" value={strategyForm.tags_text} onChange={(e) => setStrategyForm((prev) => ({ ...prev, tags_text: e.target.value }))} data-testid="admin-strategy-create-tags-input" />
           <Button className="bg-orange-500 text-black hover:bg-orange-600" data-testid="admin-strategy-create-submit-button">Create Definition</Button>
         </form>
 
@@ -566,19 +734,95 @@ export const AdminStrategiesPage = () => {
       <div className="grid gap-4 xl:grid-cols-3" data-testid="admin-strategies-main-grid">
         <div className="border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategies-list-panel">
           <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategies-list-title">Strategy List</p>
+          <div className="mt-2 grid gap-2" data-testid="admin-strategies-filter-toolbar">
+            <Input
+              placeholder="search code/name/owner"
+              value={listFilters.search}
+              onChange={(e) => setListFilters((prev) => ({ ...prev, search: e.target.value, page: 1 }))}
+              data-testid="admin-strategies-filter-search-input"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                placeholder="category"
+                value={listFilters.category}
+                onChange={(e) => setListFilters((prev) => ({ ...prev, category: e.target.value, page: 1 }))}
+                data-testid="admin-strategies-filter-category-input"
+              />
+              <Input
+                placeholder="lifecycle_state"
+                value={listFilters.lifecycle_state}
+                onChange={(e) => setListFilters((prev) => ({ ...prev, lifecycle_state: e.target.value, page: 1 }))}
+                data-testid="admin-strategies-filter-lifecycle-input"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                placeholder="validation_status"
+                value={listFilters.validation_status}
+                onChange={(e) => setListFilters((prev) => ({ ...prev, validation_status: e.target.value, page: 1 }))}
+                data-testid="admin-strategies-filter-validation-input"
+              />
+              <Input
+                placeholder="status"
+                value={listFilters.status_filter}
+                onChange={(e) => setListFilters((prev) => ({ ...prev, status_filter: e.target.value, page: 1 }))}
+                data-testid="admin-strategies-filter-status-input"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                placeholder="sort_by"
+                value={listFilters.sort_by}
+                onChange={(e) => setListFilters((prev) => ({ ...prev, sort_by: e.target.value }))}
+                data-testid="admin-strategies-filter-sort-by-input"
+              />
+              <Input
+                placeholder="sort_order asc/desc"
+                value={listFilters.sort_order}
+                onChange={(e) => setListFilters((prev) => ({ ...prev, sort_order: e.target.value }))}
+                data-testid="admin-strategies-filter-sort-order-input"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2" data-testid="admin-strategies-filter-actions-row">
+              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => setListFilters((prev) => ({ ...prev, active_only: !prev.active_only }))} data-testid="admin-strategies-filter-active-toggle-button">active_only: {String(Boolean(listFilters.active_only))}</Button>
+              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => setListFilters((prev) => ({ ...prev, production_only: !prev.production_only }))} data-testid="admin-strategies-filter-production-toggle-button">production_only: {String(Boolean(listFilters.production_only))}</Button>
+              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={loadStrategies} data-testid="admin-strategies-filter-apply-button">Apply Filters</Button>
+            </div>
+            <div className="flex flex-wrap gap-2" data-testid="admin-strategies-bulk-actions-row">
+              <Button variant="outline" className="border-red-500 text-red-200" onClick={bulkArchive} data-testid="admin-strategies-bulk-archive-button">Bulk Archive</Button>
+              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={bulkValidate} data-testid="admin-strategies-bulk-validate-button">Bulk Validate</Button>
+              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={bulkDryRun} data-testid="admin-strategies-bulk-dry-run-button">Bulk Dry-Run</Button>
+              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={bulkTag} data-testid="admin-strategies-bulk-tag-button">Bulk Tag/Category</Button>
+              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={bulkAuditExport} data-testid="admin-strategies-bulk-audit-export-button">Bulk Audit Snapshot</Button>
+            </div>
+          </div>
           {loading && <p className="mt-2 text-sm text-slate-400" data-testid="admin-strategies-loading-text">Yükleniyor...</p>}
           <div className="mt-3 space-y-2" data-testid="admin-strategies-list">
             {strategies.map((item) => (
-              <button
-                type="button"
-                key={item.strategy_id}
-                onClick={() => setSelectedStrategyId(item.strategy_id)}
-                className={`w-full border p-2 text-left text-sm ${selectedStrategyId === item.strategy_id ? "border-orange-500 bg-orange-500/10" : "border-slate-700"}`}
-                data-testid={`admin-strategy-select-button-${item.strategy_id}`}
-              >
-                <p data-testid={`admin-strategy-item-code-${item.strategy_id}`}>{item.code}</p>
-                <p className="text-xs text-slate-400" data-testid={`admin-strategy-item-status-${item.strategy_id}`}>{item.status}</p>
-              </button>
+              <div key={item.strategy_id} className={`w-full border p-2 text-left text-sm ${selectedStrategyId === item.strategy_id ? "border-orange-500 bg-orange-500/10" : "border-slate-700"}`} data-testid={`admin-strategy-select-row-${item.strategy_id}`}>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedStrategyIds.includes(item.strategy_id)}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setSelectedStrategyIds((prev) => (checked ? [...new Set([...prev, item.strategy_id])] : prev.filter((id) => id !== item.strategy_id)));
+                    }}
+                    data-testid={`admin-strategy-select-checkbox-${item.strategy_id}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStrategyId(item.strategy_id)}
+                    className="flex-1 text-left"
+                    data-testid={`admin-strategy-select-button-${item.strategy_id}`}
+                  >
+                    <p data-testid={`admin-strategy-item-code-${item.strategy_id}`}>{item.code}</p>
+                    <p className="text-xs text-slate-400" data-testid={`admin-strategy-item-status-${item.strategy_id}`}>{item.status}</p>
+                    <p className="text-xs text-slate-400" data-testid={`admin-strategy-item-owner-${item.strategy_id}`}>owner: {item.owner_name || "-"}</p>
+                    <p className="text-xs text-slate-400" data-testid={`admin-strategy-item-category-${item.strategy_id}`}>category: {item.category || "-"}</p>
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -589,6 +833,9 @@ export const AdminStrategiesPage = () => {
             <div className="border border-slate-700 p-3" data-testid="admin-strategy-detail-card">
               <p className="text-sm" data-testid="admin-strategy-detail-code">code: {detail.strategy.code}</p>
               <p className="text-sm" data-testid="admin-strategy-detail-status">status: {detail.strategy.status}</p>
+              <p className="text-sm" data-testid="admin-strategy-detail-owner">owner: {detail.strategy.owner_name || "-"}</p>
+              <p className="text-sm" data-testid="admin-strategy-detail-category">category: {detail.strategy.category || "-"}</p>
+              <p className="text-xs text-slate-400" data-testid="admin-strategy-detail-tags">tags: {(detail.strategy.tags || []).join(", ") || "-"}</p>
               <p className="text-sm" data-testid="admin-strategy-detail-active-version">active_version_id: {detail.strategy.active_version_id || "-"}</p>
               <Button variant="outline" className="mt-2 border-red-500 text-red-300" onClick={archiveStrategy} data-testid="admin-strategy-archive-button">Archive Strategy</Button>
             </div>
@@ -618,7 +865,20 @@ export const AdminStrategiesPage = () => {
                   <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => runDryRun(item.version_id)} data-testid={`admin-strategy-version-dry-run-button-${item.version_id}`}>Dry-Run</Button>
                   <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={() => activateVersion(item.version_id)} data-testid={`admin-strategy-version-activate-button-${item.version_id}`}>Activate</Button>
                   <Button variant="outline" className="border-amber-500 text-amber-200" onClick={() => rollbackVersion(item.version_id)} data-testid={`admin-strategy-version-rollback-button-${item.version_id}`}>Rollback</Button>
-                  <Button variant="outline" className="border-blue-500 text-blue-200" onClick={() => requestPromoteToProduction(item.version_id)} data-testid={`admin-strategy-version-promote-request-button-${item.version_id}`}>Promote Request</Button>
+                  <Button variant="outline" className="border-emerald-500 text-emerald-200" onClick={() => runExecutionPreview(item.version_id)} data-testid={`admin-strategy-version-execution-preview-button-${item.version_id}`}>Execution Preview</Button>
+                  <Button
+                    variant="outline"
+                    className="border-blue-500 text-blue-200"
+                    onClick={() => requestPromoteToProduction(item.version_id)}
+                    disabled={
+                      lifecycleMap[item.version_id]?.validation_status !== "PASS" ||
+                      lifecycleMap[item.version_id]?.compatibility_status !== "PASS" ||
+                      lifecycleMap[item.version_id]?.dry_run_status !== "PASS"
+                    }
+                    data-testid={`admin-strategy-version-promote-request-button-${item.version_id}`}
+                  >
+                    Promote Request
+                  </Button>
                   <Button variant="outline" className="border-fuchsia-500 text-fuchsia-200" onClick={() => setRolloutStage(item.version_id, "shadow")} data-testid={`admin-strategy-version-shadow-button-${item.version_id}`}>Stage: Shadow</Button>
                   <Button variant="outline" className="border-fuchsia-500 text-fuchsia-200" onClick={() => setRolloutStage(item.version_id, "canary")} data-testid={`admin-strategy-version-canary-button-${item.version_id}`}>Stage: Canary</Button>
                 </div>
@@ -726,6 +986,77 @@ export const AdminStrategiesPage = () => {
             <p className="text-xs text-slate-400" data-testid="admin-runtime-worker-result-event-id">event_id: {workerResult.event_id || "-"}</p>
           </div>
         )}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-strategy-explainability-grid">
+        <div className="space-y-2 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-execution-preview-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-execution-preview-title">Execution Preview</p>
+          {executionPreviewResult ? (
+            <div className="space-y-2 text-xs" data-testid="admin-strategy-execution-preview-content">
+              <p data-testid="admin-strategy-execution-preview-signal">signal: {executionPreviewResult?.explainability_trace?.selection?.signal || "-"}</p>
+              <p data-testid="admin-strategy-execution-preview-action">selected_action: {executionPreviewResult?.explainability_trace?.selection?.selected_action || "-"}</p>
+              <p data-testid="admin-strategy-execution-preview-intent">execution_intent: {executionPreviewResult?.execution_intent?.intent_id || "none"}</p>
+              <p data-testid="admin-strategy-execution-preview-order">order_preview_notional: {executionPreviewResult?.order_preview?.estimated_notional ?? "-"}</p>
+              <p data-testid="admin-strategy-execution-preview-capital">capital_allocation_pct: {executionPreviewResult?.capital_impact?.allocation_pct ?? "-"}</p>
+              <p data-testid="admin-strategy-execution-preview-risk">risk_checks: {(executionPreviewResult?.risk_checks || []).map((item) => `${item.check}:${item.status}`).join(", ")}</p>
+              <p className="text-slate-400" data-testid="admin-strategy-execution-preview-blocked-reasons">
+                blocked_reasons: {(executionPreviewResult?.blocked_reasons || []).join(", ") || "-"}
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-execution-preview-empty">Version aksiyonlarından “Execution Preview” çalıştırın.</p>
+          )}
+        </div>
+
+        <div className="space-y-2 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-promotion-readiness-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-promotion-readiness-title">One-click Promote Checklist</p>
+          {promotionReadiness ? (
+            <div className="space-y-2 text-xs" data-testid="admin-strategy-promotion-readiness-content">
+              {(promotionReadiness.checklist || []).map((item) => (
+                <p key={item.key} data-testid={`admin-strategy-promotion-readiness-item-${item.key}`}>
+                  {item.key}: {item.status} ({item.pass ? "PASS" : "FAIL"})
+                </p>
+              ))}
+              <p data-testid="admin-strategy-promotion-readiness-ready">ready_for_production: {String(Boolean(promotionReadiness.ready_for_production))}</p>
+              {Boolean((promotionReadiness.blockers || []).length) && (
+                <div className="text-red-300" data-testid="admin-strategy-promotion-readiness-blockers">
+                  {(promotionReadiness.blockers || []).map((item, idx) => (
+                    <p key={`${item}-${idx}`}>{item}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-promotion-readiness-empty">Readiness verisi yok.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-strategy-observability-grid">
+        <div className="space-y-2 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-metrics-summary-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-metrics-summary-title">Version Metrics Summary</p>
+          {metricsSummary ? (
+            <div className="space-y-1 text-xs" data-testid="admin-strategy-metrics-summary-content">
+              <p data-testid="admin-strategy-metrics-hit-rate">hit_rate: {metricsSummary?.metrics?.hit_rate ?? "-"}</p>
+              <p data-testid="admin-strategy-metrics-block-rate">block_reject_rate: {metricsSummary?.metrics?.block_reject_rate ?? "-"}</p>
+              <p data-testid="admin-strategy-metrics-false-allow">false_allow_rate: {metricsSummary?.metrics?.false_allow_rate ?? "-"}</p>
+              <p data-testid="admin-strategy-metrics-false-reject">false_reject_rate: {metricsSummary?.metrics?.false_reject_rate ?? "-"}</p>
+              <p data-testid="admin-strategy-metrics-pnl">pnl_contribution: {metricsSummary?.metrics?.pnl_contribution ?? "-"}</p>
+              <p data-testid="admin-strategy-metrics-execution-quality">execution_quality: {metricsSummary?.metrics?.execution_quality ?? "-"}</p>
+              <p data-testid="admin-strategy-metrics-drift-alerts">drift_alerts: {metricsSummary?.metrics?.drift_alerts ?? "-"}</p>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-metrics-summary-empty">Metrics yok.</p>
+          )}
+        </div>
+
+        <div className="space-y-2 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-observability-secondary-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="admin-strategy-observability-secondary-title">Drift / False Signal Summary</p>
+          <p className="text-xs" data-testid="admin-strategy-drift-count">drift_alert_count: {driftSummary?.count ?? 0}</p>
+          <p className="text-xs" data-testid="admin-strategy-false-allow-rate">false_allow_rate: {falseSignalSummary?.false_allow_rate ?? "-"}</p>
+          <p className="text-xs" data-testid="admin-strategy-false-reject-rate">false_reject_rate: {falseSignalSummary?.false_reject_rate ?? "-"}</p>
+          <p className="text-xs" data-testid="admin-strategy-signal-quality">signal_quality_last_50: {falseSignalSummary?.signal_quality_last_50 ?? "-"}</p>
+        </div>
       </div>
 
       <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-regime-panel">

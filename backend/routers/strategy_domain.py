@@ -130,21 +130,34 @@ from services.strategy_domain_service import (
     activate_strategy_version,
     approve_strategy_promotion_request,
     archive_strategy,
+    bulk_archive_strategies,
+    bulk_dry_run_strategies,
+    bulk_export_audit_snapshot,
+    bulk_tag_strategies,
+    bulk_validate_strategies,
     compare_strategy_versions,
     create_strategy_definition,
     create_strategy_promotion_request,
     create_strategy_regime_binding,
     create_strategy_version,
     evaluate_strategy_context_standard,
+    export_strategy_audit_history,
+    generate_strategy_execution_preview,
     get_active_strategy_set,
     get_latest_regime_binding,
+    get_strategy_promotion_readiness,
     get_strategy,
     get_strategy_regime_bindings,
     get_strategy_regime_overview,
     get_strategy_timeline,
+    get_strategy_version_drift_alerts,
     get_strategy_version_diff,
+    get_strategy_version_false_signal_report,
+    get_strategy_version_metrics,
+    get_strategy_rollback_chain,
     get_version,
     get_version_lifecycle,
+    list_strategy_definitions_filtered,
     list_strategy_promotion_requests,
     list_strategy_version_lifecycles,
     reject_strategy_promotion_request,
@@ -300,6 +313,36 @@ class StrategyRolloutStageRequest(BaseModel):
     rollout_stage: str | None = None
 
 
+class StrategyExecutionPreviewRequest(BaseModel):
+    context_snapshot: dict
+
+
+class StrategyBulkArchiveRequest(BaseModel):
+    strategy_ids: list[str]
+
+
+class StrategyBulkValidateRequest(BaseModel):
+    strategy_ids: list[str]
+
+
+class StrategyBulkDryRunRequest(BaseModel):
+    strategy_ids: list[str]
+    context_snapshot: dict | None = None
+
+
+class StrategyBulkTagRequest(BaseModel):
+    strategy_ids: list[str]
+    category: str | None = None
+    tags: list[str] | None = None
+    owner_name: str | None = None
+
+
+class StrategyBulkAuditExportRequest(BaseModel):
+    strategy_ids: list[str]
+    format_type: str = "json"
+    limit_per_strategy: int = 1000
+
+
 def _lifecycle_response(item: StrategyVersionLifecycle) -> dict:
     return {
         "lifecycle_id": item.lifecycle_id,
@@ -344,9 +387,87 @@ def _promotion_request_response(item: StrategyPromotionRequest) -> dict:
 
 
 @router.get("/admin/strategies", response_model=list[StrategyDefinitionResponse])
-def admin_list_strategies(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def admin_list_strategies(
+    search: str | None = None,
+    status_filter: str | None = None,
+    lifecycle_state: str | None = None,
+    active_only: bool = False,
+    production_only: bool = False,
+    validation_status: str | None = None,
+    owner_user_id: str | None = None,
+    category: str | None = None,
+    tag: str | None = None,
+    sort_by: str = "updated_at",
+    sort_order: str = "desc",
+    page: int = 1,
+    page_size: int = 50,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     _ = current_admin
-    return db.query(StrategyDefinition).order_by(StrategyDefinition.updated_at.desc()).all()
+    rows, _ = list_strategy_definitions_filtered(
+        db,
+        search=search,
+        status_filter=status_filter,
+        lifecycle_state=lifecycle_state,
+        active_only=active_only,
+        production_only=production_only,
+        validation_status=validation_status,
+        owner_user_id=owner_user_id,
+        category=category,
+        tag=tag,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=max(1, page),
+        page_size=max(1, min(page_size, 200)),
+    )
+    return rows
+
+
+@router.get("/admin/strategies/ops")
+def admin_list_strategies_ops(
+    search: str | None = None,
+    status_filter: str | None = None,
+    lifecycle_state: str | None = None,
+    active_only: bool = False,
+    production_only: bool = False,
+    validation_status: str | None = None,
+    owner_user_id: str | None = None,
+    category: str | None = None,
+    tag: str | None = None,
+    sort_by: str = "updated_at",
+    sort_order: str = "desc",
+    page: int = 1,
+    page_size: int = 50,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    rows, total = list_strategy_definitions_filtered(
+        db,
+        search=search,
+        status_filter=status_filter,
+        lifecycle_state=lifecycle_state,
+        active_only=active_only,
+        production_only=production_only,
+        validation_status=validation_status,
+        owner_user_id=owner_user_id,
+        category=category,
+        tag=tag,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=max(1, page),
+        page_size=max(1, min(page_size, 200)),
+    )
+    return {
+        "items": [StrategyDefinitionResponse.model_validate(item).model_dump() for item in rows],
+        "pagination": {
+            "page": max(1, page),
+            "page_size": max(1, min(page_size, 200)),
+            "total": total,
+            "has_next": max(1, page) * max(1, min(page_size, 200)) < total,
+        },
+    }
 
 
 @router.post("/admin/strategies", response_model=StrategyDefinitionResponse, status_code=status.HTTP_201_CREATED)
@@ -361,6 +482,10 @@ def admin_create_strategy(
         code=payload.code,
         description=payload.description,
         created_by=current_admin.id,
+        owner_user_id=payload.owner_user_id,
+        owner_name=payload.owner_name,
+        category=payload.category,
+        tags=payload.tags,
     )
     create_audit_log(
         db,
@@ -649,6 +774,221 @@ def admin_strategy_rollback(
         "current_active_version_id": result.get("current_active_version_id"),
         "reason": result.get("reason"),
     }
+
+
+@router.post("/admin/strategies/{strategy_id}/versions/{version_id}/execution-preview")
+def admin_strategy_execution_preview(
+    strategy_id: str,
+    version_id: str,
+    payload: StrategyExecutionPreviewRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = generate_strategy_execution_preview(
+        db,
+        strategy_id=strategy_id,
+        version_id=version_id,
+        context_payload=payload.context_snapshot,
+    )
+    create_audit_log(
+        db,
+        action="strategy_execution_preview_generated",
+        entity_type="strategy_version",
+        entity_id=version_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "strategy_id": strategy_id,
+            "blocked_reasons": result.get("blocked_reasons"),
+            "decision_hash": ((result.get("decision") or {}).get("decision_hash")),
+        },
+    )
+    return result
+
+
+@router.get("/admin/strategies/{strategy_id}/versions/{version_id}/metrics")
+def admin_strategy_version_metrics(
+    strategy_id: str,
+    version_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return get_strategy_version_metrics(db, strategy_id=strategy_id, version_id=version_id)
+
+
+@router.get("/admin/strategies/{strategy_id}/versions/{version_id}/drift-alerts")
+def admin_strategy_version_drift_alerts(
+    strategy_id: str,
+    version_id: str,
+    limit: int = 100,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return get_strategy_version_drift_alerts(db, strategy_id=strategy_id, version_id=version_id, limit=max(1, min(limit, 500)))
+
+
+@router.get("/admin/strategies/{strategy_id}/versions/{version_id}/false-signal-report")
+def admin_strategy_version_false_signal_report(
+    strategy_id: str,
+    version_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return get_strategy_version_false_signal_report(db, strategy_id=strategy_id, version_id=version_id)
+
+
+@router.get("/admin/strategies/{strategy_id}/versions/{version_id}/promotion-readiness")
+def admin_strategy_promotion_readiness(
+    strategy_id: str,
+    version_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return get_strategy_promotion_readiness(db, strategy_id=strategy_id, version_id=version_id)
+
+
+@router.post("/admin/strategies/bulk/archive")
+def admin_bulk_archive_strategies(
+    payload: StrategyBulkArchiveRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = bulk_archive_strategies(db, strategy_ids=payload.strategy_ids)
+    create_audit_log(
+        db,
+        action="strategy_bulk_archive",
+        entity_type="strategy_definition",
+        entity_id="bulk",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details=result,
+    )
+    return result
+
+
+@router.post("/admin/strategies/bulk/validate")
+def admin_bulk_validate_strategies(
+    payload: StrategyBulkValidateRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = bulk_validate_strategies(db, strategy_ids=payload.strategy_ids, actor_user_id=current_admin.id)
+    create_audit_log(
+        db,
+        action="strategy_bulk_validate",
+        entity_type="strategy_definition",
+        entity_id="bulk",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"success_count": result.get("success_count"), "failed_count": result.get("failed_count")},
+    )
+    return result
+
+
+@router.post("/admin/strategies/bulk/dry-run")
+def admin_bulk_dry_run_strategies(
+    payload: StrategyBulkDryRunRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = bulk_dry_run_strategies(
+        db,
+        strategy_ids=payload.strategy_ids,
+        actor_user_id=current_admin.id,
+        context_snapshot=payload.context_snapshot,
+    )
+    create_audit_log(
+        db,
+        action="strategy_bulk_dry_run",
+        entity_type="strategy_definition",
+        entity_id="bulk",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"success_count": result.get("success_count"), "failed_count": result.get("failed_count")},
+    )
+    return result
+
+
+@router.post("/admin/strategies/bulk/tag")
+def admin_bulk_tag_strategies(
+    payload: StrategyBulkTagRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = bulk_tag_strategies(
+        db,
+        strategy_ids=payload.strategy_ids,
+        category=payload.category,
+        tags=payload.tags,
+        owner_name=payload.owner_name,
+    )
+    create_audit_log(
+        db,
+        action="strategy_bulk_tag",
+        entity_type="strategy_definition",
+        entity_id="bulk",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details=result,
+    )
+    return result
+
+
+@router.post("/admin/strategies/bulk/audit-snapshot")
+def admin_bulk_audit_snapshot(
+    payload: StrategyBulkAuditExportRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = bulk_export_audit_snapshot(
+        db,
+        strategy_ids=payload.strategy_ids,
+        format_type=str(payload.format_type or "json").lower(),
+        limit_per_strategy=max(1, min(payload.limit_per_strategy, 5000)),
+    )
+    create_audit_log(
+        db,
+        action="strategy_bulk_audit_snapshot",
+        entity_type="strategy_definition",
+        entity_id="bulk",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"strategy_count": result.get("strategy_count"), "format": result.get("format")},
+    )
+    return result
+
+
+@router.get("/admin/strategies/{strategy_id}/audit-history/export")
+def admin_strategy_audit_export(
+    strategy_id: str,
+    format_type: str = "json",
+    limit: int = 1000,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return export_strategy_audit_history(
+        db,
+        strategy_id=strategy_id,
+        format_type=format_type,
+        limit=max(1, min(limit, 5000)),
+    )
+
+
+@router.get("/admin/strategies/{strategy_id}/rollback-chain")
+def admin_strategy_rollback_chain(
+    strategy_id: str,
+    limit: int = 100,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    return get_strategy_rollback_chain(db, strategy_id=strategy_id, limit=max(1, min(limit, 500)))
 
 
 @router.post("/admin/strategies/{strategy_id}/activate/{version_id}", response_model=StrategyDefinitionResponse)

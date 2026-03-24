@@ -1226,6 +1226,10 @@ class StrategyDefinitionCreate(BaseModel):
     name: str
     code: str
     description: str = ""
+    owner_user_id: str | None = None
+    owner_name: str | None = None
+    category: str = "general"
+    tags: list[str] = Field(default_factory=list)
 
 
 class StrategyVersionCreate(BaseModel):
@@ -1241,9 +1245,15 @@ class StrategyDefinitionResponse(BaseModel):
     code: str
     description: str
     owner_type: str
+    owner_user_id: str | None = None
+    owner_name: str
+    category: str
+    tags: list[str]
     created_by: str
     status: str
     active_version_id: str | None
+    archived_at: datetime | None = None
+    last_reviewed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

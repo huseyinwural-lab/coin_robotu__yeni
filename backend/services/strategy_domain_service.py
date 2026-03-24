@@ -6,18 +6,24 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
+from sqlalchemy import asc, desc, or_
 from sqlalchemy.orm import Session
 
 from models import (
     AuditLog,
+    CanonicalStrategyRegistry,
+    ExecutionIntent,
+    ExecutionIntentEvent,
     RegimeSnapshot,
     StrategyDefinition,
+    StrategyObservabilityEvent,
     StrategyPromotionRequest,
     StrategyRegimeBinding,
     StrategyVersion,
     StrategyVersionLifecycle,
 )
 from services.decision_kernel_service import build_context_hash, build_decision_hash
+from services.runtime_execution_service import map_decision_to_intent
 
 
 _CACHE_TTL_SECONDS = 30
@@ -343,6 +349,10 @@ def create_strategy_definition(
     code: str,
     description: str,
     created_by: str,
+    owner_user_id: str | None,
+    owner_name: str | None,
+    category: str,
+    tags: list[str] | None,
 ) -> StrategyDefinition:
     normalized_code = code.strip().lower()
     existing = db.query(StrategyDefinition).filter(StrategyDefinition.code == normalized_code).first()
@@ -355,6 +365,10 @@ def create_strategy_definition(
         code=normalized_code,
         description=description.strip(),
         owner_type="admin",
+        owner_user_id=owner_user_id or created_by,
+        owner_name=str(owner_name or "ops").strip() or "ops",
+        category=str(category or "general").strip().lower() or "general",
+        tags=[str(item).strip().lower() for item in (tags or []) if str(item).strip()],
         created_by=created_by,
         status="draft",
         created_at=_now_utc(),
@@ -365,6 +379,83 @@ def create_strategy_definition(
     db.refresh(row)
     _strategy_cache[row.strategy_id] = (time.time(), row.strategy_id)
     return row
+
+
+def list_strategy_definitions_filtered(
+    db: Session,
+    *,
+    search: str | None,
+    status_filter: str | None,
+    lifecycle_state: str | None,
+    active_only: bool,
+    production_only: bool,
+    validation_status: str | None,
+    owner_user_id: str | None,
+    category: str | None,
+    tag: str | None,
+    sort_by: str,
+    sort_order: str,
+    page: int,
+    page_size: int,
+) -> tuple[list[StrategyDefinition], int]:
+    query = db.query(StrategyDefinition)
+
+    if search:
+        pattern = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                StrategyDefinition.name.ilike(pattern),
+                StrategyDefinition.code.ilike(pattern),
+                StrategyDefinition.description.ilike(pattern),
+                StrategyDefinition.owner_name.ilike(pattern),
+            )
+        )
+    if status_filter:
+        query = query.filter(StrategyDefinition.status == status_filter)
+    if owner_user_id:
+        query = query.filter(StrategyDefinition.owner_user_id == owner_user_id)
+    if category:
+        query = query.filter(StrategyDefinition.category == category)
+    if tag:
+        query = query.filter(StrategyDefinition.tags.contains([tag]))
+
+    lifecycle_query = db.query(StrategyVersionLifecycle)
+    if lifecycle_state:
+        lifecycle_query = lifecycle_query.filter(StrategyVersionLifecycle.lifecycle_state == lifecycle_state)
+    if active_only:
+        lifecycle_query = lifecycle_query.filter(StrategyVersionLifecycle.is_active.is_(True))
+    if production_only:
+        lifecycle_query = lifecycle_query.filter(StrategyVersionLifecycle.is_production.is_(True))
+    if validation_status:
+        lifecycle_query = lifecycle_query.filter(StrategyVersionLifecycle.validation_status == validation_status)
+
+    if lifecycle_state or active_only or production_only or validation_status:
+        strategy_ids = [item.strategy_id for item in lifecycle_query.all()]
+        if len(strategy_ids) == 0:
+            return [], 0
+        query = query.filter(StrategyDefinition.strategy_id.in_(strategy_ids))
+
+    total = query.count()
+
+    sort_map = {
+        "name": StrategyDefinition.name,
+        "code": StrategyDefinition.code,
+        "status": StrategyDefinition.status,
+        "updated_at": StrategyDefinition.updated_at,
+        "created_at": StrategyDefinition.created_at,
+        "owner_name": StrategyDefinition.owner_name,
+        "category": StrategyDefinition.category,
+    }
+    sort_column = sort_map.get(str(sort_by or "updated_at"), StrategyDefinition.updated_at)
+    order_fn = asc if str(sort_order or "desc").lower() == "asc" else desc
+
+    rows = (
+        query.order_by(order_fn(sort_column))
+        .offset(max(page - 1, 0) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return rows, total
 
 
 def create_strategy_version(
@@ -490,6 +581,7 @@ def archive_strategy(db: Session, *, strategy_id: str) -> StrategyDefinition:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
 
     strategy.status = "archived"
+    strategy.archived_at = _now_utc()
     strategy.updated_at = _now_utc()
     db.query(StrategyVersionLifecycle).filter(StrategyVersionLifecycle.strategy_id == strategy_id).update(
         {"is_active": False, "lifecycle_state": _LIFECYCLE_ARCHIVED},
@@ -1225,5 +1317,497 @@ def resolve_strategy_binding_preview(
         "winner_priority": winner.get("priority") if winner else None,
         "has_conflict": len(filtered) > 1,
         "candidates": filtered,
+    }
+
+
+def generate_strategy_execution_preview(
+    db: Session,
+    *,
+    strategy_id: str,
+    version_id: str,
+    context_payload: dict,
+) -> dict[str, Any]:
+    strategy = get_strategy(db, strategy_id)
+    if strategy is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
+
+    version = get_version(db, version_id)
+    if version is None or version.strategy_id != strategy_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_version_not_found")
+
+    decision = evaluate_strategy_context_standard(strategy_version=version, context_payload=context_payload)
+    decision_view = decision.get("decision") or {}
+    action = str(decision_view.get("action") or "REJECT").upper()
+    symbol = str(context_payload.get("symbol") or "").upper()
+    mark_price = _safe_float(((context_payload.get("market_snapshot") or {}).get("last_price")), 0.0)
+    quantity = _safe_float(decision_view.get("size"), 0.0)
+    notional = round(quantity * mark_price, 6)
+
+    legacy_decision = {
+        "action": action,
+        "size": quantity,
+        "price_reference": {"mark_price": mark_price},
+        "reason_codes": decision.get("reason_codes") or [],
+        "strategy_version_id": version_id,
+        "context_hash": decision.get("context_hash"),
+        "decision_hash": decision.get("decision_hash"),
+    }
+    execution_intent = map_decision_to_intent(
+        strategy_id=strategy_id,
+        correlation_id=str(context_payload.get("correlation_id") or f"preview-{uuid.uuid4().hex[:8]}"),
+        decision_result=legacy_decision,
+        context_payload=context_payload,
+    )
+
+    account_projection = context_payload.get("account_state_projection") or {}
+    equity = max(_safe_float(account_projection.get("equity"), 0.0), 0.0)
+    allocation_pct = round((notional / equity) * 100, 4) if equity > 0 else 0.0
+
+    risk_checks = [
+        {
+            "check": "volatility_guard",
+            "status": "PASS" if "volatility_guard_breach" not in (decision.get("reason_codes") or []) else "BLOCK",
+            "detail": (decision.get("decision_trace") or {}).get("applied_config", {}).get("volatility_guard"),
+        },
+        {
+            "check": "risk_gate",
+            "status": "PASS" if "risk_gate_blocked" not in (decision.get("reason_codes") or []) else "BLOCK",
+            "detail": (context_payload.get("risk_state") or {}).get("blocked"),
+        },
+        {
+            "check": "capital_allocation",
+            "status": "PASS" if allocation_pct <= 100 else "BLOCK",
+            "detail": {"allocation_pct": allocation_pct},
+        },
+    ]
+
+    blocked_reasons = (decision.get("reason_codes") or []) if decision.get("result") == "BLOCK" else []
+    order_preview = (
+        {
+            "symbol": symbol,
+            "side": action,
+            "order_type": "MARKET",
+            "quantity": quantity,
+            "mark_price": mark_price,
+            "estimated_notional": notional,
+            "time_in_force": "IOC",
+        }
+        if execution_intent is not None
+        else None
+    )
+
+    return {
+        "decision": decision,
+        "execution_intent": execution_intent,
+        "order_preview": order_preview,
+        "capital_impact": {
+            "equity": equity,
+            "estimated_notional": notional,
+            "allocation_pct": allocation_pct,
+            "free_margin": _safe_float(account_projection.get("free_margin"), 0.0),
+        },
+        "risk_checks": risk_checks,
+        "blocked_reasons": blocked_reasons,
+        "explainability_trace": {
+            "strategy_id": strategy_id,
+            "strategy_version_id": version_id,
+            "decision_trace": decision.get("decision_trace") or {},
+            "selection": {
+                "selected_action": action,
+                "signal": (decision.get("reason_codes") or [None])[0],
+            },
+        },
+    }
+
+
+def get_strategy_version_metrics(db: Session, *, strategy_id: str, version_id: str) -> dict[str, Any]:
+    observability_rows = (
+        db.query(StrategyObservabilityEvent)
+        .filter(
+            StrategyObservabilityEvent.strategy_id == strategy_id,
+            StrategyObservabilityEvent.strategy_version_id == version_id,
+        )
+        .order_by(StrategyObservabilityEvent.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    intent_rows = (
+        db.query(ExecutionIntent)
+        .filter(
+            ExecutionIntent.strategy_id == strategy_id,
+            ExecutionIntent.strategy_version_id == version_id,
+        )
+        .order_by(ExecutionIntent.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    perf_snapshot = (
+        db.query(CanonicalStrategyRegistry)
+        .filter(CanonicalStrategyRegistry.strategy_id == strategy_id)
+        .order_by(CanonicalStrategyRegistry.updated_at.desc())
+        .first()
+    )
+
+    total_obs = len(observability_rows)
+    passes = len([row for row in observability_rows if bool(row.hard_gate_pass) and bool(row.threshold_pass)])
+    rejects = len([row for row in observability_rows if str(row.event_type or "").lower().endswith("rejected") or bool(row.rejection_reason)])
+    drift_alerts = len(
+        [
+            row
+            for row in observability_rows
+            if "drift" in str(row.event_type or "").lower() or "drift" in str(row.rejection_reason or "").lower()
+        ]
+    )
+
+    total_intents = len(intent_rows)
+    executed_intents = len([row for row in intent_rows if str(row.status or "").lower() in {"submitted", "approved", "executed", "done"}])
+    rejected_intents = len([row for row in intent_rows if str(row.status or "").lower() in {"rejected", "blocked", "cancelled"}])
+
+    event_rows = (
+        db.query(ExecutionIntentEvent)
+        .filter(ExecutionIntentEvent.intent_id.in_([row.intent_id for row in intent_rows]))
+        .order_by(ExecutionIntentEvent.created_at.desc())
+        .limit(1000)
+        .all()
+        if total_intents > 0
+        else []
+    )
+
+    pnl_contribution = round(
+        sum(_safe_float((event.payload or {}).get("paper_pnl"), 0.0) for event in event_rows),
+        6,
+    )
+
+    hit_rate = round((passes / total_obs) * 100, 2) if total_obs > 0 else 0.0
+    block_reject_rate = round(((rejects + rejected_intents) / max(total_obs + total_intents, 1)) * 100, 2)
+    execution_quality = round((executed_intents / max(total_intents, 1)) * 100, 2) if total_intents > 0 else 0.0
+
+    return {
+        "strategy_id": strategy_id,
+        "strategy_version_id": version_id,
+        "sample_sizes": {
+            "observability_events": total_obs,
+            "execution_intents": total_intents,
+            "execution_intent_events": len(event_rows),
+        },
+        "metrics": {
+            "hit_rate": hit_rate,
+            "block_reject_rate": block_reject_rate,
+            "false_allow_rate": _safe_float(getattr(perf_snapshot, "false_allow_rate", 0.0), 0.0),
+            "false_reject_rate": _safe_float(getattr(perf_snapshot, "false_reject_rate", 0.0), 0.0),
+            "pnl_contribution": pnl_contribution,
+            "execution_quality": execution_quality,
+            "drift_alerts": drift_alerts,
+        },
+    }
+
+
+def get_strategy_version_drift_alerts(db: Session, *, strategy_id: str, version_id: str, limit: int = 100) -> dict[str, Any]:
+    rows = (
+        db.query(StrategyObservabilityEvent)
+        .filter(
+            StrategyObservabilityEvent.strategy_id == strategy_id,
+            StrategyObservabilityEvent.strategy_version_id == version_id,
+        )
+        .order_by(StrategyObservabilityEvent.created_at.desc())
+        .limit(max(limit, 1))
+        .all()
+    )
+    alerts = []
+    for row in rows:
+        event_type = str(row.event_type or "").lower()
+        rejection_reason = str(row.rejection_reason or "")
+        if "drift" not in event_type and "drift" not in rejection_reason.lower():
+            continue
+        alerts.append(
+            {
+                "event_id": row.id,
+                "event_type": row.event_type,
+                "rejection_reason": row.rejection_reason,
+                "market_regime": row.market_regime,
+                "score_delta": row.score_delta,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+        )
+    return {
+        "strategy_id": strategy_id,
+        "strategy_version_id": version_id,
+        "drift_alerts": alerts,
+        "count": len(alerts),
+    }
+
+
+def get_strategy_version_false_signal_report(db: Session, *, strategy_id: str, version_id: str) -> dict[str, Any]:
+    snapshot = (
+        db.query(CanonicalStrategyRegistry)
+        .filter(CanonicalStrategyRegistry.strategy_id == strategy_id)
+        .order_by(CanonicalStrategyRegistry.updated_at.desc())
+        .first()
+    )
+    metrics = get_strategy_version_metrics(db, strategy_id=strategy_id, version_id=version_id)
+    return {
+        "strategy_id": strategy_id,
+        "strategy_version_id": version_id,
+        "false_allow_rate": _safe_float(getattr(snapshot, "false_allow_rate", 0.0), 0.0),
+        "false_reject_rate": _safe_float(getattr(snapshot, "false_reject_rate", 0.0), 0.0),
+        "signal_quality_last_50": _safe_float(getattr(snapshot, "last_50_signal_quality", 0.0), 0.0),
+        "execution_quality": (metrics.get("metrics") or {}).get("execution_quality", 0.0),
+        "evidence": {
+            "sample_sizes": metrics.get("sample_sizes") or {},
+            "drift_alerts": (metrics.get("metrics") or {}).get("drift_alerts", 0),
+        },
+    }
+
+
+def get_strategy_promotion_readiness(db: Session, *, strategy_id: str, version_id: str) -> dict[str, Any]:
+    strategy = get_strategy(db, strategy_id)
+    if strategy is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
+
+    version = get_version(db, version_id)
+    if version is None or version.strategy_id != strategy_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_version_not_found")
+
+    lifecycle = get_version_lifecycle(db, version_id)
+    if lifecycle is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="strategy_version_lifecycle_missing")
+
+    _expire_promotion_requests(db)
+    pending_request = (
+        db.query(StrategyPromotionRequest)
+        .filter(
+            StrategyPromotionRequest.strategy_id == strategy_id,
+            StrategyPromotionRequest.strategy_version_id == version_id,
+            StrategyPromotionRequest.status == _PROMOTION_PENDING,
+        )
+        .order_by(StrategyPromotionRequest.created_at.desc())
+        .first()
+    )
+    latest_request = (
+        db.query(StrategyPromotionRequest)
+        .filter(
+            StrategyPromotionRequest.strategy_id == strategy_id,
+            StrategyPromotionRequest.strategy_version_id == version_id,
+        )
+        .order_by(StrategyPromotionRequest.created_at.desc())
+        .first()
+    )
+
+    checks = [
+        {
+            "key": "validation",
+            "status": lifecycle.validation_status,
+            "pass": lifecycle.validation_status == _VALIDATION_PASS,
+            "message": "Validation PASS olmalı",
+        },
+        {
+            "key": "compatibility",
+            "status": lifecycle.compatibility_status,
+            "pass": lifecycle.compatibility_status == _VALIDATION_PASS,
+            "message": "Compatibility PASS olmalı",
+        },
+        {
+            "key": "dry_run",
+            "status": lifecycle.dry_run_status,
+            "pass": lifecycle.dry_run_status == _VALIDATION_PASS,
+            "message": "Dry-run PASS olmalı",
+        },
+        {
+            "key": "pending_request",
+            "status": "PENDING" if pending_request else "NONE",
+            "pass": pending_request is not None,
+            "message": "Pending promotion request bulunmalı",
+        },
+    ]
+    blockers = [item.get("message") for item in checks if not bool(item.get("pass"))]
+
+    pending_payload = None
+    if pending_request is not None:
+        pending_payload = {
+            "request_id": pending_request.request_id,
+            "strategy_id": pending_request.strategy_id,
+            "strategy_version_id": pending_request.strategy_version_id,
+            "status": pending_request.status,
+            "request_note": pending_request.request_note,
+            "requested_by": pending_request.requested_by,
+            "created_at": pending_request.created_at.isoformat() if pending_request.created_at else None,
+            "expires_at": pending_request.expires_at.isoformat() if pending_request.expires_at else None,
+        }
+
+    return {
+        "strategy_id": strategy_id,
+        "strategy_version_id": version_id,
+        "checklist": checks,
+        "pending_request": pending_payload,
+        "latest_request_status": latest_request.status if latest_request else None,
+        "is_production": bool(lifecycle.is_production),
+        "ready_for_production": len(blockers) == 0,
+        "blockers": blockers,
+    }
+
+
+def bulk_archive_strategies(db: Session, *, strategy_ids: list[str]) -> dict[str, Any]:
+    success = []
+    failed = []
+    for strategy_id in strategy_ids:
+        try:
+            archive_strategy(db, strategy_id=strategy_id)
+            success.append(strategy_id)
+        except Exception as exc:
+            db.rollback()
+            failed.append({"strategy_id": strategy_id, "error": str(exc)})
+    return {"success_count": len(success), "failed_count": len(failed), "success": success, "failed": failed}
+
+
+def bulk_validate_strategies(db: Session, *, strategy_ids: list[str], actor_user_id: str) -> dict[str, Any]:
+    success = []
+    failed = []
+    for strategy_id in strategy_ids:
+        strategy = get_strategy(db, strategy_id)
+        if strategy is None or strategy.active_version_id is None:
+            failed.append({"strategy_id": strategy_id, "error": "active_version_missing"})
+            continue
+        try:
+            result = validate_strategy_version_config(
+                db,
+                strategy_id=strategy_id,
+                version_id=strategy.active_version_id,
+                actor_user_id=actor_user_id,
+            )
+            success.append({"strategy_id": strategy_id, "result": result})
+        except Exception as exc:
+            db.rollback()
+            failed.append({"strategy_id": strategy_id, "error": str(exc)})
+    return {"success_count": len(success), "failed_count": len(failed), "success": success, "failed": failed}
+
+
+def bulk_dry_run_strategies(
+    db: Session,
+    *,
+    strategy_ids: list[str],
+    actor_user_id: str,
+    context_snapshot: dict | None,
+) -> dict[str, Any]:
+    success = []
+    failed = []
+    for strategy_id in strategy_ids:
+        strategy = get_strategy(db, strategy_id)
+        if strategy is None or strategy.active_version_id is None:
+            failed.append({"strategy_id": strategy_id, "error": "active_version_missing"})
+            continue
+        try:
+            lifecycle = get_version_lifecycle(db, strategy.active_version_id)
+            if lifecycle is None or lifecycle.validation_status != _VALIDATION_PASS:
+                validate_strategy_version_config(
+                    db,
+                    strategy_id=strategy_id,
+                    version_id=strategy.active_version_id,
+                    actor_user_id=actor_user_id,
+                )
+            result = run_strategy_version_dry_run(
+                db,
+                strategy_id=strategy_id,
+                version_id=strategy.active_version_id,
+                actor_user_id=actor_user_id,
+                context_payload=context_snapshot,
+            )
+            success.append({"strategy_id": strategy_id, "result": result})
+        except Exception as exc:
+            db.rollback()
+            failed.append({"strategy_id": strategy_id, "error": str(exc)})
+    return {"success_count": len(success), "failed_count": len(failed), "success": success, "failed": failed}
+
+
+def bulk_tag_strategies(
+    db: Session,
+    *,
+    strategy_ids: list[str],
+    category: str | None,
+    tags: list[str] | None,
+    owner_name: str | None,
+) -> dict[str, Any]:
+    rows = db.query(StrategyDefinition).filter(StrategyDefinition.strategy_id.in_(strategy_ids)).all()
+    updated = []
+    for row in rows:
+        if category is not None:
+            row.category = str(category).strip().lower() or row.category
+        if tags is not None:
+            row.tags = [str(item).strip().lower() for item in tags if str(item).strip()]
+        if owner_name is not None:
+            row.owner_name = str(owner_name).strip() or row.owner_name
+        row.updated_at = _now_utc()
+        updated.append(row.strategy_id)
+    db.commit()
+    return {"updated_count": len(updated), "updated": updated, "requested_count": len(strategy_ids)}
+
+
+def export_strategy_audit_history(db: Session, *, strategy_id: str, format_type: str = "json", limit: int = 1000) -> dict[str, Any]:
+    items = get_strategy_timeline(db, strategy_id=strategy_id, limit=limit)
+    if str(format_type).lower() == "csv":
+        headers = ["audit_id", "timestamp", "action", "severity", "actor_user_id", "actor_role", "entity_type", "entity_id"]
+        rows = [
+            ",".join(
+                [
+                    str(item.get("audit_id") or ""),
+                    str(item.get("timestamp") or ""),
+                    str(item.get("action") or ""),
+                    str(item.get("severity") or ""),
+                    str(item.get("actor_user_id") or ""),
+                    str(item.get("actor_role") or ""),
+                    str(item.get("entity_type") or ""),
+                    str(item.get("entity_id") or ""),
+                ]
+            )
+            for item in items
+        ]
+        return {"strategy_id": strategy_id, "format": "csv", "headers": headers, "rows": rows, "count": len(items)}
+    return {"strategy_id": strategy_id, "format": "json", "items": items, "count": len(items)}
+
+
+def get_strategy_rollback_chain(db: Session, *, strategy_id: str, limit: int = 100) -> dict[str, Any]:
+    rows = (
+        db.query(StrategyVersionLifecycle)
+        .filter(
+            StrategyVersionLifecycle.strategy_id == strategy_id,
+            StrategyVersionLifecycle.rolled_back_from_version_id.isnot(None),
+        )
+        .order_by(StrategyVersionLifecycle.updated_at.desc())
+        .limit(max(limit, 1))
+        .all()
+    )
+    chain = [
+        {
+            "strategy_version_id": row.strategy_version_id,
+            "rolled_back_from_version_id": row.rolled_back_from_version_id,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "lifecycle_state": row.lifecycle_state,
+            "is_active": bool(row.is_active),
+            "is_production": bool(row.is_production),
+        }
+        for row in rows
+    ]
+    return {"strategy_id": strategy_id, "items": chain, "count": len(chain)}
+
+
+def bulk_export_audit_snapshot(
+    db: Session,
+    *,
+    strategy_ids: list[str],
+    format_type: str,
+    limit_per_strategy: int,
+) -> dict[str, Any]:
+    items = [
+        export_strategy_audit_history(
+            db,
+            strategy_id=strategy_id,
+            format_type=format_type,
+            limit=limit_per_strategy,
+        )
+        for strategy_id in strategy_ids
+    ]
+    return {
+        "strategy_count": len(strategy_ids),
+        "format": format_type,
+        "items": items,
     }
 
