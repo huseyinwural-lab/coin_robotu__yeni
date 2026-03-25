@@ -1,5 +1,15 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (P0 Devamı Güncelleme)
+- ✅ Tamamlandı:
+  - Spot live + futures test credential/probe doğrulama
+  - P0 ingestion çağrılarının 200 stabil dönmesi
+  - Decision Trace Timeline UI enhancement
+  - Proxy header ve market alias backend hardening
+- 🔴 Açık kalan:
+  - `live_transition_ready=true` kapanışı için gerçek trade coverage ile ingest/pnl/reconciliation kontrollerinin PASS olması
+  - Futures live proxy URL/token netleştirmesi (kullanıcıdan eksik bilgi)
+
 ## 2026-03-25 (Task-1 Güncelleme)
 - ✅ P0 tamamlandı: Credential Orchestration UI 8/8 genişletme maddesi kapatıldı.
   - Multi-exchange: `binance/bybit/okx`

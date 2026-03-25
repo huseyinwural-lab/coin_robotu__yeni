@@ -1,3 +1,44 @@
+## 2026-03-25 — P0 Devamı (Spot Live + Futures Test + Decision Trace Timeline) ✅
+
+### Kullanıcı yönlendirmesi ve uygulanan kararlar
+- Routing fallback sabit: `user -> tenant_admin -> global_admin`
+- Market modeli: `spot / usdt_perp / coin_perp` (P0 servis tarafında canonical `futures` alias ile uyumlu)
+- Proxy auth standardı: `X-Proxy-Token` header desteği backend’e eklendi.
+- UI enhancement onayı: P0 testlerinden sonra Decision Trace Timeline eklendi.
+
+### Backend değişiklikleri
+- `commercial_ops_p0_service.py`
+  - Market alias canonicalization: `usdt_perp/coin_perp -> futures`
+  - Proxy header desteği: `X-Proxy-Token` (spot/futures için env fallback zinciri)
+  - Public price çağrıları dahil header geçişi eklendi.
+- `credential_resolution_service.py`
+  - Probe çağrılarında `X-Proxy-Token` header desteği eklendi (env’e göre).
+
+### Operasyonel doğrulama (gerçek çağrı)
+- Spot live credential probe: `ready`
+- Futures test credential probe: `ready`
+- Resolution preview (spot/live + futures/testnet): `preferred_admin` ile admin credential seçimi doğrulandı.
+- P0 ingestion çağrıları:
+  - `spot/live`: 200 (fetched=0, inserted=0)
+  - `futures/testnet`: 200 (fetched=0, inserted=0)
+- `live-gate` (testnet, futures): 200 ama `live_transition_ready=false` (trade coverage/pnl/recon kontrolü henüz PASS değil).
+
+### Frontend değişiklikleri
+- `AdminCredentialOrchestrationPage.jsx`
+  - Yeni kart: **Decision Trace Timeline**
+  - 3 adım: user credential, tenant_admin credential, global_admin credential
+  - Resolution preview sonrası step status badge’leri (`selected/skipped/checked`) güncellenir.
+
+### Test sonuçları
+- `testing_agent`: `/app/test_reports/iteration_126.json`
+  - Backend: **18/18 PASS**
+  - Frontend: **%100 PASS**
+- `auto_frontend_testing_agent`: Decision Trace Timeline + regression PASS.
+- `deep_testing_backend_v2`: P0 endpointleri ve alias/proxy desteği PASS.
+
+### Kalan net blocker
+- Spot+Futures tam live-gate kapanışı için halen canlı trade coverage gerekli; ayrıca Futures live proxy URL/token kullanıcı tarafından net paylaşılmadığı için live futures E2E closure beklemede.
+
 ## 2026-03-25 — Credential Orchestration UI Expansion (Task-1) ✅
 
 ### Kapsam (kullanıcı onaylı A/A/A/B)

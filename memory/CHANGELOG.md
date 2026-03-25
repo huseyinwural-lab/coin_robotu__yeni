@@ -1,5 +1,23 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (P0 Devamı + Decision Trace Timeline)
+- Backend:
+  - `commercial_ops_p0_service.py` içinde `usdt_perp/coin_perp -> futures` canonical alias desteği eklendi.
+  - `X-Proxy-Token` header desteği spot/futures Binance çağrılarına eklendi.
+  - Spot price/public request tarafına da proxy header geçişi eklendi.
+  - `credential_resolution_service.py` probe çağrılarına `X-Proxy-Token` header desteği eklendi.
+- Frontend:
+  - Credential Orchestration sayfasına `Decision Trace Timeline` kartı eklendi.
+  - 3 adım (user/tenant_admin/global_admin) ve dinamik status badge akışı eklendi.
+- Operasyonel test:
+  - Spot live probe: `ready`
+  - Futures test probe: `ready`
+  - P0 ingestion (spot live + futures testnet): 200
+  - Live-gate(testnet/futures): 200, `live_transition_ready=false` (coverage eksik)
+- Test kanıtları:
+  - `/app/test_reports/iteration_126.json` (backend 18/18 PASS, frontend %100)
+  - frontend specialist PASS, backend specialist PASS
+
 ## 2026-03-25 (Credential Orchestration UI Expansion)
 - `AdminCredentialOrchestrationPage.jsx` production-grade genişletildi (multi-exchange, market/purpose, routing matrix, probe dashboard, egress visibility).
 - Backend credential orchestration enum/filter uyumu güncellendi:
