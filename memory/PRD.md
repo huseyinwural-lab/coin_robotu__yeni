@@ -1,3 +1,49 @@
+## 2026-03-25 — P1.4 Export & Snapshot Layer (Faz 1-4) ✅ (Kod Tamam, Infra Blokajı Var)
+
+### Kullanıcı net seçimleri (uygulandı)
+- Export: **CSV + XLSX**
+- Snapshot tipi: **daily + weekly**
+- Compare kapsamı: **KPI + top kullanıcı + segment delta**
+- Route: **`/admin/snapshots`**
+
+### Backend — Yeni capability seti
+- Yeni tablo/model: `analytics_snapshots`
+  - alanlar: `id`, `snapshot_type`, `environment`, `snapshot_date`, `payload`
+  - unique: `(snapshot_type, snapshot_date, environment)`
+- Yeni migration: `20260325_0078_analytics_snapshots.py`
+- Yeni servis: `services/analytics_snapshot_service.py`
+  - `run_analytics_snapshot`
+  - `list_analytics_snapshots`
+  - `compare_analytics_snapshots`
+  - `export_revenue_ledger` (CSV streaming + XLSX)
+  - `export_user_economics_aggregates` (CSV streaming + XLSX)
+- Yeni routerlar:
+  - `GET /api/admin/export/revenue`
+  - `GET /api/admin/export/user-economics`
+  - `GET /api/admin/snapshots`
+  - `POST /api/admin/snapshots/run`
+  - `GET /api/admin/snapshots/compare`
+- Routerlar `server.py` içine include edildi.
+
+### Frontend — Yeni sayfa ve akış
+- Yeni sayfa: `frontend/src/pages/AdminSnapshotsPage.jsx`
+  - Snapshot run (daily/weekly)
+  - Snapshot list + base/target seçimi
+  - Compare sonucu: KPI delta + top kullanıcı delta + segment delta tabloları
+  - Export butonları: Revenue CSV/XLSX, User Economics CSV/XLSX
+- Yeni route: `/admin/snapshots`
+- Sidebar link eklendi: `Analytics Snapshots` (`nav-admin-analytics-snapshots-link`)
+
+### Test durumu
+- Lint: backend + frontend **PASS**
+- Smoke screenshot: `/admin/login` yükleme **PASS** (`/app/test_reports/p14_smoke_admin_login.jpeg`)
+- `testing_agent` raporu: `/app/test_reports/iteration_134.json`
+  - Kod inceleme: P1.4 implementasyonu **doğru görünüyor**
+  - **Kritik infra blokajı:** `postgres.internal` resolve edilemiyor → tüm `/api/*` çağrıları `database_unavailable`
+
+### Not
+- P1.4 kodu tamamlandı; fonksiyonel API doğrulaması için DB erişimi geri geldiğinde tekrar tam E2E test gereklidir.
+
 ## 2026-03-25 — P1.3 Retention & Segment Profitability ✅
 
 ### Amaç
