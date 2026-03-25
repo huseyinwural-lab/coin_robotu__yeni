@@ -1,5 +1,19 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (P1 Revenue Engine MVP)
+- Migration: `20260325_0075_revenue_ledger.py` eklendi.
+- Yeni model: `RevenueLedger` + unique `(trade_id, component_type)`.
+- Yeni servis: `revenue_engine_service.py`.
+  - fee + pnl_share komponent üretimi
+  - `%20` share rate (env: `REVENUE_PNL_SHARE_RATE`)
+  - idempotent upsert + scope bazlı sync
+- Write path entegrasyonu:
+  - REST ingestion sonrası revenue sync
+  - WS worker trade persist sonrası revenue upsert
+- Yeni endpoint: `GET /api/admin/revenue/summary`.
+- Yeni UI route: `/admin/revenue` (filters + total/today + daily graph + top users/symbols).
+- Test kanıtı: `/app/test_reports/iteration_131.json` (backend 20/20 PASS, frontend %100 PASS).
+
 ## 2026-03-25 (P0 final closure attempt)
 - Spot+Futures live sequential zincir koşuldu (ingest -> pnl -> recon -> data-quality -> live-gate).
 - Futures live credential eklendi ve probe `ready` doğrulandı.

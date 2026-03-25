@@ -1,3 +1,52 @@
+## 2026-03-25 — P1 Revenue Engine MVP ✅
+
+### Kullanıcı seçimi ile sabitlenen kural seti
+- Realized PnL Share: **sadece pozitif realized pnl** üzerinden
+- Share oranı: **%20** (`REVENUE_PNL_SHARE_RATE=0.20`)
+- Fee ayrımı: ledger’da **ayrı satır**
+- Write path: **ingest sonrası idempotent upsert**
+- UI kapsamı: **A + filtreler**
+
+### Migration / Schema
+- Yeni migration: `20260325_0075_revenue_ledger.py`
+- Yeni tablo: `revenue_ledger`
+  - benzersiz anahtar: `(trade_id, component_type)`
+  - component tipleri: `fee`, `pnl_share`
+  - alanlar: user_id, trade_id, exchange, market_type, environment, symbol, trade_time, source_amount_usd, share_rate, revenue_amount_usd
+
+### Backend endpointleri
+- Yeni endpoint: `GET /api/admin/revenue/summary`
+  - filtreler: `environment`, `start_date`, `end_date`, `user_id`, `user_email`, `symbol`, `top_limit`
+  - çıktı: `total_revenue_usd`, `today_revenue_usd`, `top_users`, `top_symbols`, `daily_revenue`
+
+### Service flow
+1. `ingestion/rest-run` tamamlanır
+2. `sync_revenue_ledger_for_scope` çalışır
+3. İlgili trade seti için `upsert_revenue_for_trades` çağrılır
+4. Her trade için 2 bileşen üretilir:
+   - fee revenue = commission_usd
+   - pnl_share revenue = max(realized_pnl_usd,0) * 0.20
+5. `(trade_id, component_type)` unique ile idempotent yazım korunur
+
+### UI planı (uygulandı)
+- Yeni sayfa: `/admin/revenue` (`AdminRevenuePage.jsx`)
+- Bileşenler:
+  - filtre paneli (date, user_email, symbol, top_limit, environment)
+  - total revenue kartı
+  - today revenue kartı
+  - daily revenue graph (bar)
+  - top users tablosu
+  - top symbols tablosu
+
+### Done checklist
+- [x] Revenue ledger schema + migration
+- [x] Trade -> revenue write path (idempotent)
+- [x] Fee ve pnl_share ayrımı
+- [x] Deterministic summary API
+- [x] Admin revenue UI (cards + graph + lists + filters)
+- [x] Regression: ingest/pnl/reconciliation/live-gate bozulmadı
+- [x] Test raporu: `/app/test_reports/iteration_131.json` (backend 20/20, frontend %100)
+
 ## 2026-03-25 — P0 Final Closure Denemesi (Real Trade Trigger Sonrası) ⚠️
 
 ### Yapılanlar

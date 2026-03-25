@@ -1,5 +1,13 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (P1 başlangıç tamamlandı)
+- ✅ Tamamlandı:
+  - Revenue Engine Core (ledger + write path + summary API + admin UI)
+  - deterministic summary + idempotent ledger write
+- 🟡 Sonraki P1 genişletme:
+  - User economics (ARPU/ARPPU/LTV/churn/cohort)
+  - Revenue detay kırılımları (strategy/tag/market bazlı)
+
 ## 2026-03-25 (P0 closure blocker netleşti)
 - ✅ Tamamlandı:
   - Spot/Futures live zincir teknik koşumu
