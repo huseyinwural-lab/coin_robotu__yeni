@@ -1,3 +1,29 @@
+## 2026-03-25 — Spot Sembol Seti (1 Yıl) Koşumu + Drift Highlight ✅
+
+### Kullanıcı tercihine göre uygulananlar
+- Spot ingest sembol seti: `BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, ADAUSDT`
+- Zaman aralığı: son 1 yıl
+- UI iyileştirmesi: Trace compare kartına **drift highlight** eklendi
+
+### Frontend geliştirme
+- `AdminCredentialOrchestrationPage.jsx`
+  - Yeni hesaplama: `source / selection_reason / probe_state` alanlarında current vs selected history farkları
+  - Yeni panel: `resolution-trace-drift-highlight-card`
+    - Seçim yok: empty state
+    - Fark yok: no-diff state
+    - Fark var: diff-list state (önceki -> güncel)
+
+### Operasyonel koşum sonucu
+- Spot live zinciri 1 yıl + yüksek hacimli çoklu sembolde:
+  - Binance weight limiti nedeniyle `429 -1003` alındı (request weight aşıldı)
+  - Uzun çağrılarda bazı istekler ingress tarafında `502 preview not responding` döndü
+  - Bu nedenle spot scope `live_transition_ready=false` kaldı
+- Futures test zinciri stabil:
+  - `live_transition_ready=true` (futures test scope)
+
+### Test
+- `auto_frontend_testing_agent` ile drift highlight doğrulandı (empty/no-diff/diff-list akışları PASS, console critical error yok).
+
 ## 2026-03-25 — Spot Live + Futures Test Zinciri (Yeniden Koşum) ve Trace History Compare ✅
 
 ### Bu turda yapılanlar

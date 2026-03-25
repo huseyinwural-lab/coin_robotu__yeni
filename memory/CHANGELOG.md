@@ -1,5 +1,11 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (Drift Highlight + Spot 1y rerun)
+- Frontend: Trace compare kartına drift highlight eklendi (`source`, `selection_reason`, `probe_state`).
+- Frontend state'leri: empty / no-diff / diff-list akışları tamamlandı.
+- Operasyon denemesi: spot live 1 yıl + çoklu yüksek hacimli sembolde Binance `429 -1003` request-weight limiti gözlendi.
+- Futures test scope live-gate doğrulaması sürdü (`true`).
+
 ## 2026-03-25 (P0 chain rerun + trace history compare)
 - Backend:
   - `GET /api/admin/commercial/p0/pnl/latest` → `market_types` query desteği eklendi.

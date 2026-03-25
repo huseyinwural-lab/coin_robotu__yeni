@@ -1,5 +1,13 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (Spot rerun durumu)
+- ✅ Tamamlandı:
+  - Drift highlight UI (trace compare) eklendi
+  - Spot sembol seti ve 1 yıllık ingest koşumu denendi
+- 🔴 Kalan blocker:
+  - Spot live tarafında Binance request-weight limiti (`429 -1003`) nedeniyle coverage üretilemedi
+  - Spot `live_transition_ready=true` alınmadan P1'e geçiş beklemede
+
 ## 2026-03-25 (P0 zincir tekrar koşumu sonucu)
 - ✅ Tamamlandı:
   - Spot live + futures test zinciri tekrar koşuldu
