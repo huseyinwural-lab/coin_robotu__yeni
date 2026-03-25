@@ -6,25 +6,49 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiClient } from "@/lib/api";
 
-const environments = ["testnet", "live"];
-const markets = ["spot", "futures"];
+const EXCHANGES = ["binance", "bybit", "okx"];
+const MARKET_TYPES = ["spot", "usdt_perp", "coin_perp"];
+const PURPOSES = ["market_data", "execution", "fallback"];
+const ENVIRONMENTS = ["testnet", "live"];
+const SCOPE_TYPES = ["global", "tenant", "group"];
+const PROBE_STATES = [
+  "ready",
+  "connectivity_only",
+  "invalid_key",
+  "permission_restricted",
+  "ip_restricted",
+  "env_mismatch",
+  "rate_limited",
+  "probe_not_supported",
+  "unreachable",
+  "no_probe",
+];
 
-const badgeClass = {
+const probeBadgeClass = {
   ready: "bg-emerald-100 text-emerald-800",
+  connectivity_only: "bg-sky-100 text-sky-800",
   invalid_key: "bg-red-100 text-red-800",
   permission_restricted: "bg-amber-100 text-amber-800",
   ip_restricted: "bg-orange-100 text-orange-800",
   env_mismatch: "bg-violet-100 text-violet-800",
+  rate_limited: "bg-yellow-100 text-yellow-800",
+  probe_not_supported: "bg-indigo-100 text-indigo-800",
   unreachable: "bg-slate-200 text-slate-800",
+  no_probe: "bg-slate-100 text-slate-700",
 };
 
 export const AdminCredentialOrchestrationPage = () => {
-  const [filters, setFilters] = useState({ exchange: "binance", market_type: "spot", environment: "testnet" });
+  const [filters, setFilters] = useState({
+    exchange: "binance",
+    market_type: "spot",
+    environment: "testnet",
+    purpose: "all",
+  });
   const [credentials, setCredentials] = useState([]);
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
-  const [previewUserId, setPreviewUserId] = useState("");
+  const [previewForm, setPreviewForm] = useState({ user_id: "", purpose: "execution" });
 
   const [createForm, setCreateForm] = useState({
     scope_type: "global",
@@ -35,6 +59,7 @@ export const AdminCredentialOrchestrationPage = () => {
     environment: "testnet",
     api_key: "",
     api_secret: "",
+    passphrase: "",
     base_url_override: "",
     ip_binding_note: "",
   });
@@ -58,6 +83,7 @@ export const AdminCredentialOrchestrationPage = () => {
             exchange: filters.exchange,
             market_type: filters.market_type,
             environment: filters.environment,
+            purpose: filters.purpose === "all" ? undefined : filters.purpose,
             include_inactive: true,
           },
         }),
@@ -83,7 +109,7 @@ export const AdminCredentialOrchestrationPage = () => {
   }, [loadData]);
 
   const handleCreateCredential = async () => {
-    if (!createForm.api_key || !createForm.api_secret) {
+    if (!createForm.api_key.trim() || !createForm.api_secret.trim()) {
       toast.error("API key ve secret zorunlu");
       return;
     }
@@ -91,12 +117,13 @@ export const AdminCredentialOrchestrationPage = () => {
       await apiClient.post("/venues/admin/credentials", {
         ...createForm,
         scope_id: createForm.scope_id || null,
+        passphrase: createForm.passphrase || null,
         base_url_override: createForm.base_url_override || null,
         ip_binding_note: createForm.ip_binding_note || null,
         is_default: false,
       });
       toast.success("Credential kaydedildi (pending)");
-      setCreateForm((prev) => ({ ...prev, api_key: "", api_secret: "" }));
+      setCreateForm((prev) => ({ ...prev, api_key: "", api_secret: "", passphrase: "" }));
       loadData();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Credential kaydedilemedi");
@@ -128,18 +155,18 @@ export const AdminCredentialOrchestrationPage = () => {
   };
 
   const handlePreview = async () => {
-    if (!previewUserId.trim()) {
+    if (!previewForm.user_id.trim()) {
       toast.error("user_id girin");
       return;
     }
     try {
       const { data } = await apiClient.get("/venues/admin/credential-resolution-preview", {
         params: {
-          user_id: previewUserId.trim(),
+          user_id: previewForm.user_id.trim(),
           exchange: filters.exchange,
           market_type: filters.market_type,
           environment: filters.environment,
-          purpose: "execution_fallback",
+          purpose: previewForm.purpose,
         },
       });
       setPreview(data || null);
@@ -149,100 +176,189 @@ export const AdminCredentialOrchestrationPage = () => {
   };
 
   const probeSummary = useMemo(() => {
+    const seed = PROBE_STATES.reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
     return credentials.reduce((acc, row) => {
-      const key = row.last_probe_status || "unknown";
+      const key = row.last_probe_status || "no_probe";
       acc[key] = (acc[key] || 0) + 1;
       return acc;
-    }, {});
+    }, seed);
+  }, [credentials]);
+
+  const egressRows = useMemo(() => {
+    return credentials.map((row) => ({
+      id: row.id,
+      exchange: row.exchange,
+      market_type: row.market_type,
+      environment: row.environment,
+      egress_url: row.base_url_override || row?.last_probe_meta?.base_url || "-",
+      proxy_note: row.ip_binding_note || "-",
+      probe_message: row.last_probe_message || "-",
+    }));
   }, [credentials]);
 
   return (
     <section className="space-y-6" data-testid="admin-credential-orchestration-page">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold" data-testid="admin-credential-orchestration-title">Credential Orchestration</h1>
+      <header className="space-y-2" data-testid="admin-credential-orchestration-header">
+        <h1 className="text-4xl font-semibold" data-testid="admin-credential-orchestration-title">Credential Orchestration</h1>
         <p className="text-sm text-slate-600" data-testid="admin-credential-orchestration-subtitle">
-          Admin master credential + user execution credential yönetişimi (deterministic source selection)
+          Multi-exchange anahtar yönetişimi: user → tenant_admin → global_admin deterministic fallback zinciri.
         </p>
       </header>
 
-      <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-4" data-testid="credential-filter-panel">
+      <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-5" data-testid="credential-filter-panel">
         <div>
-          <p className="text-xs text-slate-500">Exchange</p>
-          <Input value={filters.exchange} onChange={(e) => setFilters((p) => ({ ...p, exchange: e.target.value }))} data-testid="credential-filter-exchange-input" />
-        </div>
-        <div>
-          <p className="text-xs text-slate-500">Market</p>
-          <select className="h-10 w-full rounded border px-2" value={filters.market_type} onChange={(e) => setFilters((p) => ({ ...p, market_type: e.target.value }))} data-testid="credential-filter-market-select">
-            {markets.map((item) => (
+          <p className="mb-1 text-xs text-slate-500" data-testid="credential-filter-exchange-label">Exchange</p>
+          <select
+            className="h-10 w-full rounded border px-2"
+            value={filters.exchange}
+            onChange={(e) => setFilters((prev) => ({ ...prev, exchange: e.target.value }))}
+            data-testid="credential-filter-exchange-select"
+          >
+            {EXCHANGES.map((item) => (
               <option key={item} value={item}>{item}</option>
             ))}
           </select>
         </div>
         <div>
-          <p className="text-xs text-slate-500">Environment</p>
-          <select className="h-10 w-full rounded border px-2" value={filters.environment} onChange={(e) => setFilters((p) => ({ ...p, environment: e.target.value }))} data-testid="credential-filter-environment-select">
-            {environments.map((item) => (
+          <p className="mb-1 text-xs text-slate-500" data-testid="credential-filter-market-label">Market</p>
+          <select
+            className="h-10 w-full rounded border px-2"
+            value={filters.market_type}
+            onChange={(e) => setFilters((prev) => ({ ...prev, market_type: e.target.value }))}
+            data-testid="credential-filter-market-select"
+          >
+            {MARKET_TYPES.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <p className="mb-1 text-xs text-slate-500" data-testid="credential-filter-purpose-label">Purpose</p>
+          <select
+            className="h-10 w-full rounded border px-2"
+            value={filters.purpose}
+            onChange={(e) => setFilters((prev) => ({ ...prev, purpose: e.target.value }))}
+            data-testid="credential-filter-purpose-select"
+          >
+            <option value="all">all</option>
+            {PURPOSES.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <p className="mb-1 text-xs text-slate-500" data-testid="credential-filter-environment-label">Environment</p>
+          <select
+            className="h-10 w-full rounded border px-2"
+            value={filters.environment}
+            onChange={(e) => setFilters((prev) => ({ ...prev, environment: e.target.value }))}
+            data-testid="credential-filter-environment-select"
+          >
+            {ENVIRONMENTS.map((item) => (
               <option key={item} value={item}>{item}</option>
             ))}
           </select>
         </div>
         <div className="flex items-end">
-          <Button onClick={loadData} data-testid="credential-filter-refresh-button">Yenile</Button>
+          <Button onClick={loadData} className="w-full" data-testid="credential-filter-refresh-button">Yenile</Button>
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <article className="rounded-xl border border-slate-200 bg-white p-4" data-testid="credential-management-card">
-          <h2 className="mb-3 text-lg font-semibold">Master Credentials</h2>
-          <div className="grid gap-2 md:grid-cols-2">
-            <Input placeholder="scope_type (global/tenant/group)" value={createForm.scope_type} onChange={(e) => setCreateForm((p) => ({ ...p, scope_type: e.target.value }))} data-testid="credential-form-scope-type-input" />
-            <Input placeholder="scope_id (opsiyonel)" value={createForm.scope_id} onChange={(e) => setCreateForm((p) => ({ ...p, scope_id: e.target.value }))} data-testid="credential-form-scope-id-input" />
-            <Input placeholder="market_type (spot/futures)" value={createForm.market_type} onChange={(e) => setCreateForm((p) => ({ ...p, market_type: e.target.value }))} data-testid="credential-form-market-type-input" />
-            <Input placeholder="environment (testnet/live)" value={createForm.environment} onChange={(e) => setCreateForm((p) => ({ ...p, environment: e.target.value }))} data-testid="credential-form-environment-input" />
-            <Input placeholder="purpose" value={createForm.purpose} onChange={(e) => setCreateForm((p) => ({ ...p, purpose: e.target.value }))} data-testid="credential-form-purpose-input" />
-            <Input placeholder="base_url_override (opsiyonel)" value={createForm.base_url_override} onChange={(e) => setCreateForm((p) => ({ ...p, base_url_override: e.target.value }))} data-testid="credential-form-base-url-input" />
-            <Input placeholder="API Key" value={createForm.api_key} onChange={(e) => setCreateForm((p) => ({ ...p, api_key: e.target.value }))} data-testid="credential-form-api-key-input" />
-            <Input placeholder="API Secret" value={createForm.api_secret} onChange={(e) => setCreateForm((p) => ({ ...p, api_secret: e.target.value }))} data-testid="credential-form-api-secret-input" />
+      <section className="grid gap-6 lg:grid-cols-2" data-testid="credential-main-grid">
+        <article className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4" data-testid="credential-management-card">
+          <h2 className="text-lg font-semibold" data-testid="credential-management-title">Master Credential Tanımı</h2>
+          <div className="grid gap-2 md:grid-cols-2" data-testid="credential-create-form-grid">
+            <div>
+              <p className="mb-1 text-xs text-slate-500" data-testid="credential-form-scope-type-label">Scope Type</p>
+              <select className="h-10 w-full rounded border px-2" value={createForm.scope_type} onChange={(e) => setCreateForm((prev) => ({ ...prev, scope_type: e.target.value }))} data-testid="credential-form-scope-type-select">
+                {SCOPE_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="mb-1 text-xs text-slate-500" data-testid="credential-form-scope-id-label">Scope Id</p>
+              <Input placeholder="tenant/group id (opsiyonel)" value={createForm.scope_id} onChange={(e) => setCreateForm((prev) => ({ ...prev, scope_id: e.target.value }))} data-testid="credential-form-scope-id-input" />
+            </div>
+            <div>
+              <p className="mb-1 text-xs text-slate-500" data-testid="credential-form-exchange-label">Exchange</p>
+              <select className="h-10 w-full rounded border px-2" value={createForm.exchange} onChange={(e) => setCreateForm((prev) => ({ ...prev, exchange: e.target.value }))} data-testid="credential-form-exchange-select">
+                {EXCHANGES.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="mb-1 text-xs text-slate-500" data-testid="credential-form-market-type-label">Market Type</p>
+              <select className="h-10 w-full rounded border px-2" value={createForm.market_type} onChange={(e) => setCreateForm((prev) => ({ ...prev, market_type: e.target.value }))} data-testid="credential-form-market-type-select">
+                {MARKET_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="mb-1 text-xs text-slate-500" data-testid="credential-form-purpose-label">Purpose</p>
+              <select className="h-10 w-full rounded border px-2" value={createForm.purpose} onChange={(e) => setCreateForm((prev) => ({ ...prev, purpose: e.target.value }))} data-testid="credential-form-purpose-select">
+                {PURPOSES.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="mb-1 text-xs text-slate-500" data-testid="credential-form-environment-label">Environment</p>
+              <select className="h-10 w-full rounded border px-2" value={createForm.environment} onChange={(e) => setCreateForm((prev) => ({ ...prev, environment: e.target.value }))} data-testid="credential-form-environment-select">
+                {ENVIRONMENTS.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <p className="mb-1 text-xs text-slate-500" data-testid="credential-form-base-url-label">Base URL / Proxy Target</p>
+              <Input placeholder="https://proxy.example.com (opsiyonel)" value={createForm.base_url_override} onChange={(e) => setCreateForm((prev) => ({ ...prev, base_url_override: e.target.value }))} data-testid="credential-form-base-url-input" />
+            </div>
+            <div className="md:col-span-2">
+              <p className="mb-1 text-xs text-slate-500" data-testid="credential-form-egress-note-label">Proxy Route / Egress Note</p>
+              <Input placeholder="örn: /fapi/* -> vps-futures" value={createForm.ip_binding_note} onChange={(e) => setCreateForm((prev) => ({ ...prev, ip_binding_note: e.target.value }))} data-testid="credential-form-egress-note-input" />
+            </div>
+            <Input placeholder="API Key" value={createForm.api_key} onChange={(e) => setCreateForm((prev) => ({ ...prev, api_key: e.target.value }))} data-testid="credential-form-api-key-input" />
+            <Input placeholder="API Secret" value={createForm.api_secret} onChange={(e) => setCreateForm((prev) => ({ ...prev, api_secret: e.target.value }))} data-testid="credential-form-api-secret-input" />
+            <Input placeholder="Passphrase (okx için opsiyonel)" value={createForm.passphrase} onChange={(e) => setCreateForm((prev) => ({ ...prev, passphrase: e.target.value }))} data-testid="credential-form-passphrase-input" />
           </div>
-          <div className="mt-3 flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3" data-testid="credential-form-actions-row">
             <Button onClick={handleCreateCredential} data-testid="credential-form-save-button">Credential Kaydet</Button>
-            <p className="text-xs text-slate-500" data-testid="credential-form-note">Yeni kayıt pending açılır, Super Admin approve etmelidir.</p>
+            <p className="text-xs text-slate-500" data-testid="credential-form-note">Yeni kayıt pending açılır. Aktif kullanım için approve gerekir.</p>
           </div>
 
-          <div className="mt-4 rounded border border-slate-200" data-testid="credential-table-wrapper">
+          <div className="overflow-x-auto rounded border border-slate-200" data-testid="credential-table-wrapper">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Exchange</TableHead>
                   <TableHead>Market</TableHead>
+                  <TableHead>Purpose</TableHead>
+                  <TableHead>Scope</TableHead>
                   <TableHead>Env</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Probe</TableHead>
-                  <TableHead>Source</TableHead>
+                  <TableHead>Egress</TableHead>
+                  <TableHead>Fingerprint</TableHead>
                   <TableHead>Aksiyon</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {credentials.map((row) => (
                   <TableRow key={row.id} data-testid={`credential-row-${row.id}`}>
-                    <TableCell>{row.market_type}</TableCell>
+                    <TableCell data-testid={`credential-exchange-${row.id}`}>{row.exchange}</TableCell>
+                    <TableCell data-testid={`credential-market-${row.id}`}>{row.market_type}</TableCell>
+                    <TableCell data-testid={`credential-purpose-${row.id}`}>{row.purpose}</TableCell>
+                    <TableCell data-testid={`credential-scope-${row.id}`}>{row.scope_type}:{row.scope_id || "-"}</TableCell>
                     <TableCell>
                       <span className="rounded bg-slate-100 px-2 py-1 text-xs" data-testid={`credential-environment-badge-${row.id}`}>{row.environment}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="rounded bg-slate-100 px-2 py-1 text-xs" data-testid={`credential-status-badge-${row.id}`}>
-                        {row.is_active ? "active" : "disabled"} / {row.approval_status}
-                      </span>
+                      <span className="rounded bg-slate-100 px-2 py-1 text-xs" data-testid={`credential-status-badge-${row.id}`}>{row.is_active ? "active" : "disabled"}/{row.approval_status}</span>
                     </TableCell>
                     <TableCell>
-                      <span className={`rounded px-2 py-1 text-xs ${badgeClass[row.last_probe_status] || "bg-slate-100 text-slate-700"}`} data-testid={`credential-last-probe-status-${row.id}`}>
-                        {row.last_probe_status || "no_probe"}
-                      </span>
+                      <span className={`rounded px-2 py-1 text-xs ${probeBadgeClass[row.last_probe_status || "no_probe"] || "bg-slate-100 text-slate-700"}`} data-testid={`credential-last-probe-status-${row.id}`}>{row.last_probe_status || "no_probe"}</span>
                     </TableCell>
                     <TableCell>
-                      <p className="text-xs" data-testid={`credential-fingerprint-${row.id}`}>{row.credential_fingerprint}</p>
+                      <p className="max-w-44 truncate text-xs" data-testid={`credential-egress-url-${row.id}`}>{row.base_url_override || row?.last_probe_meta?.base_url || "-"}</p>
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <p className="max-w-40 truncate text-xs" data-testid={`credential-fingerprint-${row.id}`}>{row.credential_fingerprint}</p>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1" data-testid={`credential-actions-${row.id}`}>
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "probe")} data-testid={`credential-probe-button-${row.id}`}>Probe</Button>
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "approve")} data-testid={`credential-approve-button-${row.id}`}>Approve</Button>
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "disable")} data-testid={`credential-disable-button-${row.id}`}>Disable</Button>
@@ -252,9 +368,7 @@ export const AdminCredentialOrchestrationPage = () => {
                 ))}
                 {!credentials.length && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-sm text-slate-500" data-testid="credential-empty-state">
-                      Kayıt bulunamadı
-                    </TableCell>
+                    <TableCell colSpan={10} className="text-center text-sm text-slate-500" data-testid="credential-empty-state">Kayıt bulunamadı</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -263,58 +377,85 @@ export const AdminCredentialOrchestrationPage = () => {
         </article>
 
         <article className="space-y-6" data-testid="routing-probe-audit-column">
-          <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="routing-matrix-card">
-            <h2 className="mb-3 text-lg font-semibold">Credential Routing Matrix</h2>
-            <div className="grid gap-2 md:grid-cols-2">
-              <Input placeholder="tenant_id (opsiyonel)" value={ruleForm.tenant_id} onChange={(e) => setRuleForm((p) => ({ ...p, tenant_id: e.target.value }))} data-testid="rule-form-tenant-id-input" />
-              <Input placeholder="user_id (opsiyonel)" value={ruleForm.user_id} onChange={(e) => setRuleForm((p) => ({ ...p, user_id: e.target.value }))} data-testid="rule-form-user-id-input" />
-              <Input placeholder="market_type" value={ruleForm.market_type} onChange={(e) => setRuleForm((p) => ({ ...p, market_type: e.target.value }))} data-testid="rule-form-market-input" />
-              <Input placeholder="environment" value={ruleForm.environment} onChange={(e) => setRuleForm((p) => ({ ...p, environment: e.target.value }))} data-testid="rule-form-environment-input" />
-              <select className="h-10 w-full rounded border px-2 md:col-span-2" value={ruleForm.preferred_source} onChange={(e) => setRuleForm((p) => ({ ...p, preferred_source: e.target.value }))} data-testid="rule-form-preferred-source-select">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4" data-testid="routing-matrix-card">
+            <h2 className="mb-2 text-lg font-semibold" data-testid="routing-matrix-title">Routing Matrix</h2>
+            <p className="mb-3 text-xs text-slate-500" data-testid="routing-matrix-chain-description">Deterministik fallback: user → tenant_admin → global_admin</p>
+            <div className="grid gap-2 md:grid-cols-2" data-testid="rule-form-grid">
+              <select className="h-10 w-full rounded border px-2" value={ruleForm.exchange} onChange={(e) => setRuleForm((prev) => ({ ...prev, exchange: e.target.value }))} data-testid="rule-form-exchange-select">
+                {EXCHANGES.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+              <select className="h-10 w-full rounded border px-2" value={ruleForm.market_type} onChange={(e) => setRuleForm((prev) => ({ ...prev, market_type: e.target.value }))} data-testid="rule-form-market-select">
+                {MARKET_TYPES.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+              <select className="h-10 w-full rounded border px-2" value={ruleForm.environment} onChange={(e) => setRuleForm((prev) => ({ ...prev, environment: e.target.value }))} data-testid="rule-form-environment-select">
+                {ENVIRONMENTS.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+              <select className="h-10 w-full rounded border px-2" value={ruleForm.preferred_source} onChange={(e) => setRuleForm((prev) => ({ ...prev, preferred_source: e.target.value }))} data-testid="rule-form-preferred-source-select">
                 <option value="user">user</option>
                 <option value="admin">admin</option>
                 <option value="admin_fallback">admin_fallback</option>
               </select>
+              <Input placeholder="tenant_id (opsiyonel)" value={ruleForm.tenant_id} onChange={(e) => setRuleForm((prev) => ({ ...prev, tenant_id: e.target.value }))} data-testid="rule-form-tenant-id-input" />
+              <Input placeholder="user_id (opsiyonel)" value={ruleForm.user_id} onChange={(e) => setRuleForm((prev) => ({ ...prev, user_id: e.target.value }))} data-testid="rule-form-user-id-input" />
             </div>
-            <div className="mt-3 flex items-center gap-3">
+            <div className="mt-3 flex items-center gap-3" data-testid="rule-form-actions-row">
               <Button onClick={handleRuleUpsert} data-testid="rule-form-save-button">Kural Kaydet</Button>
               <label className="flex items-center gap-2 text-sm" data-testid="rule-form-fallback-checkbox-wrapper">
-                <input type="checkbox" checked={ruleForm.fallback_enabled} onChange={(e) => setRuleForm((p) => ({ ...p, fallback_enabled: e.target.checked }))} data-testid="rule-form-fallback-checkbox" />
+                <input type="checkbox" checked={ruleForm.fallback_enabled} onChange={(e) => setRuleForm((prev) => ({ ...prev, fallback_enabled: e.target.checked }))} data-testid="rule-form-fallback-checkbox" />
                 fallback_enabled
               </label>
             </div>
-
             <div className="mt-3 space-y-2" data-testid="rule-list-wrapper">
               {rules.map((row) => (
                 <div key={row.id} className="rounded border border-slate-200 p-2 text-xs" data-testid={`rule-row-${row.id}`}>
-                  <p>market={row.market_type} env={row.environment}</p>
-                  <p>preferred={row.preferred_source} fallback={String(row.fallback_enabled)}</p>
-                  <p>tenant={row.tenant_id || "-"} user={row.user_id || "-"}</p>
+                  <p data-testid={`rule-row-market-env-${row.id}`}>{row.exchange}/{row.market_type}/{row.environment}</p>
+                  <p data-testid={`rule-row-source-${row.id}`}>preferred={row.preferred_source} fallback={String(row.fallback_enabled)}</p>
+                  <p data-testid={`rule-row-scope-${row.id}`}>tenant={row.tenant_id || "-"} user={row.user_id || "-"}</p>
                 </div>
               ))}
               {!rules.length && <p className="text-xs text-slate-500" data-testid="rule-empty-state">Kural yok</p>}
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="probe-audit-dashboard-card">
-            <h2 className="mb-3 text-lg font-semibold">Probe & Audit Dashboard</h2>
-            <div className="mb-3 grid gap-2 md:grid-cols-2">
-              <Input placeholder="user_id" value={previewUserId} onChange={(e) => setPreviewUserId(e.target.value)} data-testid="resolution-preview-user-id-input" />
+          <div className="rounded-2xl border border-slate-200 bg-white p-4" data-testid="probe-audit-dashboard-card">
+            <h2 className="mb-3 text-lg font-semibold" data-testid="probe-dashboard-title">Probe & Resolution Preview</h2>
+            <div className="mb-3 grid gap-2 md:grid-cols-3" data-testid="resolution-preview-form-grid">
+              <Input placeholder="user_id" value={previewForm.user_id} onChange={(e) => setPreviewForm((prev) => ({ ...prev, user_id: e.target.value }))} data-testid="resolution-preview-user-id-input" />
+              <select className="h-10 w-full rounded border px-2" value={previewForm.purpose} onChange={(e) => setPreviewForm((prev) => ({ ...prev, purpose: e.target.value }))} data-testid="resolution-preview-purpose-select">
+                {PURPOSES.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
               <Button onClick={handlePreview} data-testid="resolution-preview-load-button">Selected Source Önizleme</Button>
             </div>
-            <div className="rounded border border-slate-200 p-3" data-testid="resolution-preview-output">
-              <p className="text-xs">selected source: <span data-testid="resolution-preview-source-value">{preview?.source || "-"}</span></p>
-              <p className="text-xs">credential id: <span data-testid="resolution-preview-credential-id-value">{preview?.selected_credential_id || "-"}</span></p>
-              <p className="text-xs">fingerprint: <span data-testid="resolution-preview-fingerprint-value">{preview?.masked_fingerprint || "-"}</span></p>
+            <div className="rounded border border-slate-200 p-3 text-xs" data-testid="resolution-preview-output">
+              <p data-testid="resolution-preview-source-line">selected source: <span data-testid="resolution-preview-source-value">{preview?.source || "-"}</span></p>
+              <p data-testid="resolution-preview-credential-id-line">credential id: <span data-testid="resolution-preview-credential-id-value">{preview?.selected_credential_id || "-"}</span></p>
+              <p data-testid="resolution-preview-fingerprint-line">fingerprint: <span data-testid="resolution-preview-fingerprint-value">{preview?.masked_fingerprint || "-"}</span></p>
+              <p data-testid="resolution-preview-base-url-line">effective base url: <span data-testid="resolution-preview-base-url-value">{preview?.effective_base_url || "-"}</span></p>
+              <p data-testid="resolution-preview-selection-reason-line">selection reason: <span data-testid="resolution-preview-selection-reason-value">{preview?.audit_metadata?.selection_reason || "-"}</span></p>
+              <p data-testid="resolution-preview-rule-id-line">rule id: <span data-testid="resolution-preview-rule-id-value">{preview?.audit_metadata?.rule_id || "-"}</span></p>
             </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="probe-status-distribution-grid">
-              {Object.entries(probeSummary).map(([key, value]) => (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="probe-status-distribution-grid">
+              {PROBE_STATES.map((key) => (
                 <div key={key} className="rounded border border-slate-200 p-2 text-xs" data-testid={`probe-distribution-${key}`}>
-                  <p className="font-semibold">{key}</p>
-                  <p>{value}</p>
+                  <p className="font-semibold" data-testid={`probe-distribution-key-${key}`}>{key}</p>
+                  <p data-testid={`probe-distribution-value-${key}`}>{probeSummary[key] || 0}</p>
                 </div>
               ))}
-              {!Object.keys(probeSummary).length && <p className="text-xs text-slate-500" data-testid="probe-distribution-empty">Probe dağılımı yok</p>}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4" data-testid="egress-visibility-card">
+            <h2 className="mb-3 text-lg font-semibold" data-testid="egress-visibility-title">Proxy / Egress Görünürlüğü</h2>
+            <div className="max-h-72 overflow-auto space-y-2" data-testid="egress-visibility-list">
+              {egressRows.map((row) => (
+                <div key={row.id} className="rounded border border-slate-200 p-2 text-xs" data-testid={`egress-row-${row.id}`}>
+                  <p data-testid={`egress-row-head-${row.id}`}>{row.exchange}/{row.market_type}/{row.environment}</p>
+                  <p className="truncate" data-testid={`egress-row-url-${row.id}`}>egress_url={row.egress_url}</p>
+                  <p className="truncate" data-testid={`egress-row-note-${row.id}`}>proxy_note={row.proxy_note}</p>
+                  <p className="truncate" data-testid={`egress-row-probe-${row.id}`}>probe_message={row.probe_message}</p>
+                </div>
+              ))}
+              {!egressRows.length && <p className="text-xs text-slate-500" data-testid="egress-empty-state">Egress kaydı yok</p>}
             </div>
           </div>
         </article>

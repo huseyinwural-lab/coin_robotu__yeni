@@ -590,6 +590,7 @@ def admin_execution_validation(_: User = Depends(require_admin), db: Session = D
 def admin_list_orchestration_credentials(
     exchange: str | None = Query(default=None),
     market_type: str | None = Query(default=None),
+    purpose: str | None = Query(default=None),
     environment: str | None = Query(default=None),
     scope_type: str | None = Query(default=None),
     approval_status: str | None = Query(default=None),
@@ -601,6 +602,7 @@ def admin_list_orchestration_credentials(
         db,
         exchange=exchange,
         market_type=market_type,
+        purpose=purpose,
         environment=environment,
         scope_type=scope_type,
         approval_status=approval_status,
@@ -815,7 +817,7 @@ def admin_credential_resolution_preview(
     exchange: str = Query(default="binance"),
     market_type: str = Query(default="spot"),
     environment: str = Query(default="testnet"),
-    purpose: str = Query(default="execution_fallback"),
+    purpose: str = Query(default="execution"),
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):

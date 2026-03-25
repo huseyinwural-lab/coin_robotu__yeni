@@ -16,16 +16,20 @@ from core.users.user_exchange_connector import (
 from models import AdminExchangeCredential, CredentialAssignmentRule, User, UserExchangeConnection
 
 ALLOWED_SCOPE_TYPES = {"global", "tenant", "group"}
-ALLOWED_MARKETS = {"spot", "futures"}
+ALLOWED_EXCHANGES = {"binance", "bybit", "okx"}
+ALLOWED_MARKETS = {"spot", "futures", "usdt_perp", "coin_perp"}
 ALLOWED_ENVS = {"testnet", "live"}
-ALLOWED_PURPOSES = {"market_data", "execution_fallback", "ops_probe"}
+ALLOWED_PURPOSES = {"market_data", "execution", "fallback", "execution_fallback", "ops_probe"}
 ALLOWED_SOURCES = {"user", "admin", "admin_fallback"}
 PROBE_STATUS = {
     "ready",
+    "connectivity_only",
     "invalid_key",
     "permission_restricted",
     "ip_restricted",
     "env_mismatch",
+    "rate_limited",
+    "probe_not_supported",
     "unreachable",
 }
 
@@ -45,20 +49,64 @@ def _safe_float(value, default: float = 0.0) -> float:
         return default
 
 
-def _default_spot_base(environment: str) -> str:
-    return "https://testnet.binance.vision" if environment == "testnet" else "https://api.binance.com"
+def _normalize_market_type(market_type: str) -> str:
+    normalized = _norm(market_type)
+    return "spot" if normalized == "execution" else normalized
 
 
-def _default_futures_base(environment: str) -> str:
-    return "https://testnet.binancefuture.com" if environment == "testnet" else "https://fapi.binance.com"
+def _normalize_purpose(purpose: str) -> str:
+    normalized = _norm(purpose)
+    return "fallback" if normalized == "execution_fallback" else normalized
 
 
-def _effective_base_url(*, market_type: str, environment: str, override: str | None) -> str:
+def _purpose_aliases(purpose: str) -> list[str]:
+    normalized = _normalize_purpose(purpose)
+    if normalized == "execution":
+        return ["execution", "fallback", "execution_fallback"]
+    if normalized == "fallback":
+        return ["fallback", "execution", "execution_fallback"]
+    return [normalized]
+
+
+def _market_aliases(market_type: str) -> list[str]:
+    normalized = _normalize_market_type(market_type)
+    if normalized == "spot":
+        return ["spot"]
+    if normalized == "usdt_perp":
+        return ["usdt_perp", "futures"]
+    if normalized == "coin_perp":
+        return ["coin_perp", "futures"]
+    if normalized == "futures":
+        return ["futures", "usdt_perp", "coin_perp"]
+    return [normalized]
+
+
+def _is_perp_market(market_type: str) -> bool:
+    return _normalize_market_type(market_type) in {"futures", "usdt_perp", "coin_perp"}
+
+
+def _default_spot_base(exchange: str, environment: str) -> str:
+    if exchange == "binance":
+        return "https://testnet.binance.vision" if environment == "testnet" else "https://api.binance.com"
+    if exchange == "bybit":
+        return "https://api-testnet.bybit.com" if environment == "testnet" else "https://api.bybit.com"
+    return "https://www.okx.com"
+
+
+def _default_futures_base(exchange: str, environment: str) -> str:
+    if exchange == "binance":
+        return "https://testnet.binancefuture.com" if environment == "testnet" else "https://fapi.binance.com"
+    if exchange == "bybit":
+        return "https://api-testnet.bybit.com" if environment == "testnet" else "https://api.bybit.com"
+    return "https://www.okx.com"
+
+
+def _effective_base_url(*, exchange: str, market_type: str, environment: str, override: str | None) -> str:
     if override and str(override).strip():
         return str(override).strip().rstrip("/")
-    if market_type == "futures":
-        return _default_futures_base(environment)
-    return _default_spot_base(environment)
+    if _is_perp_market(market_type):
+        return _default_futures_base(exchange, environment)
+    return _default_spot_base(exchange, environment)
 
 
 def _signed_get(*, base_url: str, endpoint: str, api_key: str, api_secret: str, params: dict | None = None) -> tuple[int, dict]:
@@ -91,6 +139,8 @@ def _spot_probe(*, base_url: str, api_key: str, api_secret: str) -> tuple[str, s
     msg = str((body or {}).get("msg") or "").lower()
     if status == 451:
         return "ip_restricted", "spot_signed_451", {"status": status, "code": code, "message": msg}
+    if status == 429:
+        return "rate_limited", "spot_rate_limited", {"status": status, "code": code, "message": msg}
     if status in {401, 403} and code in {"-2015", "-2014"}:
         return "invalid_key", "spot_invalid_key", {"status": status, "code": code, "message": msg}
     if "permission" in msg:
@@ -116,6 +166,8 @@ def _futures_probe(*, base_url: str, api_key: str, api_secret: str) -> tuple[str
     msg = str((body or {}).get("msg") or "").lower()
     if status == 451:
         return "ip_restricted", "futures_signed_451", {"status": status, "code": code, "message": msg}
+    if status == 429:
+        return "rate_limited", "futures_rate_limited", {"status": status, "code": code, "message": msg}
     if status in {401, 403} and code in {"-2015", "-2014"}:
         return "invalid_key", "futures_invalid_key", {"status": status, "code": code, "message": msg}
     if "permission" in msg:
@@ -123,6 +175,18 @@ def _futures_probe(*, base_url: str, api_key: str, api_secret: str) -> tuple[str
     if "testnet" in msg or "live" in msg:
         return "env_mismatch", "futures_environment_mismatch", {"status": status, "code": code, "message": msg}
     return "unreachable", "futures_probe_failed", {"status": status, "code": code, "message": msg}
+
+
+def _public_probe(*, base_url: str, endpoint: str, provider: str) -> tuple[str, str, dict]:
+    with httpx.Client(timeout=10.0) as client:
+        response = client.get(f"{base_url}{endpoint}")
+    if response.status_code == 451:
+        return "ip_restricted", f"{provider}_public_451", {"status": response.status_code}
+    if response.status_code == 429:
+        return "rate_limited", f"{provider}_public_rate_limited", {"status": response.status_code}
+    if response.status_code >= 400:
+        return "unreachable", f"{provider}_public_{response.status_code}", {"status": response.status_code}
+    return "connectivity_only", f"{provider}_public_ok", {"status": response.status_code}
 
 
 def _serialize_admin_credential(row: AdminExchangeCredential) -> dict:
@@ -177,13 +241,13 @@ def _serialize_assignment_rule(row: CredentialAssignmentRule) -> dict:
 def _validate_credential_payload(*, scope_type: str, market_type: str, purpose: str, environment: str, exchange: str) -> None:
     if scope_type not in ALLOWED_SCOPE_TYPES:
         raise ValueError("invalid_scope_type")
-    if market_type not in ALLOWED_MARKETS:
+    if _normalize_market_type(market_type) not in ALLOWED_MARKETS:
         raise ValueError("invalid_market_type")
     if environment not in ALLOWED_ENVS:
         raise ValueError("invalid_environment")
-    if purpose not in ALLOWED_PURPOSES:
+    if _normalize_purpose(purpose) not in ALLOWED_PURPOSES:
         raise ValueError("invalid_purpose")
-    if exchange != "binance":
+    if exchange not in ALLOWED_EXCHANGES:
         raise ValueError("unsupported_exchange")
 
 
@@ -192,6 +256,7 @@ def list_admin_credentials(
     *,
     exchange: str | None,
     market_type: str | None,
+    purpose: str | None,
     environment: str | None,
     scope_type: str | None,
     approval_status: str | None,
@@ -201,7 +266,9 @@ def list_admin_credentials(
     if exchange:
         query = query.filter(AdminExchangeCredential.exchange == _norm(exchange))
     if market_type:
-        query = query.filter(AdminExchangeCredential.market_type == _norm(market_type))
+        query = query.filter(AdminExchangeCredential.market_type.in_(_market_aliases(market_type)))
+    if purpose:
+        query = query.filter(AdminExchangeCredential.purpose.in_(_purpose_aliases(purpose)))
     if environment:
         query = query.filter(AdminExchangeCredential.environment == _norm(environment))
     if scope_type:
@@ -232,8 +299,8 @@ def create_admin_credential(
     is_default: bool,
 ) -> dict:
     normalized_scope = _norm(scope_type)
-    normalized_market = _norm(market_type)
-    normalized_purpose = _norm(purpose)
+    normalized_market = _normalize_market_type(market_type)
+    normalized_purpose = _normalize_purpose(purpose)
     normalized_env = _norm(environment)
     normalized_exchange = _norm(exchange)
 
@@ -299,7 +366,7 @@ def update_admin_credential(
     if scope_id is not None:
         row.scope_id = scope_id or None
     if purpose is not None:
-        normalized_purpose = _norm(purpose)
+        normalized_purpose = _normalize_purpose(purpose)
         if normalized_purpose not in ALLOWED_PURPOSES:
             raise ValueError("invalid_purpose")
         row.purpose = normalized_purpose
@@ -366,13 +433,26 @@ def probe_admin_credential(db: Session, *, actor: User, credential_id: str) -> d
 
     api_key = decrypt_exchange_secret(row.api_key_encrypted)
     api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
-    base_url = _effective_base_url(market_type=row.market_type, environment=row.environment, override=row.base_url_override)
+    base_url = _effective_base_url(
+        exchange=row.exchange,
+        market_type=row.market_type,
+        environment=row.environment,
+        override=row.base_url_override,
+    )
 
     try:
-        if row.market_type == "spot":
+        if row.exchange == "binance" and row.market_type == "spot":
             status_code, message, meta = _spot_probe(base_url=base_url, api_key=api_key, api_secret=api_secret)
-        else:
+        elif row.exchange == "binance":
             status_code, message, meta = _futures_probe(base_url=base_url, api_key=api_key, api_secret=api_secret)
+        elif row.exchange == "bybit":
+            status_code, message, meta = _public_probe(base_url=base_url, endpoint="/v5/market/time", provider="bybit")
+        elif row.exchange == "okx":
+            status_code, message, meta = _public_probe(base_url=base_url, endpoint="/api/v5/public/time", provider="okx")
+        else:
+            status_code, message, meta = "probe_not_supported", "probe_not_supported_for_exchange", {
+                "exchange": row.exchange
+            }
     except Exception as exc:
         status_code, message, meta = "unreachable", "probe_exception", {"error": str(exc)}
 
@@ -392,7 +472,7 @@ def list_assignment_rules(db: Session, *, exchange: str | None, market_type: str
     if exchange:
         query = query.filter(CredentialAssignmentRule.exchange == _norm(exchange))
     if market_type:
-        query = query.filter(CredentialAssignmentRule.market_type == _norm(market_type))
+        query = query.filter(CredentialAssignmentRule.market_type.in_(_market_aliases(market_type)))
     if environment:
         query = query.filter(CredentialAssignmentRule.environment == _norm(environment))
     rows = query.order_by(CredentialAssignmentRule.updated_at.desc()).all()
@@ -412,7 +492,7 @@ def upsert_assignment_rule(
     fallback_enabled: bool,
 ) -> dict:
     normalized_exchange = _norm(exchange)
-    normalized_market = _norm(market_type)
+    normalized_market = _normalize_market_type(market_type)
     normalized_env = _norm(environment)
     normalized_source = _norm(preferred_source)
 
@@ -472,7 +552,7 @@ def _rule_for_context(
         db.query(CredentialAssignmentRule)
         .filter(
             CredentialAssignmentRule.exchange == exchange,
-            CredentialAssignmentRule.market_type == market_type,
+            CredentialAssignmentRule.market_type.in_(_market_aliases(market_type)),
             CredentialAssignmentRule.environment == environment,
         )
         .order_by(CredentialAssignmentRule.updated_at.desc())
@@ -503,7 +583,7 @@ def _select_user_credential(
         .filter(
             UserExchangeConnection.user_id == user_id,
             UserExchangeConnection.exchange == exchange,
-            UserExchangeConnection.market_type == market_type,
+            UserExchangeConnection.market_type.in_(_market_aliases(market_type)),
             UserExchangeConnection.environment == environment,
         )
         .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
@@ -547,7 +627,7 @@ def _select_admin_credential(
         db.query(AdminExchangeCredential)
         .filter(
             AdminExchangeCredential.exchange == exchange,
-            AdminExchangeCredential.market_type == market_type,
+            AdminExchangeCredential.market_type.in_(_market_aliases(market_type)),
             AdminExchangeCredential.environment == environment,
             AdminExchangeCredential.is_active.is_(True),
             AdminExchangeCredential.approval_status == "approved",
@@ -555,9 +635,9 @@ def _select_admin_credential(
         .order_by(AdminExchangeCredential.is_default.desc(), AdminExchangeCredential.updated_at.desc())
     )
     rows = query.all()
-    filtered = [row for row in rows if row.purpose == purpose]
+    filtered = [row for row in rows if row.purpose in _purpose_aliases(purpose)]
     if not filtered:
-        filtered = [row for row in rows if row.purpose in {"execution_fallback", "market_data"}]
+        filtered = [row for row in rows if row.purpose in {"execution", "fallback", "execution_fallback", "market_data"}]
 
     ordered: list[AdminExchangeCredential] = []
     if tenant_id:
@@ -581,7 +661,12 @@ def _select_admin_credential(
     api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
     if not api_key or not api_secret:
         return None
-    base_url = _effective_base_url(market_type=market_type, environment=environment, override=row.base_url_override)
+    base_url = _effective_base_url(
+        exchange=exchange,
+        market_type=market_type,
+        environment=environment,
+        override=row.base_url_override,
+    )
     source = "admin_global_default"
     if row.scope_type == "tenant":
         source = "admin_tenant_default"
@@ -622,9 +707,9 @@ def resolve_exchange_credentials(
     include_secrets: bool = True,
 ) -> dict:
     normalized_exchange = _norm(exchange)
-    normalized_market = _norm(market_type)
+    normalized_market = _normalize_market_type(market_type)
     normalized_env = _norm(environment)
-    normalized_purpose = _norm(purpose)
+    normalized_purpose = _normalize_purpose(purpose)
     if normalized_market not in ALLOWED_MARKETS:
         raise ValueError("invalid_market_type")
     if normalized_env not in ALLOWED_ENVS:
@@ -712,7 +797,7 @@ def build_user_routing_preview(
     exchange: str,
     market_type: str,
     environment: str,
-    purpose: str = "execution_fallback",
+    purpose: str = "execution",
 ) -> dict:
     try:
         resolved = resolve_exchange_credentials(
