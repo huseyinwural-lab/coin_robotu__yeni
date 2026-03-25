@@ -1,5 +1,13 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (P0 closure blocker netleşti)
+- ✅ Tamamlandı:
+  - Spot/Futures live zincir teknik koşumu
+  - Futures live credential + probe
+- 🔴 Blocker:
+  - Live key üzerinde ingest edilebilir trade coverage görünmüyor (`myTrades/userTrades` boş)
+  - Bu nedenle spot+futures combined `live_transition_ready=true` alınamadı
+
 ## 2026-03-25 (Proxy geçiş sonrası durum)
 - ✅ Tamamlandı:
   - Spot/Futures live proxy entegrasyonu aktif

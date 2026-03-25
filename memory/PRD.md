@@ -1,3 +1,32 @@
+## 2026-03-25 — P0 Final Closure Denemesi (Real Trade Trigger Sonrası) ⚠️
+
+### Yapılanlar
+- Kullanıcının verdiği live proxy URL/tokenlar aktifken zincir sequential koşturuldu.
+- Futures live için eksik admin credential oluşturuldu, approve + probe yapıldı (`ready`).
+- Çalıştırılan sıra:
+  1. `/p0/ingestion/rest-run` (spot/live, BTCUSDT)
+  2. `/p0/ingestion/rest-run` (futures/live, BTCUSDT)
+  3. `/p0/pnl/latest`
+  4. `/p0/reconciliation/run`
+  5. `/p0/data-quality`
+  6. `/p0/live-gate?required_market_types=spot,futures`
+
+### Sonuç
+- Tüm endpointler teknik olarak PASS (500 yok, deterministic response var).
+- Ancak ingest çıktıları:
+  - spot fetched/inserted = 0
+  - futures fetched/inserted = 0
+- `live_transition_ready=false` kaldı.
+
+### Kök neden (kanıtlı)
+- Doğrudan signed kontrol:
+  - `GET /api/v3/myTrades?symbol=BTCUSDT` => 200, `[]`
+  - `GET /fapi/v1/userTrades?symbol=BTCUSDT` => 200, `[]`
+- Yani şu an kullanılan live key üzerinde ingest edilebilir trade kaydı görünmüyor.
+
+### Kapanış durumu
+- **P0 CLOSED değil** (trade coverage koşulu sağlanmadı).
+
 ## 2026-03-25 — Live Proxy Geçişi (Spot/Futures) ve Kademeli Spot Koşum ✅
 
 ### Uygulanan değişiklikler

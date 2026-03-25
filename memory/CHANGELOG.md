@@ -1,5 +1,12 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (P0 final closure attempt)
+- Spot+Futures live sequential zincir koşuldu (ingest -> pnl -> recon -> data-quality -> live-gate).
+- Futures live credential eklendi ve probe `ready` doğrulandı.
+- Teknik endpoint stabilitesi PASS (500 yok).
+- Closure sonucu: ingest edilen trade yok (`spot=0`, `futures=0`) → `live_transition_ready=false`.
+- Doğrudan signed kontrollerde `myTrades/userTrades` boş döndü (200 + empty list).
+
 ## 2026-03-25 (Live proxy transition + incremental spot run)
 - Live proxy env geçişi tamamlandı (spot/futures base URL + token).
 - Spot low-weight ingest ile kademeli sembol koşumu yapıldı (BTC/ETH/BNB/SOL/ADA).
