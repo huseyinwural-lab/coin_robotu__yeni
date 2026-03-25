@@ -1,3 +1,38 @@
+## 2026-03-25 — P1.4 INFRA FIX + FINAL CLOSURE ✅
+
+### FAZ 1 (DB Fix) — DONE
+- `postgres.internal` kaldırıldı.
+- Backend `DATABASE_URL`, Supabase Transaction Pooler üzerinden çalışacak şekilde güncellendi.
+- DB connectivity manuel doğrulandı (`SELECT 1` başarılı).
+
+### FAZ 2 (Migration) — DONE
+- `alembic upgrade head` başarılı.
+- `alembic current` sonucu: `20260325_0078 (head)`.
+- Kritik tablolar doğrulandı:
+  - `revenue_ledger`
+  - `user_economics_aggregates`
+  - `analytics_snapshots`
+
+### FAZ 3 (Endpoint) — DONE
+- `GET /api/admin/export/revenue` (CSV/XLSX) ✅
+- `GET /api/admin/export/user-economics` (CSV/XLSX) ✅
+- `GET /api/admin/snapshots` ✅
+- `POST /api/admin/snapshots/run` ✅
+- `GET /api/admin/snapshots/compare` ✅
+
+### FAZ 4 (UI) — DONE
+- `/admin/snapshots` route çalışıyor.
+- Snapshot list, run, compare ve export kontrolleri doğrulandı.
+- Smoke görsel: `/app/test_reports/p14_snapshots_ui_validation.jpeg`
+
+### FAZ 5 (E2E Final) — DONE
+- `testing_agent` raporu: `/app/test_reports/iteration_135.json`
+- Sonuç: backend %100 PASS (23/23), frontend %100 PASS.
+- `500` yok, `503` yok, export/snapshot/compare akışları çalışır durumda.
+
+### Kapanış Durumu
+- **P1.4 CLOSED**
+
 ## 2026-03-25 — P1.4 Export & Snapshot Layer (Faz 1-4) ✅ (Kod Tamam, Infra Blokajı Var)
 
 ### Kullanıcı net seçimleri (uygulandı)
