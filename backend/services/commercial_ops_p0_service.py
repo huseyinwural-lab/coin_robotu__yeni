@@ -19,6 +19,10 @@ STABLE_QUOTES = ("USDT", "USTC", "BUSD", "USDC", "FDUSD", "USD")
 DEFAULT_WINDOW_DAYS = 7
 MAX_FUTURES_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 MAX_SPOT_WINDOW_MS = 24 * 60 * 60 * 1000
+LOW_WEIGHT_SPOT_MAX_SYMBOLS = max(int(os.environ.get("COMMERCIAL_P0_SPOT_MAX_SYMBOLS") or "1"), 1)
+LOW_WEIGHT_SPOT_MAX_LIMIT = max(int(os.environ.get("COMMERCIAL_P0_SPOT_MAX_LIMIT") or "120"), 1)
+LOW_WEIGHT_SPOT_SLEEP_SECONDS = max(float(os.environ.get("COMMERCIAL_P0_SPOT_SLEEP_SECONDS") or "0.35"), 0.0)
+LOW_WEIGHT_SPOT_BACKOFF_SECONDS = max(float(os.environ.get("COMMERCIAL_P0_SPOT_BACKOFF_SECONDS") or "1.2"), 0.0)
 
 
 def _now() -> datetime:
@@ -87,6 +91,10 @@ def _iter_windows(start_ms: int, end_ms: int, max_span_ms: int) -> list[tuple[in
         windows.append((cursor, chunk_end))
         cursor = chunk_end + 1
     return windows
+
+
+def _is_binance_rate_limited(exc: Exception) -> bool:
+    return "binance_request_failed:429" in str(exc)
 
 
 def _extract_assets(symbol: str) -> tuple[str, str]:
@@ -564,18 +572,32 @@ def run_rest_trade_ingestion(
         market_inserted = 0
         market_duplicate = 0
         market_fetched = 0
+        market_rate_limit_hits = 0
+        low_weight_mode = bool(env == "live" and market == "spot")
 
         if market == "spot":
             if not clean_symbols:
                 raise ValueError("spot_symbols_required")
-            for symbol in clean_symbols:
+
+            spot_symbols = clean_symbols[:LOW_WEIGHT_SPOT_MAX_SYMBOLS] if low_weight_mode else clean_symbols
+            spot_limit = min(limit_per_symbol, LOW_WEIGHT_SPOT_MAX_LIMIT) if low_weight_mode else limit_per_symbol
+
+            for symbol in spot_symbols:
                 for chunk_start, chunk_end in _iter_windows(start_ms, end_ms, MAX_SPOT_WINDOW_MS):
-                    trades = client.fetch_spot_trades(
-                        symbol=symbol,
-                        start_time_ms=chunk_start,
-                        end_time_ms=chunk_end,
-                        limit=max(1, min(limit_per_symbol, 1000)),
-                    )
+                    try:
+                        trades = client.fetch_spot_trades(
+                            symbol=symbol,
+                            start_time_ms=chunk_start,
+                            end_time_ms=chunk_end,
+                            limit=max(1, min(spot_limit, 1000)),
+                        )
+                    except Exception as exc:
+                        if _is_binance_rate_limited(exc):
+                            market_rate_limit_hits += 1
+                            time.sleep(LOW_WEIGHT_SPOT_BACKOFF_SECONDS)
+                            continue
+                        raise
+
                     market_fetched += len(trades)
                     for raw in trades:
                         row = _build_spot_trade_row(
@@ -592,6 +614,9 @@ def run_rest_trade_ingestion(
                             continue
                         db.add(row)
                         market_inserted += 1
+
+                    if low_weight_mode:
+                        time.sleep(LOW_WEIGHT_SPOT_SLEEP_SECONDS)
         else:
             futures_symbols = clean_symbols or [None]
             for symbol in futures_symbols:
@@ -624,6 +649,9 @@ def run_rest_trade_ingestion(
             "fetched": market_fetched,
             "inserted": market_inserted,
             "duplicate": market_duplicate,
+            "rate_limit_hits": market_rate_limit_hits,
+            "low_weight_mode": low_weight_mode,
+            "processed_symbols": spot_symbols if market == "spot" else futures_symbols,
         }
         inserted += market_inserted
         duplicate += market_duplicate

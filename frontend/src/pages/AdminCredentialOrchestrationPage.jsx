@@ -292,18 +292,21 @@ export const AdminCredentialOrchestrationPage = () => {
       {
         key: "source",
         label: "source",
+        severity: "critical",
         current: preview?.source || "-",
         previous: selectedHistoryTrace?.source || "-",
       },
       {
         key: "selection_reason",
         label: "selection_reason",
+        severity: "medium",
         current: preview?.audit_metadata?.selection_reason || "-",
         previous: selectedHistoryTrace?.selection_reason || "-",
       },
       {
         key: "probe_state",
         label: "probe_state",
+        severity: "low",
         current: preview?.selected_probe_status || "-",
         previous: selectedHistoryTrace?.probe_state || "-",
       },
@@ -676,7 +679,14 @@ export const AdminCredentialOrchestrationPage = () => {
                 <div className="space-y-1" data-testid="resolution-trace-drift-highlight-list">
                   {traceDriftHighlights.map((diff) => (
                     <p key={diff.key} className="text-xs" data-testid={`resolution-trace-drift-highlight-item-${diff.key}`}>
-                      <span className="rounded bg-amber-100 px-1 py-0.5 text-amber-800">{diff.label}</span>:
+                      <span className="rounded bg-amber-100 px-1 py-0.5 text-amber-800">{diff.label}</span>
+                      <span
+                        className={`ml-1 rounded px-1 py-0.5 ${diff.severity === "critical" ? "bg-rose-100 text-rose-700" : diff.severity === "medium" ? "bg-orange-100 text-orange-700" : "bg-sky-100 text-sky-700"}`}
+                        data-testid={`resolution-trace-drift-severity-${diff.key}`}
+                      >
+                        {diff.severity}
+                      </span>
+                      :
                       <span className="ml-1 text-slate-700">{diff.previous}</span>
                       <span className="mx-1">→</span>
                       <span className="font-semibold text-rose-700">{diff.current}</span>
