@@ -101,6 +101,7 @@ const adminOnlyItems = [
       { to: "/admin/commercial-ops", label: "Commercial Ops", icon: BarChartBig, testId: "nav-admin-commercial-ops-link", superAdminOnly: true },
       { to: "/admin/revenue", label: "Revenue Engine", icon: TrendingUp, testId: "nav-admin-revenue-link", superAdminOnly: true },
       { to: "/admin/users/economics", label: "User Economics", icon: BarChart3, testId: "nav-admin-user-economics-link", superAdminOnly: true },
+      { to: "/admin/snapshots", label: "Analytics Snapshots", icon: LineChart, testId: "nav-admin-analytics-snapshots-link", superAdminOnly: true },
       { to: "/admin/credential-orchestration", label: "Credential Orchestration", icon: KeyRound, testId: "nav-admin-credential-orchestration-link" },
       { to: "/admin/user-approvals", label: "User Approvals", icon: UserCog, testId: "nav-admin-user-approvals-link" },
       { to: "/admin/pipeline-operations", label: "Pipeline Operations", icon: Activity, testId: "nav-admin-pipeline-operations-link" },

@@ -208,3 +208,18 @@ class UserEconomicsSnapshot(Base):
 
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AnalyticsSnapshot(Base):
+    __tablename__ = "analytics_snapshots"
+    __table_args__ = (
+        UniqueConstraint("snapshot_type", "snapshot_date", "environment", name="uq_analytics_snapshot_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    snapshot_type: Mapped[str] = mapped_column(String(20), default="daily", index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
+    snapshot_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

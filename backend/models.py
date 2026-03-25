@@ -125,7 +125,15 @@ from model_domains.governance_execution import (
     PlaybookExecutionRun,
     PlaybookRollbackMarker,
 )
-from model_domains.commercial_ops import CommercialTrade, PnlRecord, ExchangeReconciliationLog, RevenueLedger, UserEconomicsAggregate, UserEconomicsSnapshot
+from model_domains.commercial_ops import (
+    AnalyticsSnapshot,
+    CommercialTrade,
+    ExchangeReconciliationLog,
+    PnlRecord,
+    RevenueLedger,
+    UserEconomicsAggregate,
+    UserEconomicsSnapshot,
+)
 from model_domains.credential_orchestration import AdminExchangeCredential, CredentialAssignmentRule
 
 _ = immutability_listeners
@@ -254,6 +262,7 @@ __all__ = [
     "RevenueLedger",
     "UserEconomicsAggregate",
     "UserEconomicsSnapshot",
+    "AnalyticsSnapshot",
     "AdminExchangeCredential",
     "CredentialAssignmentRule",
 ]
