@@ -1893,6 +1893,9 @@ class UserExchangeConnectionResponse(BaseModel):
     has_api_secret: bool
     masked_api_key: str
     credential_fingerprint: str
+    effective_source: str = "unresolved"
+    routing_preview: dict = Field(default_factory=dict)
+    environment_valid: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -4203,6 +4206,96 @@ class ExchangeSettingsResponse(BaseModel):
     has_api_key: bool
     has_api_secret: bool
     updated_at: datetime | None
+
+
+class AdminExchangeCredentialCreateRequest(BaseModel):
+    scope_type: str = "global"
+    scope_id: str | None = None
+    exchange: str = "binance"
+    market_type: str = "spot"
+    purpose: str = "market_data"
+    environment: str = "testnet"
+    api_key: str
+    api_secret: str
+    passphrase: str | None = None
+    base_url_override: str | None = None
+    ip_binding_note: str | None = None
+    is_default: bool = False
+
+
+class AdminExchangeCredentialPatchRequest(BaseModel):
+    scope_type: str | None = None
+    scope_id: str | None = None
+    purpose: str | None = None
+    api_key: str | None = None
+    api_secret: str | None = None
+    passphrase: str | None = None
+    base_url_override: str | None = None
+    ip_binding_note: str | None = None
+    is_default: bool | None = None
+    is_active: bool | None = None
+
+
+class AdminExchangeCredentialResponse(BaseModel):
+    id: str
+    scope_type: str
+    scope_id: str | None = None
+    exchange: str
+    market_type: str
+    purpose: str
+    environment: str
+    base_url_override: str | None = None
+    ip_binding_note: str | None = None
+    is_active: bool
+    is_default: bool
+    approval_status: str
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    created_by: str | None = None
+    updated_by: str | None = None
+    has_api_key: bool
+    has_api_secret: bool
+    masked_api_key: str
+    credential_fingerprint: str
+    last_probe_status: str | None = None
+    last_probe_message: str | None = None
+    last_probe_meta: dict = Field(default_factory=dict)
+    last_probe_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CredentialAssignmentRuleUpsertRequest(BaseModel):
+    exchange: str = "binance"
+    market_type: str = "spot"
+    environment: str = "testnet"
+    tenant_id: str | None = None
+    user_id: str | None = None
+    preferred_source: str = "user"
+    fallback_enabled: bool = True
+
+
+class CredentialAssignmentRuleResponse(BaseModel):
+    id: str
+    exchange: str
+    market_type: str
+    environment: str
+    tenant_id: str | None = None
+    user_id: str | None = None
+    preferred_source: str
+    fallback_enabled: bool
+    updated_by: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CredentialResolutionPreviewResponse(BaseModel):
+    selected_credential_id: str
+    source: str
+    masked_api_key: str
+    masked_fingerprint: str
+    effective_base_url: str | None = None
+    audit_metadata: dict = Field(default_factory=dict)
 
 
 class PermissionControlResult(BaseModel):

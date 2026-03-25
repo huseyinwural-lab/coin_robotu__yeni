@@ -31,6 +31,7 @@ from db import get_db, redis_client
 from deps import require_user
 from models import BotProfile, PendingSignal, RiskPolicy, User, UserExecutionIntent
 from services.live_mode_service import validate_exchange_credentials_for_user
+from services.credential_resolution_service import build_user_routing_preview
 from schemas import (
     ExecutionIntentSubmitRequest,
     ExecutionIntentSubmitResponse,
@@ -57,6 +58,23 @@ from services.execution_readiness_service import enforce_execution_guard_or_rais
 from services.rate_limiter_service import consume_exchange_rate_limit
 
 router = APIRouter(prefix="/user", tags=["user_platform"])
+
+
+def _with_routing_metadata(*, row: dict, user_id: str, db: Session) -> dict:
+    preview = build_user_routing_preview(
+        db,
+        user_id=user_id,
+        exchange=row.get("exchange", "binance"),
+        market_type=row.get("market_type", "spot"),
+        environment=row.get("environment", "testnet"),
+        purpose="execution_fallback",
+    )
+    return {
+        **row,
+        "effective_source": preview.get("effective_source", "unresolved"),
+        "routing_preview": preview.get("routing_preview", {}),
+        "environment_valid": bool(preview.get("environment_valid", False)),
+    }
 
 
 def _submit_trade_with_guard(
@@ -187,7 +205,8 @@ def update_user_exchange(
 @router.get("/exchange-connections", response_model=list[UserExchangeConnectionResponse])
 def get_user_exchange_connections(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
     rows = list_user_exchange_connections(db, current_user.id)
-    return [UserExchangeConnectionResponse(**row) for row in rows]
+    enriched = [_with_routing_metadata(row=row, user_id=current_user.id, db=db) for row in rows]
+    return [UserExchangeConnectionResponse(**row) for row in enriched]
 
 
 @router.post("/exchange-connections", response_model=UserExchangeConnectionResponse, status_code=status.HTTP_201_CREATED)
@@ -228,7 +247,7 @@ def create_exchange_connection(
             "is_default": row["is_default"],
         },
     )
-    return UserExchangeConnectionResponse(**row)
+    return UserExchangeConnectionResponse(**_with_routing_metadata(row=row, user_id=current_user.id, db=db))
 
 
 @router.put("/exchange-connections/{connection_id}", response_model=UserExchangeConnectionResponse)
@@ -272,7 +291,7 @@ def update_exchange_connection(
             "is_default": row["is_default"],
         },
     )
-    return UserExchangeConnectionResponse(**row)
+    return UserExchangeConnectionResponse(**_with_routing_metadata(row=row, user_id=current_user.id, db=db))
 
 
 @router.post("/exchange-connections/{connection_id}/set-default", response_model=UserExchangeConnectionResponse)
@@ -295,7 +314,7 @@ def set_exchange_connection_default(
         actor_role=current_user.role.value,
         details={"account_label": row["account_label"]},
     )
-    return UserExchangeConnectionResponse(**row)
+    return UserExchangeConnectionResponse(**_with_routing_metadata(row=row, user_id=current_user.id, db=db))
 
 
 @router.post("/exchange-connections/{connection_id}/revalidate", response_model=UserExchangeConnectionResponse)
@@ -356,7 +375,7 @@ def revalidate_exchange_connection(
         },
     )
 
-    return UserExchangeConnectionResponse(**refreshed)
+    return UserExchangeConnectionResponse(**_with_routing_metadata(row=refreshed, user_id=current_user.id, db=db))
 
 
 @router.delete("/exchange-connections/{connection_id}")

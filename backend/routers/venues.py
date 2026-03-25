@@ -5,12 +5,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, require_admin
+from deps import get_current_user, require_admin, require_super_admin
 from models import AllowedMarket, ExchangeCapability, ExchangeRegistry, User, UserVenueAssignment
 from schemas import (
+    AdminExchangeCredentialCreateRequest,
+    AdminExchangeCredentialPatchRequest,
+    AdminExchangeCredentialResponse,
     AllowedMarketCreate,
     AllowedMarketResponse,
     AllowedMarketToggle,
+    CredentialAssignmentRuleResponse,
+    CredentialAssignmentRuleUpsertRequest,
+    CredentialResolutionPreviewResponse,
     ExchangeCapabilityCreate,
     ExchangeCapabilityResponse,
     ExchangeCapabilityUpdate,
@@ -29,9 +35,35 @@ from services.admin_exchange_credentials_service import (
     upsert_execution_credentials,
 )
 from services.exchange_adapter_smoke_service import run_exchange_adapter_smoke
+from services.credential_resolution_service import (
+    approve_admin_credential,
+    create_admin_credential,
+    disable_admin_credential,
+    list_admin_credentials,
+    list_assignment_rules,
+    probe_admin_credential,
+    resolve_exchange_credentials,
+    update_admin_credential,
+    upsert_assignment_rule,
+)
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry, user_allowed_venue_options, venue_health_summary
 
 router = APIRouter(prefix="/venues", tags=["venues"])
+
+
+def _credential_error(exc: Exception) -> HTTPException:
+    message = str(exc)
+    mapping = {
+        "invalid_scope_type": (status.HTTP_400_BAD_REQUEST, "invalid_scope_type"),
+        "invalid_market_type": (status.HTTP_400_BAD_REQUEST, "invalid_market_type"),
+        "invalid_environment": (status.HTTP_400_BAD_REQUEST, "invalid_environment"),
+        "invalid_purpose": (status.HTTP_400_BAD_REQUEST, "invalid_purpose"),
+        "invalid_preferred_source": (status.HTTP_400_BAD_REQUEST, "invalid_preferred_source"),
+        "unsupported_exchange": (status.HTTP_400_BAD_REQUEST, "unsupported_exchange"),
+        "credential_not_found": (status.HTTP_404_NOT_FOUND, "credential_not_found"),
+    }
+    code, detail = mapping.get(message, (status.HTTP_400_BAD_REQUEST, message))
+    return HTTPException(status_code=code, detail=detail)
 
 
 @router.get("/admin/exchanges", response_model=list[ExchangeRegistryResponse])
@@ -552,6 +584,254 @@ def admin_execution_validation(_: User = Depends(require_admin), db: Session = D
         },
         "details": smoke,
     }
+
+
+@router.get("/admin/credentials", response_model=list[AdminExchangeCredentialResponse])
+def admin_list_orchestration_credentials(
+    exchange: str | None = Query(default=None),
+    market_type: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+    scope_type: str | None = Query(default=None),
+    approval_status: str | None = Query(default=None),
+    include_inactive: bool = Query(default=True),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    rows = list_admin_credentials(
+        db,
+        exchange=exchange,
+        market_type=market_type,
+        environment=environment,
+        scope_type=scope_type,
+        approval_status=approval_status,
+        include_inactive=include_inactive,
+    )
+    return [AdminExchangeCredentialResponse(**row) for row in rows]
+
+
+@router.post("/admin/credentials", response_model=AdminExchangeCredentialResponse, status_code=status.HTTP_201_CREATED)
+def admin_create_orchestration_credential(
+    payload: AdminExchangeCredentialCreateRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = create_admin_credential(
+            db,
+            actor=current_admin,
+            scope_type=payload.scope_type,
+            scope_id=payload.scope_id,
+            exchange=payload.exchange,
+            market_type=payload.market_type,
+            purpose=payload.purpose,
+            environment=payload.environment,
+            api_key=payload.api_key,
+            api_secret=payload.api_secret,
+            passphrase=payload.passphrase,
+            base_url_override=payload.base_url_override,
+            ip_binding_note=payload.ip_binding_note,
+            is_default=payload.is_default,
+        )
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+
+    create_audit_log(
+        db,
+        action="admin_credential_created",
+        entity_type="admin_exchange_credential",
+        entity_id=row["id"],
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "exchange": row["exchange"],
+            "market_type": row["market_type"],
+            "environment": row["environment"],
+            "scope_type": row["scope_type"],
+            "purpose": row["purpose"],
+            "approval_status": row["approval_status"],
+        },
+    )
+    return AdminExchangeCredentialResponse(**row)
+
+
+@router.patch("/admin/credentials/{credential_id}", response_model=AdminExchangeCredentialResponse)
+def admin_patch_orchestration_credential(
+    credential_id: str,
+    payload: AdminExchangeCredentialPatchRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = update_admin_credential(
+            db,
+            actor=current_admin,
+            credential_id=credential_id,
+            scope_type=payload.scope_type,
+            scope_id=payload.scope_id,
+            purpose=payload.purpose,
+            base_url_override=payload.base_url_override,
+            ip_binding_note=payload.ip_binding_note,
+            api_key=payload.api_key,
+            api_secret=payload.api_secret,
+            passphrase=payload.passphrase,
+            is_default=payload.is_default,
+            is_active=payload.is_active,
+        )
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+
+    create_audit_log(
+        db,
+        action="admin_credential_updated",
+        entity_type="admin_exchange_credential",
+        entity_id=row["id"],
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"updated_fields": sorted([k for k, v in payload.model_dump().items() if v is not None])},
+    )
+    return AdminExchangeCredentialResponse(**row)
+
+
+@router.post("/admin/credentials/{credential_id}/approve", response_model=AdminExchangeCredentialResponse)
+def admin_approve_orchestration_credential(
+    credential_id: str,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = approve_admin_credential(db, actor=current_admin, credential_id=credential_id)
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+    create_audit_log(
+        db,
+        action="admin_credential_approved",
+        entity_type="admin_exchange_credential",
+        entity_id=row["id"],
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+    )
+    return AdminExchangeCredentialResponse(**row)
+
+
+@router.post("/admin/credentials/{credential_id}/disable", response_model=AdminExchangeCredentialResponse)
+def admin_disable_orchestration_credential(
+    credential_id: str,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = disable_admin_credential(db, actor=current_admin, credential_id=credential_id)
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+    create_audit_log(
+        db,
+        action="admin_credential_disabled",
+        entity_type="admin_exchange_credential",
+        entity_id=row["id"],
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+    )
+    return AdminExchangeCredentialResponse(**row)
+
+
+@router.post("/admin/credentials/{credential_id}/probe", response_model=AdminExchangeCredentialResponse)
+def admin_probe_orchestration_credential(
+    credential_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = probe_admin_credential(db, actor=current_admin, credential_id=credential_id)
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+    create_audit_log(
+        db,
+        action="admin_credential_probe_executed",
+        entity_type="admin_exchange_credential",
+        entity_id=row["id"],
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"probe_status": row.get("last_probe_status"), "probe_message": row.get("last_probe_message")},
+    )
+    return AdminExchangeCredentialResponse(**row)
+
+
+@router.get("/admin/credential-rules", response_model=list[CredentialAssignmentRuleResponse])
+def admin_list_credential_rules(
+    exchange: str | None = Query(default=None),
+    market_type: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    rows = list_assignment_rules(db, exchange=exchange, market_type=market_type, environment=environment)
+    return [CredentialAssignmentRuleResponse(**row) for row in rows]
+
+
+@router.put("/admin/credential-rules", response_model=CredentialAssignmentRuleResponse)
+def admin_put_credential_rule(
+    payload: CredentialAssignmentRuleUpsertRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = upsert_assignment_rule(
+            db,
+            actor=current_admin,
+            exchange=payload.exchange,
+            market_type=payload.market_type,
+            environment=payload.environment,
+            tenant_id=payload.tenant_id,
+            user_id=payload.user_id,
+            preferred_source=payload.preferred_source,
+            fallback_enabled=payload.fallback_enabled,
+        )
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+
+    create_audit_log(
+        db,
+        action="admin_credential_rule_updated",
+        entity_type="credential_assignment_rule",
+        entity_id=row["id"],
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "exchange": row["exchange"],
+            "market_type": row["market_type"],
+            "environment": row["environment"],
+            "preferred_source": row["preferred_source"],
+            "fallback_enabled": row["fallback_enabled"],
+        },
+    )
+    return CredentialAssignmentRuleResponse(**row)
+
+
+@router.get("/admin/credential-resolution-preview", response_model=CredentialResolutionPreviewResponse)
+def admin_credential_resolution_preview(
+    user_id: str,
+    exchange: str = Query(default="binance"),
+    market_type: str = Query(default="spot"),
+    environment: str = Query(default="testnet"),
+    purpose: str = Query(default="execution_fallback"),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = resolve_exchange_credentials(
+            db,
+            user_id=user_id,
+            exchange=exchange,
+            market_type=market_type,
+            environment=environment,
+            purpose=purpose,
+            include_secrets=False,
+        )
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+    return CredentialResolutionPreviewResponse(**result)
 
 
 @router.get("/options", response_model=list[UserVenueOptionResponse])
