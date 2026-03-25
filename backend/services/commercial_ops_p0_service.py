@@ -103,8 +103,15 @@ class BinanceCommercialClient:
         default_futures_base = (
             "https://testnet.binancefuture.com" if self.environment == "testnet" else "https://fapi.binance.com"
         )
-        self.spot_base_url = str(os.environ.get("BINANCE_SPOT_BASE_URL") or default_spot_base).strip().rstrip("/")
-        self.futures_base_url = str(os.environ.get("BINANCE_FUTURES_BASE_URL") or default_futures_base).strip().rstrip("/")
+        if self.environment == "testnet":
+            spot_override = os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL")
+            futures_override = os.environ.get("BINANCE_FUTURES_TESTNET_BASE_URL") or os.environ.get("BINANCE_FUTURES_BASE_URL")
+        else:
+            spot_override = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL")
+            futures_override = os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL") or os.environ.get("BINANCE_FUTURES_BASE_URL")
+
+        self.spot_base_url = str(spot_override or default_spot_base).strip().rstrip("/")
+        self.futures_base_url = str(futures_override or default_futures_base).strip().rstrip("/")
         self._price_cache: dict[str, float] = {}
 
     @staticmethod
