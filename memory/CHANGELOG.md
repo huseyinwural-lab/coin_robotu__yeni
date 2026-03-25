@@ -1,5 +1,16 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (P1.2 User Economics)
+- Migration: `20260325_0076_user_economics_aggregates.py` eklendi.
+- Yeni model: `UserEconomicsAggregate` (`user_id + environment` unique).
+- Yeni servis: `user_economics_service.py`
+  - `sync_user_economics_aggregates`
+  - `get_user_economics_summary`
+- Yeni endpoint: `GET /api/admin/users/economics`.
+- Yeni UI route: `/admin/users/economics` (`AdminUserEconomicsPage.jsx`).
+- Sidebar nav eklendi: `nav-admin-user-economics-link`.
+- Test kanıtı: `/app/test_reports/iteration_132.json` (backend 26/26 PASS, frontend %100).
+
 ## 2026-03-25 (P1 Revenue Engine MVP)
 - Migration: `20260325_0075_revenue_ledger.py` eklendi.
 - Yeni model: `RevenueLedger` + unique `(trade_id, component_type)`.

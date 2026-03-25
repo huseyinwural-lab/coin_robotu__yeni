@@ -1,5 +1,14 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (P1.2 tamamlandı)
+- ✅ Tamamlandı:
+  - User Economics aggregate katmanı
+  - `/api/admin/users/economics` endpointi
+  - User Economics admin UI (filter + KPI + top users + churn + cohort)
+- 🟡 Sonraki P1 adımı:
+  - Cohort retention eğrileri (zaman serisi)
+  - User profitability segmentation (VIP/standard/new)
+
 ## 2026-03-25 (P1 başlangıç tamamlandı)
 - ✅ Tamamlandı:
   - Revenue Engine Core (ledger + write path + summary API + admin UI)

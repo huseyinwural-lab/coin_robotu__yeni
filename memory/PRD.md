@@ -1,3 +1,46 @@
+## 2026-03-25 — P1.2 User Economics ✅
+
+### Kapsam (görev emri tamamlandı)
+- User economics aggregate tablo/view: `user_economics_aggregates` eklendi.
+- KPI’lar üretildi: `LTV`, `ARPU`, `ARPPU`, `churn`, `inactive_days`, `realized_pnl`, `revenue_contribution`.
+- Endpoint eklendi: `GET /api/admin/users/economics`.
+- Admin UI eklendi: `/admin/users/economics`.
+
+### Veri kaynak kuralı uyumu
+- Revenue kaynağı: **yalnızca `revenue_ledger`**.
+- PnL kaynağı: **yalnızca canonical `commercial_trades.realized_pnl_usd`**.
+- Deterministic aggregate: ardışık çağrılarda aynı KPI değerleri doğrulandı.
+
+### Backend mimari akışı
+1. `sync_user_economics_aggregates(environment, churn_inactive_days)`
+2. `revenue_ledger` + `commercial_trades` birleşik kullanıcı bazlı özet
+3. `user_economics_aggregates` idempotent upsert (`user_id + environment` unique)
+4. `get_user_economics_summary(...)` ile filtreli deterministic response
+
+### Endpoint sözleşmesi
+- `GET /api/admin/users/economics`
+  - Query: `environment`, `start_date`, `end_date`, `user_email`, `symbol`, `churn_inactive_days`, `cohort_month`, `top_limit`
+  - Response:
+    - `kpis`: total_users, paying_users, churned_users, churn_rate_pct, total_revenue_usd, arpu_usd, arppu_usd, avg_ltv_usd
+    - `top_users`, `churn_list`, `top_symbols`, `cohorts`, `rows`
+
+### UI plan (uygulandı)
+- Sayfa: `AdminUserEconomicsPage.jsx`
+- Bileşenler:
+  - Filter panel
+  - KPI kartları
+  - Top users tablosu
+  - Churn listesi
+  - Cohort görünümü (MVP tablo)
+- Nav link: `nav-admin-user-economics-link`
+
+### Test kanıtı
+- `testing_agent`: `/app/test_reports/iteration_132.json`
+  - Backend: **26/26 PASS**
+  - Frontend: **%100 PASS**
+- `auto_frontend_testing_agent`: sayfa akışları PASS
+- `deep_testing_backend_v2`: endpoint + filtre + regression PASS
+
 ## 2026-03-25 — P1 Revenue Engine MVP ✅
 
 ### Kullanıcı seçimi ile sabitlenen kural seti
