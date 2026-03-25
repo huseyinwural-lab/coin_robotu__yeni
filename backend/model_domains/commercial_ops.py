@@ -183,3 +183,28 @@ class UserEconomicsAggregate(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UserEconomicsSnapshot(Base):
+    __tablename__ = "user_economics_snapshots"
+    __table_args__ = (
+        UniqueConstraint("snapshot_type", "snapshot_date", "environment", "user_id", name="uq_user_econ_snapshot_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    snapshot_type: Mapped[str] = mapped_column(String(20), default="daily", index=True)
+    snapshot_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    user_email: Mapped[str] = mapped_column(String(255), default="", index=True)
+
+    ltv_usd: Mapped[float] = mapped_column(Float, default=0)
+    revenue_contribution_usd: Mapped[float] = mapped_column(Float, default=0)
+    realized_pnl_usd: Mapped[float] = mapped_column(Float, default=0)
+    inactive_days: Mapped[int] = mapped_column(Integer, default=0)
+    churned: Mapped[bool] = mapped_column(Boolean, default=False)
+    cohort_month: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    segment: Mapped[str] = mapped_column(String(40), default="low_activity_low_revenue", index=True)
+
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

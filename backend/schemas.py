@@ -3425,6 +3425,69 @@ class AdminUserEconomicsResponse(BaseModel):
     generated_at: str
 
 
+class RetentionTrendPoint(BaseModel):
+    cohort: str
+    period: str
+    cohort_size: int
+    active_users: int
+    retention_rate_pct: float
+    cohort_revenue_usd: float
+    cohort_realized_pnl_usd: float
+
+
+class AdminRetentionTrendResponse(BaseModel):
+    status: str
+    environment: str
+    granularity: str
+    lookback_periods: int
+    points: list[RetentionTrendPoint] = Field(default_factory=list)
+    generated_at: str
+
+
+class SegmentCardResponse(BaseModel):
+    segment: str
+    users: int
+    total_revenue_usd: float
+    total_realized_pnl_usd: float
+
+
+class AdminSegmentProfitabilityResponse(BaseModel):
+    status: str
+    environment: str
+    churn_inactive_days: int
+    segment_cards: list[SegmentCardResponse] = Field(default_factory=list)
+    churn_risk_list: list[UserEconomicsUserRow] = Field(default_factory=list)
+    reengagement_list: list[UserEconomicsUserRow] = Field(default_factory=list)
+    generated_at: str
+
+
+class UserEconomicsSnapshotRunResponse(BaseModel):
+    status: str
+    environment: str
+    snapshot_type: str
+    snapshot_date: str
+    inserted: int
+    updated: int
+    rows: int
+
+
+class UserEconomicsSnapshotTrendPoint(BaseModel):
+    snapshot_date: str
+    users: int
+    churned_users: int
+    churn_rate_pct: float
+    total_revenue_usd: float
+    avg_ltv_usd: float
+
+
+class UserEconomicsSnapshotTrendResponse(BaseModel):
+    status: str
+    environment: str
+    snapshot_type: str
+    points: list[UserEconomicsSnapshotTrendPoint] = Field(default_factory=list)
+    generated_at: str
+
+
 class CommercialP0WebsocketBootstrapRequest(BaseModel):
     target_user_id: str | None = None
     target_user_email: str | None = None

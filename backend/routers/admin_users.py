@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -8,11 +9,27 @@ from core.security import hash_password
 from db import get_db
 from deps import require_admin
 from models import User, UserExchangeConnection, UserRole, UserVenueAssignment
-from schemas import AdminUserEconomicsResponse, UserResponse, UserRoleUpdateRequest, UserStatusUpdateRequest
+from schemas import (
+    AdminRetentionTrendResponse,
+    AdminSegmentProfitabilityResponse,
+    AdminUserEconomicsResponse,
+    UserEconomicsSnapshotRunResponse,
+    UserEconomicsSnapshotTrendResponse,
+    UserResponse,
+    UserRoleUpdateRequest,
+    UserStatusUpdateRequest,
+)
 from services.audit_service import create_audit_log
 from services.identity_control_service import create_approval_request, get_or_create_identity_profile
 from services.password_policy_service import validate_password_policy
-from services.user_economics_service import get_user_economics_summary
+from services.user_economics_service import (
+    export_user_economics,
+    get_retention_trend,
+    get_segment_profitability,
+    get_user_economics_snapshot_trend,
+    get_user_economics_summary,
+    run_user_economics_snapshot,
+)
 from services.venue_service import ensure_user_venue_assignment
 
 router = APIRouter(prefix="/admin/users", tags=["admin_users"])
@@ -150,6 +167,172 @@ def get_users_economics(
         detail = str(exc)
         code = status.HTTP_404_NOT_FOUND if detail == "target_user_not_found" else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=code, detail=detail) from exc
+
+
+@router.get("/economics/retention-trend", response_model=AdminRetentionTrendResponse)
+def get_users_economics_retention_trend(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    environment: str = Query(default="live"),
+    granularity: str = Query(default="weekly"),
+    lookback_periods: int = Query(default=12, ge=1, le=104),
+):
+    _ = current_admin
+    try:
+        return AdminRetentionTrendResponse(
+            **get_retention_trend(
+                db,
+                environment=environment,
+                granularity=granularity,
+                lookback_periods=lookback_periods,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/economics/segment-profitability", response_model=AdminSegmentProfitabilityResponse)
+def get_users_segment_profitability(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    environment: str = Query(default="live"),
+    churn_inactive_days: int = Query(default=30, ge=1, le=365),
+    top_limit: int = Query(default=20, ge=1, le=100),
+):
+    _ = current_admin
+    try:
+        return AdminSegmentProfitabilityResponse(
+            **get_segment_profitability(
+                db,
+                environment=environment,
+                churn_inactive_days=churn_inactive_days,
+                top_limit=top_limit,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/economics/export.csv")
+def export_users_economics_csv(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    environment: str = Query(default="live"),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+    user_email: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    churn_inactive_days: int = Query(default=30, ge=1, le=365),
+    cohort_month: str | None = Query(default=None),
+    top_limit: int = Query(default=100, ge=1, le=200),
+):
+    _ = current_admin
+    try:
+        payload, media_type, filename = export_user_economics(
+            db,
+            environment=environment,
+            start_date=start_date,
+            end_date=end_date,
+            user_email=user_email,
+            symbol=symbol,
+            churn_inactive_days=churn_inactive_days,
+            cohort_month=cohort_month,
+            top_limit=top_limit,
+            output="csv",
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        code = status.HTTP_404_NOT_FOUND if detail == "target_user_not_found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=detail) from exc
+    return StreamingResponse(
+        iter([payload]),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/economics/export.xlsx")
+def export_users_economics_xlsx(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    environment: str = Query(default="live"),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+    user_email: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    churn_inactive_days: int = Query(default=30, ge=1, le=365),
+    cohort_month: str | None = Query(default=None),
+    top_limit: int = Query(default=100, ge=1, le=200),
+):
+    _ = current_admin
+    try:
+        payload, media_type, filename = export_user_economics(
+            db,
+            environment=environment,
+            start_date=start_date,
+            end_date=end_date,
+            user_email=user_email,
+            symbol=symbol,
+            churn_inactive_days=churn_inactive_days,
+            cohort_month=cohort_month,
+            top_limit=top_limit,
+            output="xlsx",
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        code = status.HTTP_404_NOT_FOUND if detail == "target_user_not_found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=detail) from exc
+    return StreamingResponse(
+        iter([payload]),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/economics/snapshots/run", response_model=UserEconomicsSnapshotRunResponse)
+def run_users_economics_snapshot(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    environment: str = Query(default="live"),
+    snapshot_type: str = Query(default="daily"),
+    as_of_date: str | None = Query(default=None),
+    churn_inactive_days: int = Query(default=30, ge=1, le=365),
+):
+    _ = current_admin
+    try:
+        return UserEconomicsSnapshotRunResponse(
+            **run_user_economics_snapshot(
+                db,
+                environment=environment,
+                snapshot_type=snapshot_type,
+                as_of_date=as_of_date,
+                churn_inactive_days=churn_inactive_days,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/economics/snapshots/trend", response_model=UserEconomicsSnapshotTrendResponse)
+def get_users_economics_snapshot_trend(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    environment: str = Query(default="live"),
+    snapshot_type: str = Query(default="daily"),
+    limit: int = Query(default=30, ge=1, le=365),
+):
+    _ = current_admin
+    try:
+        return UserEconomicsSnapshotTrendResponse(
+            **get_user_economics_snapshot_trend(
+                db,
+                environment=environment,
+                snapshot_type=snapshot_type,
+                limit=limit,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post("/admin-create", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
