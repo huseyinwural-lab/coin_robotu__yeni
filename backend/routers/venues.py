@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_admin, require_super_admin
-from models import AllowedMarket, ExchangeCapability, ExchangeRegistry, User, UserVenueAssignment
+from models import AdminExchangeCredential, AllowedMarket, ExchangeCapability, ExchangeRegistry, User, UserVenueAssignment
 from schemas import (
     AdminExchangeCredentialCreateRequest,
     AdminExchangeCredentialPatchRequest,
@@ -818,9 +818,11 @@ def admin_credential_resolution_preview(
     market_type: str = Query(default="spot"),
     environment: str = Query(default="testnet"),
     purpose: str = Query(default="execution"),
-    _: User = Depends(require_admin),
+    current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    request_id = str(uuid.uuid4())
+    resolved_at = datetime.now(timezone.utc).isoformat()
     try:
         result = resolve_exchange_credentials(
             db,
@@ -833,7 +835,55 @@ def admin_credential_resolution_preview(
         )
     except Exception as exc:
         raise _credential_error(exc) from exc
-    return CredentialResolutionPreviewResponse(**result)
+
+    selected_probe_status = None
+    selected_probe_message = None
+    selected_id = result.get("selected_credential_id")
+    if selected_id:
+        selected_row = db.query(AdminExchangeCredential).filter(AdminExchangeCredential.id == selected_id).first()
+        if selected_row:
+            selected_probe_status = selected_row.last_probe_status
+            selected_probe_message = selected_row.last_probe_message
+
+    enriched = {
+        **result,
+        "request_id": request_id,
+        "resolved_at": resolved_at,
+        "exchange": exchange,
+        "market_type": market_type,
+        "environment": environment,
+        "purpose": purpose,
+        "fallback_chain": ["user", "tenant_admin", "global_admin"],
+        "selected_probe_status": selected_probe_status,
+        "selected_probe_message": selected_probe_message,
+    }
+
+    create_audit_log(
+        db,
+        action="admin_credential_resolution_preview",
+        entity_type="credential_resolution_trace",
+        entity_id=request_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "request_id": request_id,
+            "resolved_at": resolved_at,
+            "user_id": user_id,
+            "exchange": exchange,
+            "market_type": market_type,
+            "environment": environment,
+            "purpose": purpose,
+            "source": result.get("source"),
+            "selected_credential_id": result.get("selected_credential_id"),
+            "masked_fingerprint": result.get("masked_fingerprint"),
+            "selection_reason": (result.get("audit_metadata") or {}).get("selection_reason"),
+            "rule_id": (result.get("audit_metadata") or {}).get("rule_id"),
+            "selected_probe_status": selected_probe_status,
+            "selected_probe_message": selected_probe_message,
+        },
+    )
+
+    return CredentialResolutionPreviewResponse(**enriched)
 
 
 @router.get("/options", response_model=list[UserVenueOptionResponse])

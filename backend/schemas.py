@@ -4290,10 +4290,19 @@ class CredentialAssignmentRuleResponse(BaseModel):
 
 
 class CredentialResolutionPreviewResponse(BaseModel):
+    request_id: str
+    resolved_at: str
     selected_credential_id: str
     source: str
     masked_api_key: str
     masked_fingerprint: str
+    exchange: str
+    market_type: str
+    environment: str
+    purpose: str
+    fallback_chain: list[str] = Field(default_factory=lambda: ["user", "tenant_admin", "global_admin"])
+    selected_probe_status: str | None = None
+    selected_probe_message: str | None = None
     effective_base_url: str | None = None
     audit_metadata: dict = Field(default_factory=dict)
 

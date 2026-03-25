@@ -2,6 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiClient } from "@/lib/api";
@@ -48,6 +56,7 @@ export const AdminCredentialOrchestrationPage = () => {
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
+  const [traceDrawerOpen, setTraceDrawerOpen] = useState(false);
   const [previewForm, setPreviewForm] = useState({ user_id: "", purpose: "execution" });
 
   const [createForm, setCreateForm] = useState({
@@ -170,6 +179,7 @@ export const AdminCredentialOrchestrationPage = () => {
         },
       });
       setPreview(data || null);
+      setTraceDrawerOpen(false);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Preview alınamadı");
     }
@@ -452,12 +462,28 @@ export const AdminCredentialOrchestrationPage = () => {
               <Button onClick={handlePreview} data-testid="resolution-preview-load-button">Selected Source Önizleme</Button>
             </div>
             <div className="rounded border border-slate-200 p-3 text-xs" data-testid="resolution-preview-output">
+              <p data-testid="resolution-preview-request-id-line">request id: <span data-testid="resolution-preview-request-id-value">{preview?.request_id || "-"}</span></p>
+              <p data-testid="resolution-preview-resolved-at-line">timestamp: <span data-testid="resolution-preview-resolved-at-value">{preview?.resolved_at || "-"}</span></p>
               <p data-testid="resolution-preview-source-line">selected source: <span data-testid="resolution-preview-source-value">{preview?.source || "-"}</span></p>
               <p data-testid="resolution-preview-credential-id-line">credential id: <span data-testid="resolution-preview-credential-id-value">{preview?.selected_credential_id || "-"}</span></p>
               <p data-testid="resolution-preview-fingerprint-line">fingerprint: <span data-testid="resolution-preview-fingerprint-value">{preview?.masked_fingerprint || "-"}</span></p>
+              <p data-testid="resolution-preview-market-line">market_type: <span data-testid="resolution-preview-market-value">{preview?.market_type || filters.market_type}</span></p>
+              <p data-testid="resolution-preview-environment-line">environment: <span data-testid="resolution-preview-environment-value">{preview?.environment || filters.environment}</span></p>
+              <p data-testid="resolution-preview-purpose-line">purpose: <span data-testid="resolution-preview-purpose-value">{preview?.purpose || previewForm.purpose}</span></p>
+              <p data-testid="resolution-preview-probe-state-line">probe state: <span data-testid="resolution-preview-probe-state-value">{preview?.selected_probe_status || "-"}</span></p>
               <p data-testid="resolution-preview-base-url-line">effective base url: <span data-testid="resolution-preview-base-url-value">{preview?.effective_base_url || "-"}</span></p>
               <p data-testid="resolution-preview-selection-reason-line">selection reason: <span data-testid="resolution-preview-selection-reason-value">{preview?.audit_metadata?.selection_reason || "-"}</span></p>
               <p data-testid="resolution-preview-rule-id-line">rule id: <span data-testid="resolution-preview-rule-id-value">{preview?.audit_metadata?.rule_id || "-"}</span></p>
+              <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="resolution-preview-trace-actions-row">
+                <Button size="sm" variant="outline" disabled={!preview?.request_id} onClick={() => setTraceDrawerOpen(true)} data-testid="resolution-preview-open-trace-drawer-button">Audit Trace Aç</Button>
+                <a
+                  href={preview?.request_id ? `#trace-${preview.request_id}` : "#"}
+                  className="text-xs text-sky-700 underline"
+                  data-testid="resolution-preview-audit-link-anchor"
+                >
+                  audit_link
+                </a>
+              </div>
             </div>
             <div className="mt-3 rounded border border-slate-200 p-3" data-testid="decision-trace-timeline-card">
               <p className="mb-2 text-xs font-semibold text-slate-700" data-testid="decision-trace-timeline-title">Decision Trace Timeline</p>
@@ -501,6 +527,32 @@ export const AdminCredentialOrchestrationPage = () => {
           </div>
         </article>
       </section>
+
+      <Dialog open={traceDrawerOpen} onOpenChange={setTraceDrawerOpen}>
+        <DialogContent className="max-w-2xl" data-testid="resolution-trace-drawer-modal">
+          <DialogHeader>
+            <DialogTitle data-testid="resolution-trace-drawer-title">Resolution Audit Trace</DialogTitle>
+            <DialogDescription data-testid="resolution-trace-drawer-description">
+              request_id ile birebir eşleşen resolution ayrıntısı.
+            </DialogDescription>
+          </DialogHeader>
+          <div id={preview?.request_id ? `trace-${preview.request_id}` : "trace-empty"} className="space-y-2 text-xs" data-testid="resolution-trace-drawer-content">
+            <p data-testid="resolution-trace-request-id">request_id: {preview?.request_id || "-"}</p>
+            <p data-testid="resolution-trace-timestamp">timestamp: {preview?.resolved_at || "-"}</p>
+            <p data-testid="resolution-trace-source">selected source: {preview?.source || "-"}</p>
+            <p data-testid="resolution-trace-fallback-chain">fallback chain: {(preview?.fallback_chain || ["user", "tenant_admin", "global_admin"]).join(" -> ")}</p>
+            <p data-testid="resolution-trace-masked-credential">used credential(masked): {preview?.masked_api_key || "-"} / {preview?.masked_fingerprint || "-"}</p>
+            <p data-testid="resolution-trace-environment">environment: {preview?.environment || filters.environment}</p>
+            <p data-testid="resolution-trace-market">market_type: {preview?.market_type || filters.market_type}</p>
+            <p data-testid="resolution-trace-purpose">purpose: {preview?.purpose || previewForm.purpose}</p>
+            <p data-testid="resolution-trace-probe-state">probe state: {preview?.selected_probe_status || "-"}</p>
+            <p data-testid="resolution-trace-probe-message">probe message: {preview?.selected_probe_message || "-"}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTraceDrawerOpen(false)} data-testid="resolution-trace-drawer-close-button">Kapat</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {loading && <p className="text-xs text-slate-500" data-testid="credential-page-loading-indicator">Yükleniyor...</p>}
     </section>
