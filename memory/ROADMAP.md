@@ -1,5 +1,11 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (Traceability Increment)
+- ✅ Tamamlandı:
+  - request_id bazlı resolution trace response
+  - aynı sayfada audit drawer/modal
+  - unique request_id doğrulaması + acceptance test PASS
+
 ## 2026-03-25 (P0 Devamı Güncelleme)
 - ✅ Tamamlandı:
   - Spot live + futures test credential/probe doğrulama

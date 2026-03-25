@@ -1,3 +1,39 @@
+## 2026-03-25 — Traceability Acceptance (Request ID + Audit Drawer) ✅
+
+### Uygulanan kullanıcı kararları
+- Audit link: aynı sayfada drawer/modal (context korunumu)
+- `request_id`: backend response’a zorunlu eklendi
+
+### Backend
+- `GET /api/venues/admin/credential-resolution-preview` artık şunları döndürüyor:
+  - `request_id` (her çağrıda unique)
+  - `resolved_at`
+  - `exchange`, `market_type`, `environment`, `purpose`
+  - `fallback_chain`
+  - `selected_probe_status`, `selected_probe_message`
+- Aynı endpoint içinde `create_audit_log` ile `request_id` bazlı trace kaydı oluşturuluyor.
+
+### Frontend
+- Resolution preview bloğuna `request_id` + `timestamp` + trace alanları eklendi.
+- Yeni `Audit Trace Aç` butonu ve aynı sayfada dialog/drawer eklendi.
+- Drawer içeriği:
+  - selected source
+  - fallback chain
+  - kullanılan credential (masked)
+  - environment
+  - market_type
+  - purpose
+  - probe state/message
+  - timestamp
+  - request_id
+- `audit_link` anchor (`#trace-{request_id}`) tıklanabilir hale getirildi.
+
+### Test kanıtı
+- `testing_agent` raporu: `/app/test_reports/iteration_127.json`
+  - Backend: **10/10 PASS**
+  - Frontend: **%100 PASS**
+  - Unique `request_id` ardışık çağrılarda doğrulandı.
+
 ## 2026-03-25 — P0 Devamı (Spot Live + Futures Test + Decision Trace Timeline) ✅
 
 ### Kullanıcı yönlendirmesi ve uygulanan kararlar

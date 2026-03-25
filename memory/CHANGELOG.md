@@ -1,5 +1,12 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (Traceability: request_id + audit drawer)
+- Backend: `credential-resolution-preview` response’u traceability alanlarıyla genişletildi (`request_id`, `resolved_at`, `fallback_chain`, `selected_probe_status` vb.).
+- Backend: endpoint içinde `request_id` bazlı audit log kaydı eklendi.
+- Frontend: aynı sayfada Audit Trace drawer/modal eklendi.
+- Frontend: preview alanına request_id/timestamp + audit_link anchor eklendi.
+- Test kanıtı: `/app/test_reports/iteration_127.json` (backend 10/10 PASS, frontend %100).
+
 ## 2026-03-25 (P0 Devamı + Decision Trace Timeline)
 - Backend:
   - `commercial_ops_p0_service.py` içinde `usdt_perp/coin_perp -> futures` canonical alias desteği eklendi.
