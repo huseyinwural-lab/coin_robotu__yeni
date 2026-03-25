@@ -101,6 +101,7 @@ def build_latest_pnl(
     target_user_id: str | None = Query(default=None),
     target_user_email: str | None = Query(default=None),
     environment: str = Query(default="testnet"),
+    market_types: list[str] = Query(default=["spot", "futures"]),
     start_ts: str | None = Query(default=None),
     end_ts: str | None = Query(default=None),
     _: User = Depends(require_super_admin),
@@ -113,6 +114,7 @@ def build_latest_pnl(
                 target_user_id=target_user_id,
                 target_user_email=target_user_email,
                 environment=environment,
+                market_types=market_types,
                 start_ts=start_ts,
                 end_ts=end_ts,
             )
@@ -152,6 +154,7 @@ def data_quality(
     target_user_id: str | None = Query(default=None),
     target_user_email: str | None = Query(default=None),
     environment: str = Query(default="testnet"),
+    required_market_types: list[str] = Query(default=["spot", "futures"]),
     _: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
@@ -162,6 +165,7 @@ def data_quality(
                 target_user_id=target_user_id,
                 target_user_email=target_user_email,
                 environment=environment,
+                required_market_types=required_market_types,
             )
         )
     except Exception as exc:

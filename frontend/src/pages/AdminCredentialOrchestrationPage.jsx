@@ -57,6 +57,9 @@ export const AdminCredentialOrchestrationPage = () => {
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [traceDrawerOpen, setTraceDrawerOpen] = useState(false);
+  const [traceHistoryLoading, setTraceHistoryLoading] = useState(false);
+  const [traceHistory, setTraceHistory] = useState([]);
+  const [selectedHistoryTrace, setSelectedHistoryTrace] = useState(null);
   const [previewForm, setPreviewForm] = useState({ user_id: "", purpose: "execution" });
 
   const [createForm, setCreateForm] = useState({
@@ -180,9 +183,59 @@ export const AdminCredentialOrchestrationPage = () => {
       });
       setPreview(data || null);
       setTraceDrawerOpen(false);
+      setSelectedHistoryTrace(null);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Preview alınamadı");
     }
+  };
+
+  const loadTraceHistory = useCallback(async () => {
+    if (!previewForm.user_id.trim()) {
+      setTraceHistory([]);
+      return;
+    }
+    setTraceHistoryLoading(true);
+    try {
+      const { data } = await apiClient.get("/audit-logs/timeline", {
+        params: {
+          action: "admin_credential_resolution_preview",
+          entity_type: "credential_resolution_trace",
+          q: previewForm.user_id.trim(),
+          limit: 20,
+        },
+      });
+      const items = Array.isArray(data?.items) ? data.items : [];
+      const normalized = items.map((item) => ({
+        audit_id: item.id,
+        request_id: item?.details?.request_id || "-",
+        resolved_at: item?.details?.resolved_at || item?.created_at || "-",
+        source: item?.details?.source || "-",
+        environment: item?.details?.environment || "-",
+        market_type: item?.details?.market_type || "-",
+        purpose: item?.details?.purpose || "-",
+        probe_state: item?.details?.selected_probe_status || "-",
+        masked_fingerprint: item?.details?.masked_fingerprint || "-",
+        selection_reason: item?.details?.selection_reason || "-",
+        rule_id: item?.details?.rule_id || "-",
+      }));
+      setTraceHistory(normalized);
+    } catch (error) {
+      setTraceHistory([]);
+      const errorDetail = error?.response?.data?.detail;
+      const errorMessage = typeof errorDetail === 'string' 
+        ? errorDetail 
+        : Array.isArray(errorDetail) 
+          ? errorDetail.map(e => e?.msg || 'Validation error').join(', ')
+          : "Trace geçmişi alınamadı";
+      toast.error(errorMessage);
+    } finally {
+      setTraceHistoryLoading(false);
+    }
+  }, [previewForm.user_id]);
+
+  const openTraceDrawer = async () => {
+    setTraceDrawerOpen(true);
+    await loadTraceHistory();
   };
 
   const probeSummary = useMemo(() => {
@@ -475,7 +528,7 @@ export const AdminCredentialOrchestrationPage = () => {
               <p data-testid="resolution-preview-selection-reason-line">selection reason: <span data-testid="resolution-preview-selection-reason-value">{preview?.audit_metadata?.selection_reason || "-"}</span></p>
               <p data-testid="resolution-preview-rule-id-line">rule id: <span data-testid="resolution-preview-rule-id-value">{preview?.audit_metadata?.rule_id || "-"}</span></p>
               <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="resolution-preview-trace-actions-row">
-                <Button size="sm" variant="outline" disabled={!preview?.request_id} onClick={() => setTraceDrawerOpen(true)} data-testid="resolution-preview-open-trace-drawer-button">Audit Trace Aç</Button>
+                <Button size="sm" variant="outline" disabled={!preview?.request_id} onClick={openTraceDrawer} data-testid="resolution-preview-open-trace-drawer-button">Audit Trace Aç</Button>
                 <a
                   href={preview?.request_id ? `#trace-${preview.request_id}` : "#"}
                   className="text-xs text-sky-700 underline"
@@ -547,6 +600,45 @@ export const AdminCredentialOrchestrationPage = () => {
             <p data-testid="resolution-trace-purpose">purpose: {preview?.purpose || previewForm.purpose}</p>
             <p data-testid="resolution-trace-probe-state">probe state: {preview?.selected_probe_status || "-"}</p>
             <p data-testid="resolution-trace-probe-message">probe message: {preview?.selected_probe_message || "-"}</p>
+          </div>
+          <div className="mt-2 rounded border border-slate-200 p-3" data-testid="resolution-trace-history-card">
+            <p className="mb-2 text-xs font-semibold" data-testid="resolution-trace-history-title">Geçmiş Trace Listesi (Son 20)</p>
+            {traceHistoryLoading && <p className="text-xs text-slate-500" data-testid="resolution-trace-history-loading">Yükleniyor...</p>}
+            {!traceHistoryLoading && !traceHistory.length && (
+              <p className="text-xs text-slate-500" data-testid="resolution-trace-history-empty">Geçmiş trace bulunamadı</p>
+            )}
+            {!traceHistoryLoading && !!traceHistory.length && (
+              <div className="space-y-2" data-testid="resolution-trace-history-list">
+                {traceHistory.map((item) => (
+                  <div key={item.audit_id} className="rounded border border-slate-200 p-2" data-testid={`resolution-trace-history-row-${item.audit_id}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs" data-testid={`resolution-trace-history-request-id-${item.audit_id}`}>request_id: {item.request_id}</p>
+                      <Button size="sm" variant="outline" onClick={() => setSelectedHistoryTrace(item)} data-testid={`resolution-trace-history-compare-button-${item.audit_id}`}>Karşılaştır</Button>
+                    </div>
+                    <p className="text-xs text-slate-600" data-testid={`resolution-trace-history-meta-${item.audit_id}`}>{item.environment}/{item.market_type}/{item.purpose} • {item.source}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="mt-2 rounded border border-slate-200 p-3" data-testid="resolution-trace-compare-card">
+            <p className="mb-2 text-xs font-semibold" data-testid="resolution-trace-compare-title">Trace Karşılaştırma</p>
+            <div className="grid gap-2 md:grid-cols-2" data-testid="resolution-trace-compare-grid">
+              <div className="rounded border border-slate-200 p-2" data-testid="resolution-trace-compare-current-column">
+                <p className="font-semibold" data-testid="resolution-trace-compare-current-title">Current</p>
+                <p data-testid="resolution-trace-compare-current-request-id">request_id: {preview?.request_id || "-"}</p>
+                <p data-testid="resolution-trace-compare-current-source">source: {preview?.source || "-"}</p>
+                <p data-testid="resolution-trace-compare-current-selection-reason">selection_reason: {preview?.audit_metadata?.selection_reason || "-"}</p>
+                <p data-testid="resolution-trace-compare-current-probe">probe: {preview?.selected_probe_status || "-"}</p>
+              </div>
+              <div className="rounded border border-slate-200 p-2" data-testid="resolution-trace-compare-history-column">
+                <p className="font-semibold" data-testid="resolution-trace-compare-history-title">Selected History</p>
+                <p data-testid="resolution-trace-compare-history-request-id">request_id: {selectedHistoryTrace?.request_id || "-"}</p>
+                <p data-testid="resolution-trace-compare-history-source">source: {selectedHistoryTrace?.source || "-"}</p>
+                <p data-testid="resolution-trace-compare-history-selection-reason">selection_reason: {selectedHistoryTrace?.selection_reason || "-"}</p>
+                <p data-testid="resolution-trace-compare-history-probe">probe: {selectedHistoryTrace?.probe_state || "-"}</p>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTraceDrawerOpen(false)} data-testid="resolution-trace-drawer-close-button">Kapat</Button>

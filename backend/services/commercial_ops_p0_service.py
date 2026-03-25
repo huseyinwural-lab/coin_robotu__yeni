@@ -698,25 +698,29 @@ def compute_and_persist_pnl(
     target_user_id: str | None,
     target_user_email: str | None,
     environment: str,
+    market_types: list[str] | None,
     start_ts: str | None,
     end_ts: str | None,
 ) -> dict:
     env = _normalize_environment(environment)
+    markets = _normalize_market_types(market_types)
     user, market_credentials = _resolve_user_and_market_credentials(
         db,
         target_user_id=target_user_id,
         target_user_email=target_user_email,
         environment=env,
-        required_markets=["futures"],
+        required_markets=markets,
     )
-    futures_ctx = market_credentials["futures"]
-    futures_client = BinanceCommercialClient(
-        api_key=futures_ctx["api_key"],
-        api_secret=futures_ctx["api_secret"],
-        environment=env,
-    )
-    if futures_ctx.get("effective_base_url"):
-        futures_client.futures_base_url = str(futures_ctx["effective_base_url"]).rstrip("/")
+    futures_client = None
+    if "futures" in market_credentials:
+        futures_ctx = market_credentials["futures"]
+        futures_client = BinanceCommercialClient(
+            api_key=futures_ctx["api_key"],
+            api_secret=futures_ctx["api_secret"],
+            environment=env,
+        )
+        if futures_ctx.get("effective_base_url"):
+            futures_client.futures_base_url = str(futures_ctx["effective_base_url"]).rstrip("/")
     spot_client = None
     if "spot" in market_credentials:
         spot_ctx = market_credentials["spot"]
@@ -728,11 +732,17 @@ def compute_and_persist_pnl(
         if spot_ctx.get("effective_base_url"):
             spot_client.spot_base_url = str(spot_ctx["effective_base_url"]).rstrip("/")
     price_client = spot_client or futures_client
+    if price_client is None:
+        raise ValueError("binance_credentials_missing")
 
     start_dt = _parse_iso(start_ts)
     end_dt = _parse_iso(end_ts)
 
     query = db.query(CommercialTrade).filter(CommercialTrade.user_id == user.id, CommercialTrade.exchange == "binance", CommercialTrade.environment == env)
+    if len(markets) == 1:
+        query = query.filter(CommercialTrade.market_type == markets[0])
+    elif len(markets) > 1:
+        query = query.filter(CommercialTrade.market_type.in_(markets))
     if start_dt is not None:
         query = query.filter(CommercialTrade.trade_time >= start_dt)
     if end_dt is not None:
@@ -744,7 +754,9 @@ def compute_and_persist_pnl(
 
     start_ms = _dt_to_ms(start_dt, _default_start_ms())
     end_ms = _dt_to_ms(end_dt, int(_now().timestamp() * 1000))
-    funding_income_rows = futures_client.fetch_futures_funding_income(start_time_ms=start_ms, end_time_ms=end_ms)
+    funding_income_rows = []
+    if futures_client is not None and "futures" in markets:
+        funding_income_rows = futures_client.fetch_futures_funding_income(start_time_ms=start_ms, end_time_ms=end_ms)
     funding_usd = 0.0
     for row in funding_income_rows:
         income = _safe_float(row.get("income"), 0.0)
@@ -753,26 +765,30 @@ def compute_and_persist_pnl(
 
     futures_unrealized = 0.0
     futures_positions: list[dict] = []
-    try:
-        for item in futures_client.fetch_futures_position_risk():
-            qty = _safe_float(item.get("positionAmt"), 0.0)
-            if qty == 0:
-                continue
-            unrealized = _safe_float(item.get("unRealizedProfit"), 0.0)
-            futures_unrealized += unrealized
-            futures_positions.append(
-                {
-                    "symbol": item.get("symbol"),
-                    "position_amt": qty,
-                    "entry_price": _safe_float(item.get("entryPrice"), 0.0),
-                    "mark_price": _safe_float(item.get("markPrice"), 0.0),
-                    "unrealized_profit_usd": unrealized,
-                }
-            )
-    except Exception:
-        futures_positions = []
+    if futures_client is not None and "futures" in markets:
+        try:
+            for item in futures_client.fetch_futures_position_risk():
+                qty = _safe_float(item.get("positionAmt"), 0.0)
+                if qty == 0:
+                    continue
+                unrealized = _safe_float(item.get("unRealizedProfit"), 0.0)
+                futures_unrealized += unrealized
+                futures_positions.append(
+                    {
+                        "symbol": item.get("symbol"),
+                        "position_amt": qty,
+                        "entry_price": _safe_float(item.get("entryPrice"), 0.0),
+                        "mark_price": _safe_float(item.get("markPrice"), 0.0),
+                        "unrealized_profit_usd": unrealized,
+                    }
+                )
+        except Exception:
+            futures_positions = []
 
-    spot_unrealized, spot_inventory = _spot_unrealized_usd(price_client, trades)
+    spot_unrealized = 0.0
+    spot_inventory = {}
+    if "spot" in markets:
+        spot_unrealized, spot_inventory = _spot_unrealized_usd(price_client, trades)
     unrealized_gross = spot_unrealized + futures_unrealized
     trading_fee_usd = commission_usd
     realized_net = realized_gross - trading_fee_usd + funding_usd
@@ -801,6 +817,7 @@ def compute_and_persist_pnl(
             "futures_positions": futures_positions,
             "spot_inventory": spot_inventory,
             "funding_events": len(funding_income_rows),
+            "market_scope": markets,
             "fee_breakdown": {
                 "trading_fee_usd": round(trading_fee_usd, 8),
                 "commission_usd": round(commission_usd, 8),
@@ -1082,17 +1099,20 @@ def get_data_quality_snapshot(
     target_user_id: str | None,
     target_user_email: str | None,
     environment: str,
+    required_market_types: list[str] | None,
 ) -> dict:
     env = _normalize_environment(environment)
+    markets = _normalize_market_types(required_market_types)
     user, _ = _resolve_user_and_market_credentials(
         db,
         target_user_id=target_user_id,
         target_user_email=target_user_email,
         environment=env,
+        required_markets=markets,
     )
 
     latest_by_market: dict[str, CommercialTrade | None] = {}
-    for market in ["spot", "futures"]:
+    for market in markets:
         latest_by_market[market] = (
             db.query(CommercialTrade)
             .filter(
@@ -1155,6 +1175,7 @@ def get_live_transition_gate(
         target_user_id=target_user_id,
         target_user_email=target_user_email,
         environment=env,
+        required_markets=markets,
     )
 
     latest_trade = None
