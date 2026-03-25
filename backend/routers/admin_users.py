@@ -8,10 +8,11 @@ from core.security import hash_password
 from db import get_db
 from deps import require_admin
 from models import User, UserExchangeConnection, UserRole, UserVenueAssignment
-from schemas import UserResponse, UserRoleUpdateRequest, UserStatusUpdateRequest
+from schemas import AdminUserEconomicsResponse, UserResponse, UserRoleUpdateRequest, UserStatusUpdateRequest
 from services.audit_service import create_audit_log
 from services.identity_control_service import create_approval_request, get_or_create_identity_profile
 from services.password_policy_service import validate_password_policy
+from services.user_economics_service import get_user_economics_summary
 from services.venue_service import ensure_user_venue_assignment
 
 router = APIRouter(prefix="/admin/users", tags=["admin_users"])
@@ -115,6 +116,40 @@ def list_users(
         query = query.filter(User.is_active.is_(False))
     query = _apply_sort(query, sort_by, sort_dir)
     return query.limit(limit).all()
+
+
+@router.get("/economics", response_model=AdminUserEconomicsResponse)
+def get_users_economics(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    environment: str = Query(default="live"),
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+    user_email: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    churn_inactive_days: int = Query(default=30, ge=1, le=365),
+    cohort_month: str | None = Query(default=None),
+    top_limit: int = Query(default=10, ge=1, le=100),
+):
+    _ = current_admin
+    try:
+        return AdminUserEconomicsResponse(
+            **get_user_economics_summary(
+                db,
+                environment=environment,
+                start_date=start_date,
+                end_date=end_date,
+                user_email=user_email,
+                symbol=symbol,
+                churn_inactive_days=churn_inactive_days,
+                cohort_month=cohort_month,
+                top_limit=top_limit,
+            )
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        code = status.HTTP_404_NOT_FOUND if detail == "target_user_not_found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=detail) from exc
 
 
 @router.post("/admin-create", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

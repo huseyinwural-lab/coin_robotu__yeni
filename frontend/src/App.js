@@ -81,6 +81,7 @@ import { AdminUniverseMonitorPage } from "@/pages/AdminUniverseMonitorPage";
 import { AdminFreshnessHeatmapPage } from "@/pages/AdminFreshnessHeatmapPage";
 import { AdminCommercialOpsPage } from "@/pages/AdminCommercialOpsPage";
 import { AdminRevenuePage } from "@/pages/AdminRevenuePage";
+import { AdminUserEconomicsPage } from "@/pages/AdminUserEconomicsPage";
 import { AdminCredentialOrchestrationPage } from "@/pages/AdminCredentialOrchestrationPage";
 import { AdminExecutionReadinessPage } from "@/pages/AdminExecutionReadinessPage";
 import { AdminBrandSettingsPage } from "@/pages/AdminBrandSettingsPage";
@@ -142,6 +143,7 @@ function App() {
             <Route path="users" element={<Navigate to="/admin/users/customers" replace />} />
             <Route path="commercial-ops" element={<AdminCommercialOpsPage />} />
             <Route path="revenue" element={<AdminRevenuePage />} />
+            <Route path="users/economics" element={<AdminUserEconomicsPage />} />
             <Route path="credential-orchestration" element={<AdminCredentialOrchestrationPage />} />
             <Route path="users/admins" element={<AdminUsersPage scope="admin" />} />
             <Route path="users/customers" element={<AdminUsersPage scope="user" />} />

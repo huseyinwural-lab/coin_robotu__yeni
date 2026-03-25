@@ -157,3 +157,29 @@ class RevenueLedger(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UserEconomicsAggregate(Base):
+    __tablename__ = "user_economics_aggregates"
+    __table_args__ = (
+        UniqueConstraint("user_id", "environment", name="uq_user_econ_user_env"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
+    user_email: Mapped[str] = mapped_column(String(255), default="", index=True)
+
+    ltv_usd: Mapped[float] = mapped_column(Float, default=0, index=True)
+    revenue_contribution_usd: Mapped[float] = mapped_column(Float, default=0, index=True)
+    realized_pnl_usd: Mapped[float] = mapped_column(Float, default=0)
+
+    first_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    inactive_days: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    churned: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    cohort_month: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

@@ -3374,6 +3374,57 @@ class AdminRevenueSummaryResponse(BaseModel):
     generated_at: str
 
 
+class UserEconomicsKpis(BaseModel):
+    total_users: int
+    paying_users: int
+    churned_users: int
+    churn_rate_pct: float
+    total_revenue_usd: float
+    arpu_usd: float
+    arppu_usd: float
+    avg_ltv_usd: float
+
+
+class UserEconomicsUserRow(BaseModel):
+    user_id: str
+    email: str
+    ltv_usd: float
+    revenue_contribution_usd: float
+    realized_pnl_usd: float
+    inactive_days: int
+    churned: bool
+    cohort_month: str | None = None
+    last_activity_at: str | None = None
+
+
+class UserEconomicsTopSymbol(BaseModel):
+    symbol: str
+    revenue_usd: float
+
+
+class UserEconomicsCohortRow(BaseModel):
+    cohort_month: str
+    users: int
+    paying_users: int
+    churned_users: int
+    total_revenue_usd: float
+    avg_ltv_usd: float
+
+
+class AdminUserEconomicsResponse(BaseModel):
+    status: str
+    environment: str
+    filters: dict = Field(default_factory=dict)
+    sync: dict = Field(default_factory=dict)
+    kpis: UserEconomicsKpis
+    top_users: list[UserEconomicsUserRow] = Field(default_factory=list)
+    churn_list: list[UserEconomicsUserRow] = Field(default_factory=list)
+    top_symbols: list[UserEconomicsTopSymbol] = Field(default_factory=list)
+    cohorts: list[UserEconomicsCohortRow] = Field(default_factory=list)
+    rows: list[UserEconomicsUserRow] = Field(default_factory=list)
+    generated_at: str
+
+
 class CommercialP0WebsocketBootstrapRequest(BaseModel):
     target_user_id: str | None = None
     target_user_email: str | None = None
