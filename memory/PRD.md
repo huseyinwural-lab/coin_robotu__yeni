@@ -1,3 +1,32 @@
+## 2026-03-25 — Düşük Ağırlık Spot Ingest + Drift Severity ✅
+
+### Yapılan geliştirmeler
+- `commercial_ops_p0_service.py`
+  - Live+Spot ingest için düşük ağırlık modu eklendi:
+    - tek/seçili sınırlı sembol işleme
+    - spot limit cap
+    - istekler arası bekleme
+    - 429 rate-limit backoff + devam etme
+  - `market_summary.spot` alanına eklendi:
+    - `rate_limit_hits`
+    - `low_weight_mode`
+    - `processed_symbols`
+- `AdminCredentialOrchestrationPage.jsx`
+  - Drift highlight’a severity seviyesi eklendi:
+    - `source => critical`
+    - `selection_reason => medium`
+    - `probe_state => low`
+
+### Operasyonel sonuç
+- Spot live 1 yıllık dar pencere BTCUSDT koşumunda tüm chunk çağrıları 200 döndü, rate-limit hit 0.
+- Ancak gerçek spot trade bulunmadığı için fetched/inserted 0 kaldı ve spot `live_transition_ready=false`.
+- Futures test tarafı `live_transition_ready=true` olarak stabil.
+
+### Test kanıtı
+- `/app/test_reports/iteration_129.json`
+  - Backend: **11/11 PASS**
+  - Frontend: **%100 PASS**
+
 ## 2026-03-25 — Spot Sembol Seti (1 Yıl) Koşumu + Drift Highlight ✅
 
 ### Kullanıcı tercihine göre uygulananlar

@@ -1,5 +1,13 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (Low-weight operasyona geçiş)
+- ✅ Tamamlandı:
+  - Spot live ingest düşük ağırlık modu
+  - Drift highlight severity etiketleri
+- 🟡 Kalan:
+  - Spot live için gerçek trade coverage üretimi (fetched/inserted > 0)
+  - Spot `live_transition_ready=true` sonrası P1 Revenue Engine başlangıcı
+
 ## 2026-03-25 (Spot rerun durumu)
 - ✅ Tamamlandı:
   - Drift highlight UI (trace compare) eklendi

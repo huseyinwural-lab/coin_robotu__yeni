@@ -1,5 +1,11 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (Low-weight spot mode + drift severity)
+- Backend: live+spot ingest için düşük ağırlık modu (symbol limit + sleep + 429 backoff + partial continue) eklendi.
+- Backend response: `market_summary.spot` içine `rate_limit_hits`, `low_weight_mode`, `processed_symbols` eklendi.
+- Frontend: drift highlight alanına severity badge eklendi (`critical/medium/low`).
+- Test: `/app/test_reports/iteration_129.json` (backend 11/11 PASS, frontend %100).
+
 ## 2026-03-25 (Drift Highlight + Spot 1y rerun)
 - Frontend: Trace compare kartına drift highlight eklendi (`source`, `selection_reason`, `probe_state`).
 - Frontend state'leri: empty / no-diff / diff-list akışları tamamlandı.
