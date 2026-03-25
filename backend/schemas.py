@@ -87,7 +87,9 @@ class AlertChannelConfigUpdateRequest(BaseModel):
 
 class AuthResponse(BaseModel):
     access_token: str | None = None
+    token: str | None = None
     token_type: str = "bearer"
+    role: str | None = None
     user: UserResponse | None = None
     mfa_required: bool = False
     mfa_challenge_token: str | None = None

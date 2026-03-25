@@ -203,7 +203,9 @@ def _login_with_policy(
         )
         return AuthResponse(
             access_token=None,
+            token=None,
             token_type="mfa_challenge",
+            role=user.role.value,
             user=user,
             mfa_required=True,
             mfa_challenge_token=mfa_payload.get("mfa_challenge_token"),
@@ -224,7 +226,13 @@ def _login_with_policy(
         actor_role=user.role.value,
         details={"email": user.email},
     )
-    return AuthResponse(access_token=session.access_token, token_type="bearer", user=user)
+    return AuthResponse(
+        access_token=session.access_token,
+        token=session.access_token,
+        token_type="bearer",
+        role=user.role.value,
+        user=user,
+    )
 
 
 @router.post("/login", response_model=AuthResponse)

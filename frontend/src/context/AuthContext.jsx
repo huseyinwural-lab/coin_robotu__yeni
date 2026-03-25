@@ -32,8 +32,7 @@ export const AuthProvider = ({ children }) => {
   }, [token]);
 
   const login = async ({ email, password, panel = "user" }) => {
-    const loginEndpoint = panel === "admin" ? "/auth/login/admin" : "/auth/login/user";
-    const { data } = await apiClient.post(loginEndpoint, { email, password });
+    const { data } = await apiClient.post("/auth/login", { email, password, panel });
     if (data?.mfa_required) {
       return {
         mfaRequired: true,

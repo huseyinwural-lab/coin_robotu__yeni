@@ -481,6 +481,10 @@ class Position(Base):
     strategy_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     cluster_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    external_order_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    last_state_transition_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fail_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

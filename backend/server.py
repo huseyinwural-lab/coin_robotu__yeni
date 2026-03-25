@@ -47,6 +47,7 @@ from routers import (
     admin_revenue,
     export,
     snapshots,
+    runtime_execution,
     admin_universe_monitor,
     admin_live_trading_dashboard,
     admin_closure,
@@ -337,6 +338,7 @@ api_router.include_router(admin_commercial_p0.router)
 api_router.include_router(admin_revenue.router)
 api_router.include_router(export.router)
 api_router.include_router(snapshots.router)
+api_router.include_router(runtime_execution.router)
 api_router.include_router(admin_closure.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(spot_strategy.router)
