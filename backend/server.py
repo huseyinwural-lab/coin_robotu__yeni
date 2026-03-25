@@ -44,6 +44,7 @@ from routers import (
     admin_strategy_intelligence,
     admin_commercial,
     admin_commercial_p0,
+    admin_revenue,
     admin_universe_monitor,
     admin_live_trading_dashboard,
     admin_closure,
@@ -331,6 +332,7 @@ api_router.include_router(admin_strategy_family_gates.router)
 api_router.include_router(admin_strategy_intelligence.router)
 api_router.include_router(admin_commercial.router)
 api_router.include_router(admin_commercial_p0.router)
+api_router.include_router(admin_revenue.router)
 api_router.include_router(admin_closure.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(spot_strategy.router)

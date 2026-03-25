@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from core.users.user_exchange_connector import decrypt_exchange_secret
 from models import CommercialTrade, ExchangeReconciliationLog, PnlRecord, User, UserExchangeConnection
 from services.credential_resolution_service import resolve_exchange_credentials
+from services.revenue_engine_service import sync_revenue_ledger_for_scope
 
 STABLE_QUOTES = ("USDT", "USTC", "BUSD", "USDC", "FDUSD", "USD")
 DEFAULT_WINDOW_DAYS = 7
@@ -657,6 +658,16 @@ def run_rest_trade_ingestion(
         duplicate += market_duplicate
         fetched += market_fetched
 
+    db.flush()
+    revenue_sync = sync_revenue_ledger_for_scope(
+        db,
+        user_id=user.id,
+        environment=env,
+        market_types=markets,
+        symbols=clean_symbols,
+        start_ts=start_ts,
+        end_ts=end_ts,
+    )
     db.commit()
     return {
         "status": "ok",
@@ -671,6 +682,7 @@ def run_rest_trade_ingestion(
         "duplicate": duplicate,
         "market_summary": market_summary,
         "source": source,
+        "revenue_sync": revenue_sync,
         "generated_at": _now().isoformat(),
     }
 

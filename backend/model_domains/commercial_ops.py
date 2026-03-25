@@ -131,3 +131,29 @@ class ExchangeReconciliationLog(Base):
 
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RevenueLedger(Base):
+    __tablename__ = "revenue_ledger"
+    __table_args__ = (
+        UniqueConstraint("trade_id", "component_type", name="uq_revenue_ledger_trade_component"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    trade_id: Mapped[str] = mapped_column(String, ForeignKey("commercial_trades.id"), index=True)
+
+    exchange: Mapped[str] = mapped_column(String(30), default="binance", index=True)
+    market_type: Mapped[str] = mapped_column(String(20), default="spot", index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="testnet", index=True)
+    symbol: Mapped[str] = mapped_column(String(30), default="", index=True)
+    trade_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    component_type: Mapped[str] = mapped_column(String(30), default="fee", index=True)
+    source_amount_usd: Mapped[float] = mapped_column(Float, default=0)
+    share_rate: Mapped[float] = mapped_column(Float, default=0)
+    revenue_amount_usd: Mapped[float] = mapped_column(Float, default=0, index=True)
+
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

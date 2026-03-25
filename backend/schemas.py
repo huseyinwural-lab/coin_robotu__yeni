@@ -3268,6 +3268,7 @@ class CommercialP0IngestionResponse(BaseModel):
     inserted: int
     duplicate: int
     market_summary: dict = Field(default_factory=dict)
+    revenue_sync: dict = Field(default_factory=dict)
     source: str
     generated_at: str
 
@@ -3341,6 +3342,36 @@ class CommercialP0LiveGateResponse(BaseModel):
     controls: dict = Field(default_factory=dict)
     live_transition_ready: bool
     evidence: dict = Field(default_factory=dict)
+
+
+class RevenueTopUserItem(BaseModel):
+    user_id: str
+    email: str
+    revenue_usd: float
+
+
+class RevenueTopSymbolItem(BaseModel):
+    symbol: str
+    revenue_usd: float
+
+
+class RevenueDailyPoint(BaseModel):
+    date: str
+    total_revenue_usd: float
+    fee_revenue_usd: float
+    pnl_share_revenue_usd: float
+
+
+class AdminRevenueSummaryResponse(BaseModel):
+    status: str
+    environment: str
+    applied_filters: dict = Field(default_factory=dict)
+    total_revenue_usd: float
+    today_revenue_usd: float
+    top_users: list[RevenueTopUserItem] = Field(default_factory=list)
+    top_symbols: list[RevenueTopSymbolItem] = Field(default_factory=list)
+    daily_revenue: list[RevenueDailyPoint] = Field(default_factory=list)
+    generated_at: str
 
 
 class CommercialP0WebsocketBootstrapRequest(BaseModel):

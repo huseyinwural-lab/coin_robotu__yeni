@@ -99,6 +99,7 @@ const adminOnlyItems = [
       { to: "/admin/strategies", label: "Bots", icon: ClipboardList, testId: "nav-admin-bots-link" },
       { to: "/admin/users/customers", label: "Users", icon: UserCog, testId: "nav-admin-users-link" },
       { to: "/admin/commercial-ops", label: "Commercial Ops", icon: BarChartBig, testId: "nav-admin-commercial-ops-link", superAdminOnly: true },
+      { to: "/admin/revenue", label: "Revenue Engine", icon: TrendingUp, testId: "nav-admin-revenue-link", superAdminOnly: true },
       { to: "/admin/credential-orchestration", label: "Credential Orchestration", icon: KeyRound, testId: "nav-admin-credential-orchestration-link" },
       { to: "/admin/user-approvals", label: "User Approvals", icon: UserCog, testId: "nav-admin-user-approvals-link" },
       { to: "/admin/pipeline-operations", label: "Pipeline Operations", icon: Activity, testId: "nav-admin-pipeline-operations-link" },

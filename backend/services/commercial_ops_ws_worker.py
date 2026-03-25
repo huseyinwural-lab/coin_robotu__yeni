@@ -20,6 +20,7 @@ from services.commercial_ops_p0_service import (
     _safe_float,
     _trade_exists,
 )
+from services.revenue_engine_service import upsert_revenue_for_trades
 
 
 def _now_iso() -> str:
@@ -225,6 +226,8 @@ class CommercialOpsWsWorker:
                     self.duplicate_count += 1
                 return
             db.add(row)
+            db.flush()
+            upsert_revenue_for_trades(db, trades=[row])
             db.commit()
             with self._lock:
                 self.inserted_count += 1
