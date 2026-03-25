@@ -1,3 +1,73 @@
+## 2026-03-26 — P1.3 Iteration 1 Runtime Core ✅
+
+### Kapsam (kullanıcı onayıyla)
+- Execution engine
+- Risk engine enforce
+- Strategy engine normalize (EMA crossover + RSI filter)
+- Redis list queue + worker loop
+- DB katmanı (execution_jobs, orders, positions uyum alanları)
+- Auth tek akış (`/api/auth/login`) + legacy wrapper uyumluluğu
+
+### Uygulanan backend çekirdek
+- `backend/core/execution_engine.py`
+  - `submit_signal()`
+  - `run_risk_checks()`
+  - `enqueue_execution()`
+  - `advance_order_state()`
+  - `handle_execution_result()`
+  - idempotent execution + retry + state machine
+- `backend/core/risk_engine.py`
+  - max_position_pct, max_daily_loss_usd, leverage_cap, per_user_notional_cap enforce
+  - kill-switch (`execution:kill_switch:global`)
+  - reject reason + audit event
+- `backend/core/strategy_engine.py`
+  - EMA crossover + RSI filter
+  - normalized output contract:
+    `{symbol, side, size, confidence, strategy_name, timestamp}`
+- `backend/workers/execution_worker.py`
+  - Redis queue consume + mevcut runtime worker fallback
+
+### DB değişiklikleri
+- Yeni model: `backend/model_domains/execution_runtime_core.py`
+  - `execution_jobs` (idempotency unique)
+  - `orders` (external_order_id unique)
+- `positions` modeline runtime alanları eklendi:
+  - `external_order_id`
+  - `last_state_transition_at`
+  - `reject_reason`
+  - `fail_reason`
+- Migration: `20260326_0079_execution_runtime_core.py`
+- `alembic current`: `20260326_0079 (head)`
+
+### Auth fix
+- `/api/auth/login` response genişletildi:
+  - `token`
+  - `role`
+  - `user`
+- Legacy endpointler korundu:
+  - `/api/auth/login/admin`
+  - `/api/auth/login/user`
+- Frontend login akışı tek endpoint’e indirildi (`AuthContext`)
+
+### Test ve doğrulama
+- Modül bazlı pytest: `/app/backend/tests/test_p13_runtime_core.py` → **5 passed**
+- Testing agent: `/app/test_reports/iteration_136.json`
+  - **21/21 PASS**
+  - Execution/Risk/Strategy/Queue/Auth/DB doğrulandı
+- Smoke görsel: `/app/test_reports/p13_runtime_smoke.jpeg`
+
+### Bu turda bilerek dışarıda bırakılanlar
+- Live PnL
+- Alert trigger wiring
+- Daily smoke cron
+- BI/exposure genişleme
+
+### Sonraki tur (Iteration 2)
+- Live PnL engine
+- Alert trigger wiring
+- Daily smoke cron
+- Snapshot anomaly alert
+
 ## 2026-03-25 — P1.4 INFRA FIX + FINAL CLOSURE ✅
 
 ### FAZ 1 (DB Fix) — DONE
