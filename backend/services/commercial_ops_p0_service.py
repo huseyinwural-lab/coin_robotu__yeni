@@ -17,6 +17,7 @@ from models import CommercialTrade, ExchangeReconciliationLog, PnlRecord, User, 
 STABLE_QUOTES = ("USDT", "USTC", "BUSD", "USDC", "FDUSD", "USD")
 DEFAULT_WINDOW_DAYS = 7
 MAX_FUTURES_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+MAX_SPOT_WINDOW_MS = 24 * 60 * 60 * 1000
 
 
 def _now() -> datetime:
@@ -539,28 +540,29 @@ def run_rest_trade_ingestion(
             if not clean_symbols:
                 raise ValueError("spot_symbols_required")
             for symbol in clean_symbols:
-                trades = client.fetch_spot_trades(
-                    symbol=symbol,
-                    start_time_ms=start_ms,
-                    end_time_ms=end_ms,
-                    limit=max(1, min(limit_per_symbol, 1000)),
-                )
-                market_fetched += len(trades)
-                for raw in trades:
-                    row = _build_spot_trade_row(
-                        user_id=user.id,
-                        connection_id=connection_id,
-                        environment=env,
+                for chunk_start, chunk_end in _iter_windows(start_ms, end_ms, MAX_SPOT_WINDOW_MS):
+                    trades = client.fetch_spot_trades(
                         symbol=symbol,
-                        payload=raw,
-                        client=client,
-                        source=source,
+                        start_time_ms=chunk_start,
+                        end_time_ms=chunk_end,
+                        limit=max(1, min(limit_per_symbol, 1000)),
                     )
-                    if _trade_exists(db, row):
-                        market_duplicate += 1
-                        continue
-                    db.add(row)
-                    market_inserted += 1
+                    market_fetched += len(trades)
+                    for raw in trades:
+                        row = _build_spot_trade_row(
+                            user_id=user.id,
+                            connection_id=connection_id,
+                            environment=env,
+                            symbol=symbol,
+                            payload=raw,
+                            client=client,
+                            source=source,
+                        )
+                        if _trade_exists(db, row):
+                            market_duplicate += 1
+                            continue
+                        db.add(row)
+                        market_inserted += 1
         else:
             futures_symbols = clean_symbols or [None]
             for symbol in futures_symbols:
@@ -881,13 +883,14 @@ def run_exchange_reconciliation(
             if spot_client is None:
                 raise ValueError("binance_credentials_missing")
             for symbol in clean_symbols:
-                for raw in spot_client.fetch_spot_trades(
-                    symbol=symbol,
-                    start_time_ms=start_ms,
-                    end_time_ms=end_ms,
-                    limit=max(1, min(limit_per_symbol, 1000)),
-                ):
-                    exchange_trade_ids.add(f"spot:{raw.get('id')}")
+                for chunk_start, chunk_end in _iter_windows(start_ms, end_ms, MAX_SPOT_WINDOW_MS):
+                    for raw in spot_client.fetch_spot_trades(
+                        symbol=symbol,
+                        start_time_ms=chunk_start,
+                        end_time_ms=chunk_end,
+                        limit=max(1, min(limit_per_symbol, 1000)),
+                    ):
+                        exchange_trade_ids.add(f"spot:{raw.get('id')}")
         else:
             if futures_client is None:
                 raise ValueError("binance_credentials_missing")
