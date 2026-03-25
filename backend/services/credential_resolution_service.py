@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import os
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlencode
@@ -85,6 +86,37 @@ def _is_perp_market(market_type: str) -> bool:
     return _normalize_market_type(market_type) in {"futures", "usdt_perp", "coin_perp"}
 
 
+def _proxy_headers_for_probe(*, exchange: str, market_type: str, environment: str) -> dict[str, str]:
+    normalized_exchange = _norm(exchange)
+    normalized_env = _norm(environment)
+    normalized_market = _normalize_market_type(market_type)
+    token = None
+
+    if normalized_exchange == "binance":
+        if normalized_market == "spot":
+            token = (
+                os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN")
+                if normalized_env == "testnet"
+                else os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
+            )
+            token = token or os.environ.get("BINANCE_SPOT_PROXY_TOKEN") or os.environ.get("BINANCE_PROXY_TOKEN")
+        else:
+            token = (
+                os.environ.get("BINANCE_FUTURES_TESTNET_PROXY_TOKEN")
+                if normalized_env == "testnet"
+                else os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
+            )
+            token = token or os.environ.get("BINANCE_FUTURES_PROXY_TOKEN") or os.environ.get("BINANCE_PROXY_TOKEN")
+    elif normalized_exchange == "bybit":
+        token = os.environ.get("BYBIT_PROXY_TOKEN")
+    elif normalized_exchange == "okx":
+        token = os.environ.get("OKX_PROXY_TOKEN")
+
+    if not token:
+        return {}
+    return {"X-Proxy-Token": token}
+
+
 def _default_spot_base(exchange: str, environment: str) -> str:
     if exchange == "binance":
         return "https://testnet.binance.vision" if environment == "testnet" else "https://api.binance.com"
@@ -109,13 +141,22 @@ def _effective_base_url(*, exchange: str, market_type: str, environment: str, ov
     return _default_spot_base(exchange, environment)
 
 
-def _signed_get(*, base_url: str, endpoint: str, api_key: str, api_secret: str, params: dict | None = None) -> tuple[int, dict]:
+def _signed_get(
+    *,
+    base_url: str,
+    endpoint: str,
+    api_key: str,
+    api_secret: str,
+    params: dict | None = None,
+    extra_headers: dict | None = None,
+) -> tuple[int, dict]:
     payload = {**(params or {}), "timestamp": int(time.time() * 1000), "recvWindow": 60000}
     qs = urlencode(payload)
     signature = hmac.new(api_secret.encode(), qs.encode(), hashlib.sha256).hexdigest()
     url = f"{base_url}{endpoint}?{qs}&signature={signature}"
+    headers = {"X-MBX-APIKEY": api_key, **(extra_headers or {})}
     with httpx.Client(timeout=15.0) as client:
-        response = client.get(url, headers={"X-MBX-APIKEY": api_key})
+        response = client.get(url, headers=headers)
     try:
         body = response.json() if response.content else {}
     except Exception:
@@ -123,15 +164,21 @@ def _signed_get(*, base_url: str, endpoint: str, api_key: str, api_secret: str, 
     return response.status_code, body
 
 
-def _spot_probe(*, base_url: str, api_key: str, api_secret: str) -> tuple[str, str, dict]:
+def _spot_probe(*, base_url: str, api_key: str, api_secret: str, extra_headers: dict | None = None) -> tuple[str, str, dict]:
     with httpx.Client(timeout=10.0) as client:
-        ping = client.get(f"{base_url}/api/v3/ping")
+        ping = client.get(f"{base_url}/api/v3/ping", headers=extra_headers or None)
     if ping.status_code == 451:
         return "ip_restricted", "spot_ping_451", {"ping_status": ping.status_code}
     if ping.status_code >= 400:
         return "unreachable", f"spot_ping_{ping.status_code}", {"ping_status": ping.status_code}
 
-    status, body = _signed_get(base_url=base_url, endpoint="/api/v3/account", api_key=api_key, api_secret=api_secret)
+    status, body = _signed_get(
+        base_url=base_url,
+        endpoint="/api/v3/account",
+        api_key=api_key,
+        api_secret=api_secret,
+        extra_headers=extra_headers,
+    )
     if status == 200:
         return "ready", "spot_account_ok", {"account_status": status}
 
@@ -150,15 +197,21 @@ def _spot_probe(*, base_url: str, api_key: str, api_secret: str) -> tuple[str, s
     return "unreachable", "spot_probe_failed", {"status": status, "code": code, "message": msg}
 
 
-def _futures_probe(*, base_url: str, api_key: str, api_secret: str) -> tuple[str, str, dict]:
+def _futures_probe(*, base_url: str, api_key: str, api_secret: str, extra_headers: dict | None = None) -> tuple[str, str, dict]:
     with httpx.Client(timeout=10.0) as client:
-        ping = client.get(f"{base_url}/fapi/v1/ping")
+        ping = client.get(f"{base_url}/fapi/v1/ping", headers=extra_headers or None)
     if ping.status_code == 451:
         return "ip_restricted", "futures_ping_451", {"ping_status": ping.status_code}
     if ping.status_code >= 400:
         return "unreachable", f"futures_ping_{ping.status_code}", {"ping_status": ping.status_code}
 
-    status, body = _signed_get(base_url=base_url, endpoint="/fapi/v2/account", api_key=api_key, api_secret=api_secret)
+    status, body = _signed_get(
+        base_url=base_url,
+        endpoint="/fapi/v2/account",
+        api_key=api_key,
+        api_secret=api_secret,
+        extra_headers=extra_headers,
+    )
     if status == 200:
         return "ready", "futures_account_ok", {"account_status": status}
 
@@ -177,9 +230,9 @@ def _futures_probe(*, base_url: str, api_key: str, api_secret: str) -> tuple[str
     return "unreachable", "futures_probe_failed", {"status": status, "code": code, "message": msg}
 
 
-def _public_probe(*, base_url: str, endpoint: str, provider: str) -> tuple[str, str, dict]:
+def _public_probe(*, base_url: str, endpoint: str, provider: str, extra_headers: dict | None = None) -> tuple[str, str, dict]:
     with httpx.Client(timeout=10.0) as client:
-        response = client.get(f"{base_url}{endpoint}")
+        response = client.get(f"{base_url}{endpoint}", headers=extra_headers or None)
     if response.status_code == 451:
         return "ip_restricted", f"{provider}_public_451", {"status": response.status_code}
     if response.status_code == 429:
@@ -439,16 +492,37 @@ def probe_admin_credential(db: Session, *, actor: User, credential_id: str) -> d
         environment=row.environment,
         override=row.base_url_override,
     )
+    proxy_headers = _proxy_headers_for_probe(exchange=row.exchange, market_type=row.market_type, environment=row.environment)
 
     try:
         if row.exchange == "binance" and row.market_type == "spot":
-            status_code, message, meta = _spot_probe(base_url=base_url, api_key=api_key, api_secret=api_secret)
+            status_code, message, meta = _spot_probe(
+                base_url=base_url,
+                api_key=api_key,
+                api_secret=api_secret,
+                extra_headers=proxy_headers,
+            )
         elif row.exchange == "binance":
-            status_code, message, meta = _futures_probe(base_url=base_url, api_key=api_key, api_secret=api_secret)
+            status_code, message, meta = _futures_probe(
+                base_url=base_url,
+                api_key=api_key,
+                api_secret=api_secret,
+                extra_headers=proxy_headers,
+            )
         elif row.exchange == "bybit":
-            status_code, message, meta = _public_probe(base_url=base_url, endpoint="/v5/market/time", provider="bybit")
+            status_code, message, meta = _public_probe(
+                base_url=base_url,
+                endpoint="/v5/market/time",
+                provider="bybit",
+                extra_headers=proxy_headers,
+            )
         elif row.exchange == "okx":
-            status_code, message, meta = _public_probe(base_url=base_url, endpoint="/api/v5/public/time", provider="okx")
+            status_code, message, meta = _public_probe(
+                base_url=base_url,
+                endpoint="/api/v5/public/time",
+                provider="okx",
+                extra_headers=proxy_headers,
+            )
         else:
             status_code, message, meta = "probe_not_supported", "probe_not_supported_for_exchange", {
                 "exchange": row.exchange

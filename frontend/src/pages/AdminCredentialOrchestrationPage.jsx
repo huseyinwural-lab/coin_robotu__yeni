@@ -196,6 +196,31 @@ export const AdminCredentialOrchestrationPage = () => {
     }));
   }, [credentials]);
 
+  const decisionTraceSteps = useMemo(() => {
+    const source = String(preview?.source || "").toLowerCase();
+    const reason = String(preview?.audit_metadata?.selection_reason || "").toLowerCase();
+    const isUser = source.includes("user");
+    const isTenant = source.includes("tenant") || source.includes("group") || reason.includes("tenant");
+    const isGlobal = source.includes("global") || (!isUser && !isTenant && !!source);
+    return [
+      {
+        key: "user",
+        label: "1) user credential",
+        status: isUser ? "selected" : "checked",
+      },
+      {
+        key: "tenant_admin",
+        label: "2) tenant_admin credential",
+        status: isTenant ? "selected" : isUser ? "skipped" : "checked",
+      },
+      {
+        key: "global_admin",
+        label: "3) global_admin credential",
+        status: isGlobal ? "selected" : isUser || isTenant ? "skipped" : "checked",
+      },
+    ];
+  }, [preview]);
+
   return (
     <section className="space-y-6" data-testid="admin-credential-orchestration-page">
       <header className="space-y-2" data-testid="admin-credential-orchestration-header">
@@ -433,6 +458,22 @@ export const AdminCredentialOrchestrationPage = () => {
               <p data-testid="resolution-preview-base-url-line">effective base url: <span data-testid="resolution-preview-base-url-value">{preview?.effective_base_url || "-"}</span></p>
               <p data-testid="resolution-preview-selection-reason-line">selection reason: <span data-testid="resolution-preview-selection-reason-value">{preview?.audit_metadata?.selection_reason || "-"}</span></p>
               <p data-testid="resolution-preview-rule-id-line">rule id: <span data-testid="resolution-preview-rule-id-value">{preview?.audit_metadata?.rule_id || "-"}</span></p>
+            </div>
+            <div className="mt-3 rounded border border-slate-200 p-3" data-testid="decision-trace-timeline-card">
+              <p className="mb-2 text-xs font-semibold text-slate-700" data-testid="decision-trace-timeline-title">Decision Trace Timeline</p>
+              <div className="space-y-2" data-testid="decision-trace-timeline-list">
+                {decisionTraceSteps.map((step) => (
+                  <div key={step.key} className="flex items-center justify-between rounded border border-slate-200 px-2 py-1 text-xs" data-testid={`decision-trace-step-${step.key}`}>
+                    <span data-testid={`decision-trace-step-label-${step.key}`}>{step.label}</span>
+                    <span
+                      className={`rounded px-2 py-0.5 ${step.status === "selected" ? "bg-emerald-100 text-emerald-700" : step.status === "skipped" ? "bg-slate-100 text-slate-600" : "bg-amber-100 text-amber-700"}`}
+                      data-testid={`decision-trace-step-status-${step.key}`}
+                    >
+                      {step.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="probe-status-distribution-grid">
               {PROBE_STATES.map((key) => (

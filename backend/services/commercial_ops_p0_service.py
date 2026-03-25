@@ -43,8 +43,13 @@ def _normalize_market_types(items: list[str] | None) -> list[str]:
     normalized = []
     for raw in items:
         candidate = str(raw or "").strip().lower()
-        if candidate in {"spot", "futures"} and candidate not in normalized:
-            normalized.append(candidate)
+        canonical = ""
+        if candidate == "spot":
+            canonical = "spot"
+        elif candidate in {"futures", "usdt_perp", "coin_perp"}:
+            canonical = "futures"
+        if canonical and canonical not in normalized:
+            normalized.append(canonical)
     return normalized or ["spot", "futures"]
 
 
@@ -114,11 +119,35 @@ class BinanceCommercialClient:
 
         self.spot_base_url = str(spot_override or default_spot_base).strip().rstrip("/")
         self.futures_base_url = str(futures_override or default_futures_base).strip().rstrip("/")
+        generic_proxy_token = os.environ.get("BINANCE_PROXY_TOKEN")
+        if self.environment == "testnet":
+            spot_token = os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN")
+            futures_token = os.environ.get("BINANCE_FUTURES_TESTNET_PROXY_TOKEN")
+        else:
+            spot_token = os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
+            futures_token = os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
+        self.spot_proxy_token = spot_token or os.environ.get("BINANCE_SPOT_PROXY_TOKEN") or generic_proxy_token
+        self.futures_proxy_token = futures_token or os.environ.get("BINANCE_FUTURES_PROXY_TOKEN") or generic_proxy_token
         self._price_cache: dict[str, float] = {}
 
     @staticmethod
     def _sign(secret: str, query_string: str) -> str:
         return hmac.new(secret.encode(), query_string.encode(), hashlib.sha256).hexdigest()
+
+    def _request_headers(self, *, base_url: str) -> dict[str, str]:
+        normalized = str(base_url or "").rstrip("/")
+        token = self.futures_proxy_token if normalized == self.futures_base_url else self.spot_proxy_token
+        headers = {"X-MBX-APIKEY": self.api_key}
+        if token:
+            headers["X-Proxy-Token"] = token
+        return headers
+
+    def _public_headers(self, *, base_url: str) -> dict[str, str]:
+        normalized = str(base_url or "").rstrip("/")
+        token = self.futures_proxy_token if normalized == self.futures_base_url else self.spot_proxy_token
+        if not token:
+            return {}
+        return {"X-Proxy-Token": token}
 
     def _signed_request(self, *, method: str, base_url: str, endpoint: str, params: dict | None = None) -> dict | list:
         for attempt in range(3):
@@ -130,7 +159,7 @@ class BinanceCommercialClient:
             url = f"{base_url}{endpoint}?{query_string}&signature={signature}"
             try:
                 with httpx.Client(timeout=20.0) as client:
-                    response = client.request(method, url, headers={"X-MBX-APIKEY": self.api_key})
+                    response = client.request(method, url, headers=self._request_headers(base_url=base_url))
             except httpx.HTTPError as exc:
                 if attempt >= 2:
                     raise ValueError(f"binance_transport_error:{exc}") from exc
@@ -152,7 +181,7 @@ class BinanceCommercialClient:
         for attempt in range(3):
             try:
                 with httpx.Client(timeout=15.0) as client:
-                    response = client.request(method, f"{base_url}{endpoint}", headers={"X-MBX-APIKEY": self.api_key})
+                    response = client.request(method, f"{base_url}{endpoint}", headers=self._request_headers(base_url=base_url))
             except httpx.HTTPError as exc:
                 if attempt >= 2:
                     raise ValueError(f"binance_transport_error:{exc}") from exc
@@ -232,7 +261,11 @@ class BinanceCommercialClient:
         if normalized in self._price_cache:
             return self._price_cache[normalized]
         with httpx.Client(timeout=10.0) as client:
-            response = client.get(f"{self.spot_base_url}/api/v3/ticker/price", params={"symbol": normalized})
+            response = client.get(
+                f"{self.spot_base_url}/api/v3/ticker/price",
+                params={"symbol": normalized},
+                headers=self._public_headers(base_url=self.spot_base_url),
+            )
         payload = response.json() if response.content else {}
         price = _safe_float(payload.get("price"), 0.0) if response.status_code < 400 else 0.0
         self._price_cache[normalized] = price
@@ -1213,8 +1246,12 @@ def export_standardized_trades_csv(
         environment=env,
     )
     query = db.query(CommercialTrade).filter(CommercialTrade.user_id == user.id, CommercialTrade.exchange == "binance", CommercialTrade.environment == env)
-    if market_type and str(market_type).strip().lower() in {"spot", "futures"}:
-        query = query.filter(CommercialTrade.market_type == str(market_type).strip().lower())
+    if market_type:
+        candidate = str(market_type).strip().lower()
+        if candidate == "spot":
+            query = query.filter(CommercialTrade.market_type == "spot")
+        elif candidate in {"futures", "usdt_perp", "coin_perp"}:
+            query = query.filter(CommercialTrade.market_type == "futures")
     if symbol:
         query = query.filter(CommercialTrade.symbol == str(symbol).strip().upper())
     start_dt = _parse_iso(start_ts)
