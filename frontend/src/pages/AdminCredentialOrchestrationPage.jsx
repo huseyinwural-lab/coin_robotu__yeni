@@ -284,6 +284,33 @@ export const AdminCredentialOrchestrationPage = () => {
     ];
   }, [preview]);
 
+  const traceDriftHighlights = useMemo(() => {
+    if (!preview || !selectedHistoryTrace) {
+      return [];
+    }
+    const checks = [
+      {
+        key: "source",
+        label: "source",
+        current: preview?.source || "-",
+        previous: selectedHistoryTrace?.source || "-",
+      },
+      {
+        key: "selection_reason",
+        label: "selection_reason",
+        current: preview?.audit_metadata?.selection_reason || "-",
+        previous: selectedHistoryTrace?.selection_reason || "-",
+      },
+      {
+        key: "probe_state",
+        label: "probe_state",
+        current: preview?.selected_probe_status || "-",
+        previous: selectedHistoryTrace?.probe_state || "-",
+      },
+    ];
+    return checks.filter((item) => String(item.current) !== String(item.previous));
+  }, [preview, selectedHistoryTrace]);
+
   return (
     <section className="space-y-6" data-testid="admin-credential-orchestration-page">
       <header className="space-y-2" data-testid="admin-credential-orchestration-header">
@@ -638,6 +665,25 @@ export const AdminCredentialOrchestrationPage = () => {
                 <p data-testid="resolution-trace-compare-history-selection-reason">selection_reason: {selectedHistoryTrace?.selection_reason || "-"}</p>
                 <p data-testid="resolution-trace-compare-history-probe">probe: {selectedHistoryTrace?.probe_state || "-"}</p>
               </div>
+            </div>
+            <div className="mt-2 rounded border border-slate-200 p-2" data-testid="resolution-trace-drift-highlight-card">
+              <p className="mb-1 text-xs font-semibold" data-testid="resolution-trace-drift-highlight-title">Drift Highlight</p>
+              {!selectedHistoryTrace && <p className="text-xs text-slate-500" data-testid="resolution-trace-drift-highlight-empty">Karşılaştırmak için geçmiş bir trace seçin.</p>}
+              {!!selectedHistoryTrace && !traceDriftHighlights.length && (
+                <p className="text-xs text-emerald-700" data-testid="resolution-trace-drift-highlight-no-diff">source/reason/probe değişimi yok.</p>
+              )}
+              {!!traceDriftHighlights.length && (
+                <div className="space-y-1" data-testid="resolution-trace-drift-highlight-list">
+                  {traceDriftHighlights.map((diff) => (
+                    <p key={diff.key} className="text-xs" data-testid={`resolution-trace-drift-highlight-item-${diff.key}`}>
+                      <span className="rounded bg-amber-100 px-1 py-0.5 text-amber-800">{diff.label}</span>:
+                      <span className="ml-1 text-slate-700">{diff.previous}</span>
+                      <span className="mx-1">→</span>
+                      <span className="font-semibold text-rose-700">{diff.current}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
