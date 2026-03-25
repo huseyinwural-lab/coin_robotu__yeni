@@ -1,5 +1,13 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (Proxy geçiş sonrası durum)
+- ✅ Tamamlandı:
+  - Spot/Futures live proxy entegrasyonu aktif
+  - Kademeli düşük ağırlık spot ingest operasyonu
+- 🔴 Kalan:
+  - Spot hesabında gerçek trade coverage üretimi (şu an sembol kontrollerinde trade=0)
+  - Spot live-gate true sonrası P1 başlangıcı
+
 ## 2026-03-25 (Low-weight operasyona geçiş)
 - ✅ Tamamlandı:
   - Spot live ingest düşük ağırlık modu

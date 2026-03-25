@@ -1,5 +1,12 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (Live proxy transition + incremental spot run)
+- Live proxy env geçişi tamamlandı (spot/futures base URL + token).
+- Spot low-weight ingest ile kademeli sembol koşumu yapıldı (BTC/ETH/BNB/SOL/ADA).
+- Sistem stabil: endpointlerde 500/regression yok.
+- Spot tarafında trade coverage olmadığı doğrulandı (myTrades=0), bu nedenle live-gate spot hâlâ false.
+- Test: `/app/test_reports/iteration_130.json` (backend 19/19 PASS, frontend %100).
+
 ## 2026-03-25 (Low-weight spot mode + drift severity)
 - Backend: live+spot ingest için düşük ağırlık modu (symbol limit + sleep + 429 backoff + partial continue) eklendi.
 - Backend response: `market_summary.spot` içine `rate_limit_hits`, `low_weight_mode`, `processed_symbols` eklendi.

@@ -1,3 +1,27 @@
+## 2026-03-25 — Live Proxy Geçişi (Spot/Futures) ve Kademeli Spot Koşum ✅
+
+### Uygulanan değişiklikler
+- `.env` canlı proxy değerleri güncellendi:
+  - `BINANCE_SPOT_LIVE_BASE_URL`
+  - `BINANCE_FUTURES_LIVE_BASE_URL`
+  - `BINANCE_SPOT_LIVE_PROXY_TOKEN`
+  - `BINANCE_FUTURES_LIVE_PROXY_TOKEN`
+- Backend restart sonrası canlı çağrılar proxy üzerinden doğrulandı.
+
+### Kademeli düşük ağırlık spot koşumu
+- Spot semboller (BTC/ETH/BNB/SOL/ADA) low-weight modda tek tek koşturuldu.
+- Tüm çağrılar stabil (500 yok), ancak fetched/inserted = 0 kaldı.
+- Doğrudan signed `myTrades` kontrollerinde de bu semboller için `items=0` gözlendi.
+
+### Gate sonucu
+- Spot live scope: `live_transition_ready=false` (coverage yok)
+- Futures test scope: `live_transition_ready=true`
+
+### Test kanıtı
+- `/app/test_reports/iteration_130.json`
+  - Backend: **19/19 PASS**
+  - Frontend: **%100 PASS**
+
 ## 2026-03-25 — Düşük Ağırlık Spot Ingest + Drift Severity ✅
 
 ### Yapılan geliştirmeler
