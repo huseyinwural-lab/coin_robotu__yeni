@@ -1,5 +1,14 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 Güncel Durum
+- ✅ Tamamlanan ana iş: Admin Credential Orchestration Layer
+  - Admin master credential yönetimi + approval/probe/audit
+  - Credential assignment rules (user/admin/admin_fallback)
+  - Deterministic resolver ve user response routing preview
+- 🔴 Açık blocker (ayrı iş paketi): Live Spot 451 egress remediation
+  - Hedef: allowed-region live spot proxy/egress ile 451 kaldırma
+  - Spot+Futures live gate closure bu iş tamamlanınca yeniden doğrulanacak
+
 ## 2026-03-24 P0.5 Closure Durumu
 - ✅ Tamamlandı:
   - Observability endpoint standardizasyonu + frontend uyumu

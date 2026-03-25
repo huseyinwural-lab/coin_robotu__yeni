@@ -1,5 +1,14 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (Admin Credential Orchestration Layer)
+- Yeni tablolar: `admin_exchange_credentials`, `credential_assignment_rules` (+ migration `20260325_0074`)
+- Yeni servis: `credential_resolution_service.py` (deterministic credential selection + fallback)
+- Yeni admin API: `/api/venues/admin/credentials*`, `/api/venues/admin/credential-rules*`, `/api/venues/admin/credential-resolution-preview`
+- User exchange response zenginleştirme: `effective_source`, `routing_preview`, `environment_valid`
+- Commercial Ops P0 credential seçimi yeni orchestration katmanına bağlandı (spot/futures ayrı seçim)
+- Probe + audit akışları eklendi (create/update/approve/disable/probe/rule)
+- Test sonucu: Backend 12/12 PASS, Frontend smoke PASS
+
 ## 2026-03-24 (P0.5 Final Closure)
 ### Consistency + Validation Tightening
 - Identity observability endpointleri ortak response contract ile standardize edildi (`status`, `contract_version`, `user_id`, `metric`, `generated_at`, `data`).

@@ -1,3 +1,44 @@
+## 2026-03-25 — Admin Credential Orchestration Layer (Yeni Katman) ✅
+
+### Uygulanan mimari
+- Yeni ayrı katman eklendi: `backend/services/credential_resolution_service.py`
+  - `resolve_exchange_credentials(...)` ile deterministic credential seçimi
+  - Kaynak sırası: user credential -> admin tenant/group/global -> fail
+  - Rule destekli (`preferred_source`, `fallback_enabled`) çözümleme
+- Bu logic `commercial_ops_p0_service.py` içine gömülmedi; servis sadece resolver’ı tüketiyor.
+
+### Veri modeli genişletmesi
+- Yeni tablolar eklendi:
+  - `admin_exchange_credentials`
+  - `credential_assignment_rules`
+- Migration eklendi: `20260325_0074_admin_credential_orchestration.py`
+- Alanlar scope/market/environment/purpose/approval/probe/audit ihtiyaçlarını kapsayacak şekilde eklendi.
+
+### API katmanı
+- Yeni admin endpointleri (`/api/venues/admin/*`):
+  - `GET/POST/PATCH /credentials`
+  - `POST /credentials/{id}/approve`
+  - `POST /credentials/{id}/disable`
+  - `POST /credentials/{id}/probe`
+  - `GET/PUT /credential-rules`
+  - `GET /credential-resolution-preview`
+- User exchange connection response genişletildi:
+  - `effective_source`
+  - `routing_preview`
+  - `environment_valid`
+
+### Probe + audit
+- Spot/Futures için ping + signed probe akışı eklendi.
+- Probe state’leri: `ready`, `invalid_key`, `permission_restricted`, `ip_restricted`, `env_mismatch`, `unreachable`
+- Create/update/approve/disable/probe/rule update işlemleri audit log’a yazılıyor.
+
+### Doğrulama
+- Backend kapsam testi: 12/12 PASS (admin credential endpointleri, rules, resolver preview, user response enrichment, commercial ops regression)
+- Frontend smoke: PASS (login + dashboard + render + no critical console errors)
+
+### Açık başlık (ayrı iş)
+- Live Spot 451 egress remediation ayrı backlog maddesi olarak açık tutuluyor.
+
 ## 2026-03-24 — P0.5 Final Closure (Consistency + Validation Tightening) ✅
 
 ### Tamamlanan maddeler
