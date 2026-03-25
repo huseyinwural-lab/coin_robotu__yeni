@@ -16,7 +16,7 @@ from services.commercial_ops_p0_service import (
     _build_spot_trade_row,
     _normalize_environment,
     _normalize_market_types,
-    _resolve_user_and_credentials,
+    _resolve_user_and_market_credentials,
     _safe_float,
     _trade_exists,
 )
@@ -248,12 +248,26 @@ def start_ws_worker(
 ) -> dict:
     env = _normalize_environment(environment)
     markets = _normalize_market_types(market_types)
-    user, api_key, api_secret, connection_map = _resolve_user_and_credentials(
+    user, market_credentials = _resolve_user_and_market_credentials(
         db,
         target_user_id=target_user_id,
         target_user_email=target_user_email,
         environment=env,
+        required_markets=markets,
     )
+
+    anchor_market = markets[0]
+    if len(markets) > 1:
+        spot_ctx = market_credentials.get("spot")
+        futures_ctx = market_credentials.get("futures")
+        if spot_ctx and futures_ctx and (
+            spot_ctx["api_key"] != futures_ctx["api_key"]
+            or spot_ctx["api_secret"] != futures_ctx["api_secret"]
+        ):
+            raise ValueError("ws_requires_single_market_or_shared_credentials")
+
+    anchor_ctx = market_credentials[anchor_market]
+    connection_map = {market: market_credentials[market]["connection"] for market in markets}
     worker_key = f"{user.id}:{env}:{','.join(sorted(markets))}"
     current = _WS_WORKERS.get(worker_key)
     if current and current.is_running:
@@ -264,8 +278,8 @@ def start_ws_worker(
         user_email=user.email,
         environment=env,
         market_types=markets,
-        api_key=api_key,
-        api_secret=api_secret,
+        api_key=anchor_ctx["api_key"],
+        api_secret=anchor_ctx["api_secret"],
         connection_map=connection_map,
     )
     _WS_WORKERS[worker_key] = worker

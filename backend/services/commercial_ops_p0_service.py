@@ -284,13 +284,14 @@ def _asset_amount_to_usd(
     return clean_amount * conversion_price
 
 
-def _resolve_user_and_credentials(
+def _resolve_user_and_market_credentials(
     db: Session,
     *,
     target_user_id: str | None,
     target_user_email: str | None,
     environment: str,
-) -> tuple[User, str, str, dict[str, UserExchangeConnection]]:
+    required_markets: list[str] | None = None,
+) -> tuple[User, dict[str, dict]]:
     user = None
     if target_user_id:
         user = db.query(User).filter(User.id == target_user_id).first()
@@ -309,28 +310,29 @@ def _resolve_user_and_credentials(
     if not rows:
         raise ValueError("binance_connection_not_found")
 
-    selected_key = ""
-    selected_secret = ""
-    for row in rows:
-        api_key = decrypt_exchange_secret(row.api_key_encrypted)
-        api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
-        if api_key and api_secret:
-            selected_key = api_key
-            selected_secret = api_secret
-            break
-
-    if not selected_key or not selected_secret:
-        raise ValueError("binance_credentials_missing")
-
-    by_market: dict[str, UserExchangeConnection] = {}
+    by_market_credentials: dict[str, dict] = {}
     for row in rows:
         market = str(row.market_type or "spot").strip().lower()
-        if market in {"spot", "futures"} and market not in by_market:
-            by_market[market] = row
-    first = rows[0]
-    by_market.setdefault("spot", first)
-    by_market.setdefault("futures", first)
-    return user, selected_key, selected_secret, by_market
+        if market not in {"spot", "futures"} or market in by_market_credentials:
+            continue
+        api_key = decrypt_exchange_secret(row.api_key_encrypted)
+        api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
+        if not api_key or not api_secret:
+            continue
+        by_market_credentials[market] = {
+            "connection": row,
+            "api_key": api_key,
+            "api_secret": api_secret,
+        }
+
+    if not by_market_credentials:
+        raise ValueError("binance_credentials_missing")
+
+    for market in _normalize_market_types(required_markets):
+        if market not in by_market_credentials:
+            raise ValueError("binance_credentials_missing")
+
+    return user, by_market_credentials
 
 
 def _build_spot_trade_row(
@@ -498,13 +500,13 @@ def run_rest_trade_ingestion(
     markets = _normalize_market_types(market_types)
     clean_symbols = [str(item or "").strip().upper() for item in (symbols or []) if str(item or "").strip()]
 
-    user, api_key, api_secret, connection_map = _resolve_user_and_credentials(
+    user, market_credentials = _resolve_user_and_market_credentials(
         db,
         target_user_id=target_user_id,
         target_user_email=target_user_email,
         environment=env,
+        required_markets=markets,
     )
-    client = BinanceCommercialClient(api_key=api_key, api_secret=api_secret, environment=env)
 
     start_ms = _dt_to_ms(_parse_iso(start_ts), _default_start_ms())
     end_ms = _dt_to_ms(_parse_iso(end_ts), int(_now().timestamp() * 1000))
@@ -515,7 +517,13 @@ def run_rest_trade_ingestion(
     market_summary: dict[str, dict] = {}
 
     for market in markets:
-        connection_id = connection_map[market].id
+        market_ctx = market_credentials[market]
+        client = BinanceCommercialClient(
+            api_key=market_ctx["api_key"],
+            api_secret=market_ctx["api_secret"],
+            environment=env,
+        )
+        connection_id = market_ctx["connection"].id
         market_inserted = 0
         market_duplicate = 0
         market_fetched = 0
@@ -656,13 +664,28 @@ def compute_and_persist_pnl(
     end_ts: str | None,
 ) -> dict:
     env = _normalize_environment(environment)
-    user, api_key, api_secret, _ = _resolve_user_and_credentials(
+    user, market_credentials = _resolve_user_and_market_credentials(
         db,
         target_user_id=target_user_id,
         target_user_email=target_user_email,
         environment=env,
+        required_markets=["futures"],
     )
-    client = BinanceCommercialClient(api_key=api_key, api_secret=api_secret, environment=env)
+    futures_ctx = market_credentials["futures"]
+    futures_client = BinanceCommercialClient(
+        api_key=futures_ctx["api_key"],
+        api_secret=futures_ctx["api_secret"],
+        environment=env,
+    )
+    spot_client = None
+    if "spot" in market_credentials:
+        spot_ctx = market_credentials["spot"]
+        spot_client = BinanceCommercialClient(
+            api_key=spot_ctx["api_key"],
+            api_secret=spot_ctx["api_secret"],
+            environment=env,
+        )
+    price_client = spot_client or futures_client
 
     start_dt = _parse_iso(start_ts)
     end_dt = _parse_iso(end_ts)
@@ -679,17 +702,17 @@ def compute_and_persist_pnl(
 
     start_ms = _dt_to_ms(start_dt, _default_start_ms())
     end_ms = _dt_to_ms(end_dt, int(_now().timestamp() * 1000))
-    funding_income_rows = client.fetch_futures_funding_income(start_time_ms=start_ms, end_time_ms=end_ms)
+    funding_income_rows = futures_client.fetch_futures_funding_income(start_time_ms=start_ms, end_time_ms=end_ms)
     funding_usd = 0.0
     for row in funding_income_rows:
         income = _safe_float(row.get("income"), 0.0)
         asset = str(row.get("asset") or "USDT").upper()
-        funding_usd += _asset_amount_to_usd(client, amount=income, asset=asset, quote_asset="USDT", executed_price=1.0)
+        funding_usd += _asset_amount_to_usd(price_client, amount=income, asset=asset, quote_asset="USDT", executed_price=1.0)
 
     futures_unrealized = 0.0
     futures_positions: list[dict] = []
     try:
-        for item in client.fetch_futures_position_risk():
+        for item in futures_client.fetch_futures_position_risk():
             qty = _safe_float(item.get("positionAmt"), 0.0)
             if qty == 0:
                 continue
@@ -707,7 +730,7 @@ def compute_and_persist_pnl(
     except Exception:
         futures_positions = []
 
-    spot_unrealized, spot_inventory = _spot_unrealized_usd(client, trades)
+    spot_unrealized, spot_inventory = _spot_unrealized_usd(price_client, trades)
     unrealized_gross = spot_unrealized + futures_unrealized
     trading_fee_usd = commission_usd
     realized_net = realized_gross - trading_fee_usd + funding_usd
@@ -791,13 +814,22 @@ def run_exchange_reconciliation(
     markets = _normalize_market_types(market_types)
     clean_symbols = [str(item or "").strip().upper() for item in (symbols or []) if str(item or "").strip()]
 
-    user, api_key, api_secret, connection_map = _resolve_user_and_credentials(
+    user, market_credentials = _resolve_user_and_market_credentials(
         db,
         target_user_id=target_user_id,
         target_user_email=target_user_email,
         environment=env,
+        required_markets=markets,
     )
-    client = BinanceCommercialClient(api_key=api_key, api_secret=api_secret, environment=env)
+    spot_client = None
+    futures_client = None
+    if "spot" in market_credentials:
+        ctx = market_credentials["spot"]
+        spot_client = BinanceCommercialClient(api_key=ctx["api_key"], api_secret=ctx["api_secret"], environment=env)
+    if "futures" in market_credentials:
+        ctx = market_credentials["futures"]
+        futures_client = BinanceCommercialClient(api_key=ctx["api_key"], api_secret=ctx["api_secret"], environment=env)
+    price_client = spot_client or futures_client
 
     start_dt = _parse_iso(start_ts)
     end_dt = _parse_iso(end_ts)
@@ -839,8 +871,10 @@ def run_exchange_reconciliation(
         if market == "spot":
             if not clean_symbols:
                 continue
+            if spot_client is None:
+                raise ValueError("binance_credentials_missing")
             for symbol in clean_symbols:
-                for raw in client.fetch_spot_trades(
+                for raw in spot_client.fetch_spot_trades(
                     symbol=symbol,
                     start_time_ms=start_ms,
                     end_time_ms=end_ms,
@@ -848,10 +882,12 @@ def run_exchange_reconciliation(
                 ):
                     exchange_trade_ids.add(f"spot:{raw.get('id')}")
         else:
+            if futures_client is None:
+                raise ValueError("binance_credentials_missing")
             futures_symbols = clean_symbols or [None]
             for symbol in futures_symbols:
                 for chunk_start, chunk_end in _iter_windows(start_ms, end_ms, MAX_FUTURES_WINDOW_MS):
-                    for raw in client.fetch_futures_trades(
+                    for raw in futures_client.fetch_futures_trades(
                         symbol=symbol,
                         start_time_ms=chunk_start,
                         end_time_ms=chunk_end,
@@ -860,7 +896,7 @@ def run_exchange_reconciliation(
                         exchange_trade_ids.add(f"futures:{raw.get('id')}")
                         pnl_amount = _safe_float(raw.get("realizedPnl"), 0.0)
                         exchange_realized_usd += _asset_amount_to_usd(
-                            client,
+                            price_client,
                             amount=pnl_amount,
                             asset="USDT",
                             quote_asset="USDT",
@@ -876,7 +912,9 @@ def run_exchange_reconciliation(
 
     position_drift_usd = 0.0
     if "futures" in markets:
-        exchange_position_rows = client.fetch_futures_position_risk()
+        if futures_client is None:
+            raise ValueError("binance_credentials_missing")
+        exchange_position_rows = futures_client.fetch_futures_position_risk()
         if clean_symbols:
             allowed_symbols = {item.upper() for item in clean_symbols}
             exchange_position_rows = [row for row in exchange_position_rows if str(row.get("symbol") or "").upper() in allowed_symbols]
@@ -897,7 +935,9 @@ def run_exchange_reconciliation(
     try:
         spot_total = 0.0
         if "spot" in markets:
-            spot_account = client.fetch_spot_account()
+            if spot_client is None:
+                raise ValueError("binance_credentials_missing")
+            spot_account = spot_client.fetch_spot_account()
             for item in (spot_account.get("balances") or []):
                 asset = str(item.get("asset") or "").upper()
                 amount = _safe_float(item.get("free"), 0.0) + _safe_float(item.get("locked"), 0.0)
@@ -906,9 +946,9 @@ def run_exchange_reconciliation(
                 if asset in STABLE_QUOTES:
                     spot_total += amount
                 else:
-                    spot_total += amount * client.get_spot_price(f"{asset}USDT")
+                    spot_total += amount * price_client.get_spot_price(f"{asset}USDT")
 
-        futures_account = client.fetch_futures_account() if "futures" in markets else {}
+        futures_account = futures_client.fetch_futures_account() if "futures" in markets and futures_client else {}
         futures_wallet = _safe_float(futures_account.get("totalWalletBalance"), 0.0)
         exchange_equity = spot_total + futures_wallet
         internal_net = sum(_safe_float(item.realized_pnl_usd) for item in internal_trades) - sum(_safe_float(item.commission_usd) for item in internal_trades)
@@ -932,7 +972,7 @@ def run_exchange_reconciliation(
 
     log = ExchangeReconciliationLog(
         user_id=user.id,
-        connection_id=connection_map[markets[0]].id if markets else None,
+        connection_id=market_credentials[markets[0]]["connection"].id if markets else None,
         exchange="binance",
         market_type="all" if len(markets) > 1 else markets[0],
         environment=env,
@@ -997,7 +1037,7 @@ def get_data_quality_snapshot(
     environment: str,
 ) -> dict:
     env = _normalize_environment(environment)
-    user, _, _, _ = _resolve_user_and_credentials(
+    user, _ = _resolve_user_and_market_credentials(
         db,
         target_user_id=target_user_id,
         target_user_email=target_user_email,
@@ -1063,7 +1103,7 @@ def get_live_transition_gate(
 ) -> dict:
     env = _normalize_environment(environment)
     markets = _normalize_market_types(required_market_types)
-    user, _, _, _ = _resolve_user_and_credentials(
+    user, _ = _resolve_user_and_market_credentials(
         db,
         target_user_id=target_user_id,
         target_user_email=target_user_email,
@@ -1152,7 +1192,7 @@ def export_standardized_trades_csv(
     end_ts: str | None,
 ) -> tuple[bytes, str]:
     env = _normalize_environment(environment)
-    user, _, _, _ = _resolve_user_and_credentials(
+    user, _ = _resolve_user_and_market_credentials(
         db,
         target_user_id=target_user_id,
         target_user_email=target_user_email,
@@ -1255,14 +1295,20 @@ def bootstrap_user_websocket_streams(
     market_types: list[str] | None,
 ) -> dict:
     env = _normalize_environment(environment)
-    user, api_key, api_secret, _ = _resolve_user_and_credentials(
+    markets = _normalize_market_types(market_types)
+    user, market_credentials = _resolve_user_and_market_credentials(
         db,
         target_user_id=target_user_id,
         target_user_email=target_user_email,
         environment=env,
+        required_markets=markets,
     )
-    client = BinanceCommercialClient(api_key=api_key, api_secret=api_secret, environment=env)
-    streams = client.bootstrap_user_data_streams(_normalize_market_types(market_types))
+    streams: dict[str, dict] = {}
+    for market in markets:
+        ctx = market_credentials[market]
+        client = BinanceCommercialClient(api_key=ctx["api_key"], api_secret=ctx["api_secret"], environment=env)
+        partial = client.bootstrap_user_data_streams([market])
+        streams.update(partial)
     return {
         "status": "ok",
         "user_id": user.id,
