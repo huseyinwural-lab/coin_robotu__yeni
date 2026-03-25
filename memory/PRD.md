@@ -1,3 +1,57 @@
+## 2026-03-25 — P1.3 Retention & Segment Profitability ✅
+
+### Amaç
+- User economics’i statik tablodan trend + segment + aksiyon seviyesine taşımak.
+
+### Backend — Yeni capability seti
+- Cohort retention trend endpointi:
+  - `GET /api/admin/users/economics/retention-trend`
+  - weekly/monthly granularite, cohort bazlı retention + revenue + pnl
+- Segment profitability endpointi:
+  - `GET /api/admin/users/economics/segment-profitability`
+  - segmentler: `high_value`, `profitable_but_inactive`, `churn_risk`, `low_activity_low_revenue`, `loss_heavy_users`
+  - churn risk + re-engagement listeleri
+- Export endpointleri:
+  - `GET /api/admin/users/economics/export.csv`
+  - `GET /api/admin/users/economics/export.xlsx`
+- Scheduled snapshot endpointleri:
+  - `POST /api/admin/users/economics/snapshots/run` (daily/weekly)
+  - `GET /api/admin/users/economics/snapshots/trend`
+
+### Yeni schema/migration
+- `user_economics_snapshots` tablosu eklendi
+  - migration: `20260325_0077_user_economics_snapshots.py`
+  - unique key: `(snapshot_type, snapshot_date, environment, user_id)`
+
+### Servis akışı
+- `user_economics_service.py` genişletildi:
+  - `get_retention_trend`
+  - `get_segment_profitability`
+  - `export_user_economics`
+  - `run_user_economics_snapshot`
+  - `get_user_economics_snapshot_trend`
+
+### UI — /admin/users/economics genişletmesi
+- Retention trend chart
+- Segment profitability cards
+- Churn risk listesi
+- Re-engagement listesi
+- Snapshot trend tablo
+- Export CSV/XLSX butonları
+- Snapshot run butonu
+
+### Kural uyumu
+- Revenue kaynağı: sadece `revenue_ledger`
+- PnL kaynağı: sadece canonical `commercial_trades`
+- Deterministic aggregate: ardışık çağrılarda KPI stabil
+
+### Test kanıtı
+- `testing_agent` raporu: `/app/test_reports/iteration_133.json`
+  - Backend: **24/24 PASS**
+  - Frontend: **%100 PASS**
+  - Deterministic check: PASS
+  - Regression (`/api/admin/commercial/p0/live-gate`): PASS
+
 ## 2026-03-25 — P1.2 User Economics ✅
 
 ### Kapsam (görev emri tamamlandı)

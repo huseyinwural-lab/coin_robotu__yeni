@@ -1,5 +1,18 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (P1.3 Retention & Segment Profitability)
+- Yeni migration: `20260325_0077_user_economics_snapshots.py`.
+- Yeni model: `UserEconomicsSnapshot`.
+- User economics backend genişletmesi:
+  - `GET /api/admin/users/economics/retention-trend`
+  - `GET /api/admin/users/economics/segment-profitability`
+  - `GET /api/admin/users/economics/export.csv`
+  - `GET /api/admin/users/economics/export.xlsx`
+  - `POST /api/admin/users/economics/snapshots/run`
+  - `GET /api/admin/users/economics/snapshots/trend`
+- Frontend /admin/users/economics sayfası trend/segment/export/snapshot bileşenleriyle genişletildi.
+- Test kanıtı: `/app/test_reports/iteration_133.json` (backend 24/24 PASS, frontend %100).
+
 ## 2026-03-25 (P1.2 User Economics)
 - Migration: `20260325_0076_user_economics_aggregates.py` eklendi.
 - Yeni model: `UserEconomicsAggregate` (`user_id + environment` unique).

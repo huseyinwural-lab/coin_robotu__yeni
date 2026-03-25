@@ -1,5 +1,15 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (P1.3 tamamlandı)
+- ✅ Tamamlandı:
+  - Retention trend (weekly/monthly)
+  - Segment profitability + churn risk/re-engagement
+  - Economics export (CSV/XLSX)
+  - Daily/weekly scheduled snapshot + trend
+- 🟡 Sonraki P1 adımı:
+  - Retention alerting (drop threshold)
+  - Segment bazlı otomatik aksiyon önerisi
+
 ## 2026-03-25 (P1.2 tamamlandı)
 - ✅ Tamamlandı:
   - User Economics aggregate katmanı
