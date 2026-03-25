@@ -1,3 +1,44 @@
+## 2026-03-25 — Spot Live + Futures Test Zinciri (Yeniden Koşum) ve Trace History Compare ✅
+
+### Bu turda yapılanlar
+- Kullanıcı talebine göre P0 zinciri tekrar koşturuldu:
+  - Spot Live akışı
+  - Futures Testnet akışı
+- Credential Orchestration drawer’a yeni geliştirme eklendi:
+  - `request_id` bazlı geçmiş trace listesi (son N)
+  - Seçili geçmiş kayıt ile current trace karşılaştırma kartı
+
+### Teknik güncellemeler
+- `commercial_ops_p0_service.py`
+  - `compute_and_persist_pnl` artık `market_types` alıyor (spot-only / futures-only destek)
+  - `get_data_quality_snapshot` artık `required_market_types` alıyor
+  - `get_live_transition_gate` içinde credential resolve çağrısı artık seçilen market scope ile yapılıyor (`required_markets=markets`)
+- `admin_commercial_p0.py`
+  - `/pnl/latest` endpointine `market_types` query desteği
+  - `/data-quality` endpointine `required_market_types` query desteği
+- `AdminCredentialOrchestrationPage.jsx`
+  - Audit drawer’a geçmiş trace listesi eklendi (`/api/audit-logs/timeline`)
+  - “Karşılaştır” butonu ile current vs selected history kıyaslaması eklendi
+  - API limit uyumu için history çağrısı `limit=20` oldu
+  - Validation error array toast formatı düzeltildi
+
+### Zincir sonuçları (özet)
+- Spot Live:
+  - ingest/pnl/recon/data-quality: 200
+  - live-gate: 200 ama `live_transition_ready=false` (spot trade coverage yok; fetched/inserted 0)
+- Futures Testnet:
+  - ingest/pnl/recon/data-quality/live-gate: 200
+  - `live_transition_ready=true` (futures test scope)
+
+### Test kanıtı
+- `/app/test_reports/iteration_128.json`
+  - Backend: **18/18 PASS**
+  - Frontend: **%100 PASS**
+
+### Karar / durum
+- P1 Revenue Engine geçiş koşulu kullanıcı kuralına göre `live_transition_ready=true` sonrasıdır.
+- Spot live scope henüz `true` olmadığı için P1 başlatılmadı.
+
 ## 2026-03-25 — Traceability Acceptance (Request ID + Audit Drawer) ✅
 
 ### Uygulanan kullanıcı kararları

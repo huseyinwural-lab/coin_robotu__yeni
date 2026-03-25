@@ -1,5 +1,14 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (P0 zincir tekrar koşumu sonucu)
+- ✅ Tamamlandı:
+  - Spot live + futures test zinciri tekrar koşuldu
+  - P0 endpointleri market-scope bazlı çalışacak şekilde hardening yapıldı
+  - Trace geçmiş karşılaştırma UI eklendi
+- 🟡 Kalan:
+  - Spot live scope’ta gerçek trade coverage olmadığı için `live_transition_ready` henüz `false`
+  - Kullanıcı kuralı gereği P1 Revenue Engine geçişi beklemede
+
 ## 2026-03-25 (Traceability Increment)
 - ✅ Tamamlandı:
   - request_id bazlı resolution trace response

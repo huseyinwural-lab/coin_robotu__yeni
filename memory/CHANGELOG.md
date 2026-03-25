@@ -1,5 +1,19 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (P0 chain rerun + trace history compare)
+- Backend:
+  - `GET /api/admin/commercial/p0/pnl/latest` → `market_types` query desteği eklendi.
+  - `GET /api/admin/commercial/p0/data-quality` → `required_market_types` query desteği eklendi.
+  - Live-gate credential resolve scope bug fix: selected market seti doğru geçiriliyor.
+- Frontend:
+  - Audit Trace drawer’a geçmiş trace listesi + karşılaştırma eklendi.
+  - History API `limit` değeri `20` (endpoint constraint uyumu).
+  - Validation error array için toast message format düzeltmesi.
+- Operasyon sonucu:
+  - Futures test live-gate scope: `true`
+  - Spot live scope: `false` (trade coverage yok)
+- Test: `/app/test_reports/iteration_128.json` (backend 18/18 PASS, frontend %100).
+
 ## 2026-03-25 (Traceability: request_id + audit drawer)
 - Backend: `credential-resolution-preview` response’u traceability alanlarıyla genişletildi (`request_id`, `resolved_at`, `fallback_chain`, `selected_probe_status` vb.).
 - Backend: endpoint içinde `request_id` bazlı audit log kaydı eklendi.
