@@ -1,5 +1,15 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-25 (Task-1 Güncelleme)
+- ✅ P0 tamamlandı: Credential Orchestration UI 8/8 genişletme maddesi kapatıldı.
+  - Multi-exchange: `binance/bybit/okx`
+  - Market modeli: `spot/usdt_perp/coin_perp`
+  - Purpose: `market_data/execution/fallback`
+  - Base URL + Proxy/Egress görünürlüğü
+  - Routing matrix + resolution preview + probe state dashboard
+- ✅ Backend uyumu tamamlandı: purpose filter + yeni enum/alias desteği.
+- 🔴 Açık blocker (P0 closure): Spot+Futures live E2E için Futures proxy erişim bilgisi bekleniyor (451 external blocker).
+
 ## 2026-03-25 Güncel Durum
 - ✅ Tamamlanan ana iş: Admin Credential Orchestration Layer
   - Admin master credential yönetimi + approval/probe/audit

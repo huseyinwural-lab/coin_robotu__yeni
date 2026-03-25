@@ -1,5 +1,19 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-25 (Credential Orchestration UI Expansion)
+- `AdminCredentialOrchestrationPage.jsx` production-grade genişletildi (multi-exchange, market/purpose, routing matrix, probe dashboard, egress visibility).
+- Backend credential orchestration enum/filter uyumu güncellendi:
+  - exchange: `binance/bybit/okx`
+  - market: `spot/usdt_perp/coin_perp` (+ `futures` alias)
+  - purpose: `market_data/execution/fallback` (+ `execution_fallback` alias)
+- `GET /api/venues/admin/credentials` endpointine `purpose` filtresi eklendi.
+- Probe state seti genişletildi (`connectivity_only`, `rate_limited`, `probe_not_supported`).
+- Test kanıtı:
+  - `/app/test_reports/iteration_125.json` (backend 22/22 PASS, frontend %100)
+  - Frontend specialist test: 5/5 PASS
+  - Backend specialist test: hedef endpointler PASS, 500 yok
+- **MOCKED**: Bybit/OKX probe yalnız public connectivity; Binance test probe ortamda `ip_restricted` dönebilir.
+
 ## 2026-03-25 (Admin Credential Orchestration Layer)
 - Yeni tablolar: `admin_exchange_credentials`, `credential_assignment_rules` (+ migration `20260325_0074`)
 - Yeni servis: `credential_resolution_service.py` (deterministic credential selection + fallback)

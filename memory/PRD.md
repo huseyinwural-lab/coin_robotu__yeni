@@ -1,3 +1,42 @@
+## 2026-03-25 — Credential Orchestration UI Expansion (Task-1) ✅
+
+### Kapsam (kullanıcı onaylı A/A/A/B)
+- 8 madde birebir uygulandı: multi-exchange, genişletilmiş market/purpose modeli, base-url/proxy alanları, routing matrix, probe state genişletme, kapsamlı liste, egress görünürlüğü.
+- Backend uyumu da güncellendi: yeni filtre/enum akışları API seviyesinde desteklendi.
+
+### Backend güncellemeleri
+- `credential_resolution_service.py`
+  - Exchange desteği: `binance`, `bybit`, `okx`
+  - Market desteği: `spot`, `usdt_perp`, `coin_perp` (+ geriye uyum `futures` alias)
+  - Purpose desteği: `market_data`, `execution`, `fallback` (+ geriye uyum `execution_fallback` alias)
+  - Purpose ve market alias çözümleme eklendi (eski kayıtlarla uyumluluk)
+  - Probe state genişletildi: `connectivity_only`, `rate_limited`, `probe_not_supported`
+  - Bybit/OKX için public connectivity probe eklendi (auth-signed probe değil)
+- `venues.py`
+  - `GET /api/venues/admin/credentials` endpointine `purpose` filtresi eklendi.
+  - Resolution preview varsayılan purpose `execution` oldu.
+
+### Frontend güncellemeleri
+- `AdminCredentialOrchestrationPage.jsx` production-grade genişletildi:
+  - Filtre paneli: exchange + market + purpose + environment
+  - Credential formu: scope/exchange/market/purpose/env + base_url + egress note + passphrase
+  - Kapsamlı credential table kolonları: Exchange, Market, Purpose, Scope, Env, Status, Probe, Egress, Fingerprint, Aksiyon
+  - Routing Matrix: deterministic zincir açıklaması + kural yönetimi
+  - Resolution Preview: purpose seçimi + reason/rule görünürlüğü
+  - Probe distribution: genişletilmiş state kartları
+  - Proxy/Egress visibility paneli
+  - Kritik öğelerde kapsamlı `data-testid` desteği
+
+### Test ve doğrulama
+- Lint: frontend + backend dosyaları PASS.
+- `testing_agent` raporu: `/app/test_reports/iteration_125.json` → backend %100 (22/22), frontend %100.
+- `auto_frontend_testing_agent`: 5/5 PASS (render, filtreler, form, routing matrix, probe+egress).
+- `deep_testing_backend_v2`: tüm hedef endpointler PASS, 500 yok, yeni enumlar kabul edildi.
+
+### Mock / kısıt notu
+- **MOCKED**: Bybit/OKX probe şu anda public connectivity kontrolü seviyesinde (signed auth probe değil).
+- **MOCKED**: Binance test key probe sonuçları ortam kısıtı nedeniyle `ip_restricted` dönebilir.
+
 ## 2026-03-25 — Admin Credential Orchestration Layer (Yeni Katman) ✅
 
 ### Uygulanan mimari
