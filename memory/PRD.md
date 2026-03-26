@@ -1,3 +1,43 @@
+## 2026-03-26 — FAZ A Unified Commercial Overview Contract ✅
+
+### Tamamlanan kapsam (P0)
+- Yeni birleşik endpoint eklendi: `GET /api/admin/commercial/overview`
+  - Varsayılanlar: `time_window=last_30_days`, `environment=live`
+  - Opsiyonel query desteği: `time_window`, `environment`, `from`, `to`
+  - Geçersiz aralıkta (`from > to`) doğrulama: `422 invalid_time_range`
+- Yeni devasa response contract şemaları eklendi (`schemas.py`):
+  - `applied_filters`
+  - `financial_accuracy`
+  - `revenue_model`
+  - `user_economics`
+  - `risk_summary`
+  - `usage_analytics`
+  - `data_quality`
+- Servis katmanında tek payload agregasyonu kuruldu (`admin_commercial_service.py`):
+  - Kaynaklar: `CommercialTrade`, `PnlRecord`, `RevenueLedger`, `UserEconomicsAggregate`, `ExchangeReconciliationLog`, `RiskOrchestratorPolicy`, `LiveActivationConfig`
+  - Finansal doğruluk hesapları: realized/unrealized, gross/net, fee/funding/commission
+  - Revenue component breakdown ve toplam tutarlılığı
+  - Risk boş veri güvenli varsayılanları
+  - Data quality empty/stale/healthy/degraded sınıflaması
+
+### Test ve doğrulama
+- Yeni deterministik servis testleri: `/app/backend/tests/test_admin_commercial_overview_service.py`
+  - gross vs net
+  - realized vs unrealized
+  - fee/funding/commission toplamı
+  - revenue aggregate tutarlılığı
+  - risk summary boş veri
+  - data quality empty/stale
+- Testing agent raporu: `/app/test_reports/iteration_143.json`
+  - Sonuç: **Backend 100% (32/32 PASS)**
+- Ek lokal doğrulama:
+  - `pytest -q /app/backend/tests/test_admin_commercial_overview_service.py` → **6 PASS**
+  - `pytest -q /app/backend/tests/test_admin_commercial_overview_service.py /app/backend/tests/test_admin_commercial_overview_testclient.py /app/backend/tests/test_admin_commercial_overview_api.py` → **32 PASS, 21 SKIP**
+
+### Not
+- External preview URL tarafında aralıklı `502 / preview not responding` gözlemi sürüyor (infra dış bağımlılık).
+- Testlerde bu durum için network-bağımlı case’lere skip dayanıklılığı eklendi.
+
 ## 2026-03-26 — KAPANIŞ TURU (Closure) ✅
 
 ### Tamamlanan kritik kapanış işleri
