@@ -1,3 +1,66 @@
+## 2026-03-26 — Scheduler/Enforcement/Alert Hardening (P0-P3) ✅
+
+### P0 — Kritik Sertleştirme
+- Scheduler üretim sertleştirmesi tamamlandı:
+  - schedule claim token + claim expiry
+  - `running_started_at` + stale run recovery
+  - aynı schedule/window için idempotency key ile duplicate üretim engeli
+  - retry/backoff policy (`retry_count`, `next_retry_at`, `last_failure_reason`, `max_retry`)
+- Enforcement kapsamı genişletildi:
+  - runtime submit
+  - execution intent approve/execute path
+  - position increase benzeri akışlar
+  - withdraw/fund request path
+  - reason code standardı korunarak 423 response ve audit
+
+### P1 — Export Lifecycle Tam Kapanış
+- Export artifact modeli güçlendirildi:
+  - `retention_expires_at`, `retention_state`
+  - `downloadable_state`, `signed_download_url`
+  - `idempotency_key`
+- Storage abstraction eklendi:
+  - `commercial_export_storage_service.py`
+  - local provider + object storage uyumlu provider contract rezervi
+- Registry validasyonu sıkılaştırıldı:
+  - unknown export type/version reject
+  - mapping override yalnız canonical registry ile uyumluysa kabul
+  - response’a `canonical_column_mapping` döndürülüyor
+
+### P2 — Alert Operasyon Sertleştirmesi
+- Bulk alert operasyonları eklendi:
+  - `POST /api/admin/commercial/alerts/bulk-lifecycle`
+- Assignment endpoint eklendi:
+  - `POST /api/admin/commercial/alerts/{alert_id}/assign`
+- SLA policy eklendi:
+  - `age_seconds`, `sla_state`, `auto_escalated`, `auto_escalated_at`
+  - overview çağrılarında SLA state update akışı
+
+### P3 — Frontend Kapanışı
+- Export Ops tabloları hardening kolonlarıyla genişletildi:
+  - retry_count, next_retry_at, running_started_at, stale_run_flag
+  - retention_state, downloadable_state
+- Alert Rail UI:
+  - selected rows bulk ack/triage
+  - assignment form
+  - SLA overdue badge
+- Üst banda infra health badge eklendi:
+  - API reachable
+  - auth reachable
+  - scheduler alive
+  - last overview refresh status
+
+### Migration ve testler
+- Yeni migration: `20260326_0084_scheduler_hardening_and_alert_ops.py`
+- Yeni test dosyası: `/app/backend/tests/test_admin_commercial_hardening_phase.py`
+- Doğrulamalar:
+  - hardening_phase: **3 PASS**
+  - enforcement_governance: **5 PASS**
+  - testing agent: `/app/test_reports/iteration_147.json` backend **8/8 PASS**
+
+### Infra notu
+- Preview ortamında backend bağlantısı zaman zaman alembic/db timeout nedeniyle erişilemez olabiliyor (testing raporlarında infra olarak işaretli).
+- Kod tarafı TestClient/pytest ile doğrulanmış durumda.
+
 ## 2026-03-26 — Commercial Ops Enforcement & Governance Closure ✅
 
 ### Kapanan kritik başlıklar (P0/P1)
