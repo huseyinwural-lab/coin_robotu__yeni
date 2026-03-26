@@ -1,3 +1,45 @@
+## 2026-03-26 — P0 Iterasyon (T-01 + T-02) ✅
+
+### T-01 — Admin Login Redirect/Token Persist Hardening
+- `frontend/src/context/AuthContext.jsx`
+  - Token + user persist katmanı netleştirildi (`token`, `auth_user`).
+  - Hydration akışı deterministikleştirildi (token yoksa temiz kapanış, token varsa yükleme bayrağı ile doğrulama).
+  - İptal edilen (`ERR_CANCELED`) hydrate isteklerinde oturumun gereksiz silinmesi engellendi.
+- `frontend/src/pages/AdminLoginPage.jsx`
+  - Başarılı login/MFA sonrası `replace` redirect ile tek akış (`/admin/dashboard`).
+  - Token-yok/user-var tutarsızlığı için sayfa seviyesinde logout senkronizasyonu eklendi.
+  - Submit button `type="submit"` netleştirildi.
+- `frontend/src/components/ProtectedRoute.jsx`
+  - Token var + user henüz hydrate olmadı durumunda “session restore” bekleme ekranı eklendi.
+
+### T-02 — Preview Smoke Gate (Fail-Fast Readiness)
+- `backend/services/commercial_preview_smoke_service.py`
+  - Deploy sonrası HTTP smoke gate eklendi:
+    - `GET /api/health`
+    - `POST /api/auth/login`
+    - `GET /admin/commercial-ops`
+    - `GET /api/admin/commercial/overview` (+ required block doğrulaması)
+- `backend/server.py`
+  - Startup sonrası background smoke gate runner eklendi (retry + interval + timeout).
+  - `/api/health/ready` ve `/api/ready` artık `preview_smoke_gate` PASS olmadan READY dönmüyor (zorunlu gate).
+  - Canary modda pipeline runtime skip davranışı korunmaya devam ediyor.
+- `backend/.env`
+  - `PREVIEW_SMOKE_BASE_URL`, `PREVIEW_SMOKE_GATE_REQUIRED`, `PREVIEW_SMOKE_GATE_*` ayarları eklendi.
+
+### Doğrulama Özeti
+- Backend bağımsız test ajanı: **4/4 PASS**
+  - health, login, ready, startup smoke checks anahtarları doğrulandı.
+- Readiness davranışı:
+  - Gate `pending` iken `/api/ready` -> **503**
+  - Gate `pass` sonrası `/api/ready` ve `/api/health/ready` -> **200**
+- Frontend deterministic smoke (Playwright): 5 iterasyon login→dashboard→commercial-ops→refresh akışı **PASS**.
+
+### Kalan Sıra (onay bekleyen)
+- P1: T-03 (scheduler leader-election/pessimistic claim)
+- P1: T-04 (object storage + signed URL)
+- P1: T-05 (export registry strict mode)
+- P2: T-06 (property-style concurrency test expansion)
+
 ## 2026-03-26 — P0 Preview Startup Timeout Closure ✅
 
 ### Sorun
