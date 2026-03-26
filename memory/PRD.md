@@ -1,3 +1,44 @@
+## 2026-03-26 — P1/P2 Sertleştirme (T-03 + T-05 + T-06) ✅
+
+### T-03 — Scheduler Leader-Election / Pessimistic Claim
+- `commercial_export_scheduler_service.py` içinde çoklu-instance güvenliği güçlendirildi:
+  - Schedule+window bazlı DB advisory lock (`pg_try_advisory_lock`) eklendi.
+  - Row-claim artık condition-based atomic update ile yapılıyor (`_try_claim_schedule`).
+  - Stale recovery, sadece running_started_at değil `claim_expires_at` üzerinden de recovery yapıyor.
+  - Failed manifest retry’de aynı idempotency key için manifest reuse eklenerek duplicate/unique conflict önlendi.
+- Yeni migration: `20260326_0085_export_scheduler_leader_election_indexes.py`
+  - `commercial_export_manifests.idempotency_key` için partial unique index
+  - scheduler claim recovery için yardımcı index
+
+### T-05 — Export Registry Strict Mode Final Hardening
+- `admin_commercial_service.py` strict validation sertleştirildi:
+  - unsupported `export_type` -> reject
+  - unsupported `schema_version` -> reject
+  - `column_mapping` override yalnız explicit allowlist alanlarda kabul
+  - invalid section/column/duplicate override -> reject
+- Manifest response’a canonical özet eklendi:
+  - `canonical_mapping_summary` (section_count, total_columns, sections)
+
+### T-06 — Property-Style Concurrency/Lifecycle Test Expansion
+- `test_admin_commercial_hardening_phase.py` genişletildi:
+  - multi-runner race -> same window duplicate export = 0 doğrulaması
+  - retry/backoff boundary + max retry disable doğrulaması
+  - strict override allowlist + canonical mapping summary doğrulaması
+  - retention lifecycle (30 gün) doğrulaması
+  - alert bulk assignment + SLA edge-case doğrulaması
+
+### Retention Kararı
+- Varsayılan retention 30 güne çekildi (`COMMERCIAL_EXPORT_RETENTION_DAYS`, default=30).
+
+### Doğrulama
+- Yeni/ilgili genişletilmiş hedef test seti: **6 passed** (`test_admin_commercial_hardening_phase.py` seçili kapsam).
+- Bağımsız backend test ajanı: Scheduler + strict registry + readiness kontrolleri **PASS**.
+- External smoke: `/api/health`, `/api/ready`, `/api/admin/commercial/overview` **PASS**.
+
+### Bekleyen (credentials sonrası)
+- **T-04 (Supabase Storage gerçek provider + signed URL)** beklemede.
+- Kullanıcı kararı: credentials gelince uygulanacak.
+
 ## 2026-03-26 — P0 Iterasyon (T-01 + T-02) ✅
 
 ### T-01 — Admin Login Redirect/Token Persist Hardening
