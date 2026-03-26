@@ -14,6 +14,8 @@ from core.alerts.runtime_alert_triggers import (
 from core.exchanges import get_execution_adapter
 from core.runtime_alert_thresholds import get_runtime_alert_thresholds
 from core.runtime_stream import runtime_stream_hub
+from core.safety.canary_mode import evaluate_canary_constraints
+from core.safety.kill_switch import evaluate_auto_kill_switch, get_kill_switch_state, is_kill_switch_active
 from core.risk_engine import evaluate_risk
 from db import redis_client
 from models import ExecutionJob, Order, Position
@@ -239,6 +241,16 @@ def submit_signal(
     if not symbol or side not in {"BUY", "SELL"} or size <= 0:
         raise ValueError("invalid_signal_payload")
 
+    if is_kill_switch_active():
+        state = get_kill_switch_state()
+        return {
+            "status": "rejected",
+            "execution_job_id": None,
+            "idempotency_key": None,
+            "state": "FAILED",
+            "risk": {"allowed": False, "reject_reason": "kill_switch_active", "details": state},
+        }
+
     idem_key = idempotency_key or _build_idempotency_key(
         user_id=user_id,
         symbol=symbol,
@@ -272,6 +284,27 @@ def submit_signal(
     )
     db.add(job)
     db.flush()
+
+    canary = evaluate_canary_constraints(
+        db,
+        user_id=user_id,
+        strategy_name=strategy_name,
+        size=size,
+        mark_price=float(signal.get("mark_price") or 1.0),
+    )
+    if not canary.get("allowed"):
+        job.state = "FAILED"
+        job.reject_reason = canary.get("reject_reason")
+        job.failed_at = _utcnow()
+        job.last_state_transition_at = _utcnow()
+        db.commit()
+        return {
+            "status": "rejected",
+            "execution_job_id": job.id,
+            "idempotency_key": idem_key,
+            "state": job.state,
+            "risk": {"allowed": False, "reject_reason": canary.get("reject_reason"), "details": canary},
+        }
 
     risk_decision = run_risk_checks(db, signal=signal, user_id=user_id, risk_limits=risk_limits)
     if not risk_decision.get("allowed"):
@@ -334,6 +367,7 @@ def submit_signal(
     )
 
     queue_payload = enqueue_execution(db, job)
+    evaluate_auto_kill_switch(db)
     create_audit_log(
         db,
         action="execution_signal_enqueued",
@@ -363,7 +397,18 @@ def execute_queued_job(db: Session, *, queue_payload: dict) -> dict:
     if str(job.state).upper() in TERMINAL_STATES:
         return {"status": "ignored", "reason": "already_terminal", "execution_job_id": execution_job_id, "state": job.state}
 
+    retry_at_ts = int(queue_payload.get("retry_at_ts") or 0)
+    now_ms = int(time.time() * 1000)
+    if retry_at_ts and now_ms < retry_at_ts:
+        redis_client.rpush(EXECUTION_QUEUE_KEY, json.dumps(queue_payload, ensure_ascii=False, default=str))
+        return {
+            "status": "deferred",
+            "execution_job_id": execution_job_id,
+            "retry_at_ts": retry_at_ts,
+        }
+
     order = _create_or_get_order(db, job=job)
+    adapter = get_execution_adapter()
 
     execution_started = time.perf_counter()
     enqueued_at_raw = queue_payload.get("enqueued_at")
@@ -377,7 +422,26 @@ def execute_queued_job(db: Session, *, queue_payload: dict) -> dict:
             queue_wait_ms = None
 
     try:
-        exchange_result = route_to_exchange(job)
+        leverage = int((job.meta_payload or {}).get("leverage") or 1)
+        mark_price = float((job.meta_payload or {}).get("mark_price") or 1.0)
+        required_margin = float(job.size or 0.0) * mark_price / max(leverage, 1)
+        available_balance = float(adapter.get_available_balance(asset="USDT") or 0.0)
+        if available_balance < required_margin:
+            raise RuntimeError("insufficient_balance")
+
+        exchange_result = adapter.submit_order(
+            {
+                "execution_job_id": job.id,
+                "idempotency_key": job.idempotency_key,
+                "symbol": job.symbol,
+                "side": job.side,
+                "size": float(job.size or 0.0),
+                "strategy_name": job.strategy_name,
+                "mark_price": mark_price,
+                "order_type": str((job.meta_payload or {}).get("order_type") or "MARKET"),
+                "limit_price": (job.meta_payload or {}).get("limit_price"),
+            }
+        )
         execution_ms = int((time.perf_counter() - execution_started) * 1000)
         total_ms = int((queue_wait_ms or 0) + execution_ms)
         job.execution_ms = execution_ms
@@ -411,6 +475,7 @@ def execute_queued_job(db: Session, *, queue_payload: dict) -> dict:
             details={"result": result},
         )
         check_failed_orders_trigger(db)
+        evaluate_auto_kill_switch(db)
         return {"status": "processed", **result}
     except Exception as exc:
         execution_ms = int((time.perf_counter() - execution_started) * 1000)
@@ -420,12 +485,18 @@ def execute_queued_job(db: Session, *, queue_payload: dict) -> dict:
         job.last_error = str(exc)[:250]
         job.fail_reason = str(exc)[:250]
         lowered = str(exc).lower()
-        if "guard" in lowered:
+        if "insufficient_balance" in lowered:
+            job.failure_class = "insufficient_balance"
+        elif "network" in lowered:
+            job.failure_class = "network_error"
+        elif "timeout" in lowered:
+            job.failure_class = "timeout"
+        elif "guard" in lowered:
             job.failure_class = "adapter_guard"
         elif "reject" in lowered:
             job.failure_class = "exchange_reject"
         else:
-            job.failure_class = "execution_exception"
+            job.failure_class = "unknown"
         if int(job.retry_count) >= int(job.max_retry):
             job.state = "FAILED"
             job.failed_at = _utcnow()
@@ -457,10 +528,13 @@ def execute_queued_job(db: Session, *, queue_payload: dict) -> dict:
 
         if str(job.state).upper() != "FAILED":
             queue_payload["retry_count"] = int(job.retry_count)
+            backoff_ms = min(8000, 1000 * (2 ** max(0, int(job.retry_count) - 1)))
+            queue_payload["retry_at_ts"] = int(time.time() * 1000) + backoff_ms
             redis_client.rpush(EXECUTION_QUEUE_KEY, json.dumps(queue_payload, ensure_ascii=False, default=str))
 
         check_worker_failure_trigger(db, threshold=3, window_minutes=15)
         check_failed_orders_trigger(db)
+        evaluate_auto_kill_switch(db)
 
         return {
             "status": "retry" if str(job.state).upper() != "FAILED" else "failed",

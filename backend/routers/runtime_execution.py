@@ -1,9 +1,14 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from core.pnl_engine import compute_runtime_pnl_positions, compute_runtime_pnl_summary
+from core.reconciliation.order_reconciliation import run_order_reconciliation
 from core.runtime_stream import runtime_stream_hub
+from core.safety.kill_switch import activate_kill_switch, deactivate_kill_switch, get_kill_switch_state
+from core.exchanges import get_execution_adapter
 from core.execution_engine import consume_execution_queue_once, submit_signal
 from core.strategy_engine import generate_strategy_signal
 from db import get_db
@@ -40,6 +45,15 @@ class AlertMuteRequest(BaseModel):
 
 class AlertNoteRequest(BaseModel):
     note: str = Field(min_length=1, max_length=2000)
+
+
+class KillSwitchActionRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CancelOrderRequest(BaseModel):
+    symbol: str
+    order_id: str
 
 
 @router.post("/strategy/signal")
@@ -291,4 +305,86 @@ def get_runtime_timeline_events(limit: int = 50, current_user: User = Depends(re
         "status": "ok",
         "items": runtime_stream_hub.get_recent_events(limit=max(1, min(limit, 200))),
         "requested_by": current_user.id,
+    }
+
+
+@router.get("/safety/kill-switch")
+def get_kill_switch(current_user: User = Depends(require_admin)):
+    return {"status": "ok", "kill_switch": get_kill_switch_state(), "requested_by": current_user.id}
+
+
+@router.post("/safety/kill-switch/activate")
+def activate_kill_switch_endpoint(
+    payload: KillSwitchActionRequest,
+    current_user: User = Depends(require_admin),
+):
+    state = activate_kill_switch(
+        source="manual",
+        reason=payload.reason,
+        metadata={"actor_user_id": current_user.id},
+    )
+    return {"status": "ok", "kill_switch": state}
+
+
+@router.post("/safety/kill-switch/deactivate")
+def deactivate_kill_switch_endpoint(
+    payload: KillSwitchActionRequest,
+    current_user: User = Depends(require_admin),
+):
+    state = deactivate_kill_switch(source="manual", reason=payload.reason)
+    return {"status": "ok", "kill_switch": state}
+
+
+@router.post("/reconciliation/orders/run")
+def run_order_reconciliation_endpoint(
+    limit: int = 100,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = run_order_reconciliation(db, limit=limit)
+    return {"status": "ok", "requested_by": current_user.id, "result": result}
+
+
+@router.get("/exchange/order-status")
+def get_exchange_order_status(
+    symbol: str,
+    order_id: str,
+    current_user: User = Depends(require_admin),
+):
+    adapter = get_execution_adapter()
+    return {
+        "status": "ok",
+        "requested_by": current_user.id,
+        "result": adapter.get_order_status(symbol=symbol, order_id=order_id),
+    }
+
+
+@router.post("/exchange/cancel-order")
+def cancel_exchange_order(
+    payload: CancelOrderRequest,
+    current_user: User = Depends(require_admin),
+):
+    adapter = get_execution_adapter()
+    return {
+        "status": "ok",
+        "requested_by": current_user.id,
+        "result": adapter.cancel_order(symbol=payload.symbol, order_id=payload.order_id),
+    }
+
+
+@router.get("/execution/mode")
+def get_execution_mode(current_user: User = Depends(require_admin)):
+    return {
+        "status": "ok",
+        "requested_by": current_user.id,
+        "mode": str(os.environ.get("EXECUTION_MODE") or "sim"),
+        "flags": {
+            "LIVE_TRADING_ENABLED": str(os.environ.get("LIVE_TRADING_ENABLED") or "false"),
+            "TESTNET_TRADING_ENABLED": str(os.environ.get("TESTNET_TRADING_ENABLED") or "false"),
+            "LIVE_ROUTE_APPROVED": str(os.environ.get("LIVE_ROUTE_APPROVED") or "false"),
+            "CANARY_MODE": str(os.environ.get("CANARY_MODE") or "false"),
+            "CANARY_MAX_NOTIONAL": str(os.environ.get("CANARY_MAX_NOTIONAL") or "100"),
+            "CANARY_ALLOWED_STRATEGIES": str(os.environ.get("CANARY_ALLOWED_STRATEGIES") or "ema_rsi"),
+            "CANARY_ALLOWED_USER_IDS": str(os.environ.get("CANARY_ALLOWED_USER_IDS") or ""),
+        },
     }

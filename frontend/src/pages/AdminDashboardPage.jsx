@@ -147,6 +147,8 @@ export const AdminDashboardPage = () => {
   const [runtimePnlSummary, setRuntimePnlSummary] = useState(null);
   const [runtimeAlerts, setRuntimeAlerts] = useState([]);
   const [runtimeSmoke, setRuntimeSmoke] = useState(null);
+  const [runtimeKillSwitch, setRuntimeKillSwitch] = useState(null);
+  const [runtimeExecutionMode, setRuntimeExecutionMode] = useState(null);
   const [runtimeTimelineEvents, setRuntimeTimelineEvents] = useState([]);
   const [runtimeWsStatus, setRuntimeWsStatus] = useState("connecting");
   const [timelineAutoScroll, setTimelineAutoScroll] = useState(true);
@@ -254,6 +256,8 @@ export const AdminDashboardPage = () => {
         runtimePnlSummaryResponse,
         runtimeAlertsResponse,
         runtimeSmokeResponse,
+        runtimeKillSwitchResponse,
+        runtimeExecutionModeResponse,
       ] = await Promise.all([
         apiClient.get("/dashboard/summary"),
         apiClient.get("/admin/action-center/summary"),
@@ -283,6 +287,8 @@ export const AdminDashboardPage = () => {
           },
         }),
         apiClient.get("/runtime/health/smoke"),
+        apiClient.get("/runtime/safety/kill-switch"),
+        apiClient.get("/runtime/execution/mode"),
       ]);
 
       const summaryPayload = summaryResponse?.data || null;
@@ -301,6 +307,8 @@ export const AdminDashboardPage = () => {
       setRuntimePnlSummary(runtimePnlSummaryResponse?.data || null);
       setRuntimeAlerts(runtimeAlertsResponse?.data?.items || []);
       setRuntimeSmoke(runtimeSmokeResponse?.data?.smoke || null);
+      setRuntimeKillSwitch(runtimeKillSwitchResponse?.data?.kill_switch || null);
+      setRuntimeExecutionMode(runtimeExecutionModeResponse?.data || null);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Admin dashboard verisi yüklenemedi";
@@ -411,6 +419,19 @@ export const AdminDashboardPage = () => {
     } catch (error) {
       const message = error?.response?.data?.detail || "Alert aksiyonu başarısız";
       toast.error(typeof message === "string" ? message : "Alert aksiyonu başarısız");
+    }
+  }, [loadDashboard]);
+
+  const handleKillSwitchAction = useCallback(async (action) => {
+    const endpoint = action === "activate" ? "/runtime/safety/kill-switch/activate" : "/runtime/safety/kill-switch/deactivate";
+    const reason = action === "activate" ? "manual_dashboard_activation" : "manual_dashboard_release";
+    try {
+      await apiClient.post(endpoint, { reason });
+      toast.success(`Kill switch ${action === "activate" ? "aktif" : "pasif"} edildi`);
+      await loadDashboard();
+    } catch (error) {
+      const message = error?.response?.data?.detail || "Kill switch aksiyonu başarısız";
+      toast.error(typeof message === "string" ? message : "Kill switch aksiyonu başarısız");
     }
   }, [loadDashboard]);
 
@@ -816,6 +837,14 @@ export const AdminDashboardPage = () => {
             <p data-testid="admin-dashboard-runtime-smoke-status">status: {runtimeSmoke?.run_status || "no_data"}</p>
             <p data-testid="admin-dashboard-runtime-smoke-summary">summary: {runtimeSmoke?.summary || "-"}</p>
             <p data-testid="admin-dashboard-runtime-smoke-completed-at">completed_at: {runtimeSmoke?.completed_at || "-"}</p>
+            <p data-testid="admin-dashboard-runtime-execution-mode">mode: {runtimeExecutionMode?.mode || "sim"}</p>
+            <p data-testid="admin-dashboard-runtime-canary-mode">canary: {runtimeExecutionMode?.flags?.CANARY_MODE || "false"}</p>
+            <p data-testid="admin-dashboard-runtime-kill-switch-status">kill_switch: {runtimeKillSwitch?.active ? "ACTIVE" : "INACTIVE"}</p>
+            <p data-testid="admin-dashboard-runtime-kill-switch-reason">reason: {runtimeKillSwitch?.reason || "-"}</p>
+            <div className="flex gap-2 pt-1" data-testid="admin-dashboard-runtime-kill-switch-actions">
+              <Button size="sm" variant="outline" onClick={() => handleKillSwitchAction("activate")} data-testid="admin-dashboard-runtime-kill-switch-activate-button">Kill ON</Button>
+              <Button size="sm" variant="outline" onClick={() => handleKillSwitchAction("deactivate")} data-testid="admin-dashboard-runtime-kill-switch-deactivate-button">Kill OFF</Button>
+            </div>
           </div>
         </article>
       </div>

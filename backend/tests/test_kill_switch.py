@@ -52,3 +52,35 @@ def test_risk_kill_switch_blocks_new_decisions(monkeypatch):
     assert result["risk_decision"] == "BLOCK"
     assert "risk_kill_switch_enabled" in result["reason_codes"]
     assert risk_engine_service.is_risk_kill_switch_active(cache) is True
+
+
+def test_runtime_kill_switch_blocks_execution_submit_signal():
+    from core.execution_engine import submit_signal
+    from core.safety.kill_switch import activate_kill_switch, deactivate_kill_switch
+    from db import SessionLocal
+    from models import User
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).order_by(User.created_at.asc()).first()
+        assert user is not None
+        activate_kill_switch(source="test", reason="runtime_kill_switch_test")
+
+        result = submit_signal(
+            db,
+            user_id=user.id,
+            signal={
+                "symbol": "BTCUSDT",
+                "side": "BUY",
+                "size": 0.1,
+                "strategy_name": "ema_rsi",
+                "mark_price": 100,
+                "leverage": 1,
+            },
+            idempotency_key="iter4-kill-switch-runtime",
+        )
+        assert result.get("status") == "rejected"
+        assert result.get("risk", {}).get("reject_reason") == "kill_switch_active"
+    finally:
+        deactivate_kill_switch(source="test", reason="runtime_kill_switch_reset")
+        db.close()

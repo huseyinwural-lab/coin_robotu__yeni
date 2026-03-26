@@ -24,3 +24,22 @@ class SimExecutionAdapter(BaseExecutionAdapter):
             "avg_fill_price": float(payload.get("mark_price") or 1.0),
             "filled_size": float(payload.get("size") or 0.0),
         }
+
+    def get_order_status(self, *, symbol: str, order_id: str) -> dict:
+        return {
+            "status": "FILLED",
+            "executed_qty": 0.0,
+            "avg_fill_price": 0.0,
+            "symbol": symbol,
+            "order_id": order_id,
+        }
+
+    def cancel_order(self, *, symbol: str, order_id: str) -> dict:
+        return {
+            "status": "CANCELED",
+            "symbol": symbol,
+            "order_id": order_id,
+        }
+
+    def get_available_balance(self, *, asset: str = "USDT") -> float:
+        return 1_000_000.0
