@@ -1,3 +1,54 @@
+## 2026-03-26 — P0 CRITICAL Onboarding + Approval Foundation ✅
+
+### Kapsam (1→6 birlikte tamamlandı)
+- KYC + AML + risk foundation zorunlu state olarak eklendi.
+- Approval context engine endpoint’i eklendi: `GET /api/admin/onboarding/{user_id}/context`.
+- Pre-execution risk pre-check (trading eligibility, region compliance, leverage/futures/spot capability) eklendi.
+- Decision intelligence motoru eklendi (risk<35 auto_approve, >=35 force_manual_review).
+- Immutable append-only decision log + audit CSV export eklendi.
+- Safety guard’lar eklendi (bulk approve disabled, reject reason zorunlu, double confirmation, same-actor constraint).
+
+### Yeni Entity’ler / Model Değişiklikleri
+- `UserOnboardingProfile` genişletildi:
+  - `kyc_status`, `risk_score`, `aml_flag`, `aml_reason`
+  - `api_key_validity`, `balance_usd`, `first_funding_at`
+  - `country_code`, `region_compliance_status`
+  - `leverage_permission`, `futures_capability`, `spot_capability`
+  - `trading_eligibility`, `precheck_reasons`
+- Yeni tablolar:
+  - `user_kyc_documents` (upload + review lifecycle)
+  - `onboarding_aml_denylist` (internal denylist)
+  - `user_onboarding_decision_logs` (immutable append-only)
+- Migration: `20260326_0088_onboarding_kyc_aml_risk_foundation.py`
+
+### Endpoint Seti
+- `GET /api/admin/onboarding/{user_id}/context`
+- `POST /api/admin/onboarding/{user_id}/risk-foundation`
+- `POST /api/admin/onboarding/{user_id}/kyc-documents`
+- `POST /api/admin/onboarding/{user_id}/kyc-documents/{document_id}/review`
+- `POST /api/admin/onboarding/{user_id}/decision`
+- `POST /api/admin/onboarding/{user_id}/decision/auto-approve`
+- `GET /api/admin/audit/export`
+
+### Rule Engine Akışı
+1. Context toplanır (KYC/AML/risk + exchange/API + balance + region).
+2. Pre-check koşulları hesaplanır (`approval_disabled`, `approval_disable_reasons`).
+3. Decision intelligence:
+   - AML hit -> `force_manual_review`
+   - risk_score < 35 -> `auto_approve`
+   - risk_score >= 35 -> `force_manual_review`
+   - (precheck blokajı varsa approve endpoint hard-block yapar)
+4. Karar sırasında:
+   - reason zorunlu
+   - confirm_token=`CONFIRM` zorunlu
+   - same actor approve+reject yasak
+   - immutable decision log append-only kayıt
+
+### Smoke/Test Sonuçları
+- Backend final doğrulama ajanı: **9/9 PASS**
+- Frontend smoke ajanı: **4/4 PASS**
+- Lokal test: `test_onboarding_approval_foundation_p0.py` -> **4 PASS**
+
 ## 2026-03-26 — T-04 Supabase Storage Kapanışı ✅
 
 ### Tamamlananlar
