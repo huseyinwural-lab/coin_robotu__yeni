@@ -55,6 +55,7 @@ async def runtime_execution_timeline_ws(websocket: WebSocket):
     if user is None:
         await websocket.accept()
         await websocket.send_json({"event_type": "runtime_stream_error", "detail": "unauthorized"})
+        await asyncio.sleep(0.15)
         await websocket.close(code=4401)
         return
 

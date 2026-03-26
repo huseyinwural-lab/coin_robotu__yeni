@@ -1,3 +1,55 @@
+## 2026-03-26 — P0 Venue/Exchange Management Control Plane (Security Hardening)
+
+### Tamamlanan P0.1 Credential Security
+- Credential orchestration’a `verify / rotate / revoke` lifecycle aksiyonları eklendi.
+- Create/rotate akışlarında secret read-back verification zorunlu hale getirildi.
+- Permission scope (read/trade/withdraw) probe sonucu normalize edilip response’a eklendi.
+- Execution purpose için withdraw scope `BLOCK`, trade scope eksikliği `BLOCK` olarak enforce edildi.
+- Secret yönetimi `secret_provider_service.py` abstraction katmanına taşındı (local/vault/kms provider namespace desteği).
+
+### Tamamlanan P0.2 Environment Separation Enforcement
+- Credential resolution’da execution path için environment lock ve prod freeze kontrolleri eklendi:
+  - `VENUE_ENV_LOCK`
+  - `VENUE_PROD_FREEZE`
+  - `LIVE_ROUTE_APPROVED`
+  - `EXECUTION_MODE`
+- Live execution path için hard gate ve mode mismatch block aktif.
+- `credential-resolution-preview` live path’te guard ihlalinde 409 döndürüyor.
+
+### Tamamlanan P0.3 Pre-trade Safety Enforcement
+- Pre-trade guard genişletildi:
+  - invalid precision/lot validation (explicit qty için)
+  - slippage guard (bps threshold)
+  - price band guard (metadata mevcutsa)
+- Validation sonuçları `PASS/WARN/BLOCK` standardına normalize edilip execution validation çıktısına eklendi.
+
+### Tamamlanan P0.4 One-click Sanity Check
+- Yeni endpoint: `POST /api/venues/admin/control-plane-sanity-check`
+- Çıktı: `net_status`, `reason_codes`, `remediation_suggestions`, detaylı `checks`
+- Kontroller:
+  - credential validity
+  - permission scope
+  - environment match
+  - venue availability
+  - capability match
+  - allowed market state
+  - live/testnet conflict
+  - default route consistency
+
+### Frontend Güncellemeleri
+- `AdminCredentialOrchestrationPage`:
+  - Lifecycle + Permission kolonları
+  - Verify / Rotate / Revoke aksiyonları
+- `AdminExchangesPage`:
+  - Control-plane sanity paneli
+  - Execution validation net_status + checks görünümü
+
+### Test Durumu
+- Testing Agent raporu: `/app/test_reports/iteration_150.json`
+  - Backend: 16/16 PASS
+  - Frontend: yeni UI elemanları doğrulandı
+- Rapor sonrası düşük öncelikli WS bulgusu düzeltildi (unauthorized path’te handshake stabilizasyonu).
+
 ## 2026-03-26 — SON ADIM KAPANIŞ TESTLERİ (Reconcile + Rollback) ✅
 
 ### Uygulanan Kapanış Düzeltmesi
