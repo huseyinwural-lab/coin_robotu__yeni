@@ -235,6 +235,12 @@ class SystemAlert(Base):
     last_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     last_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="open")
+    acknowledged_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    mute_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    operator_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     occurrences: Mapped[int] = mapped_column(Integer, default=1)
     last_triggered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -259,6 +265,19 @@ class ExecutionAlertDeliveryAttempt(Base):
     error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_test: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AlertTriageAction(Base):
+    __tablename__ = "alert_triage_actions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    alert_id: Mapped[str] = mapped_column(String, ForeignKey("system_alerts.id"), index=True)
+    action_type: Mapped[str] = mapped_column(String(40), index=True)
+    actor_user_id: Mapped[str] = mapped_column(String(120), index=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mute_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 class WeeklyReportArchive(Base):

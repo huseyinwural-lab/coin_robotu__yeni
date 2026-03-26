@@ -12,7 +12,9 @@ import requests
 sys.path.append("/app/backend")
 
 from core.alerts.runtime_alert_triggers import trigger_runtime_threshold_alert  # noqa: E402
+from core.runtime_alert_thresholds import get_runtime_alert_thresholds  # noqa: E402
 from db import SessionLocal  # noqa: E402
+from models import RuntimeSmokeRun  # noqa: E402
 from services.runtime_smoke_service import record_runtime_smoke_run  # noqa: E402
 
 
@@ -184,6 +186,7 @@ def main() -> int:
 
     db = SessionLocal()
     try:
+        thresholds = get_runtime_alert_thresholds()
         record_runtime_smoke_run(
             db,
             status=overall,
@@ -195,14 +198,21 @@ def main() -> int:
         )
 
         if overall != "PASS":
+            degraded_repeats = (
+                db.query(RuntimeSmokeRun)
+                .filter(RuntimeSmokeRun.status == "DEGRADED")
+                .count()
+            )
+            repeat_threshold = int(thresholds.get("smoke_degraded_repeat_threshold") or 2)
+            severity = "CRITICAL" if overall == "FAIL" or degraded_repeats >= repeat_threshold else "WARNING"
             trigger_runtime_threshold_alert(
                 db,
                 alert_type="runtime_daily_smoke_degraded",
-                severity="WARNING" if overall == "DEGRADED" else "CRITICAL",
+                severity=severity,
                 message=f"Daily smoke {overall}",
                 source="daily_smoke",
-                threshold=0,
-                actual_value=1,
+                threshold=repeat_threshold,
+                actual_value=degraded_repeats,
                 root_cause_code="daily_smoke_not_pass",
             )
     finally:

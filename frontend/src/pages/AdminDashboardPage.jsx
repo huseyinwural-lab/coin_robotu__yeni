@@ -147,6 +147,14 @@ export const AdminDashboardPage = () => {
   const [runtimePnlSummary, setRuntimePnlSummary] = useState(null);
   const [runtimeAlerts, setRuntimeAlerts] = useState([]);
   const [runtimeSmoke, setRuntimeSmoke] = useState(null);
+  const [runtimeTimelineEvents, setRuntimeTimelineEvents] = useState([]);
+  const [runtimeWsStatus, setRuntimeWsStatus] = useState("connecting");
+  const [timelineAutoScroll, setTimelineAutoScroll] = useState(true);
+  const [runtimeAlertFilters, setRuntimeAlertFilters] = useState({ severity: "all", state: "all", symbol: "", user_id: "", window_minutes: "60" });
+  const [alertNoteDrafts, setAlertNoteDrafts] = useState({});
+  const timelineContainerRef = useRef(null);
+  const runtimeWsRef = useRef(null);
+  const runtimeWsReconnectTimerRef = useRef(null);
   const [criticalDialogState, setCriticalDialogState] = useState({
     open: false,
     actionKey: "",
@@ -210,6 +218,20 @@ export const AdminDashboardPage = () => {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [alerts]);
 
+  const runtimeTimelineFiltered = useMemo(() => {
+    const now = Date.now();
+    const windowMs = Number(runtimeAlertFilters.window_minutes || 60) * 60 * 1000;
+    return runtimeTimelineEvents.filter((event) => {
+      const severityOk = runtimeAlertFilters.severity === "all" || String(event?.severity || "").toUpperCase() === runtimeAlertFilters.severity;
+      const stateOk = runtimeAlertFilters.state === "all" || String(event?.state || "").toUpperCase() === runtimeAlertFilters.state;
+      const symbolOk = !runtimeAlertFilters.symbol || String(event?.symbol || "").toUpperCase().includes(String(runtimeAlertFilters.symbol).toUpperCase());
+      const userOk = !runtimeAlertFilters.user_id || String(event?.user_id || "").includes(runtimeAlertFilters.user_id);
+      const ts = Date.parse(event?.timestamp || "");
+      const timeOk = Number.isFinite(ts) ? (now - ts <= windowMs) : true;
+      return severityOk && stateOk && symbolOk && userOk && timeOk;
+    });
+  }, [runtimeTimelineEvents, runtimeAlertFilters]);
+
   const allFilteredSelected = filteredAlerts.length > 0 && filteredAlerts.every((item) => selectedAlertIds.includes(item.id));
 
   const loadDashboard = useCallback(async () => {
@@ -250,7 +272,16 @@ export const AdminDashboardPage = () => {
         apiClient.get("/admin/action-center/close-next-actions/latest"),
         apiClient.get("/admin/live-trading/control-layer/action-audit", { params: { since_hours: 48, limit: 8 } }),
         apiClient.get("/runtime/pnl/summary"),
-        apiClient.get("/runtime/alerts", { params: { limit: 10 } }),
+        apiClient.get("/runtime/alerts", {
+          params: {
+            limit: 20,
+            severity: runtimeAlertFilters.severity !== "all" ? runtimeAlertFilters.severity : undefined,
+            state: runtimeAlertFilters.state !== "all" ? runtimeAlertFilters.state : undefined,
+            symbol: runtimeAlertFilters.symbol || undefined,
+            user_id: runtimeAlertFilters.user_id || undefined,
+            window_minutes: Number(runtimeAlertFilters.window_minutes || 60),
+          },
+        }),
         apiClient.get("/runtime/health/smoke"),
       ]);
 
@@ -280,7 +311,7 @@ export const AdminDashboardPage = () => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [alertFilters]);
+  }, [alertFilters, runtimeAlertFilters]);
 
   useEffect(() => {
     loadDashboard();
@@ -293,6 +324,95 @@ export const AdminDashboardPage = () => {
     const timer = setInterval(loadDashboard, 30000);
     return () => clearInterval(timer);
   }, [autoRefreshEnabled, loadDashboard]);
+
+  useEffect(() => {
+    if (!isManagerRole) {
+      setRuntimeWsStatus("disconnected");
+      return undefined;
+    }
+
+    const connectTimeline = () => {
+      const token = localStorage.getItem("token");
+      const backendUrl = process.env.REACT_APP_BACKEND_URL;
+      if (!token || !backendUrl) {
+        setRuntimeWsStatus("disconnected");
+        return;
+      }
+
+      const wsBase = backendUrl.startsWith("https://")
+        ? backendUrl.replace("https://", "wss://")
+        : backendUrl.replace("http://", "ws://");
+      const wsUrl = `${wsBase}/api/runtime/ws/execution-timeline?token=${encodeURIComponent(token)}`;
+      setRuntimeWsStatus("connecting");
+      const socket = new WebSocket(wsUrl);
+      runtimeWsRef.current = socket;
+
+      socket.onopen = () => {
+        setRuntimeWsStatus("connected");
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data || "{}");
+          if (payload?.event_type === "runtime_stream_bootstrap") {
+            setRuntimeTimelineEvents((payload?.events || []).slice(-50).reverse());
+            return;
+          }
+          setRuntimeTimelineEvents((prev) => [payload, ...prev].slice(0, 50));
+        } catch (_error) {
+          // ignore malformed message
+        }
+      };
+
+      socket.onclose = () => {
+        setRuntimeWsStatus("reconnecting");
+        runtimeWsReconnectTimerRef.current = setTimeout(connectTimeline, 1800);
+      };
+
+      socket.onerror = () => {
+        setRuntimeWsStatus("reconnecting");
+      };
+    };
+
+    connectTimeline();
+
+    return () => {
+      if (runtimeWsReconnectTimerRef.current) {
+        clearTimeout(runtimeWsReconnectTimerRef.current);
+      }
+      if (runtimeWsRef.current) {
+        runtimeWsRef.current.close();
+      }
+    };
+  }, [isManagerRole]);
+
+  useEffect(() => {
+    if (!timelineAutoScroll) {
+      return;
+    }
+    if (timelineContainerRef.current) {
+      timelineContainerRef.current.scrollTop = 0;
+    }
+  }, [runtimeTimelineEvents, timelineAutoScroll]);
+
+  const handleRuntimeAlertAction = useCallback(async (alertId, actionType, payload = {}) => {
+    const routeMap = {
+      acknowledge: `/runtime/alerts/${alertId}/ack`,
+      mute_temporarily: `/runtime/alerts/${alertId}/mute`,
+      resolve: `/runtime/alerts/${alertId}/resolve`,
+      escalate: `/runtime/alerts/${alertId}/escalate`,
+      attach_note: `/runtime/alerts/${alertId}/note`,
+    };
+
+    try {
+      await apiClient.post(routeMap[actionType], payload);
+      toast.success(`Alert aksiyonu başarılı: ${actionType}`);
+      await loadDashboard();
+    } catch (error) {
+      const message = error?.response?.data?.detail || "Alert aksiyonu başarısız";
+      toast.error(typeof message === "string" ? message : "Alert aksiyonu başarısız");
+    }
+  }, [loadDashboard]);
 
   const navigateToAuditContext = ({ action = "", q = "", requestId = "", sessionId = "" } = {}) => {
     const params = new URLSearchParams();
@@ -582,13 +702,109 @@ export const AdminDashboardPage = () => {
           </div>
         </article>
 
-        <article className="border border-amber-700/40 bg-slate-900 p-3" data-testid="admin-dashboard-runtime-alerts-card">
-          <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="admin-dashboard-runtime-alerts-title">Son Runtime Alertler</p>
-          <div className="mt-2 max-h-24 space-y-1 overflow-auto text-xs" data-testid="admin-dashboard-runtime-alerts-list">
-            {runtimeAlerts.slice(0, 5).map((item) => (
-              <p key={item.id} data-testid={`admin-dashboard-runtime-alert-item-${item.id}`}>
-                [{item.severity}] {item.alert_type}
-              </p>
+        <article className="border border-amber-700/40 bg-slate-900 p-3 md:col-span-2" data-testid="admin-dashboard-runtime-alerts-card">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-dashboard-runtime-alerts-header">
+            <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="admin-dashboard-runtime-alerts-title">Runtime Alert Triage</p>
+            <Button variant="outline" size="sm" onClick={loadDashboard} data-testid="admin-dashboard-runtime-alerts-refresh-button">Yenile</Button>
+          </div>
+
+          <div className="mt-2 grid gap-2 md:grid-cols-6" data-testid="admin-dashboard-runtime-alerts-filters">
+            <select
+              className="h-9 rounded border border-slate-700 bg-slate-950 px-2 text-xs"
+              value={runtimeAlertFilters.severity}
+              onChange={(event) => setRuntimeAlertFilters((prev) => ({ ...prev, severity: event.target.value }))}
+              data-testid="admin-dashboard-runtime-alert-filter-severity"
+            >
+              <option value="all">severity: all</option>
+              <option value="INFO">INFO</option>
+              <option value="WARNING">WARNING</option>
+              <option value="CRITICAL">CRITICAL</option>
+            </select>
+            <select
+              className="h-9 rounded border border-slate-700 bg-slate-950 px-2 text-xs"
+              value={runtimeAlertFilters.state}
+              onChange={(event) => setRuntimeAlertFilters((prev) => ({ ...prev, state: event.target.value }))}
+              data-testid="admin-dashboard-runtime-alert-filter-state"
+            >
+              <option value="all">state: all</option>
+              <option value="CREATED">CREATED</option>
+              <option value="SENT">SENT</option>
+              <option value="PARTIALLY_FILLED">PARTIALLY_FILLED</option>
+              <option value="FILLED">FILLED</option>
+              <option value="FAILED">FAILED</option>
+              <option value="CANCELED">CANCELED</option>
+              <option value="open">open</option>
+              <option value="acknowledged">acknowledged</option>
+              <option value="muted">muted</option>
+              <option value="resolved">resolved</option>
+              <option value="escalated">escalated</option>
+            </select>
+            <select
+              className="h-9 rounded border border-slate-700 bg-slate-950 px-2 text-xs"
+              value={runtimeAlertFilters.window_minutes}
+              onChange={(event) => setRuntimeAlertFilters((prev) => ({ ...prev, window_minutes: event.target.value }))}
+              data-testid="admin-dashboard-runtime-alert-filter-window"
+            >
+              <option value="15">15 dk</option>
+              <option value="60">1 saat</option>
+              <option value="1440">24 saat</option>
+            </select>
+            <Input
+              value={runtimeAlertFilters.symbol}
+              onChange={(event) => setRuntimeAlertFilters((prev) => ({ ...prev, symbol: event.target.value }))}
+              placeholder="symbol"
+              className="h-9 bg-slate-950 text-xs"
+              data-testid="admin-dashboard-runtime-alert-filter-symbol"
+            />
+            <Input
+              value={runtimeAlertFilters.user_id}
+              onChange={(event) => setRuntimeAlertFilters((prev) => ({ ...prev, user_id: event.target.value }))}
+              placeholder="user"
+              className="h-9 bg-slate-950 text-xs"
+              data-testid="admin-dashboard-runtime-alert-filter-user"
+            />
+            <Button variant="outline" size="sm" onClick={loadDashboard} data-testid="admin-dashboard-runtime-alert-filter-apply-button">Apply</Button>
+          </div>
+
+          <div className="mt-2 max-h-52 space-y-2 overflow-auto" data-testid="admin-dashboard-runtime-alerts-list">
+            {runtimeAlerts.slice(0, 8).map((item) => (
+              <article key={item.id} className="border border-slate-700 p-2 text-xs" data-testid={`admin-dashboard-runtime-alert-item-${item.id}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded border border-slate-600 px-1" data-testid={`admin-dashboard-runtime-alert-item-severity-${item.id}`}>{item.severity}</span>
+                  <span className="rounded border border-slate-600 px-1" data-testid={`admin-dashboard-runtime-alert-item-state-${item.id}`}>{item.status}</span>
+                  <span data-testid={`admin-dashboard-runtime-alert-item-type-${item.id}`}>{item.alert_type}</span>
+                </div>
+                <p className="mt-1 text-slate-300" data-testid={`admin-dashboard-runtime-alert-item-message-${item.id}`}>{item.message}</p>
+                <p className="mt-1 text-cyan-300" data-testid={`admin-dashboard-runtime-alert-item-suggested-action-${item.id}`}>{item?.suggestion?.suggested_action || "-"}</p>
+                <p className="text-slate-500" data-testid={`admin-dashboard-runtime-alert-item-runbook-hint-${item.id}`}>runbook: {item?.suggestion?.runbook_hint || "-"}</p>
+
+                <div className="mt-2 flex flex-wrap gap-1" data-testid={`admin-dashboard-runtime-alert-item-actions-${item.id}`}>
+                  <Button size="sm" variant="outline" onClick={() => handleRuntimeAlertAction(item.id, "acknowledge")} data-testid={`admin-dashboard-runtime-alert-item-ack-${item.id}`}>Ack</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleRuntimeAlertAction(item.id, "mute_temporarily", { minutes: 15, note: "mute_15m" })} data-testid={`admin-dashboard-runtime-alert-item-mute-15m-${item.id}`}>Mute 15m</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleRuntimeAlertAction(item.id, "mute_temporarily", { minutes: 60, note: "mute_1h" })} data-testid={`admin-dashboard-runtime-alert-item-mute-1h-${item.id}`}>Mute 1h</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleRuntimeAlertAction(item.id, "mute_temporarily", { minutes: 1440, note: "mute_24h" })} data-testid={`admin-dashboard-runtime-alert-item-mute-24h-${item.id}`}>Mute 24h</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleRuntimeAlertAction(item.id, "resolve", { note: "resolved_from_dashboard" })} data-testid={`admin-dashboard-runtime-alert-item-resolve-${item.id}`}>Resolve</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleRuntimeAlertAction(item.id, "escalate", { note: "escalated_from_dashboard" })} data-testid={`admin-dashboard-runtime-alert-item-escalate-${item.id}`}>Escalate</Button>
+                </div>
+
+                <div className="mt-2 flex gap-2">
+                  <Input
+                    value={alertNoteDrafts[item.id] || ""}
+                    onChange={(event) => setAlertNoteDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))}
+                    placeholder="operator note"
+                    className="h-8 bg-slate-950 text-xs"
+                    data-testid={`admin-dashboard-runtime-alert-item-note-input-${item.id}`}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleRuntimeAlertAction(item.id, "attach_note", { note: alertNoteDrafts[item.id] || "" })}
+                    data-testid={`admin-dashboard-runtime-alert-item-note-save-${item.id}`}
+                  >
+                    Note
+                  </Button>
+                </div>
+              </article>
             ))}
             {runtimeAlerts.length === 0 && <p data-testid="admin-dashboard-runtime-alerts-empty">Runtime alert yok</p>}
           </div>
@@ -603,6 +819,36 @@ export const AdminDashboardPage = () => {
           </div>
         </article>
       </div>
+
+      <article className="border border-fuchsia-700/40 bg-slate-900 p-3" data-testid="admin-dashboard-runtime-timeline-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-dashboard-runtime-timeline-header">
+          <p className="text-xs uppercase tracking-widest text-fuchsia-300" data-testid="admin-dashboard-runtime-timeline-title">Execution Timeline Stream</p>
+          <div className="flex items-center gap-2 text-xs" data-testid="admin-dashboard-runtime-timeline-controls">
+            <span data-testid="admin-dashboard-runtime-timeline-connection-status">ws_status: {runtimeWsStatus}</span>
+            <label data-testid="admin-dashboard-runtime-timeline-auto-scroll-toggle-wrapper">
+              <input type="checkbox" checked={timelineAutoScroll} onChange={(event) => setTimelineAutoScroll(event.target.checked)} data-testid="admin-dashboard-runtime-timeline-auto-scroll-toggle" />
+              auto-scroll
+            </label>
+          </div>
+        </div>
+        <div ref={timelineContainerRef} className="mt-2 max-h-48 space-y-1 overflow-auto text-xs" data-testid="admin-dashboard-runtime-timeline-list">
+          {runtimeTimelineFiltered.map((event, index) => (
+            <div key={`${event?.order_id || 'no-order'}-${event?.timestamp || index}-${index}`} className="border border-slate-700 px-2 py-1" data-testid={`admin-dashboard-runtime-timeline-item-${index}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded border border-slate-600 px-1" data-testid={`admin-dashboard-runtime-timeline-item-severity-${index}`}>{event?.severity || "INFO"}</span>
+                <span className="rounded border border-slate-600 px-1" data-testid={`admin-dashboard-runtime-timeline-item-state-${index}`}>{event?.state || "-"}</span>
+                <span data-testid={`admin-dashboard-runtime-timeline-item-symbol-${index}`}>{event?.symbol || "-"}</span>
+                <span data-testid={`admin-dashboard-runtime-timeline-item-user-${index}`}>{event?.user_id || "-"}</span>
+              </div>
+              <p className="text-slate-400" data-testid={`admin-dashboard-runtime-timeline-item-timestamp-${index}`}>{event?.timestamp || "-"}</p>
+              {(event?.meta?.reject_reason || event?.meta?.fail_reason) && (
+                <p className="text-red-300" data-testid={`admin-dashboard-runtime-timeline-item-error-${index}`}>reason: {event?.meta?.reject_reason || event?.meta?.fail_reason}</p>
+              )}
+            </div>
+          ))}
+          {runtimeTimelineFiltered.length === 0 && <p data-testid="admin-dashboard-runtime-timeline-empty">Timeline event yok</p>}
+        </div>
+      </article>
 
       <div className="border border-cyan-700/60 bg-slate-900 p-4" data-testid="admin-dashboard-global-action-toolbar">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-dashboard-global-action-toolbar-header">

@@ -1,0 +1,8 @@
+{
+  "net_pnl_drop_pct": 5,
+  "failed_orders_window": 20,
+  "failed_orders_threshold": 4,
+  "queue_depth_threshold": 30,
+  "smoke_degraded_repeat_threshold": 2,
+  "execution_latency_ms_threshold": 1200
+}

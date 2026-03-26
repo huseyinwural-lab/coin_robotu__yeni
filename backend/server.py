@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.observability.http_logging_middleware import RequestObservabilityMiddleware
 from core.structured_logging import configure_structured_logging
+from api import runtime_ws
 from routers import (
     admin_action_center,
     admin_emergency,
@@ -339,6 +340,7 @@ api_router.include_router(admin_revenue.router)
 api_router.include_router(export.router)
 api_router.include_router(snapshots.router)
 api_router.include_router(runtime_execution.router)
+api_router.include_router(runtime_ws.router)
 api_router.include_router(admin_closure.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(spot_strategy.router)
