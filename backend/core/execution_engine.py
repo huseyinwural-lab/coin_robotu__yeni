@@ -534,6 +534,33 @@ def execute_queued_job(db: Session, *, queue_payload: dict) -> dict:
 
         check_worker_failure_trigger(db, threshold=3, window_minutes=15)
         check_failed_orders_trigger(db)
+        if job.failure_class == "exchange_reject":
+            auth_related = any(
+                marker in lowered
+                for marker in [
+                    "invalid api-key",
+                    "invalid api key",
+                    "signature",
+                    "-2015",
+                    "x-proxy-token",
+                    "proxy token",
+                    "permission",
+                    "unauthorized",
+                ]
+            )
+            if auth_related:
+                trigger_runtime_threshold_alert(
+                    db,
+                    alert_type="runtime_exchange_auth_invalid",
+                    severity="CRITICAL",
+                    message=f"Exchange auth/proxy reject detected: {job.symbol}",
+                    source="execution_engine",
+                    threshold=1,
+                    actual_value=1,
+                    user_id=job.user_id,
+                    symbol=job.symbol,
+                    root_cause_code="exchange_auth_invalid",
+                )
         evaluate_auto_kill_switch(db)
 
         return {

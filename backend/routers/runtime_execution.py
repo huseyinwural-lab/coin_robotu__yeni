@@ -4,6 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from core.go_live_checklist import (
+    build_canary_readiness_score,
+    evaluate_go_live_checklist,
+    get_proxy_exchange_health_snapshot,
+    run_canary_end_to_end_validation,
+    run_final_regression_validation,
+    run_testnet_lifecycle_validation,
+    verify_kill_switch_rollback,
+)
 from core.pnl_engine import compute_runtime_pnl_positions, compute_runtime_pnl_summary
 from core.reconciliation.order_reconciliation import run_order_reconciliation
 from core.runtime_stream import runtime_stream_hub
@@ -54,6 +63,21 @@ class KillSwitchActionRequest(BaseModel):
 class CancelOrderRequest(BaseModel):
     symbol: str
     order_id: str
+
+
+class CanaryRunRequest(BaseModel):
+    symbol: str = Field(default="BTCUSDT", min_length=3, max_length=24)
+    size: float = Field(default=0.0001, gt=0)
+    strategy_name: str = Field(default="ema_rsi", min_length=1, max_length=80)
+
+
+class TestnetLifecycleRequest(BaseModel):
+    symbol: str = Field(default="BTCUSDT", min_length=3, max_length=24)
+    size: float = Field(default=0.0001, gt=0)
+
+
+class KillSwitchVerifyRequest(BaseModel):
+    symbol: str = Field(default="BTCUSDT", min_length=3, max_length=24)
 
 
 @router.post("/strategy/signal")
@@ -370,6 +394,126 @@ def cancel_exchange_order(
         "requested_by": current_user.id,
         "result": adapter.cancel_order(symbol=payload.symbol, order_id=payload.order_id),
     }
+
+
+@router.post("/exchange/testnet-lifecycle/run")
+def run_testnet_lifecycle_endpoint(
+    payload: TestnetLifecycleRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = run_testnet_lifecycle_validation(
+            db,
+            user_id=current_user.id,
+            symbol=payload.symbol,
+            size=payload.size,
+        )
+        if str(result.get("status") or "").upper() != "PASS":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result)
+        return {"status": "ok", "requested_by": current_user.id, "result": result}
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/canary/run")
+def run_canary_endpoint(
+    payload: CanaryRunRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = run_canary_end_to_end_validation(
+            db,
+            current_user=current_user,
+            symbol=payload.symbol,
+            size=payload.size,
+            strategy_name=payload.strategy_name,
+        )
+        if str(result.get("status") or "").upper() != "PASS":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result)
+        return {"status": "ok", "requested_by": current_user.id, "result": result}
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/regression/final-run")
+def run_final_regression_endpoint(
+    payload: CanaryRunRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = run_final_regression_validation(
+            db,
+            current_user=current_user,
+            symbol=payload.symbol,
+            size=payload.size,
+        )
+        if str(result.get("status") or "").upper() != "PASS":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result)
+        return {"status": "ok", "requested_by": current_user.id, "result": result}
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/canary/readiness-score")
+def get_canary_readiness_score(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return {
+        "status": "ok",
+        "requested_by": current_user.id,
+        "result": build_canary_readiness_score(db),
+    }
+
+
+@router.get("/go-live/checklist")
+def get_go_live_checklist(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return {
+        "status": "ok",
+        "requested_by": current_user.id,
+        "result": evaluate_go_live_checklist(db),
+    }
+
+
+@router.get("/exchange/proxy-health")
+def get_exchange_proxy_health(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return {
+        "status": "ok",
+        "requested_by": current_user.id,
+        "result": get_proxy_exchange_health_snapshot(db),
+    }
+
+
+@router.post("/safety/kill-switch/verify-rollback")
+def verify_kill_switch_rollback_endpoint(
+    payload: KillSwitchVerifyRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = verify_kill_switch_rollback(db, user_id=current_user.id, symbol=payload.symbol)
+        if str(result.get("status") or "").upper() != "PASS":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result)
+        return {"status": "ok", "requested_by": current_user.id, "result": result}
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/execution/mode")

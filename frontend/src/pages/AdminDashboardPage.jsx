@@ -149,6 +149,11 @@ export const AdminDashboardPage = () => {
   const [runtimeSmoke, setRuntimeSmoke] = useState(null);
   const [runtimeKillSwitch, setRuntimeKillSwitch] = useState(null);
   const [runtimeExecutionMode, setRuntimeExecutionMode] = useState(null);
+  const [runtimeReadiness, setRuntimeReadiness] = useState(null);
+  const [runtimeGoLiveChecklist, setRuntimeGoLiveChecklist] = useState(null);
+  const [runtimeProxyHealth, setRuntimeProxyHealth] = useState(null);
+  const [runtimeCanaryRunResult, setRuntimeCanaryRunResult] = useState(null);
+  const [runtimeValidationLoading, setRuntimeValidationLoading] = useState(false);
   const [runtimeTimelineEvents, setRuntimeTimelineEvents] = useState([]);
   const [runtimeWsStatus, setRuntimeWsStatus] = useState("connecting");
   const [timelineAutoScroll, setTimelineAutoScroll] = useState(true);
@@ -258,6 +263,9 @@ export const AdminDashboardPage = () => {
         runtimeSmokeResponse,
         runtimeKillSwitchResponse,
         runtimeExecutionModeResponse,
+        runtimeReadinessResponse,
+        runtimeGoLiveChecklistResponse,
+        runtimeProxyHealthResponse,
       ] = await Promise.all([
         apiClient.get("/dashboard/summary"),
         apiClient.get("/admin/action-center/summary"),
@@ -289,6 +297,9 @@ export const AdminDashboardPage = () => {
         apiClient.get("/runtime/health/smoke"),
         apiClient.get("/runtime/safety/kill-switch"),
         apiClient.get("/runtime/execution/mode"),
+        apiClient.get("/runtime/canary/readiness-score"),
+        apiClient.get("/runtime/go-live/checklist"),
+        apiClient.get("/runtime/exchange/proxy-health"),
       ]);
 
       const summaryPayload = summaryResponse?.data || null;
@@ -309,6 +320,9 @@ export const AdminDashboardPage = () => {
       setRuntimeSmoke(runtimeSmokeResponse?.data?.smoke || null);
       setRuntimeKillSwitch(runtimeKillSwitchResponse?.data?.kill_switch || null);
       setRuntimeExecutionMode(runtimeExecutionModeResponse?.data || null);
+      setRuntimeReadiness(runtimeReadinessResponse?.data?.result || null);
+      setRuntimeGoLiveChecklist(runtimeGoLiveChecklistResponse?.data?.result || null);
+      setRuntimeProxyHealth(runtimeProxyHealthResponse?.data?.result || null);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Admin dashboard verisi yüklenemedi";
@@ -432,6 +446,70 @@ export const AdminDashboardPage = () => {
     } catch (error) {
       const message = error?.response?.data?.detail || "Kill switch aksiyonu başarısız";
       toast.error(typeof message === "string" ? message : "Kill switch aksiyonu başarısız");
+    }
+  }, [loadDashboard]);
+
+  const runTestnetLifecycleValidation = useCallback(async () => {
+    setRuntimeValidationLoading(true);
+    try {
+      const { data } = await apiClient.post("/runtime/exchange/testnet-lifecycle/run", { symbol: "BTCUSDT", size: 0.0001 });
+      setRuntimeCanaryRunResult(data?.result || null);
+      toast.success("Testnet lifecycle doğrulaması PASS");
+      await loadDashboard();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const message = typeof detail === "string" ? detail : (detail?.status ? JSON.stringify(detail) : "Testnet lifecycle doğrulaması başarısız");
+      toast.error(message);
+    } finally {
+      setRuntimeValidationLoading(false);
+    }
+  }, [loadDashboard]);
+
+  const runCanaryValidation = useCallback(async () => {
+    setRuntimeValidationLoading(true);
+    try {
+      const { data } = await apiClient.post("/runtime/canary/run", { symbol: "BTCUSDT", size: 0.0001, strategy_name: "ema_rsi" });
+      setRuntimeCanaryRunResult(data?.result || null);
+      toast.success("Canary run tamamlandı");
+      await loadDashboard();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const message = typeof detail === "string" ? detail : (detail?.status ? JSON.stringify(detail) : "Canary run başarısız");
+      toast.error(message);
+    } finally {
+      setRuntimeValidationLoading(false);
+    }
+  }, [loadDashboard]);
+
+  const runKillSwitchRollbackValidation = useCallback(async () => {
+    setRuntimeValidationLoading(true);
+    try {
+      const { data } = await apiClient.post("/runtime/safety/kill-switch/verify-rollback", { symbol: "BTCUSDT" });
+      setRuntimeCanaryRunResult(data?.result || null);
+      toast.success("Kill-switch rollback doğrulaması PASS");
+      await loadDashboard();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const message = typeof detail === "string" ? detail : (detail?.status ? JSON.stringify(detail) : "Kill-switch rollback doğrulaması başarısız");
+      toast.error(message);
+    } finally {
+      setRuntimeValidationLoading(false);
+    }
+  }, [loadDashboard]);
+
+  const runFinalRegressionValidation = useCallback(async () => {
+    setRuntimeValidationLoading(true);
+    try {
+      const { data } = await apiClient.post("/runtime/regression/final-run", { symbol: "BTCUSDT", size: 0.0001, strategy_name: "ema_rsi" });
+      setRuntimeCanaryRunResult(data?.result || null);
+      toast.success("Final regression PASS");
+      await loadDashboard();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const message = typeof detail === "string" ? detail : (detail?.status ? JSON.stringify(detail) : "Final regression başarısız");
+      toast.error(message);
+    } finally {
+      setRuntimeValidationLoading(false);
     }
   }, [loadDashboard]);
 
@@ -711,7 +789,7 @@ export const AdminDashboardPage = () => {
         </div>
       </header>
 
-      <div className="grid gap-3 md:grid-cols-3" data-testid="admin-dashboard-runtime-ops-grid">
+      <div className="grid gap-3 md:grid-cols-4" data-testid="admin-dashboard-runtime-ops-grid">
         <article className="border border-emerald-700/40 bg-slate-900 p-3" data-testid="admin-dashboard-runtime-pnl-card">
           <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="admin-dashboard-runtime-pnl-title">Canlı PnL Özeti</p>
           <div className="mt-2 space-y-1 text-xs" data-testid="admin-dashboard-runtime-pnl-content">
@@ -846,6 +924,70 @@ export const AdminDashboardPage = () => {
               <Button size="sm" variant="outline" onClick={() => handleKillSwitchAction("deactivate")} data-testid="admin-dashboard-runtime-kill-switch-deactivate-button">Kill OFF</Button>
             </div>
           </div>
+        </article>
+
+        <article className="border border-lime-700/40 bg-slate-900 p-3 md:col-span-2" data-testid="admin-dashboard-runtime-readiness-card">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-dashboard-runtime-readiness-header">
+            <p className="text-xs uppercase tracking-widest text-lime-300" data-testid="admin-dashboard-runtime-readiness-title">Canary Readiness & Go/No-Go</p>
+            <span
+              className={`rounded border px-2 py-1 text-xs ${runtimeReadiness?.status === "READY" ? "border-emerald-500 text-emerald-300" : runtimeReadiness?.status === "WARNING" ? "border-amber-500 text-amber-300" : "border-rose-500 text-rose-300"}`}
+              data-testid="admin-dashboard-runtime-readiness-status"
+            >
+              {runtimeReadiness?.status || "NOT_READY"}
+            </span>
+          </div>
+
+          <div className="mt-2 grid gap-2 text-xs md:grid-cols-2" data-testid="admin-dashboard-runtime-readiness-content">
+            <div className="space-y-1" data-testid="admin-dashboard-runtime-readiness-score-block">
+              <p data-testid="admin-dashboard-runtime-readiness-score">score: {runtimeReadiness?.score ?? 0}</p>
+              <p data-testid="admin-dashboard-runtime-readiness-component-execution">execution: {String(runtimeReadiness?.components?.execution ?? false)}</p>
+              <p data-testid="admin-dashboard-runtime-readiness-component-pnl">pnl: {String(runtimeReadiness?.components?.pnl ?? false)}</p>
+              <p data-testid="admin-dashboard-runtime-readiness-component-alerts">alerts: {String(runtimeReadiness?.components?.alerts ?? false)}</p>
+              <p data-testid="admin-dashboard-runtime-readiness-component-smoke">smoke: {runtimeReadiness?.components?.smoke || "NO_DATA"}</p>
+              <p data-testid="admin-dashboard-runtime-readiness-component-exchange">exchange: {String(runtimeReadiness?.components?.exchange ?? false)}</p>
+            </div>
+
+            <div className="space-y-1" data-testid="admin-dashboard-runtime-go-live-block">
+              <p data-testid="admin-dashboard-runtime-go-live-decision">go_live: {String(runtimeGoLiveChecklist?.go_live ?? false)}</p>
+              <p data-testid="admin-dashboard-runtime-go-live-queue-backlog">queue_backlog: {runtimeGoLiveChecklist?.metrics?.queue_backlog ?? "-"}</p>
+              <p data-testid="admin-dashboard-runtime-go-live-critical-alerts">critical_alerts_30m: {runtimeGoLiveChecklist?.metrics?.critical_open_alerts_30m ?? "-"}</p>
+              <p data-testid="admin-dashboard-runtime-go-live-smoke-status">smoke_status: {runtimeGoLiveChecklist?.metrics?.smoke_status || "-"}</p>
+              <p data-testid="admin-dashboard-runtime-go-live-proxy-spot-mismatch">spot_proxy_mismatch: {String(runtimeProxyHealth?.spot?.proxy_token_mismatch ?? false)}</p>
+              <p data-testid="admin-dashboard-runtime-go-live-proxy-futures-mismatch">futures_proxy_mismatch: {String(runtimeProxyHealth?.futures?.proxy_token_mismatch ?? false)}</p>
+            </div>
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2" data-testid="admin-dashboard-runtime-readiness-actions">
+            <Button size="sm" variant="outline" onClick={runTestnetLifecycleValidation} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-run-testnet-lifecycle-button">
+              Testnet Lifecycle Run
+            </Button>
+            <Button size="sm" variant="outline" onClick={runCanaryValidation} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-run-canary-button">
+              Canary Run
+            </Button>
+            <Button size="sm" variant="outline" onClick={runKillSwitchRollbackValidation} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-run-kill-switch-verify-button">
+              Kill-Switch Verify
+            </Button>
+            <Button size="sm" variant="outline" onClick={runFinalRegressionValidation} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-run-final-regression-button">
+              Final Regression
+            </Button>
+            <Button size="sm" variant="outline" onClick={loadDashboard} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-refresh-go-live-button">
+              Refresh Go/No-Go
+            </Button>
+          </div>
+
+          {Array.isArray(runtimeGoLiveChecklist?.reasons) && runtimeGoLiveChecklist.reasons.length > 0 && (
+            <div className="mt-2 space-y-1" data-testid="admin-dashboard-runtime-go-live-reasons-list">
+              {runtimeGoLiveChecklist.reasons.map((reason, index) => (
+                <p key={`${reason}-${index}`} className="text-xs text-rose-300" data-testid={`admin-dashboard-runtime-go-live-reason-${index}`}>
+                  - {reason}
+                </p>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-2 text-xs text-slate-400" data-testid="admin-dashboard-runtime-readiness-last-run-status">
+            son_validation_status: {runtimeCanaryRunResult?.status || "-"}
+          </p>
         </article>
       </div>
 

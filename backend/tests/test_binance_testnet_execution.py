@@ -1,8 +1,8 @@
 import os
 
-import pytest
-
-from core.exchanges.binance_adapter import BinanceExecutionAdapter
+from core.go_live_checklist import run_testnet_lifecycle_validation
+from db import SessionLocal
+from models import User
 
 
 def test_binance_testnet_order_lifecycle_market_limit_cancel():
@@ -11,27 +11,32 @@ def test_binance_testnet_order_lifecycle_market_limit_cancel():
     os.environ["LIVE_TRADING_ENABLED"] = "false"
     os.environ["LIVE_ROUTE_APPROVED"] = "false"
 
-    adapter = BinanceExecutionAdapter(mode="testnet")
+    db = SessionLocal()
     try:
-        _ = adapter.get_available_balance(asset="USDT")
-    except RuntimeError as exc:
-        pytest.skip(f"testnet credentials not valid/available: {exc}")
+        canary_user = db.query(User).filter(User.email == "canary.admin@platform.local").first()
+        if canary_user is None:
+            candidates = db.query(User).order_by(User.created_at.asc()).limit(50).all()
+            canary_user = next(
+                (item for item in candidates if getattr(getattr(item, "role", None), "value", "") in {"super_admin", "admin", "ops"}),
+                None,
+            )
+        if canary_user is None:
+            canary_user = db.query(User).order_by(User.created_at.asc()).first()
+        assert canary_user is not None
 
-    limit_order = adapter.submit_order(
-        {
-            "symbol": "BTCUSDT",
-            "side": "BUY",
-            "size": 0.0001,
-            "order_type": "LIMIT",
-            "limit_price": 1000,
-            "mark_price": 1000,
-            "idempotency_key": "iter4-limit-lifecycle",
-        }
-    )
-    assert limit_order.get("external_order_id")
+        result = None
+        for _ in range(2):
+            result = run_testnet_lifecycle_validation(db, user_id=canary_user.id, symbol="BTCUSDT", size=0.0001)
+            if result.get("status") == "PASS":
+                break
 
-    status = adapter.get_order_status(symbol="BTCUSDT", order_id=limit_order["external_order_id"])
-    assert status.get("status")
+        assert result.get("status") == "PASS"
+        assert result.get("market_order_id")
+        assert result.get("cancel_order_id")
+        assert result.get("timeline_event_count", 0) > 0
+        assert result.get("db_state", {}).get("external_order_id")
 
-    cancel = adapter.cancel_order(symbol="BTCUSDT", order_id=limit_order["external_order_id"])
-    assert cancel.get("status") in {"CANCELED", "PENDING_CANCEL", "NEW", "PARTIALLY_FILLED", "FILLED"}
+        market_submit_raw = result.get("response_log", {}).get("steps", {}).get("market_submit", {}).get("raw", {})
+        assert market_submit_raw.get("orderId")
+    finally:
+        db.close()
