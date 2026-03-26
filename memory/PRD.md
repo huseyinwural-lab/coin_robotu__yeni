@@ -1,3 +1,57 @@
+## 2026-03-26 — FAZ C + FAZ B (P0+P1) ✅
+
+### Kullanıcı kararına göre kapsam
+- **Seçim C + A** uygulandı:
+  - P0 (FAZ C): Overview edge-case deterministik test genişletmesi
+  - P1 (FAZ B): `AdminCommercialOpsPage.jsx` tek endpoint refactor
+  - P2: Bilinçli olarak ertelendi
+  - UI: Mevcut görsel dil korundu
+
+### P0 — FAZ C Test genişletmesi (tamamlandı)
+- Dosya: `/app/backend/tests/test_admin_commercial_overview_service.py`
+- Yeni edge-case senaryoları eklendi:
+  - boş veri
+  - yalnız realized
+  - yalnız unrealized
+  - gross/net farkı
+  - fee/funding/commission toplam tutarlılığı (pnl_records + trade fallback)
+  - duplicate trade etkisi (usage analytics)
+  - stale data quality
+  - reconciliation drift sayımı
+  - risk summary boş ve dolu senaryo
+  - revenue component aggregation çoklu tip tutarlılığı
+
+### P1 — FAZ B Tek endpoint UI refactor (tamamlandı)
+- Dosya: `/app/frontend/src/pages/AdminCommercialOpsPage.jsx`
+- Eski dağınık çağrılar kaldırıldı (`/admin/users`, `/admin/commercial/usage-logs`, `/admin/commercial/total-pnl`)
+- Sayfa artık yalnızca:
+  - `GET /api/admin/commercial/overview`
+- İstenen bloklar eklendi/bağlandı:
+  - executive KPI
+  - financial accuracy
+  - revenue model
+  - user economics
+  - pnl analytics
+  - risk & exposure
+  - usage analytics
+  - data quality
+- Filtre yüzeyi (tek endpoint query):
+  - `environment`, `time_window`, `from`, `to`
+- Kritik UI öğelerinde kapsamlı `data-testid` kullanımı sağlandı.
+
+### Test kanıtları
+- Lokal backend testleri:
+  - `pytest -q /app/backend/tests/test_admin_commercial_overview_service.py` → **14 PASS**
+  - `pytest -q /app/backend/tests/test_admin_commercial_overview_service.py /app/backend/tests/test_admin_commercial_overview_testclient.py` → **40 PASS**
+- Testing agent: `/app/test_reports/iteration_144.json`
+  - Backend: **100% (40/40 PASS)**
+  - Frontend: Kod inceleme PASS, single-endpoint usage doğrulandı
+- Deep backend validation (`deep_testing_backend_v2`): **15/15 PASS**
+
+### Infra notu
+- Preview URL tarafında aralıklı `not responding / 502` gözlenmeye devam ediyor.
+- Frontend browser automation bu nedenle zaman zaman bloklanıyor; backend fonksiyonelliği TestClient ile doğrulandı.
+
 ## 2026-03-26 — FAZ A Unified Commercial Overview Contract ✅
 
 ### Tamamlanan kapsam (P0)
