@@ -31,6 +31,7 @@ from models import (
     UserRole,
 )
 from services.audit_service import create_audit_log
+from services.commercial_export_storage_service import get_export_storage_provider
 
 DEFAULT_OVERVIEW_TIME_WINDOW = "last_30_days"
 DEFAULT_OVERVIEW_ENVIRONMENT = "live"
@@ -1257,6 +1258,12 @@ def _build_export_ops_block(
         scheduler_health = "degraded"
     if not schedules:
         scheduler_health = "unknown"
+    latest_manifest_by_type: dict[str, CommercialExportManifest] = {}
+    for manifest in sorted(manifests, key=lambda item: getattr(item, "requested_at", _now()), reverse=True):
+        export_type = str(getattr(manifest, "export_type", "") or "")
+        if export_type and export_type not in latest_manifest_by_type:
+            latest_manifest_by_type[export_type] = manifest
+
     return {
         "scheduler_health": scheduler_health,
         "pending_exports": pending_exports,
@@ -1271,7 +1278,13 @@ def _build_export_ops_block(
                 "last_status": str(getattr(row, "last_status", "never")),
                 "last_run_at": getattr(row, "last_run_at", None),
                 "last_output_ref": getattr(row, "last_output_ref", None),
-                "failure_reason": (getattr(row, "filters_snapshot", {}) or {}).get("failure_reason"),
+                "failure_reason": getattr(row, "last_failure_reason", None),
+                "retry_count": int(getattr(row, "retry_count", 0) or 0),
+                "next_retry_at": getattr(row, "next_retry_at", None),
+                "running_started_at": getattr(row, "running_started_at", None),
+                "stale_run_flag": bool(getattr(row, "stale_run_flag", False)),
+                "retention_state": getattr(latest_manifest_by_type.get(str(getattr(row, "export_type", ""))), "retention_state", None),
+                "downloadable_state": getattr(latest_manifest_by_type.get(str(getattr(row, "export_type", ""))), "downloadable_state", None),
             }
             for row in sorted(schedules, key=lambda item: getattr(item, "updated_at", _now()), reverse=True)[:DETAIL_LIST_LIMIT]
         ],
@@ -1286,6 +1299,9 @@ def _build_export_ops_block(
                 "artifact_ref": getattr(row, "artifact_ref", None),
                 "file_hash": getattr(row, "file_hash", None),
                 "failure_reason": getattr(row, "failure_reason", None),
+                "retention_state": getattr(row, "retention_state", None),
+                "downloadable_state": getattr(row, "downloadable_state", None),
+                "signed_download_url": getattr(row, "signed_download_url", None),
             }
             for row in sorted(manifests, key=lambda item: getattr(item, "requested_at", _now()), reverse=True)[:DETAIL_LIST_LIMIT]
         ],
@@ -1340,6 +1356,14 @@ def _build_alert_rail_block(
                 "suggested_action": suggested_action,
                 "triage_status": str(getattr(row, "triage_status", "new") or "new"),
                 "acknowledged_at": getattr(row, "acknowledged_at", None),
+                "assigned_to_user_id": str(getattr(row, "assigned_to_user_id", "") or "") or None,
+                "assigned_to_email": str(getattr(row, "assigned_to_email", "") or "") or None,
+                "assigned_at": getattr(row, "assigned_at", None),
+                "assignment_note": getattr(row, "assignment_note", None),
+                "age_seconds": int(getattr(row, "age_seconds", 0) or 0),
+                "sla_state": str(getattr(row, "sla_state", "within_sla") or "within_sla"),
+                "auto_escalated": bool(getattr(row, "auto_escalated", False)),
+                "auto_escalated_at": getattr(row, "auto_escalated_at", None),
                 "created_at": getattr(row, "created_at", _now()),
             }
         )
@@ -1358,6 +1382,14 @@ def _build_alert_rail_block(
                 "suggested_action": str((getattr(row, "details", {}) or {}).get("suggested_action") or "Review alert details"),
                 "triage_status": "new",
                 "acknowledged_at": None,
+                "assigned_to_user_id": None,
+                "assigned_to_email": None,
+                "assigned_at": None,
+                "assignment_note": None,
+                "age_seconds": int((_now() - getattr(row, "created_at", _now())).total_seconds()),
+                "sla_state": "within_sla",
+                "auto_escalated": False,
+                "auto_escalated_at": None,
                 "created_at": getattr(row, "created_at", _now()),
             }
         )
@@ -1400,14 +1432,6 @@ def _resolve_export_column_mapping(export_type: str, schema_version: str, column
     return registry
 
 
-def _ensure_export_artifact_dir() -> str:
-    import os
-
-    directory = "/tmp/commercial_exports"
-    os.makedirs(directory, exist_ok=True)
-    return directory
-
-
 def finalize_export_delivery(
     db: Session,
     *,
@@ -1425,6 +1449,14 @@ def finalize_export_delivery(
         manifest.status = "failed"
         manifest.delivery_status = "failed"
         manifest.failure_reason = str(failure_reason)
+        manifest.downloadable_state = "not_ready"
+        audit_row = _safe_query_first(
+            db.query(CommercialExportAudit)
+            .filter(CommercialExportAudit.export_id == export_id)
+            .order_by(CommercialExportAudit.created_at.desc())
+        )
+        if audit_row is not None:
+            audit_row.delivery_status = "failed"
         db.commit()
         return {
             "export_id": export_id,
@@ -1433,11 +1465,12 @@ def finalize_export_delivery(
         }
 
     checksum = hashlib.sha256(content_bytes).hexdigest()
-    artifact_dir = _ensure_export_artifact_dir()
-    extension = "xlsx" if str(output_format).lower() == "xlsx" else "csv"
-    artifact_ref = f"{artifact_dir}/{export_id}.{extension}"
-    with open(artifact_ref, "wb") as handle:
-        handle.write(content_bytes)
+    storage_provider = get_export_storage_provider()
+    artifact_ref, signed_download_url = storage_provider.save_artifact(
+        export_id=export_id,
+        content_bytes=content_bytes,
+        output_format=output_format,
+    )
 
     delivered_ts = delivered_at or _now()
     manifest.status = "delivered"
@@ -1446,6 +1479,10 @@ def finalize_export_delivery(
     manifest.delivered_at = delivered_ts
     manifest.artifact_ref = artifact_ref
     manifest.failure_reason = None
+    manifest.retention_state = "active"
+    manifest.retention_expires_at = delivered_ts + timedelta(days=7)
+    manifest.downloadable_state = "ready"
+    manifest.signed_download_url = signed_download_url
 
     audit_row = _safe_query_first(
         db.query(CommercialExportAudit)
@@ -1548,6 +1585,7 @@ def create_commercial_export_manifest(
         "output_format": str(manifest.output_format),
         "checksum": str(manifest.checksum),
         "status": str(manifest.status),
+        "canonical_column_mapping": resolved_mapping,
     }
 
 
@@ -1559,11 +1597,14 @@ def create_commercial_export_schedule(
     schedule_period: str,
     output_format: str,
     filters_snapshot: dict,
+    max_retry: int,
 ) -> dict:
     actor_role = getattr(actor_user, "role", "")
     actor_role_value = str(getattr(actor_role, "value", actor_role)).lower()
     if actor_role_value != UserRole.SUPER_ADMIN.value:
         raise ValueError("admin_required")
+
+    _resolve_export_column_mapping(str(export_type or "").strip().lower(), "v1", None)
     try:
         _ = db.query(CommercialExportSchedule).limit(1).all()
     except Exception as exc:
@@ -1576,6 +1617,7 @@ def create_commercial_export_schedule(
         filters_snapshot=dict(filters_snapshot or {}),
         is_active=True,
         last_status="pending",
+        max_retry=int(max_retry),
     )
     db.add(schedule)
     db.flush()
@@ -1598,6 +1640,10 @@ def create_commercial_export_schedule(
         "is_active": bool(schedule.is_active),
         "last_status": str(schedule.last_status),
         "last_run_at": schedule.last_run_at,
+        "retry_count": int(getattr(schedule, "retry_count", 0) or 0),
+        "next_retry_at": getattr(schedule, "next_retry_at", None),
+        "running_started_at": getattr(schedule, "running_started_at", None),
+        "stale_run_flag": bool(getattr(schedule, "stale_run_flag", False)),
     }
 
 
@@ -1620,6 +1666,10 @@ def list_commercial_export_schedules(db: Session) -> list[dict]:
             "is_active": bool(row.is_active),
             "last_status": str(row.last_status),
             "last_run_at": row.last_run_at,
+            "retry_count": int(getattr(row, "retry_count", 0) or 0),
+            "next_retry_at": getattr(row, "next_retry_at", None),
+            "running_started_at": getattr(row, "running_started_at", None),
+            "stale_run_flag": bool(getattr(row, "stale_run_flag", False)),
         }
         for row in rows
     ]
@@ -1776,6 +1826,120 @@ def update_commercial_alert_lifecycle(
     }
 
 
+def update_alert_sla_states(db: Session, *, warning_seconds: int = 3600, critical_seconds: int = 4 * 3600) -> int:
+    now = _now()
+    rows = _safe_query_all(
+        db.query(CommercialAlertEvent)
+        .filter(CommercialAlertEvent.status == "open")
+        .order_by(CommercialAlertEvent.created_at.desc())
+        .limit(DETAIL_LIST_LIMIT)
+    )
+    updated = 0
+    for row in rows:
+        created_at = getattr(row, "created_at", now) or now
+        age_seconds = max(0, int((now - created_at).total_seconds()))
+        row.age_seconds = age_seconds
+        previous_state = str(getattr(row, "sla_state", "within_sla") or "within_sla")
+        if age_seconds >= critical_seconds:
+            row.sla_state = "critical_overdue"
+            if not bool(getattr(row, "auto_escalated", False)):
+                row.auto_escalated = True
+                row.auto_escalated_at = now
+                row.escalation_level = "high"
+        elif age_seconds >= warning_seconds:
+            row.sla_state = "warning_overdue"
+        else:
+            row.sla_state = "within_sla"
+        if row.sla_state != previous_state:
+            updated += 1
+    if rows:
+        db.commit()
+    return updated
+
+
+def bulk_update_alert_lifecycle(
+    db: Session,
+    *,
+    actor_user: User,
+    alert_ids: list[str],
+    triage_status: str | None,
+    escalation_level: str | None,
+    acknowledge: bool,
+) -> dict:
+    rows = _safe_query_all(db.query(CommercialAlertEvent).filter(CommercialAlertEvent.id.in_(alert_ids)))
+    now = _now()
+    updated_ids: list[str] = []
+    for row in rows:
+        if triage_status is not None:
+            row.triage_status = triage_status
+            row.status = "closed" if triage_status == "resolved" else "open"
+            if triage_status == "resolved":
+                row.resolution_at = now
+        if escalation_level is not None:
+            row.escalation_level = escalation_level
+        if acknowledge:
+            row.acknowledged_by = str(actor_user.id)
+            row.acknowledged_at = now
+        updated_ids.append(str(row.id))
+
+    create_audit_log(
+        db,
+        action="COMMERCIAL_ALERT_BULK_UPDATED",
+        entity_type="commercial_alert",
+        entity_id="bulk",
+        actor_user_id=str(actor_user.id),
+        actor_role=str(getattr(actor_user.role, "value", actor_user.role)),
+        details={
+            "updated_ids": updated_ids,
+            "triage_status": triage_status,
+            "escalation_level": escalation_level,
+            "acknowledge": acknowledge,
+        },
+    )
+    db.commit()
+    return {"updated_count": len(updated_ids), "updated_alert_ids": updated_ids}
+
+
+def assign_alert_owner(
+    db: Session,
+    *,
+    actor_user: User,
+    alert_id: str,
+    assigned_to_user_id: str,
+    assigned_to_email: str,
+    assignment_note: str,
+) -> dict:
+    row = _safe_query_first(db.query(CommercialAlertEvent).filter(CommercialAlertEvent.id == alert_id))
+    if row is None:
+        raise ValueError("alert_not_found")
+    row.assigned_to_user_id = assigned_to_user_id
+    row.assigned_to_email = assigned_to_email
+    row.assigned_at = _now()
+    row.assignment_note = assignment_note
+    create_audit_log(
+        db,
+        action="COMMERCIAL_ALERT_ASSIGNED",
+        entity_type="commercial_alert",
+        entity_id=str(row.id),
+        actor_user_id=str(actor_user.id),
+        actor_role=str(getattr(actor_user.role, "value", actor_user.role)),
+        details={
+            "assigned_to_user_id": assigned_to_user_id,
+            "assigned_to_email": assigned_to_email,
+            "assignment_note": assignment_note,
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "alert_id": str(row.id),
+        "assigned_to_user_id": row.assigned_to_user_id,
+        "assigned_to_email": row.assigned_to_email,
+        "assigned_at": row.assigned_at,
+        "assignment_note": row.assignment_note,
+    }
+
+
 def build_admin_commercial_overview(
     db: Session,
     *,
@@ -1861,6 +2025,7 @@ def build_admin_commercial_overview(
         .order_by(CommercialOperationalControlTransition.created_at.desc())
         .limit(DETAIL_LIST_LIMIT)
     )
+    update_alert_sla_states(db)
     commercial_alerts = _safe_query_all(
         db.query(CommercialAlertEvent).order_by(CommercialAlertEvent.created_at.desc()).limit(DETAIL_LIST_LIMIT)
     )

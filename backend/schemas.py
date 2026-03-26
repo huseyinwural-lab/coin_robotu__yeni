@@ -3468,6 +3468,12 @@ class AdminCommercialExportJobResponse(BaseModel):
     last_run_at: datetime | None = None
     last_output_ref: str | None = None
     failure_reason: str | None = None
+    retry_count: int = 0
+    next_retry_at: datetime | None = None
+    running_started_at: datetime | None = None
+    stale_run_flag: bool = False
+    retention_state: str | None = None
+    downloadable_state: str | None = None
 
 
 class AdminCommercialExportOpsResponse(BaseModel):
@@ -3491,6 +3497,14 @@ class AdminCommercialAlertItemResponse(BaseModel):
     suggested_action: str
     triage_status: str = "new"
     acknowledged_at: datetime | None = None
+    assigned_to_user_id: str | None = None
+    assigned_to_email: str | None = None
+    assigned_at: datetime | None = None
+    assignment_note: str | None = None
+    age_seconds: int = 0
+    sla_state: str = "within_sla"
+    auto_escalated: bool = False
+    auto_escalated_at: datetime | None = None
     created_at: datetime
 
 
@@ -3537,6 +3551,7 @@ class CommercialExportManifestResponse(BaseModel):
     output_format: str
     checksum: str
     status: str
+    canonical_column_mapping: dict = Field(default_factory=dict)
 
 
 class CommercialExportScheduleCreateRequest(BaseModel):
@@ -3544,6 +3559,7 @@ class CommercialExportScheduleCreateRequest(BaseModel):
     schedule_period: str = Field(pattern="^(daily|weekly|monthly)$")
     output_format: str = "csv"
     filters_snapshot: dict = Field(default_factory=dict)
+    max_retry: int = Field(default=3, ge=0, le=10)
 
 
 class CommercialExportScheduleResponse(BaseModel):
@@ -3554,6 +3570,10 @@ class CommercialExportScheduleResponse(BaseModel):
     is_active: bool
     last_status: str
     last_run_at: datetime | None = None
+    retry_count: int = 0
+    next_retry_at: datetime | None = None
+    running_started_at: datetime | None = None
+    stale_run_flag: bool = False
 
 
 class CommercialOperationalControlUpdateRequest(BaseModel):
@@ -3589,6 +3609,19 @@ class CommercialAlertLifecycleResponse(BaseModel):
     acknowledged_at: datetime | None = None
     resolution_note: str | None = None
     resolution_at: datetime | None = None
+
+
+class CommercialAlertBulkLifecycleRequest(BaseModel):
+    alert_ids: list[str] = Field(min_length=1, max_length=100)
+    triage_status: str | None = Field(default=None, pattern="^(new|acknowledged|investigating|resolved|ignored)$")
+    escalation_level: str | None = Field(default=None, pattern="^(none|low|medium|high|critical)$")
+    acknowledge: bool = False
+
+
+class CommercialAlertAssignmentRequest(BaseModel):
+    assigned_to_user_id: str
+    assigned_to_email: str
+    assignment_note: str = Field(min_length=3, max_length=500)
 
 
 class UserFundWithdrawRequest(BaseModel):

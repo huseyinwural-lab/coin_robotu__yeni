@@ -35,6 +35,10 @@ export const AdminCommercialOpsPage = () => {
     reason_note: "commercial ops export",
   });
   const [scheduleForm, setScheduleForm] = useState({ export_type: "pnl", schedule_period: "daily", output_format: "csv" });
+  const [selectedAlertIds, setSelectedAlertIds] = useState([]);
+  const [bulkTriageStatus, setBulkTriageStatus] = useState("acknowledged");
+  const [assignmentForm, setAssignmentForm] = useState({ alert_id: "", assigned_to_user_id: "", assigned_to_email: "", assignment_note: "" });
+  const [infraStatus, setInfraStatus] = useState({ apiReachable: false, authReachable: true, lastOverviewRefreshStatus: "idle" });
 
   const isSuperAdmin = user?.role === "super_admin";
 
@@ -49,8 +53,10 @@ export const AdminCommercialOpsPage = () => {
       if (toIso) params.to = toIso;
       const { data } = await apiClient.get("/admin/commercial/overview", { params });
       setOverview(data || null);
+      setInfraStatus((prev) => ({ ...prev, apiReachable: true, authReachable: true, lastOverviewRefreshStatus: "success" }));
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Commercial overview yüklenemedi");
+      setInfraStatus((prev) => ({ ...prev, apiReachable: false, lastOverviewRefreshStatus: "failed" }));
     } finally {
       setIsLoading(false);
     }
@@ -89,6 +95,45 @@ export const AdminCommercialOpsPage = () => {
       await loadOverview();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Alert lifecycle güncellenemedi");
+    }
+  };
+
+  const toggleAlertSelection = (alertId) => {
+    setSelectedAlertIds((prev) => (prev.includes(alertId) ? prev.filter((id) => id !== alertId) : [...prev, alertId]));
+  };
+
+  const runBulkAlertAction = async () => {
+    if (selectedAlertIds.length === 0) {
+      toast.error("Önce en az bir alert seçin");
+      return;
+    }
+    try {
+      await apiClient.post("/admin/commercial/alerts/bulk-lifecycle", {
+        alert_ids: selectedAlertIds,
+        triage_status: bulkTriageStatus,
+        escalation_level: bulkTriageStatus === "resolved" ? "none" : "medium",
+        acknowledge: true,
+      });
+      toast.success("Bulk alert aksiyonu tamamlandı");
+      setSelectedAlertIds([]);
+      await loadOverview();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bulk alert aksiyonu başarısız");
+    }
+  };
+
+  const assignAlertOwner = async () => {
+    if (!assignmentForm.alert_id) {
+      toast.error("alert_id zorunlu");
+      return;
+    }
+    try {
+      await apiClient.post(`/admin/commercial/alerts/${assignmentForm.alert_id}/assign`, assignmentForm);
+      toast.success("Alert owner atandı");
+      setAssignmentForm({ alert_id: "", assigned_to_user_id: "", assigned_to_email: "", assignment_note: "" });
+      await loadOverview();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Alert assignment başarısız");
     }
   };
 
@@ -156,12 +201,13 @@ export const AdminCommercialOpsPage = () => {
       <header className="border border-black/40 bg-orange-300 p-4" data-testid="admin-commercial-ops-header">
         <h2 className="text-4xl font-black uppercase text-black" data-testid="admin-commercial-ops-title">Commercial Ops</h2>
         <p className="text-sm text-black/80" data-testid="admin-commercial-ops-description">Tek contract ile tam backoffice operasyon paneli.</p>
-        <div className="mt-3 grid gap-2 md:grid-cols-5" data-testid="admin-commercial-header-badges-grid">
+        <div className="mt-3 grid gap-2 md:grid-cols-6" data-testid="admin-commercial-header-badges-grid">
           <div className="border border-black/20 bg-orange-100 p-2 text-xs" data-testid="admin-commercial-badge-data-freshness">data freshness: {dataQuality.freshness_seconds ?? "-"}</div>
           <div className="border border-black/20 bg-orange-100 p-2 text-xs" data-testid="admin-commercial-badge-reconciliation-status">reconciliation status: {financialAccuracy.reconciliation_status || "-"}</div>
           <div className="border border-black/20 bg-orange-100 p-2 text-xs" data-testid="admin-commercial-badge-duplicate-trade-status">duplicate trade status: {dataQuality.duplicate_trade_status || "-"}</div>
           <div className="border border-black/20 bg-orange-100 p-2 text-xs" data-testid="admin-commercial-badge-active-alert-count">active alerts: {alertRail.length}</div>
           <div className="border border-black/20 bg-orange-100 p-2 text-xs" data-testid="admin-commercial-badge-export-scheduler-health">scheduler health: {exportOps.scheduler_health || "-"}</div>
+          <div className="border border-black/20 bg-orange-100 p-2 text-xs" data-testid="admin-commercial-badge-infra-health">infra: api={String(infraStatus.apiReachable)} auth={String(infraStatus.authReachable)} scheduler={exportOps.scheduler_health || "unknown"} refresh={infraStatus.lastOverviewRefreshStatus}</div>
         </div>
       </header>
 
@@ -345,7 +391,7 @@ export const AdminCommercialOpsPage = () => {
           </div>
           <div className="mt-3 overflow-x-auto" data-testid="admin-commercial-recent-export-jobs-table-wrapper">
             <Table data-testid="admin-commercial-recent-export-jobs-table">
-              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-export-jobs-head-type">recent export jobs</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-period">period</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-status">status</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-last-run">last_run_at</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-failure">failure reason</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-export-jobs-head-type">recent export jobs</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-period">period</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-status">status</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-last-run">last_run_at</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-retry-count">retry_count</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-next-retry">next_retry_at</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-running-started">running_started_at</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-stale-flag">stale_run_flag</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-failure">failure reason</TableHead></TableRow></TableHeader>
               <TableBody>
                 {(exportOps.recent_export_jobs || []).slice(0, 50).map((row, idx) => (
                   <TableRow key={`${row.schedule_id}-${idx}`} data-testid={`admin-commercial-recent-export-jobs-row-${idx}`}>
@@ -353,6 +399,10 @@ export const AdminCommercialOpsPage = () => {
                     <TableCell data-testid={`admin-commercial-recent-export-jobs-period-${idx}`}>{row.schedule_period}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-export-jobs-status-${idx}`}>{row.last_status}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-export-jobs-last-run-${idx}`}>{row.last_run_at ? new Date(row.last_run_at).toLocaleString() : "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-export-jobs-retry-count-${idx}`}>{row.retry_count ?? 0}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-export-jobs-next-retry-${idx}`}>{row.next_retry_at ? new Date(row.next_retry_at).toLocaleString() : "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-export-jobs-running-started-${idx}`}>{row.running_started_at ? new Date(row.running_started_at).toLocaleString() : "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-export-jobs-stale-flag-${idx}`}>{String(Boolean(row.stale_run_flag))}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-export-jobs-failure-${idx}`}>{row.failure_reason || "-"}</TableCell>
                   </TableRow>
                 ))}
@@ -361,13 +411,15 @@ export const AdminCommercialOpsPage = () => {
           </div>
           <div className="mt-3 overflow-x-auto" data-testid="admin-commercial-recent-manifests-table-wrapper">
             <Table data-testid="admin-commercial-recent-manifests-table">
-              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-manifests-head-id">recent manifests</TableHead><TableHead data-testid="admin-commercial-recent-manifests-head-status">status</TableHead><TableHead data-testid="admin-commercial-recent-manifests-head-artifact">artifact</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-manifests-head-id">recent manifests</TableHead><TableHead data-testid="admin-commercial-recent-manifests-head-status">status</TableHead><TableHead data-testid="admin-commercial-recent-manifests-head-artifact">artifact</TableHead><TableHead data-testid="admin-commercial-recent-manifests-head-retention-state">retention_state</TableHead><TableHead data-testid="admin-commercial-recent-manifests-head-downloadable-state">downloadable_state</TableHead></TableRow></TableHeader>
               <TableBody>
                 {(exportOps.recent_manifests || []).slice(0, 50).map((row, idx) => (
                   <TableRow key={`${row.export_id}-${idx}`} data-testid={`admin-commercial-recent-manifests-row-${idx}`}>
                     <TableCell data-testid={`admin-commercial-recent-manifests-id-${idx}`}>{row.export_id}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-manifests-status-${idx}`}>{row.delivery_status || row.status}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-manifests-artifact-${idx}`}>{row.artifact_ref || "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-manifests-retention-state-${idx}`}>{row.retention_state || "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-manifests-downloadable-state-${idx}`}>{row.downloadable_state || "-"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -391,17 +443,34 @@ export const AdminCommercialOpsPage = () => {
 
         <article className="border border-black/30 bg-orange-100 p-4" data-testid="admin-commercial-alert-rail-panel">
           <p className="text-xs uppercase tracking-widest" data-testid="admin-commercial-alert-rail-title">Alert Rail</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="admin-commercial-alert-bulk-controls-grid">
+            <select className="border border-black/40 bg-white px-2 py-2 text-sm" value={bulkTriageStatus} onChange={(event) => setBulkTriageStatus(event.target.value)} data-testid="admin-commercial-alert-bulk-triage-select">
+              <option value="acknowledged">acknowledged</option>
+              <option value="investigating">investigating</option>
+              <option value="resolved">resolved</option>
+            </select>
+            <Button onClick={runBulkAlertAction} data-testid="admin-commercial-alert-bulk-apply-button">Bulk Apply</Button>
+            <Input placeholder="alert_id" value={assignmentForm.alert_id} onChange={(event) => setAssignmentForm((prev) => ({ ...prev, alert_id: event.target.value }))} data-testid="admin-commercial-alert-assignment-alert-id-input" />
+            <Input placeholder="assigned user id" value={assignmentForm.assigned_to_user_id} onChange={(event) => setAssignmentForm((prev) => ({ ...prev, assigned_to_user_id: event.target.value }))} data-testid="admin-commercial-alert-assignment-user-id-input" />
+            <Input placeholder="assigned email" value={assignmentForm.assigned_to_email} onChange={(event) => setAssignmentForm((prev) => ({ ...prev, assigned_to_email: event.target.value }))} data-testid="admin-commercial-alert-assignment-email-input" />
+            <Input placeholder="assignment note" value={assignmentForm.assignment_note} onChange={(event) => setAssignmentForm((prev) => ({ ...prev, assignment_note: event.target.value }))} data-testid="admin-commercial-alert-assignment-note-input" />
+            <Button onClick={assignAlertOwner} data-testid="admin-commercial-alert-assignment-submit-button">Assign Owner</Button>
+            <div className="text-xs" data-testid="admin-commercial-alert-overdue-badge">SLA overdue: {alertRail.filter((row) => String(row.sla_state || "").includes("overdue")).length}</div>
+          </div>
           <div className="mt-2 overflow-x-auto" data-testid="admin-commercial-recent-alerts-table-wrapper">
             <Table data-testid="admin-commercial-recent-alerts-table">
-              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-alerts-head-severity">severity</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-source">source</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-entity">entity</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-action">suggested_action</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-triage">triage_status</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-ack">acknowledged_at</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-ops">ops</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-alerts-head-select">select</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-severity">severity</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-source">source</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-entity">entity</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-action">suggested_action</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-triage">triage_status</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-assigned">assigned</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-sla">sla_state</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-ack">acknowledged_at</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-ops">ops</TableHead></TableRow></TableHeader>
               <TableBody>
                 {alertRail.slice(0, 50).map((row, idx) => (
                   <TableRow key={`${row.id}-${idx}`} data-testid={`admin-commercial-recent-alerts-row-${idx}`}>
+                    <TableCell data-testid={`admin-commercial-recent-alerts-select-${idx}`}><input type="checkbox" checked={selectedAlertIds.includes(row.id)} onChange={() => toggleAlertSelection(row.id)} data-testid={`admin-commercial-recent-alerts-checkbox-${idx}`} /></TableCell>
                     <TableCell data-testid={`admin-commercial-recent-alerts-severity-${idx}`}>{row.severity}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-alerts-source-${idx}`}>{row.source}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-alerts-entity-${idx}`}>{`${row.entity_type}:${row.entity_id}`}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-alerts-action-${idx}`}>{row.suggested_action}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-alerts-triage-${idx}`}>{row.triage_status || "new"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-alerts-assigned-${idx}`}>{row.assigned_to_email || "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-alerts-sla-${idx}`}>{row.sla_state || "within_sla"}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-alerts-ack-${idx}`}>{row.acknowledged_at ? new Date(row.acknowledged_at).toLocaleString() : "-"}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-alerts-ops-${idx}`}>
                       <Button size="sm" disabled={!String(row.source || "").startsWith("commercial") } onClick={() => updateAlertLifecycle(row.id, "acknowledged")} data-testid={`admin-commercial-alert-ack-button-${idx}`}>Ack</Button>

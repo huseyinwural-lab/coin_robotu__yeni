@@ -52,6 +52,7 @@ from services.execution_precheck_service import load_execution_policy_registry
 from services.execution_readiness_service import evaluate_execution_readiness
 from services.guard_metrics_service import build_guard_telemetry_payload
 from services.execution_safety_service import ExecutionSafetyViolation
+from services.commercial_controls_enforcement_service import CommercialControlViolation
 from services.system_alert_service import create_system_alert
 from services.live_mode_service import (
     create_release_gate_override,
@@ -418,6 +419,12 @@ def approve_intent(
         except ValueError as exc:
             db.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except CommercialControlViolation as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_423_LOCKED,
+                detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+            ) from exc
 
     create_audit_log(
         db,
@@ -485,6 +492,13 @@ def execute_intent(
         db.rollback()
         _log_decision_block(db, action="execute", intent_id=intent_id, actor=current_user, reason_code=str(exc))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except CommercialControlViolation as exc:
+        db.rollback()
+        _log_decision_block(db, action="execute", intent_id=intent_id, actor=current_user, reason_code=exc.reason_code)
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
 
     create_audit_log(
         db,

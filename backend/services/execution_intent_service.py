@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import redis_client
-from models import AuditLog, BotProfile, PaperPosition, Position, PositionLedgerEvent, UserExecutionIntent
+from models import AuditLog, BotProfile, PaperPosition, Position, PositionLedgerEvent, User, UserExecutionIntent
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
@@ -1386,6 +1386,31 @@ def approve_execution_intent(
     detail_payload = build_execution_intent_detail(db, intent)
     if not detail_payload.get("order_preview") or not detail_payload.get("expected_impact") or not detail_payload.get("risk_payload"):
         raise ValueError("detail_payload_incomplete_for_ack")
+
+    executor_role = "SYSTEM"
+    executor_user = db.query(User).filter(User.id == admin_user_id).first()
+    if executor_user is not None:
+        executor_role = str(getattr(executor_user.role, "value", executor_user.role) or "SYSTEM")
+
+    operation = None
+    if intent.intent_type == "OPEN_POSITION":
+        operation = "trade_intent"
+    elif intent.intent_type == "REVERSE_POSITION" or (
+        intent.intent_type in POSITION_ACTION_TYPES and not bool(intent.reduce_only)
+    ):
+        operation = "position_increase"
+    if operation:
+        enforce_commercial_control_or_raise(
+            db,
+            user_id=intent.user_id,
+            operation=operation,
+            actor_user_id=admin_user_id,
+            actor_role=executor_role,
+            entity_type="execution_intent",
+            entity_id=intent.id,
+            source="execute_approved_intent",
+            metadata={"intent_type": intent.intent_type, "symbol": intent.symbol},
+        )
 
     _ = double_confirmation
 

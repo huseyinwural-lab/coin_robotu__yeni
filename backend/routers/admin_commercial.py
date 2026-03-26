@@ -8,6 +8,8 @@ from models import User
 from schemas import (
     AdminCommercialOverviewResponse,
     AdminCommercialTotalPnlResponse,
+    CommercialAlertAssignmentRequest,
+    CommercialAlertBulkLifecycleRequest,
     CommercialAlertLifecycleResponse,
     CommercialAlertLifecycleUpdateRequest,
     CommercialExportManifestCreateRequest,
@@ -26,6 +28,8 @@ from services.admin_commercial_service import (
     create_commercial_export_schedule,
     export_monthly_pnl_with_governance,
     list_commercial_export_schedules,
+    assign_alert_owner,
+    bulk_update_alert_lifecycle,
     update_commercial_alert_lifecycle,
     update_user_operational_controls,
 )
@@ -94,6 +98,7 @@ def create_export_schedule(
             schedule_period=payload.schedule_period,
             output_format=payload.output_format,
             filters_snapshot=payload.filters_snapshot,
+            max_retry=payload.max_retry,
         )
     except ValueError as exc:
         if str(exc) == "target_user_not_found":
@@ -149,6 +154,44 @@ def update_alert_lifecycle(
             escalation_level=payload.escalation_level,
             resolution_note=payload.resolution_note,
             acknowledge=payload.acknowledge,
+        )
+    except ValueError as exc:
+        if str(exc) == "alert_not_found":
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/alerts/bulk-lifecycle")
+def bulk_alert_lifecycle(
+    payload: CommercialAlertBulkLifecycleRequest,
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return bulk_update_alert_lifecycle(
+        db,
+        actor_user=actor,
+        alert_ids=payload.alert_ids,
+        triage_status=payload.triage_status,
+        escalation_level=payload.escalation_level,
+        acknowledge=payload.acknowledge,
+    )
+
+
+@router.post("/alerts/{alert_id}/assign")
+def assign_alert_owner_route(
+    alert_id: str,
+    payload: CommercialAlertAssignmentRequest,
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return assign_alert_owner(
+            db,
+            actor_user=actor,
+            alert_id=alert_id,
+            assigned_to_user_id=payload.assigned_to_user_id,
+            assigned_to_email=payload.assigned_to_email,
+            assignment_note=payload.assignment_note,
         )
     except ValueError as exc:
         if str(exc) == "alert_not_found":

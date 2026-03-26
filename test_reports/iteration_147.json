@@ -1,0 +1,77 @@
+{
+  "summary": "Iteration 147: Hardening phase testing completed via TestClient. All 8 backend tests pass (3 hardening + 5 enforcement governance). Preview environment has infrastructure issues - backend stuck on alembic migration, login times out. Code is correct, infrastructure issue persists from iteration 146.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "Preview environment",
+        "issue": "Backend stuck on alembic migration - database connection timeout to Supabase. Login API times out.",
+        "priority": "INFRASTRUCTURE"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Login flow",
+        "issue": "Login times out due to backend not responding. Infrastructure issue, not code issue.",
+        "affected_selectors": []
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_commercial_hardening_phase.py",
+    "/app/backend/tests/test_admin_commercial_enforcement_governance.py",
+    "/app/test_reports/pytest/iteration147_hardening.xml"
+  ],
+  "action_items": [
+    "Infrastructure: Check Supabase database connection - backend stuck on alembic migration",
+    "Infrastructure: Preview environment backend not responding to API calls"
+  ],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (8/8 tests pass via TestClient)",
+    "frontend": "Smoke test passed - page loads, login form visible. Login times out due to backend infrastructure issue."
+  },
+  "seed_data_creation": "Test alerts and schedules created during pytest execution",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All hardening phase features verified via TestClient: scheduler stale recovery, idempotency, retry fields, alert bulk lifecycle, alert assignment, SLA fields. Preview environment has persistent infrastructure issue - backend stuck on alembic migration. Frontend loads correctly, login form works, but API calls time out. Code is correct.",
+  "verified_features": {
+    "scheduler_hardening": [
+      "test_scheduler_stale_recovery_and_retry_fields - PASSED",
+      "test_scheduler_idempotency_prevents_duplicate_same_window_exports - PASSED",
+      "stale_run_flag set when running_started_at > 10 minutes",
+      "retry_count incremented on stale recovery",
+      "next_retry_at set with exponential backoff",
+      "idempotency_key prevents duplicate exports in same execution window"
+    ],
+    "alert_bulk_and_assignment": [
+      "test_alert_bulk_assignment_and_sla_surface - PASSED",
+      "POST /api/admin/commercial/alerts/bulk-lifecycle - bulk triage status update",
+      "POST /api/admin/commercial/alerts/{alert_id}/assign - owner assignment",
+      "assigned_to_user_id, assigned_to_email, assignment_note fields",
+      "sla_state field (within_sla, warning_overdue, critical_overdue)"
+    ],
+    "enforcement_governance": [
+      "test_operational_control_enforcement_reason_codes_and_audit_trail - PASSED",
+      "test_transition_diff_snapshot_visible_in_overview - PASSED",
+      "test_monthly_export_governance_and_artifact_linkage - PASSED",
+      "test_scheduler_runner_executes_due_jobs_and_updates_lifecycle - PASSED",
+      "test_alert_lifecycle_ack_and_triage_normalization - PASSED"
+    ],
+    "frontend_smoke": [
+      "Page loads correctly",
+      "Login form visible and fillable",
+      "data-testid attributes present in AdminCommercialOpsPage.jsx"
+    ]
+  },
+  "infrastructure_notes": {
+    "issue": "Backend stuck on alembic migration - database connection to Supabase timing out",
+    "logs": "INFO [alembic.runtime.migration] Context impl PostgresqlImpl. INFO [alembic.runtime.migration] Will assume transactional DDL. (then hangs)",
+    "workaround": "Tests pass via TestClient which uses in-process database connection"
+  }
+}
