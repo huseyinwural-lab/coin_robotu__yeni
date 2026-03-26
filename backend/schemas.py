@@ -119,6 +119,19 @@ class OnboardingContextResponse(BaseModel):
     approval_disabled: bool
     approval_disable_reasons: list[str] = Field(default_factory=list)
     decision_engine: dict = Field(default_factory=dict)
+    decision_support: dict = Field(default_factory=dict)
+
+
+class OnboardingWorkflowStartRequest(BaseModel):
+    assigned_admin_id: str | None = None
+
+
+class OnboardingWorkflowAssignRequest(BaseModel):
+    assigned_admin_id: str
+
+
+class OnboardingWorkflowStepCompleteRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=500)
 
 
 class LoginRequest(BaseModel):

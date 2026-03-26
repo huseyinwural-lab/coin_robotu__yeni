@@ -12,12 +12,16 @@ from sqlalchemy.orm import Session
 from models import (
     OnboardingAmlDenylist,
     User,
+    UserActivationEvent,
     UserExchangeConnection,
     UserKycDocument,
     UserOnboardingDecisionLog,
     UserOnboardingProfile,
     UserRole,
+    UserStrategyScope,
 )
+from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
+from services.venue_service import ensure_user_venue_assignment
 
 
 ALLOWED_KYC_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
@@ -155,6 +159,114 @@ def _decision_engine(context: dict) -> dict:
     }
 
 
+def _decision_support_payload(context: dict) -> dict:
+    risk_score = float(context.get("risk_score") or 0)
+    balance = float(context.get("balance_usd") or 0)
+    api_validity = str(context.get("api_key_validity") or "invalid")
+    aml_flag = str(context.get("aml_flag") or "clear")
+
+    reason_codes: list[str] = []
+    if aml_flag in {"blacklist", "sanction_hit"}:
+        reason_codes.append("aml_hit")
+    if risk_score >= 70:
+        reason_codes.append("high_risk_score")
+    if api_validity != "valid":
+        reason_codes.append("invalid_api")
+    if balance <= 50:
+        reason_codes.append("low_balance")
+    if not bool(context.get("leverage_permission", False)):
+        reason_codes.append("high_leverage_request")
+
+    if "aml_hit" in reason_codes:
+        recommended_action = "reject"
+        confidence = 0.98
+    elif risk_score < AUTO_APPROVE_THRESHOLD and not context.get("approval_disabled", False):
+        recommended_action = "approve"
+        confidence = 0.82
+    elif risk_score >= 70:
+        recommended_action = "reject"
+        confidence = 0.86
+    else:
+        recommended_action = "manual_review"
+        confidence = 0.65
+
+    if risk_score >= 70 or "aml_hit" in reason_codes:
+        auto_tag = "high-risk"
+    elif risk_score < 25 and balance >= 5000:
+        auto_tag = "vip"
+    else:
+        auto_tag = "normal"
+
+    if reason_codes:
+        summary = " + ".join(reason_codes)
+    else:
+        summary = "low risk baseline"
+
+    return {
+        "recommended_action": recommended_action,
+        "confidence": round(float(confidence), 2),
+        "reason_codes": reason_codes,
+        "human_readable_summary": summary,
+        "auto_tag": auto_tag,
+    }
+
+
+def _append_activation_event(db: Session, *, user_id: str, event_type: str, payload: dict) -> None:
+    db.add(UserActivationEvent(user_id=user_id, event_type=event_type, payload=payload))
+
+
+def run_post_approval_activation(db: Session, *, user: User, actor: User | None) -> dict:
+    now = _now()
+    actor_id = actor.id if actor else None
+
+    _append_activation_event(
+        db,
+        user_id=user.id,
+        event_type="user.approval.completed",
+        payload={"at": now.isoformat(), "actor_user_id": actor_id},
+    )
+
+    ensure_user_safe_default_risk_policy(db, user.id, commit=False)
+    _append_activation_event(
+        db,
+        user_id=user.id,
+        event_type="user.risk.defaults_assigned",
+        payload={"at": now.isoformat(), "actor_user_id": actor_id},
+    )
+
+    strategy_scope = db.query(UserStrategyScope).filter(UserStrategyScope.user_id == user.id).first()
+    if strategy_scope is None:
+        strategy_scope = UserStrategyScope(
+            user_id=user.id,
+            strategy_code="core-default",
+            created_by=actor_id,
+        )
+        db.add(strategy_scope)
+    _append_activation_event(
+        db,
+        user_id=user.id,
+        event_type="user.strategy.default_bound",
+        payload={"strategy_name": "core-default", "at": now.isoformat()},
+    )
+
+    ensure_user_venue_assignment(
+        db,
+        user_id=user.id,
+        exchange_code="binance",
+        market_type="futures",
+        environment="testnet",
+        commit=False,
+    )
+    _append_activation_event(
+        db,
+        user_id=user.id,
+        event_type="user.activation.started",
+        payload={"at": now.isoformat()},
+    )
+    db.commit()
+    return {"events": 4, "strategy_scope": "core-default"}
+
+
 def build_onboarding_context(db: Session, user_id: str) -> dict:
     user = _get_user_for_onboarding(db, user_id)
     profile = get_or_create_onboarding_profile(db, user.id)
@@ -234,6 +346,7 @@ def build_onboarding_context(db: Session, user_id: str) -> dict:
         "approval_disable_reasons": precheck_reasons,
     }
     context["decision_engine"] = _decision_engine(context)
+    context["decision_support"] = _decision_support_payload(context)
     return context
 
 
@@ -442,6 +555,9 @@ def execute_onboarding_decision(
 
     db.commit()
     db.refresh(user)
+    activation_result = None
+    if normalized == "approve":
+        activation_result = run_post_approval_activation(db, user=user, actor=actor)
     log = append_decision_log(
         db,
         user_id=user.id,
@@ -458,6 +574,8 @@ def execute_onboarding_decision(
         "is_active": user.is_active,
         "decision_log_id": log.id,
         "decision_engine": engine,
+        "decision_support": context.get("decision_support") or {},
+        "activation": activation_result,
     }
 
 

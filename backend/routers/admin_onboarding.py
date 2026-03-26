@@ -13,6 +13,9 @@ from schemas import (
     OnboardingDecisionResponse,
     OnboardingKycReviewRequest,
     OnboardingRiskFoundationRequest,
+    OnboardingWorkflowAssignRequest,
+    OnboardingWorkflowStartRequest,
+    OnboardingWorkflowStepCompleteRequest,
 )
 from services.audit_service import create_audit_log
 from services.onboarding_approval_service import (
@@ -23,6 +26,14 @@ from services.onboarding_approval_service import (
     review_kyc_document,
     upload_kyc_document,
     upsert_risk_foundation,
+)
+from services.onboarding_workflow_service import (
+    assign_workflow_owner,
+    complete_workflow_step,
+    escalate_timed_out_cases,
+    get_workflow_case,
+    list_priority_queue,
+    start_workflow_case,
 )
 
 router = APIRouter(prefix="/admin/onboarding", tags=["admin-onboarding"])
@@ -42,6 +53,110 @@ def get_onboarding_context(user_id: str, db: Session = Depends(get_db), admin_us
         details={"approval_disabled": payload.get("approval_disabled", False)},
     )
     return payload
+
+
+@router.get("/{user_id}/decision-support")
+def get_onboarding_decision_support(user_id: str, db: Session = Depends(get_db), admin_user: User = Depends(require_admin)):
+    payload = build_onboarding_context(db, user_id)
+    return {
+        "user_id": user_id,
+        "decision_support": payload.get("decision_support") or {},
+        "decision_engine": payload.get("decision_engine") or {},
+    }
+
+
+@router.post("/{user_id}/workflow/start")
+def start_onboarding_workflow(
+    user_id: str,
+    payload: OnboardingWorkflowStartRequest,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    case = start_workflow_case(db, user_id=user_id, assigned_admin_id=payload.assigned_admin_id, actor=admin_user)
+    return {
+        "workflow_case_id": case.id,
+        "current_step": case.current_step,
+        "assigned_admin_id": case.assigned_admin_id,
+        "priority_score": case.priority_score,
+        "sla_due_at": case.sla_due_at.isoformat() if case.sla_due_at else None,
+    }
+
+
+@router.get("/{user_id}/workflow")
+def get_onboarding_workflow(user_id: str, db: Session = Depends(get_db), admin_user: User = Depends(require_admin)):
+    case = get_workflow_case(db, user_id)
+    if case is None:
+        return {"workflow_case": None}
+    return {
+        "workflow_case": {
+            "workflow_case_id": case.id,
+            "workflow_status": case.workflow_status,
+            "current_step": case.current_step,
+            "assigned_admin_id": case.assigned_admin_id,
+            "priority_score": case.priority_score,
+            "sla_due_at": case.sla_due_at.isoformat() if case.sla_due_at else None,
+            "escalated_at": case.escalated_at.isoformat() if case.escalated_at else None,
+            "supervisor_queue": case.supervisor_queue,
+        }
+    }
+
+
+@router.post("/{user_id}/workflow/assign")
+def assign_onboarding_workflow(
+    user_id: str,
+    payload: OnboardingWorkflowAssignRequest,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    case = assign_workflow_owner(db, user_id=user_id, assigned_admin_id=payload.assigned_admin_id, actor=admin_user)
+    return {
+        "workflow_case_id": case.id,
+        "assigned_admin_id": case.assigned_admin_id,
+        "supervisor_queue": case.supervisor_queue,
+    }
+
+
+@router.post("/{user_id}/workflow/steps/{step_name}/complete")
+def complete_onboarding_step(
+    user_id: str,
+    step_name: str,
+    payload: OnboardingWorkflowStepCompleteRequest,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    case = complete_workflow_step(
+        db,
+        user_id=user_id,
+        step_name=step_name,
+        actor=admin_user,
+        note=payload.note,
+    )
+    return {
+        "workflow_case_id": case.id,
+        "workflow_status": case.workflow_status,
+        "current_step": case.current_step,
+        "sla_due_at": case.sla_due_at.isoformat() if case.sla_due_at else None,
+    }
+
+
+@router.get("/workflow/queue")
+def list_onboarding_priority_queue(
+    assigned_admin_id: str | None = None,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    return {"items": list_priority_queue(db, assigned_admin_id=assigned_admin_id)}
+
+
+@router.post("/workflow/escalate-timeouts")
+def escalate_onboarding_timeouts(
+    payload: dict,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    supervisor_admin_id = payload.get("supervisor_admin_id")
+    result = escalate_timed_out_cases(db, actor=admin_user, supervisor_admin_id=supervisor_admin_id)
+    return result
 
 
 @router.post("/{user_id}/risk-foundation", response_model=OnboardingContextResponse)

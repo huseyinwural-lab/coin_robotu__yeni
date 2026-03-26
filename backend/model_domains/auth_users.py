@@ -110,3 +110,44 @@ class UserOnboardingDecisionLog(Base):
     explanation: Mapped[str] = mapped_column(Text)
     context_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class UserOnboardingWorkflowCase(Base):
+    __tablename__ = "user_onboarding_workflow_cases"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), unique=True, index=True)
+    workflow_status: Mapped[str] = mapped_column(String(30), default="active", index=True)
+    current_step: Mapped[str] = mapped_column(String(20), default="ops", index=True)
+    assigned_admin_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    priority_score: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    sla_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    escalation_count: Mapped[int] = mapped_column(default=0)
+    supervisor_queue: Mapped[bool] = mapped_column(Boolean, default=False)
+    workflow_metadata: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UserOnboardingWorkflowStepLog(Base):
+    __tablename__ = "user_onboarding_workflow_step_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    workflow_case_id: Mapped[str] = mapped_column(String, ForeignKey("user_onboarding_workflow_cases.id"), index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    step_name: Mapped[str] = mapped_column(String(20), index=True)
+    step_status: Mapped[str] = mapped_column(String(20), default="completed")
+    actor_user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class UserActivationEvent(Base):
+    __tablename__ = "user_activation_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(80), index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
