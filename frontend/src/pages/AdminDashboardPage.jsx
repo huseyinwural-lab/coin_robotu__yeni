@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
+import { OnboardingObservabilitySnapshot } from "@/components/OnboardingObservabilitySnapshot";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -880,6 +881,10 @@ export const AdminDashboardPage = () => {
           </div>
         </div>
       </header>
+
+      <OnboardingObservabilitySnapshot
+        onOpenDetail={() => navigate("/admin/onboarding-observability")}
+      />
 
       <div className="grid gap-3 md:grid-cols-4" data-testid="admin-dashboard-runtime-ops-grid">
         <article className="border border-emerald-700/40 bg-slate-900 p-3" data-testid="admin-dashboard-runtime-pnl-card">

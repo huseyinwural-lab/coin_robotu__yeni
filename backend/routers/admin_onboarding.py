@@ -14,6 +14,7 @@ from schemas import (
     OnboardingKycReviewRequest,
     OnboardingRiskFoundationRequest,
     OnboardingWorkflowAssignRequest,
+    OnboardingWorkflowEscalateRequest,
     OnboardingWorkflowStartRequest,
     OnboardingWorkflowStepCompleteRequest,
 )
@@ -31,10 +32,13 @@ from services.onboarding_workflow_service import (
     assign_workflow_owner,
     complete_workflow_step,
     escalate_timed_out_cases,
+    escalate_workflow_case,
     get_workflow_case,
+    list_workflow_admin_candidates,
     list_priority_queue,
     start_workflow_case,
 )
+from services.onboarding_observability_service import build_onboarding_observability_summary
 
 router = APIRouter(prefix="/admin/onboarding", tags=["admin-onboarding"])
 audit_router = APIRouter(prefix="/admin/audit", tags=["admin-onboarding-audit"])
@@ -148,6 +152,15 @@ def list_onboarding_priority_queue(
     return {"items": list_priority_queue(db, assigned_admin_id=assigned_admin_id)}
 
 
+@router.get("/workflow/admin-candidates")
+def list_onboarding_workflow_admin_candidates(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    _ = admin_user
+    return {"items": list_workflow_admin_candidates(db)}
+
+
 @router.post("/workflow/escalate-timeouts")
 def escalate_onboarding_timeouts(
     payload: dict,
@@ -157,6 +170,42 @@ def escalate_onboarding_timeouts(
     supervisor_admin_id = payload.get("supervisor_admin_id")
     result = escalate_timed_out_cases(db, actor=admin_user, supervisor_admin_id=supervisor_admin_id)
     return result
+
+
+@router.post("/{user_id}/workflow/escalate")
+def escalate_onboarding_case(
+    user_id: str,
+    payload: OnboardingWorkflowEscalateRequest,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    case = escalate_workflow_case(
+        db,
+        user_id=user_id,
+        actor=admin_user,
+        supervisor_admin_id=payload.supervisor_admin_id,
+        note=payload.note,
+        force=True,
+    )
+    return {
+        "workflow_case_id": case.id,
+        "workflow_status": case.workflow_status,
+        "current_step": case.current_step,
+        "assigned_admin_id": case.assigned_admin_id,
+        "supervisor_queue": case.supervisor_queue,
+        "escalation_count": int(case.escalation_count or 0),
+        "sla_due_at": case.sla_due_at.isoformat() if case.sla_due_at else None,
+    }
+
+
+@router.get("/observability/summary")
+def get_onboarding_observability_summary(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    _ = admin_user
+    return build_onboarding_observability_summary(db, days=days)
 
 
 @router.post("/{user_id}/risk-foundation", response_model=OnboardingContextResponse)
@@ -273,17 +322,9 @@ def make_onboarding_decision(
         actor=admin_user,
         decision=payload.decision,
         reason=payload.reason,
+        explanation=payload.explanation,
         confirm_token=payload.confirm_token,
         decision_source="manual",
-    )
-    create_audit_log(
-        db,
-        action="onboarding_manual_decision",
-        entity_type="user",
-        entity_id=user_id,
-        actor_user_id=admin_user.id,
-        actor_role=admin_user.role.value,
-        details={"decision": payload.decision, "decision_log_id": result.get("decision_log_id")},
     )
     return result
 
@@ -301,15 +342,6 @@ def auto_approve_onboarding_decision(
         actor=admin_user,
         reason=payload.reason,
         confirm_token=payload.confirm_token,
-    )
-    create_audit_log(
-        db,
-        action="onboarding_auto_decision",
-        entity_type="user",
-        entity_id=user_id,
-        actor_user_id=admin_user.id,
-        actor_role=admin_user.role.value,
-        details={"decision_log_id": result.get("decision_log_id")},
     )
     return result
 

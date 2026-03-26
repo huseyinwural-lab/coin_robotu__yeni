@@ -76,6 +76,7 @@ class OnboardingKycReviewRequest(BaseModel):
 class OnboardingDecisionRequest(BaseModel):
     decision: str
     reason: str = Field(default="", max_length=1000)
+    explanation: str | None = Field(default=None, max_length=2000)
     confirm_token: str = ""
 
 
@@ -94,6 +95,7 @@ class OnboardingDecisionResponse(BaseModel):
     is_active: bool
     decision_log_id: str
     decision_engine: dict = Field(default_factory=dict)
+    decision_support: dict = Field(default_factory=dict)
 
 
 class OnboardingContextResponse(BaseModel):
@@ -118,6 +120,14 @@ class OnboardingContextResponse(BaseModel):
     risk_flags: list[str] = Field(default_factory=list)
     approval_disabled: bool
     approval_disable_reasons: list[str] = Field(default_factory=list)
+    missing_data_fields: list[str] = Field(default_factory=list)
+    profile_last_updated_at: str | None = None
+    api_preview: dict = Field(default_factory=dict)
+    workflow_case: dict | None = None
+    assigned_to: str | None = None
+    last_decision_attempt: dict | None = None
+    last_events: list[dict] = Field(default_factory=list)
+    audit_trail_recent: list[dict] = Field(default_factory=list)
     decision_engine: dict = Field(default_factory=dict)
     decision_support: dict = Field(default_factory=dict)
 
@@ -131,6 +141,11 @@ class OnboardingWorkflowAssignRequest(BaseModel):
 
 
 class OnboardingWorkflowStepCompleteRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=500)
+
+
+class OnboardingWorkflowEscalateRequest(BaseModel):
+    supervisor_admin_id: str | None = None
     note: str | None = Field(default=None, max_length=500)
 
 

@@ -10,6 +10,7 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from models import (
+    AuditLog,
     OnboardingAmlDenylist,
     User,
     UserActivationEvent,
@@ -17,9 +18,12 @@ from models import (
     UserKycDocument,
     UserOnboardingDecisionLog,
     UserOnboardingProfile,
+    UserOnboardingWorkflowCase,
+    UserOnboardingWorkflowStepLog,
     UserRole,
     UserStrategyScope,
 )
+from services.audit_service import create_audit_log
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
 from services.venue_service import ensure_user_venue_assignment
 
@@ -27,6 +31,16 @@ from services.venue_service import ensure_user_venue_assignment
 ALLOWED_KYC_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
 MAX_KYC_DOCUMENTS = 5
 AUTO_APPROVE_THRESHOLD = 35
+
+PRECHECK_REASON_MISSING_FIELD_MAP: dict[str, list[str]] = {
+    "kyc_not_verified": ["kyc_status"],
+    "aml_hit": ["aml_flag"],
+    "risk_score_missing": ["risk_score"],
+    "api_key_invalid": ["api_key_validity"],
+    "balance_missing": ["balance_usd"],
+    "region_blocked": ["country_code"],
+    "capability_missing": ["capability"],
+}
 
 
 def _now() -> datetime:
@@ -131,10 +145,18 @@ def _decision_engine(context: dict) -> dict:
 
     if "aml_hit" in flags:
         return {
-            "recommended_action": "force_manual_review",
+            "recommended_action": "reject",
             "auto_approve": False,
-            "why_approving": "AML/sanction eşleşmesi bulundu; manuel inceleme zorunlu.",
+            "why_approving": "AML/sanction eşleşmesi bulundu; karar reject olmalı.",
             "precheck_blocked": approval_disabled,
+        }
+
+    if approval_disabled:
+        return {
+            "recommended_action": "manual_review",
+            "auto_approve": False,
+            "why_approving": "Pre-check eksikleri nedeniyle otomatik karar kapalı; manuel inceleme zorunlu.",
+            "precheck_blocked": True,
         }
 
     if risk_score < AUTO_APPROVE_THRESHOLD:
@@ -149,7 +171,7 @@ def _decision_engine(context: dict) -> dict:
         }
 
     return {
-        "recommended_action": "force_manual_review",
+        "recommended_action": "manual_review",
         "auto_approve": False,
         "why_approving": (
             f"Risk skoru {risk_score:.2f} >= {AUTO_APPROVE_THRESHOLD}; manuel inceleme gerekli."
@@ -168,6 +190,8 @@ def _decision_support_payload(context: dict) -> dict:
     reason_codes: list[str] = []
     if aml_flag in {"blacklist", "sanction_hit"}:
         reason_codes.append("aml_hit")
+    if risk_score >= AUTO_APPROVE_THRESHOLD:
+        reason_codes.append("manual_review_threshold")
     if risk_score >= 70:
         reason_codes.append("high_risk_score")
     if api_validity != "valid":
@@ -176,19 +200,21 @@ def _decision_support_payload(context: dict) -> dict:
         reason_codes.append("low_balance")
     if not bool(context.get("leverage_permission", False)):
         reason_codes.append("high_leverage_request")
+    if bool(context.get("approval_disabled", False)):
+        reason_codes.append("precheck_blocked")
 
     if "aml_hit" in reason_codes:
         recommended_action = "reject"
         confidence = 0.98
+    elif bool(context.get("approval_disabled", False)):
+        recommended_action = "manual_review"
+        confidence = 0.79
     elif risk_score < AUTO_APPROVE_THRESHOLD and not context.get("approval_disabled", False):
         recommended_action = "approve"
         confidence = 0.82
-    elif risk_score >= 70:
-        recommended_action = "reject"
-        confidence = 0.86
     else:
         recommended_action = "manual_review"
-        confidence = 0.65
+        confidence = 0.74
 
     if risk_score >= 70 or "aml_hit" in reason_codes:
         auto_tag = "high-risk"
@@ -215,7 +241,7 @@ def _append_activation_event(db: Session, *, user_id: str, event_type: str, payl
     db.add(UserActivationEvent(user_id=user_id, event_type=event_type, payload=payload))
 
 
-def run_post_approval_activation(db: Session, *, user: User, actor: User | None) -> dict:
+def run_post_approval_activation(db: Session, *, user: User, actor: User | None, commit: bool = True) -> dict:
     now = _now()
     actor_id = actor.id if actor else None
 
@@ -263,7 +289,8 @@ def run_post_approval_activation(db: Session, *, user: User, actor: User | None)
         event_type="user.activation.started",
         payload={"at": now.isoformat()},
     )
-    db.commit()
+    if commit:
+        db.commit()
     return {"events": 4, "strategy_scope": "core-default"}
 
 
@@ -302,8 +329,15 @@ def build_onboarding_context(db: Session, user_id: str) -> dict:
         precheck_reasons.append("balance_missing")
     if country_code and country_code in _blocked_regions():
         precheck_reasons.append("region_blocked")
+    if not bool(profile.futures_capability) and not bool(profile.spot_capability):
+        precheck_reasons.append("capability_missing")
 
     trading_eligibility = len(precheck_reasons) == 0
+    missing_fields: list[str] = []
+    for reason in precheck_reasons:
+        missing_fields.extend(PRECHECK_REASON_MISSING_FIELD_MAP.get(str(reason), []))
+    missing_fields = sorted({field for field in missing_fields if str(field).strip()})
+
     risk_flags = []
     if aml_flag in {"blacklist", "sanction_hit"}:
         risk_flags.append("aml_hit")
@@ -344,7 +378,122 @@ def build_onboarding_context(db: Session, user_id: str) -> dict:
         "risk_flags": risk_flags,
         "approval_disabled": not trading_eligibility,
         "approval_disable_reasons": precheck_reasons,
+        "missing_data_fields": missing_fields,
+        "profile_last_updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
+        "api_preview": {
+            "status": aggregate_api_validity,
+            "balance_usd": balance_usd,
+            "last_updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
+        },
     }
+
+    workflow_case = (
+        db.query(UserOnboardingWorkflowCase)
+        .filter(UserOnboardingWorkflowCase.user_id == user.id)
+        .first()
+    )
+    context["workflow_case"] = (
+        {
+            "workflow_case_id": workflow_case.id,
+            "workflow_status": workflow_case.workflow_status,
+            "current_step": workflow_case.current_step,
+            "assigned_to": workflow_case.assigned_admin_id,
+            "assigned_admin_id": workflow_case.assigned_admin_id,
+            "priority_score": float(workflow_case.priority_score or 0),
+            "sla_due_at": workflow_case.sla_due_at.isoformat() if workflow_case.sla_due_at else None,
+            "escalated_at": workflow_case.escalated_at.isoformat() if workflow_case.escalated_at else None,
+            "supervisor_queue": bool(workflow_case.supervisor_queue),
+            "escalation_count": int(workflow_case.escalation_count or 0),
+        }
+        if workflow_case
+        else None
+    )
+    context["assigned_to"] = workflow_case.assigned_admin_id if workflow_case else None
+
+    last_decision = (
+        db.query(UserOnboardingDecisionLog)
+        .filter(UserOnboardingDecisionLog.user_id == user.id)
+        .order_by(UserOnboardingDecisionLog.created_at.desc())
+        .first()
+    )
+    context["last_decision_attempt"] = (
+        {
+            "decision": last_decision.decision,
+            "decision_source": last_decision.decision_source,
+            "actor_user_id": last_decision.actor_user_id,
+            "actor_role": last_decision.actor_role,
+            "reason": last_decision.reason,
+            "explanation": last_decision.explanation,
+            "created_at": last_decision.created_at.isoformat() if last_decision.created_at else None,
+        }
+        if last_decision
+        else None
+    )
+
+    step_logs = (
+        db.query(UserOnboardingWorkflowStepLog)
+        .filter(UserOnboardingWorkflowStepLog.user_id == user.id)
+        .order_by(UserOnboardingWorkflowStepLog.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    activation_events = (
+        db.query(UserActivationEvent)
+        .filter(UserActivationEvent.user_id == user.id)
+        .order_by(UserActivationEvent.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    audit_rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.entity_id == user.id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    merged_events: list[dict] = []
+    for row in step_logs:
+        merged_events.append(
+            {
+                "event_type": f"workflow.{row.step_name}.{row.step_status}",
+                "note": row.note,
+                "actor_user_id": row.actor_user_id,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+        )
+    for row in activation_events:
+        merged_events.append(
+            {
+                "event_type": row.event_type,
+                "note": None,
+                "actor_user_id": None,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+        )
+    for row in audit_rows:
+        merged_events.append(
+            {
+                "event_type": f"audit.{row.action}",
+                "note": str((row.details or {}).get("reason") or "")[:200] or None,
+                "actor_user_id": row.actor_user_id,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+        )
+    merged_events = sorted(merged_events, key=lambda item: str(item.get("created_at") or ""), reverse=True)[:5]
+    context["last_events"] = merged_events
+
+    context["audit_trail_recent"] = [
+        {
+            "id": row.id,
+            "action": row.action,
+            "severity": row.severity,
+            "actor_user_id": row.actor_user_id,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in audit_rows
+    ]
+
     context["decision_engine"] = _decision_engine(context)
     context["decision_support"] = _decision_support_payload(context)
     return context
@@ -478,6 +627,7 @@ def append_decision_log(
     reason: str,
     explanation: str,
     context_snapshot: dict,
+    commit: bool = True,
 ) -> UserOnboardingDecisionLog:
     row = UserOnboardingDecisionLog(
         user_id=user_id,
@@ -490,8 +640,11 @@ def append_decision_log(
         context_snapshot=context_snapshot,
     )
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
+    else:
+        db.flush()
     return row
 
 
@@ -518,6 +671,7 @@ def execute_onboarding_decision(
     decision: str,
     reason: str,
     confirm_token: str,
+    explanation: str | None = None,
     decision_source: str = "manual",
 ) -> dict:
     if str(confirm_token or "").strip().upper() != "CONFIRM":
@@ -537,11 +691,23 @@ def execute_onboarding_decision(
     target_decision = "approved" if normalized == "approve" else "rejected"
     _enforce_same_actor_constraint(db, user_id=user.id, actor=actor, target_decision=target_decision)
 
+    explanation_note = str(explanation or reason_note).strip()
+    high_risk_or_aml = float(context.get("risk_score") or 0) >= AUTO_APPROVE_THRESHOLD or str(context.get("aml_flag") or "") in {
+        "blacklist",
+        "sanction_hit",
+    }
+    if high_risk_or_aml and len(explanation_note) < 15:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="risk_explanation_min_15_required")
+
     if normalized == "approve":
         if bool(context.get("approval_disabled")):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"code": "approval_disabled", "reasons": context.get("approval_disable_reasons") or []},
+                detail={
+                    "code": "approval_blocked_missing_data",
+                    "reasons": context.get("approval_disable_reasons") or [],
+                    "missing": context.get("missing_data_fields") or [],
+                },
             )
         user.approval_status = "approved"
         user.is_active = True
@@ -553,11 +719,9 @@ def execute_onboarding_decision(
         user.approved_at = None
         user.disabled_at = _now()
 
-    db.commit()
-    db.refresh(user)
     activation_result = None
     if normalized == "approve":
-        activation_result = run_post_approval_activation(db, user=user, actor=actor)
+        activation_result = run_post_approval_activation(db, user=user, actor=actor, commit=False)
     log = append_decision_log(
         db,
         user_id=user.id,
@@ -565,9 +729,35 @@ def execute_onboarding_decision(
         decision_source=decision_source,
         actor=actor,
         reason=reason_note,
-        explanation=str(engine.get("why_approving") or "manual_decision"),
+        explanation=explanation_note or str(engine.get("why_approving") or "manual_decision"),
         context_snapshot=context,
+        commit=False,
     )
+
+    create_audit_log(
+        db,
+        action="onboarding_decision_committed",
+        entity_type="user",
+        entity_id=user.id,
+        actor_user_id=actor.id,
+        actor_role=actor.role.value,
+        details={
+            "decision": target_decision,
+            "decision_source": decision_source,
+            "decision_log_id": log.id,
+            "missing": context.get("missing_data_fields") or [],
+        },
+        commit=False,
+    )
+
+    try:
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="decision_transaction_failed") from exc
+
+    db.refresh(user)
+    db.refresh(log)
     return {
         "user_id": user.id,
         "approval_status": user.approval_status,
@@ -581,6 +771,15 @@ def execute_onboarding_decision(
 
 def execute_auto_approve_if_eligible(db: Session, *, user_id: str, actor: User, reason: str, confirm_token: str) -> dict:
     context = build_onboarding_context(db, user_id)
+    if bool(context.get("approval_disabled")):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "approval_blocked_missing_data",
+                "reasons": context.get("approval_disable_reasons") or [],
+                "missing": context.get("missing_data_fields") or [],
+            },
+        )
     engine = context.get("decision_engine") or {}
     if str(engine.get("recommended_action")) != "auto_approve":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="manual_review_required")

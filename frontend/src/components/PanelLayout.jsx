@@ -104,6 +104,7 @@ const adminOnlyItems = [
       { to: "/admin/snapshots", label: "Analytics Snapshots", icon: LineChart, testId: "nav-admin-analytics-snapshots-link", superAdminOnly: true },
       { to: "/admin/credential-orchestration", label: "Credential Orchestration", icon: KeyRound, testId: "nav-admin-credential-orchestration-link" },
       { to: "/admin/user-approvals", label: "User Approvals", icon: UserCog, testId: "nav-admin-user-approvals-link" },
+      { to: "/admin/onboarding-observability", label: "Onboarding Observability", icon: LineChart, testId: "nav-admin-onboarding-observability-link" },
       { to: "/admin/pipeline-operations", label: "Pipeline Operations", icon: Activity, testId: "nav-admin-pipeline-operations-link" },
       { to: "/admin/exchanges", label: "Exchange Settings", icon: Globe, testId: "nav-admin-exchange-settings-link" },
       { to: "/admin/mfa-settings", label: "MFA Settings", icon: ShieldAlert, testId: "nav-admin-mfa-settings-link" },

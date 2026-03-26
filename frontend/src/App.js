@@ -7,6 +7,7 @@ import { PanelLayout } from "@/components/PanelLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminLoginPage } from "@/pages/AdminLoginPage";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
+import AdminOnboardingObservabilityPage from "@/pages/AdminOnboardingObservabilityPage";
 import { AdminExchangesPage } from "@/pages/AdminExchangesPage";
 import { AdminFuturesRiskMonitorPage } from "@/pages/AdminFuturesRiskMonitorPage";
 import { AdminFuturesStrategyControlGovernancePage } from "@/pages/AdminFuturesStrategyControlGovernancePage";
@@ -150,6 +151,7 @@ function App() {
             <Route path="users/admins" element={<AdminUsersPage scope="admin" />} />
             <Route path="users/customers" element={<AdminUsersPage scope="user" />} />
             <Route path="user-approvals" element={<AdminUserApprovalsPage />} />
+            <Route path="onboarding-observability" element={<AdminOnboardingObservabilityPage />} />
             <Route path="system-alerts" element={<AdminSystemAlertsPage />} />
             <Route path="strategy/observability" element={<AdminStrategyObservabilityPage />} />
             <Route path="strategy/observability/:strategyId" element={<AdminStrategyObservabilityDetailPage />} />
