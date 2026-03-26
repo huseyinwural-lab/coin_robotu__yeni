@@ -62,6 +62,12 @@ export const AuthProvider = ({ children }) => {
           localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data));
         }
       } catch (error) {
+        const errorCode = String(error?.code || "").toUpperCase();
+        const errorMessage = String(error?.message || "").toLowerCase();
+        const isCanceledRequest = errorCode === "ERR_CANCELED" || errorMessage.includes("canceled");
+        if (isCanceledRequest) {
+          return;
+        }
         clearAuthSession();
         setAuthToken(null);
         if (!cancelled) {
