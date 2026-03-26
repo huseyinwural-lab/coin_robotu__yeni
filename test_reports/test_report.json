@@ -1,50 +1,14 @@
 {
   "status": "completed",
-  "report_type": "final_closure",
-  "timestamp": "2026-03-26T07:08:21.668512+00:00",
+  "timestamp": "2026-03-26T07:41:59.456271+00:00",
+  "test_type": "final_closure_rerun",
   "final_status": "FAIL",
   "results": {
-    "passed": false,
-    "source_folder": "/app/test_reports/final_closure_20260326_064517",
-    "conditions": {
-      "infra_patch_applied": false,
-      "production_url_used": false,
-      "login_10x_200": false,
-      "websocket_stable": false,
-      "smoke_pass": false,
-      "readiness_ready": false,
-      "dry_run_pass": false,
-      "go_live_true": false,
-      "kill_switch_verified": true
-    },
-    "checks": {
-      "login_10x_codes": [
-        404,
-        404,
-        404,
-        404,
-        404,
-        404,
-        404,
-        404,
-        404,
-        404
-      ],
-      "login_10x_all_200": false,
-      "dashboard_status_code": 200,
-      "ws_soak": {
-        "connected": false,
-        "messages": 0,
-        "error": "No module named 'websocket'"
-      },
-      "smoke_exit_code": 1,
-      "smoke_overall_status": "FAIL",
-      "dry_run_status": "FAIL",
-      "readiness_status": "NOT_READY",
-      "go_live": false,
-      "rollback_code": 200,
-      "kill_switch_verify_code": 200,
-      "kill_switch_verify_status": "PASS"
-    }
+    "login_10x_all_200": false,
+    "smoke_overall_status": "PASS",
+    "readiness_status": "READY",
+    "go_live": true,
+    "kill_switch_verify_status": "PASS",
+    "ws_soak_connected": false
   }
 }

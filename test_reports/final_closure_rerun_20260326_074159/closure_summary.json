@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-03-26T07:41:59.456271+00:00",
+  "metrics": {
+    "login_10x_all_200": false,
+    "smoke_overall_status": "PASS",
+    "readiness_status": "READY",
+    "go_live": true,
+    "kill_switch_verify_status": "PASS",
+    "ws_soak_connected": false
+  },
+  "notes": {
+    "production_url_used": true,
+    "production_dns_reachable": false,
+    "reason": "Provided production candidate domain is not resolvable from this runtime (ERR_NAME_NOT_RESOLVED)."
+  },
+  "final_status": "FAIL"
+}

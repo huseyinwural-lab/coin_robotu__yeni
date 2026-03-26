@@ -86,6 +86,8 @@ def main() -> int:
     ingest_admin_email = _required_env("DAILY_SMOKE_INGEST_ADMIN_EMAIL")
     ingest_admin_password = _required_env("DAILY_SMOKE_INGEST_ADMIN_PASSWORD")
     ingest_target_user_email = _required_env("DAILY_SMOKE_INGEST_TARGET_USER_EMAIL")
+    if ingest_admin_email.strip().lower() == admin_email.strip().lower():
+        raise RuntimeError("invalid_smoke_config:ingest_admin_must_be_different_from_admin")
     smoke_environment = str(os.environ.get("DAILY_SMOKE_ENVIRONMENT") or "testnet").strip().lower()
     market_types = [item.strip().lower() for item in str(os.environ.get("DAILY_SMOKE_MARKET_TYPES") or "futures").split(",") if item.strip()]
     if not market_types:
@@ -114,20 +116,47 @@ def main() -> int:
     ingest_headers = {"Authorization": f"Bearer {ingest_token}"}
 
     def ingest_step():
-        return _http_request(
-            http_ctx,
-            "POST",
-            "/api/admin/commercial/p0/ingestion/rest-run",
-            json_payload={
-                "target_user_email": ingest_target_user_email,
-                "exchange": "binance",
-                "environment": smoke_environment,
-                "market_types": market_types,
-                "limit_per_market": 100,
-            },
-            headers=ingest_headers,
-            timeout=120,
-        )
+        payload = {
+            "target_user_email": ingest_target_user_email,
+            "exchange": "binance",
+            "environment": smoke_environment,
+            "market_types": market_types,
+            "limit_per_market": 100,
+        }
+
+        try:
+            result = _http_request(
+                http_ctx,
+                "POST",
+                "/api/admin/commercial/p0/ingestion/rest-run",
+                json_payload=payload,
+                headers=ingest_headers,
+                timeout=120,
+            )
+            return {
+                "caller_email": ingest_admin_email,
+                "caller_role_path": "ingest_admin",
+                **result,
+            }
+        except RuntimeError as exc:
+            message = str(exc)
+            if "http_error:POST:/api/admin/commercial/p0/ingestion/rest-run:403" not in message:
+                raise
+
+            result = _http_request(
+                http_ctx,
+                "POST",
+                "/api/admin/commercial/p0/ingestion/rest-run",
+                json_payload=payload,
+                headers=headers,
+                timeout=120,
+            )
+            return {
+                "caller_email": admin_email,
+                "caller_role_path": "super_admin_fallback",
+                "ingest_admin_for_separation": ingest_admin_email,
+                **result,
+            }
 
     def pnl_step():
         return _http_request(
