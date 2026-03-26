@@ -3552,6 +3552,7 @@ class CommercialExportManifestResponse(BaseModel):
     checksum: str
     status: str
     canonical_column_mapping: dict = Field(default_factory=dict)
+    canonical_mapping_summary: dict = Field(default_factory=dict)
 
 
 class CommercialExportScheduleCreateRequest(BaseModel):

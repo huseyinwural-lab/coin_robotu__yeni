@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 import hashlib
 from io import BytesIO
+import os
 
 from openpyxl import Workbook
 from sqlalchemy.orm import Session
@@ -70,6 +71,22 @@ EXPORT_COLUMN_REGISTRY: dict[tuple[str, str], dict] = {
     ("pnl", "v1"): {"overview": ["realized_gross_usd", "unrealized_gross_usd", "net_total_usd"]},
     ("revenue", "v1"): {"overview": ["component_type", "revenue_usd", "source_amount_usd", "share_rate_avg"]},
     ("user_economics", "v1"): {"overview": ["user_id", "user_email", "ltv_usd", "revenue_contribution_usd"]},
+}
+
+EXPORT_COLUMN_OVERRIDE_ALLOWLIST: dict[tuple[str, str], dict[str, set[str]]] = {
+    ("monthly_pnl", "v1"): {
+        "summary": {"window", "user_count", "total_pnl", "realized_total", "unrealized_total", "last_updated"},
+        "users": {"user_id", "user_email", "total_pnl", "realized_total", "unrealized_total", "trade_count", "win_rate"},
+    },
+    ("pnl", "v1"): {
+        "overview": {"realized_gross_usd", "unrealized_gross_usd", "net_total_usd"},
+    },
+    ("revenue", "v1"): {
+        "overview": {"component_type", "revenue_usd", "source_amount_usd", "share_rate_avg"},
+    },
+    ("user_economics", "v1"): {
+        "overview": {"user_id", "user_email", "ltv_usd", "revenue_contribution_usd"},
+    },
 }
 
 
@@ -1425,11 +1442,52 @@ def _resolve_export_column_mapping(export_type: str, schema_version: str, column
     key = (str(export_type or "").strip().lower(), str(schema_version or "v1").strip().lower())
     registry = EXPORT_COLUMN_REGISTRY.get(key)
     if registry is None:
+        if not any(export_key == key[0] for export_key, _ in EXPORT_COLUMN_REGISTRY.keys()):
+            raise ValueError("unsupported_export_type")
         raise ValueError("unsupported_export_schema_version")
+
     provided = dict(column_mapping or {})
-    if provided and provided != registry:
-        raise ValueError("invalid_column_mapping_registry")
-    return registry
+    if not provided:
+        return {section: list(columns) for section, columns in registry.items()}
+
+    allowlist = EXPORT_COLUMN_OVERRIDE_ALLOWLIST.get(key) or {}
+    if not allowlist:
+        raise ValueError("column_mapping_override_not_allowed")
+
+    unknown_sections = [section for section in provided.keys() if section not in registry]
+    if unknown_sections:
+        raise ValueError("invalid_column_mapping_override")
+
+    resolved_mapping: dict[str, list[str]] = {section: list(columns) for section, columns in registry.items()}
+    for section, override_columns in provided.items():
+        if section not in allowlist:
+            raise ValueError("invalid_column_mapping_override")
+        if not isinstance(override_columns, list) or not override_columns:
+            raise ValueError("invalid_column_mapping_override")
+
+        allowed_columns = allowlist.get(section) or set()
+        canonical_columns = list(registry.get(section) or [])
+        normalized = [str(column).strip() for column in override_columns if str(column).strip()]
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("invalid_column_mapping_override")
+        if any(column not in allowed_columns for column in normalized):
+            raise ValueError("invalid_column_mapping_override")
+        if any(column not in canonical_columns for column in normalized):
+            raise ValueError("invalid_column_mapping_override")
+
+        resolved_mapping[section] = normalized
+
+    return resolved_mapping
+
+
+def _build_canonical_mapping_summary(mapping: dict) -> dict:
+    sections = sorted(list(mapping.keys()))
+    total_columns = sum(len(list(mapping.get(section) or [])) for section in sections)
+    return {
+        "section_count": len(sections),
+        "total_columns": int(total_columns),
+        "sections": sections,
+    }
 
 
 def finalize_export_delivery(
@@ -1480,7 +1538,8 @@ def finalize_export_delivery(
     manifest.artifact_ref = artifact_ref
     manifest.failure_reason = None
     manifest.retention_state = "active"
-    manifest.retention_expires_at = delivered_ts + timedelta(days=7)
+    retention_days = max(1, int(os.getenv("COMMERCIAL_EXPORT_RETENTION_DAYS", "30") or "30"))
+    manifest.retention_expires_at = delivered_ts + timedelta(days=retention_days)
     manifest.downloadable_state = "ready"
     manifest.signed_download_url = signed_download_url
 
@@ -1502,6 +1561,7 @@ def finalize_export_delivery(
         "file_hash": checksum,
         "delivery_status": "success",
         "delivered_at": delivered_ts,
+        "retention_days": retention_days,
     }
 
 
@@ -1528,6 +1588,7 @@ def create_commercial_export_manifest(
     resolved_export_type = str(export_type or "").strip().lower()
     resolved_schema_version = str(schema_version or "v1").strip().lower()
     resolved_mapping = _resolve_export_column_mapping(resolved_export_type, resolved_schema_version, column_mapping)
+    mapping_summary = _build_canonical_mapping_summary(resolved_mapping)
     checksum_base = f"{resolved_export_type}|{resolved_schema_version}|{output_format}|{row_count}|{sorted((filters_snapshot or {}).items())}|{sorted(resolved_mapping.items())}"
     checksum = hashlib.sha256(checksum_base.encode("utf-8")).hexdigest()
     manifest = CommercialExportManifest(
@@ -1586,6 +1647,7 @@ def create_commercial_export_manifest(
         "checksum": str(manifest.checksum),
         "status": str(manifest.status),
         "canonical_column_mapping": resolved_mapping,
+        "canonical_mapping_summary": mapping_summary,
     }
 
 

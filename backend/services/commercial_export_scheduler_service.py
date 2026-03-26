@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+import hashlib
 import uuid
+
+from sqlalchemy import or_, text, update
 
 from db import SessionLocal, redis_client
 from models import CommercialExportManifest, CommercialExportSchedule, User
@@ -57,12 +60,12 @@ def _recover_stale_running_schedules(db, now: datetime, stale_minutes: int = 10)
     )
     for row in rows:
         started_at = getattr(row, "running_started_at", None)
-        if started_at is None:
-            continue
-        if now - started_at >= timedelta(minutes=stale_minutes):
+        claim_expired = bool(getattr(row, "claim_expires_at", None) and now >= row.claim_expires_at)
+        runtime_stale = bool(started_at is not None and now - started_at >= timedelta(minutes=stale_minutes))
+        if runtime_stale or claim_expired:
             row.last_status = "failed"
             row.stale_run_flag = True
-            row.last_failure_reason = "stale_run_recovered"
+            row.last_failure_reason = "stale_run_recovered" if runtime_stale else "stale_claim_recovered"
             row.claim_token = None
             row.claim_expires_at = None
             row.running_started_at = None
@@ -79,6 +82,55 @@ def _build_export_payload(db, export_type: str) -> tuple[bytes, str]:
     content = "generated_at,export_type\n{},{}\n".format(_now().isoformat(), export_code)
     filename = f"commercial_{export_code}_{_now().strftime('%Y%m%d%H%M%S')}.csv"
     return content.encode("utf-8"), filename
+
+
+def _build_schedule_window_lock_key(schedule_id: str, execution_window: str) -> int:
+    key_seed = f"commercial_export_schedule:{schedule_id}:{execution_window}"
+    digest = hashlib.sha256(key_seed.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=False) % (2**63 - 1)
+
+
+def _try_acquire_window_advisory_lock(db, lock_key: int) -> bool:
+    try:
+        acquired = db.execute(text("SELECT pg_try_advisory_lock(:key)"), {"key": int(lock_key)}).scalar()
+        return bool(acquired)
+    except Exception as exc:
+        db.rollback()
+        message = str(exc).lower()
+        if "pg_try_advisory_lock" in message or "no such function" in message or "does not exist" in message:
+            return True
+        return False
+
+
+def _release_window_advisory_lock(db, lock_key: int) -> None:
+    try:
+        db.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": int(lock_key)})
+    except Exception:
+        db.rollback()
+
+
+def _try_claim_schedule(db, *, schedule_id: str, claim_token: str, now: datetime, claim_expires_at: datetime) -> bool:
+    claim_stmt = (
+        update(CommercialExportSchedule)
+        .where(
+            CommercialExportSchedule.id == schedule_id,
+            CommercialExportSchedule.is_active.is_(True),
+            or_(
+                CommercialExportSchedule.claim_token.is_(None),
+                CommercialExportSchedule.claim_expires_at.is_(None),
+                CommercialExportSchedule.claim_expires_at <= now,
+            ),
+        )
+        .values(
+            claim_token=claim_token,
+            claim_expires_at=claim_expires_at,
+            last_status="due",
+            stale_run_flag=False,
+        )
+    )
+    result = db.execute(claim_stmt)
+    db.commit()
+    return int(result.rowcount or 0) == 1
 
 
 def run_commercial_export_scheduler_cycle() -> dict:
@@ -100,36 +152,52 @@ def run_commercial_export_scheduler_cycle() -> dict:
             if not _is_due(schedule, now):
                 continue
 
-            if int(getattr(schedule, "retry_count", 0) or 0) > int(getattr(schedule, "max_retry", 3) or 3):
-                schedule.last_status = "disabled"
-                schedule.is_active = False
-                db.commit()
+            execution_window = _execution_window_key(schedule, now)
+            if (
+                str(getattr(schedule, "last_execution_window", "") or "") == execution_window
+                and str(getattr(schedule, "last_status", "") or "").lower() in {"success", "running", "due"}
+            ):
                 continue
 
-            claim_token = str(uuid.uuid4())
-            schedule.claim_token = claim_token
-            schedule.claim_expires_at = now + timedelta(minutes=2)
-            schedule.last_status = "due"
-            db.commit()
-
-            actor = db.query(User).filter(User.id == schedule.requested_by).first()
-            if actor is None:
-                schedule.last_status = "failed"
-                schedule.filters_snapshot = {
-                    **(schedule.filters_snapshot or {}),
-                    "failure_reason": "scheduler_actor_not_found",
-                }
-                db.commit()
+            window_lock_key = _build_schedule_window_lock_key(str(schedule.id), execution_window)
+            if not _try_acquire_window_advisory_lock(db, window_lock_key):
                 continue
 
-            schedule.last_status = "running"
-            schedule.running_started_at = now
-            schedule.stale_run_flag = False
-            db.commit()
-
-            manifest_id: str | None = None
             try:
-                execution_window = _execution_window_key(schedule, now)
+                if int(getattr(schedule, "retry_count", 0) or 0) > int(getattr(schedule, "max_retry", 3) or 3):
+                    schedule.last_status = "disabled"
+                    schedule.is_active = False
+                    db.commit()
+                    continue
+
+                claim_token = str(uuid.uuid4())
+                claim_ok = _try_claim_schedule(
+                    db,
+                    schedule_id=str(schedule.id),
+                    claim_token=claim_token,
+                    now=now,
+                    claim_expires_at=now + timedelta(minutes=2),
+                )
+                if not claim_ok:
+                    continue
+                db.refresh(schedule)
+
+                actor = db.query(User).filter(User.id == schedule.requested_by).first()
+                if actor is None:
+                    schedule.last_status = "failed"
+                    schedule.filters_snapshot = {
+                        **(schedule.filters_snapshot or {}),
+                        "failure_reason": "scheduler_actor_not_found",
+                    }
+                    db.commit()
+                    continue
+
+                schedule.last_status = "running"
+                schedule.running_started_at = now
+                schedule.stale_run_flag = False
+                db.commit()
+
+                manifest_id: str | None = None
                 idempotency_key = f"{schedule.id}:{execution_window}:{schedule.export_type}"
                 existing = (
                     db.query(CommercialExportManifest)
@@ -149,23 +217,28 @@ def run_commercial_export_scheduler_cycle() -> dict:
                     processed += 1
                     continue
 
-                manifest = create_commercial_export_manifest(
-                    db,
-                    actor_user=actor,
-                    export_type=schedule.export_type,
-                    schema_version="v1",
-                    filters_snapshot=schedule.filters_snapshot or {},
-                    column_mapping={},
-                    output_format=schedule.output_format,
-                    row_count=0,
-                    reason_note="scheduled_export_runner",
-                )
-                manifest_id = str(manifest["export_id"])
-                manifest_row = db.query(CommercialExportManifest).filter(CommercialExportManifest.id == manifest["export_id"]).first()
+                if existing is not None:
+                    manifest_id = str(existing.id)
+                    manifest_row = existing
+                else:
+                    manifest = create_commercial_export_manifest(
+                        db,
+                        actor_user=actor,
+                        export_type=schedule.export_type,
+                        schema_version="v1",
+                        filters_snapshot=schedule.filters_snapshot or {},
+                        column_mapping={},
+                        output_format=schedule.output_format,
+                        row_count=0,
+                        reason_note="scheduled_export_runner",
+                    )
+                    manifest_id = str(manifest["export_id"])
+                    manifest_row = db.query(CommercialExportManifest).filter(CommercialExportManifest.id == manifest["export_id"]).first()
                 if manifest_row is not None:
                     manifest_row.idempotency_key = idempotency_key
                     manifest_row.status = "running"
                     manifest_row.delivery_status = "running"
+                    manifest_row.failure_reason = None
                 db.commit()
 
                 payload_bytes, filename = _build_export_payload(db, schedule.export_type)
@@ -212,7 +285,9 @@ def run_commercial_export_scheduler_cycle() -> dict:
                 schedule.claim_token = None
                 schedule.claim_expires_at = None
                 schedule.running_started_at = None
-            db.commit()
+                db.commit()
+            finally:
+                _release_window_advisory_lock(db, window_lock_key)
         return {"processed": processed}
     finally:
         db.close()
