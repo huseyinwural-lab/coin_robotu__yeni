@@ -170,7 +170,7 @@ def test_reject_reason_mandatory_and_audit_export_immutable_append_only():
         headers=headers,
         json={"decision": "reject", "reason": "bad", "confirm_token": "CONFIRM"},
     )
-    assert reject_without_reason.status_code == 422
+    assert reject_without_reason.status_code == 400
 
     reject_ok = client.post(
         f"/api/admin/onboarding/{user_id}/decision",

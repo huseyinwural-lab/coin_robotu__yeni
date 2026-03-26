@@ -130,26 +130,28 @@ def _decision_engine(context: dict) -> dict:
             "recommended_action": "force_manual_review",
             "auto_approve": False,
             "why_approving": "AML/sanction eşleşmesi bulundu; manuel inceleme zorunlu.",
-        }
-
-    if approval_disabled:
-        return {
-            "recommended_action": "blocked",
-            "auto_approve": False,
-            "why_approving": "KYC/AML/pre-check koşulları sağlanmadı, karar bloklandı.",
+            "precheck_blocked": approval_disabled,
         }
 
     if risk_score < AUTO_APPROVE_THRESHOLD:
         return {
             "recommended_action": "auto_approve",
             "auto_approve": True,
-            "why_approving": f"Risk skoru {risk_score:.2f} < {AUTO_APPROVE_THRESHOLD}; otomatik onay kriteri sağlandı.",
+            "why_approving": (
+                f"Risk skoru {risk_score:.2f} < {AUTO_APPROVE_THRESHOLD}; otomatik onay kriteri sağlandı."
+                + (" Ancak pre-check blokajı mevcut." if approval_disabled else "")
+            ),
+            "precheck_blocked": approval_disabled,
         }
 
     return {
         "recommended_action": "force_manual_review",
         "auto_approve": False,
-        "why_approving": f"Risk skoru {risk_score:.2f} >= {AUTO_APPROVE_THRESHOLD}; manuel inceleme gerekli.",
+        "why_approving": (
+            f"Risk skoru {risk_score:.2f} >= {AUTO_APPROVE_THRESHOLD}; manuel inceleme gerekli."
+            + (" Pre-check blokajı da mevcut." if approval_disabled else "")
+        ),
+        "precheck_blocked": approval_disabled,
     }
 
 
