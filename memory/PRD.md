@@ -1,3 +1,26 @@
+## 2026-03-26 — P0 Preview Startup Timeout Closure ✅
+
+### Sorun
+- Preview ortamında backend startup sonrası `/api/health` ve `/api/auth/login` timeout/502 veriyordu.
+- Event-loop üzerinde çalışan senkron background cycle’lar istekleri blokluyordu.
+
+### Uygulanan düzeltmeler
+- `user_exchange_health_loop.py`: cycle bloğu `asyncio.to_thread` ile worker thread’e taşındı.
+- `services/pipeline/runtime.py`: scanner automation cycle worker thread’e taşındı (`_run_scanner_automation_cycle`).
+- `services/commercial_export_scheduler_service.py`: scheduler cycle thread’e taşındı.
+- `server.py`: canary modda (`CANARY_MODE=true`) pipeline runtime varsayılan olarak skip edilerek startup kilidi kaldırıldı (`PIPELINE_RUNTIME_ENABLED` ile tekrar açılabilir).
+
+### Doğrulama
+- External preview:
+  - `GET /api/health` → **200 PASS**
+  - `POST /api/auth/login` → **200 PASS** (access token dönüyor)
+  - `/admin/commercial-ops` → **200 PASS** (502 yok, route açılıyor)
+- Frontend smoke: route ve login form render **PASS**; UI login redirect davranışı bir otomasyon koşusunda **inconclusive**.
+
+### Sonraki adım (kullanıcı onayı bekliyor)
+- Kullanıcı kararıyla P1’e geçiş durduruldu.
+- Bekleyen P1: scheduler leader-election / DB claim güvenliği.
+
 ## 2026-03-26 — Scheduler/Enforcement/Alert Hardening (P0-P3) ✅
 
 ### P0 — Kritik Sertleştirme
