@@ -3269,6 +3269,15 @@ class AdminCommercialFinancialAccuracyResponse(BaseModel):
     trading_fee_total_usd: float
     funding_total_usd: float
     commission_total_usd: float
+    exchange_trade_count: int = 0
+    internal_trade_count: int = 0
+    missing_trade_count: int = 0
+    duplicate_trade_count: int = 0
+    balance_drift_usd: float = 0
+    position_drift_usd: float = 0
+    pnl_drift_usd: float = 0
+    drift_within_tolerance: bool = True
+    reconciliation_status: str = "unknown"
 
 
 class AdminCommercialRevenueComponentResponse(BaseModel):
@@ -3284,11 +3293,37 @@ class AdminCommercialRevenueSymbolResponse(BaseModel):
     revenue_usd: float
 
 
+class AdminCommercialRevenueByUserResponse(BaseModel):
+    user_id: str
+    user_email: str
+    revenue_usd: float
+
+
+class AdminCommercialRevenueByPlanResponse(BaseModel):
+    tier_code: str
+    subscription_status: str
+    billing_cycle: str
+    revenue_usd: float
+
+
+class AdminCommercialRevenueBySymbolResponse(BaseModel):
+    symbol: str
+    revenue_usd: float
+
+
 class AdminCommercialRevenueModelResponse(BaseModel):
     total_revenue_usd: float
     component_breakdown: list[AdminCommercialRevenueComponentResponse] = Field(default_factory=list)
     top_symbols: list[AdminCommercialRevenueSymbolResponse] = Field(default_factory=list)
     row_count: int
+    subscription_revenue_usd: float = 0
+    platform_fee_revenue_usd: float = 0
+    tier_fee_revenue_usd: float = 0
+    profit_split_revenue_usd: float = 0
+    manual_adjustment_revenue_usd: float = 0
+    revenue_by_user: list[AdminCommercialRevenueByUserResponse] = Field(default_factory=list)
+    revenue_by_plan: list[AdminCommercialRevenueByPlanResponse] = Field(default_factory=list)
+    revenue_by_symbol: list[AdminCommercialRevenueBySymbolResponse] = Field(default_factory=list)
 
 
 class AdminCommercialEconomicsTopUserResponse(BaseModel):
@@ -3310,8 +3345,16 @@ class AdminCommercialUserEconomicsResponse(BaseModel):
     total_realized_pnl_usd: float
     avg_ltv_usd: float
     avg_inactive_days: float
+    arpu_usd: float = 0
+    arppu_usd: float = 0
+    churn_rate_pct: float = 0
+    inactive_user_count: int = 0
+    cohort_summary: list[dict] = Field(default_factory=list)
+    signup_to_retention_summary: list[dict] = Field(default_factory=list)
     segment_distribution: dict[str, int] = Field(default_factory=dict)
     top_users: list[AdminCommercialEconomicsTopUserResponse] = Field(default_factory=list)
+    top_profitability_users: list[AdminCommercialEconomicsTopUserResponse] = Field(default_factory=list)
+    high_churn_risk_users: list[AdminCommercialEconomicsTopUserResponse] = Field(default_factory=list)
 
 
 class AdminCommercialRiskSymbolExposureResponse(BaseModel):
@@ -3327,6 +3370,16 @@ class AdminCommercialRiskSummaryResponse(BaseModel):
     trading_enabled: bool
     kill_switch_enabled: bool
     top_exposure_symbols: list[AdminCommercialRiskSymbolExposureResponse] = Field(default_factory=list)
+    user_exposure_breakdown: list[dict] = Field(default_factory=list)
+    strategy_exposure_breakdown: list[dict] = Field(default_factory=list)
+    symbol_exposure_breakdown: list[AdminCommercialRiskSymbolExposureResponse] = Field(default_factory=list)
+    open_positions: list[dict] = Field(default_factory=list)
+    risk_limit_breach_count: int = 0
+    breached_users: list[dict] = Field(default_factory=list)
+    liquidation_risk_score: float = 0
+    forced_liquidation_risk: str = "low"
+    margin_risk_score: float = 0
+    margin_risk_state: str = "stable"
 
 
 class AdminCommercialUsageSymbolResponse(BaseModel):
@@ -3345,6 +3398,15 @@ class AdminCommercialUsageAnalyticsResponse(BaseModel):
     by_market_type: dict[str, int] = Field(default_factory=dict)
     by_exchange: dict[str, int] = Field(default_factory=dict)
     top_symbols: list[AdminCommercialUsageSymbolResponse] = Field(default_factory=list)
+    request_count: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    error_rate_pct: float = 0
+    avg_latency_ms: float = 0
+    p95_latency_ms: float = 0
+    rate_per_minute: float = 0
+    api_usage_by_endpoint: list[dict] = Field(default_factory=list)
+    event_type_distribution: list[dict] = Field(default_factory=list)
 
 
 class AdminCommercialDataQualityResponse(BaseModel):
@@ -3359,6 +3421,79 @@ class AdminCommercialDataQualityResponse(BaseModel):
     missing_data_alert: bool
     trade_count: int
     pnl_record_count: int
+    duplicate_trade_count: int = 0
+    duplicate_trade_status: str = "unknown"
+    cross_source_validation_state: str = "unknown"
+    missing_symbols: list[str] = Field(default_factory=list)
+    missing_data_sources: list[str] = Field(default_factory=list)
+    reconciliation_coverage_pct: float = 0
+    last_successful_reconciliation_at: datetime | None = None
+    freshness_by_source: dict[str, int | None] = Field(default_factory=dict)
+    stale_source_count: int = 0
+
+
+class AdminCommercialPnlBreakdownResponse(BaseModel):
+    key: str
+    realized_pnl_usd: float
+    unrealized_pnl_usd: float
+    total_pnl_usd: float
+    trade_count: int
+
+
+class AdminCommercialTrendPointResponse(BaseModel):
+    bucket: str
+    realized_pnl_usd: float
+    unrealized_pnl_usd: float
+    total_pnl_usd: float
+
+
+class AdminCommercialPnlAnalyticsResponse(BaseModel):
+    strategy_pnl_breakdown: list[AdminCommercialPnlBreakdownResponse] = Field(default_factory=list)
+    symbol_pnl_breakdown: list[AdminCommercialPnlBreakdownResponse] = Field(default_factory=list)
+    daily_pnl_trend: list[AdminCommercialTrendPointResponse] = Field(default_factory=list)
+    weekly_pnl_trend: list[AdminCommercialTrendPointResponse] = Field(default_factory=list)
+    realized_vs_unrealized_trend: list[AdminCommercialTrendPointResponse] = Field(default_factory=list)
+    max_drawdown_usd: float = 0
+    max_drawdown_pct: float = 0
+    drawdown_series: list[dict] = Field(default_factory=list)
+
+
+class AdminCommercialExportJobResponse(BaseModel):
+    schedule_id: str
+    export_type: str
+    schedule_period: str
+    is_active: bool
+    output_format: str
+    last_status: str
+    last_run_at: datetime | None = None
+
+
+class AdminCommercialExportOpsResponse(BaseModel):
+    scheduler_health: str = "unknown"
+    pending_exports: int = 0
+    delivered_exports: int = 0
+    recent_export_jobs: list[AdminCommercialExportJobResponse] = Field(default_factory=list)
+
+
+class AdminCommercialAlertItemResponse(BaseModel):
+    id: str
+    alert_type: str
+    severity: str
+    source: str
+    entity_type: str
+    entity_id: str
+    title: str
+    message: str
+    suggested_action: str
+    created_at: datetime
+
+
+class AdminCommercialOperationalControlSummaryResponse(BaseModel):
+    trading_enabled_count: int = 0
+    emergency_stop_count: int = 0
+    capital_frozen_count: int = 0
+    withdraw_locked_count: int = 0
+    recent_actions: list[dict] = Field(default_factory=list)
 
 
 class AdminCommercialOverviewResponse(BaseModel):
@@ -3368,9 +3503,69 @@ class AdminCommercialOverviewResponse(BaseModel):
     financial_accuracy: AdminCommercialFinancialAccuracyResponse
     revenue_model: AdminCommercialRevenueModelResponse
     user_economics: AdminCommercialUserEconomicsResponse
+    pnl_analytics: AdminCommercialPnlAnalyticsResponse
     risk_summary: AdminCommercialRiskSummaryResponse
     usage_analytics: AdminCommercialUsageAnalyticsResponse
     data_quality: AdminCommercialDataQualityResponse
+    export_ops: AdminCommercialExportOpsResponse
+    alert_rail: list[AdminCommercialAlertItemResponse] = Field(default_factory=list)
+    operational_controls: AdminCommercialOperationalControlSummaryResponse
+
+
+class CommercialExportManifestCreateRequest(BaseModel):
+    export_type: str
+    schema_version: str = "v1"
+    filters_snapshot: dict = Field(default_factory=dict)
+    column_mapping: dict = Field(default_factory=dict)
+    output_format: str = "csv"
+    row_count: int = Field(default=0, ge=0)
+    reason_note: str = Field(min_length=5, max_length=255)
+
+
+class CommercialExportManifestResponse(BaseModel):
+    export_id: str
+    export_type: str
+    schema_version: str
+    requested_by: str
+    requested_at: datetime
+    output_format: str
+    checksum: str
+    status: str
+
+
+class CommercialExportScheduleCreateRequest(BaseModel):
+    export_type: str
+    schedule_period: str = Field(pattern="^(daily|weekly|monthly)$")
+    output_format: str = "csv"
+    filters_snapshot: dict = Field(default_factory=dict)
+
+
+class CommercialExportScheduleResponse(BaseModel):
+    schedule_id: str
+    export_type: str
+    schedule_period: str
+    output_format: str
+    is_active: bool
+    last_status: str
+    last_run_at: datetime | None = None
+
+
+class CommercialOperationalControlUpdateRequest(BaseModel):
+    trading_enabled: bool
+    capital_frozen: bool
+    withdraw_locked: bool
+    emergency_stop: bool
+    reason_note: str = Field(min_length=5, max_length=255)
+
+
+class CommercialOperationalControlResponse(BaseModel):
+    user_id: str
+    trading_enabled: bool
+    capital_frozen: bool
+    withdraw_locked: bool
+    emergency_stop: bool
+    reason_note: str
+    updated_at: datetime
 
 
 class CommercialP0IngestionRequest(BaseModel):

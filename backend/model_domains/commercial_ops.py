@@ -223,3 +223,136 @@ class AnalyticsSnapshot(Base):
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class CommercialSubscriptionProfile(Base):
+    __tablename__ = "commercial_subscription_profiles"
+    __table_args__ = (UniqueConstraint("user_id", "environment", name="uq_commercial_sub_profile_user_env"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
+
+    subscription_status: Mapped[str] = mapped_column(String(30), default="inactive", index=True)
+    tier_code: Mapped[str] = mapped_column(String(40), default="free", index=True)
+    billing_cycle: Mapped[str] = mapped_column(String(20), default="monthly")
+    subscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    renewal_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    subscription_fee_usd: Mapped[float] = mapped_column(Float, default=0)
+    profit_share_rate: Mapped[float] = mapped_column(Float, default=0)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class CommercialUsageEvent(Base):
+    __tablename__ = "commercial_usage_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
+    event_type: Mapped[str] = mapped_column(String(30), default="api_call", index=True)
+    endpoint: Mapped[str] = mapped_column(String(160), default="/api/admin/commercial/overview", index=True)
+    success: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class CommercialExportManifest(Base):
+    __tablename__ = "commercial_export_manifests"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    export_type: Mapped[str] = mapped_column(String(40), index=True)
+    schema_version: Mapped[str] = mapped_column(String(20), default="v1")
+    requested_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    filters_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    column_mapping: Mapped[dict] = mapped_column(JSON, default=dict)
+    row_count: Mapped[int] = mapped_column(Integer, default=0)
+    output_format: Mapped[str] = mapped_column(String(20), default="csv")
+    checksum: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    file_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class CommercialExportSchedule(Base):
+    __tablename__ = "commercial_export_schedules"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    export_type: Mapped[str] = mapped_column(String(40), index=True)
+    schedule_period: Mapped[str] = mapped_column(String(20), default="daily", index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    output_format: Mapped[str] = mapped_column(String(20), default="csv")
+    requested_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    filters_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_status: Mapped[str] = mapped_column(String(20), default="never")
+    last_output_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class CommercialExportAudit(Base):
+    __tablename__ = "commercial_export_audits"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    export_id: Mapped[str] = mapped_column(String, index=True)
+    actor_user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    actor_email: Mapped[str] = mapped_column(String(255), default="")
+    export_type: Mapped[str] = mapped_column(String(40), index=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    filters_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    file_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    reason_note: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CommercialOperationalControlState(Base):
+    __tablename__ = "commercial_operational_control_states"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), unique=True, index=True)
+    trading_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    capital_frozen: Mapped[bool] = mapped_column(Boolean, default=False)
+    withdraw_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    emergency_stop: Mapped[bool] = mapped_column(Boolean, default=False)
+    reason_note: Mapped[str] = mapped_column(String(255), default="")
+    updated_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class CommercialOperationalControlTransition(Base):
+    __tablename__ = "commercial_operational_control_transitions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    actor_user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    actor_email: Mapped[str] = mapped_column(String(255), default="")
+    previous_state: Mapped[dict] = mapped_column(JSON, default=dict)
+    next_state: Mapped[dict] = mapped_column(JSON, default=dict)
+    reason_note: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CommercialAlertEvent(Base):
+    __tablename__ = "commercial_alert_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    alert_type: Mapped[str] = mapped_column(String(80), index=True)
+    severity: Mapped[str] = mapped_column(String(20), default="warning", index=True)
+    source: Mapped[str] = mapped_column(String(60), default="commercial_overview")
+    entity_type: Mapped[str] = mapped_column(String(40), default="system")
+    entity_id: Mapped[str] = mapped_column(String(120), default="global", index=True)
+    title: Mapped[str] = mapped_column(String(160), default="")
+    message: Mapped[str] = mapped_column(String(500), default="")
+    suggested_action: Mapped[str] = mapped_column(String(255), default="")
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

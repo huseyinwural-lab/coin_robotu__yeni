@@ -87,7 +87,7 @@ def test_risk_summary_empty_data_scenario_returns_safe_defaults():
     payload = _build_risk_summary_block(
         [],
         [],
-        open_position_count=0,
+        open_positions=[],
         risk_policy=None,
         live_config=None,
     )
@@ -268,9 +268,9 @@ def test_risk_summary_reconciliation_drift_scenario_counted():
     payload = _build_risk_summary_block(
         trades,
         logs,
-        open_position_count=3,
+        open_positions=[_ns(id="p1"), _ns(id="p2"), _ns(id="p3")],
         risk_policy=_ns(daily_loss_limit_pct=4.2),
-        live_config=_ns(trading_enabled=True, kill_switch_enabled=False),
+        live_config=_ns(trading_enabled=True, kill_switch_enabled=False, max_total_exposure=1000),
     )
 
     assert payload["open_position_count"] == 3
@@ -290,9 +290,9 @@ def test_risk_summary_full_scenario_with_top_exposure_symbols():
     payload = _build_risk_summary_block(
         trades,
         [],
-        open_position_count=2,
+        open_positions=[_ns(id="p1"), _ns(id="p2")],
         risk_policy=_ns(daily_loss_limit_pct=5.0),
-        live_config=_ns(trading_enabled=True, kill_switch_enabled=True),
+        live_config=_ns(trading_enabled=True, kill_switch_enabled=True, max_total_exposure=1200),
     )
 
     assert payload["top_exposure_symbols"][0]["symbol"] == "BTCUSDT"
