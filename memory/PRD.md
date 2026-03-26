@@ -1,3 +1,62 @@
+## 2026-03-26 — P1 System Intelligence (7,8,9) ✅
+
+### 7) Workflow Engine (ops -> risk -> final)
+- Yeni workflow tabloları:
+  - `user_onboarding_workflow_cases`
+  - `user_onboarding_workflow_step_logs`
+- Sıralı zorunlu akış enforce edildi:
+  - `ops` tamamlanmadan `risk` açılamaz
+  - `risk` tamamlanmadan `final` açılamaz
+- Assignment + queue:
+  - her case `assigned_admin_id`
+  - priority queue risk_score/AML/precheck etkili skorla sıralanır
+- SLA & escalation:
+  - varsayılan SLA: 30 dk
+  - timeout sonrası escalation endpoint’i case’i supervisor_queue’ya taşır
+
+### 8) User Lifecycle Automation (Approval => Activation)
+- Approve sonrası otomatik activation zinciri eklendi:
+  - `user.approval.completed`
+  - `user.risk.defaults_assigned`
+  - `user.strategy.default_bound`
+  - `user.activation.started`
+- Yeni event tablosu:
+  - `user_activation_events`
+- Varsayılanlar:
+  - default risk policy assignment
+  - default strategy scope binding (`core-default`)
+  - default venue assignment/config init zinciri
+
+### 9) Decision Support (Heuristic-only)
+- Context’e heuristic decision support eklendi:
+  - `recommended_action`
+  - `confidence`
+  - `reason_codes`
+  - `human_readable_summary`
+  - `auto_tag` (high-risk / normal / vip)
+- Endpoint:
+  - `GET /api/admin/onboarding/{user_id}/decision-support`
+
+### Yeni Endpoint Seti
+- `POST /api/admin/onboarding/{user_id}/workflow/start`
+- `GET /api/admin/onboarding/{user_id}/workflow`
+- `POST /api/admin/onboarding/{user_id}/workflow/assign`
+- `POST /api/admin/onboarding/{user_id}/workflow/steps/{step_name}/complete`
+- `GET /api/admin/onboarding/workflow/queue`
+- `POST /api/admin/onboarding/workflow/escalate-timeouts`
+- `GET /api/admin/onboarding/{user_id}/decision-support`
+
+### Migration
+- `20260326_0089_onboarding_workflow_engine_activation_events.py`
+
+### Test/Smoke Sonuçları
+- `test_onboarding_workflow_engine_p1.py` -> **3 PASS**
+- `test_onboarding_approval_foundation_p0.py` (regression subset) -> **4 PASS**
+- Backend final smoke agent -> **6/6 PASS** (workflow/queue/escalation/decision support/activation/readiness)
+
+### Not
+- Frontend otomasyon aracında login tarafında aralıklı `ERR_ABORTED` gözlemi raporlandı; backend API smoke ve P1 backend akışları PASS.
+
 ## 2026-03-26 — P0 CRITICAL Onboarding + Approval Foundation ✅
 
 ### Kapsam (1→6 birlikte tamamlandı)
