@@ -109,7 +109,10 @@ from services.user_exchange_health_loop import run_exchange_connection_health_lo
 from services.weekly_report_service import run_weekly_report_loop
 from services.db_backup_scheduler_service import run_backup_scheduler_loop
 from services.commercial_export_scheduler_service import run_commercial_export_scheduler_loop
-from services.commercial_preview_smoke_service import run_commercial_preview_smoke_gate
+from services.commercial_preview_smoke_service import (
+    run_commercial_preview_http_gate_once,
+    run_commercial_preview_smoke_gate,
+)
 from db import (
     engine,
     get_database_runtime_state,
@@ -135,6 +138,7 @@ weekly_report_task: asyncio.Task | None = None
 exchange_health_task: asyncio.Task | None = None
 backup_scheduler_task: asyncio.Task | None = None
 commercial_export_scheduler_task: asyncio.Task | None = None
+preview_smoke_gate_task: asyncio.Task | None = None
 PROCESS_STARTED_AT = datetime.now(timezone.utc)
 STARTUP_RUNTIME_STATE = {
     "database_url_valid": False,
@@ -210,6 +214,26 @@ def _ready_dependency_checks() -> tuple[bool, dict[str, dict]]:
         ready = False
         checks["redis"] = {"status": "not_ready", "reason": str(exc)[:200]}
 
+    preview_gate_required = str(os.getenv("PREVIEW_SMOKE_GATE_REQUIRED", "true") or "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if preview_gate_required:
+        preview_state = STARTUP_RUNTIME_STATE.get("preview_smoke_gate") or {}
+        preview_status = str(preview_state.get("status") or "pending").strip().lower()
+        preview_ready = preview_status == "pass"
+        checks["preview_smoke_gate"] = {
+            "status": "ready" if preview_ready else "not_ready",
+            "gate_status": preview_status,
+            "checked_at": preview_state.get("checked_at"),
+            "reason": preview_state.get("reason") or preview_state.get("last_error"),
+        }
+        if not preview_ready:
+            ready = False
+    else:
+        checks["preview_smoke_gate"] = {"status": "skipped", "reason": "disabled_by_flag"}
+
     return ready, checks
 
 
@@ -229,22 +253,7 @@ def simple_readiness_check():
 
 @api_router.get("/ready")
 def readiness_check():
-    checks: dict[str, dict] = {}
-    ready = True
-
-    try:
-        verify_database_connection()
-        checks["database"] = {"status": "ready"}
-    except Exception as exc:  # pragma: no cover - runtime dependency failure branch
-        ready = False
-        checks["database"] = {"status": "not_ready", "reason": str(exc)[:200]}
-
-    try:
-        redis_client.ping()
-        checks["redis"] = {"status": "ready"}
-    except Exception as exc:  # pragma: no cover - runtime dependency failure branch
-        ready = False
-        checks["redis"] = {"status": "not_ready", "reason": str(exc)[:200]}
+    ready, checks = _ready_dependency_checks()
 
     if is_database_ready():
         try:
@@ -447,6 +456,69 @@ async def startup_event():
         logger.error("STARTUP_TASK_FAILED", extra={"task": task_name, "error": last_error})
         return False
 
+    async def _run_preview_smoke_gate_job() -> None:
+        max_attempts = max(1, int(os.getenv("PREVIEW_SMOKE_GATE_ATTEMPTS", "12") or "12"))
+        interval_seconds = max(2.0, float(os.getenv("PREVIEW_SMOKE_GATE_INTERVAL_SECONDS", "5") or "5"))
+        timeout_seconds = max(15.0, float(os.getenv("PREVIEW_SMOKE_GATE_TIMEOUT_SECONDS", "75") or "75"))
+        base_url = str(os.getenv("PREVIEW_SMOKE_BASE_URL") or "").strip()
+        admin_email = str(os.getenv("PREVIEW_SMOKE_ADMIN_EMAIL") or os.getenv("ADMIN_BOOTSTRAP_EMAIL") or "").strip()
+        admin_password = str(os.getenv("PREVIEW_SMOKE_ADMIN_PASSWORD") or os.getenv("ADMIN_BOOTSTRAP_PASSWORD") or "").strip()
+
+        if not base_url:
+            STARTUP_RUNTIME_STATE["preview_smoke_gate"] = {
+                "status": "failed",
+                "reason": "preview_smoke_base_url_missing",
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+            }
+            return
+
+        if not admin_email or not admin_password:
+            STARTUP_RUNTIME_STATE["preview_smoke_gate"] = {
+                "status": "failed",
+                "reason": "preview_smoke_admin_credentials_missing",
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+            }
+            return
+
+        for attempt in range(1, max_attempts + 1):
+            STARTUP_RUNTIME_STATE["preview_smoke_gate"] = {
+                "status": "pending",
+                "attempt": attempt,
+                "max_attempts": max_attempts,
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+            }
+            try:
+                result = await run_commercial_preview_http_gate_once(
+                    base_url=base_url,
+                    admin_email=admin_email,
+                    admin_password=admin_password,
+                    timeout_seconds=timeout_seconds,
+                )
+                result["attempt"] = attempt
+                result["max_attempts"] = max_attempts
+                STARTUP_RUNTIME_STATE["preview_smoke_gate"] = result
+                logger.info("PREVIEW_SMOKE_GATE_PASSED", extra={"attempt": attempt})
+                return
+            except Exception as exc:  # noqa: BLE001
+                last_error = str(exc)[:300]
+                logger.warning(
+                    "PREVIEW_SMOKE_GATE_RETRY",
+                    extra={
+                        "attempt": attempt,
+                        "max_attempts": max_attempts,
+                        "error": last_error,
+                    },
+                )
+                STARTUP_RUNTIME_STATE["preview_smoke_gate"] = {
+                    "status": "failed",
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "last_error": last_error,
+                    "checked_at": datetime.now(timezone.utc).isoformat(),
+                }
+                if attempt < max_attempts:
+                    await asyncio.sleep(interval_seconds)
+
     db_url = os.getenv("DATABASE_URL")
     try:
         enforce_postgresql_only(db_url, "startup")
@@ -506,14 +578,9 @@ async def startup_event():
             retries=2,
             timeout_seconds=12,
         )
-        preview_smoke_ok = await _run_with_retry(
-            "preview_smoke_gate",
-            run_commercial_preview_smoke_gate,
-            retries=1,
-            timeout_seconds=12,
-        )
         STARTUP_RUNTIME_STATE["preview_smoke_gate"] = {
-            "status": "pass" if preview_smoke_ok else "failed",
+            "status": "pending",
+            "mode": "deploy_http_gate",
             "checked_at": datetime.now(timezone.utc).isoformat(),
         }
     else:
@@ -545,7 +612,7 @@ async def startup_event():
         STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
         logger.warning("PIPELINE_RUNTIME_SKIPPED_DATABASE_NOT_READY")
 
-    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task
+    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task
     if STARTUP_RUNTIME_STATE["database_ready"]:
         from db import SessionLocal
 
@@ -553,6 +620,7 @@ async def startup_event():
         exchange_health_task = asyncio.create_task(run_exchange_connection_health_loop(SessionLocal))
         backup_scheduler_task = asyncio.create_task(run_backup_scheduler_loop())
         commercial_export_scheduler_task = asyncio.create_task(run_commercial_export_scheduler_loop())
+        preview_smoke_gate_task = asyncio.create_task(_run_preview_smoke_gate_job())
         STARTUP_RUNTIME_STATE["background_loops_started"] = True
     else:
         STARTUP_RUNTIME_STATE["background_loops_started"] = False
@@ -572,7 +640,7 @@ async def startup_event():
 async def shutdown_event():
     if STARTUP_RUNTIME_STATE.get("pipeline_runtime_ok"):
         await pipeline_runtime.stop()
-    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task
+    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task
     if weekly_report_task:
         weekly_report_task.cancel()
     if exchange_health_task:
@@ -581,6 +649,8 @@ async def shutdown_event():
         backup_scheduler_task.cancel()
     if commercial_export_scheduler_task:
         commercial_export_scheduler_task.cancel()
+    if preview_smoke_gate_task:
+        preview_smoke_gate_task.cancel()
 
 
 app = create_socket_app(fastapi_app)

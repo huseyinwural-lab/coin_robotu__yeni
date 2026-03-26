@@ -5,12 +5,20 @@ import { useAuth } from "@/context/AuthContext";
 const adminRoles = new Set(["super_admin", "admin", "ops"]);
 
 export const ProtectedRoute = ({ children, role = null }) => {
-  const { user, loading } = useAuth();
+  const { user, token, loading } = useAuth();
 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100" data-testid="auth-loading-state">
         Yükleniyor...
+      </div>
+    );
+  }
+
+  if (!user && token) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100" data-testid="auth-session-restore-state">
+        Oturum doğrulanıyor...
       </div>
     );
   }

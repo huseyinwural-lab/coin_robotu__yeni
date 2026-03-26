@@ -3,32 +3,83 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { apiClient, setAuthToken } from "@/lib/api";
 
 const AuthContext = createContext(null);
+const AUTH_TOKEN_KEY = "token";
+const AUTH_USER_KEY = "auth_user";
+
+const readStoredUser = () => {
+  try {
+    const raw = localStorage.getItem(AUTH_USER_KEY);
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const persistAuthSession = ({ token, user }) => {
+  if (token) {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+  }
+  if (user) {
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  }
+};
+
+const clearAuthSession = () => {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_USER_KEY);
+};
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem("token"));
+  const [user, setUser] = useState(readStoredUser);
+  const [token, setToken] = useState(localStorage.getItem(AUTH_TOKEN_KEY));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const hydrate = async () => {
       if (!token) {
-        setLoading(false);
+        setAuthToken(null);
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
         return;
       }
+
+      if (!cancelled) {
+        setLoading(true);
+      }
+
       try {
         setAuthToken(token);
         const { data } = await apiClient.get("/auth/me");
-        setUser(data);
+        if (!cancelled) {
+          setUser(data);
+          localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data));
+        }
       } catch (error) {
-        localStorage.removeItem("token");
+        clearAuthSession();
         setAuthToken(null);
-        setToken(null);
-        setUser(null);
+        if (!cancelled) {
+          setToken(null);
+          setUser(null);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
+
     hydrate();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const login = async ({ email, password, panel = "user" }) => {
@@ -45,7 +96,7 @@ export const AuthProvider = ({ children }) => {
       };
     }
 
-    localStorage.setItem("token", data.access_token);
+    persistAuthSession({ token: data.access_token, user: data.user || null });
     setAuthToken(data.access_token);
     setToken(data.access_token);
     setUser(data.user);
@@ -58,7 +109,7 @@ export const AuthProvider = ({ children }) => {
       method,
       code,
     });
-    localStorage.setItem("token", data.access_token);
+    persistAuthSession({ token: data.access_token, user: data.user || null });
     setAuthToken(data.access_token);
     setToken(data.access_token);
     setUser(data.user);
@@ -78,7 +129,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
+    clearAuthSession();
     setAuthToken(null);
     setToken(null);
     setUser(null);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 
 export const AdminLoginPage = () => {
   const navigate = useNavigate();
-  const { login, verifyMfaChallenge } = useAuth();
+  const { login, verifyMfaChallenge, user, loading } = useAuth();
   const [form, setForm] = useState({ email: "", password: "" });
   const [submitting, setSubmitting] = useState(false);
   const [mfaState, setMfaState] = useState(null);
@@ -19,6 +19,16 @@ export const AdminLoginPage = () => {
     const backupLike = normalized.includes("-") || /[A-Za-z]/.test(normalized);
     return backupLike ? "backup_code" : "totp";
   };
+
+  useEffect(() => {
+    if (loading || !user) {
+      return;
+    }
+    const adminRoles = new Set(["super_admin", "admin", "ops"]);
+    if (adminRoles.has(user.role)) {
+      navigate("/admin/dashboard", { replace: true });
+    }
+  }, [loading, navigate, user]);
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -32,7 +42,7 @@ export const AdminLoginPage = () => {
         return;
       }
       toast.success("Admin girişi başarılı");
-      navigate("/admin/dashboard");
+      navigate("/admin/dashboard", { replace: true });
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Admin girişi başarısız");
     } finally {
@@ -52,7 +62,7 @@ export const AdminLoginPage = () => {
         code: mfaCode,
       });
       toast.success("MFA doğrulandı");
-      navigate("/admin/dashboard");
+      navigate("/admin/dashboard", { replace: true });
     } catch (error) {
       toast.error(error?.response?.data?.detail || "MFA doğrulaması başarısız");
     } finally {
