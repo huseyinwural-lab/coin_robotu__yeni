@@ -3247,6 +3247,132 @@ class AdminCommercialTotalPnlResponse(BaseModel):
     calendar_month: CommercialCalendarMonthPnlResponse
 
 
+class AdminCommercialOverviewAppliedFiltersResponse(BaseModel):
+    environment: str
+    time_window: str
+    from_ts: str | None = None
+    to_ts: str | None = None
+    range_start: datetime | None = None
+    range_end: datetime | None = None
+
+
+class AdminCommercialFinancialAccuracyResponse(BaseModel):
+    record_count: int
+    trade_count: int
+    realized_gross_usd: float
+    unrealized_gross_usd: float
+    gross_total_usd: float
+    realized_net_usd: float
+    unrealized_net_usd: float
+    net_total_usd: float
+    net_vs_gross_delta_usd: float
+    trading_fee_total_usd: float
+    funding_total_usd: float
+    commission_total_usd: float
+
+
+class AdminCommercialRevenueComponentResponse(BaseModel):
+    component_type: str
+    revenue_usd: float
+    source_amount_usd: float
+    share_rate_avg: float
+    row_count: int
+
+
+class AdminCommercialRevenueSymbolResponse(BaseModel):
+    symbol: str
+    revenue_usd: float
+
+
+class AdminCommercialRevenueModelResponse(BaseModel):
+    total_revenue_usd: float
+    component_breakdown: list[AdminCommercialRevenueComponentResponse] = Field(default_factory=list)
+    top_symbols: list[AdminCommercialRevenueSymbolResponse] = Field(default_factory=list)
+    row_count: int
+
+
+class AdminCommercialEconomicsTopUserResponse(BaseModel):
+    user_id: str
+    user_email: str
+    ltv_usd: float
+    revenue_contribution_usd: float
+    realized_pnl_usd: float
+    inactive_days: int
+    churned: bool
+
+
+class AdminCommercialUserEconomicsResponse(BaseModel):
+    total_users: int
+    paying_users: int
+    churned_users: int
+    total_ltv_usd: float
+    total_revenue_contribution_usd: float
+    total_realized_pnl_usd: float
+    avg_ltv_usd: float
+    avg_inactive_days: float
+    segment_distribution: dict[str, int] = Field(default_factory=dict)
+    top_users: list[AdminCommercialEconomicsTopUserResponse] = Field(default_factory=list)
+
+
+class AdminCommercialRiskSymbolExposureResponse(BaseModel):
+    symbol: str
+    exposure_usd: float
+
+
+class AdminCommercialRiskSummaryResponse(BaseModel):
+    open_position_count: int
+    risk_exposure_usd: float
+    high_drift_reconciliation_count: int
+    latest_daily_loss_limit_pct: float | None = None
+    trading_enabled: bool
+    kill_switch_enabled: bool
+    top_exposure_symbols: list[AdminCommercialRiskSymbolExposureResponse] = Field(default_factory=list)
+
+
+class AdminCommercialUsageSymbolResponse(BaseModel):
+    symbol: str
+    trade_count: int
+    notional_usd: float
+
+
+class AdminCommercialUsageAnalyticsResponse(BaseModel):
+    total_trades: int
+    unique_users: int
+    unique_symbols: int
+    total_notional_usd: float
+    avg_trade_notional_usd: float
+    activity_days: int
+    by_market_type: dict[str, int] = Field(default_factory=dict)
+    by_exchange: dict[str, int] = Field(default_factory=dict)
+    top_symbols: list[AdminCommercialUsageSymbolResponse] = Field(default_factory=list)
+
+
+class AdminCommercialDataQualityResponse(BaseModel):
+    status: str
+    empty_data: bool
+    stale_sources: list[str] = Field(default_factory=list)
+    freshness_seconds: int | None = None
+    stale_threshold_seconds: int
+    latest_trade_at: datetime | None = None
+    latest_pnl_at: datetime | None = None
+    latest_reconciliation_at: datetime | None = None
+    missing_data_alert: bool
+    trade_count: int
+    pnl_record_count: int
+
+
+class AdminCommercialOverviewResponse(BaseModel):
+    generated_at: datetime
+    contract_version: str
+    applied_filters: AdminCommercialOverviewAppliedFiltersResponse
+    financial_accuracy: AdminCommercialFinancialAccuracyResponse
+    revenue_model: AdminCommercialRevenueModelResponse
+    user_economics: AdminCommercialUserEconomicsResponse
+    risk_summary: AdminCommercialRiskSummaryResponse
+    usage_analytics: AdminCommercialUsageAnalyticsResponse
+    data_quality: AdminCommercialDataQualityResponse
+
+
 class CommercialP0IngestionRequest(BaseModel):
     target_user_id: str | None = None
     target_user_email: str | None = None

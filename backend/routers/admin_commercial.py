@@ -1,14 +1,40 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_super_admin
 from models import User
-from schemas import AdminCommercialTotalPnlResponse, CommercialUsageLogsResponse
-from services.admin_commercial_service import build_total_pnl_bundle, build_usage_logs, export_monthly_pnl_excel
+from schemas import AdminCommercialOverviewResponse, AdminCommercialTotalPnlResponse, CommercialUsageLogsResponse
+from services.admin_commercial_service import (
+    build_admin_commercial_overview,
+    build_total_pnl_bundle,
+    build_usage_logs,
+    export_monthly_pnl_excel,
+)
 
 router = APIRouter(prefix="/admin/commercial", tags=["admin_commercial"])
+
+
+@router.get("/overview", response_model=AdminCommercialOverviewResponse)
+def admin_commercial_overview(
+    time_window: str = Query(default="last_30_days"),
+    environment: str = Query(default="live"),
+    from_ts: str | None = Query(default=None, alias="from"),
+    to_ts: str | None = Query(default=None, alias="to"),
+    _: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return build_admin_commercial_overview(
+            db,
+            time_window=time_window,
+            environment=environment,
+            from_ts=from_ts,
+            to_ts=to_ts,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/usage-logs", response_model=CommercialUsageLogsResponse)
