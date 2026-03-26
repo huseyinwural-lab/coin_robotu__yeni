@@ -10,6 +10,7 @@ from sqlalchemy import or_, text, update
 from db import SessionLocal, redis_client
 from models import CommercialExportManifest, CommercialExportSchedule, User
 from services.admin_commercial_service import (
+    cleanup_expired_export_artifacts,
     create_commercial_export_manifest,
     export_monthly_pnl_excel,
     finalize_export_delivery,
@@ -288,7 +289,8 @@ def run_commercial_export_scheduler_cycle() -> dict:
                 db.commit()
             finally:
                 _release_window_advisory_lock(db, window_lock_key)
-        return {"processed": processed}
+        cleanup_stats = cleanup_expired_export_artifacts(db, limit=50)
+        return {"processed": processed, "cleanup": cleanup_stats}
     finally:
         db.close()
 

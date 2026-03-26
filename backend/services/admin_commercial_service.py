@@ -1524,24 +1524,41 @@ def finalize_export_delivery(
 
     checksum = hashlib.sha256(content_bytes).hexdigest()
     storage_provider = get_export_storage_provider()
-    artifact_ref, signed_download_url = storage_provider.save_artifact(
+    retention_days = max(1, int(os.getenv("COMMERCIAL_EXPORT_RETENTION_DAYS", "30") or "30"))
+    signed_url_ttl_seconds = max(60, int(os.getenv("COMMERCIAL_EXPORT_SIGNED_URL_TTL_SECONDS", "900") or "900"))
+    delivered_ts = delivered_at or _now()
+    retention_until = delivered_ts + timedelta(days=retention_days)
+    storage_result = storage_provider.save_artifact(
         export_id=export_id,
         content_bytes=content_bytes,
         output_format=output_format,
+        retention_until=retention_until,
+        signed_url_ttl_seconds=signed_url_ttl_seconds,
     )
+    artifact_ref = str(storage_result.get("artifact_ref") or "").strip()
+    signed_download_url = str(storage_result.get("signed_download_url") or "").strip()
+    if not artifact_ref:
+        raise RuntimeError("export_storage_artifact_ref_missing")
+    if not signed_download_url:
+        raise RuntimeError("export_storage_signed_url_missing")
 
-    delivered_ts = delivered_at or _now()
     manifest.status = "delivered"
     manifest.delivery_status = "success"
     manifest.file_hash = checksum
     manifest.delivered_at = delivered_ts
     manifest.artifact_ref = artifact_ref
     manifest.failure_reason = None
-    manifest.retention_state = "active"
-    retention_days = max(1, int(os.getenv("COMMERCIAL_EXPORT_RETENTION_DAYS", "30") or "30"))
-    manifest.retention_expires_at = delivered_ts + timedelta(days=retention_days)
-    manifest.downloadable_state = "ready"
+    manifest.retention_state = str(storage_result.get("retention_state") or "active")
+    manifest.retention_expires_at = retention_until
+    manifest.downloadable_state = str(storage_result.get("downloadable_state") or "ready")
     manifest.signed_download_url = signed_download_url
+    manifest.details = {
+        **(manifest.details or {}),
+        "storage_provider": str(storage_result.get("storage_provider") or getattr(storage_provider, "provider_name", "unknown")),
+        "storage_object_path": storage_result.get("storage_object_path"),
+        "signed_url_ttl_seconds": signed_url_ttl_seconds,
+        "retention_until": retention_until.isoformat(),
+    }
 
     audit_row = _safe_query_first(
         db.query(CommercialExportAudit)
@@ -1562,6 +1579,53 @@ def finalize_export_delivery(
         "delivery_status": "success",
         "delivered_at": delivered_ts,
         "retention_days": retention_days,
+    }
+
+
+def cleanup_expired_export_artifacts(db: Session, *, limit: int = 100) -> dict:
+    now = _now()
+    rows = (
+        db.query(CommercialExportManifest)
+        .filter(
+            CommercialExportManifest.retention_expires_at.is_not(None),
+            CommercialExportManifest.retention_expires_at <= now,
+            CommercialExportManifest.retention_state.in_(["active", "expired", "cleanup_failed"]),
+            CommercialExportManifest.artifact_ref.is_not(None),
+        )
+        .order_by(CommercialExportManifest.retention_expires_at.asc())
+        .limit(max(1, int(limit)))
+        .all()
+    )
+    if not rows:
+        return {"scanned": 0, "deleted": 0, "failed": 0}
+
+    provider = get_export_storage_provider()
+    deleted = 0
+    failed = 0
+    for row in rows:
+        try:
+            provider.delete_artifact(artifact_ref=str(row.artifact_ref or ""))
+            row.retention_state = "deleted"
+            row.downloadable_state = "expired"
+            row.signed_download_url = None
+            row.details = {
+                **(row.details or {}),
+                "cleanup_deleted_at": now.isoformat(),
+            }
+            deleted += 1
+        except Exception as exc:  # noqa: BLE001
+            row.retention_state = "cleanup_failed"
+            row.details = {
+                **(row.details or {}),
+                "cleanup_failed_at": now.isoformat(),
+                "cleanup_error": str(exc)[:220],
+            }
+            failed += 1
+    db.commit()
+    return {
+        "scanned": len(rows),
+        "deleted": deleted,
+        "failed": failed,
     }
 
 

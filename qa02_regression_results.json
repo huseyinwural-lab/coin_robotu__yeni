@@ -1,0 +1,133 @@
+{
+  "status": "FAIL",
+  "passed_tests": 1,
+  "total_tests": 5,
+  "success_rate": "20.0%",
+  "test_results": [
+    {
+      "test_name": "Admin Authentication",
+      "status": "PASS",
+      "details": "Successfully authenticated admin user. Token length: 244",
+      "evidence": null,
+      "timestamp": "2026-03-26T18:19:34.954922"
+    },
+    {
+      "test_name": "Readiness Endpoint",
+      "status": "FAIL",
+      "details": "Readiness check failed: status=ready, gate_status=None",
+      "evidence": {
+        "status": "ready",
+        "service": "backend-api",
+        "checks": {
+          "database": {
+            "status": "ready"
+          },
+          "redis": {
+            "status": "ready"
+          },
+          "preview_smoke_gate": {
+            "status": "ready",
+            "gate_status": "pass",
+            "checked_at": "2026-03-26T18:17:01.846853+00:00",
+            "reason": null
+          },
+          "execution_queue": {
+            "status": "ready",
+            "queue_size": 0,
+            "critical_limit": 60
+          },
+          "ready_override": {
+            "status": "ready"
+          }
+        },
+        "startup": {
+          "database_url_valid": true,
+          "migration_ok": true,
+          "database_ready": true,
+          "seed_admin_ok": true,
+          "state_rebuild_ok": true,
+          "pipeline_runtime_ok": false,
+          "background_loops_started": true,
+          "preview_smoke_gate": {
+            "status": "pass",
+            "started_at": "2026-03-26T18:16:22.873567+00:00",
+            "checked_at": "2026-03-26T18:17:01.846853+00:00",
+            "checks": {
+              "api_health": {
+                "status_code": 200,
+                "status": "pass"
+              },
+              "auth_login": {
+                "status_code": 200,
+                "status": "pass"
+              },
+              "commercial_route": {
+                "status_code": 200,
+                "status": "pass"
+              },
+              "overview_fetch": {
+                "status_code": 200,
+                "status": "pass",
+                "missing_blocks": []
+              }
+            },
+            "missing_blocks": [],
+            "attempt": 1,
+            "max_attempts": 12
+          },
+          "last_error": null
+        },
+        "timestamp": "2026-03-26T18:19:35.883250+00:00"
+      },
+      "timestamp": "2026-03-26T18:19:35.901470"
+    },
+    {
+      "test_name": "Scheduler Race Protection",
+      "status": "PASS",
+      "details": "No duplicate exports detected. Successful requests: 0, Unique exports: 0",
+      "evidence": {
+        "requests": [
+          {
+            "request_id": "race_test_002cd27d",
+            "status_code": 404,
+            "response": "{\"detail\":\"Not Found\"}"
+          },
+          {
+            "request_id": "race_test_bdf217eb",
+            "status_code": 404,
+            "response": "{\"detail\":\"Not Found\"}"
+          },
+          {
+            "request_id": "race_test_1ab99659",
+            "status_code": 404,
+            "response": "{\"detail\":\"Not Found\"}"
+          }
+        ],
+        "duplicates": []
+      },
+      "timestamp": "2026-03-26T18:19:36.383864"
+    },
+    {
+      "test_name": "Export Creation and Manifest",
+      "status": "FAIL",
+      "details": "Export trigger failed: 404",
+      "evidence": null,
+      "timestamp": "2026-03-26T18:19:38.294629"
+    },
+    {
+      "test_name": "Signed URL Delivery",
+      "status": "FAIL",
+      "details": "Failed to get exports list: 404",
+      "evidence": null,
+      "timestamp": "2026-03-26T18:19:38.352300"
+    },
+    {
+      "test_name": "Alert SLA Endpoint Flow",
+      "status": "FAIL",
+      "details": "SLA overview endpoint failed: 404",
+      "evidence": null,
+      "timestamp": "2026-03-26T18:19:38.412020"
+    }
+  ],
+  "completed_at": "2026-03-26T18:19:38.412056"
+}

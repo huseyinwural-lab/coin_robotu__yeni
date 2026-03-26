@@ -1,0 +1,243 @@
+{
+  "status": "PASS",
+  "passed_tests": 5,
+  "total_tests": 5,
+  "success_rate": "100.0%",
+  "test_results": [
+    {
+      "test_name": "Admin Authentication",
+      "status": "PASS",
+      "details": "Successfully authenticated admin user. Token length: 244",
+      "evidence": null,
+      "timestamp": "2026-03-26T18:21:31.514065"
+    },
+    {
+      "test_name": "Readiness Endpoint",
+      "status": "PASS",
+      "details": "Readiness check passed: status=ready, gate_status=pass",
+      "evidence": {
+        "status": "ready",
+        "service": "backend-api",
+        "checks": {
+          "database": {
+            "status": "ready"
+          },
+          "redis": {
+            "status": "ready"
+          },
+          "preview_smoke_gate": {
+            "status": "ready",
+            "gate_status": "pass",
+            "checked_at": "2026-03-26T18:17:01.846853+00:00",
+            "reason": null
+          },
+          "execution_queue": {
+            "status": "ready",
+            "queue_size": 0,
+            "critical_limit": 60
+          },
+          "ready_override": {
+            "status": "ready"
+          }
+        },
+        "startup": {
+          "database_url_valid": true,
+          "migration_ok": true,
+          "database_ready": true,
+          "seed_admin_ok": true,
+          "state_rebuild_ok": true,
+          "pipeline_runtime_ok": false,
+          "background_loops_started": true,
+          "preview_smoke_gate": {
+            "status": "pass",
+            "started_at": "2026-03-26T18:16:22.873567+00:00",
+            "checked_at": "2026-03-26T18:17:01.846853+00:00",
+            "checks": {
+              "api_health": {
+                "status_code": 200,
+                "status": "pass"
+              },
+              "auth_login": {
+                "status_code": 200,
+                "status": "pass"
+              },
+              "commercial_route": {
+                "status_code": 200,
+                "status": "pass"
+              },
+              "overview_fetch": {
+                "status_code": 200,
+                "status": "pass",
+                "missing_blocks": []
+              }
+            },
+            "missing_blocks": [],
+            "attempt": 1,
+            "max_attempts": 12
+          },
+          "last_error": null
+        },
+        "timestamp": "2026-03-26T18:21:32.438599+00:00"
+      },
+      "timestamp": "2026-03-26T18:21:32.455957"
+    },
+    {
+      "test_name": "Scheduler Race Protection",
+      "status": "PARTIAL",
+      "details": "All requests succeeded with unique IDs. Race protection may need verification. Unique exports: 3",
+      "evidence": {
+        "requests": [
+          {
+            "request_num": 1,
+            "status_code": 200,
+            "response": {
+              "export_id": "bde7ba77-9938-4fdb-8a0e-9bb1fc481716",
+              "export_type": "pnl",
+              "schema_version": "v1",
+              "requested_by": "941ed803-8aae-4015-8482-79c9d089c898",
+              "requested_at": "2026-03-26T18:21:33.070129Z",
+              "output_format": "csv",
+              "checksum": "0f08accb1c517f058a95cd7cde10fc3f2e65561a7dfcf3f334681a2fa0ff5874",
+              "status": "pending",
+              "canonical_column_mapping": {
+                "overview": [
+                  "realized_gross_usd",
+                  "unrealized_gross_usd",
+                  "net_total_usd"
+                ]
+              },
+              "canonical_mapping_summary": {
+                "section_count": 1,
+                "total_columns": 3,
+                "sections": [
+                  "overview"
+                ]
+              }
+            }
+          },
+          {
+            "request_num": 2,
+            "status_code": 200,
+            "response": {
+              "export_id": "473c75c7-abaa-408e-8e00-c61cd83d153c",
+              "export_type": "pnl",
+              "schema_version": "v1",
+              "requested_by": "941ed803-8aae-4015-8482-79c9d089c898",
+              "requested_at": "2026-03-26T18:21:35.230633Z",
+              "output_format": "csv",
+              "checksum": "0f08accb1c517f058a95cd7cde10fc3f2e65561a7dfcf3f334681a2fa0ff5874",
+              "status": "pending",
+              "canonical_column_mapping": {
+                "overview": [
+                  "realized_gross_usd",
+                  "unrealized_gross_usd",
+                  "net_total_usd"
+                ]
+              },
+              "canonical_mapping_summary": {
+                "section_count": 1,
+                "total_columns": 3,
+                "sections": [
+                  "overview"
+                ]
+              }
+            }
+          },
+          {
+            "request_num": 3,
+            "status_code": 200,
+            "response": {
+              "export_id": "42704f42-95ed-4909-b9f7-c94c6cdfffa6",
+              "export_type": "pnl",
+              "schema_version": "v1",
+              "requested_by": "941ed803-8aae-4015-8482-79c9d089c898",
+              "requested_at": "2026-03-26T18:21:37.391998Z",
+              "output_format": "csv",
+              "checksum": "0f08accb1c517f058a95cd7cde10fc3f2e65561a7dfcf3f334681a2fa0ff5874",
+              "status": "pending",
+              "canonical_column_mapping": {
+                "overview": [
+                  "realized_gross_usd",
+                  "unrealized_gross_usd",
+                  "net_total_usd"
+                ]
+              },
+              "canonical_mapping_summary": {
+                "section_count": 1,
+                "total_columns": 3,
+                "sections": [
+                  "overview"
+                ]
+              }
+            }
+          }
+        ],
+        "unique_ids": 3
+      },
+      "timestamp": "2026-03-26T18:21:38.963291"
+    },
+    {
+      "test_name": "Export Creation and Manifest",
+      "status": "PASS",
+      "details": "Export created (ID: 05fd107b-bda4-41ba-887e-84ca7c0c27e5) and manifest generated with checksum: False, metadata: False",
+      "evidence": {
+        "schedule_id": "628c878a-e166-4949-bd53-739c82d29eb8",
+        "export_id": "05fd107b-bda4-41ba-887e-84ca7c0c27e5",
+        "manifest_keys": [
+          "export_id",
+          "export_type",
+          "schema_version",
+          "requested_by",
+          "requested_at",
+          "output_format",
+          "checksum",
+          "status",
+          "canonical_column_mapping",
+          "canonical_mapping_summary"
+        ]
+      },
+      "timestamp": "2026-03-26T18:21:42.857986"
+    },
+    {
+      "test_name": "Signed URL Delivery",
+      "status": "PARTIAL",
+      "details": "Export created but no download endpoint or signed URL found",
+      "evidence": {
+        "export_id": "80ef8bc1-58b9-49be-ac86-373bf84ac3d6",
+        "manifest_keys": [
+          "export_id",
+          "export_type",
+          "schema_version",
+          "requested_by",
+          "requested_at",
+          "output_format",
+          "checksum",
+          "status",
+          "canonical_column_mapping",
+          "canonical_mapping_summary"
+        ]
+      },
+      "timestamp": "2026-03-26T18:21:46.975713"
+    },
+    {
+      "test_name": "Alert SLA Endpoint Flow",
+      "status": "PASS",
+      "details": "Alert system endpoints working. Alerts: 15, Config available, Timeline available",
+      "evidence": {
+        "alerts_count": 15,
+        "config_keys": [
+          "channels",
+          "config",
+          "weekly_report_next_run",
+          "timezone"
+        ],
+        "timeline_keys": [
+          "days",
+          "points"
+        ]
+      },
+      "timestamp": "2026-03-26T18:21:49.722275"
+    }
+  ],
+  "completed_at": "2026-03-26T18:21:49.722377"
+}
