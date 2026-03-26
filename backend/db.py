@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from core.config import settings
 from core.db_determinism import enforce_postgresql_only
@@ -194,7 +195,31 @@ def _resolve_database_url() -> str:
 
 
 def _create_and_verify_engine(database_url: str) -> Engine:
-    connect_args = {"connect_timeout": 10} if database_url.startswith("postgresql") else {}
+    connect_args = {"connect_timeout": 4} if database_url.startswith("postgresql") else {}
+    parsed = make_url(database_url)
+    host = str(parsed.host or "").strip().lower()
+    use_null_pool = "pooler.supabase.com" in host
+    if database_url.startswith("postgresql"):
+        connect_args["sslmode"] = "require"
+
+    engine_kwargs: dict = {
+        "pool_pre_ping": True,
+        "pool_recycle": 180,
+        "connect_args": connect_args,
+    }
+    if use_null_pool:
+        engine_kwargs["poolclass"] = NullPool
+    else:
+        engine_kwargs.update(
+            {
+                "pool_timeout": 30,
+                "pool_size": 10,
+                "max_overflow": 20,
+                "pool_use_lifo": True,
+                "pool_reset_on_return": "rollback",
+            }
+        )
+
     last_error: Exception | None = None
 
     for attempt in range(3):
@@ -202,12 +227,7 @@ def _create_and_verify_engine(database_url: str) -> Engine:
         try:
             candidate_engine = create_engine(
                 database_url,
-                pool_pre_ping=True,
-                pool_recycle=180,
-                pool_timeout=30,
-                pool_size=10,
-                max_overflow=20,
-                connect_args=connect_args,
+                **engine_kwargs,
             )
             with candidate_engine.connect() as connection:
                 connection.execute(text("SELECT 1"))
@@ -286,9 +306,13 @@ def is_database_ready() -> bool:
 
 
 def verify_database_connection() -> None:
-    db_engine = get_engine()
-    with db_engine.connect() as connection:
-        connection.execute(text("SELECT 1"))
+    try:
+        db_engine = get_engine()
+        with db_engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception as exc:  # noqa: BLE001
+        _mark_db_state(reachable=False, initialized=False, last_error=_sanitize_error(exc))
+        raise
     _mark_db_state(reachable=True, initialized=True, last_error=None)
 
 
@@ -321,6 +345,11 @@ Base = declarative_base()
 redis_client = _build_redis_client()
 
 def get_db():
+    if not is_database_ready() or _session_factory is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="database_not_ready",
+        )
     try:
         db = SessionLocal()
     except Exception as exc:

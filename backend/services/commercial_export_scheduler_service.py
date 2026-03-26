@@ -242,10 +242,13 @@ def run_commercial_export_scheduler_cycle() -> dict:
                     manifest_row.failure_reason = None
                 db.commit()
 
+                if not manifest_id:
+                    raise RuntimeError("scheduler_manifest_id_missing")
+
                 payload_bytes, filename = _build_export_payload(db, schedule.export_type)
                 delivery = finalize_export_delivery(
                     db,
-                    export_id=manifest["export_id"],
+                    export_id=manifest_id,
                     content_bytes=payload_bytes,
                     output_format=schedule.output_format,
                 )

@@ -34,7 +34,7 @@ def _resolve_migration_url() -> str:
     try:
         connect_args = {}
         if str(normalized_env_url).startswith("postgresql"):
-            connect_args = {"connect_timeout": 3}
+            connect_args = {"connect_timeout": 3, "sslmode": "require"}
         engine = create_engine(normalized_env_url, pool_pre_ping=True, connect_args=connect_args, future=True)
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))

@@ -1,6 +1,8 @@
 import axios from "axios";
 
 const BACKEND_URL = String(process.env.REACT_APP_BACKEND_URL || "").trim();
+const AUTH_TOKEN_KEY = "token";
+const AUTH_USER_KEY = "auth_user";
 
 if (!BACKEND_URL) {
   throw new Error(
@@ -22,7 +24,25 @@ export const apiClient = axios.create({
 
 const SESSION_STORAGE_KEY = "platform-session-id";
 
+const readStoredToken = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+};
+
+const clearStoredAuth = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  window.localStorage.removeItem(AUTH_USER_KEY);
+};
+
 const ensureSessionId = () => {
+  if (typeof window === "undefined") {
+    return "server-session";
+  }
   const current = window.localStorage.getItem(SESSION_STORAGE_KEY);
   if (current) {
     return current;
@@ -39,10 +59,79 @@ const generateRequestId = () => {
 apiClient.interceptors.request.use((config) => {
   const nextConfig = config;
   nextConfig.headers = nextConfig.headers || {};
+
+  if (!nextConfig.headers.Authorization) {
+    const token = readStoredToken();
+    if (token) {
+      nextConfig.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+
   nextConfig.headers["X-Session-ID"] = ensureSessionId();
   nextConfig.headers["X-Request-ID"] = generateRequestId();
   return nextConfig;
 });
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const shouldRetryRequest = (error) => {
+  const config = error?.config || {};
+  const method = String(config.method || "get").toLowerCase();
+  const url = String(config.url || "");
+  const retryableMethods = new Set(["get", "head", "options"]);
+  const retryableStatus = new Set([502, 503, 504]);
+  const retryableCodes = new Set(["ECONNABORTED", "ERR_NETWORK", "ERR_BAD_RESPONSE"]);
+
+  if ((config.__retryCount || 0) >= 1) {
+    return false;
+  }
+
+  if (String(error?.code || "").toUpperCase() === "ERR_CANCELED") {
+    return false;
+  }
+
+  const retryableAuthPath = url.includes("/auth/login") || url.includes("/auth/me");
+  if (!retryableMethods.has(method) && !retryableAuthPath) {
+    return false;
+  }
+
+  if (retryableStatus.has(Number(error?.response?.status))) {
+    return true;
+  }
+
+  if (retryableCodes.has(String(error?.code || "").toUpperCase())) {
+    return true;
+  }
+
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("timeout") || message.includes("network error");
+};
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error?.config || {};
+
+    if (shouldRetryRequest(error)) {
+      config.__retryCount = (config.__retryCount || 0) + 1;
+      await wait(350);
+      return apiClient.request(config);
+    }
+
+    const status = Number(error?.response?.status || 0);
+    const url = String(config.url || "");
+    const isLoginLike = url.includes("/auth/login") || url.includes("/auth/mfa/challenge/verify");
+    if (status === 401 && !isLoginLike) {
+      clearStoredAuth();
+      setAuthToken(null);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("platform-auth-expired"));
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
 
 export const setAuthToken = (token) => {
   if (token) {

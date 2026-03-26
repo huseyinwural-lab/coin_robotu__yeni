@@ -88,6 +88,32 @@ export const AuthProvider = ({ children }) => {
     };
   }, [token]);
 
+  useEffect(() => {
+    const onAuthExpired = () => {
+      clearAuthSession();
+      setAuthToken(null);
+      setToken(null);
+      setUser(null);
+    };
+
+    const onStorageChanged = (event) => {
+      if (event.key === AUTH_TOKEN_KEY) {
+        const nextToken = localStorage.getItem(AUTH_TOKEN_KEY);
+        setToken(nextToken);
+      }
+      if (event.key === AUTH_USER_KEY) {
+        setUser(readStoredUser());
+      }
+    };
+
+    window.addEventListener("platform-auth-expired", onAuthExpired);
+    window.addEventListener("storage", onStorageChanged);
+    return () => {
+      window.removeEventListener("platform-auth-expired", onAuthExpired);
+      window.removeEventListener("storage", onStorageChanged);
+    };
+  }, []);
+
   const login = async ({ email, password, panel = "user" }) => {
     const { data } = await apiClient.post("/auth/login", { email, password, panel });
     if (data?.mfa_required) {
