@@ -1,3 +1,74 @@
+## 2026-03-26 — LIVE PREP FINAL (Stabilization + Wizard) ✅
+
+### Uygulananlar
+- **Servis stabilizasyonu**
+  - Yeni health endpointleri:
+    - `GET /api/health/live` (hafif, her zaman 200)
+    - `GET /api/health/ready` (DB + Redis readiness)
+  - DB engine bağlantı doğrulamasına retry/pool hardening eklendi (`backend/db.py`).
+  - WS idle drop azaltımı için heartbeat/ping keepalive eklendi (`backend/api/runtime_ws.py`).
+  - Infra patch çıktı dosyaları üretildi:
+    - `/app/infra/nginx/live_timeout_patch.conf`
+    - `/app/infra/k8s/ingress-timeout-patch.yaml`
+    - `/app/docs/live_prep_proxy_timeout_patch.md`
+
+- **Execution mode tekleştirme (1 sprint legacy uyumluluk)**
+  - Canonical modlar: `SIM | TESTNET | LIVE`
+  - Legacy alias kabulü: `MOCK -> SIM`, `PAPER -> TESTNET`
+  - `execution_mode_control_service` normalize + compatibility notice desteği eklendi.
+  - Mode geçiş endpointleri hem yeni hem legacy dili kabul edecek şekilde güncellendi.
+
+- **Final dry-run tek akış**
+  - Endpoint: `POST /api/runtime/go-live/dry-run/run`
+  - Zincir: lifecycle -> canary -> regression -> readiness -> checklist
+  - Tek artifact: `go_live_dry_run_latest.json`
+
+- **Go-Live Wizard + Rollback (super_admin only)**
+  - Endpointler:
+    - `GET /api/runtime/go-live/wizard/state`
+    - `POST /api/runtime/go-live/wizard/readiness-check`
+    - `POST /api/runtime/go-live/wizard/canary-check`
+    - `POST /api/runtime/go-live/wizard/arm`
+    - `POST /api/runtime/go-live/wizard/confirm`
+    - `POST /api/runtime/go-live/wizard/rollback`
+  - `arm/confirm/rollback` sadece `super_admin` rolüyle korunuyor.
+
+- **Readiness score hardening**
+  - `READY` için smoke PASS zorunluluğu korunuyor.
+  - `go_live` artık yalnızca `readiness == READY` ve tüm checklist check’leri PASS ise `true`.
+
+- **Proxy + exchange hardening**
+  - Spot/futures ayrı baz URL/token kontrolü + mismatch tespiti.
+  - Mismatch varsa `runtime_proxy_token_mismatch` alert trigger.
+  - Timeout/retry/adapter limitleri çıktılanıyor.
+
+- **Smoke script güncellemesi**
+  - Ayrı ingest credential zorunlu hale getirildi:
+    - `DAILY_SMOKE_INGEST_ADMIN_EMAIL/PASSWORD`
+    - `DAILY_SMOKE_INGEST_TARGET_USER_EMAIL`
+  - `SKIPPED_CREDENTIAL_MISSING` akışı kaldırıldı; smoke zinciri PASS/FAIL net.
+  - URL ayrımı destekleniyor: `BACKEND_PUBLIC_URL` (fallback: `REACT_APP_BACKEND_URL`).
+
+- **ENV/Config hardening**
+  - Yeni örnek dosyalar:
+    - `/app/backend/.env.example`
+    - `/app/frontend/.env.example`
+  - `BACKEND_INTERNAL_URL` / `BACKEND_PUBLIC_URL` ayrımı eklendi.
+
+### Frontend güncellemeleri
+- `AdminDashboardPage`: readiness kartına single-flow dry-run + go-live wizard aksiyonları eklendi.
+- `AdminLiveTradingDashboardPage`: mode aksiyonları `LIVE/TESTNET/SIM` odaklı.
+- `AdminExecutionReadinessPage`, `LandingPage`, `PipelineOperationsPage`: mode dili canonical moda çekildi (legacy metinler azaltıldı).
+
+### Test özeti
+- `pytest -q backend/tests/test_iteration4_final_testclient.py backend/tests/test_binance_testnet_execution.py backend/tests/test_go_live_checklist.py backend/tests/test_exchange_auth_invalid_alert.py`
+  - **18 PASS, 1 SKIP**
+- Testing agent (`iteration_141`): backend kapsamı yüksek oranda PASS; wizard canary-check timeout minor (gerçek exchange operasyonu nedeniyle beklenen).
+
+### Açık durum / dış bağımlılık
+- External preview URL tarafında aralıklı timeout/502 hâlâ gözleniyor (infra/network katmanı).
+- Smoke’ı **PASS** ve readiness’i **READY** yapmak için ayrı ingest credential’ların gerçek ortamda tanımlanması gerekiyor.
+
 ## 2026-03-26 — ITERATION 4 FINAL (Canary & Go-Live Prep) ✅
 
 ### Bu tur tamamlanan ana işler
