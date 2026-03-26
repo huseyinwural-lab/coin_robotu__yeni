@@ -15,6 +15,7 @@ from services.execution_precheck_service import list_execution_presets, validate
 from services.execution_mode_control_service import enforce_execution_mode_for_intent
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.execution_safety_service import enforce_execution_open_allowed_or_raise
+from services.commercial_controls_enforcement_service import enforce_commercial_control_or_raise
 from services.idempotency_service import build_execution_idempotency_key
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.portfolio_risk_service import portfolio_risk_check
@@ -459,6 +460,25 @@ def _build_position_action_preview_payload(db: Session, user_id: str, payload: d
 def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[UserExecutionIntent, dict]:
     intent_type = str(payload.get("intent_type") or "OPEN_POSITION").upper()
     token = str(uuid.uuid4())
+
+    operation = None
+    if intent_type == "OPEN_POSITION":
+        operation = "trade_intent"
+    elif intent_type == "REVERSE_POSITION":
+        operation = "position_increase"
+
+    if operation:
+        enforce_commercial_control_or_raise(
+            db,
+            user_id=user_id,
+            operation=operation,
+            actor_user_id=user_id,
+            actor_role="USER",
+            entity_type="execution_intent_preview",
+            entity_id=token,
+            source="execution_intent_preview",
+            metadata={"intent_type": intent_type},
+        )
 
     if intent_type == "OPEN_POSITION":
         validation = validate_execution_payload(payload)
@@ -977,6 +997,26 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         raise ValueError("preview_required")
     if preview_hash and preview_hash != intent.preview_hash:
         raise ValueError("preview_hash_mismatch")
+
+    operation = None
+    if intent.intent_type == "OPEN_POSITION":
+        operation = "trade_intent"
+    elif intent.intent_type == "REVERSE_POSITION" or (
+        intent.intent_type in POSITION_ACTION_TYPES and not bool(intent.reduce_only)
+    ):
+        operation = "position_increase"
+    if operation:
+        enforce_commercial_control_or_raise(
+            db,
+            user_id=user_id,
+            operation=operation,
+            actor_user_id=user_id,
+            actor_role="USER",
+            entity_type="user_execution_intent",
+            entity_id=intent.id,
+            source="execution_intent_service_submit",
+            metadata={"intent_type": intent.intent_type, "symbol": intent.symbol},
+        )
 
     if intent.intent_type == "OPEN_POSITION":
         enforce_execution_guard_or_raise(

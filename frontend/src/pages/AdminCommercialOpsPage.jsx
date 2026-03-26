@@ -71,7 +71,24 @@ export const AdminCommercialOpsPage = () => {
       setControlForm((prev) => ({ ...prev, reason_note: "" }));
       await loadOverview();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Operational control güncellenemedi");
+      const detail = error?.response?.data?.detail;
+      const reasonCode = typeof detail === "object" ? detail?.reason_code : undefined;
+      toast.error(reasonCode ? `Operational control reddedildi: ${reasonCode}` : detail || "Operational control güncellenemedi");
+    }
+  };
+
+  const updateAlertLifecycle = async (alertId, triageStatus) => {
+    try {
+      await apiClient.post(`/admin/commercial/alerts/${alertId}/lifecycle`, {
+        triage_status: triageStatus,
+        escalation_level: triageStatus === "resolved" ? "none" : "medium",
+        resolution_note: triageStatus === "resolved" ? "Panel üzerinden çözüldü" : null,
+        acknowledge: true,
+      });
+      toast.success("Alert lifecycle güncellendi");
+      await loadOverview();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Alert lifecycle güncellenemedi");
     }
   };
 
@@ -328,13 +345,43 @@ export const AdminCommercialOpsPage = () => {
           </div>
           <div className="mt-3 overflow-x-auto" data-testid="admin-commercial-recent-export-jobs-table-wrapper">
             <Table data-testid="admin-commercial-recent-export-jobs-table">
-              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-export-jobs-head-type">recent export jobs</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-period">period</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-status">status</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-export-jobs-head-type">recent export jobs</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-period">period</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-status">status</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-last-run">last_run_at</TableHead><TableHead data-testid="admin-commercial-recent-export-jobs-head-failure">failure reason</TableHead></TableRow></TableHeader>
               <TableBody>
                 {(exportOps.recent_export_jobs || []).slice(0, 50).map((row, idx) => (
                   <TableRow key={`${row.schedule_id}-${idx}`} data-testid={`admin-commercial-recent-export-jobs-row-${idx}`}>
                     <TableCell data-testid={`admin-commercial-recent-export-jobs-type-${idx}`}>{row.export_type}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-export-jobs-period-${idx}`}>{row.schedule_period}</TableCell>
                     <TableCell data-testid={`admin-commercial-recent-export-jobs-status-${idx}`}>{row.last_status}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-export-jobs-last-run-${idx}`}>{row.last_run_at ? new Date(row.last_run_at).toLocaleString() : "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-export-jobs-failure-${idx}`}>{row.failure_reason || "-"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="mt-3 overflow-x-auto" data-testid="admin-commercial-recent-manifests-table-wrapper">
+            <Table data-testid="admin-commercial-recent-manifests-table">
+              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-manifests-head-id">recent manifests</TableHead><TableHead data-testid="admin-commercial-recent-manifests-head-status">status</TableHead><TableHead data-testid="admin-commercial-recent-manifests-head-artifact">artifact</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {(exportOps.recent_manifests || []).slice(0, 50).map((row, idx) => (
+                  <TableRow key={`${row.export_id}-${idx}`} data-testid={`admin-commercial-recent-manifests-row-${idx}`}>
+                    <TableCell data-testid={`admin-commercial-recent-manifests-id-${idx}`}>{row.export_id}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-manifests-status-${idx}`}>{row.delivery_status || row.status}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-manifests-artifact-${idx}`}>{row.artifact_ref || "-"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="mt-3 overflow-x-auto" data-testid="admin-commercial-recent-audits-table-wrapper">
+            <Table data-testid="admin-commercial-recent-audits-table">
+              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-audits-head-id">recent audit trail</TableHead><TableHead data-testid="admin-commercial-recent-audits-head-actor">actor</TableHead><TableHead data-testid="admin-commercial-recent-audits-head-status">delivery_status</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {(exportOps.recent_audits || []).slice(0, 50).map((row, idx) => (
+                  <TableRow key={`${row.audit_id}-${idx}`} data-testid={`admin-commercial-recent-audits-row-${idx}`}>
+                    <TableCell data-testid={`admin-commercial-recent-audits-id-${idx}`}>{row.export_id}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-audits-actor-${idx}`}>{row.actor_email || "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-audits-status-${idx}`}>{row.delivery_status || "-"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -346,13 +393,19 @@ export const AdminCommercialOpsPage = () => {
           <p className="text-xs uppercase tracking-widest" data-testid="admin-commercial-alert-rail-title">Alert Rail</p>
           <div className="mt-2 overflow-x-auto" data-testid="admin-commercial-recent-alerts-table-wrapper">
             <Table data-testid="admin-commercial-recent-alerts-table">
-              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-alerts-head-severity">severity</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-title">recent alerts</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-time">time</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead data-testid="admin-commercial-recent-alerts-head-severity">severity</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-source">source</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-entity">entity</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-action">suggested_action</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-triage">triage_status</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-ack">acknowledged_at</TableHead><TableHead data-testid="admin-commercial-recent-alerts-head-ops">ops</TableHead></TableRow></TableHeader>
               <TableBody>
                 {alertRail.slice(0, 50).map((row, idx) => (
                   <TableRow key={`${row.id}-${idx}`} data-testid={`admin-commercial-recent-alerts-row-${idx}`}>
                     <TableCell data-testid={`admin-commercial-recent-alerts-severity-${idx}`}>{row.severity}</TableCell>
-                    <TableCell data-testid={`admin-commercial-recent-alerts-title-${idx}`}>{row.title}</TableCell>
-                    <TableCell data-testid={`admin-commercial-recent-alerts-time-${idx}`}>{row.created_at ? new Date(row.created_at).toLocaleString() : "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-alerts-source-${idx}`}>{row.source}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-alerts-entity-${idx}`}>{`${row.entity_type}:${row.entity_id}`}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-alerts-action-${idx}`}>{row.suggested_action}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-alerts-triage-${idx}`}>{row.triage_status || "new"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-alerts-ack-${idx}`}>{row.acknowledged_at ? new Date(row.acknowledged_at).toLocaleString() : "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-recent-alerts-ops-${idx}`}>
+                      <Button size="sm" disabled={!String(row.source || "").startsWith("commercial") } onClick={() => updateAlertLifecycle(row.id, "acknowledged")} data-testid={`admin-commercial-alert-ack-button-${idx}`}>Ack</Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -376,6 +429,22 @@ export const AdminCommercialOpsPage = () => {
             <select className="border border-black/40 bg-white px-2 py-2 text-sm" value={String(controlForm.emergency_stop)} onChange={(event) => setControlForm((prev) => ({ ...prev, emergency_stop: event.target.value === "true" }))} data-testid="admin-commercial-operational-controls-emergency-stop-select"><option value="false">emergency_stop=false</option><option value="true">emergency_stop=true</option></select>
             <Input placeholder="reason note" value={controlForm.reason_note} onChange={(event) => setControlForm((prev) => ({ ...prev, reason_note: event.target.value }))} data-testid="admin-commercial-operational-controls-reason-note-input" />
             <Button onClick={submitOperationalControl} data-testid="admin-commercial-operational-controls-submit-button">Control Uygula</Button>
+          </div>
+          <div className="mt-3 overflow-x-auto" data-testid="admin-commercial-operational-controls-transitions-table-wrapper">
+            <Table data-testid="admin-commercial-operational-controls-transitions-table">
+              <TableHeader><TableRow><TableHead data-testid="admin-commercial-operational-controls-transitions-head-user">user</TableHead><TableHead data-testid="admin-commercial-operational-controls-transitions-head-changed-fields">changed_fields</TableHead><TableHead data-testid="admin-commercial-operational-controls-transitions-head-diff">previous → new</TableHead></TableRow></TableHeader>
+              <TableBody>
+                {(operationalControls.recent_actions || []).slice(0, 50).map((row, idx) => (
+                  <TableRow key={`${row.transition_id}-${idx}`} data-testid={`admin-commercial-operational-controls-transitions-row-${idx}`}>
+                    <TableCell data-testid={`admin-commercial-operational-controls-transitions-user-${idx}`}>{row.user_id}</TableCell>
+                    <TableCell data-testid={`admin-commercial-operational-controls-transitions-changed-fields-${idx}`}>{(row.changed_fields || []).join(", ") || "-"}</TableCell>
+                    <TableCell data-testid={`admin-commercial-operational-controls-transitions-diff-${idx}`}>
+                      {JSON.stringify(row.previous_state_snapshot || {})} → {JSON.stringify(row.new_state_snapshot || {})}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         </article>
       </section>

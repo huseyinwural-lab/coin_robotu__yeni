@@ -28,6 +28,7 @@ from services.execution_intent_service import (
     preview_execution_intent,
     submit_execution_intent,
 )
+from services.commercial_controls_enforcement_service import CommercialControlViolation
 from services.execution_readiness_service import enforce_execution_guard_or_raise
 from services.execution_readiness_service import evaluate_execution_readiness
 from services.execution_safety_service import ExecutionSafetyViolation
@@ -147,6 +148,11 @@ def preview_intent(
             )
             raise _quote_asset_http_exception(payload_data.get("symbol")) from exc
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except CommercialControlViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
 
     create_audit_log(
         db,
@@ -321,6 +327,11 @@ def preview_position_action(
             )
             raise _quote_asset_http_exception(mapped_payload.get("symbol")) from exc
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except CommercialControlViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
     create_audit_log(
         db,
         action=validation.get("preflight_event_code") or AuditEvent.ORDER_PREFLIGHT,
@@ -406,6 +417,11 @@ def submit_position_action(
     except ValueError as exc:
         message = str(exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
+    except CommercialControlViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
 
     create_audit_log(
         db,
@@ -472,6 +488,11 @@ def submit_intent(
     except ValueError as exc:
         message = str(exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
+    except CommercialControlViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
 
     create_audit_log(
         db,

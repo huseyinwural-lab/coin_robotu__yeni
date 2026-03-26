@@ -278,6 +278,9 @@ class CommercialExportManifest(Base):
     status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     file_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    artifact_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    delivery_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    failure_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
@@ -310,6 +313,8 @@ class CommercialExportAudit(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     filters_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     file_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    artifact_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    delivery_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     reason_note: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -337,6 +342,9 @@ class CommercialOperationalControlTransition(Base):
     actor_email: Mapped[str] = mapped_column(String(255), default="")
     previous_state: Mapped[dict] = mapped_column(JSON, default=dict)
     next_state: Mapped[dict] = mapped_column(JSON, default=dict)
+    previous_state_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    new_state_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    changed_fields: Mapped[list] = mapped_column(JSON, default=list)
     reason_note: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -354,5 +362,11 @@ class CommercialAlertEvent(Base):
     message: Mapped[str] = mapped_column(String(500), default="")
     suggested_action: Mapped[str] = mapped_column(String(255), default="")
     status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    triage_status: Mapped[str] = mapped_column(String(20), default="new", index=True)
+    escalation_level: Mapped[str] = mapped_column(String(20), default="none", index=True)
+    acknowledged_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    resolution_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

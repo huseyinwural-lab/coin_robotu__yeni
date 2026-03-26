@@ -20,6 +20,7 @@ from services.paper_exchange_adapter_service import paper_exchange_adapter
 from services.failed_event_service import upsert_failed_event
 from core.users.user_exchange_connections import note_connection_runtime_event
 from services.execution_safety_service import ExecutionSafetyViolation, enforce_execution_open_allowed_or_raise
+from services.commercial_controls_enforcement_service import CommercialControlViolation, enforce_commercial_control_or_raise
 
 
 def _canonical(payload: dict) -> str:
@@ -180,6 +181,17 @@ def dispatch_decision_result(
 
     proposed_notional = float(decision_result.get("notional") or decision_result.get("size") or intent_payload.get("quantity") or 0.0)
     try:
+        enforce_commercial_control_or_raise(
+            db,
+            user_id=str(intent_payload.get("account_id") or ""),
+            operation="trade_intent",
+            actor_user_id=str(intent_payload.get("account_id") or ""),
+            actor_role="SYSTEM",
+            entity_type="execution_intent",
+            entity_id=str(intent_payload.get("intent_hash") or decision_result.get("decision_hash") or correlation_id),
+            source="runtime_execution_dispatch",
+            metadata={"symbol": intent_payload.get("symbol"), "notional": proposed_notional},
+        )
         enforce_execution_open_allowed_or_raise(
             db,
             proposed_notional=proposed_notional,
@@ -197,6 +209,25 @@ def dispatch_decision_result(
             "action": "REJECT",
             "reason_codes": [reason_code],
             "execution_safety": {"reason_code": reason_code, **(exc.details or {})},
+        }
+        emitted_events.append(
+            publish_runtime_event(
+                event_type="execution.intent.rejected",
+                payload={"reason_codes": [reason_code], "decision_hash": decision_result.get("decision_hash")},
+                correlation_id=correlation_id,
+                causation_id=decision_result.get("decision_hash"),
+                partition_key=f"{context_payload.get('symbol')}::{strategy_id}",
+            )
+        )
+        db.commit()
+        return decision_result, None, emitted_events
+    except CommercialControlViolation as exc:
+        reason_code = exc.reason_code
+        decision_result = {
+            **decision_result,
+            "action": "REJECT",
+            "reason_codes": [reason_code],
+            "commercial_control": {"reason_code": reason_code, **(exc.details or {})},
         }
         emitted_events.append(
             publish_runtime_event(
@@ -296,6 +327,17 @@ def process_submission_event_once(db: Session, worker_name: str = "execution-wor
             raise ValueError("duplicate_terminal_event")
 
         try:
+            enforce_commercial_control_or_raise(
+                db,
+                user_id=str(intent.account_id or ""),
+                operation="execution_submit",
+                actor_user_id=str(intent.account_id or ""),
+                actor_role="SYSTEM",
+                entity_type="execution_intent",
+                entity_id=str(intent.intent_id),
+                source="runtime_execution_worker",
+                metadata={"symbol": intent.symbol, "quantity": intent.quantity},
+            )
             enforce_execution_open_allowed_or_raise(
                 db,
                 proposed_notional=float(intent.quantity or 0.0),
@@ -306,6 +348,22 @@ def process_submission_event_once(db: Session, worker_name: str = "execution-wor
                 entity_id=str(intent.intent_id),
             )
         except ExecutionSafetyViolation as exc:
+            reason_code = exc.reason_code
+            db.add(
+                ExecutionIntentEvent(
+                    id=str(uuid.uuid4()),
+                    intent_id=intent.intent_id,
+                    event_type="execution.order.finalized",
+                    event_status="rejected",
+                    payload={"reason_code": reason_code, **(exc.details or {})},
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+            db.commit()
+            mark_event_processed(event_id)
+            ack_runtime_event(processing_queue, raw)
+            return {"status": "blocked", "event_id": event_id, "reason_code": reason_code}
+        except CommercialControlViolation as exc:
             reason_code = exc.reason_code
             db.add(
                 ExecutionIntentEvent(

@@ -108,6 +108,7 @@ from services.state_rebuild_service import run_state_rebuild
 from services.user_exchange_health_loop import run_exchange_connection_health_loop
 from services.weekly_report_service import run_weekly_report_loop
 from services.db_backup_scheduler_service import run_backup_scheduler_loop
+from services.commercial_export_scheduler_service import run_commercial_export_scheduler_loop
 from db import (
     engine,
     get_database_runtime_state,
@@ -132,6 +133,7 @@ logger = logging.getLogger(__name__)
 weekly_report_task: asyncio.Task | None = None
 exchange_health_task: asyncio.Task | None = None
 backup_scheduler_task: asyncio.Task | None = None
+commercial_export_scheduler_task: asyncio.Task | None = None
 PROCESS_STARTED_AT = datetime.now(timezone.utc)
 STARTUP_RUNTIME_STATE = {
     "database_url_valid": False,
@@ -486,13 +488,14 @@ async def startup_event():
         STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
         logger.warning("PIPELINE_RUNTIME_SKIPPED_DATABASE_NOT_READY")
 
-    global weekly_report_task, exchange_health_task, backup_scheduler_task
+    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task
     if STARTUP_RUNTIME_STATE["database_ready"]:
         from db import SessionLocal
 
         weekly_report_task = asyncio.create_task(run_weekly_report_loop(SessionLocal))
         exchange_health_task = asyncio.create_task(run_exchange_connection_health_loop(SessionLocal))
         backup_scheduler_task = asyncio.create_task(run_backup_scheduler_loop())
+        commercial_export_scheduler_task = asyncio.create_task(run_commercial_export_scheduler_loop())
         STARTUP_RUNTIME_STATE["background_loops_started"] = True
     else:
         STARTUP_RUNTIME_STATE["background_loops_started"] = False
@@ -512,13 +515,15 @@ async def startup_event():
 async def shutdown_event():
     if STARTUP_RUNTIME_STATE.get("pipeline_runtime_ok"):
         await pipeline_runtime.stop()
-    global weekly_report_task, exchange_health_task, backup_scheduler_task
+    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task
     if weekly_report_task:
         weekly_report_task.cancel()
     if exchange_health_task:
         exchange_health_task.cancel()
     if backup_scheduler_task:
         backup_scheduler_task.cancel()
+    if commercial_export_scheduler_task:
+        commercial_export_scheduler_task.cancel()
 
 
 app = create_socket_app(fastapi_app)

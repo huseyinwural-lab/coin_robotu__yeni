@@ -31,6 +31,7 @@ from db import get_db
 from deps import get_current_user, require_admin
 from models import ExecutionJob, Order, RuntimeSmokeRun, User
 from services.runtime_alert_triage_service import apply_alert_action, list_runtime_alerts
+from services.commercial_controls_enforcement_service import CommercialControlViolation, enforce_commercial_control_or_raise
 
 
 router = APIRouter(prefix="/runtime", tags=["runtime_execution"])
@@ -113,6 +114,17 @@ def produce_strategy_signal(payload: StrategySignalRequest, _: User = Depends(re
 @router.post("/execution/submit")
 def submit_execution(payload: ExecutionSubmitRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
+        enforce_commercial_control_or_raise(
+            db,
+            user_id=current_user.id,
+            operation="execution_submit",
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            entity_type="runtime_execution_submit",
+            entity_id=payload.idempotency_key or payload.symbol,
+            source="runtime_execution_router_submit",
+            metadata={"symbol": payload.symbol, "size": payload.size, "mark_price": payload.mark_price},
+        )
         result = submit_signal(
             db,
             user_id=current_user.id,
@@ -130,6 +142,11 @@ def submit_execution(payload: ExecutionSubmitRequest, current_user: User = Depen
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except CommercialControlViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
     return result
 
 

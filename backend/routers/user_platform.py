@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -49,11 +51,17 @@ from schemas import (
     UserPortfolioSnapshotResponse,
     UserRiskSettingsResponse,
     UserRiskSettingsUpdate,
+    UserFundWithdrawRequest,
+    UserFundWithdrawResponse,
     UserTradeResponse,
 )
 from services.audit_service import create_audit_log, create_domain_event
 from services.explainability_rules_service import build_trade_explain
 from services.execution_intent_service import submit_execution_intent
+from services.commercial_controls_enforcement_service import (
+    CommercialControlViolation,
+    enforce_commercial_control_or_raise,
+)
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.rate_limiter_service import consume_exchange_rate_limit
 
@@ -131,6 +139,11 @@ def _submit_trade_with_guard(
         intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except CommercialControlViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
 
     create_audit_log(
         db,
@@ -572,4 +585,44 @@ def get_user_dashboard(current_user: User = Depends(require_user), db: Session =
         pending_signals_count=pending_signals_count,
         heartbeat=heartbeat,
     )
+
+
+@router.post("/funds/withdraw-request", response_model=UserFundWithdrawResponse)
+def create_withdraw_request(
+    payload: UserFundWithdrawRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        enforce_commercial_control_or_raise(
+            db,
+            user_id=current_user.id,
+            operation="withdraw",
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+            entity_type="fund_withdraw_request",
+            entity_id="pending",
+            source="user_platform_withdraw_request",
+            metadata={"amount_usd": payload.amount_usd, "destination": payload.destination},
+        )
+    except CommercialControlViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={"reason_code": exc.reason_code, "message": exc.message, **(exc.details or {})},
+        ) from exc
+
+    request_id = str(uuid.uuid4())
+    create_domain_event(
+        db,
+        event_type="FUND_WITHDRAW_REQUESTED",
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        payload={
+            "request_id": request_id,
+            "amount_usd": payload.amount_usd,
+            "destination": payload.destination,
+            "reason_note": payload.reason_note,
+        },
+    )
+    return UserFundWithdrawResponse(status="queued", request_id=request_id)
 

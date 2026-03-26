@@ -8,6 +8,8 @@ from models import User
 from schemas import (
     AdminCommercialOverviewResponse,
     AdminCommercialTotalPnlResponse,
+    CommercialAlertLifecycleResponse,
+    CommercialAlertLifecycleUpdateRequest,
     CommercialExportManifestCreateRequest,
     CommercialExportManifestResponse,
     CommercialExportScheduleCreateRequest,
@@ -22,8 +24,9 @@ from services.admin_commercial_service import (
     build_usage_logs,
     create_commercial_export_manifest,
     create_commercial_export_schedule,
-    export_monthly_pnl_excel,
+    export_monthly_pnl_with_governance,
     list_commercial_export_schedules,
+    update_commercial_alert_lifecycle,
     update_user_operational_controls,
 )
 
@@ -130,6 +133,29 @@ def set_user_operational_controls(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.post("/alerts/{alert_id}/lifecycle", response_model=CommercialAlertLifecycleResponse)
+def update_alert_lifecycle(
+    alert_id: str,
+    payload: CommercialAlertLifecycleUpdateRequest,
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return update_commercial_alert_lifecycle(
+            db,
+            actor_user=actor,
+            alert_id=alert_id,
+            triage_status=payload.triage_status,
+            escalation_level=payload.escalation_level,
+            resolution_note=payload.resolution_note,
+            acknowledge=payload.acknowledge,
+        )
+    except ValueError as exc:
+        if str(exc) == "alert_not_found":
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.get("/usage-logs", response_model=CommercialUsageLogsResponse)
 def admin_usage_logs(
     user_id: str | None = Query(default=None),
@@ -163,11 +189,21 @@ def admin_total_pnl(
 @router.get("/monthly-pnl/export")
 def admin_monthly_pnl_export(
     month: str | None = Query(default=None, description="YYYY-MM"),
-    _: User = Depends(require_super_admin),
+    actor: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
-    payload, filename = export_monthly_pnl_excel(db, month=month)
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    payload, filename, export_id, delivery_payload = export_monthly_pnl_with_governance(
+        db,
+        month=month,
+        actor_user=actor,
+        filters_snapshot={"month": month},
+    )
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Export-Id": export_id,
+        "X-Export-Artifact-Ref": str(delivery_payload.get("artifact_ref") or ""),
+        "X-Export-File-Hash": str(delivery_payload.get("file_hash") or ""),
+    }
     return StreamingResponse(
         iter([payload]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

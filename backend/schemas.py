@@ -3466,6 +3466,8 @@ class AdminCommercialExportJobResponse(BaseModel):
     output_format: str
     last_status: str
     last_run_at: datetime | None = None
+    last_output_ref: str | None = None
+    failure_reason: str | None = None
 
 
 class AdminCommercialExportOpsResponse(BaseModel):
@@ -3473,6 +3475,8 @@ class AdminCommercialExportOpsResponse(BaseModel):
     pending_exports: int = 0
     delivered_exports: int = 0
     recent_export_jobs: list[AdminCommercialExportJobResponse] = Field(default_factory=list)
+    recent_manifests: list[dict] = Field(default_factory=list)
+    recent_audits: list[dict] = Field(default_factory=list)
 
 
 class AdminCommercialAlertItemResponse(BaseModel):
@@ -3485,6 +3489,8 @@ class AdminCommercialAlertItemResponse(BaseModel):
     title: str
     message: str
     suggested_action: str
+    triage_status: str = "new"
+    acknowledged_at: datetime | None = None
     created_at: datetime
 
 
@@ -3566,6 +3572,35 @@ class CommercialOperationalControlResponse(BaseModel):
     emergency_stop: bool
     reason_note: str
     updated_at: datetime
+
+
+class CommercialAlertLifecycleUpdateRequest(BaseModel):
+    triage_status: str = Field(pattern="^(new|acknowledged|investigating|resolved|ignored)$")
+    escalation_level: str = Field(pattern="^(none|low|medium|high|critical)$")
+    resolution_note: str | None = Field(default=None, max_length=500)
+    acknowledge: bool = False
+
+
+class CommercialAlertLifecycleResponse(BaseModel):
+    alert_id: str
+    triage_status: str
+    escalation_level: str
+    acknowledged_by: str | None = None
+    acknowledged_at: datetime | None = None
+    resolution_note: str | None = None
+    resolution_at: datetime | None = None
+
+
+class UserFundWithdrawRequest(BaseModel):
+    amount_usd: float = Field(gt=0)
+    destination: str = Field(min_length=3, max_length=200)
+    reason_note: str = Field(min_length=5, max_length=255)
+
+
+class UserFundWithdrawResponse(BaseModel):
+    status: str
+    request_id: str
+    reason_code: str | None = None
 
 
 class CommercialP0IngestionRequest(BaseModel):

@@ -46,6 +46,31 @@ _FIXED_REVENUE_COMPONENTS = [
     "pnl_share",
 ]
 
+EXPORT_COLUMN_REGISTRY: dict[tuple[str, str], dict] = {
+    ("monthly_pnl", "v1"): {
+        "summary": [
+            "window",
+            "user_count",
+            "total_pnl",
+            "realized_total",
+            "unrealized_total",
+            "last_updated",
+        ],
+        "users": [
+            "user_id",
+            "user_email",
+            "total_pnl",
+            "realized_total",
+            "unrealized_total",
+            "trade_count",
+            "win_rate",
+        ],
+    },
+    ("pnl", "v1"): {"overview": ["realized_gross_usd", "unrealized_gross_usd", "net_total_usd"]},
+    ("revenue", "v1"): {"overview": ["component_type", "revenue_usd", "source_amount_usd", "share_rate_avg"]},
+    ("user_economics", "v1"): {"overview": ["user_id", "user_email", "ltv_usd", "revenue_contribution_usd"]},
+}
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -312,6 +337,34 @@ def export_monthly_pnl_excel(db: Session, *, month: str | None) -> tuple[bytes, 
     buffer.seek(0)
     filename = f"monthly_pnl_{month_label}.xlsx"
     return buffer.getvalue(), filename
+
+
+def export_monthly_pnl_with_governance(
+    db: Session,
+    *,
+    month: str | None,
+    actor_user: User,
+    filters_snapshot: dict | None = None,
+) -> tuple[bytes, str, str, dict]:
+    workbook_bytes, filename = export_monthly_pnl_excel(db, month=month)
+    manifest_payload = create_commercial_export_manifest(
+        db,
+        actor_user=actor_user,
+        export_type="monthly_pnl",
+        schema_version="v1",
+        filters_snapshot=filters_snapshot or {"month": month},
+        column_mapping={},
+        output_format="xlsx",
+        row_count=0,
+        reason_note="monthly_pnl_export",
+    )
+    delivery_payload = finalize_export_delivery(
+        db,
+        export_id=manifest_payload["export_id"],
+        content_bytes=workbook_bytes,
+        output_format="xlsx",
+    )
+    return workbook_bytes, filename, manifest_payload["export_id"], delivery_payload
 
 
 def _round6(value: float) -> float:
@@ -1195,8 +1248,9 @@ def _build_pnl_analytics_block(
 def _build_export_ops_block(
     manifests: list[CommercialExportManifest],
     schedules: list[CommercialExportSchedule],
+    audits: list[CommercialExportAudit] | None = None,
 ) -> dict:
-    pending_exports = sum(1 for row in manifests if str(getattr(row, "status", "")).lower() in {"queued", "pending"})
+    pending_exports = sum(1 for row in manifests if str(getattr(row, "status", "")).lower() in {"queued", "pending", "due", "running"})
     delivered_exports = sum(1 for row in manifests if str(getattr(row, "status", "")).lower() == "delivered")
     scheduler_health = "healthy"
     if any(str(getattr(row, "last_status", "")).lower() in {"failed", "error"} for row in schedules):
@@ -1216,8 +1270,38 @@ def _build_export_ops_block(
                 "output_format": str(getattr(row, "output_format", "csv")),
                 "last_status": str(getattr(row, "last_status", "never")),
                 "last_run_at": getattr(row, "last_run_at", None),
+                "last_output_ref": getattr(row, "last_output_ref", None),
+                "failure_reason": (getattr(row, "filters_snapshot", {}) or {}).get("failure_reason"),
             }
             for row in sorted(schedules, key=lambda item: getattr(item, "updated_at", _now()), reverse=True)[:DETAIL_LIST_LIMIT]
+        ],
+        "recent_manifests": [
+            {
+                "export_id": str(getattr(row, "id", "")),
+                "export_type": str(getattr(row, "export_type", "")),
+                "status": str(getattr(row, "status", "pending")),
+                "delivery_status": str(getattr(row, "delivery_status", "pending")),
+                "requested_at": getattr(row, "requested_at", None),
+                "delivered_at": getattr(row, "delivered_at", None),
+                "artifact_ref": getattr(row, "artifact_ref", None),
+                "file_hash": getattr(row, "file_hash", None),
+                "failure_reason": getattr(row, "failure_reason", None),
+            }
+            for row in sorted(manifests, key=lambda item: getattr(item, "requested_at", _now()), reverse=True)[:DETAIL_LIST_LIMIT]
+        ],
+        "recent_audits": [
+            {
+                "audit_id": str(getattr(row, "id", "")),
+                "export_id": str(getattr(row, "export_id", "")),
+                "actor_email": str(getattr(row, "actor_email", "")),
+                "export_type": str(getattr(row, "export_type", "")),
+                "requested_at": getattr(row, "requested_at", None),
+                "delivered_at": getattr(row, "delivered_at", None),
+                "delivery_status": str(getattr(row, "delivery_status", "pending")),
+                "artifact_ref": getattr(row, "artifact_ref", None),
+                "file_hash": getattr(row, "file_hash", None),
+            }
+            for row in sorted(audits or [], key=lambda item: getattr(item, "created_at", _now()), reverse=True)[:DETAIL_LIST_LIMIT]
         ],
     }
 
@@ -1226,19 +1310,36 @@ def _build_alert_rail_block(
     commercial_alerts: list[CommercialAlertEvent],
     system_alerts: list,
 ) -> list[dict]:
+    def _normalize_severity(raw_value: str | None) -> str:
+        value = str(raw_value or "info").strip().lower()
+        mapping = {
+            "critical": "critical",
+            "error": "high",
+            "high": "high",
+            "warning": "medium",
+            "warn": "medium",
+            "medium": "medium",
+            "low": "low",
+            "info": "info",
+        }
+        return mapping.get(value, "info")
+
     items: list[dict] = []
     for row in commercial_alerts[:DETAIL_LIST_LIMIT]:
+        suggested_action = str(getattr(row, "suggested_action", "") or "").strip() or "Investigate and apply operational playbook"
         items.append(
             {
                 "id": str(getattr(row, "id", "")),
                 "alert_type": str(getattr(row, "alert_type", "")),
-                "severity": str(getattr(row, "severity", "warning")),
-                "source": str(getattr(row, "source", "commercial_overview")),
-                "entity_type": str(getattr(row, "entity_type", "system")),
-                "entity_id": str(getattr(row, "entity_id", "global")),
+                "severity": _normalize_severity(str(getattr(row, "severity", "warning"))),
+                "source": str(getattr(row, "source", "commercial.overview")),
+                "entity_type": str(getattr(row, "entity_type", "system") or "system"),
+                "entity_id": str(getattr(row, "entity_id", "global") or "global"),
                 "title": str(getattr(row, "title", "")),
                 "message": str(getattr(row, "message", "")),
-                "suggested_action": str(getattr(row, "suggested_action", "")),
+                "suggested_action": suggested_action,
+                "triage_status": str(getattr(row, "triage_status", "new") or "new"),
+                "acknowledged_at": getattr(row, "acknowledged_at", None),
                 "created_at": getattr(row, "created_at", _now()),
             }
         )
@@ -1248,13 +1349,15 @@ def _build_alert_rail_block(
             {
                 "id": str(getattr(row, "id", "")),
                 "alert_type": str(getattr(row, "alert_type", "system_alert")),
-                "severity": str(getattr(row, "severity", "INFO")).lower(),
-                "source": "system_alerts",
+                "severity": _normalize_severity(str(getattr(row, "severity", "INFO"))),
+                "source": "system.alerts",
                 "entity_type": "system",
                 "entity_id": str(getattr(row, "entity_key", "global") or "global"),
                 "title": str(getattr(row, "alert_type", "system_alert")),
                 "message": str(getattr(row, "message", "")),
                 "suggested_action": str((getattr(row, "details", {}) or {}).get("suggested_action") or "Review alert details"),
+                "triage_status": "new",
+                "acknowledged_at": None,
                 "created_at": getattr(row, "created_at", _now()),
             }
         )
@@ -1275,11 +1378,93 @@ def _build_operational_controls_block(states: list[CommercialOperationalControlS
                 "user_id": str(getattr(row, "user_id", "")),
                 "actor_user_id": str(getattr(row, "actor_user_id", "")),
                 "actor_email": str(getattr(row, "actor_email", "")),
+                "changed_fields": list(getattr(row, "changed_fields", []) or []),
+                "previous_state_snapshot": dict(getattr(row, "previous_state_snapshot", {}) or {}),
+                "new_state_snapshot": dict(getattr(row, "new_state_snapshot", {}) or {}),
                 "reason_note": str(getattr(row, "reason_note", "")),
                 "created_at": getattr(row, "created_at", _now()),
             }
             for row in sorted(transitions, key=lambda item: getattr(item, "created_at", _now()), reverse=True)[:DETAIL_LIST_LIMIT]
         ],
+    }
+
+
+def _resolve_export_column_mapping(export_type: str, schema_version: str, column_mapping: dict | None) -> dict:
+    key = (str(export_type or "").strip().lower(), str(schema_version or "v1").strip().lower())
+    registry = EXPORT_COLUMN_REGISTRY.get(key)
+    if registry is None:
+        raise ValueError("unsupported_export_schema_version")
+    provided = dict(column_mapping or {})
+    if provided and provided != registry:
+        raise ValueError("invalid_column_mapping_registry")
+    return registry
+
+
+def _ensure_export_artifact_dir() -> str:
+    import os
+
+    directory = "/tmp/commercial_exports"
+    os.makedirs(directory, exist_ok=True)
+    return directory
+
+
+def finalize_export_delivery(
+    db: Session,
+    *,
+    export_id: str,
+    content_bytes: bytes,
+    output_format: str,
+    delivered_at: datetime | None = None,
+    failure_reason: str | None = None,
+) -> dict:
+    manifest = _safe_query_first(db.query(CommercialExportManifest).filter(CommercialExportManifest.id == export_id))
+    if manifest is None:
+        raise ValueError("export_manifest_not_found")
+
+    if failure_reason:
+        manifest.status = "failed"
+        manifest.delivery_status = "failed"
+        manifest.failure_reason = str(failure_reason)
+        db.commit()
+        return {
+            "export_id": export_id,
+            "delivery_status": "failed",
+            "failure_reason": manifest.failure_reason,
+        }
+
+    checksum = hashlib.sha256(content_bytes).hexdigest()
+    artifact_dir = _ensure_export_artifact_dir()
+    extension = "xlsx" if str(output_format).lower() == "xlsx" else "csv"
+    artifact_ref = f"{artifact_dir}/{export_id}.{extension}"
+    with open(artifact_ref, "wb") as handle:
+        handle.write(content_bytes)
+
+    delivered_ts = delivered_at or _now()
+    manifest.status = "delivered"
+    manifest.delivery_status = "success"
+    manifest.file_hash = checksum
+    manifest.delivered_at = delivered_ts
+    manifest.artifact_ref = artifact_ref
+    manifest.failure_reason = None
+
+    audit_row = _safe_query_first(
+        db.query(CommercialExportAudit)
+        .filter(CommercialExportAudit.export_id == export_id)
+        .order_by(CommercialExportAudit.created_at.desc())
+    )
+    if audit_row is not None:
+        audit_row.file_hash = checksum
+        audit_row.delivered_at = delivered_ts
+        audit_row.artifact_ref = artifact_ref
+        audit_row.delivery_status = "success"
+
+    db.commit()
+    return {
+        "export_id": export_id,
+        "artifact_ref": artifact_ref,
+        "file_hash": checksum,
+        "delivery_status": "success",
+        "delivered_at": delivered_ts,
     }
 
 
@@ -1303,18 +1488,22 @@ def create_commercial_export_manifest(
         _ = db.query(CommercialExportManifest).limit(1).all()
     except Exception as exc:
         raise ValueError("export_manifest_table_unavailable") from exc
-    checksum_base = f"{export_type}|{schema_version}|{output_format}|{row_count}|{sorted(filters_snapshot.items())}"
+    resolved_export_type = str(export_type or "").strip().lower()
+    resolved_schema_version = str(schema_version or "v1").strip().lower()
+    resolved_mapping = _resolve_export_column_mapping(resolved_export_type, resolved_schema_version, column_mapping)
+    checksum_base = f"{resolved_export_type}|{resolved_schema_version}|{output_format}|{row_count}|{sorted((filters_snapshot or {}).items())}|{sorted(resolved_mapping.items())}"
     checksum = hashlib.sha256(checksum_base.encode("utf-8")).hexdigest()
     manifest = CommercialExportManifest(
-        export_type=str(export_type),
-        schema_version=str(schema_version or "v1"),
+        export_type=resolved_export_type,
+        schema_version=resolved_schema_version,
         requested_by=str(actor_user.id),
         filters_snapshot=dict(filters_snapshot or {}),
-        column_mapping=dict(column_mapping or {}),
+        column_mapping=resolved_mapping,
         row_count=int(row_count or 0),
         output_format=str(output_format or "csv"),
         checksum=checksum,
-        status="queued",
+        status="pending",
+        delivery_status="pending",
     )
     db.add(manifest)
     db.flush()
@@ -1323,10 +1512,11 @@ def create_commercial_export_manifest(
         export_id=str(manifest.id),
         actor_user_id=str(actor_user.id),
         actor_email=str(actor_user.email),
-        export_type=str(export_type),
+        export_type=resolved_export_type,
         requested_at=getattr(manifest, "requested_at", _now()),
         filters_snapshot=dict(filters_snapshot or {}),
         reason_note=str(reason_note or ""),
+        delivery_status="pending",
     )
     db.add(audit)
     db.flush()
@@ -1385,7 +1575,7 @@ def create_commercial_export_schedule(
         requested_by=str(actor_user.id),
         filters_snapshot=dict(filters_snapshot or {}),
         is_active=True,
-        last_status="never",
+        last_status="pending",
     )
     db.add(schedule)
     db.flush()
@@ -1481,6 +1671,11 @@ def update_user_operational_controls(
         "withdraw_locked": bool(withdraw_locked),
         "emergency_stop": bool(emergency_stop),
     }
+    changed_fields = [
+        key
+        for key in ["trading_enabled", "capital_frozen", "withdraw_locked", "emergency_stop"]
+        if bool(previous_state.get(key)) != bool(next_state.get(key))
+    ]
     state.trading_enabled = bool(trading_enabled)
     state.capital_frozen = bool(capital_frozen)
     state.withdraw_locked = bool(withdraw_locked)
@@ -1494,6 +1689,9 @@ def update_user_operational_controls(
         actor_email=str(actor_user.email),
         previous_state=previous_state,
         next_state=next_state,
+        previous_state_snapshot=previous_state,
+        new_state_snapshot=next_state,
+        changed_fields=changed_fields,
         reason_note=normalized_reason,
     )
     db.add(transition)
@@ -1518,6 +1716,63 @@ def update_user_operational_controls(
         "emergency_stop": bool(state.emergency_stop),
         "reason_note": str(state.reason_note),
         "updated_at": state.updated_at,
+    }
+
+
+def update_commercial_alert_lifecycle(
+    db: Session,
+    *,
+    actor_user: User,
+    alert_id: str,
+    triage_status: str,
+    escalation_level: str,
+    resolution_note: str | None,
+    acknowledge: bool,
+) -> dict:
+    row = _safe_query_first(db.query(CommercialAlertEvent).filter(CommercialAlertEvent.id == alert_id))
+    if row is None:
+        raise ValueError("alert_not_found")
+
+    if not str(getattr(row, "suggested_action", "") or "").strip():
+        row.suggested_action = "Review affected entity and apply recovery runbook"
+
+    row.triage_status = str(triage_status)
+    row.escalation_level = str(escalation_level)
+    if acknowledge:
+        row.acknowledged_by = str(actor_user.id)
+        row.acknowledged_at = _now()
+    if resolution_note:
+        row.resolution_note = str(resolution_note)
+    if str(triage_status) == "resolved":
+        row.resolution_at = _now()
+        row.status = "closed"
+    else:
+        row.status = "open"
+
+    create_audit_log(
+        db,
+        action="COMMERCIAL_ALERT_LIFECYCLE_UPDATED",
+        entity_type="commercial_alert",
+        entity_id=str(row.id),
+        actor_user_id=str(actor_user.id),
+        actor_role=str(getattr(actor_user.role, "value", actor_user.role)),
+        details={
+            "triage_status": triage_status,
+            "escalation_level": escalation_level,
+            "acknowledge": acknowledge,
+            "resolution_note": resolution_note,
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "alert_id": str(row.id),
+        "triage_status": str(row.triage_status),
+        "escalation_level": str(row.escalation_level),
+        "acknowledged_by": str(row.acknowledged_by) if row.acknowledged_by else None,
+        "acknowledged_at": row.acknowledged_at,
+        "resolution_note": row.resolution_note,
+        "resolution_at": row.resolution_at,
     }
 
 
@@ -1593,6 +1848,9 @@ def build_admin_commercial_overview(
     export_schedules = _safe_query_all(
         db.query(CommercialExportSchedule).order_by(CommercialExportSchedule.updated_at.desc()).limit(DETAIL_LIST_LIMIT)
     )
+    export_audits = _safe_query_all(
+        db.query(CommercialExportAudit).order_by(CommercialExportAudit.created_at.desc()).limit(DETAIL_LIST_LIMIT)
+    )
     operational_states = _safe_query_all(
         db.query(CommercialOperationalControlState)
         .order_by(CommercialOperationalControlState.updated_at.desc())
@@ -1665,7 +1923,7 @@ def build_admin_commercial_overview(
             missing_data_alert=missing_data_alert,
             reconciliation_logs=reconciliation_logs,
         ),
-        "export_ops": _build_export_ops_block(export_manifests, export_schedules),
+        "export_ops": _build_export_ops_block(export_manifests, export_schedules, export_audits),
         "alert_rail": _build_alert_rail_block(commercial_alerts, system_alerts),
         "operational_controls": _build_operational_controls_block(operational_states, operational_transitions),
     }
