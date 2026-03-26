@@ -1,3 +1,46 @@
+## 2026-03-26 — ITERATION 4 FINAL (Canary & Go-Live Prep) ✅
+
+### Bu tur tamamlanan ana işler
+- **Gerçek Binance Testnet Lifecycle (SKIP kaldırıldı):**
+  - `backend/tests/test_binance_testnet_execution.py` artık gerçek lifecycle doğrulaması yapıyor.
+  - Artifact: `/app/test_reports/binance_testnet_lifecycle_latest.json` (gerçek `market_order_id`, `cancel_order_id`, raw exchange log, timeline, db_state).
+- **End-to-End Canary Run + Final Regression:**
+  - Yeni çekirdek: `backend/core/go_live_checklist.py`
+  - Canary run, kill-switch rollback verify, final regression, readiness score, go-live checklist, proxy health üretimleri eklendi.
+  - Artifact’ler:
+    - `/app/test_reports/canary_run_latest.json`
+    - `/app/test_reports/runtime_final_regression_latest.json`
+    - `/app/test_reports/kill_switch_verification_latest.json`
+    - `/app/test_reports/iteration4_final_evidence.json`
+- **Go/No-Go motoru:**
+  - `backend/routers/runtime_execution.py` endpointleri eklendi:
+    - `POST /api/runtime/exchange/testnet-lifecycle/run`
+    - `POST /api/runtime/canary/run`
+    - `POST /api/runtime/regression/final-run`
+    - `GET /api/runtime/canary/readiness-score`
+    - `GET /api/runtime/go-live/checklist`
+    - `GET /api/runtime/exchange/proxy-health`
+    - `POST /api/runtime/safety/kill-switch/verify-rollback`
+- **Proxy / Exchange hardening:**
+  - `binance_adapter.py` spot+futures taban URL/proxy token ayrımı, timeout+retry, quantity/price normalization, futures min-notional handling ve leverage set akışı eklendi.
+  - Invalid auth/proxy reject durumunda `runtime_exchange_auth_invalid` alert trigger eklendi.
+- **Frontend (Operator UI):**
+  - `AdminDashboardPage.jsx` içine **Canary Readiness & Go/No-Go** kartı + aksiyon butonları eklendi.
+
+### Test özeti (bu tur)
+- `pytest -q backend/tests/test_iteration4_final_testclient.py` → **15 PASS**
+- `pytest -q backend/tests/test_go_live_checklist.py ... test_kill_switch.py` (seçili kritik suite) → **10 PASS**
+- `pytest -q backend/tests/test_binance_testnet_execution.py` → **PASS** (SKIP yok)
+
+### Mevcut readiness çıktısı
+- `readiness_score`: **WARNING (60)**
+- `go_live_checklist.go_live`: **true**
+- `canary_run`: **PASS**
+- `final_regression`: **PASS**
+
+### Notlar
+- Dış preview URL’de zaman zaman 502/timeout gözlemi var; buna rağmen TestClient + artifact tabanlı doğrulama ile backend acceptance kanıtları üretildi.
+
 ## 2026-03-26 — P1.3 Iteration 4 Proxy Header Hardening ✅
 
 ### Tamamlananlar

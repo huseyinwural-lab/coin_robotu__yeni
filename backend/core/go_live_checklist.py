@@ -528,6 +528,10 @@ def run_canary_end_to_end_validation(
     adapter = get_execution_adapter()
     _ensure_valid_testnet_credentials(adapter)
 
+    kill_switch_state = get_kill_switch_state()
+    if bool(kill_switch_state.get("active")):
+        deactivate_kill_switch(source="go_live_checklist", reason="pre_canary_reset")
+
     idempotency_key = f"canary-run-{int(time.time() * 1000)}"
 
     submit_result = submit_signal(

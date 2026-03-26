@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -193,11 +194,37 @@ def _resolve_database_url() -> str:
 
 
 def _create_and_verify_engine(database_url: str) -> Engine:
-    connect_args = {"connect_timeout": 5} if database_url.startswith("postgresql") else {}
-    candidate_engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args)
-    with candidate_engine.connect() as connection:
-        connection.execute(text("SELECT 1"))
-    return candidate_engine
+    connect_args = {"connect_timeout": 10} if database_url.startswith("postgresql") else {}
+    last_error: Exception | None = None
+
+    for attempt in range(3):
+        candidate_engine = None
+        try:
+            candidate_engine = create_engine(
+                database_url,
+                pool_pre_ping=True,
+                pool_recycle=180,
+                pool_timeout=30,
+                pool_size=10,
+                max_overflow=20,
+                connect_args=connect_args,
+            )
+            with candidate_engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+            return candidate_engine
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            if candidate_engine is not None:
+                try:
+                    candidate_engine.dispose()
+                except Exception:  # noqa: BLE001
+                    pass
+            if attempt < 2:
+                time.sleep(0.6 * (attempt + 1))
+                continue
+
+    assert last_error is not None
+    raise last_error
 
 
 def init_db_engine(force: bool = False) -> Engine:
