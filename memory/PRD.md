@@ -1,3 +1,27 @@
+## 2026-03-26 — P1.3 Iteration 4 Proxy Header Hardening ✅
+
+### Tamamlananlar
+- `backend/core/exchanges/binance_adapter.py` proxy-aware hale getirildi.
+  - `X-Proxy-Token` header desteği signed requestlere eklendi.
+  - `_public_request(...)` metodu eklendi ve proxy header desteği verildi.
+  - Proxy token çözümleme zinciri: `BINANCE_SPOT_TESTNET_PROXY_TOKEN` / `BINANCE_SPOT_PROXY_TOKEN` / `BINANCE_PROXY_TOKEN` / proxy base URL içinden token infer.
+- Dayanıklılık iyileştirmesi:
+  - JSON parse fallback eklendi (non-json response durumunda güvenli mesaj üretimi).
+
+### Yeni testler
+- `backend/tests/test_binance_adapter_proxy_headers.py`
+  - signed request için `X-MBX-APIKEY` + `X-Proxy-Token` doğrulaması
+  - public request için yalnızca `X-Proxy-Token` doğrulaması
+
+### Doğrulama (bu tur)
+- `pytest -q backend/tests/test_binance_adapter_proxy_headers.py` → PASS (2/2)
+- `pytest -q backend/tests/test_binance_testnet_execution.py` → SKIP (credential/exchange koşulu)
+- `pytest -q backend/tests/test_order_reconciliation.py backend/tests/test_order_reconciliation_engine.py backend/tests/test_kill_switch.py` → PASS
+- `deep_testing_backend_v2` doğrulaması: kritik regresyon yok, proxy header desteği doğrulandı.
+
+### Açık not
+- `test_binance_testnet_execution.py` canlı testnet erişimine bağlı olduğundan bu ortamda SKIP olabilir; bu beklenen davranıştır.
+
 ## 2026-03-26 — P1.3 Iteration 3 Operator Control Layer ✅
 
 ### Teslim edilen ana başlıklar
