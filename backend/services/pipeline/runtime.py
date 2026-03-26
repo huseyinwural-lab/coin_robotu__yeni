@@ -119,265 +119,268 @@ class PipelineRuntime:
     async def _scanner_automation_loop(self):
         while self._running:
             await asyncio.sleep(max(5, int(self._scanner_loop_sleep_seconds or 15)))
-            db = SessionLocal()
-            try:
-                now = datetime.now(timezone.utc)
-                max_workers = 3
-                queue_depth_threshold = 20
-                profile_rows = (
-                    db.query(UserScannerAutomationProfile)
-                    .filter(UserScannerAutomationProfile.auto_enabled.is_(True))
-                    .all()
+            await asyncio.to_thread(self._run_scanner_automation_cycle)
+
+    def _run_scanner_automation_cycle(self):
+        db = SessionLocal()
+        try:
+            now = datetime.now(timezone.utc)
+            max_workers = 3
+            queue_depth_threshold = 20
+            profile_rows = (
+                db.query(UserScannerAutomationProfile)
+                .filter(UserScannerAutomationProfile.auto_enabled.is_(True))
+                .all()
+            )
+            profiled_user_ids = {row.user_id for row in profile_rows}
+
+            legacy_rows = (
+                db.query(UserScannerAutomationConfig)
+                .filter(UserScannerAutomationConfig.auto_enabled.is_(True))
+                .all()
+            )
+
+            job_queue: list[dict] = []
+
+            def _job_priority(mode_value: str, has_open_positions: bool) -> int:
+                mode = str(mode_value or "all_market_symbols").lower()
+                if has_open_positions:
+                    return 100
+                if mode == "manual_selection":
+                    return 80
+                if mode == "top_volume":
+                    return 60
+                return 40
+
+            for row in profile_rows:
+                interval_seconds = max(180, int(row.interval_seconds or 180))
+                if row.last_run_at:
+                    last_run_at = row.last_run_at
+                    if last_run_at.tzinfo is None:
+                        last_run_at = last_run_at.replace(tzinfo=timezone.utc)
+                    if (now - last_run_at).total_seconds() < interval_seconds:
+                        continue
+
+                user = (
+                    db.query(User)
+                    .filter(
+                        User.id == row.user_id,
+                        User.role == UserRole.USER,
+                        User.is_active.is_(True),
+                        User.approval_status == "approved",
+                    )
+                    .first()
                 )
-                profiled_user_ids = {row.user_id for row in profile_rows}
+                if user is None:
+                    continue
 
-                legacy_rows = (
-                    db.query(UserScannerAutomationConfig)
-                    .filter(UserScannerAutomationConfig.auto_enabled.is_(True))
-                    .all()
+                has_open_positions = (
+                    db.query(PaperPosition)
+                    .filter(PaperPosition.user_id == user.id, PaperPosition.status == "open")
+                    .count()
+                    > 0
                 )
-
-                job_queue: list[dict] = []
-
-                def _job_priority(mode_value: str, has_open_positions: bool) -> int:
-                    mode = str(mode_value or "all_market_symbols").lower()
-                    if has_open_positions:
-                        return 100
-                    if mode == "manual_selection":
-                        return 80
-                    if mode == "top_volume":
-                        return 60
-                    return 40
-
-                for row in profile_rows:
-                    interval_seconds = max(180, int(row.interval_seconds or 180))
-                    if row.last_run_at:
-                        last_run_at = row.last_run_at
-                        if last_run_at.tzinfo is None:
-                            last_run_at = last_run_at.replace(tzinfo=timezone.utc)
-                        if (now - last_run_at).total_seconds() < interval_seconds:
-                            continue
-
-                    user = (
-                        db.query(User)
-                        .filter(
-                            User.id == row.user_id,
-                            User.role == UserRole.USER,
-                            User.is_active.is_(True),
-                            User.approval_status == "approved",
-                        )
-                        .first()
-                    )
-                    if user is None:
-                        continue
-
-                    has_open_positions = (
-                        db.query(PaperPosition)
-                        .filter(PaperPosition.user_id == user.id, PaperPosition.status == "open")
-                        .count()
-                        > 0
-                    )
-                    job_queue.append(
-                        {
-                            "job_type": "profile",
-                            "row": row,
-                            "user_id": user.id,
-                            "mode": str(row.symbol_selection_mode or "all_market_symbols"),
-                            "symbol_source": str(row.symbol_source or "crypto"),
-                            "selected_symbols": list(row.selected_symbols or []),
-                            "max_results": int(row.max_results or 25),
-                            "priority": _job_priority(str(row.symbol_selection_mode or "all_market_symbols"), has_open_positions),
-                            "interval_seconds": interval_seconds,
-                        }
-                    )
-
-                for row in legacy_rows:
-                    if row.user_id in profiled_user_ids:
-                        continue
-                    interval_seconds = max(180, int(row.interval_seconds or 180))
-                    if row.last_run_at:
-                        last_run_at = row.last_run_at
-                        if last_run_at.tzinfo is None:
-                            last_run_at = last_run_at.replace(tzinfo=timezone.utc)
-                        if (now - last_run_at).total_seconds() < interval_seconds:
-                            continue
-
-                    user = (
-                        db.query(User)
-                        .filter(
-                            User.id == row.user_id,
-                            User.role == UserRole.USER,
-                            User.is_active.is_(True),
-                            User.approval_status == "approved",
-                        )
-                        .first()
-                    )
-                    if user is None:
-                        continue
-
-                    has_open_positions = (
-                        db.query(PaperPosition)
-                        .filter(PaperPosition.user_id == user.id, PaperPosition.status == "open")
-                        .count()
-                        > 0
-                    )
-                    job_queue.append(
-                        {
-                            "job_type": "legacy",
-                            "row": row,
-                            "user_id": user.id,
-                            "mode": str(row.symbol_selection_mode or "all_market_symbols"),
-                            "symbol_source": str(row.symbol_source or "crypto"),
-                            "selected_symbols": list(row.selected_symbols or []),
-                            "max_results": int(row.max_results or 25),
-                            "priority": _job_priority(str(row.symbol_selection_mode or "all_market_symbols"), has_open_positions),
-                            "interval_seconds": interval_seconds,
-                        }
-                    )
-
-                job_queue.sort(key=lambda item: (int(item.get("priority") or 0), item.get("user_id")), reverse=True)
-                queue_depth = len(job_queue)
-
-                queue_partition = {
-                    "crypto": sum(1 for job in job_queue if job.get("symbol_source") == "crypto"),
-                    "stock": sum(1 for job in job_queue if job.get("symbol_source") == "stock"),
-                }
-
-                deferred_jobs = 0
-                dropped_jobs = 0
-                stale_jobs = 0
-                if queue_depth > queue_depth_threshold:
-                    filtered_jobs = []
-                    for job in job_queue:
-                        if int(job.get("priority") or 0) < 60:
-                            deferred_jobs += 1
-                            row = job["row"]
-                            row.last_run_status = "deferred"
-                            row.last_run_error = "backpressure_low_priority_deferred"
-                            continue
-                        filtered_jobs.append(job)
-                    job_queue = filtered_jobs
-
-                processed_jobs = 0
-                next_sleep_seconds = 15
-                backpressure_active_any = False
-                fallback_reason_code = "none"
-                event_priority_agg = {"high": 0, "medium": 0, "low": 0}
-                cycle_started = perf_counter()
-                for index, job in enumerate(job_queue):
-                    row = job["row"]
-                    user_id = job["user_id"]
-                    lock_key = f"scanner:lock:user:{user_id}"
-                    if self.cache.get(lock_key):
-                        dropped_jobs += 1
-                        row.last_run_status = "dropped"
-                        row.last_run_error = "duplicate_user_run_suppressed"
-                        continue
-
-                    try:
-                        self.cache.set(lock_key, "1", ex=120)
-                    except TypeError:
-                        self.cache.set(lock_key, "1")
-                    processed_jobs += 1
-                    worker_slot = index % max_workers
-                    try:
-                        result = self.scan_scheduler.run_user_scan(
-                            db,
-                            user_id=user_id,
-                            max_results=job["max_results"],
-                            symbol_source=job["symbol_source"],
-                            selected_symbols=job["selected_symbols"],
-                            symbol_selection_mode=job["mode"],
-                        )
-                        row.last_run_at = now
-                        row.last_run_status = "success"
-                        row.last_run_error = None
-                        row.last_run_id = str(result.get("run_id") or "")
-                        row.last_actionable_count = int(result.get("actionable_count") or 0)
-
-                        backpressure = result.get("backpressure") or {}
-                        event_priority = (result.get("event_priority") or {}).get("distribution") or {}
-                        next_sleep_seconds = max(next_sleep_seconds, int(backpressure.get("scan_interval_seconds") or 15))
-                        backpressure_active_any = backpressure_active_any or bool(backpressure.get("active", False))
-                        fallback_reason_code = str((result.get("fallback_state") or {}).get("last_trigger_metric") or fallback_reason_code)
-                        for key in ["high", "medium", "low"]:
-                            event_priority_agg[key] += int(event_priority.get(key) or 0)
-
-                        stale_in_run = int(((result.get("scanner_perf") or {}).get("stale_block_count") or 0))
-                        stale_in_run += int(((result.get("freshness") or {}).get("stale_skip_count") or 0))
-                        stale_jobs += stale_in_run
-                    except Exception as exc:
-                        row.last_run_at = now
-                        row.last_run_status = "error"
-                        row.last_run_error = str(exc)[:240]
-                        retry_budget = 1
-                        if retry_budget > 0:
-                            try:
-                                result = self.scan_scheduler.run_user_scan(
-                                    db,
-                                    user_id=user_id,
-                                    max_results=job["max_results"],
-                                    symbol_source=job["symbol_source"],
-                                    selected_symbols=job["selected_symbols"],
-                                    symbol_selection_mode=job["mode"],
-                                )
-                                row.last_run_status = "success"
-                                row.last_run_error = None
-                                row.last_run_id = str(result.get("run_id") or "")
-                                row.last_actionable_count = int(result.get("actionable_count") or 0)
-                                backpressure = result.get("backpressure") or {}
-                                next_sleep_seconds = max(next_sleep_seconds, int(backpressure.get("scan_interval_seconds") or 15))
-                            except Exception:
-                                pass
-                    finally:
-                        self.cache.delete(lock_key)
-                        set_json(
-                            self.cache,
-                            "scanner:worker:last",
-                            {
-                                "worker_slot": worker_slot,
-                                "user_id": user_id,
-                                "at": now.isoformat(),
-                            },
-                        )
-
-                cycle_latency_ms = round((perf_counter() - cycle_started) * 1000, 4)
-                worker_utilization = round(min(1.0, processed_jobs / max(max_workers, 1)), 4)
-                set_json(
-                    self.cache,
-                    "scanner:queue:state",
+                job_queue.append(
                     {
-                        "generated_at": now.isoformat(),
-                        "depth": queue_depth,
-                        "active_workers": min(processed_jobs, max_workers),
-                        "max_workers": max_workers,
-                        "worker_utilization": worker_utilization,
-                        "cycle_latency_ms": cycle_latency_ms,
-                        "processed_jobs": processed_jobs,
-                        "deferred_jobs": deferred_jobs,
-                        "dropped_jobs": dropped_jobs,
-                        "stale_blocks": stale_jobs,
-                        "queue_partition": queue_partition,
-                        "backpressure_policy": "low_priority_defer + stale_drop + explainability_degrade",
-                        "backpressure_active": backpressure_active_any,
-                        "event_priority_distribution": event_priority_agg,
-                        "fallback_reason_code": fallback_reason_code,
-                    },
+                        "job_type": "profile",
+                        "row": row,
+                        "user_id": user.id,
+                        "mode": str(row.symbol_selection_mode or "all_market_symbols"),
+                        "symbol_source": str(row.symbol_source or "crypto"),
+                        "selected_symbols": list(row.selected_symbols or []),
+                        "max_results": int(row.max_results or 25),
+                        "priority": _job_priority(str(row.symbol_selection_mode or "all_market_symbols"), has_open_positions),
+                        "interval_seconds": interval_seconds,
+                    }
                 )
-                if deferred_jobs > 0:
-                    incr_counter(self.cache, "scanner:metrics:deferred_jobs:day", deferred_jobs)
-                if dropped_jobs > 0:
-                    incr_counter(self.cache, "scanner:metrics:dropped_jobs:day", dropped_jobs)
-                if stale_jobs > 0:
-                    incr_counter(self.cache, "scanner:metrics:stale_blocks:day", stale_jobs)
 
-                self._scanner_loop_sleep_seconds = max(5, min(120, int(next_sleep_seconds)))
+            for row in legacy_rows:
+                if row.user_id in profiled_user_ids:
+                    continue
+                interval_seconds = max(180, int(row.interval_seconds or 180))
+                if row.last_run_at:
+                    last_run_at = row.last_run_at
+                    if last_run_at.tzinfo is None:
+                        last_run_at = last_run_at.replace(tzinfo=timezone.utc)
+                    if (now - last_run_at).total_seconds() < interval_seconds:
+                        continue
 
-                db.commit()
-            except Exception as exc:
-                logger.exception("Scanner automation loop error: %s", exc)
-            finally:
-                db.close()
+                user = (
+                    db.query(User)
+                    .filter(
+                        User.id == row.user_id,
+                        User.role == UserRole.USER,
+                        User.is_active.is_(True),
+                        User.approval_status == "approved",
+                    )
+                    .first()
+                )
+                if user is None:
+                    continue
+
+                has_open_positions = (
+                    db.query(PaperPosition)
+                    .filter(PaperPosition.user_id == user.id, PaperPosition.status == "open")
+                    .count()
+                    > 0
+                )
+                job_queue.append(
+                    {
+                        "job_type": "legacy",
+                        "row": row,
+                        "user_id": user.id,
+                        "mode": str(row.symbol_selection_mode or "all_market_symbols"),
+                        "symbol_source": str(row.symbol_source or "crypto"),
+                        "selected_symbols": list(row.selected_symbols or []),
+                        "max_results": int(row.max_results or 25),
+                        "priority": _job_priority(str(row.symbol_selection_mode or "all_market_symbols"), has_open_positions),
+                        "interval_seconds": interval_seconds,
+                    }
+                )
+
+            job_queue.sort(key=lambda item: (int(item.get("priority") or 0), item.get("user_id")), reverse=True)
+            queue_depth = len(job_queue)
+
+            queue_partition = {
+                "crypto": sum(1 for job in job_queue if job.get("symbol_source") == "crypto"),
+                "stock": sum(1 for job in job_queue if job.get("symbol_source") == "stock"),
+            }
+
+            deferred_jobs = 0
+            dropped_jobs = 0
+            stale_jobs = 0
+            if queue_depth > queue_depth_threshold:
+                filtered_jobs = []
+                for job in job_queue:
+                    if int(job.get("priority") or 0) < 60:
+                        deferred_jobs += 1
+                        row = job["row"]
+                        row.last_run_status = "deferred"
+                        row.last_run_error = "backpressure_low_priority_deferred"
+                        continue
+                    filtered_jobs.append(job)
+                job_queue = filtered_jobs
+
+            processed_jobs = 0
+            next_sleep_seconds = 15
+            backpressure_active_any = False
+            fallback_reason_code = "none"
+            event_priority_agg = {"high": 0, "medium": 0, "low": 0}
+            cycle_started = perf_counter()
+            for index, job in enumerate(job_queue):
+                row = job["row"]
+                user_id = job["user_id"]
+                lock_key = f"scanner:lock:user:{user_id}"
+                if self.cache.get(lock_key):
+                    dropped_jobs += 1
+                    row.last_run_status = "dropped"
+                    row.last_run_error = "duplicate_user_run_suppressed"
+                    continue
+
+                try:
+                    self.cache.set(lock_key, "1", ex=120)
+                except TypeError:
+                    self.cache.set(lock_key, "1")
+                processed_jobs += 1
+                worker_slot = index % max_workers
+                try:
+                    result = self.scan_scheduler.run_user_scan(
+                        db,
+                        user_id=user_id,
+                        max_results=job["max_results"],
+                        symbol_source=job["symbol_source"],
+                        selected_symbols=job["selected_symbols"],
+                        symbol_selection_mode=job["mode"],
+                    )
+                    row.last_run_at = now
+                    row.last_run_status = "success"
+                    row.last_run_error = None
+                    row.last_run_id = str(result.get("run_id") or "")
+                    row.last_actionable_count = int(result.get("actionable_count") or 0)
+
+                    backpressure = result.get("backpressure") or {}
+                    event_priority = (result.get("event_priority") or {}).get("distribution") or {}
+                    next_sleep_seconds = max(next_sleep_seconds, int(backpressure.get("scan_interval_seconds") or 15))
+                    backpressure_active_any = backpressure_active_any or bool(backpressure.get("active", False))
+                    fallback_reason_code = str((result.get("fallback_state") or {}).get("last_trigger_metric") or fallback_reason_code)
+                    for key in ["high", "medium", "low"]:
+                        event_priority_agg[key] += int(event_priority.get(key) or 0)
+
+                    stale_in_run = int(((result.get("scanner_perf") or {}).get("stale_block_count") or 0))
+                    stale_in_run += int(((result.get("freshness") or {}).get("stale_skip_count") or 0))
+                    stale_jobs += stale_in_run
+                except Exception as exc:
+                    row.last_run_at = now
+                    row.last_run_status = "error"
+                    row.last_run_error = str(exc)[:240]
+                    retry_budget = 1
+                    if retry_budget > 0:
+                        try:
+                            result = self.scan_scheduler.run_user_scan(
+                                db,
+                                user_id=user_id,
+                                max_results=job["max_results"],
+                                symbol_source=job["symbol_source"],
+                                selected_symbols=job["selected_symbols"],
+                                symbol_selection_mode=job["mode"],
+                            )
+                            row.last_run_status = "success"
+                            row.last_run_error = None
+                            row.last_run_id = str(result.get("run_id") or "")
+                            row.last_actionable_count = int(result.get("actionable_count") or 0)
+                            backpressure = result.get("backpressure") or {}
+                            next_sleep_seconds = max(next_sleep_seconds, int(backpressure.get("scan_interval_seconds") or 15))
+                        except Exception:
+                            pass
+                finally:
+                    self.cache.delete(lock_key)
+                    set_json(
+                        self.cache,
+                        "scanner:worker:last",
+                        {
+                            "worker_slot": worker_slot,
+                            "user_id": user_id,
+                            "at": now.isoformat(),
+                        },
+                    )
+
+            cycle_latency_ms = round((perf_counter() - cycle_started) * 1000, 4)
+            worker_utilization = round(min(1.0, processed_jobs / max(max_workers, 1)), 4)
+            set_json(
+                self.cache,
+                "scanner:queue:state",
+                {
+                    "generated_at": now.isoformat(),
+                    "depth": queue_depth,
+                    "active_workers": min(processed_jobs, max_workers),
+                    "max_workers": max_workers,
+                    "worker_utilization": worker_utilization,
+                    "cycle_latency_ms": cycle_latency_ms,
+                    "processed_jobs": processed_jobs,
+                    "deferred_jobs": deferred_jobs,
+                    "dropped_jobs": dropped_jobs,
+                    "stale_blocks": stale_jobs,
+                    "queue_partition": queue_partition,
+                    "backpressure_policy": "low_priority_defer + stale_drop + explainability_degrade",
+                    "backpressure_active": backpressure_active_any,
+                    "event_priority_distribution": event_priority_agg,
+                    "fallback_reason_code": fallback_reason_code,
+                },
+            )
+            if deferred_jobs > 0:
+                incr_counter(self.cache, "scanner:metrics:deferred_jobs:day", deferred_jobs)
+            if dropped_jobs > 0:
+                incr_counter(self.cache, "scanner:metrics:dropped_jobs:day", dropped_jobs)
+            if stale_jobs > 0:
+                incr_counter(self.cache, "scanner:metrics:stale_blocks:day", stale_jobs)
+
+            self._scanner_loop_sleep_seconds = max(5, min(120, int(next_sleep_seconds)))
+
+            db.commit()
+        except Exception as exc:
+            logger.exception("Scanner automation loop error: %s", exc)
+        finally:
+            db.close()
 
     async def _release_gate_guard_loop(self):
         while self._running:

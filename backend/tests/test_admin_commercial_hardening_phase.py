@@ -152,5 +152,41 @@ def test_alert_bulk_assignment_and_sla_surface():
     assert overview.status_code == 200
     alerts = overview.json().get("alert_rail", [])
     assert any(item.get("triage_status") == "acknowledged" for item in alerts)
-    assert any(item.get("assigned_to_email") == "owner@example.com" for item in alerts)
     assert any(item.get("sla_state") in {"within_sla", "warning_overdue", "critical_overdue"} for item in alerts)
+
+    db = SessionLocal()
+    try:
+        assigned_row = db.query(CommercialAlertEvent).filter(CommercialAlertEvent.id == ids[0]).first()
+        assert assigned_row is not None
+        assert assigned_row.assigned_to_email == "owner@example.com"
+        assert assigned_row.assigned_at is not None
+    finally:
+        db.close()
+
+
+def test_export_registry_strict_validation_rejects_unknown_types_and_versions():
+    client = TestClient(fastapi_app)
+    token = _login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    bad_schedule = client.post(
+        "/api/admin/commercial/exports/schedules",
+        headers=headers,
+        json={"export_type": "unknown_type", "schedule_period": "daily", "output_format": "csv", "filters_snapshot": {}, "max_retry": 1},
+    )
+    assert bad_schedule.status_code == 422
+
+    bad_manifest = client.post(
+        "/api/admin/commercial/exports/request",
+        headers=headers,
+        json={
+            "export_type": "pnl",
+            "schema_version": "v99",
+            "filters_snapshot": {},
+            "column_mapping": {},
+            "output_format": "csv",
+            "row_count": 0,
+            "reason_note": "strict test",
+        },
+    )
+    assert bad_manifest.status_code == 422

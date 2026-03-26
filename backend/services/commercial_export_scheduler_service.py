@@ -226,7 +226,7 @@ async def run_commercial_export_scheduler_loop(interval_seconds: int = 60):
             redis_client.set(lock_key, "1")
             redis_client.expire(lock_key, max(30, interval_seconds - 5))
             try:
-                run_commercial_export_scheduler_cycle()
+                await asyncio.to_thread(run_commercial_export_scheduler_cycle)
             finally:
                 redis_client.delete(lock_key)
         await asyncio.sleep(interval_seconds)

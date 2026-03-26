@@ -1,8 +1,9 @@
 import logging
 import os
+import subprocess
+import sys
 from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -54,5 +55,14 @@ def run_alembic_upgrade():
     migration_url = _resolve_migration_url()
     config.set_main_option("sqlalchemy.url", migration_url)
     os.environ["ALEMBIC_DATABASE_URL"] = migration_url
-    command.upgrade(config, "head")
+    timeout_seconds = int(os.getenv("ALEMBIC_UPGRADE_TIMEOUT_SECONDS", "25"))
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(backend_root))
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "-c", str(alembic_ini), "upgrade", "head"],
+        cwd=str(backend_root),
+        env=env,
+        check=True,
+        timeout=timeout_seconds,
+    )
     logger.info("Alembic migrations applied to head")

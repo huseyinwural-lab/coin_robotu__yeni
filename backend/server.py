@@ -109,6 +109,7 @@ from services.user_exchange_health_loop import run_exchange_connection_health_lo
 from services.weekly_report_service import run_weekly_report_loop
 from services.db_backup_scheduler_service import run_backup_scheduler_loop
 from services.commercial_export_scheduler_service import run_commercial_export_scheduler_loop
+from services.commercial_preview_smoke_service import run_commercial_preview_smoke_gate
 from db import (
     engine,
     get_database_runtime_state,
@@ -143,6 +144,7 @@ STARTUP_RUNTIME_STATE = {
     "state_rebuild_ok": False,
     "pipeline_runtime_ok": False,
     "background_loops_started": False,
+    "preview_smoke_gate": {"status": "pending"},
     "last_error": None,
 }
 # Contract-test compatibility: some tests monkeypatch `server.engine` directly.
@@ -416,11 +418,17 @@ fastapi_app.add_middleware(RequestObservabilityMiddleware)
 
 @fastapi_app.on_event("startup")
 async def startup_event():
-    async def _run_with_retry(task_name: str, func, retries: int = 5, base_delay: float = 1.5) -> bool:
+    async def _run_with_retry(
+        task_name: str,
+        func,
+        retries: int = 5,
+        base_delay: float = 1.5,
+        timeout_seconds: float = 20.0,
+    ) -> bool:
         last_error = None
         for attempt in range(1, retries + 1):
             try:
-                func()
+                await asyncio.wait_for(asyncio.to_thread(func), timeout=timeout_seconds)
                 logger.info("STARTUP_TASK_OK", extra={"task": task_name, "attempt": attempt})
                 return True
             except Exception as exc:
@@ -449,16 +457,36 @@ async def startup_event():
         STARTUP_RUNTIME_STATE["last_error"] = str(exc)[:300]
         logger.error("DATABASE_URL_INVALID", extra={"error": str(exc)[:300]})
 
-    STARTUP_RUNTIME_STATE["migration_ok"] = await _run_with_retry("alembic_upgrade", run_alembic_upgrade, retries=5)
-    STARTUP_RUNTIME_STATE["database_ready"] = await _run_with_retry("database_connectivity", verify_database_connection, retries=5)
+    STARTUP_RUNTIME_STATE["migration_ok"] = await _run_with_retry(
+        "alembic_upgrade",
+        run_alembic_upgrade,
+        retries=2,
+        timeout_seconds=25,
+    )
+    STARTUP_RUNTIME_STATE["database_ready"] = await _run_with_retry(
+        "database_connectivity",
+        verify_database_connection,
+        retries=3,
+        timeout_seconds=8,
+    )
     if STARTUP_RUNTIME_STATE["database_ready"]:
-        STARTUP_RUNTIME_STATE["database_ready"] = await _run_with_retry("database_init", init_db_engine, retries=3)
+        STARTUP_RUNTIME_STATE["database_ready"] = await _run_with_retry(
+            "database_init",
+            init_db_engine,
+            retries=2,
+            timeout_seconds=10,
+        )
 
     reliability_policy = {"policy_version": "unknown", "runtime_env": "degraded"}
     if STARTUP_RUNTIME_STATE["database_ready"]:
         from db import SessionLocal
 
-        STARTUP_RUNTIME_STATE["seed_admin_ok"] = await _run_with_retry("seed_default_admin", seed_default_admin, retries=3)
+        STARTUP_RUNTIME_STATE["seed_admin_ok"] = await _run_with_retry(
+            "seed_default_admin",
+            seed_default_admin,
+            retries=2,
+            timeout_seconds=10,
+        )
         try:
             reliability_policy = load_connection_reliability_policy(force_refresh=True)
         except Exception as exc:
@@ -472,11 +500,37 @@ async def startup_event():
             finally:
                 db_session.close()
 
-        STARTUP_RUNTIME_STATE["state_rebuild_ok"] = await _run_with_retry("state_rebuild", _state_rebuild_job, retries=3)
+        STARTUP_RUNTIME_STATE["state_rebuild_ok"] = await _run_with_retry(
+            "state_rebuild",
+            _state_rebuild_job,
+            retries=2,
+            timeout_seconds=12,
+        )
+        preview_smoke_ok = await _run_with_retry(
+            "preview_smoke_gate",
+            run_commercial_preview_smoke_gate,
+            retries=1,
+            timeout_seconds=12,
+        )
+        STARTUP_RUNTIME_STATE["preview_smoke_gate"] = {
+            "status": "pass" if preview_smoke_ok else "failed",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
     else:
         logger.error("DATABASE_NOT_READY_STARTUP_DEGRADED")
+        STARTUP_RUNTIME_STATE["preview_smoke_gate"] = {
+            "status": "skipped",
+            "reason": "database_not_ready",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
 
-    if STARTUP_RUNTIME_STATE["database_ready"]:
+    canary_mode = str(os.getenv("CANARY_MODE", "false") or "false").strip().lower() in {"1", "true", "yes"}
+    runtime_flag_default = "0" if canary_mode else "1"
+    pipeline_runtime_enabled = (
+        str(os.getenv("PIPELINE_RUNTIME_ENABLED", runtime_flag_default) or runtime_flag_default).strip().lower()
+        in {"1", "true", "yes"}
+    )
+    if STARTUP_RUNTIME_STATE["database_ready"] and pipeline_runtime_enabled:
         try:
             await pipeline_runtime.start()
             STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = True
@@ -484,6 +538,9 @@ async def startup_event():
             STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
             STARTUP_RUNTIME_STATE["last_error"] = str(exc)[:300]
             logger.error("PIPELINE_RUNTIME_START_FAILED", extra={"error": str(exc)[:300]})
+    elif STARTUP_RUNTIME_STATE["database_ready"] and not pipeline_runtime_enabled:
+        STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
+        logger.warning("PIPELINE_RUNTIME_SKIPPED_BY_FLAG", extra={"canary_mode": canary_mode})
     else:
         STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
         logger.warning("PIPELINE_RUNTIME_SKIPPED_DATABASE_NOT_READY")

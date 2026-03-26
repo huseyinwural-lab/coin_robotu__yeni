@@ -345,22 +345,25 @@ def _sync_connection(db: Session, row: UserExchangeConnection, open_positions_in
         row.updated_at = datetime.now(timezone.utc)
 
 
+def _run_exchange_connection_health_cycle(session_factory) -> None:
+    db = session_factory()
+    try:
+        open_positions_index = _build_open_position_index(db)
+        rows = db.query(UserExchangeConnection).all()
+        for row in rows:
+            _sync_connection(db, row, open_positions_index)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Exchange connection health loop cycle failed")
+    finally:
+        db.close()
+
+
 async def run_exchange_connection_health_loop(session_factory) -> None:
     logger.info("Starting exchange connection health loop")
     while True:
         cycle_started = datetime.now(timezone.utc)
-        db = session_factory()
-        try:
-            open_positions_index = _build_open_position_index(db)
-            rows = db.query(UserExchangeConnection).all()
-            for row in rows:
-                _sync_connection(db, row, open_positions_index)
-            db.commit()
-        except Exception:
-            db.rollback()
-            logger.exception("Exchange connection health loop cycle failed")
-        finally:
-            db.close()
-
+        await asyncio.to_thread(_run_exchange_connection_health_cycle, session_factory)
         elapsed = (datetime.now(timezone.utc) - cycle_started).total_seconds()
         await asyncio.sleep(max(1.0, 2.0 - elapsed))
