@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
@@ -41,6 +41,20 @@ class UserOnboardingProfile(Base):
     full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    kyc_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    risk_score: Mapped[float] = mapped_column(Float, default=0.0)
+    aml_flag: Mapped[str] = mapped_column(String(30), default="clear", index=True)
+    aml_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    api_key_validity: Mapped[str] = mapped_column(String(20), default="unknown")
+    balance_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    first_funding_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    country_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    region_compliance_status: Mapped[str] = mapped_column(String(20), default="unknown")
+    leverage_permission: Mapped[bool] = mapped_column(Boolean, default=False)
+    futures_capability: Mapped[bool] = mapped_column(Boolean, default=False)
+    spot_capability: Mapped[bool] = mapped_column(Boolean, default=True)
+    trading_eligibility: Mapped[bool] = mapped_column(Boolean, default=False)
+    precheck_reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
     verification_code: Mapped[str | None] = mapped_column(String(12), nullable=True)
     verification_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verification_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -49,3 +63,50 @@ class UserOnboardingProfile(Base):
     password_reset_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UserKycDocument(Base):
+    __tablename__ = "user_kyc_documents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    file_name: Mapped[str] = mapped_column(String(255))
+    file_type: Mapped[str] = mapped_column(String(20))
+    storage_ref: Mapped[str] = mapped_column(Text)
+    upload_status: Mapped[str] = mapped_column(String(20), default="uploaded", index=True)
+    review_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    uploaded_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    document_metadata: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class OnboardingAmlDenylist(Base):
+    __tablename__ = "onboarding_aml_denylist"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    match_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    match_type: Mapped[str] = mapped_column(String(30), default="email")
+    reason: Mapped[str] = mapped_column(Text, default="aml_internal_denylist")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UserOnboardingDecisionLog(Base):
+    __tablename__ = "user_onboarding_decision_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    decision: Mapped[str] = mapped_column(String(30), index=True)
+    decision_source: Mapped[str] = mapped_column(String(30), default="manual")
+    actor_user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    actor_role: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    reason: Mapped[str] = mapped_column(Text)
+    explanation: Mapped[str] = mapped_column(Text)
+    context_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

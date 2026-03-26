@@ -74,6 +74,7 @@ from routers import (
     symbol_selector,
     admin_execution,
     user_approvals,
+    admin_onboarding,
     user_execution,
     user_trading,
     user_explainability,
@@ -357,6 +358,7 @@ api_router.include_router(reports_alias.router)
 api_router.include_router(symbol_selector.router)
 api_router.include_router(ops_alerts.router)
 api_router.include_router(user_approvals.router)
+api_router.include_router(admin_onboarding.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(identity_control.router)
 api_router.include_router(admin_universe_monitor.router)
@@ -366,6 +368,7 @@ api_router.include_router(admin_risk_router.router)
 api_router.include_router(exchange.router)
 api_router.include_router(venues.router)
 api_router.include_router(audit.router)
+api_router.include_router(admin_onboarding.audit_router)
 api_router.include_router(market.router)
 api_router.include_router(admin_control.router)
 api_router.include_router(admin_kill_switch.router)

@@ -22,7 +22,14 @@ from model_domains.audit_reporting_system_config import (
     UserVenueAssignment,
     WeeklyReportArchive,
 )
-from model_domains.auth_users import User, UserOnboardingProfile, UserRole
+from model_domains.auth_users import (
+    OnboardingAmlDenylist,
+    User,
+    UserKycDocument,
+    UserOnboardingDecisionLog,
+    UserOnboardingProfile,
+    UserRole,
+)
 from model_domains.security_branding import AuthMfaChallenge, BrandSetting, UserMfaBackupCode, UserMfaPreference
 from model_domains.identity_control import (
     ApprovalPolicyConfig,
@@ -153,6 +160,9 @@ __all__ = [
     "UserRole",
     "User",
     "UserOnboardingProfile",
+    "UserKycDocument",
+    "OnboardingAmlDenylist",
+    "UserOnboardingDecisionLog",
     "AdminControl",
     "UserSignalMode",
     "UserScannerResult",

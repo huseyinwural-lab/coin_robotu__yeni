@@ -9,12 +9,13 @@ import { apiClient } from "@/lib/api";
 
 export const AdminUserApprovalsPage = () => {
   const [requests, setRequests] = useState([]);
+  const [contexts, setContexts] = useState({});
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("requested_at");
   const [sortDir, setSortDir] = useState("asc");
   const [selectedIds, setSelectedIds] = useState([]);
-  const [rejectReason, setRejectReason] = useState("");
+  const [decisionReason, setDecisionReason] = useState("");
   const [emailSuggestions, setEmailSuggestions] = useState([]);
 
   const loadRequests = useCallback(async () => {
@@ -48,7 +49,7 @@ export const AdminUserApprovalsPage = () => {
           params: { query: search || "", limit: 8 },
         });
         setEmailSuggestions(data?.suggestions || []);
-      } catch (_error) {
+      } catch {
         setEmailSuggestions([]);
       }
     }, 250);
@@ -72,21 +73,23 @@ export const AdminUserApprovalsPage = () => {
     setSelectedIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
   };
 
-  const handleBulkApprove = async () => {
-    if (selectedIds.length === 0) {
-      toast.error("En az bir kullanıcı seçin");
-      return;
-    }
-    const confirmed = window.confirm(`${selectedIds.length} kullanıcı onaylansın mı?`);
-    if (!confirmed) return;
+  const loadContext = async (userId) => {
     try {
-      await apiClient.post("/admin/user-approvals/bulk-approve", { ids: selectedIds });
-      toast.success("Seçili kullanıcılar onaylandı");
-      setSelectedIds([]);
-      loadRequests();
+      const { data } = await apiClient.get(`/admin/onboarding/${userId}/context`);
+      setContexts((prev) => ({ ...prev, [userId]: data }));
+      return data;
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Bulk approve başarısız");
+      toast.error(error?.response?.data?.detail || "Onboarding context alınamadı");
+      return null;
     }
+  };
+
+  const requireReason = () => {
+    if (decisionReason.trim().length < 5) {
+      toast.error("Decision reason zorunlu (min 5 karakter)");
+      return false;
+    }
+    return true;
   };
 
   const handleBulkReject = async () => {
@@ -94,57 +97,74 @@ export const AdminUserApprovalsPage = () => {
       toast.error("En az bir kullanıcı seçin");
       return;
     }
-    if (!rejectReason.trim()) {
-      toast.error("Reject reason zorunlu");
-      return;
-    }
-    const confirmed = window.confirm(`${selectedIds.length} kullanıcı reddedilsin mi?`);
+    if (!requireReason()) return;
+    const confirmed = window.confirm(`${selectedIds.length} kullanıcı reject edilsin mi?`);
     if (!confirmed) return;
     try {
-      await apiClient.post("/admin/user-approvals/bulk-reject", { ids: selectedIds, reason: rejectReason });
-      toast.success("Seçili kullanıcılar reddedildi");
+      await apiClient.post("/admin/user-approvals/bulk-reject", {
+        ids: selectedIds,
+        reason: decisionReason.trim(),
+        confirm_token: "CONFIRM",
+      });
+      toast.success("Seçili kullanıcılar reject edildi");
       setSelectedIds([]);
-      setRejectReason("");
-      loadRequests();
+      await loadRequests();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Bulk reject başarısız");
     }
   };
 
   const handleSingleApprove = async (userId) => {
-    const confirmed = window.confirm("Bu kullanıcıyı onaylamak istiyor musun?");
+    if (!requireReason()) return;
+    const context = contexts[userId] || (await loadContext(userId));
+    if (!context) return;
+    if (context.approval_disabled) {
+      toast.error(`Approval disabled: ${(context.approval_disable_reasons || []).join(", ")}`);
+      return;
+    }
+
+    const confirmed = window.confirm("Auto-approve kararı uygulansın mı? (double confirm)");
     if (!confirmed) return;
     try {
-      await apiClient.post("/admin/user-approvals/bulk-approve", { ids: [userId] });
-      toast.success("Kullanıcı onaylandı");
-      loadRequests();
+      await apiClient.post(`/admin/onboarding/${userId}/decision/auto-approve`, {
+        decision: "approve",
+        reason: decisionReason.trim(),
+        confirm_token: "CONFIRM",
+      });
+      toast.success("Kullanıcı approve edildi");
+      await loadRequests();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Onay işlemi başarısız");
+      toast.error(error?.response?.data?.detail || "Approve işlemi başarısız");
     }
   };
 
   const handleSingleReject = async (userId) => {
-    const reason = rejectReason.trim() || "manual_reject";
-    const confirmed = window.confirm("Bu kullanıcıyı reddetmek istiyor musun?");
+    if (!requireReason()) return;
+    const confirmed = window.confirm("Kullanıcı reject edilsin mi? (double confirm)");
     if (!confirmed) return;
     try {
-      await apiClient.post("/admin/user-approvals/bulk-reject", { ids: [userId], reason });
-      toast.success("Kullanıcı reddedildi");
-      loadRequests();
+      await apiClient.post(`/admin/onboarding/${userId}/decision`, {
+        decision: "reject",
+        reason: decisionReason.trim(),
+        confirm_token: "CONFIRM",
+      });
+      toast.success("Kullanıcı reject edildi");
+      await loadRequests();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Reddetme işlemi başarısız");
+      toast.error(error?.response?.data?.detail || "Reject işlemi başarısız");
     }
   };
 
   const handleRejectStale = async () => {
-    const confirmed = window.confirm("30 günden eski pending talepler reddedilsin mi?");
+    if (!requireReason()) return;
+    const confirmed = window.confirm("30 günden eski pending talepler reject edilsin mi?");
     if (!confirmed) return;
     try {
       const { data } = await apiClient.post("/admin/user-approvals/reject-stale", {
         stale_days: 30,
-        reason: "stale_pending_auto_reject",
+        reason: decisionReason.trim(),
       });
-      toast.success(`${data?.count || 0} stale talep reddedildi`);
+      toast.success(`${data?.count || 0} stale talep reject edildi`);
       await loadRequests();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Stale reject başarısız");
@@ -207,10 +227,10 @@ export const AdminUserApprovalsPage = () => {
           </Button>
           <Button
             className="border border-black bg-black text-orange-400 hover:bg-zinc-800"
-            onClick={handleBulkApprove}
+            disabled
             data-testid="admin-user-approvals-bulk-approve-button"
           >
-            Bulk Approve
+            Bulk Approve (Disabled)
           </Button>
           <Button
             className="border border-black bg-red-600 text-white hover:bg-red-700"
@@ -227,11 +247,11 @@ export const AdminUserApprovalsPage = () => {
             Reject Stale (&gt;30g)
           </Button>
           <Input
-            placeholder="Reject reason (zorunlu)"
-            value={rejectReason}
-            onChange={(event) => setRejectReason(event.target.value)}
+            placeholder="Decision reason (approve/reject için zorunlu)"
+            value={decisionReason}
+            onChange={(event) => setDecisionReason(event.target.value)}
             className="max-w-[320px]"
-            data-testid="admin-user-approvals-reject-reason-input"
+            data-testid="admin-user-approvals-decision-reason-input"
           />
         </div>
         <p className="mt-2 text-sm text-black" data-testid="admin-user-approvals-count">
@@ -252,6 +272,7 @@ export const AdminUserApprovalsPage = () => {
               </TableHead>
               <TableHead data-testid="admin-approvals-head-email">E-posta</TableHead>
               <TableHead data-testid="admin-approvals-head-status">Durum</TableHead>
+              <TableHead data-testid="admin-approvals-head-risk">Risk/KYC</TableHead>
               <TableHead data-testid="admin-approvals-head-requested">Talep Zamanı</TableHead>
               <TableHead data-testid="admin-approvals-head-action">Aksiyon</TableHead>
             </TableRow>
@@ -268,11 +289,26 @@ export const AdminUserApprovalsPage = () => {
                 </TableCell>
                 <TableCell data-testid={`admin-approval-email-${item.id}`}>{item.email}</TableCell>
                 <TableCell data-testid={`admin-approval-status-${item.id}`}>{item.approval_status}</TableCell>
+                <TableCell data-testid={`admin-approval-risk-${item.id}`}>
+                  <div className="text-xs">
+                    <div>KYC: {contexts[item.id]?.kyc_status || "-"}</div>
+                    <div>Risk: {contexts[item.id]?.risk_score ?? "-"}</div>
+                    <div>AML: {contexts[item.id]?.aml_flag || "-"}</div>
+                  </div>
+                </TableCell>
                 <TableCell data-testid={`admin-approval-requested-at-${item.id}`}>
                   {new Date(item.approval_requested_at).toLocaleString()}
                 </TableCell>
                 <TableCell data-testid={`admin-approval-actions-${item.id}`}>
                   <div className="flex flex-wrap gap-2" data-testid={`admin-approval-action-buttons-${item.id}`}>
+                    <Button
+                      size="sm"
+                      className="border border-black bg-white text-black hover:bg-zinc-100"
+                      onClick={() => loadContext(item.id)}
+                      data-testid={`admin-approval-context-button-${item.id}`}
+                    >
+                      Context
+                    </Button>
                     <Button
                       size="sm"
                       className="border border-black bg-black text-orange-400 hover:bg-zinc-800"
@@ -290,12 +326,22 @@ export const AdminUserApprovalsPage = () => {
                       Reject
                     </Button>
                   </div>
+                  {contexts[item.id]?.approval_disabled && (
+                    <p className="mt-2 text-xs text-red-700" data-testid={`admin-approval-disable-reasons-${item.id}`}>
+                      Disabled: {(contexts[item.id]?.approval_disable_reasons || []).join(", ")}
+                    </p>
+                  )}
+                  {contexts[item.id]?.decision_engine?.why_approving && (
+                    <p className="mt-1 text-xs text-black/70" data-testid={`admin-approval-why-${item.id}`}>
+                      Why: {contexts[item.id]?.decision_engine?.why_approving}
+                    </p>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
             {!loading && requests.length === 0 && (
               <TableRow data-testid="admin-approval-empty-row">
-                <TableCell colSpan={5} className="text-center text-sm text-black/70" data-testid="admin-approval-empty-text">
+                <TableCell colSpan={6} className="text-center text-sm text-black/70" data-testid="admin-approval-empty-text">
                   Bekleyen kullanıcı talebi bulunmuyor.
                 </TableCell>
               </TableRow>

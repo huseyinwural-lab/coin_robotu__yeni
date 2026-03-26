@@ -8,8 +8,7 @@ from deps import require_admin
 from models import User, UserRole
 from schemas import UserResponse
 from services.audit_service import create_audit_log
-from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
-from services.venue_service import ensure_user_venue_assignment
+from services.onboarding_approval_service import execute_onboarding_decision
 
 router = APIRouter(prefix="/admin/user-approvals", tags=["user_approvals"])
 
@@ -64,38 +63,7 @@ def bulk_approve(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    ids = payload.get("ids") or []
-    if not ids:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ids_required")
-
-    users = db.query(User).filter(User.id.in_(ids), User.role == UserRole.USER).all()
-    now = datetime.now(timezone.utc)
-    for user in users:
-        user.approval_status = "approved"
-        user.is_active = True
-        user.approved_at = now
-        ensure_user_safe_default_risk_policy(db, user.id, commit=False)
-        ensure_user_venue_assignment(
-            db,
-            user_id=user.id,
-            exchange_code="binance",
-            market_type="futures",
-            environment="testnet",
-            commit=False,
-        )
-    db.commit()
-
-    create_audit_log(
-        db,
-        action="USER_APPROVAL_BULK_APPROVED",
-        entity_type="user",
-        entity_id=current_admin.id,
-        actor_user_id=current_admin.id,
-        actor_role=current_admin.role.value,
-        severity="info",
-        details={"count": len(users), "user_ids": [user.id for user in users]},
-    )
-    return {"count": len(users), "user_ids": [user.id for user in users]}
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="bulk_approve_disabled")
 
 
 @router.post("/bulk-reject")
@@ -106,19 +74,28 @@ def bulk_reject(
 ):
     ids = payload.get("ids") or []
     reason = (payload.get("reason") or "").strip()
+    confirm_token = (payload.get("confirm_token") or "").strip()
     if not ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ids_required")
     if not reason:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="reject_reason_required")
+    if confirm_token.upper() != "CONFIRM":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="double_confirmation_required")
 
     users = db.query(User).filter(User.id.in_(ids), User.role == UserRole.USER).all()
-    now = datetime.now(timezone.utc)
+    rejected_ids: list[str] = []
     for user in users:
-        user.approval_status = "rejected"
-        user.is_active = False
-        user.approved_at = None
-        user.disabled_at = now
-    db.commit()
+        result = execute_onboarding_decision(
+            db,
+            user_id=user.id,
+            actor=current_admin,
+            decision="reject",
+            reason=reason,
+            confirm_token="CONFIRM",
+            decision_source="bulk_manual",
+        )
+        if str(result.get("approval_status")) == "rejected":
+            rejected_ids.append(user.id)
 
     create_audit_log(
         db,
@@ -128,9 +105,9 @@ def bulk_reject(
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
         severity="warning",
-        details={"count": len(users), "reason": reason, "user_ids": [user.id for user in users]},
+        details={"count": len(rejected_ids), "reason": reason, "user_ids": rejected_ids},
     )
-    return {"count": len(users), "user_ids": [user.id for user in users], "reason": reason}
+    return {"count": len(rejected_ids), "user_ids": rejected_ids, "reason": reason}
 
 
 @router.post("/reject-stale")
@@ -154,14 +131,19 @@ def reject_stale_pending_approvals(
         .all()
     )
 
-    now = datetime.now(timezone.utc)
+    rejected_ids: list[str] = []
     for user in users:
-        user.approval_status = "rejected"
-        user.is_active = False
-        user.approved_at = None
-        user.disabled_at = now
-
-    db.commit()
+        result = execute_onboarding_decision(
+            db,
+            user_id=user.id,
+            actor=current_admin,
+            decision="reject",
+            reason=reason,
+            confirm_token="CONFIRM",
+            decision_source="stale_auto_reject",
+        )
+        if str(result.get("approval_status")) == "rejected":
+            rejected_ids.append(user.id)
     create_audit_log(
         db,
         action="USER_APPROVAL_STALE_REJECTED",
@@ -170,6 +152,6 @@ def reject_stale_pending_approvals(
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
         severity="warning",
-        details={"count": len(users), "stale_days": stale_days, "reason": reason},
+        details={"count": len(rejected_ids), "stale_days": stale_days, "reason": reason},
     )
-    return {"count": len(users), "stale_days": stale_days, "reason": reason}
+    return {"count": len(rejected_ids), "stale_days": stale_days, "reason": reason}

@@ -30,6 +30,7 @@ from schemas import (
     PasswordResetRequestResponse,
     PasswordResetConfirmPayload,
     PasswordResetConfirmResponse,
+    OnboardingDecisionRequest,
 )
 from services.audit_service import create_audit_log
 from services.admin_profile_service import change_admin_password, update_admin_profile
@@ -49,6 +50,7 @@ from services.password_reset_service import (
     issue_password_reset_token,
     send_password_reset_email,
 )
+from services.onboarding_approval_service import execute_onboarding_decision
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
@@ -390,10 +392,20 @@ def list_user_approval_requests(
 @router.post("/admin/user-approval-requests/{user_id}/approve", response_model=UserResponse)
 def approve_user_request(
     user_id: str,
+    payload: OnboardingDecisionRequest,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    user = approve_user_account(db, user_id)
+    execute_onboarding_decision(
+        db,
+        user_id=user_id,
+        actor=current_admin,
+        decision="approve",
+        reason=payload.reason,
+        confirm_token=payload.confirm_token,
+        decision_source="auth_legacy_manual",
+    )
+    user = db.query(User).filter(User.id == user_id).first()
     create_audit_log(
         db,
         action="user_approval_approved",
@@ -409,10 +421,20 @@ def approve_user_request(
 @router.post("/admin/user-approval-requests/{user_id}/reject", response_model=UserResponse)
 def reject_user_request(
     user_id: str,
+    payload: OnboardingDecisionRequest,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    user = reject_user_account(db, user_id)
+    execute_onboarding_decision(
+        db,
+        user_id=user_id,
+        actor=current_admin,
+        decision="reject",
+        reason=payload.reason,
+        confirm_token=payload.confirm_token,
+        decision_source="auth_legacy_manual",
+    )
+    user = db.query(User).filter(User.id == user_id).first()
     create_audit_log(
         db,
         action="user_approval_rejected",

@@ -138,13 +138,23 @@ def onboarding_status_by_email(db: Session, email: str) -> dict:
 
     profile = _onboarding_profile_for_user(db, user)
     verified = bool(profile.email_verified)
+    kyc_verified = str(profile.kyc_status or "pending").lower() == "verified"
+    aml_clear = str(profile.aml_flag or "clear").lower() == "clear"
+    risk_scored = float(profile.risk_score or 0) > 0
     approval = str(user.approval_status)
     active = bool(user.is_active)
     steps = [
         {"key": "account_created", "label": "Hesap oluşturuldu", "done": True},
         {"key": "email_verified", "label": "E-posta doğrulandı", "done": verified},
+        {"key": "kyc_verified", "label": "KYC doğrulaması", "done": kyc_verified},
+        {"key": "aml_clear", "label": "AML kontrolü", "done": aml_clear},
+        {"key": "risk_scored", "label": "Risk skorlaması", "done": risk_scored},
         {"key": "admin_approved", "label": "Admin onayı", "done": approval == "approved"},
-        {"key": "login_ready", "label": "Girişe hazır", "done": verified and approval == "approved" and active},
+        {
+            "key": "login_ready",
+            "label": "Girişe hazır",
+            "done": verified and kyc_verified and aml_clear and risk_scored and approval == "approved" and active,
+        },
     ]
     return {
         "email": user.email,

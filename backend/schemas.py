@@ -56,6 +56,71 @@ class AuthOnboardingStatusResponse(BaseModel):
     steps: list[dict] = Field(default_factory=list)
 
 
+class OnboardingRiskFoundationRequest(BaseModel):
+    risk_score: float = Field(ge=0, le=100)
+    aml_flag: str = Field(default="clear")
+    aml_reason: str | None = None
+    api_key_validity: str = Field(default="unknown")
+    balance_usd: float = Field(default=0)
+    country_code: str | None = Field(default=None, max_length=8)
+    leverage_permission: bool = False
+    futures_capability: bool = False
+    spot_capability: bool = True
+
+
+class OnboardingKycReviewRequest(BaseModel):
+    review_status: str
+    review_note: str = Field(min_length=5, max_length=500)
+
+
+class OnboardingDecisionRequest(BaseModel):
+    decision: str
+    reason: str = Field(min_length=5, max_length=1000)
+    confirm_token: str
+
+
+class OnboardingKycDocumentResponse(BaseModel):
+    document_id: str
+    file_name: str
+    file_type: str
+    review_status: str
+    review_note: str | None = None
+    uploaded_at: datetime | None = None
+
+
+class OnboardingDecisionResponse(BaseModel):
+    user_id: str
+    approval_status: str
+    is_active: bool
+    decision_log_id: str
+    decision_engine: dict = Field(default_factory=dict)
+
+
+class OnboardingContextResponse(BaseModel):
+    user_id: str
+    email: str
+    approval_status: str
+    account_age_days: int
+    exchange_connections: list[dict] = Field(default_factory=list)
+    api_key_validity: str
+    balance_usd: float
+    first_funding_at: str | None = None
+    kyc_status: str
+    kyc_documents: list[dict] = Field(default_factory=list)
+    risk_score: float
+    aml_flag: str
+    aml_reason: str | None = None
+    trading_eligibility: bool
+    region_compliance: str
+    leverage_permission: bool
+    futures_capability: bool
+    spot_capability: bool
+    risk_flags: list[str] = Field(default_factory=list)
+    approval_disabled: bool
+    approval_disable_reasons: list[str] = Field(default_factory=list)
+    decision_engine: dict = Field(default_factory=dict)
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
