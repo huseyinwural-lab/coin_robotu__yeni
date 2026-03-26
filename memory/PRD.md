@@ -1,3 +1,91 @@
+## 2026-03-26 — P1.3 Iteration 2 Runtime Ops Katmanı ✅
+
+### Teslim edilen kapsam
+- Live PnL engine
+- Runtime alert trigger wiring
+- Daily smoke cron/script
+- SIM→testnet/live adapter guard mimarisi
+- Runtime API genişletme
+- Admin dashboard’a sınırlı runtime veri bağlama
+
+### Live PnL Engine
+- Yeni modül: `backend/core/pnl_engine.py`
+- Hesaplanan alanlar:
+  - `realized_pnl`
+  - `unrealized_pnl`
+  - `fees`
+  - `funding`
+  - `net_pnl`
+- User/symbol bazlı satırlar + aggregate summary üretimi sağlandı.
+
+### Alert Trigger Wiring
+- Yeni modül: `backend/core/alerts/runtime_alert_triggers.py`
+- Aktif tetikler:
+  - `runtime_pnl_drop` (default %5)
+  - `runtime_failed_orders_high` (20 içinde 4+)
+  - `runtime_queue_depth_high` (30+)
+  - `runtime_daily_loss_limit` (risk limit bazlı)
+  - `runtime_worker_failures_high`
+  - `runtime_snapshot_delta_high`
+- Alert payload contract:
+  - `severity`, `source`, `user_id?`, `symbol?`, `threshold`, `actual_value`, `timestamp`
+
+### Daily Smoke
+- Yeni script: `scripts/daily_smoke.py`
+- Zincir:
+  - ingest → pnl → reconciliation → revenue → snapshot compare
+- Credential yok davranışı:
+  - ingest: `SKIPPED_CREDENTIAL_MISSING`
+  - overall: `DEGRADED`
+  - alert: üretiliyor
+- Smoke sonucu DB’ye yazılıyor:
+  - yeni tablo/model: `runtime_smoke_runs`
+
+### Exchange Adapter Guard Mimarisi
+- Yeni adapter katmanı:
+  - `backend/core/exchanges/base_adapter.py`
+  - `backend/core/exchanges/sim_adapter.py`
+  - `backend/core/exchanges/binance_adapter.py`
+  - `backend/core/exchanges/__init__.py`
+- Varsayılanlar:
+  - `EXECUTION_MODE=sim`
+  - `LIVE_TRADING_ENABLED=false`
+  - `TESTNET_TRADING_ENABLED=false`
+- Live route için çift guard enforced:
+  - `EXECUTION_MODE=live` + `LIVE_TRADING_ENABLED=true`
+
+### Runtime API Genişletme
+- `GET /api/runtime/pnl/summary`
+- `GET /api/runtime/pnl/positions`
+- `GET /api/runtime/alerts`
+- `GET /api/runtime/health/smoke`
+
+### Admin UI (sınırlı kapsam)
+- `AdminDashboardPage` içine runtime kartları eklendi:
+  - canlı PnL özeti
+  - son runtime alertler
+  - son smoke sonucu
+
+### DB/Migration
+- Yeni migration: `20260326_0080_runtime_smoke_runs.py`
+- Alembic head: `20260326_0080`
+
+### Test sonuçları
+- Modül testleri (iteration2 seti) PASS
+  - `test_pnl_engine.py`
+  - `test_runtime_alert_triggers.py`
+  - `test_daily_smoke.py`
+  - `test_exchange_adapter_routing.py`
+  - `test_runtime_pnl_api.py`
+- Testing agent raporu: `/app/test_reports/iteration_137.json`
+  - Backend %100
+  - Frontend %100
+  - 24/24 PASS
+
+### MOCKED / Guarded Notu
+- Execution route default olarak SIM adapter üzerinden ilerliyor (gerçek exchange call yok).
+- Binance testnet/live route guarded stub seviyesinde.
+
 ## 2026-03-26 — P1.3 Iteration 1 Runtime Core ✅
 
 ### Kapsam (kullanıcı onayıyla)
