@@ -1,3 +1,113 @@
+## 2026-03-26 — Commercial Ops Backoffice Expansion (T-01..T-12 + F-01..F-03) ✅
+
+### Uygulanan kapsam
+- **Overview contract korunarak büyütüldü** (`GET /api/admin/commercial/overview`, contract_version: `v2`).
+- **Soft-limit uygulandı:** ağır detay listeleri maksimum 50 kayıt.
+- **Subscription/Tier ayrı domain** olarak eklendi (`commercial_subscription_profiles`).
+
+### Backend — FAZ 1 (T-01..T-07)
+- `pnl_analytics` bloğu eklendi:
+  - strategy/symbol breakdown
+  - daily/weekly trend
+  - realized_vs_unrealized trend
+  - max drawdown + drawdown series
+- `financial_accuracy` reconciliation alanları eklendi:
+  - exchange/internal/missing/duplicate trade count
+  - balance/position/pnl drift
+  - drift_within_tolerance + reconciliation_status
+- `revenue_model` ürünleşti:
+  - subscription/platform/tier/profit split/manual adjustment revenue
+  - revenue_by_user / revenue_by_plan / revenue_by_symbol
+- `user_economics` BI genişletmesi:
+  - arpu/arppu/churn/inactive_user_count
+  - cohort_summary, signup_to_retention_summary
+  - top_profitability_users, high_churn_risk_users
+- `risk_summary` derinleşti:
+  - user/strategy/symbol exposure breakdown
+  - open_positions, breached_users, risk_limit_breach_count
+  - liquidation_risk_score, forced_liquidation_risk
+  - margin_risk_score, margin_risk_state
+- `usage_analytics` telemetry alanları eklendi:
+  - request/success/failure/error rate
+  - avg/p95 latency, rpm
+  - endpoint/event dağılımı
+- `data_quality` operasyonel kalite alanları eklendi:
+  - duplicate_trade_status, cross_source_validation_state
+  - missing_symbols/sources
+  - reconciliation_coverage_pct
+  - freshness_by_source, stale_source_count
+
+### Backend — FAZ 2 (T-08..T-10)
+- Yeni domainler + migration (`20260326_0082_commercial_ops_backoffice_domains.py`):
+  - `commercial_export_manifests`
+  - `commercial_export_schedules`
+  - `commercial_export_audits`
+- Yeni endpointler:
+  - `POST /api/admin/commercial/exports/request`
+  - `POST /api/admin/commercial/exports/schedules`
+  - `GET /api/admin/commercial/exports/schedules`
+- Export request akışında manifest + audit + checksum üretimi eklendi.
+
+### Backend — FAZ 3 (T-11..T-12)
+- Yeni domainler:
+  - `commercial_operational_control_states`
+  - `commercial_operational_control_transitions`
+  - `commercial_alert_events`
+- Yeni endpoint:
+  - `POST /api/admin/commercial/controls/{user_id}`
+- Kurallar aktif:
+  - reason_note zorunlu
+  - admin guard (service katmanında da doğrulama)
+  - emergency_stop=true ise trading_enabled otomatik false
+  - transition + audit kaydı
+
+### Frontend — FAZ 4 (F-01..F-03)
+- `AdminCommercialOpsPage.jsx` genişletildi (mevcut görsel dil korunarak):
+  - Executive KPI
+  - Financial Accuracy
+  - Revenue Model
+  - User Economics
+  - PnL Analytics
+  - Risk & Exposure
+  - Usage Analytics
+  - Data Quality
+  - Export Ops
+  - Alert Rail
+  - Operational Controls Panel
+- Header rozetleri eklendi:
+  - data freshness
+  - reconciliation status
+  - duplicate trade status
+  - active alerts count
+  - export scheduler health
+- Drill-down tablolar eklendi:
+  - top strategies by pnl
+  - top symbols by pnl
+  - top users by revenue
+  - breached users
+  - high churn risk users
+  - recent alerts
+  - recent export jobs
+- Kritik öğelerde kapsamlı `data-testid` kullanıldı.
+
+### Test — FAZ 5 (QA)
+- Yeni test dosyası: `/app/backend/tests/test_admin_commercial_backoffice_phase_expansion.py`
+  - pnl analytics aggregation/trend/drawdown
+  - revenue by plan/user
+  - arpu/arppu/churn
+  - usage telemetry
+  - data quality genişletilmiş alanlar
+  - operational control güvenlik doğrulamaları
+- Çalıştırılan testler:
+  - `pytest -q ...overview_service + backoffice_phase_expansion + overview_testclient` => **49 PASS**
+- Testing agent raporu: `/app/test_reports/iteration_145.json`
+  - Backend: **100% PASS**
+  - Frontend: Kod/contract doğrulaması PASS (preview ağ dalgalanması notu var)
+
+### Infra notu
+- Preview ortamında aralıklı `net::ERR_ABORTED` / API erişim dalgalanması sürüyor.
+- Backend fonksiyonellik TestClient + pytest ile doğrulandı.
+
 ## 2026-03-26 — FAZ C + FAZ B (P0+P1) ✅
 
 ### Kullanıcı kararına göre kapsam
