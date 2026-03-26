@@ -1,3 +1,76 @@
+## 2026-03-26 — Commercial Ops Enforcement & Governance Closure ✅
+
+### Kapanan kritik başlıklar (P0/P1)
+- **Operational controls enforcement** çekirdeğe bağlandı:
+  - trade intent / runtime execution submit / position-increase path’lerinde kontrol zorunlu
+  - withdraw/fund çıkışı için enforcement path eklendi (`/api/user/funds/withdraw-request`)
+  - deterministic reason code standardı aktif:
+    - `COMMERCIAL_TRADING_DISABLED`
+    - `COMMERCIAL_EMERGENCY_STOP`
+    - `COMMERCIAL_CAPITAL_FROZEN`
+    - `COMMERCIAL_WITHDRAW_LOCKED`
+- **Transition diff standardı** tamamlandı:
+  - `previous_state_snapshot`, `new_state_snapshot`, `changed_fields`
+  - overview içinde `operational_controls.recent_actions` altında görünür
+
+### Export governance kapanışı
+- `/api/admin/commercial/monthly-pnl/export` endpoint’i korunarak **bypass kaldırıldı**:
+  - manifest + audit + checksum + artifact linkage zorunlu
+  - response header’ları:
+    - `X-Export-Id`
+    - `X-Export-File-Hash`
+    - `X-Export-Artifact-Ref`
+- Export modeli güçlendirildi:
+  - manifest/audit tarafında `artifact_ref`, `delivery_status`, `file_hash`, `delivered_at`, `failure_reason`
+- Column mapping için registry doğrulaması eklendi (type + schema version).
+
+### Scheduled export runner (polling)
+- Backend içinde 60 saniyelik polling runner devrede (`startup` ile başlıyor):
+  - due tarama
+  - lifecycle: `pending -> due -> running -> success|failed` 
+  - manifest/audit üretimi ve artifact link güncellemesi
+  - lock/re-entrancy için redis tabanlı basit kilit koruması
+
+### Alert lifecycle kapanışı
+- Alert rail pasif liste olmaktan çıkarıldı:
+  - lifecycle endpoint: `POST /api/admin/commercial/alerts/{alert_id}/lifecycle`
+  - alanlar: ack, triage, escalation, resolution
+- Alert normalization standardı güçlendirildi:
+  - severity normalize
+  - source namespace normalize
+  - entity_type/entity_id zorunlu mapping
+  - suggested_action boşsa default ile dolduruluyor
+
+### Frontend kapanış (F-01/F-02/F-03)
+- Operational Controls paneli:
+  - transition diff tablosu (changed_fields + previous→new snapshot)
+  - hata durumunda backend reason code geri bildirimi
+- Export Ops paneli:
+  - recent manifests
+  - recent audit trail
+  - schedule `last_run_at/last_status/failure reason`
+  - artifact reference görünürlüğü
+- Alert Rail:
+  - source/entity/suggested_action/triage/acknowledged_at kolonları
+  - ack aksiyonu (lifecycle endpoint’e bağlı)
+
+### Migrationlar
+- `20260326_0083_commercial_ops_enforcement_and_lifecycle.py` eklendi ve uygulandı.
+
+### Test kanıtları
+- Yeni testler:
+  - `/app/backend/tests/test_admin_commercial_enforcement_governance.py`
+  - `/app/backend/tests/test_iteration146_commercial_ops_enforcement.py`
+- Lokal doğrulama:
+  - enforcement/governance + overview test setleri PASS
+  - örnek toplam: **31 PASS** (overview_testclient + enforcement_governance)
+- Testing agent raporu:
+  - `/app/test_reports/iteration_146.json`
+  - Backend: **100% PASS**, Frontend kod/selector doğrulaması PASS
+
+### Infra notu
+- Preview ortamında aralıklı 404/ERR_ABORTED görülebiliyor; backend akışları TestClient + pytest ile doğrulandı.
+
 ## 2026-03-26 — Commercial Ops Backoffice Expansion (T-01..T-12 + F-01..F-03) ✅
 
 ### Uygulanan kapsam
