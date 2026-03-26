@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 
 export const AdminLoginPage = () => {
   const navigate = useNavigate();
-  const { login, verifyMfaChallenge, user, loading } = useAuth();
+  const { login, verifyMfaChallenge, user, loading, logout } = useAuth();
   const [form, setForm] = useState({ email: "", password: "" });
   const [submitting, setSubmitting] = useState(false);
   const [mfaState, setMfaState] = useState(null);
@@ -21,14 +21,20 @@ export const AdminLoginPage = () => {
   };
 
   useEffect(() => {
-    if (loading || !user) {
+    const storedToken = localStorage.getItem("token");
+    if (!storedToken && user) {
+      logout();
+      return;
+    }
+
+    if (loading || !user || !storedToken) {
       return;
     }
     const adminRoles = new Set(["super_admin", "admin", "ops"]);
     if (adminRoles.has(user.role)) {
       navigate("/admin/dashboard", { replace: true });
     }
-  }, [loading, navigate, user]);
+  }, [loading, logout, navigate, user]);
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -131,7 +137,7 @@ export const AdminLoginPage = () => {
           </button>
         </div>
 
-        <Button className="mt-5 w-full rounded-none bg-black text-orange-300 hover:bg-zinc-900" data-testid="admin-login-submit-button" disabled={submitting}>
+        <Button type="submit" className="mt-5 w-full rounded-none bg-black text-orange-300 hover:bg-zinc-900" data-testid="admin-login-submit-button" disabled={submitting}>
           {submitting ? "İşleniyor..." : "Admin Olarak Giriş Yap"}
         </Button>
 
