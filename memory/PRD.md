@@ -12,6 +12,7 @@
   - Artifact: `/app/test_reports/closure_regression_report.json`
   - Kapsam: login, smoke, readiness, dry-run, rollback, websocket timeline, wizard auth(super_admin only)
   - Sonuç: `overall_pass=true`
+  - Testing agent doğrulaması: `/app/test_reports/iteration_142.json` -> **21/21 PASS**
 
 ### Env ve config borcu kapanışı
 - Yeni örnek dosyalar tamamlandı:
