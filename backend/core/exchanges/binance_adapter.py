@@ -17,10 +17,67 @@ class BinanceExecutionAdapter(BaseExecutionAdapter):
     adapter_name = "binance"
 
     def __init__(self, *, mode: str = "testnet"):
-        self.mode = mode
+        self.mode = str(mode or "testnet").strip().lower()
         self.api_key = str(os.environ.get("BINANCE_TESTNET_API_KEY") or "").strip()
         self.api_secret = str(os.environ.get("BINANCE_TESTNET_API_SECRET") or "").strip()
-        self.base_url = str(os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL") or "https://testnet.binance.vision").strip().rstrip("/")
+        if self.mode == "testnet":
+            base_override = os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL")
+            mode_proxy_token = os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN") or os.environ.get("BINANCE_SPOT_PROXY_TOKEN")
+            default_base_url = "https://testnet.binance.vision"
+        else:
+            base_override = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL")
+            mode_proxy_token = os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN") or os.environ.get("BINANCE_SPOT_PROXY_TOKEN")
+            default_base_url = "https://api.binance.com"
+
+        self.base_url = str(base_override or default_base_url).strip().rstrip("/")
+        generic_proxy_token = os.environ.get("BINANCE_PROXY_TOKEN")
+        self.proxy_token = str(mode_proxy_token or generic_proxy_token or self._token_from_proxy_base_url(self.base_url) or "").strip()
+
+    @staticmethod
+    def _token_from_proxy_base_url(base_url: str) -> str:
+        normalized = str(base_url or "")
+        marker = "/p/"
+        if marker not in normalized:
+            return ""
+        tail = normalized.split(marker, 1)[1]
+        return str(tail.split("/", 1)[0]).strip()
+
+    def _request_headers(self, *, include_api_key: bool) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if include_api_key:
+            headers["X-MBX-APIKEY"] = self.api_key
+        if self.proxy_token:
+            headers["X-Proxy-Token"] = self.proxy_token
+        return headers
+
+    @staticmethod
+    def _response_payload(response: httpx.Response) -> dict | list:
+        if not response.content:
+            return {}
+        try:
+            payload = response.json()
+        except ValueError:
+            return {"msg": response.text or "exchange_error"}
+        return payload if isinstance(payload, (dict, list)) else {}
+
+    def _public_request(self, method: str, endpoint: str, params: dict | None = None) -> dict | list:
+        query = urlencode(params or {}, doseq=True)
+        url = f"{self.base_url}{endpoint}"
+        if query:
+            url = f"{url}?{query}"
+
+        try:
+            response = httpx.request(method, url, headers=self._request_headers(include_api_key=False), timeout=20.0)
+        except httpx.TimeoutException as exc:
+            raise RuntimeError("timeout") from exc
+        except httpx.RequestError as exc:
+            raise RuntimeError("network_error") from exc
+
+        payload = self._response_payload(response)
+        if response.status_code >= 400:
+            message = payload.get("msg") if isinstance(payload, dict) else "exchange_error"
+            raise RuntimeError(f"exchange_reject:{response.status_code}:{message}")
+        return payload
 
     def _guard(self) -> None:
         execution_mode = str(os.environ.get("EXECUTION_MODE") or "sim").strip().lower()
@@ -50,15 +107,14 @@ class BinanceExecutionAdapter(BaseExecutionAdapter):
         signature = hmac.new(self.api_secret.encode(), query.encode(), hashlib.sha256).hexdigest()
         url = f"{self.base_url}{endpoint}?{query}&signature={signature}"
 
-        headers = {"X-MBX-APIKEY": self.api_key}
         try:
-            response = httpx.request(method, url, headers=headers, timeout=20.0)
+            response = httpx.request(method, url, headers=self._request_headers(include_api_key=True), timeout=20.0)
         except httpx.TimeoutException as exc:
             raise RuntimeError("timeout") from exc
         except httpx.RequestError as exc:
             raise RuntimeError("network_error") from exc
 
-        payload = response.json() if response.content else {}
+        payload = self._response_payload(response)
         if response.status_code >= 400:
             message = payload.get("msg") if isinstance(payload, dict) else "exchange_error"
             raise RuntimeError(f"exchange_reject:{response.status_code}:{message}")
