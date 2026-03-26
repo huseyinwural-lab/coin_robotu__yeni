@@ -1,3 +1,102 @@
+## 2026-03-26 — P1.3 Iteration 3 Operator Control Layer ✅
+
+### Teslim edilen ana başlıklar
+- WebSocket execution timeline stream
+- Alert triage actions (ack/mute/resolve/escalate/note)
+- Auto-remediation suggested actions
+- Threshold tuning (ENV > JSON)
+- Execution latency/failure diagnostics
+- Admin dashboard runtime operasyon paneli
+
+### 1) Execution Timeline Stream
+- Yeni modüller:
+  - `backend/core/runtime_stream.py`
+  - `backend/api/runtime_ws.py`
+- WebSocket endpoint:
+  - `/api/runtime/ws/execution-timeline`
+- Event payload canlı akış:
+  - `event_type`, `order_id`, `user_id`, `symbol`, `side`, `state`, `previous_state`, `source`, `timestamp`, `meta`
+- Ek endpoint:
+  - `GET /api/runtime/timeline/events` (son event snapshot)
+
+### 2) Alert Triage Actions
+- `system_alerts` genişletildi:
+  - `acknowledged_by`, `acknowledged_at`, `resolved_by`, `resolved_at`, `mute_until`, `operator_note`
+- Yeni history tablosu:
+  - `alert_triage_actions`
+- Yeni servis:
+  - `services/runtime_alert_triage_service.py`
+- Yeni API’ler:
+  - `POST /api/runtime/alerts/{id}/ack`
+  - `POST /api/runtime/alerts/{id}/mute`
+  - `POST /api/runtime/alerts/{id}/resolve`
+  - `POST /api/runtime/alerts/{id}/escalate`
+  - `POST /api/runtime/alerts/{id}/note`
+- Mute seçenekleri:
+  - 15m / 1h / 24h
+
+### 3) Auto-Remediation Suggestion
+- Yeni modül:
+  - `backend/core/alerts/suggested_actions.py`
+- İlk 5 alert tipi için suggestion + runbook_hint üretildi:
+  - `runtime_pnl_drop`
+  - `runtime_daily_smoke_degraded`
+  - `runtime_queue_depth_high`
+  - `runtime_failed_orders_high`
+  - `runtime_daily_loss_limit`
+
+### 4) Threshold Tuning
+- Yeni config:
+  - `backend/config/runtime_alert_thresholds.json`
+- Yeni loader:
+  - `backend/core/runtime_alert_thresholds.py`
+- Öncelik kuralı:
+  - **ENV > JSON**
+- Tunable alanlar:
+  - `net_pnl_drop_pct`
+  - `failed_orders_window`
+  - `failed_orders_threshold`
+  - `queue_depth_threshold`
+  - `smoke_degraded_repeat_threshold`
+  - `execution_latency_ms_threshold`
+
+### 5) Execution Diagnostics
+- `execution_jobs` alanları:
+  - `queue_wait_ms`
+  - `execution_ms`
+  - `total_ms`
+  - `failure_class`
+- Route çıkışlarında görünür hale getirildi.
+
+### 6) Admin UI Runtime Ops
+- `AdminDashboardPage` runtime panel genişletildi:
+  - canlı PnL kartı
+  - triage aksiyon butonlu alert paneli
+  - suggestion/runbook alanı
+  - severity/state/symbol/user/time filtreleri
+  - execution timeline paneli (son 50 event, auto-scroll, ws reconnecting göstergesi)
+
+### Migration
+- Yeni migration:
+  - `20260326_0081_alert_triage_and_execution_diagnostics.py`
+- Alembic head:
+  - `20260326_0081`
+
+### Test sonuçları
+- Iteration 3 test dosyaları:
+  - `test_runtime_websocket_stream.py`
+  - `test_alert_triage_actions.py`
+  - `test_alert_suggested_actions.py`
+  - `test_threshold_config_loading.py`
+  - `test_execution_latency_metrics.py`
+- Testing agent raporu:
+  - `/app/test_reports/iteration_138.json`
+  - Backend %100 / Frontend %100 / 24-24 PASS
+
+### MOCKED/Guarded notu
+- Execution varsayılanı SIM adapter.
+- Binance live/testnet route guarded stub, canlı açılmadı.
+
 ## 2026-03-26 — P1.3 Iteration 2 Runtime Ops Katmanı ✅
 
 ### Teslim edilen kapsam
