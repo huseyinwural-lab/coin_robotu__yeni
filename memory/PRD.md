@@ -1,3 +1,55 @@
+## 2026-03-26 — T-04 Supabase Storage Kapanışı ✅
+
+### Tamamlananlar
+- `commercial_export_storage_service.py` production provider pattern’e geçirildi:
+  - `LocalExportStorageProvider` (kontrollü fallback)
+  - `SupabaseExportStorageProvider` (gerçek bucket upload + signed URL)
+  - Env-based seçim: `COMMERCIAL_EXPORT_STORAGE_PROVIDER=supabase|local`
+- Supabase env konfigürasyonu bağlandı:
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `SUPABASE_STORAGE_BUCKET`
+  - `COMMERCIAL_EXPORT_SIGNED_URL_TTL_SECONDS=900`
+- `finalize_export_delivery` gerçek storage sonucu ile güncellendi:
+  - artifact_ref artık `supabase://bucket/path`
+  - `signed_download_url` gerçek Supabase signed URL
+  - retention metadata/details (retention_until, storage provider/path, ttl)
+- Cleanup helper eklendi:
+  - `cleanup_expired_export_artifacts(...)`
+  - expired artifact’leri delete edip manifest state güncelliyor
+- Scheduler cycle sonunda cleanup helper tetikleniyor.
+
+### Placeholder URL Temizliği
+- Legacy `local://download/...` URL pattern’i tamamen kaldırıldı.
+- Data migration’larla eski local URL kayıtları temizlenip devre dışı bırakıldı.
+
+### Migration’lar
+- `20260326_0086_remove_legacy_local_download_placeholder_urls.py`
+- `20260326_0087_disable_legacy_local_signed_urls.py`
+
+### QA-01 Test Kapanışı
+- Yeni test dosyası: `test_commercial_export_storage_provider.py`
+  - valid config ile Supabase upload + signed URL PASS
+  - missing config deterministic FAIL
+  - expired retention cleanup PASS
+  - manifest + audit + artifact linkage PASS
+  - local provider controlled fallback PASS
+- Sonuç: **5 passed**
+
+### QA-02 Regression Kapanışı
+- Bağımsız backend test ajanı: **5/5 PASS**
+  - scheduler race protection
+  - export create + manifest generation
+  - signed URL delivery (404 yok, local://download yok)
+  - alert SLA flow
+  - readiness pass
+
+### Net Durum
+- T-03 ✅
+- T-04 ✅
+- T-05 ✅
+- T-06 ✅
+
 ## 2026-03-26 — P1/P2 Sertleştirme (T-03 + T-05 + T-06) ✅
 
 ### T-03 — Scheduler Leader-Election / Pessimistic Claim
