@@ -68,11 +68,17 @@ export const AuthProvider = ({ children }) => {
         if (isCanceledRequest) {
           return;
         }
-        clearAuthSession();
-        setAuthToken(null);
-        if (!cancelled) {
-          setToken(null);
-          setUser(null);
+        const status = Number(error?.response?.status || 0);
+        if (status === 401) {
+          clearAuthSession();
+          setAuthToken(null);
+          if (!cancelled) {
+            setToken(null);
+            setUser(null);
+          }
+        } else if (!cancelled) {
+          setAuthToken(token);
+          setUser((prev) => prev || readStoredUser());
         }
       } finally {
         if (!cancelled) {

@@ -1,3 +1,34 @@
+## 2026-03-26 — MASTER GÖREV EMRİ (P1+P2 Unified) Uygulama Güncellemesi
+
+### Tamamlanan Ana Kapsam
+- Workflow + Decision platform birleşik uygulaması genişletildi: assignment/escalation/priority queue + decision guardrails + observability truth layer + admin cockpit UX.
+- Backend: `workflow/admin-candidates`, `workflow/escalate`, `observability/summary` endpointleri eklendi; context payload’ı detail drawer için genişletildi.
+- Frontend: `/admin/user-approvals` decision cockpit seviyesine çıkarıldı (assign/escalate/detail drawer/decision support/quick approve+risk/quick reject template+free text/empty-state blocking panel).
+
+### Guardrail ve Karar Kuralları
+- `approve` için data completeness zorunlu: missing fields ile 409 BLOCK.
+- High-risk/AML durumunda explanation min 15 karakter zorunluluğu eklendi.
+- Decision + audit log tek transaction içinde commit edilecek şekilde decision akışı sertleştirildi.
+
+### Observability (P2-E1)
+- `GET /api/admin/onboarding/observability/summary` üretimde:
+  - KPI: approval_rate, avg_approval_time, reject_distribution, funnel, drop_off_rate, sla_breach_rate
+  - Reconcile: decision/audit/workflow log tutarlılık kontrolü, mismatch varsa `status=degraded`
+  - Telemetry: p50/p95/p99 + 2s warning / 5s error eşikleri
+- UI:
+  - Dashboard snapshot kartı eklendi
+  - Detay sayfa eklendi: `/admin/onboarding-observability`
+
+### Son Test Notları
+- Testing agent: `/app/test_reports/iteration_149.json` backend 19/19 PASS.
+- Report aksiyonları işlendi:
+  - WebSocket auth handshake daha stabil hale getirildi (token claim tabanlı admin resolve).
+  - Auth hydration flakiness azaltıldı (401 dışı hatada session koruma).
+  - Login süresi iyileştirildi ancak ortam kaynaklı gecikme devam ediyor (yaklaşık ~7s bandı gözleniyor).
+
+### Kalan/İzleme
+- Login p95 performansının <5s hedefe indirilmesi için DB round-trip ve auth-side telemetry derin optimizasyonu.
+
 ## 2026-03-26 — P1 Final Closure Progress Update
 
 ### Orijinal Problem Özeti

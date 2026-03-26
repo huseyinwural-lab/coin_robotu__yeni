@@ -40,7 +40,6 @@ from services.identity_control_service import (
     get_or_create_identity_profile,
     list_active_sessions,
     record_login_failure,
-    record_login_success,
     register_auth_session,
     revoke_session,
 )
@@ -218,15 +217,6 @@ def _login_with_policy(
         )
 
     register_auth_session(db, user=user, access_token=session.access_token, request=request, commit=False)
-    record_login_success(
-        db,
-        request=request,
-        endpoint_scope=endpoint_scope,
-        email=user.email,
-        user=user,
-        identity_profile=identity_profile,
-        commit=False,
-    )
     create_audit_log(
         db,
         action="user_login",
