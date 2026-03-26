@@ -1,9 +1,14 @@
 import json
-import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from core.alerts.runtime_alert_triggers import (
+    check_failed_orders_trigger,
+    check_queue_depth_trigger,
+    check_worker_failure_trigger,
+)
+from core.exchanges import get_execution_adapter
 from core.risk_engine import evaluate_risk
 from db import redis_client
 from models import ExecutionJob, Order, Position
@@ -59,6 +64,7 @@ def enqueue_execution(db: Session, job: ExecutionJob) -> dict:
     redis_client.rpush(EXECUTION_QUEUE_KEY, json.dumps(payload, ensure_ascii=False, default=str))
     job.queue_payload = payload
     db.commit()
+    check_queue_depth_trigger(db, threshold=30)
     return payload
 
 
@@ -103,18 +109,19 @@ def advance_order_state(db: Session, *, order: Order, new_state: str, reason: st
 
 
 def route_to_exchange(job: ExecutionJob) -> dict:
-    external_order_id = f"SIM-{job.id[:12]}"
-    size = float(job.size or 0.0)
-    states = ["SENT"]
-    if size >= 2:
-        states.append("PARTIALLY_FILLED")
-    states.append("FILLED")
-    return {
-        "external_order_id": external_order_id,
-        "states": states,
-        "avg_fill_price": float((job.meta_payload or {}).get("mark_price") or 1.0),
-        "filled_size": size,
-    }
+    adapter = get_execution_adapter()
+    return adapter.submit_order(
+        {
+            "execution_job_id": job.id,
+            "idempotency_key": job.idempotency_key,
+            "user_id": job.user_id,
+            "symbol": job.symbol,
+            "side": job.side,
+            "size": float(job.size or 0.0),
+            "strategy_name": job.strategy_name,
+            "mark_price": float((job.meta_payload or {}).get("mark_price") or 1.0),
+        }
+    )
 
 
 def _sync_position_after_fill(db: Session, *, order: Order) -> None:
@@ -290,6 +297,7 @@ def execute_queued_job(db: Session, *, queue_payload: dict) -> dict:
             actor_role="system",
             details={"result": result},
         )
+        check_failed_orders_trigger(db, threshold=4, window_size=20)
         return {"status": "processed", **result}
     except Exception as exc:
         job.retry_count = int(job.retry_count or 0) + 1
@@ -304,6 +312,9 @@ def execute_queued_job(db: Session, *, queue_payload: dict) -> dict:
         if str(job.state).upper() != "FAILED":
             queue_payload["retry_count"] = int(job.retry_count)
             redis_client.rpush(EXECUTION_QUEUE_KEY, json.dumps(queue_payload, ensure_ascii=False, default=str))
+
+        check_worker_failure_trigger(db, threshold=3, window_minutes=15)
+        check_failed_orders_trigger(db, threshold=4, window_size=20)
 
         return {
             "status": "retry" if str(job.state).upper() != "FAILED" else "failed",

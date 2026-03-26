@@ -126,6 +126,7 @@ from model_domains.governance_execution import (
     PlaybookRollbackMarker,
 )
 from model_domains.execution_runtime_core import ExecutionJob, Order
+from model_domains.runtime_ops import RuntimeSmokeRun
 from model_domains.commercial_ops import (
     AnalyticsSnapshot,
     CommercialTrade,
@@ -171,6 +172,7 @@ __all__ = [
     "PlaybookRollbackMarker",
     "ExecutionJob",
     "Order",
+    "RuntimeSmokeRun",
     "StrategyRegimeBinding",
     "CanonicalStrategyRegistry",
     "StrategyFamilyGate",

@@ -144,6 +144,9 @@ export const AdminDashboardPage = () => {
   const [killSwitchState, setKillSwitchState] = useState(null);
   const [actionAuditSnippet, setActionAuditSnippet] = useState([]);
   const [incidentHistory, setIncidentHistory] = useState({ audit_events: [], recent_alerts: [] });
+  const [runtimePnlSummary, setRuntimePnlSummary] = useState(null);
+  const [runtimeAlerts, setRuntimeAlerts] = useState([]);
+  const [runtimeSmoke, setRuntimeSmoke] = useState(null);
   const [criticalDialogState, setCriticalDialogState] = useState({
     open: false,
     actionKey: "",
@@ -218,7 +221,18 @@ export const AdminDashboardPage = () => {
     setLoadError("");
 
     try {
-      const [summaryResponse, actionSummaryResponse, killSwitchResponse, incidentResponse, alertsResponse, latestAutoCloseResponse, actionAuditResponse] = await Promise.all([
+      const [
+        summaryResponse,
+        actionSummaryResponse,
+        killSwitchResponse,
+        incidentResponse,
+        alertsResponse,
+        latestAutoCloseResponse,
+        actionAuditResponse,
+        runtimePnlSummaryResponse,
+        runtimeAlertsResponse,
+        runtimeSmokeResponse,
+      ] = await Promise.all([
         apiClient.get("/dashboard/summary"),
         apiClient.get("/admin/action-center/summary"),
         apiClient.get("/admin/kill-switch"),
@@ -235,6 +249,9 @@ export const AdminDashboardPage = () => {
         }),
         apiClient.get("/admin/action-center/close-next-actions/latest"),
         apiClient.get("/admin/live-trading/control-layer/action-audit", { params: { since_hours: 48, limit: 8 } }),
+        apiClient.get("/runtime/pnl/summary"),
+        apiClient.get("/runtime/alerts", { params: { limit: 10 } }),
+        apiClient.get("/runtime/health/smoke"),
       ]);
 
       const summaryPayload = summaryResponse?.data || null;
@@ -250,6 +267,9 @@ export const AdminDashboardPage = () => {
       setAlerts(alertsResponse?.data?.items || []);
       setLatestAutoCloseAudit(latestAutoCloseResponse?.data?.found ? latestAutoCloseResponse?.data?.item : null);
       setActionAuditSnippet(actionAuditResponse?.data?.items || []);
+      setRuntimePnlSummary(runtimePnlSummaryResponse?.data || null);
+      setRuntimeAlerts(runtimeAlertsResponse?.data?.items || []);
+      setRuntimeSmoke(runtimeSmokeResponse?.data?.smoke || null);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Admin dashboard verisi yüklenemedi";
@@ -549,6 +569,40 @@ export const AdminDashboardPage = () => {
           </div>
         </div>
       </header>
+
+      <div className="grid gap-3 md:grid-cols-3" data-testid="admin-dashboard-runtime-ops-grid">
+        <article className="border border-emerald-700/40 bg-slate-900 p-3" data-testid="admin-dashboard-runtime-pnl-card">
+          <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="admin-dashboard-runtime-pnl-title">Canlı PnL Özeti</p>
+          <div className="mt-2 space-y-1 text-xs" data-testid="admin-dashboard-runtime-pnl-content">
+            <p data-testid="admin-dashboard-runtime-pnl-scope">scope: {runtimePnlSummary?.scope || "-"}</p>
+            <p data-testid="admin-dashboard-runtime-pnl-open-positions">open_positions: {runtimePnlSummary?.open_positions ?? "-"}</p>
+            <p data-testid="admin-dashboard-runtime-pnl-realized">realized: {runtimePnlSummary?.realized_pnl ?? "-"}</p>
+            <p data-testid="admin-dashboard-runtime-pnl-unrealized">unrealized: {runtimePnlSummary?.unrealized_pnl ?? "-"}</p>
+            <p data-testid="admin-dashboard-runtime-pnl-net">net: {runtimePnlSummary?.net_pnl ?? "-"}</p>
+          </div>
+        </article>
+
+        <article className="border border-amber-700/40 bg-slate-900 p-3" data-testid="admin-dashboard-runtime-alerts-card">
+          <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="admin-dashboard-runtime-alerts-title">Son Runtime Alertler</p>
+          <div className="mt-2 max-h-24 space-y-1 overflow-auto text-xs" data-testid="admin-dashboard-runtime-alerts-list">
+            {runtimeAlerts.slice(0, 5).map((item) => (
+              <p key={item.id} data-testid={`admin-dashboard-runtime-alert-item-${item.id}`}>
+                [{item.severity}] {item.alert_type}
+              </p>
+            ))}
+            {runtimeAlerts.length === 0 && <p data-testid="admin-dashboard-runtime-alerts-empty">Runtime alert yok</p>}
+          </div>
+        </article>
+
+        <article className="border border-cyan-700/40 bg-slate-900 p-3" data-testid="admin-dashboard-runtime-smoke-card">
+          <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="admin-dashboard-runtime-smoke-title">Son Smoke Sonucu</p>
+          <div className="mt-2 space-y-1 text-xs" data-testid="admin-dashboard-runtime-smoke-content">
+            <p data-testid="admin-dashboard-runtime-smoke-status">status: {runtimeSmoke?.run_status || "no_data"}</p>
+            <p data-testid="admin-dashboard-runtime-smoke-summary">summary: {runtimeSmoke?.summary || "-"}</p>
+            <p data-testid="admin-dashboard-runtime-smoke-completed-at">completed_at: {runtimeSmoke?.completed_at || "-"}</p>
+          </div>
+        </article>
+      </div>
 
       <div className="border border-cyan-700/60 bg-slate-900 p-4" data-testid="admin-dashboard-global-action-toolbar">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-dashboard-global-action-toolbar-header">

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from openpyxl import Workbook
 from sqlalchemy.orm import Session
 
+from core.alerts.runtime_alert_triggers import check_snapshot_compare_delta_trigger
 from models import AnalyticsSnapshot, RevenueLedger, User
 from services.revenue_engine_service import get_revenue_summary
 from services.user_economics_service import get_segment_profitability, get_user_economics_summary
@@ -447,6 +448,16 @@ def compare_analytics_snapshots(
     base_segments = base_payload.get("segments", [])
     target_segments = target_payload.get("segments", [])
 
+    kpi_delta_rows = _build_kpi_delta(base_kpis, target_kpis)
+    for item in kpi_delta_rows:
+        if item.get("metric") == "total_revenue_usd" and item.get("delta_pct") is not None:
+            check_snapshot_compare_delta_trigger(
+                db,
+                delta_pct=float(item["delta_pct"]),
+                threshold_pct=5.0,
+                metric="total_revenue_usd",
+            )
+
     return {
         "status": "ok",
         "snapshot_type": base_snapshot.snapshot_type,
@@ -460,7 +471,7 @@ def compare_analytics_snapshots(
             "snapshot_date": target_snapshot.snapshot_date.isoformat(),
         },
         "delta": {
-            "kpis": _build_kpi_delta(base_kpis, target_kpis),
+            "kpis": kpi_delta_rows,
             "top_users": _build_top_user_delta(base_top_users, target_top_users),
             "segments": _build_segment_delta(base_segments, target_segments),
         },

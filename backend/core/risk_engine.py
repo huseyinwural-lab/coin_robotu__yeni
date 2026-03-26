@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from core.alerts.runtime_alert_triggers import check_daily_loss_trigger
 from db import redis_client
 from models import CommercialTrade, Position
 from services.audit_service import create_audit_log
@@ -83,6 +84,12 @@ def evaluate_risk(
     )
     if daily_realized_pnl <= -abs(_to_float(cfg["max_daily_loss_usd"])):
         reject_reasons.append("max_daily_loss_exceeded")
+        check_daily_loss_trigger(
+            db,
+            user_id=user_id,
+            daily_loss_usd=abs(float(daily_realized_pnl)),
+            configured_limit=abs(_to_float(cfg["max_daily_loss_usd"])),
+        )
         if abs(daily_realized_pnl) > abs(_to_float(cfg["kill_switch_drawdown_threshold_usd"])):
             block_all_trades(reason="daily_drawdown_threshold_breached", actor_user_id=user_id)
             reject_reasons.append("kill_switch_triggered")
