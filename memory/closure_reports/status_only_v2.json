@@ -1,0 +1,11 @@
+{
+  "processed_at": "2026-03-26T06:52:12.862444+00:00",
+  "final_status": "FAIL",
+  "critical": {
+    "infra_patch_applied": false,
+    "production_url_used": false,
+    "smoke_pass": false,
+    "readiness_ready": false,
+    "dry_run_pass": false
+  }
+}

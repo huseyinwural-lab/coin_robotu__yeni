@@ -1,0 +1,53 @@
+{
+  "processed_at": "2026-03-26T06:52:12.862648+00:00",
+  "final_status": "FAIL",
+  "passed_conditions": [
+    "kill_switch_verified"
+  ],
+  "failed_conditions": [
+    "infra_patch_applied",
+    "production_url_used",
+    "login_10x_200",
+    "websocket_stable",
+    "smoke_pass",
+    "readiness_ready",
+    "dry_run_pass",
+    "go_live_true"
+  ],
+  "checks": {
+    "login_10x_codes": [
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404
+    ],
+    "login_10x_all_200": false,
+    "dashboard_status_code": 200,
+    "ws_soak": {
+      "connected": false,
+      "messages": 0,
+      "error": "No module named 'websocket'"
+    },
+    "smoke_exit_code": 1,
+    "smoke_overall_status": "FAIL",
+    "dry_run_status": "FAIL",
+    "readiness_status": "NOT_READY",
+    "go_live": false,
+    "rollback_code": 200,
+    "kill_switch_verify_code": 200,
+    "kill_switch_verify_status": "PASS"
+  },
+  "artifacts": {
+    "devops_apply_commands": "/app/test_reports/final_closure_20260326_064517/devops_apply_commands.sh",
+    "daily_smoke_latest": "/app/test_reports/final_closure_20260326_064517/daily_smoke_latest.json",
+    "final_go_no_go_artifact": "/app/test_reports/final_closure_20260326_064517/final_go_no_go_artifact.json",
+    "rollback_state": "/app/test_reports/final_closure_20260326_064517/rollback_state.json",
+    "kill_switch_verify": "/app/test_reports/final_closure_20260326_064517/kill_switch_verify.json"
+  }
+}
