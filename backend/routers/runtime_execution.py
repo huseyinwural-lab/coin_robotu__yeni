@@ -7,11 +7,18 @@ from sqlalchemy.orm import Session
 from core.go_live_checklist import (
     build_canary_readiness_score,
     evaluate_go_live_checklist,
+    get_go_live_wizard_state,
     get_proxy_exchange_health_snapshot,
     run_canary_end_to_end_validation,
     run_final_regression_validation,
+    run_single_flow_dry_run,
     run_testnet_lifecycle_validation,
     verify_kill_switch_rollback,
+    wizard_arm_live,
+    wizard_confirm_live,
+    wizard_rollback_live,
+    wizard_run_canary_check,
+    wizard_run_readiness_check,
 )
 from core.pnl_engine import compute_runtime_pnl_positions, compute_runtime_pnl_summary
 from core.reconciliation.order_reconciliation import run_order_reconciliation
@@ -78,6 +85,17 @@ class TestnetLifecycleRequest(BaseModel):
 
 class KillSwitchVerifyRequest(BaseModel):
     symbol: str = Field(default="BTCUSDT", min_length=3, max_length=24)
+
+
+class DryRunRequest(BaseModel):
+    symbol: str = Field(default="BTCUSDT", min_length=3, max_length=24)
+    size: float = Field(default=0.0001, gt=0)
+
+
+def require_super_admin(current_user: User = Depends(get_current_user)) -> User:
+    if str(current_user.role.value) != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_required")
+    return current_user
 
 
 @router.post("/strategy/signal")
@@ -463,6 +481,23 @@ def run_final_regression_endpoint(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
+@router.post("/go-live/dry-run/run")
+def run_go_live_dry_run_endpoint(
+    payload: DryRunRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = run_single_flow_dry_run(db, current_user=current_user, symbol=payload.symbol, size=payload.size)
+        if str(result.get("status") or "").upper() != "PASS":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result)
+        return {"status": "ok", "requested_by": current_user.id, "result": result}
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @router.get("/canary/readiness-score")
 def get_canary_readiness_score(
     current_user: User = Depends(require_admin),
@@ -499,6 +534,56 @@ def get_exchange_proxy_health(
     }
 
 
+@router.get("/go-live/wizard/state")
+def get_go_live_wizard_state_endpoint(current_user: User = Depends(require_admin)):
+    return {"status": "ok", "requested_by": current_user.id, "result": get_go_live_wizard_state()}
+
+
+@router.post("/go-live/wizard/readiness-check")
+def run_go_live_wizard_readiness_step(
+    current_user: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return {"status": "ok", "requested_by": current_user.id, "result": wizard_run_readiness_check(db)}
+
+
+@router.post("/go-live/wizard/canary-check")
+def run_go_live_wizard_canary_step(
+    payload: DryRunRequest,
+    current_user: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    return {
+        "status": "ok",
+        "requested_by": current_user.id,
+        "result": wizard_run_canary_check(db, current_user=current_user, symbol=payload.symbol, size=payload.size),
+    }
+
+
+@router.post("/go-live/wizard/arm")
+def run_go_live_wizard_arm(
+    current_user: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return {"status": "ok", "requested_by": current_user.id, "result": wizard_arm_live(db)}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/go-live/wizard/confirm")
+def run_go_live_wizard_confirm(current_user: User = Depends(require_super_admin)):
+    try:
+        return {"status": "ok", "requested_by": current_user.id, "result": wizard_confirm_live()}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/go-live/wizard/rollback")
+def run_go_live_wizard_rollback(current_user: User = Depends(require_super_admin)):
+    return {"status": "ok", "requested_by": current_user.id, "result": wizard_rollback_live()}
+
+
 @router.post("/safety/kill-switch/verify-rollback")
 def verify_kill_switch_rollback_endpoint(
     payload: KillSwitchVerifyRequest,
@@ -518,10 +603,26 @@ def verify_kill_switch_rollback_endpoint(
 
 @router.get("/execution/mode")
 def get_execution_mode(current_user: User = Depends(require_admin)):
+    alias_to_mode = {
+        "mock": "sim",
+        "paper": "testnet",
+        "live": "live",
+        "sim": "sim",
+        "testnet": "testnet",
+    }
+    compatibility_alias = {
+        "sim": "MOCK",
+        "testnet": "PAPER",
+        "live": "LIVE",
+    }
+    raw_mode = str(os.environ.get("EXECUTION_MODE") or "sim").strip().lower()
+    mode = alias_to_mode.get(raw_mode, raw_mode)
     return {
         "status": "ok",
         "requested_by": current_user.id,
-        "mode": str(os.environ.get("EXECUTION_MODE") or "sim"),
+        "mode": mode,
+        "compatibility_alias": compatibility_alias.get(mode, "MOCK"),
+        "compatibility_notice": "legacy PAPER/MOCK aliases will be removed after one sprint",
         "flags": {
             "LIVE_TRADING_ENABLED": str(os.environ.get("LIVE_TRADING_ENABLED") or "false"),
             "TESTNET_TRADING_ENABLED": str(os.environ.get("TESTNET_TRADING_ENABLED") or "false"),

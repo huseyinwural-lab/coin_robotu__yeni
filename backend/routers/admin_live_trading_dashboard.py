@@ -13,6 +13,7 @@ from services.audit_service import create_audit_log
 from services.execution_mode_control_service import (
     get_execution_mode,
     get_latency_thresholds,
+    normalize_execution_mode,
     read_mode_snapshots,
     set_latency_thresholds,
     switch_execution_mode,
@@ -36,6 +37,8 @@ OPS_ALLOWED_ALERT_ACTIONS = {"resolve", "mute", "fix_action"}
 
 MODE_SWITCH_PHRASE = {
     "LIVE": "SWITCH TO LIVE",
+    "TESTNET": "SWITCH TO TESTNET",
+    "SIM": "SWITCH TO SIM",
     "PAPER": "SWITCH TO PAPER",
     "MOCK": "SWITCH TO MOCK",
 }
@@ -60,7 +63,7 @@ SCANNER_UNIVERSE_PHRASE = "UPDATE SYMBOL UNIVERSE"
 
 
 class ExecutionModeSwitchRequest(BaseModel):
-    mode: str = Field(pattern="^(LIVE|PAPER|MOCK)$")
+    mode: str = Field(pattern="^(LIVE|TESTNET|SIM|PAPER|MOCK)$")
     reason: str = Field(min_length=5, max_length=300)
     confirmation_phrase: str = Field(min_length=5, max_length=80)
 
@@ -261,7 +264,11 @@ def admin_live_trading_switch_execution_mode(
     manager = _require_manager(current_admin)
     previous_mode = get_execution_mode(db, redis_client)
 
-    if payload.mode == "LIVE":
+    normalized_mode = normalize_execution_mode(payload.mode)
+    if normalized_mode is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_mode")
+
+    if normalized_mode == "LIVE":
         enforce_production_gate_or_raise(
             db,
             actor_user_id=manager.id,
@@ -270,7 +277,7 @@ def admin_live_trading_switch_execution_mode(
             reason_text=payload.reason,
         )
 
-    expected_phrase = MODE_SWITCH_PHRASE[payload.mode]
+    expected_phrase = MODE_SWITCH_PHRASE[str(payload.mode).strip().upper()]
     if payload.confirmation_phrase.strip().upper() != expected_phrase:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -280,7 +287,7 @@ def admin_live_trading_switch_execution_mode(
     result = switch_execution_mode(
         db,
         redis_client,
-        mode=payload.mode,
+        mode=normalized_mode,
         reason=payload.reason,
         actor_user_id=manager.id,
         actor_role=manager.role.value,
@@ -292,10 +299,11 @@ def admin_live_trading_switch_execution_mode(
         entity_id="global",
         actor_user_id=manager.id,
         actor_role=manager.role.value,
-        severity="warning" if payload.mode == "LIVE" else "info",
+        severity="warning" if normalized_mode == "LIVE" else "info",
         details={
             "previous_state": previous_mode,
-            "next_state": payload.mode,
+            "next_state": normalized_mode,
+            "requested_mode": str(payload.mode).strip().upper(),
             "reason_code": "MODE_TRANSITION",
             "reason_text": payload.reason,
             "expiry": None,

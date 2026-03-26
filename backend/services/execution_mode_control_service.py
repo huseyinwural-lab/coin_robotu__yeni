@@ -15,7 +15,22 @@ DEFAULT_LATENCY_THRESHOLDS = {
     "execution_latency_ms": 1600,
 }
 
-ALLOWED_MODES = {"LIVE", "PAPER", "MOCK"}
+CANONICAL_MODES = {"LIVE", "TESTNET", "SIM"}
+LEGACY_MODE_ALIASES = {"PAPER", "MOCK"}
+MODE_ALIAS_MAP = {
+    "LIVE": "LIVE",
+    "TESTNET": "TESTNET",
+    "SIM": "SIM",
+    "PAPER": "TESTNET",
+    "MOCK": "SIM",
+}
+
+
+def normalize_execution_mode(mode: str | None) -> str | None:
+    if mode is None:
+        return None
+    normalized = str(mode).strip().upper()
+    return MODE_ALIAS_MAP.get(normalized)
 
 
 def _decode(value):
@@ -29,16 +44,16 @@ def _decode(value):
 def get_execution_mode(db: Session, cache) -> str:
     raw = _decode(cache.get(EXECUTION_MODE_KEY))
     if raw:
-        normalized = str(raw).strip().upper()
-        if normalized in ALLOWED_MODES:
+        normalized = normalize_execution_mode(raw)
+        if normalized in CANONICAL_MODES:
             return normalized
 
     config = db.query(LiveActivationConfig).filter(LiveActivationConfig.id == "global").first()
     if config and bool(config.live_mode_enabled) and not bool(config.safe_mode_enabled):
         return "LIVE"
     if config and bool(config.safe_mode_enabled):
-        return "PAPER"
-    return "MOCK"
+        return "TESTNET"
+    return "SIM"
 
 
 def get_latency_thresholds(cache) -> dict:
@@ -71,16 +86,16 @@ def infer_requested_execution_mode(intent: UserExecutionIntent) -> str:
     payload = intent.normalized_order_payload or {}
     explicit_mode = payload.get("execution_mode") or payload.get("engine_mode") or payload.get("route_mode")
     if explicit_mode:
-        normalized = str(explicit_mode).strip().upper()
-        if normalized in ALLOWED_MODES:
+        normalized = normalize_execution_mode(explicit_mode)
+        if normalized in CANONICAL_MODES:
             return normalized
 
     if bool(payload.get("mocked")) or str(payload.get("simulate") or "").lower() in {"true", "1", "yes"}:
-        return "MOCK"
+        return "SIM"
 
     market_type = str(intent.market_type or "").lower()
-    if "paper" in market_type or "sim" in market_type:
-        return "PAPER"
+    if "paper" in market_type or "sim" in market_type or "testnet" in market_type:
+        return "TESTNET"
 
     return "LIVE"
 
@@ -131,8 +146,9 @@ def switch_execution_mode(
     actor_user_id: str,
     actor_role: str,
 ) -> dict:
-    normalized_mode = str(mode or "").strip().upper()
-    if normalized_mode not in ALLOWED_MODES:
+    requested_mode = str(mode or "").strip().upper()
+    normalized_mode = normalize_execution_mode(requested_mode)
+    if normalized_mode not in CANONICAL_MODES:
         raise ValueError("invalid_mode")
 
     previous_mode = get_execution_mode(db, cache)
@@ -166,6 +182,8 @@ def switch_execution_mode(
 
     snapshot_payload = {
         "mode": normalized_mode,
+        "requested_mode": requested_mode,
+        "compatibility_alias_used": requested_mode in LEGACY_MODE_ALIASES,
         "previous_mode": previous_mode,
         "reason": reason,
         "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -191,6 +209,8 @@ def switch_execution_mode(
         details={
             "previous_mode": previous_mode,
             "new_mode": normalized_mode,
+            "requested_mode": requested_mode,
+            "compatibility_alias_used": requested_mode in LEGACY_MODE_ALIASES,
             "reason": reason,
             "snapshot_captured": True,
         },
@@ -198,6 +218,9 @@ def switch_execution_mode(
 
     return {
         "mode": normalized_mode,
+        "requested_mode": requested_mode,
+        "compatibility_alias_used": requested_mode in LEGACY_MODE_ALIASES,
+        "compatibility_notice": "legacy alias accepted for one sprint" if requested_mode in LEGACY_MODE_ALIASES else None,
         "previous_mode": previous_mode,
         "snapshot": snapshot_payload,
         "audit_log_id": audit_row.id,

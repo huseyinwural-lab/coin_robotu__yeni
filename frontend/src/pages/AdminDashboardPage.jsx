@@ -154,6 +154,8 @@ export const AdminDashboardPage = () => {
   const [runtimeProxyHealth, setRuntimeProxyHealth] = useState(null);
   const [runtimeCanaryRunResult, setRuntimeCanaryRunResult] = useState(null);
   const [runtimeValidationLoading, setRuntimeValidationLoading] = useState(false);
+  const [runtimeDryRunResult, setRuntimeDryRunResult] = useState(null);
+  const [goLiveWizardState, setGoLiveWizardState] = useState(null);
   const [runtimeTimelineEvents, setRuntimeTimelineEvents] = useState([]);
   const [runtimeWsStatus, setRuntimeWsStatus] = useState("connecting");
   const [timelineAutoScroll, setTimelineAutoScroll] = useState(true);
@@ -179,6 +181,7 @@ export const AdminDashboardPage = () => {
   const hasLoadedOnceRef = useRef(false);
 
   const isManagerRole = ["super_admin", "admin"].includes(String(user?.role || ""));
+  const isSuperAdmin = String(user?.role || "") === "super_admin";
   const killSwitchActive = useMemo(() => {
     if (killSwitchState) {
       return !Boolean(killSwitchState.trading_enabled);
@@ -266,6 +269,7 @@ export const AdminDashboardPage = () => {
         runtimeReadinessResponse,
         runtimeGoLiveChecklistResponse,
         runtimeProxyHealthResponse,
+        runtimeWizardStateResponse,
       ] = await Promise.all([
         apiClient.get("/dashboard/summary"),
         apiClient.get("/admin/action-center/summary"),
@@ -300,6 +304,7 @@ export const AdminDashboardPage = () => {
         apiClient.get("/runtime/canary/readiness-score"),
         apiClient.get("/runtime/go-live/checklist"),
         apiClient.get("/runtime/exchange/proxy-health"),
+        apiClient.get("/runtime/go-live/wizard/state"),
       ]);
 
       const summaryPayload = summaryResponse?.data || null;
@@ -323,6 +328,7 @@ export const AdminDashboardPage = () => {
       setRuntimeReadiness(runtimeReadinessResponse?.data?.result || null);
       setRuntimeGoLiveChecklist(runtimeGoLiveChecklistResponse?.data?.result || null);
       setRuntimeProxyHealth(runtimeProxyHealthResponse?.data?.result || null);
+      setGoLiveWizardState(runtimeWizardStateResponse?.data?.result || null);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Admin dashboard verisi yüklenemedi";
@@ -508,6 +514,92 @@ export const AdminDashboardPage = () => {
       const detail = error?.response?.data?.detail;
       const message = typeof detail === "string" ? detail : (detail?.status ? JSON.stringify(detail) : "Final regression başarısız");
       toast.error(message);
+    } finally {
+      setRuntimeValidationLoading(false);
+    }
+  }, [loadDashboard]);
+
+  const runSingleFlowDryRun = useCallback(async () => {
+    setRuntimeValidationLoading(true);
+    try {
+      const { data } = await apiClient.post("/runtime/go-live/dry-run/run", { symbol: "BTCUSDT", size: 0.0001 });
+      setRuntimeDryRunResult(data?.result || null);
+      toast.success("Dry-run tek akış PASS");
+      await loadDashboard();
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const message = typeof detail === "string" ? detail : (detail?.status ? JSON.stringify(detail) : "Dry-run tek akış başarısız");
+      toast.error(message);
+    } finally {
+      setRuntimeValidationLoading(false);
+    }
+  }, [loadDashboard]);
+
+  const runWizardReadinessCheck = useCallback(async () => {
+    setRuntimeValidationLoading(true);
+    try {
+      const { data } = await apiClient.post("/runtime/go-live/wizard/readiness-check", {});
+      setGoLiveWizardState(data?.result || null);
+      toast.success("Wizard readiness adımı tamamlandı");
+      await loadDashboard();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Wizard readiness adımı başarısız");
+    } finally {
+      setRuntimeValidationLoading(false);
+    }
+  }, [loadDashboard]);
+
+  const runWizardCanaryCheck = useCallback(async () => {
+    setRuntimeValidationLoading(true);
+    try {
+      const { data } = await apiClient.post("/runtime/go-live/wizard/canary-check", { symbol: "BTCUSDT", size: 0.0001 });
+      setGoLiveWizardState(data?.result || null);
+      toast.success("Wizard canary adımı tamamlandı");
+      await loadDashboard();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Wizard canary adımı başarısız");
+    } finally {
+      setRuntimeValidationLoading(false);
+    }
+  }, [loadDashboard]);
+
+  const runWizardArm = useCallback(async () => {
+    setRuntimeValidationLoading(true);
+    try {
+      const { data } = await apiClient.post("/runtime/go-live/wizard/arm", {});
+      setGoLiveWizardState(data?.result || null);
+      toast.success("Wizard live-arm adımı tamamlandı");
+      await loadDashboard();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Wizard arm adımı başarısız");
+    } finally {
+      setRuntimeValidationLoading(false);
+    }
+  }, [loadDashboard]);
+
+  const runWizardConfirm = useCallback(async () => {
+    setRuntimeValidationLoading(true);
+    try {
+      const { data } = await apiClient.post("/runtime/go-live/wizard/confirm", {});
+      setGoLiveWizardState(data?.result || null);
+      toast.success("Wizard confirm adımı tamamlandı");
+      await loadDashboard();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Wizard confirm adımı başarısız");
+    } finally {
+      setRuntimeValidationLoading(false);
+    }
+  }, [loadDashboard]);
+
+  const runWizardRollback = useCallback(async () => {
+    setRuntimeValidationLoading(true);
+    try {
+      const { data } = await apiClient.post("/runtime/go-live/wizard/rollback", {});
+      setGoLiveWizardState(data?.result || null);
+      toast.success("Wizard rollback tetiklendi");
+      await loadDashboard();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Wizard rollback başarısız");
     } finally {
       setRuntimeValidationLoading(false);
     }
@@ -970,9 +1062,32 @@ export const AdminDashboardPage = () => {
             <Button size="sm" variant="outline" onClick={runFinalRegressionValidation} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-run-final-regression-button">
               Final Regression
             </Button>
+            <Button size="sm" variant="outline" onClick={runSingleFlowDryRun} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-run-single-flow-dry-run-button">
+              Single-Flow Dry-Run
+            </Button>
             <Button size="sm" variant="outline" onClick={loadDashboard} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-refresh-go-live-button">
               Refresh Go/No-Go
             </Button>
+          </div>
+
+          <div className="mt-3 rounded border border-cyan-700/40 p-2" data-testid="admin-dashboard-go-live-wizard-card">
+            <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-dashboard-go-live-wizard-header">
+              <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="admin-dashboard-go-live-wizard-title">Go-Live Wizard</p>
+              <span className="text-xs text-slate-300" data-testid="admin-dashboard-go-live-wizard-stage">stage: {goLiveWizardState?.stage || "idle"}</span>
+            </div>
+            <p className="mt-1 text-xs text-slate-400" data-testid="admin-dashboard-go-live-wizard-role-lock">
+              role-lock: {isSuperAdmin ? "UNLOCKED(super_admin)" : "LOCKED(super_admin only)"}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2" data-testid="admin-dashboard-go-live-wizard-actions">
+              <Button size="sm" variant="outline" onClick={runWizardReadinessCheck} disabled={runtimeValidationLoading || !isSuperAdmin} data-testid="admin-dashboard-go-live-wizard-readiness-check-button">1) Readiness Check</Button>
+              <Button size="sm" variant="outline" onClick={runWizardCanaryCheck} disabled={runtimeValidationLoading || !isSuperAdmin} data-testid="admin-dashboard-go-live-wizard-canary-check-button">2) Canary PASS Check</Button>
+              <Button size="sm" variant="outline" onClick={runWizardArm} disabled={runtimeValidationLoading || !isSuperAdmin} data-testid="admin-dashboard-go-live-wizard-arm-button">3) Live Arm</Button>
+              <Button size="sm" variant="outline" onClick={runWizardConfirm} disabled={runtimeValidationLoading || !isSuperAdmin} data-testid="admin-dashboard-go-live-wizard-confirm-button">4) Confirm</Button>
+              <Button size="sm" variant="outline" onClick={runWizardRollback} disabled={runtimeValidationLoading || !isSuperAdmin} data-testid="admin-dashboard-go-live-wizard-rollback-button">Rollback</Button>
+            </div>
+            <p className="mt-2 text-xs text-slate-300" data-testid="admin-dashboard-go-live-wizard-state-flags">
+              armed={String(goLiveWizardState?.armed || false)} · confirmed={String(goLiveWizardState?.confirmed || false)} · rolled_back={String(goLiveWizardState?.rolled_back || false)}
+            </p>
           </div>
 
           {Array.isArray(runtimeGoLiveChecklist?.reasons) && runtimeGoLiveChecklist.reasons.length > 0 && (
@@ -987,6 +1102,9 @@ export const AdminDashboardPage = () => {
 
           <p className="mt-2 text-xs text-slate-400" data-testid="admin-dashboard-runtime-readiness-last-run-status">
             son_validation_status: {runtimeCanaryRunResult?.status || "-"}
+          </p>
+          <p className="text-xs text-slate-400" data-testid="admin-dashboard-runtime-dry-run-last-status">
+            dry_run_status: {runtimeDryRunResult?.status || "-"}
           </p>
         </article>
       </div>

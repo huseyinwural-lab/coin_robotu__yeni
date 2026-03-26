@@ -739,13 +739,13 @@ def build_live_trading_summary(db: Session, cache, *, window: str = "1h") -> dic
 
     config = _safe_component("live_config", lambda: _live_config(db), {}, require_dict=False)
     config_obj = None if isinstance(config, dict) else config
-    execution_mode = "MOCK"
+    execution_mode = "SIM"
     if config_obj:
         market_type = str(config_obj.market_type or "").lower()
-        if bool(config_obj.live_mode_enabled) and "testnet" not in market_type:
-            execution_mode = "LIVE" if not bool(config_obj.safe_mode_enabled) else "GUARDED_LIVE"
-        elif bool(config_obj.live_mode_enabled):
-            execution_mode = "PAPER_LIVE"
+        if bool(config_obj.live_mode_enabled) and "testnet" not in market_type and not bool(config_obj.safe_mode_enabled):
+            execution_mode = "LIVE"
+        elif bool(config_obj.live_mode_enabled) or "testnet" in market_type or bool(config_obj.safe_mode_enabled):
+            execution_mode = "TESTNET"
 
     system_health = {
         "execution_mode": execution_mode,

@@ -4693,7 +4693,7 @@ class ProductionGateOverrideCreateRequest(BaseModel):
 
 
 class ProductionGateModeTransitionRequest(BaseModel):
-    target_mode: str = Field(pattern="^(LIVE|PAPER|MOCK)$")
+    target_mode: str = Field(pattern="^(LIVE|TESTNET|SIM|PAPER|MOCK)$")
     reason_text: str = Field(min_length=8, max_length=600)
     confirmation_phrase: str = Field(min_length=5, max_length=80)
 

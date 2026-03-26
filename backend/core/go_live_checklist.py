@@ -10,6 +10,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from core.alerts.runtime_alert_triggers import trigger_runtime_threshold_alert
 from core.execution_engine import execute_queued_job, submit_signal
 from core.exchanges import get_execution_adapter
 from core.pnl_engine import compute_runtime_pnl_summary
@@ -26,6 +27,8 @@ TESTNET_LIFECYCLE_ARTIFACT = "binance_testnet_lifecycle_latest.json"
 CANARY_RUN_ARTIFACT = "canary_run_latest.json"
 KILL_SWITCH_VERIFICATION_ARTIFACT = "kill_switch_verification_latest.json"
 FINAL_REGRESSION_ARTIFACT = "runtime_final_regression_latest.json"
+GO_LIVE_DRY_RUN_ARTIFACT = "go_live_dry_run_latest.json"
+GO_LIVE_WIZARD_STATE_FILE = "go_live_wizard_state.json"
 
 
 def _utcnow() -> datetime:
@@ -732,7 +735,7 @@ def evaluate_go_live_checklist(db: Session) -> dict:
     if readiness.get("status") == "NOT_READY":
         reasons.append("readiness NOT_READY")
 
-    go_live = all(checks.values()) and readiness.get("status") != "NOT_READY"
+    go_live = all(checks.values()) and readiness.get("status") == "READY"
     return {
         "go_live": go_live,
         "reasons": reasons,
@@ -776,6 +779,123 @@ def run_final_regression_validation(db: Session, *, current_user, symbol: str = 
     }
     payload["artifact_path"] = persist_artifact(FINAL_REGRESSION_ARTIFACT, payload)
     return payload
+
+
+def run_single_flow_dry_run(db: Session, *, current_user, symbol: str = "BTCUSDT", size: float = 0.0001) -> dict:
+    started_at = _utcnow()
+    lifecycle = run_testnet_lifecycle_validation(db, user_id=current_user.id, symbol=symbol, size=size)
+    canary = run_canary_end_to_end_validation(db, current_user=current_user, symbol=symbol, size=size, strategy_name="ema_rsi")
+    regression = run_final_regression_validation(db, current_user=current_user, symbol=symbol, size=size)
+    readiness = build_canary_readiness_score(db)
+    checklist = evaluate_go_live_checklist(db)
+
+    checks = {
+        "lifecycle": str(lifecycle.get("status") or "").upper() == "PASS",
+        "canary": str(canary.get("status") or "").upper() == "PASS",
+        "regression": str(regression.get("status") or "").upper() == "PASS",
+        "readiness_ready": str(readiness.get("status") or "") == "READY",
+        "go_live": bool(checklist.get("go_live")),
+    }
+    status = "PASS" if all(checks.values()) else "FAIL"
+    payload = {
+        "status": status,
+        "started_at": started_at.isoformat(),
+        "finished_at": _utcnow().isoformat(),
+        "checks": checks,
+        "lifecycle": lifecycle,
+        "canary": canary,
+        "regression": regression,
+        "readiness": readiness,
+        "checklist": checklist,
+    }
+    payload["artifact_path"] = persist_artifact(GO_LIVE_DRY_RUN_ARTIFACT, payload)
+    return payload
+
+
+def _default_wizard_state() -> dict:
+    return {
+        "stage": "idle",
+        "readiness": None,
+        "checklist": None,
+        "canary": None,
+        "armed": False,
+        "confirmed": False,
+        "rolled_back": False,
+        "updated_at": _utcnow().isoformat(),
+    }
+
+
+def get_go_live_wizard_state() -> dict:
+    payload = _load_artifact(GO_LIVE_WIZARD_STATE_FILE)
+    if not payload:
+        return _default_wizard_state()
+    return payload
+
+
+def _save_go_live_wizard_state(payload: dict) -> dict:
+    state = {**_default_wizard_state(), **payload, "updated_at": _utcnow().isoformat()}
+    persist_artifact(GO_LIVE_WIZARD_STATE_FILE, state)
+    return state
+
+
+def wizard_run_readiness_check(db: Session) -> dict:
+    readiness = build_canary_readiness_score(db)
+    checklist = evaluate_go_live_checklist(db)
+    return _save_go_live_wizard_state(
+        {
+            "stage": "readiness_checked",
+            "readiness": readiness,
+            "checklist": checklist,
+            "armed": False,
+            "confirmed": False,
+        }
+    )
+
+
+def wizard_run_canary_check(db: Session, *, current_user, symbol: str = "BTCUSDT", size: float = 0.0001) -> dict:
+    canary = run_canary_end_to_end_validation(db, current_user=current_user, symbol=symbol, size=size, strategy_name="ema_rsi")
+    state = get_go_live_wizard_state()
+    state["stage"] = "canary_checked"
+    state["canary"] = canary
+    return _save_go_live_wizard_state(state)
+
+
+def wizard_arm_live(db: Session) -> dict:
+    state = get_go_live_wizard_state()
+    readiness_status = str((state.get("readiness") or {}).get("status") or "")
+    canary_status = str((state.get("canary") or {}).get("status") or "")
+    if readiness_status != "READY":
+        raise RuntimeError("wizard_arm_blocked_readiness_not_ready")
+    if canary_status != "PASS":
+        raise RuntimeError("wizard_arm_blocked_canary_not_pass")
+    checklist = evaluate_go_live_checklist(db)
+    if not bool(checklist.get("go_live")):
+        raise RuntimeError("wizard_arm_blocked_checklist_not_pass")
+
+    state["stage"] = "armed"
+    state["armed"] = True
+    state["checklist"] = checklist
+    return _save_go_live_wizard_state(state)
+
+
+def wizard_confirm_live() -> dict:
+    state = get_go_live_wizard_state()
+    if not bool(state.get("armed")):
+        raise RuntimeError("wizard_confirm_blocked_not_armed")
+    state["stage"] = "confirmed"
+    state["confirmed"] = True
+    state["note"] = "no_real_live_enable_in_this_phase"
+    return _save_go_live_wizard_state(state)
+
+
+def wizard_rollback_live() -> dict:
+    activate_kill_switch(source="go_live_wizard", reason="manual_rollback_trigger", metadata={"stage": "wizard"})
+    state = get_go_live_wizard_state()
+    state["stage"] = "rolled_back"
+    state["rolled_back"] = True
+    state["armed"] = False
+    state["confirmed"] = False
+    return _save_go_live_wizard_state(state)
 
 
 def get_proxy_exchange_health_snapshot(db: Session) -> dict:
@@ -828,6 +948,18 @@ def get_proxy_exchange_health_snapshot(db: Session) -> dict:
         .limit(5)
         .all()
     )
+
+    if spot_mismatch or futures_mismatch:
+        trigger_runtime_threshold_alert(
+            db,
+            alert_type="runtime_proxy_token_mismatch",
+            severity="CRITICAL",
+            message="Proxy token mismatch detected in exchange config",
+            source="go_live_checklist",
+            threshold=1,
+            actual_value=1,
+            root_cause_code="proxy_token_mismatch",
+        )
 
     return {
         "status": "ok",

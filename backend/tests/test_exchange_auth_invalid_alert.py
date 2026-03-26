@@ -1,7 +1,9 @@
 import time
+import os
 
 from core import execution_engine
 from core.execution_engine import submit_signal
+from core.safety.kill_switch import deactivate_kill_switch
 from db import SessionLocal
 from models import SystemAlert, User
 
@@ -17,6 +19,8 @@ class _RejectingAdapter:
 def test_exchange_auth_reject_creates_runtime_alert(monkeypatch):
     db = SessionLocal()
     try:
+        deactivate_kill_switch(source="test", reason="pre_test_reset")
+        os.environ["CANARY_MODE"] = "false"
         user = db.query(User).order_by(User.created_at.asc()).first()
         assert user is not None
 

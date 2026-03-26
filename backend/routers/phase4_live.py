@@ -45,7 +45,7 @@ from schemas import (
     ProductionGateTimelineResponse,
 )
 from services.audit_service import create_audit_log
-from services.execution_mode_control_service import get_execution_mode, switch_execution_mode
+from services.execution_mode_control_service import get_execution_mode, normalize_execution_mode, switch_execution_mode
 from services.live_mode_service import (
     adapter,
     apply_config_update,
@@ -99,6 +99,8 @@ router = APIRouter(prefix="/phase4", tags=["phase4_live"])
 logger = logging.getLogger(__name__)
 MODE_TRANSITION_PHRASES = {
     "LIVE": "SWITCH TO LIVE",
+    "TESTNET": "SWITCH TO TESTNET",
+    "SIM": "SWITCH TO SIM",
     "PAPER": "SWITCH TO PAPER",
     "MOCK": "SWITCH TO MOCK",
 }
@@ -833,8 +835,12 @@ def admin_production_gate_mode_transition(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    target_mode = str(request.target_mode or "").strip().upper()
-    expected_phrase = MODE_TRANSITION_PHRASES[target_mode]
+    requested_mode = str(request.target_mode or "").strip().upper()
+    target_mode = normalize_execution_mode(requested_mode)
+    if target_mode is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_mode")
+
+    expected_phrase = MODE_TRANSITION_PHRASES[requested_mode]
     if str(request.confirmation_phrase or "").strip().upper() != expected_phrase:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -874,6 +880,7 @@ def admin_production_gate_mode_transition(
         details={
             "previous_state": previous_mode,
             "next_state": target_mode,
+            "requested_mode": requested_mode,
             "reason_code": "MODE_TRANSITION",
             "reason_text": request.reason_text,
             "expiry": None,

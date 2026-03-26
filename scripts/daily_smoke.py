@@ -25,12 +25,18 @@ def _required_env(name: str) -> str:
     return value
 
 
+def _required_env_any(*names: str) -> str:
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+    raise RuntimeError(f"missing_env_any:{','.join(names)}")
+
+
 def _run_step(name: str, fn):
     started = time.time()
     try:
-        payload = fn()
-        if payload.get("status") in {"SKIPPED_CREDENTIAL_MISSING", "FAIL"}:
-            return payload
+        payload = fn() or {}
         return {
             "status": "PASS",
             "detail": payload,
@@ -46,10 +52,12 @@ def _run_step(name: str, fn):
 
 def main() -> int:
     started_at = datetime.now(timezone.utc)
-    base_url = _required_env("REACT_APP_BACKEND_URL").rstrip("/")
+    base_url = _required_env_any("BACKEND_PUBLIC_URL", "REACT_APP_BACKEND_URL").rstrip("/")
     admin_email = _required_env("DAILY_SMOKE_ADMIN_EMAIL")
     admin_password = _required_env("DAILY_SMOKE_ADMIN_PASSWORD")
-    target_user_email = os.environ.get("DAILY_SMOKE_TARGET_USER_EMAIL")
+    ingest_admin_email = _required_env("DAILY_SMOKE_INGEST_ADMIN_EMAIL")
+    ingest_admin_password = _required_env("DAILY_SMOKE_INGEST_ADMIN_PASSWORD")
+    ingest_target_user_email = _required_env("DAILY_SMOKE_INGEST_TARGET_USER_EMAIL")
 
     login = requests.post(
         f"{base_url}/api/auth/login",
@@ -60,22 +68,26 @@ def main() -> int:
     token = login.json().get("access_token")
     headers = {"Authorization": f"Bearer {token}"}
 
+    ingest_login = requests.post(
+        f"{base_url}/api/auth/login",
+        json={"email": ingest_admin_email, "password": ingest_admin_password},
+        timeout=25,
+    )
+    ingest_login.raise_for_status()
+    ingest_token = ingest_login.json().get("access_token")
+    ingest_headers = {"Authorization": f"Bearer {ingest_token}"}
+
     def ingest_step():
-        if not target_user_email:
-            return {
-                "status": "SKIPPED_CREDENTIAL_MISSING",
-                "detail": {"reason": "DAILY_SMOKE_TARGET_USER_EMAIL missing"},
-            }
         resp = requests.post(
             f"{base_url}/api/admin/commercial/p0/ingestion/rest-run",
             json={
-                "target_user_email": target_user_email,
+                "target_user_email": ingest_target_user_email,
                 "exchange": "binance",
                 "environment": "live",
                 "market_types": ["spot", "futures"],
                 "limit_per_market": 100,
             },
-            headers=headers,
+            headers=ingest_headers,
             timeout=120,
         )
         resp.raise_for_status()
@@ -156,20 +168,8 @@ def main() -> int:
         "snapshot_compare": _run_step("snapshot_compare", snapshot_compare_step),
     }
 
-    if steps["ingest"].get("status") == "SKIPPED_CREDENTIAL_MISSING":
-        for dependent_step in ["pnl", "reconciliation", "revenue", "snapshot_compare"]:
-            if steps[dependent_step].get("status") == "FAIL":
-                steps[dependent_step] = {
-                    "status": "SKIPPED_CREDENTIAL_MISSING",
-                    "detail": {
-                        "reason": "upstream_ingest_skipped_credential_missing",
-                        "upstream_step": "ingest",
-                    },
-                }
-
     has_fail = any(step.get("status") == "FAIL" for step in steps.values())
-    has_skipped = any(step.get("status") == "SKIPPED_CREDENTIAL_MISSING" for step in steps.values())
-    overall = "FAIL" if has_fail else "DEGRADED" if has_skipped else "PASS"
+    overall = "FAIL" if has_fail else "PASS"
 
     summary = f"daily_smoke:{overall}"
     report = {

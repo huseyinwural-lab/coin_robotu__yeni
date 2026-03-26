@@ -168,7 +168,7 @@ export const PipelineOperationsPage = () => {
   const [alertStatusFilter, setAlertStatusFilter] = useState("all");
   const [alertSinceHours, setAlertSinceHours] = useState("24");
   const [alertEventFilter, setAlertEventFilter] = useState("");
-  const [runtimeMode, setRuntimeMode] = useState("MOCK");
+  const [runtimeMode, setRuntimeMode] = useState("SIM");
   const [scannerOps, setScannerOps] = useState({ runtime: {}, symbol_universe: [], whitelist: [], blacklist: [], manual_trigger: {} });
   const [rolloutOps, setRolloutOps] = useState(null);
   const [riskOps, setRiskOps] = useState({ cluster_exposure: [], symbol_exposure: [], config: {} });
@@ -332,9 +332,9 @@ export const PipelineOperationsPage = () => {
 
       try {
         const modeRes = await apiClient.get("/admin/live-trading/control-layer/state");
-        setRuntimeMode(String(modeRes.data?.execution_mode || "MOCK").toUpperCase());
+        setRuntimeMode(String(modeRes.data?.execution_mode || "SIM").toUpperCase());
       } catch {
-        setRuntimeMode("MOCK");
+        setRuntimeMode("SIM");
       }
 
       setWsHealth(wsRes.data || null);

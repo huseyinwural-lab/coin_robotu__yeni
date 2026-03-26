@@ -172,6 +172,57 @@ def health_check():
     return JSONResponse(status_code=status_code, content=payload)
 
 
+@api_router.get("/health/live")
+def live_health_check():
+    payload = {
+        "status": "ok",
+        "service": "backend-api",
+        "checks": {
+            "process": {
+                "status": "up",
+                "uptime_seconds": int((datetime.now(timezone.utc) - PROCESS_STARTED_AT).total_seconds()),
+            }
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    return JSONResponse(status_code=200, content=payload)
+
+
+def _ready_dependency_checks() -> tuple[bool, dict[str, dict]]:
+    checks: dict[str, dict] = {}
+    ready = True
+
+    try:
+        verify_database_connection()
+        checks["database"] = {"status": "ready"}
+    except Exception as exc:  # noqa: BLE001
+        ready = False
+        checks["database"] = {"status": "not_ready", "reason": str(exc)[:200]}
+
+    try:
+        redis_client.ping()
+        checks["redis"] = {"status": "ready"}
+    except Exception as exc:  # noqa: BLE001
+        ready = False
+        checks["redis"] = {"status": "not_ready", "reason": str(exc)[:200]}
+
+    return ready, checks
+
+
+@api_router.get("/health/ready")
+def simple_readiness_check():
+    ready, checks = _ready_dependency_checks()
+    return JSONResponse(
+        status_code=200 if ready else 503,
+        content={
+            "status": "ready" if ready else "not_ready",
+            "service": "backend-api",
+            "checks": checks,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+
 @api_router.get("/ready")
 def readiness_check():
     checks: dict[str, dict] = {}

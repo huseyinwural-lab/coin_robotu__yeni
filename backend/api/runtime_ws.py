@@ -1,4 +1,7 @@
+import asyncio
+import os
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -59,6 +62,10 @@ async def runtime_execution_timeline_ws(websocket: WebSocket):
         return
 
     client_id = f"{user.id}:{uuid.uuid4()}"
+    try:
+        heartbeat_seconds = max(10.0, float(os.environ.get("RUNTIME_WS_HEARTBEAT_SECONDS") or 25.0))
+    except ValueError:
+        heartbeat_seconds = 25.0
     await runtime_stream_hub.connect(client_id=client_id, websocket=websocket)
     try:
         await websocket.send_json(
@@ -69,9 +76,17 @@ async def runtime_execution_timeline_ws(websocket: WebSocket):
             }
         )
         while True:
-            message = await websocket.receive_text()
-            if str(message).strip().lower() == "ping":
-                await websocket.send_json({"event_type": "pong"})
+            try:
+                message = await asyncio.wait_for(websocket.receive_text(), timeout=heartbeat_seconds)
+                if str(message).strip().lower() == "ping":
+                    await websocket.send_json({"event_type": "pong"})
+            except asyncio.TimeoutError:
+                await websocket.send_json(
+                    {
+                        "event_type": "runtime_stream_ping",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
     except WebSocketDisconnect:
         pass
     except Exception:  # noqa: BLE001
