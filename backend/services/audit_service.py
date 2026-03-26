@@ -24,6 +24,7 @@ def create_audit_log(
     actor_user_id: str | None = None,
     actor_role: str = "system",
     details: dict | None = None,
+    commit: bool = True,
 ) -> AuditLog:
     resolved_action = action.value if isinstance(action, Enum) else str(action)
     request_context = get_request_context()
@@ -44,8 +45,9 @@ def create_audit_log(
         details=merged_details,
     )
     db.add(audit_entry)
-    db.commit()
-    db.refresh(audit_entry)
+    if commit:
+        db.commit()
+        db.refresh(audit_entry)
     return audit_entry
 
 

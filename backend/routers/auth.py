@@ -217,8 +217,16 @@ def _login_with_policy(
             email_code_preview=mfa_payload.get("email_code_preview"),
         )
 
-    register_auth_session(db, user=user, access_token=session.access_token, request=request)
-    record_login_success(db, request=request, endpoint_scope=endpoint_scope, email=user.email, user=user)
+    register_auth_session(db, user=user, access_token=session.access_token, request=request, commit=False)
+    record_login_success(
+        db,
+        request=request,
+        endpoint_scope=endpoint_scope,
+        email=user.email,
+        user=user,
+        identity_profile=identity_profile,
+        commit=False,
+    )
     create_audit_log(
         db,
         action="user_login",
@@ -227,7 +235,9 @@ def _login_with_policy(
         actor_user_id=user.id,
         actor_role=user.role.value,
         details={"email": user.email},
+        commit=False,
     )
+    db.commit()
     return AuthResponse(
         access_token=session.access_token,
         token=session.access_token,

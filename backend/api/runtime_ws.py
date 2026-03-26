@@ -58,6 +58,8 @@ async def runtime_execution_timeline_ws(websocket: WebSocket):
     token = _extract_token(websocket)
     user = _resolve_admin_user(token)
     if user is None:
+        await websocket.accept()
+        await websocket.send_json({"event_type": "runtime_stream_error", "detail": "unauthorized"})
         await websocket.close(code=4401)
         return
 

@@ -1,3 +1,56 @@
+## 2026-03-26 — P1 Final Closure Progress Update
+
+### Orijinal Problem Özeti
+- Commercial Ops + Admin Onboarding için P0/P1 sertleştirme
+- Son blokaj: DB timeout / login flakiness (ERR_ABORTED etkisi)
+- Son hedef: Frontend Workflow Visibility + Auth Stabilization
+
+### Bu iterasyonda tamamlananlar
+- Backend DB runtime stabilizasyonu:
+  - Supabase pooler için `NullPool` + `sslmode=require` uyumu
+  - `verify_database_connection` başarısızlığında runtime state yanlışlıkla `ready=true` kalma hatası düzeltildi
+  - `get_db` fail-fast guard ile `database_not_ready` durumunda koruma netleştirildi
+- Backend bug fix:
+  - `commercial_export_scheduler_service.py` içinde `manifest_id` kullanım hatası düzeltildi
+- Frontend P1.1 Auth Stabilization:
+  - `apiClient` request/response interceptor geliştirildi
+  - Sessiz retry (502/503/504 + network timeout) eklendi
+  - Token localStorage hydration + unauthorized event cleanup + cross-tab storage sync eklendi
+- Frontend P1.2–P1.6 Workflow Visibility (`/admin/user-approvals`):
+  - Current step badge (OPS/RISK/FINAL)
+  - Complete Step butonu
+  - Start Workflow butonu
+  - SLA countdown ve renkli durum gösterimi
+  - Escalation badge
+  - Decision Support drawer (recommended_action, confidence, summary, reason_codes)
+  - Kritik elementler için kapsamlı `data-testid`
+
+### Test Durumu
+- Testing Agent raporu: `/app/test_reports/iteration_148.json`
+  - Backend 18/18 geçti
+  - Frontend workflow visibility doğrulandı
+  - Tespit edilen iki konu üzerinde aksiyon alındı:
+    - Login latency azaltma için auth path transaction/commit optimizasyonu
+    - WS `/api/runtime/ws/execution-timeline` unauthorized handshake fix (accept + structured error + close)
+- Self-test:
+  - `GET /api/health` -> 200
+  - `POST /api/auth/login` -> 200 (tekrarlı başarılı)
+  - `GET /api/admin/user-approvals` -> 200
+  - `GET /api/admin/onboarding/workflow/queue` -> 200
+  - `GET /api/admin/onboarding/{user_id}/context` -> 200
+  - WebSocket runtime timeline:
+    - token yok: structured unauthorized mesajı alıp kapanıyor
+    - token ile: bootstrap + ping/pong başarılı
+
+### Açık / İzlenecek Maddeler
+- P1 takip: Login response süresi halen ortam gecikmesine bağlı yüksek (iyileşti, ancak daha da optimize edilebilir)
+- P2 backlog:
+  - Dış AML provider entegrasyonu
+  - Model destekli risk scoring
+
+### Sonraki Adım Önerisi
+- Login path için telemetry bazlı query/commit profilleme (route-level timing breakdown) eklenerek hedef <3s p95.
+
 ## 2026-03-26 — P1 System Intelligence (7,8,9) ✅
 
 ### 7) Workflow Engine (ops -> risk -> final)

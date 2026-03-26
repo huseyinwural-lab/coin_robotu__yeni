@@ -334,14 +334,17 @@ def ensure_identity_control_seed(db: Session) -> None:
     _seed_approval_policies(db)
 
 
-def get_or_create_identity_profile(db: Session, user_id: str) -> UserIdentityProfile:
+def get_or_create_identity_profile(db: Session, user_id: str, *, commit: bool = True) -> UserIdentityProfile:
     row = db.query(UserIdentityProfile).filter(UserIdentityProfile.user_id == user_id).first()
     if row is not None:
         return row
     row = UserIdentityProfile(user_id=user_id)
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
+    else:
+        db.flush()
     return row
 
 
@@ -487,7 +490,16 @@ def record_login_failure(
     }
 
 
-def record_login_success(db: Session, *, request: Request, endpoint_scope: str, email: str, user: User) -> None:
+def record_login_success(
+    db: Session,
+    *,
+    request: Request,
+    endpoint_scope: str,
+    email: str,
+    user: User,
+    identity_profile: UserIdentityProfile | None = None,
+    commit: bool = True,
+) -> None:
     normalized_email = _normalize_email(email)
     redis_client.delete(_failure_key(normalized_email, endpoint_scope))
     redis_client.delete(_lock_key(normalized_email, endpoint_scope))
@@ -523,14 +535,16 @@ def record_login_success(db: Session, *, request: Request, endpoint_scope: str, 
             "ip": ip,
             "device_fingerprint": fingerprint,
         },
+        commit=False,
     )
 
-    profile = get_or_create_identity_profile(db, user.id)
+    profile = identity_profile or get_or_create_identity_profile(db, user.id, commit=False)
     profile.last_seen_ip = ip
     profile.last_seen_device = fingerprint
     profile.policy_locked_until = None
     profile.updated_at = _utcnow()
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def enforce_admin_totp_policy(db: Session, *, user: User) -> None:
@@ -546,14 +560,27 @@ def enforce_admin_totp_policy(db: Session, *, user: User) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin_totp_setup_required")
 
 
-def register_auth_session(db: Session, *, user: User, access_token: str, request: Request, expires_minutes: int = 60) -> AuthSession:
+def register_auth_session(
+    db: Session,
+    *,
+    user: User,
+    access_token: str,
+    request: Request,
+    expires_minutes: int = 60,
+    commit: bool = True,
+    lookup_existing: bool = False,
+) -> AuthSession:
     token_hash = _token_hash(access_token)
-    existing = db.query(AuthSession).filter(AuthSession.token_hash == token_hash).first()
-    if existing is not None:
-        existing.last_seen_at = _utcnow()
-        db.commit()
-        db.refresh(existing)
-        return existing
+    if lookup_existing:
+        existing = db.query(AuthSession).filter(AuthSession.token_hash == token_hash).first()
+        if existing is not None:
+            existing.last_seen_at = _utcnow()
+            if commit:
+                db.commit()
+                db.refresh(existing)
+            else:
+                db.flush()
+            return existing
 
     ip = resolve_client_ip(request)
     user_agent = str(request.headers.get("user-agent") or "")
@@ -568,8 +595,11 @@ def register_auth_session(db: Session, *, user: User, access_token: str, request
         expires_at=_utcnow() + timedelta(minutes=max(expires_minutes, 1)),
     )
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    if commit:
+        db.commit()
+        db.refresh(row)
+    else:
+        db.flush()
     return row
 
 
