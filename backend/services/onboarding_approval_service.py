@@ -722,35 +722,35 @@ def execute_onboarding_decision(
     activation_result = None
     if normalized == "approve":
         activation_result = run_post_approval_activation(db, user=user, actor=actor, commit=False)
-    log = append_decision_log(
-        db,
-        user_id=user.id,
-        decision=target_decision,
-        decision_source=decision_source,
-        actor=actor,
-        reason=reason_note,
-        explanation=explanation_note or str(engine.get("why_approving") or "manual_decision"),
-        context_snapshot=context,
-        commit=False,
-    )
-
-    create_audit_log(
-        db,
-        action="onboarding_decision_committed",
-        entity_type="user",
-        entity_id=user.id,
-        actor_user_id=actor.id,
-        actor_role=actor.role.value,
-        details={
-            "decision": target_decision,
-            "decision_source": decision_source,
-            "decision_log_id": log.id,
-            "missing": context.get("missing_data_fields") or [],
-        },
-        commit=False,
-    )
-
     try:
+        log = append_decision_log(
+            db,
+            user_id=user.id,
+            decision=target_decision,
+            decision_source=decision_source,
+            actor=actor,
+            reason=reason_note,
+            explanation=explanation_note or str(engine.get("why_approving") or "manual_decision"),
+            context_snapshot=context,
+            commit=False,
+        )
+
+        create_audit_log(
+            db,
+            action="onboarding_decision_committed",
+            entity_type="user",
+            entity_id=user.id,
+            actor_user_id=actor.id,
+            actor_role=actor.role.value,
+            details={
+                "decision": target_decision,
+                "decision_source": decision_source,
+                "decision_log_id": log.id,
+                "missing": context.get("missing_data_fields") or [],
+            },
+            commit=False,
+        )
+
         db.commit()
     except Exception as exc:  # noqa: BLE001
         db.rollback()

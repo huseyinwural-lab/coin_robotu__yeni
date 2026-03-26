@@ -1,3 +1,17 @@
+## 2026-03-26 — SON ADIM KAPANIŞ TESTLERİ (Reconcile + Rollback) ✅
+
+### Uygulanan Kapanış Düzeltmesi
+- `execute_onboarding_decision` içinde decision log + audit write + commit bloğu tek `try/except` içine alındı.
+- Audit write veya transaction adımında hata olursa `db.rollback()` garantisi ile `decision_transaction_failed` döndürülüyor.
+
+### Yeni Test Dosyası
+- `/app/backend/tests/test_iteration150_closure_reconcile_rollback.py`
+  - **Test 1 (Reconcile)**: `audit != decision log` simülasyonu sonrası observability summary `status=degraded` ve `decision_audit_count_mismatch` doğrulandı.
+  - **Test 2 (Log Failure/Rollback)**: audit write fail simülasyonu ile decision işleminin rollback olduğu; user state ve decision log persistence yapılmadığı doğrulandı.
+
+### Test Sonucu
+- `pytest -q tests/test_iteration150_closure_reconcile_rollback.py` -> **2 PASSED**
+
 ## 2026-03-26 — MASTER GÖREV EMRİ (P1+P2 Unified) Uygulama Güncellemesi
 
 ### Tamamlanan Ana Kapsam
