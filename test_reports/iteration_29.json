@@ -1,0 +1,47 @@
+{
+  "summary": "Gitignore lock script verification complete - All tests PASS",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/scripts/gitignore_lock.sh", "/app/scripts/verify_phase1_backup_restore.sh"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A - backend only test"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "gitignore_lock.sh verified: lock command produces 31 lines, SHA256 matches expected, skip-worktree flag (S) active",
+  "test_results": {
+    "gitignore_lock_command": {
+      "output": "LOCKED_OK",
+      "status": "PASS"
+    },
+    "gitignore_line_count": {
+      "expected": 31,
+      "actual": 31,
+      "status": "PASS"
+    },
+    "gitignore_sha256": {
+      "expected": "b66d300515862154b899da5aeab96115bbdc55ed11fe674873669adb967cf1d9",
+      "actual": "b66d300515862154b899da5aeab96115bbdc55ed11fe674873669adb967cf1d9",
+      "status": "PASS"
+    },
+    "skip_worktree_flag": {
+      "expected": "S .gitignore",
+      "actual": "S .gitignore",
+      "status": "PASS"
+    },
+    "verify_phase1_script": {
+      "command": "bash scripts/verify_phase1_backup_restore.sh",
+      "result": "Phase 1 Verify: PASS",
+      "status": "PASS"
+    }
+  }
+}

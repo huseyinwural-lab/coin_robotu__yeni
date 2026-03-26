@@ -1,0 +1,59 @@
+{
+  "summary": "Runtime Control & Recovery Layer regression testing COMPLETE. All 31 backend API tests passed. Frontend AdminPipelineControlPage verified with all 8 critical sections loading correctly. RBAC verified - ops user cannot access super_admin actions. Scanner controls in Live Trading Dashboard working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_runtime_control_endpoints.py",
+    "/app/test_reports/pytest/runtime_control_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "InMemoryRedis compatibility fixes working correctly - _safe_ltrim and _safe_rpop helper functions handle missing methods gracefully",
+    "All runtime endpoints return proper audit_log_id for traceability",
+    "RBAC enforcement working - ops user gets 403 on super_admin-only endpoints",
+    "Confirmation phrase validation working correctly for all critical actions"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_runtime_control_endpoints.py"
+  ],
+  "success_rate": {
+    "backend": "100% (31/31 tests passed)",
+    "frontend": "100% (all sections verified)"
+  },
+  "test_credentials": {
+    "super_admin": "canary.admin@platform.local / CanaryAdmin123!",
+    "ops": "canary.ops@platform.local / CanaryOps123!"
+  },
+  "seed_data_creation": "N/A - used existing test credentials",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Runtime Control & Recovery Layer fully tested. All endpoints working with in-memory Redis fallback. AdminPipelineControlPage has all 8 sections: WS/Pipeline Control, Release Gate, Override Control, Guard Telemetry, Heartbeat/Service Recovery, Exchange Monitoring, Alert History, Alert Policy.",
+  "features_verified": {
+    "GET /api/runtime/action-audit": "PASS - returns audit list with filtering",
+    "GET /api/runtime/action-audit/{id}": "PASS - returns audit detail, 404 for non-existent",
+    "AdminPipelineControlPage sections": {
+      "WS/Pipeline Control": "PASS - reconnect, new session, resync, flush buttons",
+      "Release Gate": "PASS - manual recheck, fix_redirect link",
+      "Override Control": "PASS - create, list, cancel, history",
+      "Guard Telemetry": "PASS - blocked trades, top reasons",
+      "Heartbeat/Service Recovery": "PASS - health check, service restart",
+      "Exchange Monitoring": "PASS - drift details, connection details, trend",
+      "Alert History": "PASS - row actions (ack/mute/resolve), bulk actions",
+      "Alert Policy": "PASS - update, rollback, test-alert"
+    },
+    "WS actions require super_admin + phrase": "PASS - RECONNECT WS, FORCE NEW WS SESSION",
+    "Pipeline actions require super_admin + phrase": "PASS - FORCE PIPELINE RESYNC, FLUSH PIPELINE",
+    "Release gate recheck returns details and fix_redirect": "PASS",
+    "Override create/list/cancel/history with TTL cap": "PASS - max 120 minutes enforced",
+    "Alert policy validation": "PASS - warning > critical threshold enforced",
+    "Scanner controls in Live Dashboard": "PASS - restart, manual trigger, symbol universe"
+  },
+  "in_memory_redis_fallback": "PASS - no 500 errors from runtime endpoints"
+}

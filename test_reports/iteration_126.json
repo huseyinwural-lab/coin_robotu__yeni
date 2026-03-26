@@ -1,0 +1,108 @@
+{
+  "summary": "P0 Commercial Ops and Decision Trace Timeline testing complete. Backend APIs (18/18 tests passed) and Frontend UI verified. All features working correctly: credential orchestration with purpose filter + multi-market alias, spot live probe, futures test probe, P0 ingestion endpoints, live-gate endpoint, and Decision Trace Timeline UI rendering.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p0_decision_trace_timeline.py",
+    "/app/test_reports/pytest/p0_decision_trace_timeline_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_p0_decision_trace_timeline.py"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 tests passed)",
+    "frontend": "100%"
+  },
+  "test_credentials": "Admin: canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "Created test credentials for binance spot/live and futures/testnet during probe testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "P0 Commercial Ops and Decision Trace Timeline fully functional. All CRUD operations for credentials work. Routing rules with user/admin/admin_fallback sources work. Resolution preview shows correct fallback chain. Probe functionality works (returns ip_restricted for test keys as expected). Filter interactions (exchange/market/purpose/environment) work correctly. Decision Trace Timeline UI renders correctly with 3 steps: user credential, tenant_admin credential, global_admin credential.",
+  "features_verified": {
+    "backend_apis": {
+      "GET /api/venues/admin/credentials": {
+        "status": "PASS",
+        "filters_tested": ["purpose=market_data", "purpose=execution", "purpose=fallback", "market_type=usdt_perp", "market_type=coin_perp"],
+        "multi_market_alias": "PASS - usdt_perp and coin_perp correctly alias to futures"
+      },
+      "POST /api/venues/admin/credentials/{id}/probe": {
+        "status": "PASS",
+        "spot_live_probe": "PASS - returns probe status",
+        "futures_testnet_probe": "PASS - returns probe status"
+      },
+      "POST /api/admin/commercial/p0/ingestion/rest-run": {
+        "status": "PASS",
+        "spot_live_requires_symbols": "PASS - correctly returns 400 without symbols",
+        "spot_live_with_symbols": "PASS",
+        "futures_testnet": "PASS"
+      },
+      "GET /api/admin/commercial/p0/live-gate": {
+        "status": "PASS",
+        "futures_required": "PASS - returns live_transition_ready status",
+        "spot_and_futures": "PASS"
+      },
+      "GET /api/venues/admin/credential-resolution-preview": {
+        "status": "PASS",
+        "audit_metadata": "PASS - returns selection_reason for Decision Trace Timeline",
+        "fallback_chain": "PASS - follows user→tenant_admin→global_admin"
+      },
+      "GET /api/venues/admin/credential-rules": {
+        "status": "PASS"
+      },
+      "PUT /api/venues/admin/credential-rules": {
+        "status": "PASS"
+      },
+      "GET /api/admin/commercial/p0/data-quality": {
+        "status": "PASS"
+      }
+    },
+    "frontend_ui": {
+      "page_render": {
+        "status": "PASS",
+        "route": "/admin/credential-orchestration",
+        "title": "Credential Orchestration"
+      },
+      "filter_panel": {
+        "status": "PASS",
+        "elements": ["credential-filter-exchange-select", "credential-filter-market-select", "credential-filter-purpose-select", "credential-filter-environment-select", "credential-filter-refresh-button"]
+      },
+      "decision_trace_timeline": {
+        "status": "PASS",
+        "card": "decision-trace-timeline-card found",
+        "title": "Decision Trace Timeline",
+        "steps": [
+          {"key": "user", "label": "1) user credential", "status": "checked"},
+          {"key": "tenant_admin", "label": "2) tenant_admin credential", "status": "checked"},
+          {"key": "global_admin", "label": "3) global_admin credential", "status": "checked"}
+        ]
+      },
+      "routing_matrix": {
+        "status": "PASS",
+        "description": "Deterministik fallback: user → tenant_admin → global_admin"
+      },
+      "probe_dashboard": {
+        "status": "PASS",
+        "probe_states_displayed": ["ready", "connectivity_only", "invalid_key", "ip_restricted", "no_probe"]
+      },
+      "credential_table": {
+        "status": "PASS",
+        "columns": ["Exchange", "Market", "Purpose", "Scope", "Env", "Status", "Probe", "Egress"]
+      }
+    }
+  },
+  "mocked_apis": {
+    "Binance Spot Live": "MOCKED - returns ip_restricted due to test environment",
+    "Binance Futures Testnet": "MOCKED - returns probe status based on connectivity",
+    "Bybit/OKX Probe": "MOCKED - public endpoint connectivity check only"
+  },
+  "rca_of_the_issue": "No issues found. All features working as expected."
+}

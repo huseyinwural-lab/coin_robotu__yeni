@@ -1,0 +1,80 @@
+{
+  "summary": "Risk Orchestrator Decision Trace Export + Approval Queue Ownership + Force Apply testing completed. All 19 backend API tests passed. Frontend UI verified with all 5 tabs (Risk Gate, Operations, Monitoring, Approvals & Trace, Control Tower) rendering correctly. Decision trace export (JSON/CSV), escalation sweep, decision intelligence, and control tower metrics all working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_risk_orchestrator_decision_trace_export.py",
+    "/app/test_reports/pytest/risk_orchestrator_decision_trace_export_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Decision trace export endpoints correctly implement JSON and CSV formats with proper Content-Type and Content-Disposition headers",
+    "Approval queue correctly implements scope filters (all/my/unassigned) and state filters (pending/assigned/approved/rejected/expired)",
+    "Queue list endpoint returns all required SLA fields (sla_remaining_seconds, sla_stage)",
+    "Escalation sweep endpoint correctly returns warning_escalations, critical_escalations, stuck_detected counts",
+    "Force apply endpoint correctly validates approval_id and requires reason_note",
+    "Operational dashboard returns all required metrics: active_pending_approvals, critical_queue, unassigned, my_approvals, reject_spike_last_hour, override_usage, risk_score_distribution, approval_throughput_last_hour",
+    "Decision intelligence endpoint returns diff, risk_breakdown, why_decision, similar_patterns",
+    "Reject insights endpoint returns insights with 3+/30min threshold",
+    "Frontend has proper tabbed interface with all 5 tabs rendering correctly",
+    "Export JSON and Export CSV buttons trigger file downloads with correct filenames",
+    "Escalation Sweep button works and shows success toast",
+    "Decision Intelligence button loads and displays decision details"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_risk_orchestrator_decision_trace_export.py"
+  ],
+  "success_rate": {
+    "backend": "100% (19/19 passed)",
+    "frontend": "100% (All tabs and features verified)"
+  },
+  "test_credentials": {
+    "super_admin": "canary.admin@platform.local / CanaryAdmin123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Risk Orchestrator Decision Trace Export + Approval Queue Ownership fully tested. All endpoints working: /policy/decision-traces/export?export_format=json|csv (with proper headers), /policy/queue (scope/state/critical_first filters), /policy/queue/sweep (escalation processing), /policy/queue/{id}/force-apply (super_admin only, requires reason_note), /policy/decision-intelligence/{trace_id} (diff, risk_breakdown, why_decision, similar_patterns), /rejects/insights (3+/30min threshold), /operations/dashboard (all metrics). Frontend tabbed UI verified with all panels rendering correctly. Export buttons trigger file downloads.",
+  "tests_passed": {
+    "backend": [
+      "GET /policy/decision-traces/export?export_format=json - returns JSON with proper headers and structure",
+      "GET /policy/decision-traces/export?export_format=csv - returns CSV with proper headers and columns",
+      "GET /policy/queue?scope=all - returns queue list with SLA fields",
+      "GET /policy/queue?scope=my - returns user's assigned approvals",
+      "GET /policy/queue?scope=unassigned - returns unassigned approvals only",
+      "GET /policy/queue?state={state} - filters by state (pending/assigned/approved/rejected/expired)",
+      "GET /policy/queue?critical_first=true - CRITICAL items sorted first",
+      "POST /policy/queue/sweep - returns warning_escalations, critical_escalations, stuck_detected",
+      "POST /policy/queue/{id}/force-apply - returns 404 for invalid approval_id",
+      "POST /policy/queue/{id}/force-apply - validates reason_note requirement",
+      "GET /operations/dashboard - returns all required metrics",
+      "GET /policy/decision-traces - returns trace list with all required fields",
+      "GET /policy/decision-intelligence/{trace_id} - returns diff, risk_breakdown, why_decision, similar_patterns",
+      "GET /rejects/insights - returns insights with window_minutes and suggestions",
+      "GET /alerts - returns approval-related alert types",
+      "GET /policy/approvals - returns approval list with all required fields",
+      "POST /policy/queue/{id}/assign - returns 404 for invalid approval_id",
+      "GET /status - returns policy, kill_switch, trading_enabled, open_intents",
+      "POST /policy/simulate - returns simulation_id, result_status, risk_score, classification, approval_flow"
+    ],
+    "frontend": [
+      "Tabbed interface renders (Risk Gate, Operations, Monitoring, Approvals & Trace, Control Tower)",
+      "Risk Gate tab: Policy Management form, Simülasyon Çalıştır button, Apply (Double Confirm) button, override checkbox",
+      "Approvals & Trace tab: 4-Eyes Approval Queue with scope/state filters, Escalation Sweep button, Decision Trace panel",
+      "Approvals & Trace tab: Export JSON and Export CSV buttons trigger file downloads",
+      "Approvals & Trace tab: Decision Intelligence buttons load decision details",
+      "Control Tower tab: Operational Dashboard with all metrics (active_pending, critical_queue, unassigned, my_approvals, reject_spike, override_usage)",
+      "Control Tower tab: Risk Score Distribution & Throughput display",
+      "Sticky status header with role badge (super_admin), kill switch status, trading status",
+      "Escalation Sweep button works and shows success toast"
+    ]
+  },
+  "mocked_apis_note": "Slack webhook and Binance futures may be MOCKED in some flows"
+}

@@ -1,0 +1,95 @@
+{
+  "summary": "Execution Control P1 Consistency Testing Complete - All backend tests passed (25/26, 1 skipped). Frontend URL filter restoration and export error handling verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_execution_control_p1_consistency.py",
+    "/app/test_reports/pytest/execution_control_p1_consistency_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Export filters (search/state/status/source_type/symbol/strategy/order_id) are correctly applied to all query sets",
+    "Export scope variations work correctly: correlation_id only, execution_event_id only, time_range only",
+    "Multi-scope export correctly returns 422 with detail message",
+    "Empty-data export scenario is deterministic: ZIP file list is fixed, CSV headers are present",
+    "Analytics semantic alignment verified: summary.failures == failure-trends.totals.failures",
+    "Analytics endpoint parity verified: /summary, /state-latency, /failure-trends all accept same filter set",
+    "Summary.dead_letter_count == failure-trends.dead_letter_total verified",
+    "State-latency scope matches summary scope (transitions count matches)",
+    "Frontend states page URL filter restoration working correctly",
+    "Frontend analytics page URL filter restoration working correctly",
+    "Frontend export error handling shows 'Export hatası: <backend detail>' format correctly"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_execution_control_p1_consistency.py"
+  ],
+  "success_rate": {
+    "backend": "96% (25/26 tests passed, 1 skipped)",
+    "frontend": "100% (all URL filter restoration and export error handling verified)"
+  },
+  "test_credentials": {
+    "super_admin": "canary.admin@platform.local / CanaryAdmin123!"
+  },
+  "seed_data_creation": "Simulations created during testing for state transitions",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Execution Control P1 consistency fixes fully tested. Key verifications: 1) Export filters are applied to all query sets (events, transitions, failed_events, manual_actions, idempotency_collisions, trace). 2) Export scope variations work correctly with proper 422 errors for multi-scope. 3) Analytics semantic alignment verified - summary.failures equals failure-trends total_failures. 4) Frontend URL filter restoration works on both /admin/execution/states and /admin/execution/analytics pages. 5) Frontend export error handling shows 'Export hatası: <backend detail>' format.",
+  "verified_features": {
+    "export_filter_application": {
+      "symbol_filter": "PASS",
+      "source_type_filter": "PASS",
+      "state_filter": "PASS",
+      "search_filter": "PASS",
+      "strategy_filter": "PASS"
+    },
+    "export_scope_variations": {
+      "correlation_id_only": "PASS",
+      "execution_event_id_only": "PASS",
+      "time_range_only": "PASS",
+      "multi_scope_422": "PASS"
+    },
+    "empty_data_deterministic": {
+      "all_required_files_present": "PASS",
+      "csv_headers_present": "PASS"
+    },
+    "analytics_semantic_alignment": {
+      "summary_failures_equals_failure_trends_total": "PASS",
+      "summary_failures_equals_daily_trend_sum": "PASS",
+      "summary_dead_letter_equals_failure_trends_dead_letter_total": "PASS"
+    },
+    "analytics_endpoint_parity": {
+      "summary_accepts_all_filters": "PASS",
+      "state_latency_accepts_all_filters": "PASS",
+      "failure_trends_accepts_all_filters": "PASS",
+      "all_endpoints_return_same_filter_context": "PASS"
+    },
+    "state_latency_scope_alignment": {
+      "transitions_matches_summary": "PASS"
+    },
+    "search_filter_wide_fields": {
+      "search_by_symbol": "PASS",
+      "search_by_correlation_id_substring": "PASS",
+      "search_by_strategy": "PASS"
+    },
+    "export_error_messages": {
+      "no_scope_400_with_detail": "PASS",
+      "multi_scope_422_with_detail": "PASS",
+      "invalid_time_range_422_with_detail": "PASS"
+    },
+    "frontend_url_filter_restoration": {
+      "states_page": "PASS - source_type, symbol, state filters restored from URL",
+      "analytics_page": "PASS - source_type, symbol filters restored from URL"
+    },
+    "frontend_export_error_handling": {
+      "400_error_format": "PASS - Shows 'Export hatası: correlation_id veya execution_event_id veya time range zorunlu'"
+    }
+  },
+  "mocked_api_note": "Binance Futures execution mocked as per original request"
+}

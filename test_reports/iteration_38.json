@@ -1,0 +1,53 @@
+{
+  "summary": "C1 Canary Phase verification completed - ALL TESTS PASS. Run duration 61 minutes (>=60dk requirement met), kill-switch tests passed at phase start and end, all 3 artifact files generated and JSON files are valid/parseable.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/artifacts/canary_c1_run.log",
+    "/app/artifacts/canary_c1_summary.json",
+    "/app/artifacts/canary_c1_metrics_snapshot.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A - skipped per request"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "C1 canary phase completed successfully. Key metrics: 12 loops, 61 min duration, 0 crashes, 0 5xx errors, 0 reject anomalies, 0 latency spikes. Max latency p95: 2884.86ms. All 3 symbols (BTCUSDT, ETHUSDT, BNBUSDT) tested with capital=150 USDT and max_positions=2.",
+  "verification_details": {
+    "duration_check": {
+      "start_time": "2026-03-20T17:30:44Z",
+      "end_time": "2026-03-20T18:32:28Z",
+      "duration_minutes": 61,
+      "requirement": ">=60",
+      "status": "PASS"
+    },
+    "kill_switch_tests": {
+      "phase_start": "PASS",
+      "phase_end": "PASS",
+      "log_evidence_start": "Line 5: Kill-switch faz başı testi",
+      "log_evidence_end": "Line 54: Kill-switch faz sonu testi"
+    },
+    "artifact_files": {
+      "canary_c1_run.log": "EXISTS - 56 lines",
+      "canary_c1_summary.json": "EXISTS - valid JSON",
+      "canary_c1_metrics_snapshot.json": "EXISTS - valid JSON"
+    },
+    "json_parsing": {
+      "summary_fields": ["phase", "canary_rollout_test", "symbols", "capital_usdt", "max_positions", "duration_minutes", "crash_count", "error_5xx_count", "reject_anomaly", "latency_spike", "kill_switch_start_test", "kill_switch_end_test", "health_check", "ready_check", "timestamp"],
+      "metrics_fields": ["phase", "loop_count", "max_error_rate", "max_order_fail_rate", "max_reject_rate", "max_latency_ms_p95", "max_pnl_drift", "crash_count", "error_5xx_count", "reject_count", "reject_anomaly_count", "latency_spike_count", "health_http", "ready_http", "timestamp"],
+      "status": "PASS"
+    }
+  }
+}

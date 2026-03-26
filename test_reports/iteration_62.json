@@ -1,0 +1,64 @@
+{
+  "summary": "Faz-2 Strategy Control + Governance System Testing Complete. All backend endpoints (21 tests) and frontend UI verified. Rollout/Bulk/Rollback features working correctly with proper confirm phrase enforcement and response contract.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_strategy_control_governance_faz2.py",
+    "/app/test_reports/pytest/strategy_control_faz2_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend response contract {status, trace_id, message, state_snapshot} properly implemented for all Faz-2 endpoints",
+    "Rollout precheck correctly validates health<50, error>3%, drift>0, checklist - all checks visible in UI",
+    "Auto-rollback thresholds (health_score_min=50, error_rate_max_pct=3) correctly configured and returned in rollout_policy",
+    "Bulk action endpoint correctly rejects disable/decommission with message 'Bulk action sadece pause/resume/throttle destekler'",
+    "Confirm phrase enforcement working: PROMOTE SHADOW, APPLY ROLLOUT, ROLLBACK LAST ACTION, BULK PAUSE/RESUME/THROTTLE",
+    "Rollout percentage constraint [10, 25, 50, 100] correctly enforced with rejection message",
+    "Super admin authorization (require_super_admin) properly blocks ops users with 403 on all Faz-2 endpoints"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_strategy_control_governance_faz2.py"
+  ],
+  "success_rate": {
+    "backend": "100% (21 passed)",
+    "frontend": "100% (All UI elements verified: rollout panel, bulk panel, checkboxes, confirm inputs, result cards)"
+  },
+  "test_credentials": "canary.admin@platform.local / CanaryAdmin123! (super_admin), canary.ops@platform.local / CanaryOps123! (ops)",
+  "seed_data_creation": "None required - used existing strategies from pipeline",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Faz-2 Strategy Control + Governance System fully tested. Key features verified: 1) Overview returns phase_scope=phase_2_rollout_bulk_rollback, bulk_capabilities=[pause,resume,throttle], rollout_policy with canary_steps=[10,25,50,100] and auto_rollback_thresholds 2) Rollout precheck endpoint returns health/recent_error/drift/checklist checks 3) Promote shadow requires 'PROMOTE SHADOW' confirm and passes precheck 4) Rollout requires 'APPLY ROLLOUT' confirm and valid percentage [10,25,50,100] 5) Rollback requires 'ROLLBACK LAST ACTION' confirm 6) Bulk action only allows pause/resume/throttle with respective confirm phrases 7) All responses have {status, trace_id, message, state_snapshot} contract 8) Ops users get 403 on all endpoints",
+  "faz2_acceptance_criteria_status": {
+    "overview_phase_scope": "PASS - phase_scope=phase_2_rollout_bulk_rollback",
+    "overview_bulk_capabilities": "PASS - [pause, resume, throttle] only, no disable/decommission",
+    "overview_rollout_policy": "PASS - canary_steps=[10,25,50,100], auto_rollback_thresholds={health_score_min:50, error_rate_max_pct:3}",
+    "rollout_precheck_endpoint": "PASS - Returns health/recent_error/drift/checklist checks with ok/current/required fields",
+    "promote_shadow_confirm_required": "PASS - Rejects without 'PROMOTE SHADOW' confirm phrase",
+    "promote_shadow_precheck_fail_behavior": "PASS - Rejects when precheck fails with precheck details in response",
+    "rollout_confirm_required": "PASS - Rejects without 'APPLY ROLLOUT' confirm phrase",
+    "rollout_percentage_constraint": "PASS - Only accepts [10, 25, 50, 100], rejects 15% with error message",
+    "rollout_auto_rollback_response": "PASS - Returns auto_rollback object with triggered/reason/thresholds/previous_state",
+    "rollback_confirm_required": "PASS - Rejects without 'ROLLBACK LAST ACTION' confirm phrase",
+    "rollback_single_step": "PASS - Rolls back last action for strategy",
+    "bulk_action_scope": "PASS - Only pause/resume/throttle allowed, disable/decommission rejected",
+    "bulk_action_confirm_required": "PASS - Requires BULK PAUSE/BULK RESUME/BULK THROTTLE",
+    "bulk_action_reason_required": "PASS - Reason field required (min 3 chars)",
+    "response_contract": "PASS - All endpoints return {status, trace_id, message, state_snapshot}",
+    "super_admin_authorization": "PASS - Ops users get 403 on all Faz-2 endpoints",
+    "frontend_rollout_panel": "PASS - Strategy select, operation select, percentage select, precheck button, result cards all working",
+    "frontend_bulk_panel": "PASS - Action select (pause/resume/throttle only), reason input, confirm input, submit button, result text all working",
+    "frontend_checkboxes": "PASS - Strategy selection checkboxes visible and functional"
+  },
+  "mocked_apis": {
+    "has_mocked_apis": true,
+    "mocked_apis_list": ["Binance execution in MOCK mode"]
+  },
+  "precheck_behavior_note": "Rollout precheck fails as expected due to conservative thresholds (health<50, error>3%). This is documented expected behavior per agent context."
+}

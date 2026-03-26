@@ -1,0 +1,113 @@
+{
+  "summary": "Admin Credential Orchestration UI testing complete. Backend APIs (22/22 tests passed) and Frontend UI verified. Multi-exchange support (binance/bybit/okx), market types (spot/usdt_perp/coin_perp), purposes (market_data/execution/fallback), routing matrix with user→tenant_admin→global_admin fallback chain all working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_credential_orchestration_api.py",
+    "/app/test_reports/pytest/credential_orchestration_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_credential_orchestration_api.py"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 tests passed)",
+    "frontend": "100%"
+  },
+  "test_credentials": "Admin: canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "Created test credentials for binance/bybit/okx with various market types and purposes during testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Admin Credential Orchestration page fully functional. All CRUD operations for credentials work. Routing rules with user/admin/admin_fallback sources work. Resolution preview shows correct fallback chain. Probe functionality works (returns ip_restricted for test keys as expected). Filter interactions (exchange/market/purpose/environment) work correctly.",
+  "features_verified": {
+    "backend_apis": {
+      "GET /api/venues/admin/credentials": {
+        "status": "PASS",
+        "filters_tested": ["exchange", "market_type", "purpose", "environment", "include_inactive"],
+        "exchanges_tested": ["binance", "bybit", "okx"],
+        "market_types_tested": ["spot", "usdt_perp", "coin_perp"],
+        "purposes_tested": ["market_data", "execution", "fallback"]
+      },
+      "POST /api/venues/admin/credentials": {
+        "status": "PASS",
+        "validation_tested": ["invalid_exchange", "invalid_market_type", "invalid_purpose"],
+        "fields_verified": ["scope_type", "exchange", "market_type", "purpose", "environment", "api_key", "api_secret", "passphrase"]
+      },
+      "POST /api/venues/admin/credentials/{id}/approve": {
+        "status": "PASS",
+        "fields_verified": ["approval_status", "is_active", "approved_by", "approved_at"]
+      },
+      "POST /api/venues/admin/credentials/{id}/disable": {
+        "status": "PASS",
+        "fields_verified": ["is_active"]
+      },
+      "POST /api/venues/admin/credentials/{id}/probe": {
+        "status": "PASS",
+        "fields_verified": ["last_probe_status", "last_probe_message", "last_probe_at", "last_probe_meta"]
+      },
+      "GET /api/venues/admin/credential-rules": {
+        "status": "PASS",
+        "filters_tested": ["exchange", "market_type", "environment"]
+      },
+      "PUT /api/venues/admin/credential-rules": {
+        "status": "PASS",
+        "sources_tested": ["user", "admin", "admin_fallback"],
+        "validation_tested": ["invalid_preferred_source"]
+      },
+      "GET /api/venues/admin/credential-resolution-preview": {
+        "status": "PASS",
+        "purposes_tested": ["execution", "fallback"],
+        "fields_verified": ["selected_credential_id", "source", "masked_api_key", "masked_fingerprint", "effective_base_url", "audit_metadata"]
+      }
+    },
+    "frontend_ui": {
+      "page_render": {
+        "status": "PASS",
+        "route": "/admin/credential-orchestration",
+        "title": "Credential Orchestration"
+      },
+      "filter_panel": {
+        "status": "PASS",
+        "elements": ["exchange_select", "market_select", "purpose_select", "environment_select", "refresh_button"]
+      },
+      "credential_form": {
+        "status": "PASS",
+        "elements": ["scope_type", "scope_id", "exchange", "market_type", "purpose", "environment", "base_url", "egress_note", "api_key", "api_secret", "passphrase"]
+      },
+      "credential_table": {
+        "status": "PASS",
+        "columns": ["Exchange", "Market", "Purpose", "Scope", "Env", "Status", "Probe", "Egress", "Fingerprint", "Aksiyon"]
+      },
+      "routing_matrix": {
+        "status": "PASS",
+        "description": "Deterministik fallback: user → tenant_admin → global_admin",
+        "elements": ["exchange_select", "market_select", "environment_select", "preferred_source_select", "tenant_id_input", "user_id_input", "fallback_checkbox"]
+      },
+      "probe_dashboard": {
+        "status": "PASS",
+        "probe_states_displayed": ["ready", "connectivity_only", "invalid_key", "permission_restricted", "ip_restricted", "env_mismatch", "rate_limited", "probe_not_supported", "unreachable", "no_probe"]
+      },
+      "resolution_preview": {
+        "status": "PASS",
+        "elements": ["user_id_input", "purpose_select", "preview_button"],
+        "output_fields": ["selected_source", "credential_id", "fingerprint", "effective_base_url", "selection_reason", "rule_id"]
+      },
+      "egress_visibility": {
+        "status": "PASS",
+        "fields": ["exchange", "market_type", "environment", "egress_url", "proxy_note", "probe_message"]
+      }
+    }
+  },
+  "mocked_apis": {
+    "Binance Testnet": "MOCKED (returns ip_restricted due to test environment)",
+    "Bybit/OKX Probe": "MOCKED (public endpoint connectivity check only)"
+  }
+}

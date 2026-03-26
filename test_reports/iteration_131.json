@@ -1,0 +1,104 @@
+{
+  "summary": "Iteration 131: P1 Revenue Engine Testing Complete. Backend (20/20 tests passed). Frontend Revenue page verified with all UI elements working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration131_revenue_engine.py",
+    "/app/test_reports/pytest/iteration131_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "revenue_ledger table migration correctly implemented with idempotent check (_has_table)",
+    "RevenueLedger model has proper UniqueConstraint for trade_id + component_type (idempotent upsert)",
+    "REVENUE_PNL_SHARE_RATE=0.20 correctly configured in backend/.env",
+    "Revenue components correctly separated: 'fee' (100% of commission_usd) and 'pnl_share' (20% of positive realized_pnl_usd)",
+    "sync_revenue_ledger_for_scope called after trade ingestion in run_rest_trade_ingestion",
+    "AdminRevenuePage.jsx has all required data-testid attributes for testing",
+    "Revenue endpoint requires super_admin role (require_super_admin dependency)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration131_revenue_engine.py"
+  ],
+  "success_rate": {
+    "backend": "100% (20/20 tests passed)",
+    "frontend": "100%"
+  },
+  "test_credentials": "Admin: canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "None - used existing data from previous iterations",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "P1 Revenue Engine fully verified. revenue_ledger table created, revenue_sync working after ingestion, summary endpoint deterministic, UI rendering correctly with filters/cards/graphs/tables.",
+  "features_verified": {
+    "migration_table": {
+      "revenue_ledger_table": "PASS - table created via migration 20260325_0075",
+      "endpoint_no_crash": "PASS - GET /api/admin/revenue/summary returns 200"
+    },
+    "trade_revenue_write_path": {
+      "ingest_rest_run_revenue_sync": "PASS - response includes revenue_sync field",
+      "idempotent_upsert": "PASS - UniqueConstraint on trade_id+component_type"
+    },
+    "revenue_component_separation": {
+      "fee_component": "PASS - 100% of commission_usd",
+      "pnl_share_component": "PASS - 20% of positive realized_pnl_usd"
+    },
+    "summary_determinism": {
+      "consecutive_calls_consistent": "PASS - total/today values match across calls"
+    },
+    "summary_metrics": {
+      "total_revenue": "PASS - displayed in UI (live: 0.163310 USD, testnet: 2.048358 USD)",
+      "today_revenue": "PASS - displayed in UI",
+      "top_users": "PASS - table with email, user_id, revenue columns",
+      "top_symbols": "PASS - table with symbol, revenue columns",
+      "daily_graph": "PASS - bar chart with date, total, fee, pnl_share breakdown"
+    },
+    "regression_existing_flows": {
+      "ingest_rest_run": "PASS - endpoint available, no 500",
+      "pnl_latest": "PASS - endpoint available, no 500",
+      "reconciliation_run": "PASS - endpoint available, no 500",
+      "live_gate": "PASS - endpoint available, no 500",
+      "data_quality": "PASS - endpoint available, no 500"
+    },
+    "frontend_ui": {
+      "admin_revenue_page": {
+        "status": "PASS",
+        "route": "/admin/revenue",
+        "elements_verified": [
+          "admin-revenue-page",
+          "admin-revenue-header",
+          "admin-revenue-title",
+          "admin-revenue-filters",
+          "admin-revenue-filter-environment-select",
+          "admin-revenue-filter-start-date-input",
+          "admin-revenue-filter-end-date-input",
+          "admin-revenue-filter-user-email-input",
+          "admin-revenue-filter-symbol-input",
+          "admin-revenue-filter-top-limit-input",
+          "admin-revenue-filter-refresh-button",
+          "admin-revenue-total-card",
+          "admin-revenue-today-card",
+          "admin-revenue-daily-graph-card",
+          "admin-revenue-top-users-card",
+          "admin-revenue-top-users-table",
+          "admin-revenue-top-symbols-card",
+          "admin-revenue-top-symbols-table"
+        ]
+      },
+      "navigation": {
+        "status": "PASS",
+        "sidebar_link": "nav-admin-revenue-link (superAdminOnly: true)",
+        "route_configured": "/admin/revenue -> AdminRevenuePage"
+      }
+    }
+  },
+  "mocked_apis": {
+    "Bybit/OKX Probe": "MOCKED - public endpoint connectivity check only"
+  },
+  "rca_of_the_issue": "N/A - All P1 Revenue Engine features working as expected"
+}

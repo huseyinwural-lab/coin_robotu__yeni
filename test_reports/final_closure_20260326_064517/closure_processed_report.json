@@ -1,0 +1,38 @@
+{
+  "report_type": "alternative_processed_closure_report",
+  "generated_at": "2026-03-26T06:49:51.469127+00:00",
+  "source_folder": "/app/test_reports/final_closure_20260326_064517",
+  "final_status": "FAIL",
+  "pass_count": 1,
+  "fail_count": 8,
+  "passed_conditions": [
+    "kill_switch_verified"
+  ],
+  "failed_conditions": [
+    "infra_patch_applied",
+    "production_url_used",
+    "login_10x_200",
+    "websocket_stable",
+    "smoke_pass",
+    "readiness_ready",
+    "dry_run_pass",
+    "go_live_true"
+  ],
+  "key_fail_reasons": {
+    "infra_patch_applied": "3:B seçimi nedeniyle canlı apply bu oturumda yapılmadı",
+    "production_url_used": "kullanılan URL preview, production/public URL değil",
+    "login_10x_200": "/api/auth/login çağrıları 404 döndü",
+    "websocket_stable": "websocket soak doğrulaması tamamlanamadı",
+    "smoke_pass": "smoke overall_status FAIL",
+    "readiness_ready": "readiness NOT_READY",
+    "dry_run_pass": "dry-run FAIL",
+    "go_live_true": "checklist go_live=false"
+  },
+  "evidence_files": {
+    "devops_apply_commands": "/app/test_reports/final_closure_20260326_064517/devops_apply_commands.sh",
+    "daily_smoke_latest": "/app/test_reports/final_closure_20260326_064517/daily_smoke_latest.json",
+    "final_go_no_go_artifact": "/app/test_reports/final_closure_20260326_064517/final_go_no_go_artifact.json",
+    "rollback_state": "/app/test_reports/final_closure_20260326_064517/rollback_state.json",
+    "kill_switch_verify": "/app/test_reports/final_closure_20260326_064517/kill_switch_verify.json"
+  }
+}

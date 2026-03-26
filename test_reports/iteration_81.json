@@ -1,0 +1,57 @@
+{
+  "summary": "Checkpoint 2 (P1) Testing Complete - Snapshot Restore Workflow + Approval Visibility + Audit-grade Export. All 14 backend tests PASSED. Frontend UI verification PASSED for super_admin and admin roles.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_checkpoint2_snapshot_restore_approval.py",
+    "/app/test_reports/pytest/checkpoint2_pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "All Checkpoint 2 features implemented correctly",
+    "Snapshot create/list/restore endpoints working as expected",
+    "Role-based CTA working: super_admin sees 'Restore Now', admin sees 'Restore Request'",
+    "Approval list returns all required fields: request_type, action_type, target_type, target_id, requested_by, reason_note, status, stale_state, revision_context, created_at",
+    "Export JSON contains audit_meta with all required fields: exported_at, exported_by, config_version, snapshot_id, reason_note, related_request_id, source_context, revision_context",
+    "Export CSV contains metadata rows",
+    "Export creates audit log entry in state-history (strategy_allocation_export)",
+    "Restore invalidation mechanism working - pending requests get requires_review + STALE status"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_checkpoint2_snapshot_restore_approval.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": {
+    "super_admin": "canary.admin@platform.local / CanaryAdmin123!",
+    "admin": "alloc.admin.checkpoint2@example.com / AdminTest123!"
+  },
+  "seed_data_creation": "Test snapshots created during testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Checkpoint 2 fully verified. Snapshot restore workflow, approval visibility, and audit-grade export all working correctly. Role-based CTAs verified (super_admin: Restore Now, admin: Restore Request). State history shows export entries.",
+  "verified_features": {
+    "POST /api/admin/strategy-allocation/snapshots create": "PASS - creates snapshot with metadata",
+    "POST /api/admin/strategy-allocation/snapshots/{id}/restore super_admin": "PASS - executes directly",
+    "POST /api/admin/strategy-allocation/snapshots/{id}/restore admin": "PASS - creates pending approval request",
+    "Restore approve invalidates pending requests": "PASS - sets requires_review + stale_state=STALE",
+    "Approval list endpoint fields": "PASS - returns request_type, action_type, target, requested_by, reason, status, stale_state, revision_context",
+    "Request age badge created_at": "PASS - formatRequestAge function working",
+    "GET /api/admin/strategy-allocation/export?format=json audit_meta": "PASS - contains all required fields",
+    "GET /api/admin/strategy-allocation/export?format=csv metadata": "PASS - contains metadata rows",
+    "Export audit log entry": "PASS - strategy_allocation_export in state-history",
+    "Frontend snapshot list restore button": "PASS - visible with metadata",
+    "Frontend role-based CTA": "PASS - super_admin: Restore Now, admin: Restore Request",
+    "Frontend approval list visibility": "PASS - target, status, stale visible"
+  },
+  "mocked_api_note": "Binance Futures execution MOCKED as per original spec"
+}

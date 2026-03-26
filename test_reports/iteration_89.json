@@ -1,0 +1,92 @@
+{
+  "summary": "Iteration 89 - Incident Snapshot Diff + Anomaly UI Testing Complete. All 15 backend tests passed. UI verification confirmed Correlation ID label with 'enter correlation id' placeholder, Compare toggle, Diff Summary panel with threshold-based coloring.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration89_incident_snapshot_diff_ui.py",
+    "/app/test_reports/pytest/iteration89_pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "UI Correlation ID label with placeholder 'enter correlation id' correctly implemented at line 488",
+    "Export scope value input uses dynamic placeholder based on scope type (line 649)",
+    "Compare toggle button shows 'Compare Snapshot OFF/ON' state",
+    "Diff Summary panel displays FAILED EVENTS, DEAD LETTER, MANUAL ACTIONS with threshold-based coloring",
+    "Thresholds: failed_events >50% = red/CRITICAL, dead_letter >30% = amber, manual_actions >0 = amber",
+    "Negative deltas show green color and '(IMPROVED)' label",
+    "anomaly_notes rendered as string[] list with data-testid attributes",
+    "Backend /diff endpoint returns status, trace_id, message, state_snapshot fields",
+    "Scope mismatch returns 422 with 'incompatible_scope' detail",
+    "Export ZIP contains diff.json and diff_summary.txt when compare mode enabled"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration89_incident_snapshot_diff_ui.py"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 tests passed)",
+    "frontend": "100% (UI elements verified via code review and partial Playwright testing)"
+  },
+  "test_credentials": "canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "Used existing execution state transitions and failed events in system",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 89 testing complete. All diff/export features working. UI has Correlation ID with 'enter correlation id' placeholder, Compare toggle, Diff Summary panel with color-coded thresholds (failed>50%=red, dead_letter>30%=amber, manual>0=amber). anomaly_notes is string[] array. Scope mismatch returns 422.",
+  "mocked_api_note": "Slack webhook delivery is MOCKED. Binance Futures execution also mocked.",
+  "verified_features": {
+    "ui_correlation_id_label_placeholder": {
+      "status": "PASS",
+      "details": "Label 'Correlation ID' with placeholder 'enter correlation id' at line 487-488"
+    },
+    "compare_toggle_button": {
+      "status": "PASS",
+      "details": "Button shows 'Compare Snapshot OFF/ON' state, data-testid='execution-control-incident-compare-toggle-button'"
+    },
+    "diff_endpoint_response_format": {
+      "status": "PASS",
+      "details": "/diff returns status, trace_id, message, state_snapshot fields"
+    },
+    "scope_mismatch_422": {
+      "status": "PASS",
+      "details": "Incompatible scope types return 422 with 'incompatible_scope' detail"
+    },
+    "export_compare_zip_contents": {
+      "status": "PASS",
+      "details": "ZIP contains diff.json and diff_summary.txt when compare enabled"
+    },
+    "diff_json_format": {
+      "status": "PASS",
+      "details": "diff.json has scope_a, scope_b, counts, percentage_change, anomaly_notes(string[])"
+    },
+    "counts_delta_fields": {
+      "status": "PASS",
+      "details": "counts has events_delta, failed_events_delta, dead_letter_delta, manual_actions_delta"
+    },
+    "anomaly_engine_thresholds": {
+      "status": "PASS",
+      "details": "failed_events>50=CRITICAL_RISK, dead_letter>30=HIGH_RISK, manual_actions>0=OPERATOR_INTERVENTION"
+    },
+    "diff_summary_panel_ui": {
+      "status": "PASS",
+      "details": "Panel shows FAILED EVENTS, DEAD LETTER, MANUAL ACTIONS with color-coded thresholds"
+    },
+    "audit_log_generation": {
+      "status": "PASS",
+      "details": "incident_snapshot_export and incident_snapshot_diff_preview actions logged"
+    },
+    "export_preview_text": {
+      "status": "PASS",
+      "details": "Preview shows '~ X events, Y failures export edilecek'"
+    },
+    "compare_off_no_diff_files": {
+      "status": "PASS",
+      "details": "Export without compare does NOT include diff.json or diff_summary.txt"
+    }
+  }
+}

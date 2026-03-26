@@ -1,0 +1,117 @@
+{
+  "summary": "Comprehensive regression testing of Execution Decision Gate features. All 39 backend tests passed. Frontend UI verified working correctly with all P0/P1/P2 features including approve/execute semantics separation, alerts API user-state, config API thresholds + feature flag, and observability metrics.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_execution_decision_gate_closure.py",
+    "/app/backend/tests/test_execution_decision_gate_p0_p1_p2.py",
+    "/app/test_reports/pytest/execution_decision_gate_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Approve vs Execute semantics correctly implemented: QUEUED -> APPROVED -> RELEASED state machine",
+    "High-risk execute confirmation blocking works correctly - requires execute_confirmation=true for high-risk intents",
+    "Alerts API correctly implements user-based state (read_at, acked_at, acked_by per user)",
+    "Config API correctly stores thresholds in DB via BrandSetting and supports feature flag execution_decision_gate_enforced",
+    "Observability metrics include reject_ratio, override_ratio, stale_decision_attempt_count, unauthorized_action_attempt_count"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (39/39 tests passed)",
+    "frontend": "100% (UI verified working)"
+  },
+  "test_credentials": "super_admin: canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "Test intents created via direct DB insertion for testing purposes",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Execution Queue Decision Gate features fully tested. All P0/P1/P2 features working. Approve/Execute separation verified. Alerts API user-state verified. Config API thresholds + feature flag verified. Observability metrics verified. Slack Webhook and Binance are MOCKED.",
+  "features_tested": {
+    "approve_with_reason": {
+      "status": "PASS",
+      "evidence": "test_approve_without_reason_returns_400 - returns 400 when reason is empty"
+    },
+    "reject_with_reason": {
+      "status": "PASS",
+      "evidence": "test_reject_without_reason_returns_400 - returns 400 when reason is empty"
+    },
+    "detail_ack_blocking": {
+      "status": "PASS",
+      "evidence": "test_approve_without_read_ack_returns_400 - returns 400 when read_acknowledged is false"
+    },
+    "high_risk_execute_confirmation_blocking": {
+      "status": "PASS",
+      "evidence": "test_high_risk_approve_without_double_confirmation_returns_400 - execute requires execute_confirmation=true for high-risk"
+    },
+    "unauthorized_override_blocking": {
+      "status": "PASS",
+      "evidence": "test_override_requires_super_admin - returns 403 when non-super_admin tries override"
+    },
+    "super_admin_queue_control_blocking": {
+      "status": "PASS",
+      "evidence": "test_pause_requires_super_admin, test_resume_requires_super_admin, test_clear_requires_super_admin - all return 401/403 for non-super_admin"
+    },
+    "bulk_action_limit_20_enforcement": {
+      "status": "PASS",
+      "evidence": "test_bulk_limit_exceeded_returns_400 - returns 400 when intent_ids > 20"
+    },
+    "invalid_state_transition_reject": {
+      "status": "PASS",
+      "evidence": "test_invalid_transition_rejected - returns 400/409 for invalid transitions"
+    },
+    "stale_detail_version_reject": {
+      "status": "PASS",
+      "evidence": "test_stale_detail_version_rejected - returns 400 with 'stale' in message"
+    },
+    "cancel_flow": {
+      "status": "PASS",
+      "evidence": "test_cancel_from_queued_succeeds - returns 200 with status=CANCELLED"
+    },
+    "manual_edit_revalidation": {
+      "status": "PASS",
+      "evidence": "test_edit_returns_diff - returns 200 with diff and detail_version"
+    },
+    "auto_refresh_stale_locked_retryable_visibility": {
+      "status": "PASS",
+      "evidence": "UI shows operational_status column with retryable/locked states, stale indicator shows GÜNCEL/STALE"
+    },
+    "approve_vs_execute_semantics": {
+      "status": "PASS",
+      "evidence": "test_high_risk_approve_with_double_confirmation_succeeds - QUEUED -> APPROVED -> RELEASED flow verified"
+    },
+    "alerts_api_read_ack_user_state": {
+      "status": "PASS",
+      "evidence": "GET /alerts returns status, read_at, acked_at, acked_by per user. POST /alerts/{id}/read and /ack work correctly"
+    },
+    "config_api_thresholds_feature_flag": {
+      "status": "PASS",
+      "evidence": "GET /config returns execution_decision_gate_enforced and thresholds. PATCH /config updates correctly"
+    },
+    "observability_metric_contract": {
+      "status": "PASS",
+      "evidence": "GET /observability returns metrics with reject_ratio, override_ratio, stale_decision_attempt_count, unauthorized_action_attempt_count"
+    }
+  },
+  "frontend_ui_verification": {
+    "execution_queue_page": "PASS - Page loads with summary grid (Total, Queued, High Risk, Rejected, Approval Avg, Stale Indicator)",
+    "alert_center": "PASS - Shows alerts with Mark Read, Ack, Open Intent buttons",
+    "decision_gate_config": "PASS - Shows execution_decision_gate_enforced checkbox and threshold inputs (queue_backlog, high_risk_spike, reject_spike)",
+    "filter_panel": "PASS - Status, risk, type filters and sort options working",
+    "bulk_operations": "PASS - Bulk Approve, Bulk Reject, Bulk Cancel with detay okundu and high-risk toplu onay checkboxes",
+    "queue_control": "PASS - Pause Queue, Resume Queue, Clear Queue buttons visible for super_admin",
+    "reject_analytics": "PASS - Reject Distribution, Reject Trend, Fix Guidance sections visible",
+    "queue_table": "PASS - Shows Intent, Symbol, Notional, Risk (high/low badges), Status, Operational, Created, Actions columns",
+    "detail_drawer": "PASS - Order Preview, Normalized Payload, Risk Payload, Expected Impact, Action History, Manual Edit, Decision Enforcement sections",
+    "decision_buttons": "PASS - Approve (Queue Release), Execute (Final), Reject, Cancel Intent buttons with proper disabled states"
+  },
+  "mocked_apis": {
+    "has_mocked_apis": true,
+    "mocked_apis_list": ["Slack Webhook", "Binance"]
+  }
+}

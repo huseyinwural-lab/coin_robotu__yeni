@@ -1,0 +1,99 @@
+{
+  "summary": "Iteration 90 - Recommended Actions Deterministic Rule Testing Complete. All 11 backend tests passed. UI verification confirmed Recommended Actions list renders with correct severity colors (CRITICAL=red, WARNING=amber, INFO=emerald).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration90_recommended_actions.py",
+    "/app/test_reports/pytest/iteration90_pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "recommended_actions contract verified: each element has action, severity, reason fields",
+    "Deterministic rule behavior: same input produces identical recommended_actions order/output",
+    "Threshold mapping implemented correctly in _build_snapshot_diff_payload function (lines 1906-1944)",
+    "failed_events >50% increase triggers CRITICAL: 'retry policy tune' + 'timeout review'",
+    "dead_letter >30% increase triggers WARNING: 'guardrail hardening' + 'validation check'",
+    "manual_actions >0 increase triggers WARNING: 'runbook review' + 'automation gap'",
+    "idempotency_collisions >0 increase triggers WARNING: 'idempotency check hardening'",
+    "Negative delta/improvement triggers INFO: 'keep current policy' with reason 'stable improvement observed'",
+    "No issues triggers INFO: 'keep current policy' with reason 'stable'",
+    "Export ZIP contains diff.json with recommended_actions when compare enabled",
+    "diff_summary.txt contains 'Recommended Actions' section with format: - [SEVERITY] action (reason)",
+    "UI renders Recommended Actions list with data-testid='execution-control-diff-recommended-actions-list'",
+    "Severity colors verified: CRITICAL=text-red-400, WARNING=text-amber-300, INFO=text-emerald-400"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration90_recommended_actions.py"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 tests passed)",
+    "frontend": "100% (UI elements verified via Playwright)"
+  },
+  "test_credentials": "canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "Used existing execution state transitions with correlation_id 'final-b'",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 90 testing complete. All recommended_actions features working. Backend rules: failed_events>50%=CRITICAL(retry policy tune, timeout review), dead_letter>30%=WARNING(guardrail hardening, validation check), manual_actions>0=WARNING(runbook review, automation gap), idempotency_collisions>0=WARNING(idempotency check hardening), improvement=INFO(keep current policy). UI renders actions with severity colors correctly.",
+  "mocked_api_note": "Slack webhook delivery is MOCKED. Binance Futures execution also MOCKED.",
+  "verified_features": {
+    "diff_response_contains_recommended_actions": {
+      "status": "PASS",
+      "details": "/api/admin-phase3/incident-snapshots/diff response contains diff.recommended_actions field"
+    },
+    "recommended_actions_element_contract": {
+      "status": "PASS",
+      "details": "Each element has action, severity, reason fields. Severity values: CRITICAL, WARNING, INFO"
+    },
+    "deterministic_rule_behavior": {
+      "status": "PASS",
+      "details": "Same input produces identical recommended_actions order/output across 3 runs"
+    },
+    "threshold_failed_events_critical": {
+      "status": "PASS",
+      "details": "failed_events >50% increase triggers CRITICAL: retry policy tune + timeout review"
+    },
+    "threshold_dead_letter_warning": {
+      "status": "PASS",
+      "details": "dead_letter >30% increase triggers WARNING: guardrail hardening + validation check"
+    },
+    "threshold_manual_actions_warning": {
+      "status": "PASS",
+      "details": "manual_actions >0 increase triggers WARNING: runbook review + automation gap"
+    },
+    "negative_delta_info_keep_policy": {
+      "status": "PASS",
+      "details": "Negative delta/improvement produces INFO 'keep current policy' action"
+    },
+    "idempotency_collision_action": {
+      "status": "PASS",
+      "details": "idempotency_collisions delta >0 produces WARNING 'idempotency check hardening'"
+    },
+    "export_zip_diff_json_recommended_actions": {
+      "status": "PASS",
+      "details": "Export ZIP contains diff.json with recommended_actions when compare enabled"
+    },
+    "diff_summary_txt_recommended_actions_section": {
+      "status": "PASS",
+      "details": "diff_summary.txt contains 'Recommended Actions' section with format: - [SEVERITY] action (reason)"
+    },
+    "export_without_compare_no_diff_files": {
+      "status": "PASS",
+      "details": "Export without compare does NOT include diff.json or diff_summary.txt"
+    },
+    "ui_recommended_actions_list_render": {
+      "status": "PASS",
+      "details": "Frontend renders Recommended Actions list with data-testid='execution-control-diff-recommended-actions-list'"
+    },
+    "ui_severity_colors": {
+      "status": "PASS",
+      "details": "Severity colors verified: CRITICAL=text-red-400, WARNING=text-amber-300, INFO=text-emerald-400"
+    }
+  }
+}

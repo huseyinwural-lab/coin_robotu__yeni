@@ -1,0 +1,3 @@
+processed=true
+status=FAIL
+location=/app/test_reports/final_closure_20260326_064517

@@ -1,0 +1,84 @@
+{
+  "summary": "Iteration 75 - Decision Approval Governance Testing COMPLETE. All 25 backend tests passed. Frontend UI verified: all 7 modular panels found (Role Visibility, Simulation Guard, Conflict Action, Hedge Action, Rebalance Action, Approval Queue, Simulation History). Role matrix correctly enforced: admin can create requests, super_admin can approve/reject/execute.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration75_decision_approval_governance.py",
+    "/app/test_reports/pytest/iteration75_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "POST /api/admin/decision-requests/conflict-resolve correctly requires admin role (super_admin gets 403)",
+    "POST /api/admin/decision-requests/hedge-apply correctly requires admin role",
+    "POST /api/admin/decision-requests/rebalance-change correctly requires admin role",
+    "All decision request endpoints require simulation_run_id (400 if missing)",
+    "GET /api/admin/decision-requests returns items sorted by: status (pending first) > severity_band > risk_delta_score > created_at",
+    "POST /api/admin/decision-requests/{id}/approve correctly requires super_admin role (admin gets 403)",
+    "POST /api/admin/decision-requests/{id}/reject correctly requires super_admin role",
+    "POST /api/admin/decision-requests/{id}/execute requires: super_admin role + approved status + valid preview_token",
+    "GET /api/admin/simulation-runs/{run_id}/compare-current returns before/current/compare_summary with risk_delta_vs_history",
+    "Frontend modular panels all have correct data-testid attributes for testing"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration75_decision_approval_governance.py"
+  ],
+  "success_rate": {
+    "backend": "100% (25/25 tests passed)",
+    "frontend": "100% (all 7 modular panels verified)"
+  },
+  "seed_data_creation": "Test decision requests created during workflow testing (conflict_resolve, hedge_apply, rebalance_change types)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Decision approval governance fully tested. Role matrix: admin creates requests (super_admin blocked), super_admin approves/rejects/executes (admin blocked). Queue sorting: pending first, then by severity_band (critical>high>medium>low), then by risk_delta_score (descending), then by created_at. Execute requires preview_token validation. Simulation compare endpoint returns risk_delta_vs_history and decision_delta_vs_history.",
+  "features_verified": {
+    "backend": [
+      "POST /api/admin/decision-requests/conflict-resolve: admin role required, simulation_run_id required",
+      "POST /api/admin/decision-requests/hedge-apply: admin role required, simulation_run_id required",
+      "POST /api/admin/decision-requests/rebalance-change: admin role required, simulation_run_id required",
+      "GET /api/admin/decision-requests: returns sorted list (pending first, then severity/risk/time)",
+      "GET /api/admin/decision-requests?status_filter=pending: filters by status",
+      "POST /api/admin/decision-requests/{id}/approve: super_admin only",
+      "POST /api/admin/decision-requests/{id}/reject: super_admin only",
+      "POST /api/admin/decision-requests/{id}/execute: super_admin only + approved status + preview_token required",
+      "GET /api/admin/decision-requests/{id}/preview: returns preview_token, risk_delta_score, severity_band, impact_summary",
+      "GET /api/admin/simulation-runs/{run_id}/compare-current: returns before/current/compare_summary"
+    ],
+    "frontend": [
+      "Role Visibility Panel: shows role-specific permissions (super_admin: simulate + approve/reject/execute + override apply/revoke)",
+      "Simulation Guard Panel: user_id, symbol, side, notional, strategy_binding, volatility inputs + Run Simulation button",
+      "Conflict Action Panel: displays strategy conflicts with Request button (admin only)",
+      "Hedge Action Panel: displays hedge suggestions with Request button (admin only)",
+      "Rebalance Action Panel: displays rebalance events with Request button (admin only)",
+      "Approval Queue Panel: shows pending/approved/rejected requests with Approve/Reject/Execute buttons (super_admin only)",
+      "Simulation History Panel: shows simulation runs with Compare button"
+    ]
+  },
+  "role_matrix_verified": {
+    "admin": {
+      "can_create_decision_requests": true,
+      "can_approve_requests": false,
+      "can_reject_requests": false,
+      "can_execute_requests": false
+    },
+    "super_admin": {
+      "can_create_decision_requests": false,
+      "can_approve_requests": true,
+      "can_reject_requests": true,
+      "can_execute_requests": true
+    }
+  },
+  "queue_sorting_verified": {
+    "primary": "status (pending=0, approved=1, rejected=2, executed=3, revoked=4, expired=5)",
+    "secondary": "severity_band (critical=4, high=3, medium=2, low=1) - descending",
+    "tertiary": "risk_delta_score - descending",
+    "quaternary": "created_at - ascending"
+  },
+  "mocked_api_note": "Binance Futures execution in MOCK mode as noted in request"
+}

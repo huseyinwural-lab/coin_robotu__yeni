@@ -1,0 +1,117 @@
+{
+  "summary": "P1.3 User Economics - Retention & Segment Profitability testing completed. All 24 backend API tests passed. Frontend UI fully functional with all components visible and interactive.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration133_p13_user_economics.py",
+    "/app/test_reports/pytest/pytest_p13_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration133_p13_user_economics.py"
+  ],
+  "success_rate": {
+    "backend": "100% (24/24 tests passed)",
+    "frontend": "100% (all UI components verified)"
+  },
+  "test_credentials": "Admin: canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "Snapshot created via POST /api/admin/users/economics/snapshots/run",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "P1.3 User Economics features fully tested. Backend endpoints: retention-trend, segment-profitability, export.csv, export.xlsx, snapshots/run, snapshots/trend all working. UI page at /admin/users/economics shows KPI cards, retention trend chart, segment profitability cards, churn risk list, reengagement list, snapshot trend table, and cohort view. Export buttons download files correctly.",
+  "features_tested": {
+    "backend_endpoints": [
+      {
+        "endpoint": "GET /api/admin/users/economics/retention-trend",
+        "status": "PASS",
+        "notes": "Returns cohort retention data with weekly/monthly granularity"
+      },
+      {
+        "endpoint": "GET /api/admin/users/economics/segment-profitability",
+        "status": "PASS",
+        "notes": "Returns 5 segment cards (high_value, profitable_but_inactive, churn_risk, low_activity_low_revenue, loss_heavy_users)"
+      },
+      {
+        "endpoint": "GET /api/admin/users/economics/export.csv",
+        "status": "PASS",
+        "notes": "Downloads CSV file with user economics data"
+      },
+      {
+        "endpoint": "GET /api/admin/users/economics/export.xlsx",
+        "status": "PASS",
+        "notes": "Downloads XLSX file with user economics data"
+      },
+      {
+        "endpoint": "POST /api/admin/users/economics/snapshots/run",
+        "status": "PASS",
+        "notes": "Creates daily/weekly snapshots successfully"
+      },
+      {
+        "endpoint": "GET /api/admin/users/economics/snapshots/trend",
+        "status": "PASS",
+        "notes": "Returns snapshot trend data points"
+      },
+      {
+        "endpoint": "GET /api/admin/commercial/p0/live-gate (Regression)",
+        "status": "PASS",
+        "notes": "Endpoint still accessible"
+      }
+    ],
+    "frontend_components": [
+      {
+        "component": "KPI Cards (AVG LTV, ARPU, ARPPU, CHURN%)",
+        "status": "PASS"
+      },
+      {
+        "component": "Retention Trend Chart",
+        "status": "PASS"
+      },
+      {
+        "component": "Segment Profitability Cards",
+        "status": "PASS"
+      },
+      {
+        "component": "Churn Risk List",
+        "status": "PASS"
+      },
+      {
+        "component": "Re-engagement List",
+        "status": "PASS"
+      },
+      {
+        "component": "Snapshot Trend Table",
+        "status": "PASS"
+      },
+      {
+        "component": "Export CSV Button",
+        "status": "PASS"
+      },
+      {
+        "component": "Export XLSX Button",
+        "status": "PASS"
+      },
+      {
+        "component": "Snapshot Run Button",
+        "status": "PASS"
+      },
+      {
+        "component": "Filter Panel (environment, dates, user_email, symbol, cohort, churn_days)",
+        "status": "PASS"
+      }
+    ]
+  },
+  "mocked_apis": {
+    "has_mocked_apis": true,
+    "mocked_apis_list": ["Bybit/OKX probe (public connectivity-only)"]
+  },
+  "deterministic_aggregate_check": "PASS - Economics aggregates are consistent across multiple API calls",
+  "generated_at": "2026-03-25T21:45:00Z"
+}

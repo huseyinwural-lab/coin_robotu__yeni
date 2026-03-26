@@ -1,0 +1,5 @@
+{
+  "connected": false,
+  "messages": 0,
+  "error": "No module named 'websocket'"
+}

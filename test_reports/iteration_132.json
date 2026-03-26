@@ -1,0 +1,151 @@
+{
+  "summary": "Iteration 132: P1.2 User Economics Testing Complete. Backend (26/26 tests passed). Frontend User Economics page verified with all UI elements working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration132_user_economics.py",
+    "/app/test_reports/pytest/iteration132_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "user_economics_aggregates table migration correctly implemented with idempotent check (_has_table)",
+    "UserEconomicsAggregate model has proper UniqueConstraint for user_id + environment (uq_user_econ_user_env)",
+    "sync_user_economics_aggregates correctly aggregates revenue from revenue_ledger and pnl from commercial_trades",
+    "get_user_economics_summary provides deterministic results with proper filtering",
+    "KPIs correctly calculated: LTV, ARPU, ARPPU, churn_rate_pct, total_users, paying_users",
+    "AdminUserEconomicsPage.jsx has all required data-testid attributes for testing",
+    "User Economics endpoint requires admin role (require_admin dependency)",
+    "Filters properly implemented: environment, start_date, end_date, user_email, symbol, churn_inactive_days, cohort_month, top_limit"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration132_user_economics.py"
+  ],
+  "success_rate": {
+    "backend": "100% (26/26 tests passed)",
+    "frontend": "100%"
+  },
+  "test_credentials": "Admin: canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "None - used existing data from previous iterations",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "P1.2 User Economics fully verified. user_economics_aggregates table created, sync working, summary endpoint deterministic, UI rendering correctly with filters/KPI cards/tables.",
+  "features_verified": {
+    "migration_table": {
+      "user_economics_aggregates_table": "PASS - table created via migration 20260325_0076",
+      "endpoint_no_crash": "PASS - GET /api/admin/users/economics returns 200"
+    },
+    "endpoint_determinism": {
+      "consecutive_calls_consistent": "PASS - KPIs match across consecutive calls"
+    },
+    "filters": {
+      "environment_live": "PASS - filters by live environment",
+      "environment_testnet": "PASS - filters by testnet environment",
+      "start_date": "PASS - filters by start_date",
+      "end_date": "PASS - filters by end_date",
+      "user_email": "PASS - filters by user_email (404 for non-existent)",
+      "symbol": "PASS - filters by symbol",
+      "churn_inactive_days": "PASS - filters by churn_inactive_days",
+      "cohort_month": "PASS - filters by cohort_month",
+      "top_limit": "PASS - limits top_users list"
+    },
+    "kpi_validation": {
+      "total_users": "PASS - integer count",
+      "paying_users": "PASS - integer count",
+      "churned_users": "PASS - integer count",
+      "churn_rate_pct": "PASS - float percentage",
+      "total_revenue_usd": "PASS - float USD amount",
+      "arpu_usd": "PASS - float USD amount",
+      "arppu_usd": "PASS - float USD amount",
+      "avg_ltv_usd": "PASS - float USD amount"
+    },
+    "payload_lists": {
+      "top_users": "PASS - list with user_id, email, ltv_usd, revenue_contribution_usd, realized_pnl_usd, inactive_days, churned",
+      "churn_list": "PASS - list of churned users with inactive_days",
+      "top_symbols": "PASS - list with symbol, revenue_usd",
+      "cohorts": "PASS - list with cohort_month, users, paying_users, churned_users, total_revenue_usd, avg_ltv_usd"
+    },
+    "regression_existing_flows": {
+      "ingest_rest_run": "PASS - endpoint available, no 500",
+      "pnl_latest": "PASS - endpoint available, no 500",
+      "reconciliation_run": "PASS - endpoint available, no 500",
+      "live_gate": "PASS - endpoint available, no 500",
+      "data_quality": "PASS - endpoint available, no 500",
+      "revenue_summary": "PASS - endpoint available, no 500"
+    },
+    "authorization": {
+      "unauthorized_rejected": "PASS - returns 401/403 without token",
+      "invalid_token_rejected": "PASS - returns 401/403 with invalid token"
+    },
+    "frontend_ui": {
+      "admin_user_economics_page": {
+        "status": "PASS",
+        "route": "/admin/users/economics",
+        "elements_verified": [
+          "admin-user-economics-page",
+          "admin-user-economics-header",
+          "admin-user-economics-title",
+          "admin-user-economics-subtitle",
+          "admin-user-economics-filter-panel",
+          "admin-user-economics-filter-environment-select",
+          "admin-user-economics-filter-start-date-input",
+          "admin-user-economics-filter-end-date-input",
+          "admin-user-economics-filter-user-email-input",
+          "admin-user-economics-filter-symbol-input",
+          "admin-user-economics-filter-cohort-input",
+          "admin-user-economics-filter-churn-days-input",
+          "admin-user-economics-filter-top-limit-input",
+          "admin-user-economics-filter-refresh-button",
+          "admin-user-economics-kpi-cards-grid",
+          "admin-user-economics-kpi-ltv-card",
+          "admin-user-economics-kpi-ltv-value",
+          "admin-user-economics-kpi-arpu-card",
+          "admin-user-economics-kpi-arpu-value",
+          "admin-user-economics-kpi-arppu-card",
+          "admin-user-economics-kpi-arppu-value",
+          "admin-user-economics-kpi-churn-card",
+          "admin-user-economics-kpi-churn-value",
+          "admin-user-economics-top-users-card",
+          "admin-user-economics-top-users-table",
+          "admin-user-economics-churn-list-card",
+          "admin-user-economics-churn-list-table",
+          "admin-user-economics-cohort-card",
+          "admin-user-economics-cohort-table"
+        ]
+      },
+      "navigation": {
+        "status": "PASS",
+        "sidebar_link": "nav-admin-user-economics-link (superAdminOnly: true)",
+        "route_configured": "/admin/users/economics -> AdminUserEconomicsPage"
+      },
+      "data_display": {
+        "live_environment": {
+          "avg_ltv": "0.163310",
+          "arpu": "0.163310",
+          "arppu": "0.163310",
+          "churn_pct": "0.000",
+          "top_users_count": 1,
+          "cohort_2026_03_users": 1
+        },
+        "testnet_environment": {
+          "avg_ltv": "1.024179",
+          "arpu": "1.024179",
+          "arppu": "2.048358",
+          "churn_pct": "0.000",
+          "top_users_count": 2,
+          "cohort_2026_03_users": 2
+        }
+      }
+    }
+  },
+  "mocked_apis": {
+    "Bybit/OKX Probe": "MOCKED - public endpoint connectivity check only"
+  },
+  "rca_of_the_issue": "N/A - All P1.2 User Economics features working as expected"
+}
