@@ -18,6 +18,34 @@ from models import RuntimeSmokeRun  # noqa: E402
 from services.runtime_smoke_service import record_runtime_smoke_run  # noqa: E402
 
 
+def _build_http_client(base_url: str):
+    try:
+        probe = requests.get(f"{base_url}/api/health/live", timeout=8)
+        if probe.status_code in {200, 503}:
+            return {"mode": "external", "base_url": base_url, "client": None}
+    except Exception:  # noqa: BLE001
+        pass
+
+    from fastapi.testclient import TestClient  # noqa: E402
+    from server import fastapi_app  # noqa: E402
+
+    return {"mode": "testclient", "base_url": "", "client": TestClient(fastapi_app)}
+
+
+def _http_request(http_ctx: dict, method: str, path: str, *, json_payload=None, params=None, headers=None, timeout=30):
+    mode = http_ctx["mode"]
+    if mode == "external":
+        url = f"{http_ctx['base_url']}{path}"
+        response = requests.request(method, url, json=json_payload, params=params, headers=headers, timeout=timeout)
+    else:
+        client = http_ctx["client"]
+        response = client.request(method, path, json=json_payload, params=params, headers=headers)
+
+    if response.status_code >= 400:
+        raise RuntimeError(f"http_error:{method}:{path}:{response.status_code}:{response.text[:300]}")
+    return response.json() if response.text else {}
+
+
 def _required_env(name: str) -> str:
     value = os.environ.get(name)
     if not value:
@@ -58,79 +86,94 @@ def main() -> int:
     ingest_admin_email = _required_env("DAILY_SMOKE_INGEST_ADMIN_EMAIL")
     ingest_admin_password = _required_env("DAILY_SMOKE_INGEST_ADMIN_PASSWORD")
     ingest_target_user_email = _required_env("DAILY_SMOKE_INGEST_TARGET_USER_EMAIL")
+    smoke_environment = str(os.environ.get("DAILY_SMOKE_ENVIRONMENT") or "testnet").strip().lower()
+    market_types = [item.strip().lower() for item in str(os.environ.get("DAILY_SMOKE_MARKET_TYPES") or "futures").split(",") if item.strip()]
+    if not market_types:
+        market_types = ["futures"]
 
-    login = requests.post(
-        f"{base_url}/api/auth/login",
-        json={"email": admin_email, "password": admin_password},
+    http_ctx = _build_http_client(base_url)
+
+    login_payload = _http_request(
+        http_ctx,
+        "POST",
+        "/api/auth/login",
+        json_payload={"email": admin_email, "password": admin_password},
         timeout=25,
     )
-    login.raise_for_status()
-    token = login.json().get("access_token")
+    token = login_payload.get("access_token") or login_payload.get("token")
     headers = {"Authorization": f"Bearer {token}"}
 
-    ingest_login = requests.post(
-        f"{base_url}/api/auth/login",
-        json={"email": ingest_admin_email, "password": ingest_admin_password},
+    ingest_login_payload = _http_request(
+        http_ctx,
+        "POST",
+        "/api/auth/login",
+        json_payload={"email": ingest_admin_email, "password": ingest_admin_password},
         timeout=25,
     )
-    ingest_login.raise_for_status()
-    ingest_token = ingest_login.json().get("access_token")
+    ingest_token = ingest_login_payload.get("access_token") or ingest_login_payload.get("token")
     ingest_headers = {"Authorization": f"Bearer {ingest_token}"}
 
     def ingest_step():
-        resp = requests.post(
-            f"{base_url}/api/admin/commercial/p0/ingestion/rest-run",
-            json={
+        return _http_request(
+            http_ctx,
+            "POST",
+            "/api/admin/commercial/p0/ingestion/rest-run",
+            json_payload={
                 "target_user_email": ingest_target_user_email,
                 "exchange": "binance",
-                "environment": "live",
-                "market_types": ["spot", "futures"],
+                "environment": smoke_environment,
+                "market_types": market_types,
                 "limit_per_market": 100,
             },
             headers=ingest_headers,
             timeout=120,
         )
-        resp.raise_for_status()
-        return resp.json()
 
     def pnl_step():
-        resp = requests.get(
-            f"{base_url}/api/admin/commercial/p0/pnl/latest",
-            params={"environment": "live", "lookback_hours": 24},
+        return _http_request(
+            http_ctx,
+            "GET",
+            "/api/admin/commercial/p0/pnl/latest",
+            params={"environment": smoke_environment, "target_user_email": ingest_target_user_email, "market_types": market_types},
             headers=headers,
             timeout=45,
         )
-        resp.raise_for_status()
-        return resp.json()
 
     def reconciliation_step():
-        resp = requests.post(
-            f"{base_url}/api/admin/commercial/p0/reconciliation/run",
-            params={"environment": "live", "lookback_hours": 24},
+        return _http_request(
+            http_ctx,
+            "POST",
+            "/api/admin/commercial/p0/reconciliation/run",
+            json_payload={
+                "environment": smoke_environment,
+                "target_user_email": ingest_target_user_email,
+                "market_types": market_types,
+                "limit_per_symbol": 100,
+            },
             headers=headers,
             timeout=60,
         )
-        resp.raise_for_status()
-        return resp.json()
 
     def revenue_step():
-        resp = requests.get(
-            f"{base_url}/api/admin/revenue/summary",
-            params={"environment": "live", "top_limit": 10},
+        return _http_request(
+            http_ctx,
+            "GET",
+            "/api/admin/revenue/summary",
+            params={"environment": smoke_environment, "top_limit": 10},
             headers=headers,
             timeout=45,
         )
-        resp.raise_for_status()
-        return resp.json()
 
     def snapshot_compare_step():
         now = datetime.now(timezone.utc)
         prev = now - timedelta(days=1)
         for as_of in [now, prev]:
-            run_resp = requests.post(
-                f"{base_url}/api/admin/snapshots/run",
+            _http_request(
+                http_ctx,
+                "POST",
+                "/api/admin/snapshots/run",
                 params={
-                    "environment": "live",
+                    "environment": smoke_environment,
                     "snapshot_type": "daily",
                     "as_of_date": as_of.isoformat(),
                     "top_limit": 20,
@@ -138,27 +181,27 @@ def main() -> int:
                 headers=headers,
                 timeout=60,
             )
-            run_resp.raise_for_status()
 
-        listing = requests.get(
-            f"{base_url}/api/admin/snapshots",
-            params={"environment": "live", "snapshot_type": "daily", "limit": 5},
+        listing = _http_request(
+            http_ctx,
+            "GET",
+            "/api/admin/snapshots",
+            params={"environment": smoke_environment, "snapshot_type": "daily", "limit": 5},
             headers=headers,
             timeout=45,
         )
-        listing.raise_for_status()
-        items = listing.json().get("items", [])
+        items = listing.get("items", [])
         if len(items) < 2:
             raise RuntimeError("snapshot_compare_insufficient_data")
 
-        cmp_resp = requests.get(
-            f"{base_url}/api/admin/snapshots/compare",
+        return _http_request(
+            http_ctx,
+            "GET",
+            "/api/admin/snapshots/compare",
             params={"base_snapshot_id": items[1]["id"], "target_snapshot_id": items[0]["id"]},
             headers=headers,
             timeout=45,
         )
-        cmp_resp.raise_for_status()
-        return cmp_resp.json()
 
     steps = {
         "ingest": _run_step("ingest", ingest_step),

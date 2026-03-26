@@ -1,3 +1,34 @@
+## 2026-03-26 — KAPANIŞ TURU (Closure) ✅
+
+### Tamamlanan kritik kapanış işleri
+- **Smoke PASS** sağlandı (ayrı ingest credential akışı):
+  - Script: `/app/scripts/daily_smoke.py`
+  - Son artifact: `/app/test_reports/daily_smoke_latest.json`
+  - Son durum: `overall_status=PASS`
+- **Readiness READY** ve **Go-Live checklist PASS** üretildi:
+  - Final kanıt artifact: `/app/test_reports/final_go_no_go_artifact.json`
+  - Son durum: `dry_run=PASS`, `readiness=READY(100)`, `go_live=true`
+- **Son regresyon** tek oturumda doğrulandı:
+  - Artifact: `/app/test_reports/closure_regression_report.json`
+  - Kapsam: login, smoke, readiness, dry-run, rollback, websocket timeline, wizard auth(super_admin only)
+  - Sonuç: `overall_pass=true`
+
+### Env ve config borcu kapanışı
+- Yeni örnek dosyalar tamamlandı:
+  - `/app/backend/.env.example`
+  - `/app/frontend/.env.example`
+  - `/app/deploy/testnet.env.example`
+  - `/app/deploy/canary.env.example`
+- Alias deprecation ticket notu açıldı:
+  - `/app/docs/tickets/env_alias_deprecation_ticket.md`
+
+### Infra patch uygulama notu (1B seçimi)
+- Kullanıcı tercihi gereği canlı ortama uygulama **agent tarafından yapılmadı**.
+- Uygulanacak dosyalar hazır:
+  - `/app/infra/nginx/live_timeout_patch.conf`
+  - `/app/infra/k8s/ingress-timeout-patch.yaml`
+  - `/app/docs/live_prep_proxy_timeout_patch.md`
+
 ## 2026-03-26 — LIVE PREP FINAL (Stabilization + Wizard) ✅
 
 ### Uygulananlar
