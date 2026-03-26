@@ -4866,6 +4866,12 @@ class AdminExchangeCredentialPatchRequest(BaseModel):
     is_active: bool | None = None
 
 
+class AdminExchangeCredentialRotateRequest(BaseModel):
+    api_key: str
+    api_secret: str
+    passphrase: str | None = None
+
+
 class AdminExchangeCredentialResponse(BaseModel):
     id: str
     scope_type: str
@@ -4890,6 +4896,10 @@ class AdminExchangeCredentialResponse(BaseModel):
     last_probe_status: str | None = None
     last_probe_message: str | None = None
     last_probe_meta: dict = Field(default_factory=dict)
+    permission_scope: dict = Field(default_factory=dict)
+    permission_scope_validation: dict = Field(default_factory=dict)
+    lifecycle_status: str = "pending"
+    secret_provider: str = "local"
     last_probe_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

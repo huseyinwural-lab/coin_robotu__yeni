@@ -71,6 +71,7 @@ export const AdminExchangesPage = () => {
   const [healthSummary, setHealthSummary] = useState(null);
   const [executionCredentials, setExecutionCredentials] = useState(null);
   const [executionValidation, setExecutionValidation] = useState(null);
+  const [controlPlaneSanity, setControlPlaneSanity] = useState(null);
 
   const [exchangeDrafts, setExchangeDrafts] = useState({});
   const [capabilityDrafts, setCapabilityDrafts] = useState({});
@@ -332,6 +333,16 @@ export const AdminExchangesPage = () => {
     }
   };
 
+  const runControlPlaneSanityCheck = async () => {
+    try {
+      const { data } = await apiClient.post("/venues/admin/control-plane-sanity-check");
+      setControlPlaneSanity(data || null);
+      toast.success(`Sanity check tamamlandı: ${data?.net_status || "UNKNOWN"}`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Control plane sanity check başarısız");
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="admin-exchanges-page">
       <header className="border border-orange-700 bg-slate-900 p-4" data-testid="admin-exchanges-header">
@@ -457,6 +468,7 @@ export const AdminExchangesPage = () => {
           <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-execution-validation-title">Execution Activation Validation</p>
           <Button type="button" onClick={runExecutionValidation} data-testid="admin-execution-validation-apply-button">Validation Çalıştır</Button>
           <div className="space-y-2 rounded border border-slate-700 p-3 text-sm" data-testid="admin-execution-validation-results">
+            <p data-testid="admin-execution-validation-net-status">net_status: {executionValidation?.net_status || "n/a"}</p>
             <p data-testid="admin-execution-validation-adapter-smoke">adapter_smoke_test: {executionValidation?.validation?.adapter_smoke_test || "n/a"}</p>
             <p data-testid="admin-execution-validation-bybit-ready">bybit_testnet_live_ready: {executionValidation?.validation?.bybit_testnet_live_ready || "n/a"}</p>
             <p data-testid="admin-execution-validation-precision">precision_validation: {executionValidation?.validation?.precision_validation || "n/a"}</p>
@@ -464,10 +476,34 @@ export const AdminExchangesPage = () => {
             <p data-testid="admin-execution-validation-submit">order_submit_test: {executionValidation?.validation?.order_submit_test || "n/a"}</p>
             <p data-testid="admin-execution-validation-cancel">cancel_test: {executionValidation?.validation?.cancel_test || "n/a"}</p>
             <p data-testid="admin-execution-validation-retry">retry_behavior: {executionValidation?.validation?.retry_behavior || "n/a"}</p>
+            <div className="space-y-1 text-xs" data-testid="admin-execution-validation-checks">
+              {(executionValidation?.checks || []).map((item, index) => (
+                <p key={`${item.check}-${index}`} data-testid={`admin-execution-validation-check-${index}`}>
+                  {item.check}: {item.status} ({item.reason_code})
+                </p>
+              ))}
+            </div>
           </div>
           <p className="text-xs text-slate-400" data-testid="admin-execution-validation-note">
             Not: Credential yoksa execution testleri fail-safe olarak MOCKED döner.
           </p>
+        </div>
+
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-control-plane-sanity-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-control-plane-sanity-title">Venue Control Plane Sanity Check</p>
+          <Button type="button" onClick={runControlPlaneSanityCheck} data-testid="admin-control-plane-sanity-run-button">Sanity Check Çalıştır</Button>
+          <div className="space-y-2 rounded border border-slate-700 p-3 text-sm" data-testid="admin-control-plane-sanity-results">
+            <p data-testid="admin-control-plane-sanity-net-status">net_status: {controlPlaneSanity?.net_status || "n/a"}</p>
+            <p data-testid="admin-control-plane-sanity-reason-codes">reason_codes: {(controlPlaneSanity?.reason_codes || []).join(", ") || "-"}</p>
+            <p data-testid="admin-control-plane-sanity-remediation">remediation: {(controlPlaneSanity?.remediation_suggestions || []).join(" | ") || "-"}</p>
+            <div className="space-y-1 text-xs" data-testid="admin-control-plane-sanity-checks-list">
+              {(controlPlaneSanity?.checks || []).map((item, index) => (
+                <p key={`${item.check}-${index}`} data-testid={`admin-control-plane-sanity-check-${index}`}>
+                  {item.check}: {item.status} ({(item.reason_codes || []).join(", ") || "ok"})
+                </p>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 

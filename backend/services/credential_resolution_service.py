@@ -10,11 +10,10 @@ from sqlalchemy.orm import Session
 
 from core.users.user_exchange_connector import (
     credential_fingerprint,
-    decrypt_exchange_secret,
-    encrypt_exchange_secret,
     mask_secret,
 )
 from models import AdminExchangeCredential, CredentialAssignmentRule, User, UserExchangeConnection
+from services.secret_provider_service import decrypt_secret_value, encrypt_secret_value, secret_provider_name
 
 ALLOWED_SCOPE_TYPES = {"global", "tenant", "group"}
 ALLOWED_EXCHANGES = {"binance", "bybit", "okx"}
@@ -84,6 +83,88 @@ def _market_aliases(market_type: str) -> list[str]:
 
 def _is_perp_market(market_type: str) -> bool:
     return _normalize_market_type(market_type) in {"futures", "usdt_perp", "coin_perp"}
+
+
+def _is_execution_purpose(purpose: str) -> bool:
+    return _normalize_purpose(purpose) in {"execution", "fallback", "execution_fallback"}
+
+
+def _verify_secret_roundtrip(*, plain: str, encrypted: str) -> None:
+    if decrypt_secret_value(encrypted) != str(plain or ""):
+        raise ValueError("credential_readback_verification_failed")
+
+
+def _permission_scope_from_meta(meta: dict | None) -> dict:
+    payload = dict(meta or {})
+    scope = payload.get("permission_scope")
+    if isinstance(scope, dict):
+        return {
+            "read": bool(scope.get("read", False)),
+            "trade": bool(scope.get("trade", False)),
+            "withdraw": bool(scope.get("withdraw", False)),
+        }
+    return {"read": False, "trade": False, "withdraw": False}
+
+
+def _validate_permission_scope(*, purpose: str, permission_scope: dict) -> dict:
+    read_ok = bool(permission_scope.get("read", False))
+    trade_ok = bool(permission_scope.get("trade", False))
+    withdraw_enabled = bool(permission_scope.get("withdraw", False))
+
+    if _is_execution_purpose(purpose):
+        if withdraw_enabled:
+            return {
+                "status": "block",
+                "reason_code": "withdraw_scope_detected",
+                "message": "withdraw yetkisi olan key execution için bloklandı",
+            }
+        if not trade_ok:
+            return {
+                "status": "block",
+                "reason_code": "missing_trade_scope",
+                "message": "execution için trade scope zorunlu",
+            }
+        if not read_ok:
+            return {
+                "status": "warn",
+                "reason_code": "missing_read_scope",
+                "message": "read scope doğrulanamadı",
+            }
+        return {"status": "pass", "reason_code": "scope_ok", "message": "scope doğrulandı"}
+
+    if not read_ok:
+        return {
+            "status": "warn",
+            "reason_code": "missing_read_scope",
+            "message": "market_data purpose için read scope beklenir",
+        }
+    return {"status": "pass", "reason_code": "scope_ok", "message": "scope doğrulandı"}
+
+
+def _lifecycle_status(row: AdminExchangeCredential) -> str:
+    meta = dict(row.last_probe_meta or {})
+    explicit = str(meta.get("lifecycle_status") or "").strip().lower()
+    if explicit:
+        return explicit
+    if str(row.approval_status) == "revoked":
+        return "revoked"
+    if row.last_probe_status in {"ready", "connectivity_only"}:
+        return "verified"
+    if str(row.approval_status) == "approved":
+        return "approved"
+    return "pending"
+
+
+def _base_url_environment_mismatch(*, environment: str, base_url: str | None) -> bool:
+    url = str(base_url or "").lower()
+    env = _norm(environment)
+    if not url:
+        return False
+    if env == "live" and "testnet" in url:
+        return True
+    if env == "testnet" and "testnet" not in url and any(part in url for part in ["binance.com", "bybit.com", "okx.com"]):
+        return True
+    return False
 
 
 def _proxy_headers_for_probe(*, exchange: str, market_type: str, environment: str) -> dict[str, str]:
@@ -180,7 +261,12 @@ def _spot_probe(*, base_url: str, api_key: str, api_secret: str, extra_headers: 
         extra_headers=extra_headers,
     )
     if status == 200:
-        return "ready", "spot_account_ok", {"account_status": status}
+        permission_scope = {
+            "read": True,
+            "trade": bool(body.get("canTrade", True)) if isinstance(body, dict) else True,
+            "withdraw": bool(body.get("canWithdraw", False)) if isinstance(body, dict) else False,
+        }
+        return "ready", "spot_account_ok", {"account_status": status, "permission_scope": permission_scope}
 
     code = str((body or {}).get("code") or "")
     msg = str((body or {}).get("msg") or "").lower()
@@ -213,7 +299,12 @@ def _futures_probe(*, base_url: str, api_key: str, api_secret: str, extra_header
         extra_headers=extra_headers,
     )
     if status == 200:
-        return "ready", "futures_account_ok", {"account_status": status}
+        permission_scope = {
+            "read": True,
+            "trade": bool(body.get("canTrade", True)) if isinstance(body, dict) else True,
+            "withdraw": False,
+        }
+        return "ready", "futures_account_ok", {"account_status": status, "permission_scope": permission_scope}
 
     code = str((body or {}).get("code") or "")
     msg = str((body or {}).get("msg") or "").lower()
@@ -239,12 +330,19 @@ def _public_probe(*, base_url: str, endpoint: str, provider: str, extra_headers:
         return "rate_limited", f"{provider}_public_rate_limited", {"status": response.status_code}
     if response.status_code >= 400:
         return "unreachable", f"{provider}_public_{response.status_code}", {"status": response.status_code}
-    return "connectivity_only", f"{provider}_public_ok", {"status": response.status_code}
+    return "connectivity_only", f"{provider}_public_ok", {
+        "status": response.status_code,
+        "permission_scope": {"read": True, "trade": True, "withdraw": False},
+        "permission_scope_source": "inferred_public_probe",
+    }
 
 
 def _serialize_admin_credential(row: AdminExchangeCredential) -> dict:
-    api_key = decrypt_exchange_secret(row.api_key_encrypted)
-    api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
+    api_key = decrypt_secret_value(row.api_key_encrypted)
+    api_secret = decrypt_secret_value(row.api_secret_encrypted)
+    probe_meta = row.last_probe_meta or {}
+    permission_scope = _permission_scope_from_meta(probe_meta)
+    permission_scope_validation = _validate_permission_scope(purpose=row.purpose, permission_scope=permission_scope)
     return {
         "id": row.id,
         "scope_type": row.scope_type,
@@ -268,7 +366,11 @@ def _serialize_admin_credential(row: AdminExchangeCredential) -> dict:
         "credential_fingerprint": credential_fingerprint(api_key, api_secret),
         "last_probe_status": row.last_probe_status,
         "last_probe_message": row.last_probe_message,
-        "last_probe_meta": row.last_probe_meta or {},
+        "last_probe_meta": probe_meta,
+        "permission_scope": permission_scope,
+        "permission_scope_validation": permission_scope_validation,
+        "lifecycle_status": _lifecycle_status(row),
+        "secret_provider": secret_provider_name(),
         "last_probe_at": row.last_probe_at,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
@@ -365,6 +467,14 @@ def create_admin_credential(
         exchange=normalized_exchange,
     )
 
+    api_key_cipher = encrypt_secret_value(api_key)
+    api_secret_cipher = encrypt_secret_value(api_secret)
+    passphrase_cipher = encrypt_secret_value(passphrase or "") if passphrase else None
+    _verify_secret_roundtrip(plain=api_key, encrypted=api_key_cipher)
+    _verify_secret_roundtrip(plain=api_secret, encrypted=api_secret_cipher)
+    if passphrase and passphrase_cipher:
+        _verify_secret_roundtrip(plain=passphrase, encrypted=passphrase_cipher)
+
     row = AdminExchangeCredential(
         scope_type=normalized_scope,
         scope_id=(scope_id or None),
@@ -372,9 +482,9 @@ def create_admin_credential(
         market_type=normalized_market,
         purpose=normalized_purpose,
         environment=normalized_env,
-        api_key_encrypted=encrypt_exchange_secret(api_key),
-        api_secret_encrypted=encrypt_exchange_secret(api_secret),
-        passphrase_encrypted=encrypt_exchange_secret(passphrase or "") if passphrase else None,
+        api_key_encrypted=api_key_cipher,
+        api_secret_encrypted=api_secret_cipher,
+        passphrase_encrypted=passphrase_cipher,
         base_url_override=(base_url_override or None),
         ip_binding_note=(ip_binding_note or None),
         is_active=False,
@@ -384,6 +494,7 @@ def create_admin_credential(
         updated_by=actor.id,
         created_at=_now(),
         updated_at=_now(),
+        last_probe_meta={"lifecycle_status": "pending_verify", "read_back_verified": True},
     )
     db.add(row)
     db.commit()
@@ -428,15 +539,22 @@ def update_admin_credential(
     if ip_binding_note is not None:
         row.ip_binding_note = ip_binding_note or None
     if api_key is not None and str(api_key).strip():
-        row.api_key_encrypted = encrypt_exchange_secret(api_key)
+        cipher = encrypt_secret_value(api_key)
+        _verify_secret_roundtrip(plain=api_key, encrypted=cipher)
+        row.api_key_encrypted = cipher
         row.approval_status = "pending"
         row.is_active = False
     if api_secret is not None and str(api_secret).strip():
-        row.api_secret_encrypted = encrypt_exchange_secret(api_secret)
+        cipher = encrypt_secret_value(api_secret)
+        _verify_secret_roundtrip(plain=api_secret, encrypted=cipher)
+        row.api_secret_encrypted = cipher
         row.approval_status = "pending"
         row.is_active = False
     if passphrase is not None:
-        row.passphrase_encrypted = encrypt_exchange_secret(passphrase) if passphrase else None
+        cipher = encrypt_secret_value(passphrase) if passphrase else None
+        if passphrase and cipher:
+            _verify_secret_roundtrip(plain=passphrase, encrypted=cipher)
+        row.passphrase_encrypted = cipher
         row.approval_status = "pending"
         row.is_active = False
     if is_default is not None:
@@ -446,6 +564,10 @@ def update_admin_credential(
 
     row.updated_by = actor.id
     row.updated_at = _now()
+    meta = dict(row.last_probe_meta or {})
+    meta["lifecycle_status"] = "pending_verify"
+    meta["read_back_verified"] = True
+    row.last_probe_meta = meta
     db.commit()
     db.refresh(row)
     return _serialize_admin_credential(row)
@@ -461,6 +583,9 @@ def approve_admin_credential(db: Session, *, actor: User, credential_id: str) ->
     row.approved_at = _now()
     row.updated_by = actor.id
     row.updated_at = _now()
+    meta = dict(row.last_probe_meta or {})
+    meta["lifecycle_status"] = "approved"
+    row.last_probe_meta = meta
     db.commit()
     db.refresh(row)
     return _serialize_admin_credential(row)
@@ -474,6 +599,71 @@ def disable_admin_credential(db: Session, *, actor: User, credential_id: str) ->
     row.approval_status = "rejected" if row.approval_status == "pending" else row.approval_status
     row.updated_by = actor.id
     row.updated_at = _now()
+    meta = dict(row.last_probe_meta or {})
+    meta["lifecycle_status"] = "disabled"
+    row.last_probe_meta = meta
+    db.commit()
+    db.refresh(row)
+    return _serialize_admin_credential(row)
+
+
+def revoke_admin_credential(db: Session, *, actor: User, credential_id: str) -> dict:
+    row = db.query(AdminExchangeCredential).filter(AdminExchangeCredential.id == credential_id).first()
+    if row is None:
+        raise ValueError("credential_not_found")
+    row.is_active = False
+    row.approval_status = "revoked"
+    row.updated_by = actor.id
+    row.updated_at = _now()
+    meta = dict(row.last_probe_meta or {})
+    meta["lifecycle_status"] = "revoked"
+    meta["revoked_at"] = _now().isoformat()
+    row.last_probe_meta = meta
+    db.commit()
+    db.refresh(row)
+    return _serialize_admin_credential(row)
+
+
+def rotate_admin_credential(
+    db: Session,
+    *,
+    actor: User,
+    credential_id: str,
+    api_key: str,
+    api_secret: str,
+    passphrase: str | None,
+) -> dict:
+    row = db.query(AdminExchangeCredential).filter(AdminExchangeCredential.id == credential_id).first()
+    if row is None:
+        raise ValueError("credential_not_found")
+    if not str(api_key or "").strip() or not str(api_secret or "").strip():
+        raise ValueError("invalid_rotation_payload")
+
+    api_key_cipher = encrypt_secret_value(api_key)
+    api_secret_cipher = encrypt_secret_value(api_secret)
+    passphrase_cipher = encrypt_secret_value(passphrase or "") if passphrase else None
+    _verify_secret_roundtrip(plain=api_key, encrypted=api_key_cipher)
+    _verify_secret_roundtrip(plain=api_secret, encrypted=api_secret_cipher)
+    if passphrase and passphrase_cipher:
+        _verify_secret_roundtrip(plain=passphrase, encrypted=passphrase_cipher)
+
+    row.api_key_encrypted = api_key_cipher
+    row.api_secret_encrypted = api_secret_cipher
+    row.passphrase_encrypted = passphrase_cipher
+    row.is_active = False
+    row.approval_status = "pending"
+    row.approved_by = None
+    row.approved_at = None
+    row.last_probe_status = None
+    row.last_probe_message = None
+    row.last_probe_at = None
+    row.updated_by = actor.id
+    row.updated_at = _now()
+    meta = dict(row.last_probe_meta or {})
+    meta["lifecycle_status"] = "rotated_pending_verify"
+    meta["rotated_at"] = _now().isoformat()
+    meta["read_back_verified"] = True
+    row.last_probe_meta = meta
     db.commit()
     db.refresh(row)
     return _serialize_admin_credential(row)
@@ -484,14 +674,34 @@ def probe_admin_credential(db: Session, *, actor: User, credential_id: str) -> d
     if row is None:
         raise ValueError("credential_not_found")
 
-    api_key = decrypt_exchange_secret(row.api_key_encrypted)
-    api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
+    api_key = decrypt_secret_value(row.api_key_encrypted)
+    api_secret = decrypt_secret_value(row.api_secret_encrypted)
     base_url = _effective_base_url(
         exchange=row.exchange,
         market_type=row.market_type,
         environment=row.environment,
         override=row.base_url_override,
     )
+    if _base_url_environment_mismatch(environment=row.environment, base_url=base_url):
+        row.last_probe_status = "env_mismatch"
+        row.last_probe_message = "base_url_environment_mismatch"
+        row.last_probe_meta = {
+            "base_url": base_url,
+            "permission_scope": {"read": False, "trade": False, "withdraw": False},
+            "permission_scope_validation": {
+                "status": "block",
+                "reason_code": "environment_mismatch",
+                "message": "credential environment ve route URL eşleşmiyor",
+            },
+            "lifecycle_status": "verify_failed",
+        }
+        row.last_probe_at = _now()
+        row.updated_by = actor.id
+        row.updated_at = _now()
+        db.commit()
+        db.refresh(row)
+        return _serialize_admin_credential(row)
+
     proxy_headers = _proxy_headers_for_probe(exchange=row.exchange, market_type=row.market_type, environment=row.environment)
 
     try:
@@ -530,15 +740,36 @@ def probe_admin_credential(db: Session, *, actor: User, credential_id: str) -> d
     except Exception as exc:
         status_code, message, meta = "unreachable", "probe_exception", {"error": str(exc)}
 
+    permission_scope = _permission_scope_from_meta(meta)
+    scope_validation = _validate_permission_scope(purpose=row.purpose, permission_scope=permission_scope)
+    if scope_validation["status"] == "block":
+        status_code = "permission_restricted"
+        message = scope_validation["reason_code"]
+
     row.last_probe_status = status_code
     row.last_probe_message = message
-    row.last_probe_meta = {**(meta or {}), "base_url": base_url}
+    row.last_probe_meta = {
+        **(meta or {}),
+        "base_url": base_url,
+        "permission_scope": permission_scope,
+        "permission_scope_validation": scope_validation,
+        "lifecycle_status": "verified" if status_code in {"ready", "connectivity_only"} else "verify_failed",
+        "verified_at": _now().isoformat(),
+    }
     row.last_probe_at = _now()
     row.updated_by = actor.id
     row.updated_at = _now()
     db.commit()
     db.refresh(row)
     return _serialize_admin_credential(row)
+
+
+def verify_admin_credential(db: Session, *, actor: User, credential_id: str) -> dict:
+    row = probe_admin_credential(db, actor=actor, credential_id=credential_id)
+    status = str(row.get("last_probe_status") or "")
+    if status not in {"ready", "connectivity_only"}:
+        raise ValueError("credential_verify_failed")
+    return row
 
 
 def list_assignment_rules(db: Session, *, exchange: str | None, market_type: str | None, environment: str | None) -> list[dict]:
@@ -665,8 +896,8 @@ def _select_user_credential(
     )
     if row is None:
         return None
-    api_key = decrypt_exchange_secret(row.api_key_encrypted)
-    api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
+    api_key = decrypt_secret_value(row.api_key_encrypted)
+    api_secret = decrypt_secret_value(row.api_secret_encrypted)
     if not api_key or not api_secret:
         return None
     return {
@@ -731,8 +962,13 @@ def _select_admin_credential(
         return None
 
     row = deduped[0]
-    api_key = decrypt_exchange_secret(row.api_key_encrypted)
-    api_secret = decrypt_exchange_secret(row.api_secret_encrypted)
+    permission_scope = _permission_scope_from_meta(row.last_probe_meta)
+    scope_validation = _validate_permission_scope(purpose=purpose, permission_scope=permission_scope)
+    if scope_validation["status"] == "block":
+        return None
+
+    api_key = decrypt_secret_value(row.api_key_encrypted)
+    api_secret = decrypt_secret_value(row.api_secret_encrypted)
     if not api_key or not api_secret:
         return None
     base_url = _effective_base_url(
@@ -764,6 +1000,9 @@ def _select_admin_credential(
             "exchange": row.exchange,
             "market_type": row.market_type,
             "environment": row.environment,
+            "permission_scope": permission_scope,
+            "permission_scope_validation": scope_validation,
+            "lifecycle_status": _lifecycle_status(row),
         },
     }
 
@@ -788,6 +1027,20 @@ def resolve_exchange_credentials(
         raise ValueError("invalid_market_type")
     if normalized_env not in ALLOWED_ENVS:
         raise ValueError("invalid_environment")
+
+    if _is_execution_purpose(normalized_purpose):
+        env_lock = _norm(os.environ.get("VENUE_ENV_LOCK"))
+        if env_lock in {"testnet", "live"} and normalized_env != env_lock:
+            raise ValueError("environment_lock_blocked")
+
+        if normalized_env == "live":
+            if _norm(os.environ.get("VENUE_PROD_FREEZE"), default="false") == "true":
+                raise ValueError("prod_freeze_active")
+            if _norm(os.environ.get("LIVE_ROUTE_APPROVED"), default="false") != "true":
+                raise ValueError("live_route_not_approved")
+            mode = _norm(os.environ.get("EXECUTION_MODE"), default="sim")
+            if mode != "live":
+                raise ValueError("mode_mismatch_live_blocked")
 
     rule = _rule_for_context(
         db,
@@ -843,6 +1096,22 @@ def resolve_exchange_credentials(
 
     if selected is None:
         raise ValueError("credential_not_found")
+
+    if _is_execution_purpose(normalized_purpose):
+        from services.venue_service import check_user_venue_access
+
+        access_allowed, _, _, _ = check_user_venue_access(
+            db,
+            user_id=user_id,
+            exchange=normalized_exchange,
+            market_type=normalized_market,
+            environment=normalized_env,
+        )
+        if not access_allowed:
+            raise ValueError("venue_not_allowed")
+
+        if normalized_env == "live" and str(selected.get("source") or "").startswith("user"):
+            raise ValueError("approved_credential_required")
 
     response = {
         "selected_credential_id": selected["credential_id"],

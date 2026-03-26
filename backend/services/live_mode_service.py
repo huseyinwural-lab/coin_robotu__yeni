@@ -1671,6 +1671,9 @@ def _fetch_symbol_filters(symbol: str) -> dict:
         "step_size": 0.001,
         "quantity_precision": 3,
         "min_notional": 0.0,
+        "tick_size": 0.0,
+        "price_multiplier_up": 0.0,
+        "price_multiplier_down": 0.0,
     }
     info = adapter.exchange_info(symbol)
     symbols = info.get("symbols") if isinstance(info, dict) else None
@@ -1686,6 +1689,11 @@ def _fetch_symbol_filters(symbol: str) -> dict:
             defaults["step_size"] = _safe_float(item.get("stepSize"), defaults["step_size"])
         elif item.get("filterType") in {"MIN_NOTIONAL", "NOTIONAL"}:
             defaults["min_notional"] = _safe_float(item.get("notional") or item.get("minNotional"), defaults["min_notional"])
+        elif item.get("filterType") == "PRICE_FILTER":
+            defaults["tick_size"] = _safe_float(item.get("tickSize"), defaults["tick_size"])
+        elif item.get("filterType") in {"PERCENT_PRICE", "PERCENT_PRICE_BY_SIDE"}:
+            defaults["price_multiplier_up"] = _safe_float(item.get("multiplierUp") or item.get("askMultiplierUp"), defaults["price_multiplier_up"])
+            defaults["price_multiplier_down"] = _safe_float(item.get("multiplierDown") or item.get("bidMultiplierDown"), defaults["price_multiplier_down"])
 
     defaults["quantity_precision"] = int(symbol_info.get("quantityPrecision") or defaults["quantity_precision"])
     return defaults
@@ -1844,7 +1852,61 @@ def run_exchange_test_order_market(
     if quantity_error:
         raise ValueError(quantity_error)
 
+    pre_trade_checks: list[dict] = []
+    if quantity_override is not None:
+        rounded_override = _quantize_to_step(
+            float(quantity_override),
+            symbol_filters["step_size"],
+            symbol_filters["quantity_precision"],
+            rounding=ROUND_DOWN,
+        )
+        precision_status = "pass" if abs(rounded_override - float(quantity_override)) <= max(symbol_filters["step_size"], 1e-8) else "block"
+        pre_trade_checks.append(
+            {
+                "check": "precision_lot_validation",
+                "status": precision_status,
+                "reason_code": "invalid_precision_or_lot" if precision_status == "block" else "ok",
+            }
+        )
+        if precision_status == "block":
+            raise ValueError("invalid_precision_or_lot")
+
     quote_qty = round(quantity * mid_price, 6)
+
+    max_slippage_bps = _safe_float(os.getenv("TEST_ORDER_MAX_SLIPPAGE_BPS"), 120.0)
+    bid_price = _safe_float(ticker.get("bid_price"), mid_price)
+    ask_price = _safe_float(ticker.get("ask_price"), mid_price)
+    expected_slippage_bps = abs((ask_price - bid_price) / max(mid_price, 1e-9)) * 10000
+    slippage_status = "pass" if expected_slippage_bps <= max_slippage_bps else "block"
+    pre_trade_checks.append(
+        {
+            "check": "pre_trade_slippage_guard",
+            "status": slippage_status,
+            "reason_code": "slippage_too_high" if slippage_status == "block" else "ok",
+            "value_bps": round(expected_slippage_bps, 4),
+            "threshold_bps": max_slippage_bps,
+        }
+    )
+    if slippage_status == "block":
+        raise ValueError("pretrade_slippage_blocked")
+
+    if symbol_filters.get("price_multiplier_up") and symbol_filters.get("price_multiplier_down"):
+        upper = mid_price * float(symbol_filters["price_multiplier_up"])
+        lower = mid_price * float(symbol_filters["price_multiplier_down"])
+        band_status = "pass" if lower <= mid_price <= upper else "block"
+        pre_trade_checks.append(
+            {
+                "check": "price_band_guard",
+                "status": band_status,
+                "reason_code": "price_band_violation" if band_status == "block" else "ok",
+                "lower": round(lower, 8),
+                "upper": round(upper, 8),
+            }
+        )
+        if band_status == "block":
+            raise ValueError("price_band_guard_blocked")
+    else:
+        pre_trade_checks.append({"check": "price_band_guard", "status": "warn", "reason_code": "price_band_metadata_missing"})
 
     strategy_type, _ = _resolve_strategy_context(db, user.id)
     volatility_pct = _market_volatility_pct()
@@ -2016,6 +2078,15 @@ def run_exchange_test_order_market(
         "applied_leverage": leverage_plan["applied_leverage"],
         "leverage_policy_mode": leverage_plan["leverage_policy_mode"],
         "leverage_clamp_reasons": leverage_plan["leverage_clamp_reasons"],
+    }
+    pre_trade_net_status = "PASS"
+    if any(str(item.get("status") or "").lower() == "block" for item in pre_trade_checks):
+        pre_trade_net_status = "BLOCK"
+    elif any(str(item.get("status") or "").lower() == "warn" for item in pre_trade_checks):
+        pre_trade_net_status = "WARN"
+    enriched_raw_status["pre_trade_validation"] = {
+        "net_status": pre_trade_net_status,
+        "checks": pre_trade_checks,
     }
 
     metric = ExecutionMetric(

@@ -1,0 +1,101 @@
+{
+  "summary": "Iteration 150: P0 Control Plane Security Hardening - All 16 backend tests passed (100%). Frontend UI verified with all new features working: credential orchestration verify/rotate/revoke buttons, lifecycle/permission columns, control-plane sanity check, and execution validation endpoints.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "WebSocket /api/runtime/ws/execution-timeline",
+        "issue": "WebSocket connection fails - WebSocket is closed before connection established",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration150_p0_control_plane_security.py",
+    "/app/test_reports/pytest/iteration150_p0_control_plane.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminCredentialOrchestrationPage.jsx has comprehensive data-testid attributes for all UI elements including verify/rotate/revoke buttons",
+    "AdminExchangesPage.jsx has proper data-testid attributes for sanity check and execution validation panels",
+    "Credential lifecycle status flow correctly implemented: pending_verify -> verified/verify_failed -> revoked/rotated_pending_verify",
+    "Permission scope validation correctly blocks withdraw scope for execution credentials",
+    "Control-plane sanity check returns proper net_status (PASS/WARN/BLOCK) with reason_codes and remediation_suggestions",
+    "Execution validation returns net_status with detailed checks array including status and reason_code for each check",
+    "Live environment credential resolution correctly blocked without LIVE_ROUTE_APPROVED"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration150_p0_control_plane_security.py"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 tests pass)",
+    "frontend": "100% - All UI elements verified"
+  },
+  "test_credentials": {
+    "admin_email": "canary.admin@platform.local",
+    "admin_password": "CanaryAdmin123!"
+  },
+  "seed_data_creation": "Test credentials created during testing with TEST_ prefix for lifecycle flow verification",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "P0 Control Plane Security features fully verified. Backend: credential orchestration CRUD (list/create/probe/verify/revoke/rotate), lifecycle status flow (pending_verify/verified/revoked/rotated_pending_verify), permission scope validation (read/trade/withdraw), control-plane sanity check, execution validation, credential resolution preview with live hard-gate. Frontend: AdminCredentialOrchestrationPage has verify/rotate/revoke buttons and lifecycle/permission columns working. AdminExchangesPage has sanity check panel (returns BLOCK) and execution validation panel (returns WARN with detailed checks).",
+  "verified_features": {
+    "credential_orchestration_endpoints": [
+      "GET /api/venues/admin/credentials - list with filters (exchange, market_type, environment, purpose)",
+      "POST /api/venues/admin/credentials - create with lifecycle_status=pending_verify",
+      "POST /api/venues/admin/credentials/{id}/probe - returns last_probe_status, last_probe_message, permission_scope",
+      "POST /api/venues/admin/credentials/{id}/verify - verifies credential and updates lifecycle",
+      "POST /api/venues/admin/credentials/{id}/revoke - sets lifecycle_status=revoked, approval_status=revoked",
+      "POST /api/venues/admin/credentials/{id}/rotate - sets lifecycle_status=rotated_pending_verify"
+    ],
+    "permission_scope_validation": [
+      "Response contains permission_scope with read/trade/withdraw boolean fields",
+      "Response contains permission_scope_validation with status/reason_code/message",
+      "Withdraw scope detected blocks execution credentials"
+    ],
+    "lifecycle_status_flow": [
+      "Create: lifecycle_status=pending_verify",
+      "Probe: lifecycle_status=verified or verify_failed",
+      "Revoke: lifecycle_status=revoked",
+      "Rotate: lifecycle_status=rotated_pending_verify"
+    ],
+    "control_plane_sanity_check": [
+      "POST /api/venues/admin/control-plane-sanity-check returns net_status (PASS/WARN/BLOCK)",
+      "Response includes reason_codes array",
+      "Response includes remediation_suggestions array",
+      "Response includes checks array with check/status/reason_codes/remediation_suggestion per check"
+    ],
+    "execution_validation": [
+      "POST /api/venues/admin/execution-validation returns net_status (PASS/WARN/BLOCK)",
+      "Response includes checks array with check/status/reason_code/remediation per check",
+      "Response includes validation object with legacy fields (adapter_smoke_test, precision_validation, etc.)"
+    ],
+    "credential_resolution_preview": [
+      "GET /api/venues/admin/credential-resolution-preview returns source and audit_metadata",
+      "Live environment blocked with 409 (live_route_not_approved) when LIVE_ROUTE_APPROVED=false"
+    ],
+    "credential_assignment_rules": [
+      "GET /api/venues/admin/credential-rules - list rules",
+      "PUT /api/venues/admin/credential-rules - upsert rule with preferred_source and fallback_enabled"
+    ],
+    "frontend_admin_credential_orchestration_page": [
+      "Page title: Credential Orchestration",
+      "Filter panel with Exchange/Market/Purpose/Environment dropdowns",
+      "Credential table with Lifecycle and Permission columns",
+      "Verify/Rotate/Revoke action buttons per credential row",
+      "Lifecycle badges showing pending_verify/verified/revoked/rotated_pending_verify",
+      "Permission scope display showing read/trade/withdraw values"
+    ],
+    "frontend_admin_exchanges_page": [
+      "Venue Control Plane Sanity Check panel with run button",
+      "Sanity check results: net_status, reason_codes, checks list",
+      "Execution Activation Validation panel with run button",
+      "Execution validation results: net_status, checks with status/reason_code"
+    ]
+  }
+}

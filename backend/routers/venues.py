@@ -10,6 +10,7 @@ from models import AdminExchangeCredential, AllowedMarket, ExchangeCapability, E
 from schemas import (
     AdminExchangeCredentialCreateRequest,
     AdminExchangeCredentialPatchRequest,
+    AdminExchangeCredentialRotateRequest,
     AdminExchangeCredentialResponse,
     AllowedMarketCreate,
     AllowedMarketResponse,
@@ -42,10 +43,14 @@ from services.credential_resolution_service import (
     list_admin_credentials,
     list_assignment_rules,
     probe_admin_credential,
+    revoke_admin_credential,
     resolve_exchange_credentials,
+    rotate_admin_credential,
     update_admin_credential,
     upsert_assignment_rule,
+    verify_admin_credential,
 )
+from services.venue_control_plane_service import run_venue_control_plane_sanity
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry, user_allowed_venue_options, venue_health_summary
 
 router = APIRouter(prefix="/venues", tags=["venues"])
@@ -61,6 +66,18 @@ def _credential_error(exc: Exception) -> HTTPException:
         "invalid_preferred_source": (status.HTTP_400_BAD_REQUEST, "invalid_preferred_source"),
         "unsupported_exchange": (status.HTTP_400_BAD_REQUEST, "unsupported_exchange"),
         "credential_not_found": (status.HTTP_404_NOT_FOUND, "credential_not_found"),
+        "credential_readback_verification_failed": (
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "credential_readback_verification_failed",
+        ),
+        "credential_verify_failed": (status.HTTP_409_CONFLICT, "credential_verify_failed"),
+        "invalid_rotation_payload": (status.HTTP_400_BAD_REQUEST, "invalid_rotation_payload"),
+        "environment_lock_blocked": (status.HTTP_409_CONFLICT, "environment_lock_blocked"),
+        "prod_freeze_active": (status.HTTP_409_CONFLICT, "prod_freeze_active"),
+        "live_route_not_approved": (status.HTTP_409_CONFLICT, "live_route_not_approved"),
+        "mode_mismatch_live_blocked": (status.HTTP_409_CONFLICT, "mode_mismatch_live_blocked"),
+        "venue_not_allowed": (status.HTTP_409_CONFLICT, "venue_not_allowed"),
+        "approved_credential_required": (status.HTTP_409_CONFLICT, "approved_credential_required"),
     }
     code, detail = mapping.get(message, (status.HTTP_400_BAD_REQUEST, message))
     return HTTPException(status_code=code, detail=detail)
@@ -572,9 +589,27 @@ def admin_execution_validation(_: User = Depends(require_admin), db: Session = D
     credentials = execution_credentials_for_adapter(db)
     smoke = run_exchange_adapter_smoke(credentials_override=credentials)
     bybit_ready = smoke["summary"].get("execution_bybit_pass_count", 0) >= 1
+    adapter_status = "PASS" if smoke["summary"].get("market_fail_count", 0) == 0 else "DEGRADED"
+    precision_status = "PASS" if smoke["summary"].get("precision_pass_count", 0) >= 2 else "PARTIAL"
+    order_submit_status = "PASS" if bybit_ready else "MOCKED"
+    checks = [
+        {"check": "adapter_smoke_test", "status": "PASS" if adapter_status == "PASS" else "BLOCK", "reason_code": "adapter_smoke_failed" if adapter_status != "PASS" else "ok", "remediation": "Adapter connectivity/proxy/credential ayarlarını kontrol edin." if adapter_status != "PASS" else ""},
+        {"check": "precision_validation", "status": "PASS" if precision_status == "PASS" else "WARN", "reason_code": "precision_partial" if precision_status != "PASS" else "ok", "remediation": "Symbol metadata ve lot precision değerlerini yenileyin." if precision_status != "PASS" else ""},
+        {"check": "lot_size_validation", "status": "PASS" if precision_status == "PASS" else "WARN", "reason_code": "lot_validation_partial" if precision_status != "PASS" else "ok", "remediation": "minQty/stepSize/tickSize senkronunu doğrulayın." if precision_status != "PASS" else ""},
+        {"check": "order_submit_test", "status": "PASS" if order_submit_status == "PASS" else "WARN", "reason_code": "order_submit_mocked" if order_submit_status != "PASS" else "ok", "remediation": "Execution credential ve venue izinlerini tamamlayın." if order_submit_status != "PASS" else ""},
+        {"check": "pre_trade_slippage_guard", "status": "WARN" if order_submit_status != "PASS" else "PASS", "reason_code": "slippage_guard_not_live" if order_submit_status != "PASS" else "ok", "remediation": "Canlı slippage guard için bybit live readiness sağlayın." if order_submit_status != "PASS" else ""},
+    ]
+    net_status = "PASS"
+    if any(item["status"] == "BLOCK" for item in checks):
+        net_status = "BLOCK"
+    elif any(item["status"] == "WARN" for item in checks):
+        net_status = "WARN"
+
     return {
+        "net_status": net_status,
+        "checks": checks,
         "validation": {
-            "adapter_smoke_test": "PASS" if smoke["summary"].get("market_fail_count", 0) == 0 else "DEGRADED",
+            "adapter_smoke_test": adapter_status,
             "precision_validation": "PASS" if smoke["summary"].get("precision_pass_count", 0) >= 2 else "PARTIAL",
             "lot_size_validation": "PASS" if smoke["summary"].get("precision_pass_count", 0) >= 2 else "PARTIAL",
             "order_submit_test": "PASS" if bybit_ready else "MOCKED",
@@ -738,6 +773,80 @@ def admin_disable_orchestration_credential(
     return AdminExchangeCredentialResponse(**row)
 
 
+@router.post("/admin/credentials/{credential_id}/verify", response_model=AdminExchangeCredentialResponse)
+def admin_verify_orchestration_credential(
+    credential_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = verify_admin_credential(db, actor=current_admin, credential_id=credential_id)
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+    create_audit_log(
+        db,
+        action="admin_credential_verified",
+        entity_type="admin_exchange_credential",
+        entity_id=row["id"],
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"probe_status": row.get("last_probe_status")},
+    )
+    return AdminExchangeCredentialResponse(**row)
+
+
+@router.post("/admin/credentials/{credential_id}/revoke", response_model=AdminExchangeCredentialResponse)
+def admin_revoke_orchestration_credential(
+    credential_id: str,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = revoke_admin_credential(db, actor=current_admin, credential_id=credential_id)
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+    create_audit_log(
+        db,
+        action="admin_credential_revoked",
+        entity_type="admin_exchange_credential",
+        entity_id=row["id"],
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+    )
+    return AdminExchangeCredentialResponse(**row)
+
+
+@router.post("/admin/credentials/{credential_id}/rotate", response_model=AdminExchangeCredentialResponse)
+def admin_rotate_orchestration_credential(
+    credential_id: str,
+    payload: AdminExchangeCredentialRotateRequest,
+    current_admin: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = rotate_admin_credential(
+            db,
+            actor=current_admin,
+            credential_id=credential_id,
+            api_key=payload.api_key,
+            api_secret=payload.api_secret,
+            passphrase=payload.passphrase,
+        )
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+    create_audit_log(
+        db,
+        action="admin_credential_rotated",
+        entity_type="admin_exchange_credential",
+        entity_id=row["id"],
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+    )
+    return AdminExchangeCredentialResponse(**row)
+
+
 @router.post("/admin/credentials/{credential_id}/probe", response_model=AdminExchangeCredentialResponse)
 def admin_probe_orchestration_credential(
     credential_id: str,
@@ -758,6 +867,27 @@ def admin_probe_orchestration_credential(
         details={"probe_status": row.get("last_probe_status"), "probe_message": row.get("last_probe_message")},
     )
     return AdminExchangeCredentialResponse(**row)
+
+
+@router.post("/admin/control-plane-sanity-check")
+def admin_run_control_plane_sanity_check(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = run_venue_control_plane_sanity(db)
+    create_audit_log(
+        db,
+        action="venue_control_plane_sanity_check",
+        entity_type="venue_control_plane",
+        entity_id="global",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "net_status": result.get("net_status"),
+            "reason_codes": result.get("reason_codes") or [],
+        },
+    )
+    return result
 
 
 @router.get("/admin/credential-rules", response_model=list[CredentialAssignmentRuleResponse])

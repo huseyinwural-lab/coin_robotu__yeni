@@ -142,14 +142,29 @@ export const AdminCredentialOrchestrationPage = () => {
     }
   };
 
-  const handleCredentialAction = async (id, action) => {
+  const handleCredentialAction = async (id, action, payload = null) => {
     try {
-      await apiClient.post(`/venues/admin/credentials/${id}/${action}`);
+      await apiClient.post(`/venues/admin/credentials/${id}/${action}`, payload || undefined);
       toast.success(`${action} tamamlandı`);
       loadData();
     } catch (error) {
       toast.error(error?.response?.data?.detail || `${action} başarısız`);
     }
+  };
+
+  const handleRotateCredential = async (id) => {
+    const apiKey = window.prompt("Yeni API key girin");
+    if (!apiKey) {
+      toast.error("Rotate için api_key zorunlu");
+      return;
+    }
+    const apiSecret = window.prompt("Yeni API secret girin");
+    if (!apiSecret) {
+      toast.error("Rotate için api_secret zorunlu");
+      return;
+    }
+    const passphrase = window.prompt("Passphrase (opsiyonel)") || null;
+    await handleCredentialAction(id, "rotate", { api_key: apiKey, api_secret: apiSecret, passphrase: passphrase || null });
   };
 
   const handleRuleUpsert = async () => {
@@ -447,6 +462,8 @@ export const AdminCredentialOrchestrationPage = () => {
                   <TableHead>Scope</TableHead>
                   <TableHead>Env</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Lifecycle</TableHead>
+                  <TableHead>Permission</TableHead>
                   <TableHead>Probe</TableHead>
                   <TableHead>Egress</TableHead>
                   <TableHead>Fingerprint</TableHead>
@@ -467,6 +484,16 @@ export const AdminCredentialOrchestrationPage = () => {
                       <span className="rounded bg-slate-100 px-2 py-1 text-xs" data-testid={`credential-status-badge-${row.id}`}>{row.is_active ? "active" : "disabled"}/{row.approval_status}</span>
                     </TableCell>
                     <TableCell>
+                      <span className="rounded bg-amber-100 px-2 py-1 text-xs" data-testid={`credential-lifecycle-badge-${row.id}`}>{row.lifecycle_status || "pending"}</span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-xs" data-testid={`credential-permission-scope-${row.id}`}>
+                        <p data-testid={`credential-permission-read-${row.id}`}>read:{String(Boolean(row.permission_scope?.read))}</p>
+                        <p data-testid={`credential-permission-trade-${row.id}`}>trade:{String(Boolean(row.permission_scope?.trade))}</p>
+                        <p data-testid={`credential-permission-withdraw-${row.id}`}>withdraw:{String(Boolean(row.permission_scope?.withdraw))}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
                       <span className={`rounded px-2 py-1 text-xs ${probeBadgeClass[row.last_probe_status || "no_probe"] || "bg-slate-100 text-slate-700"}`} data-testid={`credential-last-probe-status-${row.id}`}>{row.last_probe_status || "no_probe"}</span>
                     </TableCell>
                     <TableCell>
@@ -478,7 +505,10 @@ export const AdminCredentialOrchestrationPage = () => {
                     <TableCell>
                       <div className="flex gap-1" data-testid={`credential-actions-${row.id}`}>
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "probe")} data-testid={`credential-probe-button-${row.id}`}>Probe</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "verify")} data-testid={`credential-verify-button-${row.id}`}>Verify</Button>
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "approve")} data-testid={`credential-approve-button-${row.id}`}>Approve</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleRotateCredential(row.id)} data-testid={`credential-rotate-button-${row.id}`}>Rotate</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "revoke")} data-testid={`credential-revoke-button-${row.id}`}>Revoke</Button>
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "disable")} data-testid={`credential-disable-button-${row.id}`}>Disable</Button>
                       </div>
                     </TableCell>
@@ -486,7 +516,7 @@ export const AdminCredentialOrchestrationPage = () => {
                 ))}
                 {!credentials.length && (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-sm text-slate-500" data-testid="credential-empty-state">Kayıt bulunamadı</TableCell>
+                    <TableCell colSpan={12} className="text-center text-sm text-slate-500" data-testid="credential-empty-state">Kayıt bulunamadı</TableCell>
                   </TableRow>
                 )}
               </TableBody>
