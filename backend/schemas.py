@@ -4682,6 +4682,9 @@ class ExecutionReadinessResponse(BaseModel):
     mocked_flag: bool = False
     override_active: bool = False
     reason_codes: list[str] = Field(default_factory=list)
+    readiness_state: str | None = None
+    execution_allowed: bool | None = None
+    go_live_allowed: bool | None = None
 
 
 class GuardTelemetryReasonResponse(BaseModel):

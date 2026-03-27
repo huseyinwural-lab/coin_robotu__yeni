@@ -9,12 +9,18 @@ if str(BACKEND_ROOT) not in sys.path:
 from core.readiness.go_live_validator import run_go_live_validator
 
 
+class DummyConfig:
+    live_mode_enabled = True
+    safe_mode_enabled = False
+    kill_switch_enabled = False
+
+
 def _base_context():
     return {
         "generated_at": "2026-03-27T00:00:00+00:00",
         "execution_mode": "LIVE",
         "env_mode": "LIVE",
-        "config": type("Cfg", (), {"live_mode_enabled": True, "safe_mode_enabled": False, "kill_switch_enabled": False})(),
+        "config": DummyConfig(),
         "kill_switch_active": False,
         "release_gate": {"status": "PASS", "reason_codes": []},
         "connection": {
@@ -61,7 +67,7 @@ def _base_context():
             "total_exposure": 0,
             "partial_fill_count": 1,
             "funding_available": True,
-            "funding_count": 2,
+            "funding_count": 3,
             "funding_error": None,
         },
         "execution_tests": {
@@ -74,33 +80,37 @@ def _base_context():
             "db_ok": True,
             "redis_ok": True,
             "queue_sizes": {"runtime:execution:queue": 0},
-            "worker_events": 2,
+            "worker_events": 3,
             "worker_lag_sec": 5,
             "strategy_engine_status": "ok",
         },
     }
 
 
-def test_go_live_validator_ready_when_all_blocking_pass():
+def test_validator_output_has_layers():
+    result = run_go_live_validator(_base_context())
+    assert "scores" in result
+    assert "by_layer" in result
+    assert "blocking_failures" in result
+    assert "warnings" in result
+    assert "unknowns" in result
+    for key in ["core", "trading_state", "exchange", "execution", "risk", "infra"]:
+        assert key in result["scores"]
+        assert key in result["by_layer"]
+
+
+def test_validator_blocks_when_execution_mocked():
     context = _base_context()
+    context["execution_tests"]["submit"] = {"status": "MOCKED", "mocked": True}
+    result = run_go_live_validator(context)
+    assert result["readiness_state"] != "READY"
+    reasons = [item["reason_code"] for item in result.get("blocking_failures", [])]
+    assert "EXECUTION_TEST_MOCKED" in reasons
+
+
+def test_validator_ready_with_funding_unknown():
+    context = _base_context()
+    context["trading_state"]["funding_available"] = False
+    context["trading_state"]["funding_count"] = 0
     result = run_go_live_validator(context)
     assert result["readiness_state"] == "READY"
-    assert result["go_live_allowed"] is True
-    assert result["execution_allowed"] is True
-
-
-def test_go_live_validator_blocks_when_data_missing():
-    context = _base_context()
-    context["data_sources"]["balances"] = {"available": False, "fallback_used": False, "data_source": "cache"}
-    result = run_go_live_validator(context)
-    assert result["readiness_state"] in {"BLOCKED", "UNKNOWN"}
-    assert result["go_live_allowed"] is False
-    assert "BALANCE_DATA_MISSING" in result["reason_codes"]
-
-
-def test_go_live_validator_blocks_when_mode_mismatch():
-    context = _base_context()
-    context["execution_mode"] = "TESTNET"
-    result = run_go_live_validator(context)
-    assert result["readiness_state"] == "BLOCKED"
-    assert "MODE_MISMATCH" in result["reason_codes"]

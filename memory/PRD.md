@@ -1,3 +1,23 @@
+## 2026-03-27 — P0+P1 Futures Live Readiness Full Core Completeness
+
+### Core kapsam genişletmesi
+- go_live_validator artık core + trading_state + exchange + execution + risk + infra layer breakdown üretir
+- Çıkış şeması: scores/by_layer/blocking_failures/warnings/unknowns alanları eklendi
+- Execution gate ve live_readiness_guard validator sonucuna bağlı kaldı
+
+### Yeni layer check’leri
+- Trading state: balance/position/order sync, margin availability, funding status (non-blocking), liquidation risk
+- Exchange: API connectivity, websocket health, orderbook sync, rate limit state
+- Execution: precision, dry-run submit, cancel, partial fill, reduce-only
+- Risk: config load, leverage validation, margin mode, exposure limit, risk orchestrator availability
+- Infra: DB, Redis/queue, worker state, strategy engine status
+
+### Test durumu
+- Yeni unit: `test_go_live_validator_p1.py`
+- Güncellenen regression: `test_go_live_validator_p0.py`, `test_live_readiness_endpoint.py`
+- Pytest: P0/P1 validator + execution readiness + guard PASS
+- Smoke: `/api/admin/futures/live-readiness` scores/by_layer doğrulandı
+
 ## 2026-03-27 — P0 Futures Live Readiness Hardening (Go-Live Validator)
 
 ### Mimari değişiklikler
