@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from dependencies.execution_guard_dependency import execution_guard_dependency
@@ -30,7 +30,7 @@ from core.users.user_risk_settings import (
     serialize_user_risk_settings,
 )
 from db import get_db, redis_client
-from deps import require_fresh_step_up, require_user
+from deps import require_step_up_for, require_user
 from models import BotProfile, PendingSignal, RiskPolicy, User, UserExecutionIntent
 from services.live_mode_service import validate_exchange_credentials_for_user
 from services.credential_resolution_service import build_user_routing_preview
@@ -64,6 +64,8 @@ from services.commercial_controls_enforcement_service import (
 )
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.rate_limiter_service import consume_exchange_rate_limit
+from services.risk_policy_service import evaluate_request_risk
+from services.suspicious_activity_service import create_risk_event, maybe_create_suspicious_alert
 
 router = APIRouter(prefix="/user", tags=["user_platform"])
 
@@ -171,7 +173,7 @@ def _submit_trade_with_guard(
 @router.post(
     "/exchange/connect",
     response_model=UserExchangeConnectResponse,
-    dependencies=[Depends(require_fresh_step_up)],
+    dependencies=[Depends(require_step_up_for("exchange_credential_update"))],
 )
 def connect_user_exchange(
     payload: UserExchangeConnectRequest,
@@ -213,7 +215,7 @@ def get_user_exchange(current_user: User = Depends(require_user), db: Session = 
 @router.put(
     "/exchange",
     response_model=UserExchangeConnectResponse,
-    dependencies=[Depends(require_fresh_step_up)],
+    dependencies=[Depends(require_step_up_for("exchange_credential_update"))],
 )
 def update_user_exchange(
     payload: UserExchangeConnectRequest,
@@ -234,7 +236,7 @@ def get_user_exchange_connections(current_user: User = Depends(require_user), db
     "/exchange-connections",
     response_model=UserExchangeConnectionResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_fresh_step_up)],
+    dependencies=[Depends(require_step_up_for("api_key_create"))],
 )
 def create_exchange_connection(
     payload: UserExchangeConnectionUpsertRequest,
@@ -279,7 +281,7 @@ def create_exchange_connection(
 @router.put(
     "/exchange-connections/{connection_id}",
     response_model=UserExchangeConnectionResponse,
-    dependencies=[Depends(require_fresh_step_up)],
+    dependencies=[Depends(require_step_up_for("exchange_credential_update"))],
 )
 def update_exchange_connection(
     connection_id: str,
@@ -408,7 +410,7 @@ def revalidate_exchange_connection(
     return UserExchangeConnectionResponse(**_with_routing_metadata(row=refreshed, user_id=current_user.id, db=db))
 
 
-@router.delete("/exchange-connections/{connection_id}", dependencies=[Depends(require_fresh_step_up)])
+@router.delete("/exchange-connections/{connection_id}", dependencies=[Depends(require_step_up_for("api_key_delete"))])
 def remove_exchange_connection(
     connection_id: str,
     current_user: User = Depends(require_user),
@@ -524,7 +526,7 @@ def validate_order(
 @router.post(
     "/open-position",
     response_model=ExecutionIntentSubmitResponse,
-    dependencies=[Depends(execution_guard_dependency), Depends(require_fresh_step_up)],
+    dependencies=[Depends(execution_guard_dependency), Depends(require_step_up_for("trade_execution"))],
 )
 def open_position(
     payload: ExecutionIntentSubmitRequest,
@@ -537,7 +539,7 @@ def open_position(
 @router.post(
     "/execute-order",
     response_model=ExecutionIntentSubmitResponse,
-    dependencies=[Depends(execution_guard_dependency), Depends(require_fresh_step_up)],
+    dependencies=[Depends(execution_guard_dependency), Depends(require_step_up_for("execute_order"))],
 )
 def execute_order(
     payload: ExecutionIntentSubmitRequest,
@@ -550,7 +552,7 @@ def execute_order(
 @router.post(
     "/manual-trade",
     response_model=ExecutionIntentSubmitResponse,
-    dependencies=[Depends(execution_guard_dependency), Depends(require_fresh_step_up)],
+    dependencies=[Depends(execution_guard_dependency), Depends(require_step_up_for("manual_trade"))],
 )
 def manual_trade(
     payload: ExecutionIntentSubmitRequest,
@@ -619,13 +621,35 @@ def get_user_dashboard(current_user: User = Depends(require_user), db: Session =
 @router.post(
     "/funds/withdraw-request",
     response_model=UserFundWithdrawResponse,
-    dependencies=[Depends(require_fresh_step_up)],
+    dependencies=[Depends(require_step_up_for("withdraw", amount_field="amount_usd"))],
 )
 def create_withdraw_request(
     payload: UserFundWithdrawRequest,
+    request: Request,
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    risk_eval = evaluate_request_risk(
+        db,
+        user=current_user,
+        request=request,
+        action_name="withdraw",
+        amount_usdt=float(payload.amount_usd or 0),
+    )
+    event = create_risk_event(
+        db,
+        user=current_user,
+        action_name="withdraw",
+        risk_level=risk_eval.risk_level,
+        risk_reasons=risk_eval.risk_reasons,
+        requires_step_up=True,
+        ip_address=(risk_eval.context.get("context") or {}).get("ip_address"),
+        country_iso=(risk_eval.context.get("context") or {}).get("country_iso"),
+        device_fingerprint=(risk_eval.context.get("context") or {}).get("device_fingerprint"),
+        metadata={"amount_usd": float(payload.amount_usd or 0)},
+    )
+    maybe_create_suspicious_alert(db, user=current_user, risk_event=event)
+
     try:
         enforce_commercial_control_or_raise(
             db,

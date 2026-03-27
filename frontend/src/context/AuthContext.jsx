@@ -132,6 +132,9 @@ export const AuthProvider = ({ children }) => {
         graceActive: Boolean(data.mfa_grace_active),
         graceExpiresAt: data.mfa_grace_expires_at || null,
         mfaSetupRequired: Boolean(data.mfa_setup_required),
+        riskLevel: data.risk_level || "low",
+        riskReasons: data.risk_reasons || [],
+        challengeReason: data.challenge_reason || null,
         emailDeliveryStatus: data.email_delivery_status,
         emailCodePreview: data.email_code_preview,
         user: data.user || null,
@@ -158,8 +161,8 @@ export const AuthProvider = ({ children }) => {
     return data.user;
   };
 
-  const stepUpAuth = async ({ method, code }) => {
-    const { data } = await apiClient.post("/auth/step-up", { method, code });
+  const stepUpAuth = async ({ method, code, scope = [] }) => {
+    const { data } = await apiClient.post("/auth/step-up", { method, code, scope });
     persistAuthSession({ token: data.access_token, user: data.user || null });
     setAuthToken(data.access_token);
     setToken(data.access_token);

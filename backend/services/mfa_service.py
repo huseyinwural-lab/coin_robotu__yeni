@@ -23,7 +23,7 @@ MFA_CHALLENGE_TTL_MINUTES = 10
 EMAIL_OTP_TTL_MINUTES = 5
 MFA_GRACE_PERIOD_HOURS = 24
 MFA_STEP_UP_TTL_MINUTES = 10
-PRIVILEGED_MFA_ROLES = {"super_admin", "admin", "ops", "trader"}
+PRIVILEGED_MFA_ROLES = {"super_admin", "admin", "ops"}
 BACKUP_CODE_HASHER = CryptContext(schemes=["bcrypt"], deprecated="auto")
 MFA_SECRET_PREFIX = "mfa_aes:v1"
 EMAIL_OTP_RESEND_LIMIT = 3
@@ -486,6 +486,17 @@ def start_mfa_challenge_if_required(
     totp_ready = _totp_ready(pref)
 
     if force_challenge:
+        if role_is_privileged and not totp_ready:
+            return {
+                "mfa_required": True,
+                "login_blocked": True,
+                "block_reason": "risk_requires_totp_setup",
+                "mfa_setup_required": True,
+                "mfa_grace_active": False,
+                "mfa_grace_expires_at": None,
+                "challenge_reason": challenge_reason or "risk_enforced",
+            }
+
         challenge_methods: list[str] = []
         if totp_ready:
             challenge_methods = ["totp"]
@@ -503,7 +514,11 @@ def start_mfa_challenge_if_required(
             request_ip=request_ip,
             challenge_reason=challenge_reason or "new_device",
         )
-        if payload.get("email_delivery_status") == "FAILED" and challenge_methods == ["email_otp"]:
+        if (
+            payload.get("email_delivery_status") == "FAILED"
+            and challenge_methods == ["email_otp"]
+            and _runtime_environment() in {"prod", "production"}
+        ):
             return {
                 "mfa_required": True,
                 "login_blocked": True,
@@ -709,6 +724,7 @@ def verify_mfa_challenge(
     code: str,
     device_id: str,
     session_context: dict | None = None,
+    step_up_scope: list[str] | None = None,
 ) -> dict:
     _ensure_mfa_tables(db)
     row = _resolve_challenge_row(db, challenge_token)
@@ -753,6 +769,8 @@ def verify_mfa_challenge(
         device_id=device_id,
         ip_hash=(session_context or {}).get("ip_hash"),
         device_fingerprint=(session_context or {}).get("device_fingerprint"),
+        step_up_at=now if mfa_verified else None,
+        step_up_scope=list(step_up_scope or ["auth_login"]),
     )
     step_up_valid_until = now + timedelta(minutes=MFA_STEP_UP_TTL_MINUTES) if mfa_verified else None
 
@@ -769,6 +787,7 @@ def verify_mfa_challenge(
         "mfa_setup_required": bool(verification_context.get("mfa_setup_required")),
         "step_up_required": not mfa_verified,
         "step_up_valid_until": step_up_valid_until,
+        "step_up_scope": list(step_up_scope or ["auth_login"]),
     }
 
 
@@ -780,6 +799,7 @@ def verify_step_up_code(
     code: str,
     device_id: str,
     session_context: dict | None = None,
+    step_up_scope: list[str] | None = None,
 ) -> dict:
     now = _now()
     pref = _get_or_create_preference(db, user.id)
@@ -806,6 +826,8 @@ def verify_step_up_code(
         device_id=device_id,
         ip_hash=(session_context or {}).get("ip_hash"),
         device_fingerprint=(session_context or {}).get("device_fingerprint"),
+        step_up_at=now,
+        step_up_scope=list(step_up_scope or []),
     )
     return {
         "access_token": token,
@@ -815,6 +837,7 @@ def verify_step_up_code(
         "mfa_verified": True,
         "step_up_required": False,
         "step_up_valid_until": now + timedelta(minutes=MFA_STEP_UP_TTL_MINUTES),
+        "step_up_scope": list(step_up_scope or []),
         "mfa_methods": [],
     }
 

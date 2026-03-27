@@ -62,7 +62,8 @@ export const AdminLoginPage = () => {
         setMfaState(result);
         setMfaCode("");
         setSelectedMfaMethod((result?.methods || [])[0] || "totp");
-        toast.info("MFA doğrulama adımı gerekli");
+        const reasons = Array.isArray(result?.riskReasons) ? result.riskReasons.join(", ") : "";
+        toast.info(`MFA doğrulama adımı gerekli${reasons ? ` (${reasons})` : ""}`);
         return;
       }
       toast.success("Admin girişi başarılı");
@@ -189,6 +190,16 @@ export const AdminLoginPage = () => {
             <p className="text-xs text-slate-600" data-testid="admin-login-mfa-methods">
               Yöntemler: {mfaMethods.length ? mfaMethods.join(", ") : "totp"}
             </p>
+            {!!mfaState?.riskReasons?.length && (
+              <p className="text-xs text-rose-700" data-testid="admin-login-risk-reasons">
+                risk_reasons: {mfaState.riskReasons.join(", ")}
+              </p>
+            )}
+            {!!mfaState?.challengeReason && (
+              <p className="text-xs text-slate-600" data-testid="admin-login-challenge-reason">
+                challenge_reason: {mfaState.challengeReason}
+              </p>
+            )}
             {mfaState?.emailDeliveryStatus && (
               <p className="text-xs text-slate-600" data-testid="admin-login-mfa-email-delivery-status">
                 email_delivery_status: {mfaState.emailDeliveryStatus}

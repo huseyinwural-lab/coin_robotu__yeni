@@ -192,8 +192,13 @@ class AuthResponse(BaseModel):
     mfa_grace_expires_at: datetime | None = None
     mfa_setup_required: bool = False
     mfa_verified: bool = False
+    requires_step_up: bool = False
+    risk_level: str = "low"
+    risk_reasons: list[str] = Field(default_factory=list)
+    challenge_reason: str | None = None
     step_up_required: bool = False
     step_up_valid_until: datetime | None = None
+    step_up_scope: list[str] = Field(default_factory=list)
     email_delivery_status: str | None = None
     email_code_preview: str | None = None
 
@@ -241,6 +246,7 @@ class MfaChallengeVerifyRequest(BaseModel):
 class AuthStepUpVerifyRequest(BaseModel):
     method: str = Field(min_length=4, max_length=20)
     code: str = Field(min_length=4, max_length=12)
+    scope: list[str] = Field(default_factory=list)
 
 
 class MfaChallengeCreateRequest(BaseModel):

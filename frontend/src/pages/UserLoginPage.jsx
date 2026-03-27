@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
+import { apiClient } from "@/lib/api";
 
 export const UserLoginPage = () => {
   const navigate = useNavigate();
@@ -68,7 +69,8 @@ export const UserLoginPage = () => {
           setMfaState(loginResult);
           setMfaCode("");
           setSelectedMfaMethod((loginResult?.methods || [])[0] || "totp");
-          toast.info("MFA doğrulama adımı gerekli");
+          const reasons = Array.isArray(loginResult?.riskReasons) ? loginResult.riskReasons.join(", ") : "";
+          toast.info(`MFA doğrulama adımı gerekli${reasons ? ` (${reasons})` : ""}`);
           return;
         }
         toast.success(`Giriş başarılı${rememberMe ? "" : " (oturum cihazda saklanmayacak)"}`);
@@ -184,6 +186,16 @@ export const UserLoginPage = () => {
               <p className="text-xs text-slate-600" data-testid="user-login-mfa-methods">
                 Yöntemler: {mfaMethods.length ? mfaMethods.join(", ") : "totp"}
               </p>
+              {!!mfaState?.riskReasons?.length && (
+                <p className="text-xs text-rose-700" data-testid="user-login-risk-reasons">
+                  risk_reasons: {mfaState.riskReasons.join(", ")}
+                </p>
+              )}
+              {!!mfaState?.challengeReason && (
+                <p className="text-xs text-slate-600" data-testid="user-login-challenge-reason">
+                  challenge_reason: {mfaState.challengeReason}
+                </p>
+              )}
               {mfaState?.emailDeliveryStatus && (
                 <p className="text-xs text-slate-600" data-testid="user-login-mfa-email-delivery-status">
                   email_delivery_status: {mfaState.emailDeliveryStatus}

@@ -19,7 +19,7 @@ if (!/^https?:\/\//i.test(BACKEND_URL)) {
 
 export const apiClient = axios.create({
   baseURL: `${BACKEND_URL.replace(/\/$/, "")}/api`,
-  timeout: 15000,
+  timeout: 30000,
   withCredentials: true,
 });
 
@@ -136,7 +136,8 @@ apiClient.interceptors.response.use(
     }
 
     if (status === 403) {
-      const detail = String(error?.response?.data?.detail || "").toLowerCase();
+      const detailRaw = error?.response?.data?.detail;
+      const detail = typeof detailRaw === "string" ? detailRaw.toLowerCase() : String(detailRaw?.reason_code || "").toLowerCase();
       if (detail.includes("step_up_required") && typeof window !== "undefined") {
         window.dispatchEvent(new Event("platform-step-up-required"));
       }

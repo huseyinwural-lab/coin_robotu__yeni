@@ -25,6 +25,7 @@ from model_domains.identity_control import (
 )
 from models import AuditLog, ExecutionMetric, User, UserExchangeConnection, UserOnboardingProfile, UserRiskSetting, UserRole
 from services.audit_service import create_audit_log
+from services.geoip_service import resolve_ip_location
 from services.mfa_service import get_mfa_settings
 from services.rate_limiter_service import TokenBucketRateLimiter
 
@@ -516,6 +517,9 @@ def record_login_success(
 
     user_agent = str(request.headers.get("user-agent") or "")
     fingerprint = resolve_device_fingerprint(request)
+    ip_hash = resolve_ip_hash(request)
+    location = resolve_ip_location(ip)
+    country_iso = str(location.get("country_iso") or "").strip().upper() or None
 
     db.add(
         LoginHistoryEvent(
@@ -543,6 +547,7 @@ def record_login_success(
             "endpoint_scope": endpoint_scope,
             "ip": ip,
             "device_fingerprint": fingerprint,
+            "country_iso": country_iso,
         },
         commit=False,
     )
@@ -550,6 +555,14 @@ def record_login_success(
     profile = identity_profile or get_or_create_identity_profile(db, user.id, commit=False)
     profile.last_seen_ip = ip
     profile.last_seen_device = fingerprint
+    snapshot = dict(profile.compliance_snapshot or {})
+    snapshot["security_context"] = {
+        "ip_hash": ip_hash,
+        "country_iso": country_iso,
+        "device_fingerprint": fingerprint,
+        "updated_at": _utcnow().isoformat(),
+    }
+    profile.compliance_snapshot = snapshot
     profile.policy_locked_until = None
     profile.updated_at = _utcnow()
     if commit:

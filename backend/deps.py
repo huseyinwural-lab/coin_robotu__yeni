@@ -13,6 +13,8 @@ from services.identity_control_service import (
     resolve_device_fingerprint,
     resolve_ip_hash,
 )
+from services.risk_policy_service import evaluate_request_risk, standardized_risk_response
+from services.suspicious_activity_service import create_risk_event, maybe_create_suspicious_alert
 
 bearer_scheme = HTTPBearer(auto_error=False)
 ADMIN_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}
@@ -123,25 +125,103 @@ def _resolve_mfa_verified_at(payload: dict | None) -> datetime | None:
         return None
 
 
+def _resolve_step_up_at(payload: dict | None) -> datetime | None:
+    raw_value = (payload or {}).get("step_up_at")
+    if raw_value in {None, ""}:
+        return _resolve_mfa_verified_at(payload)
+    try:
+        value = float(raw_value)
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return _resolve_mfa_verified_at(payload)
+
+
+def _resolve_step_up_scope(payload: dict | None) -> list[str]:
+    values = (payload or {}).get("step_up_scope")
+    if not isinstance(values, list):
+        return []
+    result: list[str] = []
+    for value in values:
+        normalized = str(value or "").strip().lower()
+        if normalized and normalized not in result:
+            result.append(normalized)
+    return result
+
+
+def require_step_up_for(action_name: str, *, amount_field: str | None = None):
+    normalized_action = str(action_name or "").strip().lower() or "global_critical_action"
+
+    async def _dependency(
+        request: Request,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        payload = getattr(request.state, "auth_payload", None)
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing_auth_payload")
+
+        amount_usdt: float | None = None
+        if amount_field:
+            try:
+                payload_json = await request.json()
+                raw_amount = (payload_json or {}).get(amount_field)
+                if raw_amount is not None:
+                    amount_usdt = float(raw_amount)
+            except Exception:
+                amount_usdt = None
+
+        risk_eval = evaluate_request_risk(
+            db,
+            user=current_user,
+            request=request,
+            action_name=normalized_action,
+            amount_usdt=amount_usdt,
+        )
+        risk_response = standardized_risk_response(risk_eval)
+
+        step_up_at = _resolve_step_up_at(payload)
+        step_up_scope = _resolve_step_up_scope(payload)
+        has_valid_step_up = bool(payload.get("mfa_verified")) and step_up_at is not None
+        if has_valid_step_up:
+            age_seconds = (datetime.now(timezone.utc) - step_up_at).total_seconds()
+            if age_seconds > STEP_UP_MAX_AGE_SECONDS:
+                has_valid_step_up = False
+
+        scope_allowed = "*" in step_up_scope or normalized_action in step_up_scope
+        if not has_valid_step_up or not scope_allowed:
+            event = create_risk_event(
+                db,
+                user=current_user,
+                action_name=normalized_action,
+                risk_level=risk_eval.risk_level,
+                risk_reasons=risk_eval.risk_reasons,
+                requires_step_up=True,
+                ip_address=(risk_eval.context.get("context") or {}).get("ip_address"),
+                country_iso=(risk_eval.context.get("context") or {}).get("country_iso"),
+                device_fingerprint=(risk_eval.context.get("context") or {}).get("device_fingerprint"),
+                metadata={"step_up_scope": step_up_scope, "scope_allowed": scope_allowed},
+            )
+            maybe_create_suspicious_alert(db, user=current_user, risk_event=event)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "reason_code": "step_up_required",
+                    "required_action": normalized_action,
+                    **risk_response,
+                },
+            )
+
+        return current_user
+
+    return _dependency
+
+
 def require_fresh_step_up(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_step_up_for("global_critical_action")),
 ) -> User:
-    payload = getattr(request.state, "auth_payload", None)
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing_auth_payload")
-
-    if not bool(payload.get("mfa_verified")):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="step_up_required")
-
-    verified_at = _resolve_mfa_verified_at(payload)
-    if verified_at is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="step_up_required")
-
-    age_seconds = (datetime.now(timezone.utc) - verified_at).total_seconds()
-    if age_seconds > STEP_UP_MAX_AGE_SECONDS:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="step_up_required")
-
+    _ = request
     return current_user
 
 

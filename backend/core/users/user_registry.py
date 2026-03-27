@@ -20,6 +20,9 @@ class UserLoginSession:
     access_token: str
 
 
+_DUMMY_PASSWORD_HASH = "$2b$12$fb78Hlro9YwdPp44T7C7NOSuNhP.DS0NZu8B/suMK0Il31TCDy0Qu"
+
+
 def _normalize_email(email: str) -> str:
     return email.strip()
 
@@ -175,7 +178,11 @@ def user_login_with_policy(
 ) -> UserLoginSession:
     normalized_email = _normalize_email(payload.email)
     user = db.query(User).filter(User.email == normalized_email).first()
-    if user is None or not verify_password(payload.password, user.password_hash):
+    if user is None:
+        verify_password(payload.password, _DUMMY_PASSWORD_HASH)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if target_role and user.role != target_role:

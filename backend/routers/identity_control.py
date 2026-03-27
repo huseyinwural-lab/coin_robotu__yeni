@@ -10,6 +10,7 @@ from db import get_db
 from deps import require_admin
 from model_domains.identity_control import IdentityApprovalRequest, IdentityRolePolicy, LoginHistoryEvent, UserBotScope, UserInviteToken, UserStrategyScope
 from model_domains.identity_control import ApprovalPolicyConfig
+from model_domains.security_branding import AuthRiskEvent, SuspiciousActivityAlert
 from models import User, UserRole
 from services.audit_service import create_audit_log
 from services.identity_control_service import (
@@ -47,6 +48,7 @@ from services.user_observability_service import (
     get_user_security_telemetry,
     get_user_trading_observability,
 )
+from services.suspicious_activity_service import list_open_suspicious_alerts, resolve_suspicious_alert
 
 router = APIRouter(prefix="/admin/identity", tags=["identity-control"])
 
@@ -212,6 +214,10 @@ class ApprovalPolicyUpdatePayload(BaseModel):
     required_approvals: int | None = Field(default=None, ge=1, le=5)
     requester_roles: list[str] | None = None
     approver_roles: list[str] | None = None
+
+
+class SuspiciousAlertResolvePayload(BaseModel):
+    note: str = ""
 
 
 def _request_if_critical(
@@ -1370,3 +1376,68 @@ def admin_identity_bot_scope(
     if target is not None:
         evaluate_user_eligibility(db, user=target, commit=True)
     return {"id": row.id, "user_id": row.user_id, "bot_profile_id": row.bot_profile_id, "is_enabled": row.is_enabled}
+
+
+@router.get("/security/suspicious-alerts")
+def admin_identity_suspicious_alerts(
+    limit: int = Query(default=100, ge=1, le=500),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.audit.read")
+    rows = list_open_suspicious_alerts(db, limit=limit)
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "user_id": row.user_id,
+                "risk_event_id": row.risk_event_id,
+                "severity": row.severity,
+                "status": row.status,
+                "title": row.title,
+                "details": row.details_json,
+                "created_at": row.created_at,
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.post("/security/suspicious-alerts/{alert_id}/resolve")
+def admin_identity_resolve_suspicious_alert(
+    alert_id: str,
+    payload: SuspiciousAlertResolvePayload,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.audit.read")
+    row = resolve_suspicious_alert(db, alert_id=alert_id, resolver_user_id=current_admin.id, note=payload.note)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="suspicious_alert_not_found")
+    db.commit()
+    return {"status": "resolved", "id": row.id, "resolved_at": row.resolved_at, "resolver_user_id": current_admin.id}
+
+
+@router.get("/security/metrics")
+def admin_identity_security_metrics(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.audit.read")
+
+    success_count = db.query(LoginHistoryEvent).filter(LoginHistoryEvent.outcome == "SUCCESS").count()
+    fail_count = db.query(LoginHistoryEvent).filter(LoginHistoryEvent.outcome == "FAILURE").count()
+    lockout_count = db.query(LoginHistoryEvent).filter(LoginHistoryEvent.lock_until.isnot(None)).count()
+    step_up_trigger_count = db.query(AuthRiskEvent).filter(AuthRiskEvent.requires_step_up.is_(True)).count()
+    high_risk_count = db.query(AuthRiskEvent).filter(AuthRiskEvent.risk_level.in_(["high", "critical"])).count()
+    open_alert_count = db.query(SuspiciousActivityAlert).filter(SuspiciousActivityAlert.status == "open").count()
+
+    return {
+        "mfa_success_rate": (success_count / max(success_count + fail_count, 1)),
+        "mfa_fail_rate": (fail_count / max(success_count + fail_count, 1)),
+        "attack_attempt_count": fail_count,
+        "lockout_count": lockout_count,
+        "step_up_trigger_count": step_up_trigger_count,
+        "high_risk_event_count": high_risk_count,
+        "open_suspicious_alert_count": open_alert_count,
+    }

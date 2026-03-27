@@ -50,7 +50,9 @@ from services.identity_control_service import (
     resolve_ip_hash,
     revoke_session,
 )
+from services.risk_policy_service import evaluate_request_risk, standardized_risk_response
 from services.security_audit_context_service import build_security_audit_context
+from services.suspicious_activity_service import create_risk_event, maybe_create_suspicious_alert
 from services.password_reset_service import (
     build_password_reset_link,
     consume_password_reset_token,
@@ -61,6 +63,7 @@ from services.onboarding_approval_service import execute_onboarding_decision
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 AUTH_PROTECTION_SCOPE = "auth_access"
+MANDATORY_MFA_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}
 
 
 class AdminProfileUpdateRequest(BaseModel):
@@ -157,6 +160,25 @@ def _login_with_policy(
     user = session.user
     current_device_fingerprint = resolve_device_fingerprint(request)
     is_new_device = not is_known_device(db, user_id=user.id, device_fingerprint=current_device_fingerprint)
+    risk_eval = evaluate_request_risk(db, user=user, request=request, action_name="login")
+    mandatory_mfa = user.role in MANDATORY_MFA_ROLES
+    risk_requires_challenge = bool(risk_eval.requires_step_up)
+    requires_challenge = bool(mandatory_mfa or risk_eval.requires_step_up)
+
+    risk_event = create_risk_event(
+        db,
+        user=user,
+        action_name="login",
+        risk_level=risk_eval.risk_level,
+        risk_reasons=risk_eval.risk_reasons,
+        requires_step_up=requires_challenge,
+        ip_address=(risk_eval.context.get("context") or {}).get("ip_address"),
+        country_iso=(risk_eval.context.get("context") or {}).get("country_iso"),
+        device_fingerprint=current_device_fingerprint,
+        metadata={"mandatory_mfa": mandatory_mfa, "new_device": is_new_device},
+    )
+    maybe_create_suspicious_alert(db, user=user, risk_event=risk_event)
+
     session_context = {
         "ip_hash": resolve_ip_hash(request),
         "device_fingerprint": current_device_fingerprint,
@@ -182,8 +204,8 @@ def _login_with_policy(
     mfa_payload = start_mfa_challenge_if_required(
         db,
         user=user,
-        force_challenge=is_new_device,
-        challenge_reason="new_device" if is_new_device else "standard_login",
+        force_challenge=risk_requires_challenge,
+        challenge_reason=(risk_eval.risk_reasons[0] if risk_eval.risk_reasons else ("mandatory_mfa" if mandatory_mfa else "standard_login")),
         request_ip=audit_context.get("ip_address"),
     )
     if mfa_payload:
@@ -227,6 +249,10 @@ def _login_with_policy(
             mfa_grace_active=bool(mfa_payload.get("mfa_grace_active")),
             mfa_grace_expires_at=mfa_payload.get("mfa_grace_expires_at"),
             mfa_setup_required=bool(mfa_payload.get("mfa_setup_required")),
+            requires_step_up=True,
+            risk_level=risk_eval.risk_level,
+            risk_reasons=list(risk_eval.risk_reasons or []),
+            challenge_reason=mfa_payload.get("challenge_reason") or (risk_eval.risk_reasons[0] if risk_eval.risk_reasons else None),
             email_delivery_status=mfa_payload.get("email_delivery_status"),
             email_code_preview=mfa_payload.get("email_code_preview"),
         )
@@ -239,6 +265,7 @@ def _login_with_policy(
         device_id=device_id,
         ip_hash=session_context.get("ip_hash"),
         device_fingerprint=session_context.get("device_fingerprint"),
+        step_up_scope=["auth_login"],
     )
     set_device_cookie(response, request, device_id=device_id)
     register_auth_session(db, user=user, access_token=access_token, request=request, commit=False)
@@ -269,6 +296,10 @@ def _login_with_policy(
         role=user.role.value,
         user=user,
         mfa_verified=False,
+        requires_step_up=False,
+        risk_level=risk_eval.risk_level,
+        risk_reasons=list(risk_eval.risk_reasons or []),
+        step_up_scope=["auth_login"],
     )
 
 
@@ -307,6 +338,13 @@ def post_step_up_auth(
         "ip_hash": resolve_ip_hash(request),
         "device_fingerprint": resolve_device_fingerprint(request),
     }
+    requested_scope = [str(item or "").strip().lower() for item in (payload.scope or []) if str(item or "").strip()]
+    if not requested_scope:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="step_up_scope_required")
+
+    risk_eval = evaluate_request_risk(db, user=current_user, request=request, action_name=requested_scope[0])
+    risk_response = standardized_risk_response(risk_eval)
+
     enforce_login_protection(
         db,
         request=request,
@@ -322,6 +360,7 @@ def post_step_up_auth(
             code=payload.code,
             device_id=device_id,
             session_context=session_context,
+            step_up_scope=requested_scope,
         )
     except HTTPException as exc:
         record_login_failure(
@@ -356,7 +395,12 @@ def post_step_up_auth(
         commit=False,
     )
     db.commit()
-    return AuthResponse(**result)
+    return AuthResponse(
+        **result,
+        requires_step_up=False,
+        risk_level=risk_response.get("risk_level", "low"),
+        risk_reasons=risk_response.get("risk_reasons") or [],
+    )
 
 
 @router.get("/sessions/active")

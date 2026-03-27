@@ -42,6 +42,12 @@ from services.mfa_service import (
     verify_mfa_challenge,
     verify_totp_setup,
 )
+from services.recovery_approval_service import (
+    approve_recovery_request,
+    create_recovery_request,
+    finalize_recovery_request,
+    list_recovery_requests,
+)
 from services.security_audit_context_service import build_security_audit_context
 
 router = APIRouter(prefix="/auth/mfa", tags=["mfa"])
@@ -68,6 +74,16 @@ class MfaBootstrapVerifyRequest(BaseModel):
     email: str
     password: str
     code: str = Field(min_length=6, max_length=10)
+
+
+class RecoveryRequestPayload(BaseModel):
+    user_id: str | None = None
+    reason: str = Field(min_length=12, max_length=1000)
+    delay_minutes: int = Field(default=15, ge=1, le=1440)
+
+
+class RecoveryApprovePayload(BaseModel):
+    note: str = ""
 
 
 @router.get("/settings", response_model=MfaSettingsResponse)
@@ -381,6 +397,10 @@ def post_public_mfa_challenge(
         mfa_challenge_token=challenge.get("mfa_challenge_token"),
         mfa_methods=list(challenge.get("mfa_methods") or []),
         mfa_expires_at=challenge.get("mfa_expires_at"),
+        requires_step_up=True,
+        risk_level="medium",
+        risk_reasons=[str(payload.reason or "manual_challenge")],
+        challenge_reason=str(payload.reason or "manual_challenge"),
         email_delivery_status=challenge.get("email_delivery_status"),
         email_code_preview=challenge.get("email_code_preview"),
     )
@@ -464,6 +484,137 @@ def post_admin_mfa_reset(
         details={"revoked_sessions": revoked, "target_email": target.email},
     )
     return {"status": "ok", "target_user_id": target_user_id, "revoked_sessions": revoked, "mfa": payload}
+
+
+@router.post("/recovery/request")
+def post_recovery_request(
+    payload: RecoveryRequestPayload,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    target_user_id = payload.user_id or current_user.id
+    if target_user_id != current_user.id and current_user.role not in {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}:
+        raise HTTPException(status_code=403, detail="recovery_target_forbidden")
+    row = create_recovery_request(
+        db,
+        target_user_id=target_user_id,
+        requested_by_user_id=current_user.id,
+        reason=payload.reason,
+        delay_minutes=payload.delay_minutes,
+    )
+    create_audit_log(
+        db,
+        action="mfa_recovery_requested",
+        entity_type="user",
+        entity_id=target_user_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning",
+        details={"recovery_request_id": row.id, **build_security_audit_context(request)},
+    )
+    db.commit()
+    return {
+        "status": row.status,
+        "recovery_request_id": row.id,
+        "required_approvals": row.required_approvals,
+        "approval_count": row.approval_count,
+        "ready_after": row.ready_after,
+    }
+
+
+@router.post("/recovery/{request_id}/approve")
+def post_recovery_approve(
+    request_id: str,
+    payload: RecoveryApprovePayload,
+    request: Request,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = approve_recovery_request(db, request_id=request_id, approver=current_admin, note=payload.note)
+    create_audit_log(
+        db,
+        action="mfa_recovery_approval_added",
+        entity_type="mfa_recovery_request",
+        entity_id=row.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={"approval_count": row.approval_count, **build_security_audit_context(request)},
+    )
+    db.commit()
+    return {
+        "status": row.status,
+        "recovery_request_id": row.id,
+        "approval_count": row.approval_count,
+        "required_approvals": row.required_approvals,
+        "ready_after": row.ready_after,
+    }
+
+
+@router.post("/recovery/{request_id}/finalize")
+def post_recovery_finalize(
+    request_id: str,
+    request: Request,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = finalize_recovery_request(db, request_id=request_id, finalizer=current_admin)
+    target_user = db.query(User).filter(User.id == row.user_id).first()
+    if target_user is None:
+        raise HTTPException(status_code=404, detail="recovery_target_user_not_found")
+
+    payload = admin_reset_user_mfa(db, user_id=row.user_id)
+    revoked = revoke_all_active_sessions_for_user(
+        db,
+        target_user_id=row.user_id,
+        actor=current_admin,
+        reason="recovery_finalize_mfa_reset",
+    )
+    create_audit_log(
+        db,
+        action="mfa_recovery_finalized",
+        entity_type="mfa_recovery_request",
+        entity_id=row.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="critical",
+        details={"target_user_id": row.user_id, "revoked_sessions": revoked, **build_security_audit_context(request)},
+    )
+    db.commit()
+    return {
+        "status": row.status,
+        "recovery_request_id": row.id,
+        "target_user_id": row.user_id,
+        "revoked_sessions": revoked,
+        "mfa": payload,
+    }
+
+
+@router.get("/recovery/requests")
+def get_recovery_requests(
+    status_filter: str | None = None,
+    limit: int = 100,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    rows = list_recovery_requests(db, status_filter=status_filter, limit=limit)
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "user_id": row.user_id,
+                "requested_by_user_id": row.requested_by_user_id,
+                "status": row.status,
+                "approval_count": row.approval_count,
+                "required_approvals": row.required_approvals,
+                "ready_after": row.ready_after,
+                "created_at": row.created_at,
+            }
+            for row in rows
+        ],
+        "actor": current_admin.id,
+    }
 
 
 @router.post("/bootstrap/totp/start")
