@@ -1,3 +1,34 @@
+## 2026-03-27 — P2-401 + P2-402 Başlangıç İskeleti Tamamlandı
+
+### Uygulanan Kapsam
+- **P2-401 Control Plane Cockpit**
+  - Yeni endpoint: `GET /api/venues/admin/control-plane-cockpit`
+  - Bloklar: `global_overview`, `active_route_map`, `failover_state_board`, `route_churn_anomaly_alert`, `last_critical_changes`
+  - Route churn anomaly eşiği parametreli: `window_minutes` + `churn_threshold`
+  - Varsayılan ve uygulanan eşik: **son 30 dk içinde >=5 geçiş**
+- **P2-402 Conflict Detection Center (iskelet)**
+  - Yeni endpoint: `GET /api/venues/admin/conflict-detection-center`
+  - Çıktı: `net_status`, `alerts`, `blocking_alerts`, `warning_alerts`, `summary`
+  - İlk conflict kuralları: `default_venue_blocked`, `preferred_and_blocked_overlap`, `capital_allocation_missing`, `primary_force_disabled`, `primary_secondary_same`
+
+### Frontend Güncellemeleri
+- Yeni panel: `ControlPlaneCockpitPanel.jsx`
+  - overview, route map, churn alert, last critical changes görünümü
+  - threshold inputları ile canlı yenileme
+- Yeni panel: `ConflictDetectionPanel.jsx`
+  - blocking/warning alert listeleri + özet
+- `AdminExchangesPage.jsx` içine cockpit + conflict panelleri entegre edildi.
+
+### Doğrulama
+- Testing Agent raporu: `/app/test_reports/iteration_155.json`
+  - Backend: **20/20 PASS**
+  - Frontend data-testid doğrulaması: **PASS**
+- Route churn tetik doğrulaması raporda geçti: 30dk/5 eşiğinde `status=BLOCK` ve `hot_routes` döndü.
+
+### Sonraki Adım
+- P2-403 Validation Center UI (timeline + diff + rerun controls)
+- P2-404 Strategy-to-Venue Heatmap (allocation drift + route churn görselleştirme)
+
 ## 2026-03-27 — P2 Iteration (P2.1 + P2.2 + P2.3) Tamamlandı
 
 ### Kapsam Kararı
