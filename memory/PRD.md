@@ -1,3 +1,37 @@
+## 2026-03-27 — P2-406 + P2-407 + P2-408 Tamamlandı
+
+### P2-406 — Validation Center Trend Chart + Root-Cause Hints
+- `GET /api/venues/admin/validation-center` genişletildi:
+  - `check_level_trends`
+  - `top_reason_codes`
+  - drift alertlerde `latest_reason_codes` + `root_cause_hints`
+- Drift kuralı aktif: **24 saat içinde PASS→WARN/BLOCK**
+- UI: `ValidationCenterPanel` içinde trend listesi, root-cause hint görünümü ve rerun akışı
+
+### P2-407 — Heatmap Zaman Dilimi Karşılaştırması (24h vs 30d)
+- `GET /api/venues/admin/strategy-venue-heatmap` genişletildi:
+  - `compare_window_hours` parametresi (varsayılan 720h = 30d)
+  - `comparison.strategy_deltas`
+  - `compare_window`
+- UI: `StrategyVenueHeatmapPanel` içinde 24h vs 30d drift/churn delta görünümü
+
+### P2-408 — Remediation Approval Workflow
+- `POST /api/venues/admin/conflict-auto-remediation-apply` workflow modları:
+  - `dry_run`
+  - `submit` (approval queue)
+  - `approve_apply` (onay + uygulama)
+- Yeni endpoint: `GET /api/venues/admin/conflict-auto-remediation-approvals`
+- Draft endpoint genişletildi:
+  - `approval_requests`
+  - `pending_approval_count`
+- UI: `ConflictAutoRemediationPanel` içinde dry-run, onaya gönder, onayla/uygula akışları
+
+### Test / Doğrulama
+- Testing Agent raporu: `/app/test_reports/iteration_157.json`
+  - Backend: **23/24 PASS, 1 SKIPPED**
+  - Frontend: **26/26 PASS**
+- Test dosyası: `/app/backend/tests/test_iteration157_p2_406_407_408.py`
+
 ## 2026-03-27 — P2-403 + P2-404 + P2-405 Tamamlandı
 
 ### P2-403 — Validation Center UI
