@@ -12,6 +12,7 @@ from models import AuditLog, BotProfile, PaperPosition, Position, PositionLedger
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
+from services.execution_pipeline_orchestrator import ExecutionPipelineViolation, run_execution_pipeline
 from services.execution_mode_control_service import enforce_execution_mode_for_intent
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.execution_safety_service import enforce_execution_open_allowed_or_raise
@@ -102,6 +103,14 @@ def _safe_spread_bps(symbol: str) -> float:
         return float(parsed.get("spread_bps") or 0.0)
     except Exception:
         return 0.0
+
+
+def _has_market_data(symbol: str) -> bool:
+    try:
+        payload = redis_client.get(f"market:ticker:{symbol}")
+        return bool(payload)
+    except Exception:
+        return False
 
 
 def _default_bot(db: Session, user_id: str, market_type: str, symbol: str | None = None) -> BotProfile:
@@ -798,6 +807,49 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
             final_reject_codes = []
             final_risk_flags = sorted(set([*final_risk_flags, "testnet_signal_bridge_soft_override"]))
 
+    pipeline_context = {
+        "intent_token": token,
+        "user_id": user_id,
+        "portfolio_id": payload.get("portfolio_id") or user_id,
+        "strategy_binding": strategy_binding,
+        "symbol": symbol,
+        "environment": requested_environment,
+        "market_type": str(normalized.get("market_type") or payload.get("market_type") or "spot"),
+        "margin_mode": str(normalized.get("margin_mode") or payload.get("margin_mode") or ""),
+        "volatility_pct": float(payload.get("volatility_pct") or 0.0),
+        "risk_score": float(risk_impact.get("risk_score") or 0.0),
+        "proposed_notional": max(adjusted_notional, 0.0),
+        "market_data_available": _has_market_data(symbol),
+        "portfolio_drawdown_pct": payload.get("portfolio_drawdown_pct"),
+        "market_snapshot": scanner_snapshot or payload.get("market_snapshot") or {},
+    }
+    pipeline_result = run_execution_pipeline(
+        db,
+        lifecycle_action="preview",
+        context=pipeline_context,
+    )
+    policy_decision = pipeline_result.get("policy_decision") or {}
+    pipeline_reject = pipeline_result.get("standardized_reject") or {}
+    if str(pipeline_result.get("enforced_action") or "ALLOW").upper() == "BLOCK":
+        validation["validation_status"] = "rejected"
+        reject_code = str(pipeline_reject.get("reason_code") or "POLICY_PRETRADE_BLOCK")
+        final_reject_codes = sorted(set([*final_reject_codes, reject_code]))
+        final_risk_flags = sorted(set([*final_risk_flags, "pipeline_pretrade_blocked"]))
+        gate_decision = "BLOCK"
+    elif pipeline_reject:
+        reject_code = str(pipeline_reject.get("reason_code") or "policy_violation_logged")
+        final_risk_flags = sorted(
+            set(
+                [
+                    *final_risk_flags,
+                    "pipeline_violation_logged",
+                    f"pipeline_reason:{reject_code.lower()}",
+                ]
+            )
+        )
+        if str(policy_decision.get("recommended_action") or "ALLOW").upper() == "BLOCK":
+            gate_decision = "BLOCK"
+
     normalized["meta_strategy_summary"] = meta_summary
     normalized["portfolio_risk_impact"] = {
         "risk_score": risk_impact.get("risk_score"),
@@ -815,6 +867,14 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     normalized["capital_rebalance"] = rebalance_result
     normalized["hedge_suggestion"] = hedge_suggestion
     normalized["risk_engine"] = risk_engine_result
+    normalized["execution_pipeline"] = {
+        "pipeline_id": pipeline_result.get("pipeline_id"),
+        "rollout_mode": pipeline_result.get("rollout_mode"),
+        "recommended_action": pipeline_result.get("recommended_action"),
+        "enforced_action": pipeline_result.get("enforced_action"),
+        "stage_results": pipeline_result.get("stages") or [],
+        "standardized_reject": pipeline_reject,
+    }
 
     if normalized.get("size") is not None:
         action_size = _to_float(normalized.get("size"), action_size)
@@ -958,6 +1018,12 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     validation["applied_leverage"] = normalized.get("leverage_applied")
     validation["leverage_policy_mode"] = normalized.get("leverage_policy_mode")
     validation["leverage_clamp_reasons"] = normalized.get("leverage_clamp_reasons") or []
+    validation["policy_decision"] = policy_decision
+    validation["policy_trace"] = policy_decision.get("trace") or {}
+    validation["pipeline_stage_results"] = pipeline_result.get("stages") or []
+    validation["standardized_reject"] = pipeline_reject if pipeline_reject else None
+    validation["rollout_mode"] = pipeline_result.get("rollout_mode") or "shadow"
+    validation["execution_mode"] = str(requested_environment or "testnet").lower()
 
     try:
         db.commit()
@@ -997,6 +1063,71 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         raise ValueError("preview_required")
     if preview_hash and preview_hash != intent.preview_hash:
         raise ValueError("preview_hash_mismatch")
+
+    normalized_payload = dict(intent.normalized_order_payload or {})
+    submit_pipeline_context = {
+        "intent_id": intent.id,
+        "intent_token": intent.intent_token,
+        "user_id": user_id,
+        "portfolio_id": normalized_payload.get("portfolio_id") or user_id,
+        "strategy_binding": normalized_payload.get("strategy_binding") or "",
+        "symbol": str(intent.symbol or ""),
+        "environment": normalized_payload.get("environment") or "testnet",
+        "market_type": str(intent.market_type or "spot"),
+        "margin_mode": normalized_payload.get("margin_mode") or "",
+        "volatility_pct": _to_float(normalized_payload.get("volatility_pct"), 0.0),
+        "risk_score": float(intent.risk_score or 0.0),
+        "proposed_notional": float(intent.notional or 0.0),
+        "market_data_available": _has_market_data(str(intent.symbol or "")),
+        "portfolio_drawdown_pct": normalized_payload.get("portfolio_drawdown_pct"),
+        "market_snapshot": normalized_payload.get("market_snapshot") or normalized_payload.get("scanner_signal_snapshot") or {},
+    }
+    submit_pipeline_result = run_execution_pipeline(
+        db,
+        lifecycle_action="submit",
+        context=submit_pipeline_context,
+    )
+    submit_pipeline_reject = submit_pipeline_result.get("standardized_reject") or {}
+    normalized_payload["submit_execution_pipeline"] = {
+        "pipeline_id": submit_pipeline_result.get("pipeline_id"),
+        "rollout_mode": submit_pipeline_result.get("rollout_mode"),
+        "recommended_action": submit_pipeline_result.get("recommended_action"),
+        "enforced_action": submit_pipeline_result.get("enforced_action"),
+        "stage_results": submit_pipeline_result.get("stages") or [],
+        "standardized_reject": submit_pipeline_reject,
+    }
+    if submit_pipeline_reject:
+        reason_code = str(submit_pipeline_reject.get("reason_code") or "POLICY_PRETRADE_BLOCK")
+        intent.risk_flags = sorted(
+            set(
+                [
+                    *(intent.risk_flags or []),
+                    "pipeline_violation_logged",
+                    f"pipeline_reason:{reason_code.lower()}",
+                ]
+            )
+        )
+    intent.normalized_order_payload = normalized_payload
+
+    if str(submit_pipeline_result.get("enforced_action") or "ALLOW").upper() == "BLOCK":
+        block_code = str(submit_pipeline_reject.get("reason_code") or "POLICY_PRETRADE_BLOCK")
+        intent.reject_reason_codes = sorted(set([*(intent.reject_reason_codes or []), block_code]))
+        _transition_execution_intent_status(
+            intent,
+            target_status="REJECTED",
+            actor_user_id=user_id,
+            reason=f"pipeline_block:{block_code}",
+        )
+        db.commit()
+        db.refresh(intent)
+        raise ExecutionPipelineViolation(
+            standardized_reject={
+                **submit_pipeline_reject,
+                "stage": submit_pipeline_reject.get("stage") or "PRE_TRADE",
+                "action_taken": submit_pipeline_reject.get("action_taken") or "BLOCK",
+            },
+            pipeline_result=submit_pipeline_result,
+        )
 
     operation = None
     if intent.intent_type == "OPEN_POSITION":
@@ -1112,6 +1243,7 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
             "preview_hash": intent.preview_hash,
             "queue_mode": intent.queue_mode,
             "capital_rebalance": rebalance_apply_result,
+            "execution_pipeline": (intent.normalized_order_payload or {}).get("submit_execution_pipeline") or {},
         },
     )
     db.commit()

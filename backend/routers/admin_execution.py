@@ -49,6 +49,11 @@ from services.execution_intent_service import (
     retry_execution_intent,
 )
 from services.execution_precheck_service import load_execution_policy_registry
+from services.execution_policy_service import (
+    build_execution_policy_observability,
+    get_execution_policy_engine_config,
+    list_recent_execution_policy_decisions,
+)
 from services.execution_readiness_service import evaluate_execution_readiness
 from services.guard_metrics_service import build_guard_telemetry_payload
 from services.execution_safety_service import ExecutionSafetyViolation
@@ -1281,15 +1286,30 @@ def revoke_execution_guard_override(
 def execution_policies(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     _ = current_user
     registry = load_execution_policy_registry()
+    engine_config = get_execution_policy_engine_config(db)
+    observability = build_execution_policy_observability(db, hours=24)
+    recent_decisions = list_recent_execution_policy_decisions(db, limit=40)
     recent_violations = (
         db.query(AuditLog)
-        .filter(AuditLog.action.in_(["EXECUTION_INTENT_REJECTED"]))
+        .filter(
+            AuditLog.action.in_(
+                [
+                    "EXECUTION_INTENT_REJECTED",
+                    "EXECUTION_BLOCKED",
+                    "EXECUTION_DECISION_BLOCKED_APPROVE",
+                    "EXECUTION_DECISION_BLOCKED_EXECUTE",
+                ]
+            )
+        )
         .order_by(AuditLog.created_at.desc())
         .limit(20)
         .all()
     )
     return {
         "registry": registry,
+        "engine_config": engine_config,
+        "observability_metrics": observability,
+        "policy_decision_log": recent_decisions,
         "recent_policy_violations": [
             {
                 "entity_id": row.entity_id,

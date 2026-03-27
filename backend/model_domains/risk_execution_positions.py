@@ -277,9 +277,46 @@ class ExecutionPolicy(Base):
     partial_fill_tolerance_pct: Mapped[float] = mapped_column(Float, default=50)
     execution_urgency: Mapped[str] = mapped_column(String(20), default="medium")
     retry_limit: Mapped[int] = mapped_column(Integer, default=2)
+    policy_scope: Mapped[str] = mapped_column(String(30), default="strategy", index=True)
+    scope_key: Mapped[str] = mapped_column(String(120), default="default", index=True)
+    policy_code: Mapped[str | None] = mapped_column(String(160), nullable=True, unique=True, index=True)
+    priority: Mapped[int] = mapped_column(Integer, default=100, index=True)
+    override_behavior: Mapped[str] = mapped_column(String(20), default="merge")
+    conditions_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    rules_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    enforcement_action: Mapped[str] = mapped_column(String(20), default="BLOCK")
+    severity: Mapped[str] = mapped_column(String(20), default="HIGH")
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExecutionPolicyDecisionLog(Base):
+    __tablename__ = "execution_policy_decision_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    pipeline_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    lifecycle_action: Mapped[str] = mapped_column(String(20), default="preview", index=True)
+    stage: Mapped[str] = mapped_column(String(30), default="PRE_TRADE", index=True)
+    intent_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    intent_token: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    symbol: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    strategy_binding: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    environment: Mapped[str] = mapped_column(String(30), default="testnet", index=True)
+    rollout_mode: Mapped[str] = mapped_column(String(20), default="shadow")
+    recommended_action: Mapped[str] = mapped_column(String(20), default="ALLOW")
+    enforced_action: Mapped[str] = mapped_column(String(20), default="ALLOW")
+    reason_code: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    reason_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    policy_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    rule_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    severity: Mapped[str] = mapped_column(String(20), default="INFO", index=True)
+    action_taken: Mapped[str] = mapped_column(String(80), default="ALLOW")
+    is_violation: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    trace_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 class RiskExposureGroup(Base):
     __tablename__ = "risk_exposure_groups"

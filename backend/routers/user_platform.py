@@ -58,6 +58,7 @@ from schemas import (
 from services.audit_service import create_audit_log, create_domain_event
 from services.explainability_rules_service import build_trade_explain
 from services.execution_intent_service import submit_execution_intent
+from services.execution_pipeline_orchestrator import ExecutionPipelineViolation
 from services.commercial_controls_enforcement_service import (
     CommercialControlViolation,
     enforce_commercial_control_or_raise,
@@ -139,6 +140,14 @@ def _submit_trade_with_guard(
 
     try:
         intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
+    except ExecutionPipelineViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={
+                **(exc.standardized_reject or {}),
+                "pipeline": exc.pipeline_result,
+            },
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except CommercialControlViolation as exc:
@@ -156,12 +165,16 @@ def _submit_trade_with_guard(
         actor_role=current_user.role.value,
         details={"source": source, "intent_type": intent.intent_type, "symbol": intent.symbol},
     )
+    submit_pipeline = (intent.normalized_order_payload or {}).get("submit_execution_pipeline") or {}
+    submit_soft_reject = submit_pipeline.get("standardized_reject") or {}
     return ExecutionIntentSubmitResponse(
         intent_id=intent.id,
         intent_status="QUEUED_FOR_APPROVAL",
-        reason_codes=[],
+        reason_codes=[str(submit_soft_reject.get("reason_code"))] if submit_soft_reject.get("reason_code") else [],
         queue_state=intent.status,
         execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+        policy_decision=submit_pipeline,
+        pipeline_trace=submit_pipeline.get("stage_results") or [],
         explain=build_trade_explain(
             validation=precheck,
             execution_mode=str(readiness.get("mode") or "MOCKED").lower(),

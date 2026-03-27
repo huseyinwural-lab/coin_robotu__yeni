@@ -16,6 +16,7 @@ from schemas import (
 from services.audit_service import create_audit_log, create_guard_audit_event
 from services.explainability_rules_service import build_trade_explain
 from services.execution_intent_service import preview_execution_intent, submit_execution_intent
+from services.execution_pipeline_orchestrator import ExecutionPipelineViolation
 from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
 from services.execution_safety_service import ExecutionSafetyViolation
 from services.quote_asset_constraints import (
@@ -69,6 +70,11 @@ def _build_preview_response(intent, validation: dict) -> ExecutionIntentPreviewR
         applied_leverage=validation.get("applied_leverage"),
         leverage_policy_mode=validation.get("leverage_policy_mode"),
         leverage_clamp_reasons=validation.get("leverage_clamp_reasons") or [],
+        policy_decision=validation.get("policy_decision") or {},
+        policy_trace=validation.get("policy_trace") or {},
+        pipeline_stage_results=validation.get("pipeline_stage_results") or [],
+        standardized_reject=validation.get("standardized_reject"),
+        rollout_mode=str(validation.get("rollout_mode") or "shadow"),
     )
 
 
@@ -265,6 +271,14 @@ def execute_trading(
 
     try:
         intent = submit_execution_intent(db, current_user.id, payload.intent_token, preview_hash=payload.preview_hash)
+    except ExecutionPipelineViolation as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={
+                **(exc.standardized_reject or {}),
+                "pipeline": exc.pipeline_result,
+            },
+        ) from exc
     except ExecutionSafetyViolation as exc:
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
@@ -297,12 +311,16 @@ def execute_trading(
         actor_role=current_user.role.value,
         details={"intent_token": intent.intent_token, "queue_mode": intent.queue_mode},
     )
+    submit_pipeline = (intent.normalized_order_payload or {}).get("submit_execution_pipeline") or {}
+    submit_soft_reject = submit_pipeline.get("standardized_reject") or {}
     return ExecutionIntentSubmitResponse(
         intent_id=intent.id,
         intent_status="QUEUED_FOR_APPROVAL",
-        reason_codes=[],
+        reason_codes=[str(submit_soft_reject.get("reason_code"))] if submit_soft_reject.get("reason_code") else [],
         queue_state=intent.status,
         execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+        policy_decision=submit_pipeline,
+        pipeline_trace=submit_pipeline.get("stage_results") or [],
         explain=build_trade_explain(
             validation=precheck,
             execution_mode=str(readiness.get("mode") or "MOCKED").lower(),

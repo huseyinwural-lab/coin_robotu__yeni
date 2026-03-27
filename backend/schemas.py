@@ -2763,6 +2763,11 @@ class ExecutionIntentPreviewResponse(BaseModel):
     leverage_policy_mode: str | None = None
     leverage_clamp_reasons: list[str] = Field(default_factory=list)
     execution_mode: str = "mocked"
+    policy_decision: dict = Field(default_factory=dict)
+    policy_trace: dict = Field(default_factory=dict)
+    pipeline_stage_results: list[dict] = Field(default_factory=list)
+    standardized_reject: dict | None = None
+    rollout_mode: str = "shadow"
 
 
 class TradingPreviewRateLimitResponse(BaseModel):
@@ -2788,6 +2793,8 @@ class ExecutionIntentSubmitResponse(BaseModel):
     reason_codes: list[str]
     queue_state: str
     execution_mode: str = "mocked"
+    policy_decision: dict = Field(default_factory=dict)
+    pipeline_trace: list[dict] = Field(default_factory=list)
     explain: list[str] = Field(default_factory=list, min_length=1)
 
 

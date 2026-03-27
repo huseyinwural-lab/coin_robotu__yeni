@@ -36,6 +36,9 @@ export const ExecutionPoliciesPage = () => {
   }
 
   const registry = payload?.registry || {};
+  const engineConfig = payload?.engine_config || {};
+  const observability = payload?.observability_metrics || {};
+  const decisionLog = payload?.policy_decision_log || [];
   const violations = payload?.recent_policy_violations || [];
 
   return (
@@ -77,6 +80,31 @@ export const ExecutionPoliciesPage = () => {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2" data-testid="execution-policies-grid">
+        <div className="rounded border border-emerald-900/70 bg-slate-900 p-4" data-testid="execution-policies-observability-card">
+          <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="execution-policies-observability-title">Policy Engine Observability</p>
+          <div className="mt-3 grid gap-2 text-xs text-slate-200 md:grid-cols-2" data-testid="execution-policies-observability-metrics">
+            <p data-testid="execution-policies-rollout-mode">rollout_mode: {engineConfig?.rollout_mode || "shadow"}</p>
+            <p data-testid="execution-policies-log-count">decision_log_count: {observability?.decision_log_count ?? 0}</p>
+            <p data-testid="execution-policies-violation-count">violation_count: {observability?.violation_count ?? 0}</p>
+            <p data-testid="execution-policies-risk-breach-count">risk_breach_count: {observability?.risk_breach_metrics?.breach_count ?? 0}</p>
+            <p data-testid="execution-policies-pretrade-total">pre_trade_total: {observability?.pre_post_ratio?.pre_trade_total ?? 0}</p>
+            <p data-testid="execution-policies-posttrade-total">post_trade_total: {observability?.pre_post_ratio?.post_trade_total ?? 0}</p>
+          </div>
+
+          <div className="mt-3 space-y-2" data-testid="execution-policies-stage-rates">
+            {Object.entries(observability?.stage_decision_rates || {}).length === 0 && (
+              <p className="text-xs text-slate-400" data-testid="execution-policies-stage-rates-empty">Stage karar oranı verisi yok.</p>
+            )}
+            {Object.entries(observability?.stage_decision_rates || {}).map(([stage, values]) => (
+              <article key={stage} className="rounded border border-slate-800 p-2" data-testid={`execution-policies-stage-rate-${stage}`}>
+                <p className="text-xs uppercase tracking-wider text-slate-300" data-testid={`execution-policies-stage-rate-title-${stage}`}>{stage}</p>
+                <p className="text-[11px] text-slate-400" data-testid={`execution-policies-stage-rate-allow-${stage}`}>allow_rate: {values?.allow_rate ?? 0}</p>
+                <p className="text-[11px] text-slate-400" data-testid={`execution-policies-stage-rate-block-${stage}`}>block_rate: {values?.block_rate ?? 0}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
         <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-registry-card">
           <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-registry-title">Registry</p>
           <pre className="mt-3 overflow-x-auto text-xs text-slate-200" data-testid="execution-policies-registry-json">{JSON.stringify(registry, null, 2)}</pre>
@@ -94,6 +122,20 @@ export const ExecutionPoliciesPage = () => {
               </article>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-decision-log-card">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-decision-log-title">Policy Decision Log</p>
+        <div className="mt-3 space-y-2" data-testid="execution-policies-decision-log-list">
+          {decisionLog.length === 0 && <p className="text-sm text-slate-400" data-testid="execution-policies-decision-log-empty">Policy decision log kaydı yok.</p>}
+          {decisionLog.slice(0, 12).map((item, index) => (
+            <article key={`${item.id}-${index}`} className="rounded border border-slate-800 p-3" data-testid={`execution-policies-decision-log-row-${index}`}>
+              <p className="text-xs text-slate-300" data-testid={`execution-policies-decision-log-stage-${index}`}>{item.stage} · {item.enforced_action}</p>
+              <p className="text-[11px] text-slate-400" data-testid={`execution-policies-decision-log-reason-${index}`}>reason_code: {item.reason_code || "-"}</p>
+              <p className="text-[11px] text-slate-400" data-testid={`execution-policies-decision-log-time-${index}`}>{item.created_at ? new Date(item.created_at).toLocaleString() : "-"}</p>
+            </article>
+          ))}
         </div>
       </div>
 
