@@ -68,6 +68,12 @@ from services.execution_governance_service import (
     rollback_policy_version,
     update_remediation_recommendation_status,
 )
+from services.execution_environment_control_service import (
+    deactivate_safe_mode,
+    list_environment_overrides,
+    list_safe_mode_states,
+    upsert_environment_override,
+)
 from services.execution_readiness_service import evaluate_execution_readiness
 from services.guard_metrics_service import build_guard_telemetry_payload
 from services.execution_safety_service import ExecutionSafetyViolation
@@ -248,6 +254,19 @@ class PolicyVersionABCompareRequest(BaseModel):
     policy_code: str
     primary_version_id: str
     shadow_version_id: str
+
+
+class EnvironmentOverrideUpsertRequest(BaseModel):
+    environment: str
+    scope_type: str = "GLOBAL"
+    scope_value: str = "*"
+    priority: int = 100
+    override_payload: dict = {}
+    change_summary: str = ""
+
+
+class SafeModeDeactivateRequest(BaseModel):
+    reason: str
 
 
 @router.get("/execution-queue", response_model=list[ExecutionIntentQueueItemResponse])
@@ -1330,6 +1349,8 @@ def execution_policies(current_user: User = Depends(require_admin), db: Session 
     strategy_health = build_strategy_health_state(db, window_hours=24)
     release_gate = build_release_gate_status(db, window_hours=24)
     remediations = list_remediation_recommendations(db, limit=100)
+    environment_overrides = list_environment_overrides(db, environment=None)
+    safe_mode_states = list_safe_mode_states(db, environment=None, active_only=False)
     recent_violations = (
         db.query(AuditLog)
         .filter(
@@ -1355,6 +1376,8 @@ def execution_policies(current_user: User = Depends(require_admin), db: Session 
         "strategy_health": strategy_health,
         "release_gate": release_gate,
         "remediation_recommendations": remediations,
+        "environment_overrides": environment_overrides,
+        "safe_mode_states": safe_mode_states,
         "recent_policy_violations": [
             {
                 "entity_id": row.entity_id,
@@ -1408,6 +1431,82 @@ def execution_policy_strategy_health(
 ):
     _ = current_user
     return build_strategy_health_state(db, window_hours=window_hours)
+
+
+@router.get("/execution-policies/environment-overrides")
+def execution_policy_environment_overrides(
+    environment: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return list_environment_overrides(db, environment=environment)
+
+
+@router.post("/execution-policies/environment-overrides")
+def upsert_execution_policy_environment_override(
+    payload: EnvironmentOverrideUpsertRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = upsert_environment_override(
+        db,
+        environment=payload.environment,
+        scope_type=payload.scope_type,
+        scope_value=payload.scope_value,
+        priority=payload.priority,
+        override_payload=dict(payload.override_payload or {}),
+        actor_user_id=current_user.id,
+        change_summary=payload.change_summary,
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "override_id": row.override_id,
+        "environment": row.environment,
+        "scope_type": row.scope_type,
+        "scope_value": row.scope_value,
+        "priority": row.priority,
+        "is_active": bool(row.is_active),
+    }
+
+
+@router.get("/execution-policies/safe-mode")
+def execution_policy_safe_mode_states(
+    environment: str | None = Query(default=None),
+    active_only: bool = Query(default=False),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return list_safe_mode_states(db, environment=environment, active_only=active_only)
+
+
+@router.post("/execution-policies/safe-mode/{safe_mode_id}/deactivate")
+def deactivate_execution_policy_safe_mode(
+    safe_mode_id: str,
+    payload: SafeModeDeactivateRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = deactivate_safe_mode(
+            db,
+            safe_mode_id=safe_mode_id,
+            actor_user_id=current_user.id,
+            reason=payload.reason,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(row)
+    return {
+        "safe_mode_id": row.safe_mode_id,
+        "is_active": bool(row.is_active),
+        "deactivated_at": row.deactivated_at,
+        "deactivated_by": row.deactivated_by,
+    }
 
 
 @router.get("/execution-policies/remediations")

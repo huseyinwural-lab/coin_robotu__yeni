@@ -23,6 +23,11 @@ from services.execution_governance_service import (
     seed_default_strategy_bindings,
     select_auto_action,
 )
+from services.execution_environment_control_service import (
+    apply_environment_overrides,
+    apply_safe_mode_overrides,
+    normalize_environment,
+)
 
 from models import (
     BrandSetting,
@@ -138,6 +143,18 @@ def _safe_float(value, fallback: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return fallback
+
+
+def _to_jsonable(value):
+    if isinstance(value, dict):
+        return {str(key): _to_jsonable(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, tuple):
+        return [_to_jsonable(item) for item in value]
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
 
 
 def _is_live_environment(environment: str | None) -> bool:
@@ -943,12 +960,27 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
             },
         }
 
+    environment_override_trace: list[dict] = []
+    safe_mode_trace: list[dict] = []
+    safe_mode_findings: list[dict] = []
+
     strategy_binding = str(context.get("strategy_binding") or "").strip()
     strategy_binding_eval = evaluate_strategy_binding_constraints(db, context=context)
     strategy_risk_class = str(strategy_binding_eval.get("risk_class") or "MEDIUM").upper()
     strategy_limits = dict(strategy_binding_eval.get("limits") or {})
     if strategy_limits:
         effective_rules = _deep_merge(effective_rules, {"risk": strategy_limits})
+
+    effective_rules, environment_override_trace = apply_environment_overrides(
+        db,
+        effective_rules=effective_rules,
+        context=context,
+    )
+    effective_rules, safe_mode_trace, safe_mode_findings = apply_safe_mode_overrides(
+        db,
+        effective_rules=effective_rules,
+        context=context,
+    )
 
     has_strategy_policy = any(
         _normalize_scope_value(getattr(row, "policy_scope", None) or "strategy") == "strategy"
@@ -958,6 +990,18 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
 
     findings: list[dict] = []
     soft_non_live = False
+    for safe_mode_finding in safe_mode_findings:
+        findings.append(
+            _reject_contract(
+                reason_code=str(safe_mode_finding.get("reason_code") or "SAFE_MODE_ENFORCEMENT"),
+                reason_message=str(safe_mode_finding.get("reason_message") or "Safe mode restriction enforced"),
+                stage=stage,
+                severity=str(safe_mode_finding.get("severity") or "CRITICAL"),
+                action_taken="HARD_BLOCK",
+                policy_id=matched_rows[-1].id if matched_rows else None,
+                rule_id=str(safe_mode_finding.get("rule_id") or "safe_mode.enforcement"),
+            )
+        )
     for strategy_violation in list(strategy_binding_eval.get("violations") or []):
         is_live_binding = _is_live_environment(context.get("environment"))
         finding_action = "BLOCK" if is_live_binding else "SOFT_ALLOW_NON_LIVE"
@@ -1237,6 +1281,15 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
                 "violations": list(strategy_binding_eval.get("violations") or []),
                 "limits": strategy_limits,
             },
+            "environment": {
+                "input": str(context.get("environment") or "DEV"),
+                "normalized": normalize_environment(context.get("environment")),
+                "override_trace": environment_override_trace,
+            },
+            "safe_mode": {
+                "active": bool(safe_mode_trace),
+                "scopes": safe_mode_trace,
+            },
             "execution_mode": "REAL" if _is_live_environment(context.get("environment")) else "SIMULATION",
             "decision_steps": decision_steps,
             "debug": {
@@ -1514,8 +1567,8 @@ def append_execution_policy_decision_log(
     is_violation: bool,
 ) -> ExecutionPolicyDecisionLog:
     reject = dict(policy_result.get("standardized_reject") or {})
-    trace_payload = dict(policy_result.get("trace") or {})
-    metrics_snapshot = dict(policy_result.get("metrics_snapshot") or trace_payload.get("metrics_snapshot") or {})
+    trace_payload = _to_jsonable(dict(policy_result.get("trace") or {}))
+    metrics_snapshot = _to_jsonable(dict(policy_result.get("metrics_snapshot") or trace_payload.get("metrics_snapshot") or {}))
     trace_id = str(context.get("trace_id") or context.get("pipeline_id") or context.get("intent_token") or "") or None
     execution_mode = str(context.get("execution_mode") or ("REAL" if _is_live_environment(context.get("environment")) else "SIMULATION")).upper()
     simulation_mode = execution_mode == "SIMULATION"
@@ -1536,7 +1589,7 @@ def append_execution_policy_decision_log(
         simulation_mode=simulation_mode,
         symbol=str(context.get("symbol") or "").upper() or None,
         strategy_binding=str(context.get("strategy_binding") or "") or None,
-        environment=str(context.get("environment") or "testnet").lower(),
+        environment=normalize_environment(context.get("environment")),
         rollout_mode=str(policy_result.get("rollout_mode") or "shadow").lower(),
         recommended_action=str(policy_result.get("recommended_action") or "ALLOW"),
         enforced_action=str(policy_result.get("enforced_action") or "ALLOW"),
@@ -1643,6 +1696,8 @@ def append_execution_policy_decision_log(
                     },
                     idempotency_key=f"{mapped_event}:{violation_id or row.id}",
                 )
+
+    row.trace_payload = _to_jsonable(dict(row.trace_payload or {}))
 
     db.add(row)
     return row

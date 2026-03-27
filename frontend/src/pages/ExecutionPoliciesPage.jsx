@@ -45,6 +45,8 @@ export const ExecutionPoliciesPage = () => {
   const strategyHealth = payload?.strategy_health || [];
   const releaseGate = payload?.release_gate || {};
   const remediationRecommendations = payload?.remediation_recommendations || [];
+  const environmentOverrides = payload?.environment_overrides || [];
+  const safeModeStates = payload?.safe_mode_states || [];
   const severityDistribution = observability?.violation_aggregations?.["24h"]?.severity_distribution || {};
   const violations = payload?.recent_policy_violations || [];
 
@@ -233,6 +235,35 @@ export const ExecutionPoliciesPage = () => {
               <p className="text-[11px] text-slate-500" data-testid={`execution-policies-remediation-summary-${idx}`}>{item.summary}</p>
             </article>
           ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2" data-testid="execution-policies-environment-safe-mode-grid">
+        <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-environment-overrides-card">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-environment-overrides-title">Environment Overrides</p>
+          {environmentOverrides.length === 0 && <p className="mt-2 text-sm text-slate-400" data-testid="execution-policies-environment-overrides-empty">Override tanımı yok.</p>}
+          <div className="mt-2 space-y-2" data-testid="execution-policies-environment-overrides-list">
+            {environmentOverrides.slice(0, 10).map((item, idx) => (
+              <article key={`${item.override_id}-${idx}`} className="rounded border border-slate-800 p-2" data-testid={`execution-policies-environment-override-row-${idx}`}>
+                <p className="text-xs text-slate-200" data-testid={`execution-policies-environment-override-env-${idx}`}>{item.environment} · {item.scope_type}</p>
+                <p className="text-[11px] text-slate-400" data-testid={`execution-policies-environment-override-scope-${idx}`}>{item.scope_value} · priority={item.priority}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-safe-mode-card">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-safe-mode-title">Safe Mode Visibility</p>
+          {safeModeStates.length === 0 && <p className="mt-2 text-sm text-slate-400" data-testid="execution-policies-safe-mode-empty">Safe mode kaydı yok.</p>}
+          <div className="mt-2 space-y-2" data-testid="execution-policies-safe-mode-list">
+            {safeModeStates.slice(0, 10).map((item, idx) => (
+              <article key={`${item.safe_mode_id}-${idx}`} className="rounded border border-slate-800 p-2" data-testid={`execution-policies-safe-mode-row-${idx}`}>
+                <p className="text-xs text-slate-200" data-testid={`execution-policies-safe-mode-state-${idx}`}>{item.environment} · {item.scope_type} · {item.is_active ? "ACTIVE" : "INACTIVE"}</p>
+                <p className="text-[11px] text-slate-400" data-testid={`execution-policies-safe-mode-reason-${idx}`}>{item.trigger_reason}</p>
+                <p className="text-[11px] text-slate-500" data-testid={`execution-policies-safe-mode-time-${idx}`}>{item.activated_at ? new Date(item.activated_at).toLocaleString() : "-"}</p>
+              </article>
+            ))}
+          </div>
         </div>
       </div>
 

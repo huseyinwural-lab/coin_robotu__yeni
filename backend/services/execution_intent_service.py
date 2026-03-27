@@ -826,6 +826,8 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     pipeline_context = {
         "intent_token": token,
         "request_id": token,
+        "intent_type": str(normalized.get("intent_type") or payload.get("intent_type") or "OPEN_POSITION"),
+        "reduce_only": bool(normalized.get("reduce_only") or payload.get("reduce_only")),
         "user_id": user_id,
         "portfolio_id": normalized.get("portfolio_id") or f"default:{user_id}",
         "strategy_binding": strategy_binding,
@@ -1093,6 +1095,8 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         "intent_id": intent.id,
         "intent_token": intent.intent_token,
         "request_id": intent.intent_token,
+        "intent_type": str(normalized_payload.get("intent_type") or intent.intent_type or "OPEN_POSITION"),
+        "reduce_only": bool(normalized_payload.get("reduce_only")),
         "user_id": user_id,
         "portfolio_id": normalized_payload.get("portfolio_id") or f"default:{user_id}",
         "strategy_binding": normalized_payload.get("strategy_binding") or "",

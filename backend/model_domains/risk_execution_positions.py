@@ -609,6 +609,42 @@ class ExecutionGovernanceEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
+
+class ExecutionEnvironmentOverride(Base):
+    __tablename__ = "execution_environment_overrides"
+
+    override_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    environment: Mapped[str] = mapped_column(String(20), index=True)
+    scope_type: Mapped[str] = mapped_column(String(20), default="GLOBAL", index=True)
+    scope_value: Mapped[str] = mapped_column(String(120), default="*", index=True)
+    priority: Mapped[int] = mapped_column(Integer, default=100, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    override_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExecutionSafeModeState(Base):
+    __tablename__ = "execution_safe_mode_states"
+
+    safe_mode_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    environment: Mapped[str] = mapped_column(String(20), index=True)
+    scope_type: Mapped[str] = mapped_column(String(20), default="GLOBAL", index=True)
+    scope_value: Mapped[str] = mapped_column(String(120), default="*", index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    trigger_reason: Mapped[str] = mapped_column(String(160))
+    trigger_source: Mapped[str] = mapped_column(String(80), default="AUTO")
+    activated_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    activated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    deactivated_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    override_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
 class Position(Base):
     __tablename__ = "positions"
 
