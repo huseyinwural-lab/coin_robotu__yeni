@@ -1,3 +1,55 @@
+## 2026-03-27 — P2 Iteration (P2.1 + P2.2 + P2.3) Tamamlandı
+
+### Kapsam Kararı
+- Uygulanan kapsam: **P2.1 Failover/Redundancy + P2.2 Deterministic Multi-venue Routing + P2.3 Validation Engine**
+- Failover modu: **Hibrit (otomatik trigger + manuel override)**
+
+### Backend Teslimleri
+- Yeni failover policy katmanı:
+  - `PUT /api/venues/admin/failover-policies`
+  - `POST /api/venues/admin/failover/manual-override`
+  - `GET /api/venues/admin/failover-policies`
+  - `GET /api/venues/admin/failover-state`
+- Failover state machine:
+  - venue runtime state: `healthy | degraded | down`
+  - otomatik trigger metrikleri: `latency`, `error_rate`, `validation_failure`
+  - manuel override: `force_route`, `force_disable`
+  - deterministic transition + transition log üretimi
+- `POST /api/venues/admin/routing-preview-v2` P2 genişletmesi:
+  - deterministic scoring girdileri: health/capability/policy/latency/rate-limit/allocation
+  - yeni outputlar: `selected_venue`, `fallback_chain`, `decision_factors`, `reject_reason`
+  - failover + routing decision logları: `failover_transition_logs`, `routing_decision_log`, `routing_decision_trace`
+  - explainability + validation consistency (`validation_report`)
+  - live için failover policy yoksa blocking guard
+- Validation engine standard rapor:
+  - `POST /api/venues/admin/execution-validation`
+  - check seti: `real_balance_fetch`, `permission_matrix_test`, `venue_capability_runtime_test`, `dry_run_execution_simulation`, `test_order_cancel_retry`, `rejection_classification`
+  - standart çıktı: `checks[]`, `net_status`, `reason_codes`, `validation_report`
+
+### Frontend Teslimleri
+- `RoutingPolicyPanel` genişletildi:
+  - failover alanları (primary/secondary/fallback, threshold’lar, auto reroute)
+  - manuel override aksiyonları (apply/clear)
+  - failover runtime ve transition log görünümü
+- `RoutingPreviewPanel` genişletildi:
+  - selected_venue/fallback_chain/reject_reason
+  - failover transition logları
+  - routing decision log
+  - validation report özeti
+- `AdminExchangesPage` entegrasyonu:
+  - failover policy yükleme/saklama/manual override akışları
+  - routing preview sonrası failover state yenileme
+
+### Test / Doğrulama
+- Testing Agent raporu: `/app/test_reports/iteration_154.json`
+  - Backend: **36/36 PASS (100%)**
+  - Frontend: failover/routing panelleri ve data-testid doğrulaması PASS
+- Test dosyası: `/app/backend/tests/test_iteration154_p2_failover_routing_validation.py`
+
+### Açık Kalanlar
+- P2.4 cockpit UX dönüşümü (global overview, active route map, conflict/alert center)
+- P3 adayı: multi-tenant orchestration + capital rebalance automation
+
 ## 2026-03-27 — P1-C TAM KAPANIŞ (Control Plane UI + Contract Stabilization)
 
 ### Tamamlanan Backend (Faz 1)
