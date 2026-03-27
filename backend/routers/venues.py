@@ -50,7 +50,10 @@ from services.credential_resolution_service import (
     upsert_assignment_rule,
     verify_admin_credential,
 )
-from services.venue_control_plane_service import run_venue_control_plane_sanity
+from services.venue_control_plane_service import (
+    get_cached_venue_control_plane_sanity,
+    run_and_cache_venue_control_plane_sanity,
+)
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry, user_allowed_venue_options, venue_health_summary
 
 router = APIRouter(prefix="/venues", tags=["venues"])
@@ -78,6 +81,17 @@ def _credential_error(exc: Exception) -> HTTPException:
         "mode_mismatch_live_blocked": (status.HTTP_409_CONFLICT, "mode_mismatch_live_blocked"),
         "venue_not_allowed": (status.HTTP_409_CONFLICT, "venue_not_allowed"),
         "approved_credential_required": (status.HTTP_409_CONFLICT, "approved_credential_required"),
+        "sanity_gate_blocked": (status.HTTP_409_CONFLICT, "sanity_gate_blocked"),
+        "canary_allowlist_blocked": (status.HTTP_409_CONFLICT, "canary_allowlist_blocked"),
+        "two_step_approval_missing": (status.HTTP_409_CONFLICT, "two_step_approval_missing"),
+        "local_secret_provider_not_allowed_in_prod": (
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "local_secret_provider_not_allowed_in_prod",
+        ),
+        "execution_credential_readback_verification_failed": (
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "execution_credential_readback_verification_failed",
+        ),
     }
     code, detail = mapping.get(message, (status.HTTP_400_BAD_REQUEST, message))
     return HTTPException(status_code=code, detail=detail)
@@ -588,36 +602,72 @@ def admin_patch_execution_credentials(
 def admin_execution_validation(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     credentials = execution_credentials_for_adapter(db)
     smoke = run_exchange_adapter_smoke(credentials_override=credentials)
+
     bybit_ready = smoke["summary"].get("execution_bybit_pass_count", 0) >= 1
-    adapter_status = "PASS" if smoke["summary"].get("market_fail_count", 0) == 0 else "DEGRADED"
-    precision_status = "PASS" if smoke["summary"].get("precision_pass_count", 0) >= 2 else "PARTIAL"
-    order_submit_status = "PASS" if bybit_ready else "MOCKED"
+    adapter_ok = smoke["summary"].get("market_fail_count", 0) == 0
+    precision_ok = smoke["summary"].get("precision_pass_count", 0) >= 2
+
     checks = [
-        {"check": "adapter_smoke_test", "status": "PASS" if adapter_status == "PASS" else "BLOCK", "reason_code": "adapter_smoke_failed" if adapter_status != "PASS" else "ok", "remediation": "Adapter connectivity/proxy/credential ayarlarını kontrol edin." if adapter_status != "PASS" else ""},
-        {"check": "precision_validation", "status": "PASS" if precision_status == "PASS" else "WARN", "reason_code": "precision_partial" if precision_status != "PASS" else "ok", "remediation": "Symbol metadata ve lot precision değerlerini yenileyin." if precision_status != "PASS" else ""},
-        {"check": "lot_size_validation", "status": "PASS" if precision_status == "PASS" else "WARN", "reason_code": "lot_validation_partial" if precision_status != "PASS" else "ok", "remediation": "minQty/stepSize/tickSize senkronunu doğrulayın." if precision_status != "PASS" else ""},
-        {"check": "order_submit_test", "status": "PASS" if order_submit_status == "PASS" else "WARN", "reason_code": "order_submit_mocked" if order_submit_status != "PASS" else "ok", "remediation": "Execution credential ve venue izinlerini tamamlayın." if order_submit_status != "PASS" else ""},
-        {"check": "pre_trade_slippage_guard", "status": "WARN" if order_submit_status != "PASS" else "PASS", "reason_code": "slippage_guard_not_live" if order_submit_status != "PASS" else "ok", "remediation": "Canlı slippage guard için bybit live readiness sağlayın." if order_submit_status != "PASS" else ""},
+        {
+            "name": "balance_fetch_test",
+            "status": "PASS" if adapter_ok else "BLOCK",
+            "reason_code": "balance_fetch_failed" if not adapter_ok else "ok",
+            "severity": "high" if not adapter_ok else "low",
+            "remediation_suggestions": ["Credential/venue connectivity ve balance endpoint erişimini doğrulayın."] if not adapter_ok else [],
+        },
+        {
+            "name": "permission_test",
+            "status": "PASS" if bybit_ready else "BLOCK",
+            "reason_code": "permission_or_probe_failed" if not bybit_ready else "ok",
+            "severity": "high" if not bybit_ready else "low",
+            "remediation_suggestions": ["Execution permission scope ve credential approval durumunu doğrulayın."] if not bybit_ready else [],
+        },
+        {
+            "name": "order_submit_test",
+            "status": "PASS" if bybit_ready else "BLOCK",
+            "reason_code": "order_submit_failed" if not bybit_ready else "ok",
+            "severity": "high" if not bybit_ready else "low",
+            "remediation_suggestions": ["Test/sandbox order submit akışını venue tarafında doğrulayın."] if not bybit_ready else [],
+        },
+        {
+            "name": "cancel_test",
+            "status": "PASS" if bybit_ready else "BLOCK",
+            "reason_code": "cancel_failed" if not bybit_ready else "ok",
+            "severity": "high" if not bybit_ready else "low",
+            "remediation_suggestions": ["Submit edilen test order’ın cancel endpoint akışını kontrol edin."] if not bybit_ready else [],
+        },
+        {
+            "name": "precision_lot_validation",
+            "status": "PASS" if precision_ok else "WARN",
+            "reason_code": "precision_validation_partial" if not precision_ok else "ok",
+            "severity": "medium" if not precision_ok else "low",
+            "remediation_suggestions": ["Symbol minQty/stepSize/tickSize metadata senkronunu yenileyin."] if not precision_ok else [],
+        },
     ]
-    net_status = "PASS"
-    if any(item["status"] == "BLOCK" for item in checks):
-        net_status = "BLOCK"
-    elif any(item["status"] == "WARN" for item in checks):
-        net_status = "WARN"
+
+    highest_rank = 0
+    for item in checks:
+        status_value = str(item.get("status") or "PASS").lower()
+        highest_rank = max(highest_rank, 2 if status_value == "block" else (1 if status_value == "warn" else 0))
+    net_status = "PASS" if highest_rank == 0 else ("WARN" if highest_rank == 1 else "BLOCK")
+
+    reason_codes = sorted({item["reason_code"] for item in checks if item.get("reason_code") and item.get("reason_code") != "ok"})
+    remediation = sorted({suggestion for item in checks for suggestion in (item.get("remediation_suggestions") or [])})
 
     return {
         "net_status": net_status,
+        "reason_codes": reason_codes,
+        "remediation_suggestions": remediation,
         "checks": checks,
         "validation": {
-            "adapter_smoke_test": adapter_status,
-            "precision_validation": "PASS" if smoke["summary"].get("precision_pass_count", 0) >= 2 else "PARTIAL",
-            "lot_size_validation": "PASS" if smoke["summary"].get("precision_pass_count", 0) >= 2 else "PARTIAL",
-            "order_submit_test": "PASS" if bybit_ready else "MOCKED",
-            "cancel_test": "PASS" if bybit_ready else "MOCKED",
+            "adapter_smoke_test": "PASS" if adapter_ok else "BLOCK",
+            "precision_validation": "PASS" if precision_ok else "WARN",
+            "lot_size_validation": "PASS" if precision_ok else "WARN",
+            "order_submit_test": "PASS" if bybit_ready else "BLOCK",
+            "cancel_test": "PASS" if bybit_ready else "BLOCK",
             "retry_behavior": "PASS",
-            "bybit_testnet_live_ready": "PASS" if bybit_ready else "DEGRADED",
+            "bybit_testnet_live_ready": "PASS" if bybit_ready else "BLOCK",
         },
-        "details": smoke,
     }
 
 
@@ -874,7 +924,7 @@ def admin_run_control_plane_sanity_check(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    result = run_venue_control_plane_sanity(db)
+    result = run_and_cache_venue_control_plane_sanity(db)
     create_audit_log(
         db,
         action="venue_control_plane_sanity_check",
@@ -888,6 +938,17 @@ def admin_run_control_plane_sanity_check(
         },
     )
     return result
+
+
+@router.get("/admin/control-plane-sanity-last")
+def admin_get_control_plane_sanity_last(
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    cached = get_cached_venue_control_plane_sanity()
+    if cached is None:
+        return {"net_status": "WARN", "reason_codes": ["sanity_not_run"], "remediation_suggestions": ["Sanity check çalıştırın"], "checks": []}
+    return cached
 
 
 @router.get("/admin/credential-rules", response_model=list[CredentialAssignmentRuleResponse])

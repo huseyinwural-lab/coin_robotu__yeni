@@ -13,7 +13,13 @@ from core.users.user_exchange_connector import (
     mask_secret,
 )
 from models import AdminExchangeCredential, CredentialAssignmentRule, User, UserExchangeConnection
-from services.secret_provider_service import decrypt_secret_value, encrypt_secret_value, secret_provider_name
+from services.secret_provider_service import (
+    decrypt_secret_value,
+    encrypt_secret_value,
+    revoke_secret_value,
+    rotate_secret_value,
+    secret_provider_name,
+)
 
 ALLOWED_SCOPE_TYPES = {"global", "tenant", "group"}
 ALLOWED_EXCHANGES = {"binance", "bybit", "okx"}
@@ -338,11 +344,32 @@ def _public_probe(*, base_url: str, endpoint: str, provider: str, extra_headers:
 
 
 def _serialize_admin_credential(row: AdminExchangeCredential) -> dict:
-    api_key = decrypt_secret_value(row.api_key_encrypted)
-    api_secret = decrypt_secret_value(row.api_secret_encrypted)
+    # Handle revoked secrets gracefully - don't try to decrypt revoked credentials
+    api_key = ""
+    api_secret = ""
+    try:
+        api_key = decrypt_secret_value(row.api_key_encrypted) if row.api_key_encrypted else ""
+    except RuntimeError as e:
+        if "secret_revoked" in str(e):
+            api_key = "[REVOKED]"
+        else:
+            raise
+    try:
+        api_secret = decrypt_secret_value(row.api_secret_encrypted) if row.api_secret_encrypted else ""
+    except RuntimeError as e:
+        if "secret_revoked" in str(e):
+            api_secret = "[REVOKED]"
+        else:
+            raise
+
     probe_meta = row.last_probe_meta or {}
     permission_scope = _permission_scope_from_meta(probe_meta)
     permission_scope_validation = _validate_permission_scope(purpose=row.purpose, permission_scope=permission_scope)
+
+    # For revoked credentials, use placeholder values for masked_api_key and fingerprint
+    masked_key = "[REVOKED]" if api_key == "[REVOKED]" else mask_secret(api_key)
+    fingerprint = "[REVOKED]" if api_key == "[REVOKED]" or api_secret == "[REVOKED]" else credential_fingerprint(api_key, api_secret)
+
     return {
         "id": row.id,
         "scope_type": row.scope_type,
@@ -362,8 +389,8 @@ def _serialize_admin_credential(row: AdminExchangeCredential) -> dict:
         "updated_by": row.updated_by,
         "has_api_key": bool(row.api_key_encrypted),
         "has_api_secret": bool(row.api_secret_encrypted),
-        "masked_api_key": mask_secret(api_key),
-        "credential_fingerprint": credential_fingerprint(api_key, api_secret),
+        "masked_api_key": masked_key,
+        "credential_fingerprint": fingerprint,
         "last_probe_status": row.last_probe_status,
         "last_probe_message": row.last_probe_message,
         "last_probe_meta": probe_meta,
@@ -522,6 +549,8 @@ def update_admin_credential(
     if row is None:
         raise ValueError("credential_not_found")
 
+    revoke_after_commit: list[str] = []
+
     if scope_type is not None:
         normalized_scope = _norm(scope_type)
         if normalized_scope not in ALLOWED_SCOPE_TYPES:
@@ -539,22 +568,31 @@ def update_admin_credential(
     if ip_binding_note is not None:
         row.ip_binding_note = ip_binding_note or None
     if api_key is not None and str(api_key).strip():
+        old_ref = row.api_key_encrypted
         cipher = encrypt_secret_value(api_key)
         _verify_secret_roundtrip(plain=api_key, encrypted=cipher)
         row.api_key_encrypted = cipher
+        if old_ref and old_ref != cipher:
+            revoke_after_commit.append(old_ref)
         row.approval_status = "pending"
         row.is_active = False
     if api_secret is not None and str(api_secret).strip():
+        old_ref = row.api_secret_encrypted
         cipher = encrypt_secret_value(api_secret)
         _verify_secret_roundtrip(plain=api_secret, encrypted=cipher)
         row.api_secret_encrypted = cipher
+        if old_ref and old_ref != cipher:
+            revoke_after_commit.append(old_ref)
         row.approval_status = "pending"
         row.is_active = False
     if passphrase is not None:
+        old_ref = row.passphrase_encrypted
         cipher = encrypt_secret_value(passphrase) if passphrase else None
         if passphrase and cipher:
             _verify_secret_roundtrip(plain=passphrase, encrypted=cipher)
         row.passphrase_encrypted = cipher
+        if old_ref and old_ref != cipher:
+            revoke_after_commit.append(old_ref)
         row.approval_status = "pending"
         row.is_active = False
     if is_default is not None:
@@ -570,6 +608,12 @@ def update_admin_credential(
     row.last_probe_meta = meta
     db.commit()
     db.refresh(row)
+
+    for secret_ref in revoke_after_commit:
+        try:
+            revoke_secret_value(secret_ref)
+        except Exception:  # noqa: BLE001
+            continue
     return _serialize_admin_credential(row)
 
 
@@ -621,6 +665,14 @@ def revoke_admin_credential(db: Session, *, actor: User, credential_id: str) -> 
     row.last_probe_meta = meta
     db.commit()
     db.refresh(row)
+
+    for secret_ref in [row.api_key_encrypted, row.api_secret_encrypted, row.passphrase_encrypted]:
+        if not secret_ref:
+            continue
+        try:
+            revoke_secret_value(secret_ref)
+        except Exception:  # noqa: BLE001
+            continue
     return _serialize_admin_credential(row)
 
 
@@ -639,9 +691,17 @@ def rotate_admin_credential(
     if not str(api_key or "").strip() or not str(api_secret or "").strip():
         raise ValueError("invalid_rotation_payload")
 
-    api_key_cipher = encrypt_secret_value(api_key)
-    api_secret_cipher = encrypt_secret_value(api_secret)
-    passphrase_cipher = encrypt_secret_value(passphrase or "") if passphrase else None
+    old_key_ref = row.api_key_encrypted
+    old_secret_ref = row.api_secret_encrypted
+    old_passphrase_ref = row.passphrase_encrypted
+
+    api_key_cipher = rotate_secret_value(old_key_ref, api_key) if old_key_ref else encrypt_secret_value(api_key)
+    api_secret_cipher = rotate_secret_value(old_secret_ref, api_secret) if old_secret_ref else encrypt_secret_value(api_secret)
+    passphrase_cipher = (
+        rotate_secret_value(old_passphrase_ref, passphrase)
+        if passphrase and old_passphrase_ref
+        else (encrypt_secret_value(passphrase) if passphrase else None)
+    )
     _verify_secret_roundtrip(plain=api_key, encrypted=api_key_cipher)
     _verify_secret_roundtrip(plain=api_secret, encrypted=api_secret_cipher)
     if passphrase and passphrase_cipher:
@@ -666,6 +726,12 @@ def rotate_admin_credential(
     row.last_probe_meta = meta
     db.commit()
     db.refresh(row)
+
+    if old_passphrase_ref and not passphrase:
+        try:
+            revoke_secret_value(old_passphrase_ref)
+        except Exception:  # noqa: BLE001
+            pass
     return _serialize_admin_credential(row)
 
 
@@ -1041,6 +1107,22 @@ def resolve_exchange_credentials(
             mode = _norm(os.environ.get("EXECUTION_MODE"), default="sim")
             if mode != "live":
                 raise ValueError("mode_mismatch_live_blocked")
+
+            from services.venue_control_plane_service import get_cached_venue_control_plane_sanity
+
+            sanity_result = get_cached_venue_control_plane_sanity()
+            if not sanity_result or str(sanity_result.get("net_status") or "").upper() != "PASS":
+                raise ValueError("sanity_gate_blocked")
+
+            canary_allowlist = [item.strip() for item in str(os.environ.get("LIVE_CANARY_ALLOWLIST_USER_IDS") or "").split(",") if item.strip()]
+            if canary_allowlist and str(user_id) not in canary_allowlist:
+                raise ValueError("canary_allowlist_blocked")
+
+            two_step_required = _norm(os.environ.get("LIVE_TWO_STEP_APPROVAL_REQUIRED"), default="false") in {"1", "true", "yes"}
+            if two_step_required:
+                approved_users = [item.strip() for item in str(os.environ.get("LIVE_TWO_STEP_APPROVED_USER_IDS") or "").split(",") if item.strip()]
+                if str(user_id) not in approved_users:
+                    raise ValueError("two_step_approval_missing")
 
     rule = _rule_for_context(
         db,

@@ -1,8 +1,15 @@
 import json
 from datetime import datetime, timezone
 
-from core.users.user_exchange_connector import decrypt_exchange_secret, encrypt_exchange_secret, mask_secret
+from core.users.user_exchange_connector import mask_secret
 from models import ExternalProviderCredential
+from services.secret_provider_service import (
+    decrypt_secret_value,
+    encrypt_secret_value,
+    revoke_secret_value,
+    rotate_secret_value,
+    secret_provider_name,
+)
 
 
 EXECUTION_CREDENTIALS_PROVIDER = "exchange_execution_credentials_v1"
@@ -29,7 +36,7 @@ def _normalize(payload: dict | None) -> dict:
 def _read_row_payload(row: ExternalProviderCredential | None) -> dict:
     if row is None or not row.api_key_encrypted:
         return dict(DEFAULT_PAYLOAD)
-    decrypted = decrypt_exchange_secret(row.api_key_encrypted)
+    decrypted = decrypt_secret_value(row.api_key_encrypted)
     if not decrypted:
         return dict(DEFAULT_PAYLOAD)
     try:
@@ -67,6 +74,7 @@ def get_execution_credentials(db) -> dict:
     has_bybit_legacy = bool(payload.get("bybit_api_key") and payload.get("bybit_secret"))
     return {
         "provider": EXECUTION_CREDENTIALS_PROVIDER,
+        "secret_provider": secret_provider_name(),
         "has_bybit_credentials": bool(has_bybit_testnet or has_bybit_live or has_bybit_legacy),
         "has_bybit_testnet_credentials": has_bybit_testnet,
         "has_bybit_live_credentials": has_bybit_live,
@@ -89,7 +97,17 @@ def upsert_execution_credentials(db, patch_payload: dict) -> dict:
 
     current = _read_row_payload(row)
     merged = _normalize({**current, **(patch_payload or {})})
-    row.api_key_encrypted = encrypt_exchange_secret(json.dumps(merged, ensure_ascii=False))
+    serialized = json.dumps(merged, ensure_ascii=False)
+
+    old_reference = row.api_key_encrypted
+    if old_reference:
+        row.api_key_encrypted = rotate_secret_value(old_reference, serialized)
+    else:
+        row.api_key_encrypted = encrypt_secret_value(serialized)
+
+    if decrypt_secret_value(row.api_key_encrypted) != serialized:
+        raise ValueError("execution_credential_readback_verification_failed")
+
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
@@ -124,3 +142,19 @@ def execution_credentials_for_adapter(db) -> dict:
             "passphrase": payload.get("okx_passphrase") or "",
         },
     }
+
+
+def revoke_execution_credentials(db) -> None:
+    row = (
+        db.query(ExternalProviderCredential)
+        .filter(ExternalProviderCredential.provider == EXECUTION_CREDENTIALS_PROVIDER)
+        .first()
+    )
+    if row and row.api_key_encrypted:
+        try:
+            revoke_secret_value(row.api_key_encrypted)
+        except Exception:
+            pass
+        row.api_key_encrypted = None
+        row.updated_at = datetime.now(timezone.utc)
+        db.commit()

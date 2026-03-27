@@ -152,20 +152,6 @@ export const AdminCredentialOrchestrationPage = () => {
     }
   };
 
-  const handleRotateCredential = async (id) => {
-    const apiKey = window.prompt("Yeni API key girin");
-    if (!apiKey) {
-      toast.error("Rotate için api_key zorunlu");
-      return;
-    }
-    const apiSecret = window.prompt("Yeni API secret girin");
-    if (!apiSecret) {
-      toast.error("Rotate için api_secret zorunlu");
-      return;
-    }
-    const passphrase = window.prompt("Passphrase (opsiyonel)") || null;
-    await handleCredentialAction(id, "rotate", { api_key: apiKey, api_secret: apiSecret, passphrase: passphrase || null });
-  };
 
   const handleRuleUpsert = async () => {
     try {
@@ -443,9 +429,9 @@ export const AdminCredentialOrchestrationPage = () => {
               <p className="mb-1 text-xs text-slate-500" data-testid="credential-form-egress-note-label">Proxy Route / Egress Note</p>
               <Input placeholder="örn: /fapi/* -> vps-futures" value={createForm.ip_binding_note} onChange={(e) => setCreateForm((prev) => ({ ...prev, ip_binding_note: e.target.value }))} data-testid="credential-form-egress-note-input" />
             </div>
-            <Input placeholder="API Key" value={createForm.api_key} onChange={(e) => setCreateForm((prev) => ({ ...prev, api_key: e.target.value }))} data-testid="credential-form-api-key-input" />
-            <Input placeholder="API Secret" value={createForm.api_secret} onChange={(e) => setCreateForm((prev) => ({ ...prev, api_secret: e.target.value }))} data-testid="credential-form-api-secret-input" />
-            <Input placeholder="Passphrase (okx için opsiyonel)" value={createForm.passphrase} onChange={(e) => setCreateForm((prev) => ({ ...prev, passphrase: e.target.value }))} data-testid="credential-form-passphrase-input" />
+            <Input type="password" autoComplete="new-password" placeholder="API Key" value={createForm.api_key} onChange={(e) => setCreateForm((prev) => ({ ...prev, api_key: e.target.value }))} data-testid="credential-form-api-key-input" />
+            <Input type="password" autoComplete="new-password" placeholder="API Secret" value={createForm.api_secret} onChange={(e) => setCreateForm((prev) => ({ ...prev, api_secret: e.target.value }))} data-testid="credential-form-api-secret-input" />
+            <Input type="password" autoComplete="new-password" placeholder="Passphrase (okx için opsiyonel)" value={createForm.passphrase} onChange={(e) => setCreateForm((prev) => ({ ...prev, passphrase: e.target.value }))} data-testid="credential-form-passphrase-input" />
           </div>
           <div className="flex flex-wrap items-center gap-3" data-testid="credential-form-actions-row">
             <Button onClick={handleCreateCredential} data-testid="credential-form-save-button">Credential Kaydet</Button>
@@ -507,7 +493,6 @@ export const AdminCredentialOrchestrationPage = () => {
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "probe")} data-testid={`credential-probe-button-${row.id}`}>Probe</Button>
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "verify")} data-testid={`credential-verify-button-${row.id}`}>Verify</Button>
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "approve")} data-testid={`credential-approve-button-${row.id}`}>Approve</Button>
-                        <Button size="sm" variant="outline" onClick={() => handleRotateCredential(row.id)} data-testid={`credential-rotate-button-${row.id}`}>Rotate</Button>
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "revoke")} data-testid={`credential-revoke-button-${row.id}`}>Revoke</Button>
                         <Button size="sm" variant="outline" onClick={() => handleCredentialAction(row.id, "disable")} data-testid={`credential-disable-button-${row.id}`}>Disable</Button>
                       </div>

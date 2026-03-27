@@ -151,6 +151,7 @@ export const PanelLayout = () => {
   const navigate = useNavigate();
   const adminRoles = new Set(["super_admin", "admin", "ops"]);
   const [gateBadge, setGateBadge] = useState(null);
+  const [sanityBadge, setSanityBadge] = useState(null);
   const [nowTick, setNowTick] = useState(Date.now());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -173,6 +174,7 @@ export const PanelLayout = () => {
   useEffect(() => {
     if (!isAdmin) {
       setGateBadge(null);
+      setSanityBadge(null);
       return;
     }
 
@@ -185,8 +187,21 @@ export const PanelLayout = () => {
       }
     };
 
+    const fetchSanity = async () => {
+      try {
+        const { data } = await apiClient.get("/venues/admin/control-plane-sanity-last");
+        setSanityBadge(data || null);
+      } catch {
+        setSanityBadge(null);
+      }
+    };
+
     fetchGate();
-    const timer = setInterval(fetchGate, 15000);
+    fetchSanity();
+    const timer = setInterval(() => {
+      fetchGate();
+      fetchSanity();
+    }, 15000);
     return () => clearInterval(timer);
   }, [isAdmin]);
 
@@ -329,6 +344,11 @@ export const PanelLayout = () => {
             {isAdmin && gateBadge?.override_active && (
               <div className="mt-2 rounded border border-red-700 bg-red-700/20 px-2 py-1 text-[11px] font-semibold text-black" data-testid="navbar-override-countdown-badge">
                 active override · {countdownLabel}
+              </div>
+            )}
+            {isAdmin && (
+              <div className="mt-2 rounded border border-black/40 bg-white/60 px-2 py-1 text-[11px]" data-testid="navbar-control-plane-sanity-badge">
+                sanity: {sanityBadge?.net_status || "WARN"}
               </div>
             )}
           </div>

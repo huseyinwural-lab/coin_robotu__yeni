@@ -381,54 +381,72 @@ export const AdminExchangesPage = () => {
           <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-execution-credential-title">Admin → Exchange Settings (Execution Activation)</p>
           <form className="grid gap-2 md:grid-cols-2" onSubmit={saveExecutionCredentials} data-testid="admin-execution-credential-form">
             <Input
+              type="password"
+              autoComplete="new-password"
               value={executionCredentialForm.bybit_api_key}
               onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_api_key: event.target.value }))}
               placeholder="bybit_api_key"
               data-testid="admin-execution-bybit-api-key-input"
             />
             <Input
+              type="password"
+              autoComplete="new-password"
               value={executionCredentialForm.bybit_secret}
               onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_secret: event.target.value }))}
               placeholder="bybit_secret"
               data-testid="admin-execution-bybit-secret-input"
             />
             <Input
+              type="password"
+              autoComplete="new-password"
               value={executionCredentialForm.bybit_testnet_api_key}
               onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_testnet_api_key: event.target.value }))}
               placeholder="bybit_testnet_api_key"
               data-testid="admin-execution-bybit-testnet-api-key-input"
             />
             <Input
+              type="password"
+              autoComplete="new-password"
               value={executionCredentialForm.bybit_testnet_secret}
               onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_testnet_secret: event.target.value }))}
               placeholder="bybit_testnet_secret"
               data-testid="admin-execution-bybit-testnet-secret-input"
             />
             <Input
+              type="password"
+              autoComplete="new-password"
               value={executionCredentialForm.bybit_live_api_key}
               onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_live_api_key: event.target.value }))}
               placeholder="bybit_live_api_key"
               data-testid="admin-execution-bybit-live-api-key-input"
             />
             <Input
+              type="password"
+              autoComplete="new-password"
               value={executionCredentialForm.bybit_live_secret}
               onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_live_secret: event.target.value }))}
               placeholder="bybit_live_secret"
               data-testid="admin-execution-bybit-live-secret-input"
             />
             <Input
+              type="password"
+              autoComplete="new-password"
               value={executionCredentialForm.okx_api_key}
               onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, okx_api_key: event.target.value }))}
               placeholder="okx_api_key"
               data-testid="admin-execution-okx-api-key-input"
             />
             <Input
+              type="password"
+              autoComplete="new-password"
               value={executionCredentialForm.okx_secret}
               onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, okx_secret: event.target.value }))}
               placeholder="okx_secret"
               data-testid="admin-execution-okx-secret-input"
             />
             <Input
+              type="password"
+              autoComplete="new-password"
               value={executionCredentialForm.okx_passphrase}
               onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, okx_passphrase: event.target.value }))}
               placeholder="okx_passphrase"
@@ -479,13 +497,13 @@ export const AdminExchangesPage = () => {
             <div className="space-y-1 text-xs" data-testid="admin-execution-validation-checks">
               {(executionValidation?.checks || []).map((item, index) => (
                 <p key={`${item.check}-${index}`} data-testid={`admin-execution-validation-check-${index}`}>
-                  {item.check}: {item.status} ({item.reason_code})
+                  {item.name || item.check}: {item.status} ({item.reason_code}) / severity: {item.severity || "n/a"}
                 </p>
               ))}
             </div>
           </div>
           <p className="text-xs text-slate-400" data-testid="admin-execution-validation-note">
-            Not: Credential yoksa execution testleri fail-safe olarak MOCKED döner.
+            Not: Execution validation gerçek endpoint sonuçlarıyla PASS/WARN/BLOCK döndürür.
           </p>
         </div>
 
@@ -499,7 +517,7 @@ export const AdminExchangesPage = () => {
             <div className="space-y-1 text-xs" data-testid="admin-control-plane-sanity-checks-list">
               {(controlPlaneSanity?.checks || []).map((item, index) => (
                 <p key={`${item.check}-${index}`} data-testid={`admin-control-plane-sanity-check-${index}`}>
-                  {item.check}: {item.status} ({(item.reason_codes || []).join(", ") || "ok"})
+                  {item.name || item.check}: {item.status} ({item.reason_code || "ok"}) / severity: {item.severity || "n/a"}
                 </p>
               ))}
             </div>

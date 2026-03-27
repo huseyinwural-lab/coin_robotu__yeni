@@ -17,6 +17,13 @@ def get_execution_adapter():
             raise RuntimeError("environment_lock_blocked")
         if prod_freeze:
             raise RuntimeError("prod_freeze_active")
+
+        from services.venue_control_plane_service import get_cached_venue_control_plane_sanity
+
+        sanity = get_cached_venue_control_plane_sanity()
+        if not sanity or str(sanity.get("net_status") or "").upper() != "PASS":
+            raise RuntimeError("sanity_gate_blocked")
+
         if live_enabled and live_route_approved:
             return BinanceExecutionAdapter(mode="live")
         raise RuntimeError("live_guard_blocked")
