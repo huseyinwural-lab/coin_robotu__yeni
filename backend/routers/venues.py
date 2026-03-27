@@ -1,6 +1,6 @@
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -810,6 +810,152 @@ def _build_execution_validation_report(db: Session) -> dict:
         },
         "smoke_summary": smoke.get("summary") or {},
         "adapter_output": smoke,
+    }
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _build_route_churn_alert(transition_logs: list[dict], *, window_minutes: int = 30, threshold: int = 5) -> dict:
+    now_utc = datetime.now(timezone.utc)
+    lower_bound = now_utc - timedelta(minutes=window_minutes)
+
+    by_key: dict[str, int] = defaultdict(int)
+    recent_logs = []
+    for item in transition_logs or []:
+        created_at = _parse_iso_datetime(item.get("created_at"))
+        if created_at and created_at >= lower_bound:
+            key = str(item.get("key") or "unknown")
+            by_key[key] += 1
+            recent_logs.append(item)
+
+    hot_routes = [
+        {"key": key, "transition_count": count}
+        for key, count in sorted(by_key.items(), key=lambda pair: pair[1], reverse=True)
+        if count >= threshold
+    ]
+
+    status_value = "BLOCK" if hot_routes else "PASS"
+    reason_codes = ["route_churn_anomaly_detected"] if hot_routes else []
+    remediation = ["Anomali görülen route için failover threshold ve manual override politikasını gözden geçirin."] if hot_routes else []
+
+    return {
+        "status": status_value,
+        "window_minutes": window_minutes,
+        "threshold": threshold,
+        "total_recent_transitions": len(recent_logs),
+        "hot_routes": hot_routes,
+        "reason_codes": reason_codes,
+        "remediation_suggestions": remediation,
+        "evaluated_at": now_utc.isoformat(),
+    }
+
+
+def _build_conflict_detection_report(db: Session) -> dict:
+    routing = get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
+    failover = _get_failover_policy_config(db)
+
+    routing_rules = routing.get("rules") or {}
+    failover_rules = failover.get("rules") or {}
+
+    alerts: list[dict] = []
+
+    for key, rule in routing_rules.items():
+        default_venue = str(rule.get("default_venue") or "").strip().lower()
+        blocked_venues = set(_normalize_venue_list(rule.get("blocked_venues") or []))
+        preferred_venues = _normalize_venue_list(rule.get("preferred_venues") or [])
+        capital_allocation = list(rule.get("capital_allocation") or [])
+
+        if default_venue and default_venue in blocked_venues:
+            alerts.append(
+                {
+                    "type": "routing_conflict",
+                    "severity": "BLOCK",
+                    "reason_code": "default_venue_blocked",
+                    "entity_id": key,
+                    "message": "Default venue blocked_venues içinde tanımlı.",
+                    "blocking": True,
+                }
+            )
+
+        overlap = sorted(list(blocked_venues.intersection(preferred_venues)))
+        if overlap:
+            alerts.append(
+                {
+                    "type": "routing_conflict",
+                    "severity": "WARN",
+                    "reason_code": "preferred_and_blocked_overlap",
+                    "entity_id": key,
+                    "message": f"Aynı venue preferred ve blocked listede: {', '.join(overlap)}",
+                    "blocking": False,
+                }
+            )
+
+        if not capital_allocation:
+            alerts.append(
+                {
+                    "type": "allocation_conflict",
+                    "severity": "WARN",
+                    "reason_code": "capital_allocation_missing",
+                    "entity_id": key,
+                    "message": "Routing policy için capital_allocation tanımı eksik.",
+                    "blocking": False,
+                }
+            )
+
+    for key, rule in failover_rules.items():
+        primary_venue = str(rule.get("primary_venue") or "").strip().lower()
+        secondary_venue = str(rule.get("secondary_venue") or "").strip().lower()
+        manual_override = dict(rule.get("manual_override") or {})
+        force_disable = set(_normalize_venue_list(manual_override.get("force_disable") or []))
+
+        if primary_venue and primary_venue in force_disable:
+            alerts.append(
+                {
+                    "type": "failover_conflict",
+                    "severity": "BLOCK",
+                    "reason_code": "primary_force_disabled",
+                    "entity_id": key,
+                    "message": "Primary venue manual force_disable listesinde.",
+                    "blocking": True,
+                }
+            )
+
+        if primary_venue and secondary_venue and primary_venue == secondary_venue:
+            alerts.append(
+                {
+                    "type": "failover_conflict",
+                    "severity": "WARN",
+                    "reason_code": "primary_secondary_same",
+                    "entity_id": key,
+                    "message": "Primary ve secondary venue aynı değer.",
+                    "blocking": False,
+                }
+            )
+
+    has_block = any(item.get("severity") == "BLOCK" for item in alerts)
+    has_warn = any(item.get("severity") == "WARN" for item in alerts)
+
+    return {
+        "net_status": "BLOCK" if has_block else ("WARN" if has_warn else "PASS"),
+        "alerts": alerts,
+        "blocking_alerts": [item for item in alerts if item.get("blocking")],
+        "warning_alerts": [item for item in alerts if not item.get("blocking")],
+        "summary": {
+            "total_alerts": len(alerts),
+            "block_count": sum(1 for item in alerts if item.get("severity") == "BLOCK"),
+            "warn_count": sum(1 for item in alerts if item.get("severity") == "WARN"),
+        },
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -2160,6 +2306,100 @@ def admin_routing_preview_v2(
 @router.get("/admin/operational-health")
 def admin_operational_health(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     return _build_operational_health_payload(db)
+
+
+@router.get("/admin/control-plane-cockpit")
+def admin_control_plane_cockpit(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    window_minutes: int = Query(default=30, ge=5, le=180),
+    churn_threshold: int = Query(default=5, ge=1, le=20),
+):
+    operational_health = _build_operational_health_payload(db)
+    conflict_report = _build_conflict_detection_report(db)
+
+    routing_policy = get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
+    failover_policy = _get_failover_policy_config(db)
+    failover_runtime = _get_failover_runtime_config(db)
+
+    transition_logs = list(failover_runtime.get("transition_logs") or [])
+    churn_alert = _build_route_churn_alert(transition_logs, window_minutes=window_minutes, threshold=churn_threshold)
+
+    exchange_health = operational_health.get("exchange_health") or {}
+    global_overview = {
+        "total_venues": len(exchange_health),
+        "healthy_venues": sum(1 for status in exchange_health.values() if str(status) == "healthy"),
+        "degraded_venues": sum(1 for status in exchange_health.values() if str(status) == "degraded"),
+        "down_venues": sum(1 for status in exchange_health.values() if str(status) == "down"),
+        "routing_rule_count": len((routing_policy.get("rules") or {})),
+        "failover_rule_count": len((failover_policy.get("rules") or {})),
+        "active_failover_state_count": len((failover_runtime.get("runtime_state") or {})),
+    }
+
+    active_route_map = []
+    for key, runtime_state in (failover_runtime.get("runtime_state") or {}).items():
+        parts = key.split(":")
+        active_route_map.append(
+            {
+                "key": key,
+                "user_id": parts[0] if len(parts) > 0 else None,
+                "strategy_id": parts[1] if len(parts) > 1 else None,
+                "market_type": parts[2] if len(parts) > 2 else None,
+                "environment": parts[3] if len(parts) > 3 else None,
+                "active_venue": runtime_state.get("active_venue"),
+                "fallback_chain": runtime_state.get("fallback_chain") or [],
+                "selection_reason": runtime_state.get("selection_reason"),
+                "updated_at": runtime_state.get("updated_at"),
+            }
+        )
+
+    latest_changes_rows = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.action.in_(
+                [
+                    "venue_failover_policy_updated",
+                    "venue_failover_manual_override_applied",
+                    "venue_failover_transition",
+                    "venue_routing_decision_generated",
+                    "venue_routing_policy_updated",
+                    "venue_market_policy_updated",
+                    "venue_capability_matrix_override_updated",
+                ]
+            )
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    latest_changes = [
+        {
+            "id": row.id,
+            "action": row.action,
+            "entity_type": row.entity_type,
+            "entity_id": row.entity_id,
+            "actor_user_id": row.actor_user_id,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in latest_changes_rows
+    ]
+
+    return {
+        "global_overview": global_overview,
+        "active_route_map": active_route_map,
+        "failover_state_board": list((failover_runtime.get("runtime_state") or {}).values()),
+        "misconfiguration_alerts": conflict_report.get("alerts") or [],
+        "route_churn_anomaly_alert": churn_alert,
+        "last_critical_changes": latest_changes,
+        "operational_health": operational_health,
+        "conflict_detection_center": conflict_report,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/admin/conflict-detection-center")
+def admin_conflict_detection_center(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return _build_conflict_detection_report(db)
 
 
 @router.get("/admin/audit-timeline")
