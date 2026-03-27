@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { apiClient } from "@/lib/api";
+import { apiClient, FRONTEND_BACKEND_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -39,7 +39,7 @@ export const ExecutionStatesPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isSuperAdmin = String(user?.role || "") === "super_admin";
-  const backendUrl = String(process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
+  const backendUrl = FRONTEND_BACKEND_URL;
   const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState({});

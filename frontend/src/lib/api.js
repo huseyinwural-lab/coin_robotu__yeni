@@ -1,6 +1,14 @@
 import axios from "axios";
 
-const BACKEND_URL = String(process.env.REACT_APP_BACKEND_URL || "").trim();
+const CONFIGURED_BACKEND_URL = String(process.env.REACT_APP_BACKEND_URL || "").trim();
+const LOOPBACK_URL_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+const isRemoteBrowser =
+  typeof window !== "undefined" &&
+  !/^(localhost|127\.0\.0\.1)$/i.test(String(window.location.hostname || ""));
+const BACKEND_URL =
+  LOOPBACK_URL_REGEX.test(CONFIGURED_BACKEND_URL) && isRemoteBrowser
+    ? window.location.origin
+    : CONFIGURED_BACKEND_URL;
 const AUTH_TOKEN_KEY = "token";
 const AUTH_USER_KEY = "auth_user";
 
@@ -17,8 +25,10 @@ if (!/^https?:\/\//i.test(BACKEND_URL)) {
   );
 }
 
+export const FRONTEND_BACKEND_URL = BACKEND_URL.replace(/\/$/, "");
+
 export const apiClient = axios.create({
-  baseURL: `${BACKEND_URL.replace(/\/$/, "")}/api`,
+  baseURL: `${FRONTEND_BACKEND_URL}/api`,
   timeout: 30000,
   withCredentials: true,
 });
