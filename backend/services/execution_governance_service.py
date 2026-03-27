@@ -396,7 +396,8 @@ def _rollout_matches(rollout_strategy: dict, context: dict) -> bool:
     if symbols and symbol not in symbols:
         return False
 
-    pct = int(float(strategy.get("traffic_percentage") or 100))
+    raw_pct = strategy.get("traffic_percentage")
+    pct = int(float(raw_pct if raw_pct is not None else 100))
     pct = max(min(pct, 100), 0)
     if pct >= 100:
         return True
