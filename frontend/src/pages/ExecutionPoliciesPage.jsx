@@ -44,6 +44,54 @@ const DEFAULT_RULE = {
   ],
 };
 
+const BUILDER_PRESETS = [
+  {
+    id: "exposure-cap",
+    label: "Exposure Cap",
+    description: "Toplam exposure sınırı",
+    scope: { environment: "DEV" },
+    rules: [
+      {
+        rule_id: "exposure_cap",
+        action: "BLOCK",
+        severity: "HIGH",
+        logical_operator: "AND",
+        conditions: [{ field: "exposure", operator: ">", value: "100000" }],
+      },
+    ],
+  },
+  {
+    id: "drawdown-brake",
+    label: "Drawdown Brake",
+    description: "Drawdown kritik eşiği",
+    scope: { environment: "STAGING" },
+    rules: [
+      {
+        rule_id: "drawdown_guard",
+        action: "REDUCE_ONLY",
+        severity: "CRITICAL",
+        logical_operator: "AND",
+        conditions: [{ field: "drawdown", operator: ">=", value: "0.12" }],
+      },
+    ],
+  },
+  {
+    id: "volatility-throttle",
+    label: "Volatility Throttle",
+    description: "Volatilite yükseldiğinde throttle",
+    scope: { environment: "PROD" },
+    rules: [
+      {
+        rule_id: "volatility_throttle",
+        action: "THROTTLE",
+        severity: "MEDIUM",
+        logical_operator: "AND",
+        conditions: [{ field: "volatility", operator: ">=", value: "0.8" }],
+      },
+    ],
+  },
+];
+
 export const ExecutionPoliciesPage = () => {
   const [payload, setPayload] = useState(null);
   const [remediationState, setRemediationState] = useState(null);
@@ -142,6 +190,23 @@ export const ExecutionPoliciesPage = () => {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!selectedVersionId) {
+      setVersionValidation(null);
+      return;
+    }
+    const loadValidation = async () => {
+      try {
+        const { data } = await apiClient.post(`/admin/execution-policies/versions/${selectedVersionId}/validate`);
+        setVersionValidation(data);
+      } catch (error) {
+        setVersionValidation(null);
+        toast.error(error?.response?.data?.detail || "Version validation alınamadı");
+      }
+    };
+    loadValidation();
+  }, [selectedVersionId]);
+
   if (isLoading) {
     return <LoadingSkeleton rows={7} testId="execution-policies-loading-skeleton" />;
   }
@@ -170,23 +235,6 @@ export const ExecutionPoliciesPage = () => {
   const simulationVersion = versionMap[simulationVersionId];
   const diffVersionAData = versionMap[diffVersionA];
   const diffVersionBData = versionMap[diffVersionB];
-
-  useEffect(() => {
-    if (!selectedVersionId) {
-      setVersionValidation(null);
-      return;
-    }
-    const loadValidation = async () => {
-      try {
-        const { data } = await apiClient.post(`/admin/execution-policies/versions/${selectedVersionId}/validate`);
-        setVersionValidation(data);
-      } catch (error) {
-        setVersionValidation(null);
-        toast.error(error?.response?.data?.detail || "Version validation alınamadı");
-      }
-    };
-    loadValidation();
-  }, [selectedVersionId]);
 
   const updateBuilderScope = (field, value) => {
     setBuilderPayload((prev) => ({
@@ -262,6 +310,22 @@ export const ExecutionPoliciesPage = () => {
       nextRules[ruleIndex] = { ...nextRules[ruleIndex], conditions: nextConditions };
       return { ...prev, rules: nextRules };
     });
+  };
+
+  const applyBuilderPreset = (preset) => {
+    setBuilderPayload((prev) => ({
+      ...prev,
+      description: preset.description || prev.description,
+      scope: {
+        ...prev.scope,
+        ...preset.scope,
+      },
+      rules: preset.rules.map((rule, idx) => ({
+        ...rule,
+        rule_id: rule.rule_id || `${preset.id}_${idx + 1}`,
+      })),
+    }));
+    setBuilderValidation(null);
   };
 
   const handleBuilderValidate = async () => {
@@ -604,6 +668,31 @@ export const ExecutionPoliciesPage = () => {
                   placeholder="BTCUSDT"
                   data-testid="policy-builder-scope-symbol"
                 />
+              </div>
+            </div>
+
+            <div className="mt-4 rounded border border-slate-800 bg-slate-950/40 p-3" data-testid="policy-builder-presets-panel">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="policy-builder-presets-title">Risk Preset Kütüphanesi</p>
+                  <p className="text-[11px] text-slate-500" data-testid="policy-builder-presets-subtitle">Hazır şablonla hızlı başlangıç.</p>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-3" data-testid="policy-builder-presets-grid">
+                {BUILDER_PRESETS.map((preset) => (
+                  <div key={preset.id} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid={`policy-builder-preset-card-${preset.id}`}>
+                    <p className="text-xs text-slate-100" data-testid={`policy-builder-preset-label-${preset.id}`}>{preset.label}</p>
+                    <p className="text-[11px] text-slate-500" data-testid={`policy-builder-preset-description-${preset.id}`}>{preset.description}</p>
+                    <p className="mt-2 text-[11px] text-slate-400" data-testid={`policy-builder-preset-scope-${preset.id}`}>scope: {preset.scope.environment}</p>
+                    <Button
+                      className="mt-3 border border-slate-700 bg-transparent text-xs text-slate-200 hover:border-emerald-400"
+                      onClick={() => applyBuilderPreset(preset)}
+                      data-testid={`policy-builder-preset-apply-${preset.id}`}
+                    >
+                      Uygula
+                    </Button>
+                  </div>
+                ))}
               </div>
             </div>
 

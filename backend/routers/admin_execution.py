@@ -1717,6 +1717,22 @@ def validate_execution_policy_builder(
     built = build_internal_policy_schema(payload.dict(exclude_none=True))
     schema = built.get("schema") or {}
     validation = validate_policy_schema(schema)
+    create_audit_log(
+        db,
+        action="EXECUTION_POLICY_VALIDATED",
+        entity_type="execution_policy_builder",
+        entity_id=schema.get("policy_code") or "builder",
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="info",
+        details={
+            "policy_code": schema.get("policy_code"),
+            "errors": len(validation.errors),
+            "warnings": len(validation.warnings),
+            "risk_level": validation.risk_level,
+        },
+    )
+    db.commit()
     return {
         "policy_code": schema.get("policy_code"),
         "errors": validation.errors,
@@ -1799,6 +1815,22 @@ def validate_execution_policy_version(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="policy_version_not_found")
     schema = _builder_schema_from_version(row)
     validation = validate_policy_schema(schema)
+    create_audit_log(
+        db,
+        action="EXECUTION_POLICY_VERSION_VALIDATED",
+        entity_type="execution_policy_version",
+        entity_id=row.version_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="info",
+        details={
+            "policy_code": row.policy_code,
+            "errors": len(validation.errors),
+            "warnings": len(validation.warnings),
+            "risk_level": validation.risk_level,
+        },
+    )
+    db.commit()
     return {
         "version_id": row.version_id,
         "policy_code": row.policy_code,
@@ -1817,7 +1849,7 @@ def diff_execution_policy_versions(
 ):
     _ = current_user
     try:
-        return get_policy_version_diff(
+        diff = get_policy_version_diff(
             db,
             policy_code=payload.policy_code,
             version_a=payload.version_a,
@@ -1825,6 +1857,22 @@ def diff_execution_policy_versions(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    create_audit_log(
+        db,
+        action="EXECUTION_POLICY_DIFF_COMPARE",
+        entity_type="execution_policy",
+        entity_id=payload.policy_code,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="info",
+        details={
+            "version_a": payload.version_a,
+            "version_b": payload.version_b,
+            "change_count": len(diff.get("changes") or []),
+        },
+    )
+    db.commit()
+    return diff
 
 
 @router.post("/execution-policies/simulate")
@@ -1841,6 +1889,22 @@ def simulate_execution_policy(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="policy_code_mismatch")
     schema = _builder_schema_from_version(row)
     simulation = simulate_policy_schema(schema, dict(payload.simulation_input or {}))
+    create_audit_log(
+        db,
+        action="EXECUTION_POLICY_SIMULATION_RUN",
+        entity_type="execution_policy_version",
+        entity_id=row.version_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="info",
+        details={
+            "policy_code": row.policy_code,
+            "decision": simulation.get("decision"),
+            "action": simulation.get("action"),
+            "severity": simulation.get("severity"),
+        },
+    )
+    db.commit()
     return {
         "policy_code": row.policy_code,
         "version_id": row.version_id,
