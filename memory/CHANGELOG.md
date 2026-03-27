@@ -1,5 +1,19 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-27 (P0 BLOCKER Security Hardening)
+- Challenge-based auth flow tamamlandı: privileged login artık doğrudan token dönmüyor, `mfa_challenge` dönüyor.
+- MFA verify endpointleri birleştirildi/genişletildi: `/api/mfa/verify`, `/api/auth/mfa/verify`, `/api/auth/mfa/challenge/verify`.
+- JWT session binding zorunlu hale geldi: `mfa_verified + device_id + mfa_verified_at` claimleri.
+- `device_id` server-generated httpOnly cookie + token claim eşleşme kontrolü eklendi.
+- 24h grace period + `grace_ack` akışı eklendi; grace sonrası privileged MFA setup zorunlu blok davranışı aktif.
+- Brute-force koruması (user+IP çifti): 5 fail -> 30 dk lock.
+- TOTP anti-replay ve drift tolerance (±1 window) eklendi.
+- Backup codes bcrypt hash + single-use + regenerate invalidate akışı tamamlandı.
+- Step-up auth endpointi eklendi: `POST /api/auth/step-up`.
+- Kritik endpointlerde step-up freshness (10 dk) enforcement eklendi (withdraw/API key/trade execution).
+- Frontend login/MFA akışı challenge modeline uyarlandı; admin grace_ack butonu eklendi.
+- Test kanıtı: `/app/test_reports/iteration_159.json` (backend 17/17 PASS, frontend MFA login handling PASS).
+
 ## 2026-03-25 (P1.3 Retention & Segment Profitability)
 - Yeni migration: `20260325_0077_user_economics_snapshots.py`.
 - Yeni model: `UserEconomicsSnapshot`.

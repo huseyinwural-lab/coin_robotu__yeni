@@ -1,5 +1,21 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-27 (P0 Security BLOCKER Kapandı)
+- ✅ Tamamlandı (P0):
+  - Challenge-based login + token-after-MFA
+  - 24h grace + grace sonrası hard block
+  - JWT `mfa_verified/device_id` + httpOnly cookie binding
+  - Brute-force lock (5 fail / 30dk, user+IP)
+  - TOTP anti-replay + backup code hardening
+  - Step-up auth (10dk) + kritik endpoint enforcement
+
+## P1 (Sıradaki)
+- Sumsub AML entegrasyonu (ilk faz: manuel veri girişi destekli şema/akış)
+- Deterministik risk scoring genişletmesi (LLM yok)
+
+## P2 (Backlog)
+- Multi-tenant capital rebalance automation (policy/simulation/manual -> scheduler/kill-switch fazları)
+
 ## 2026-03-25 (P1.3 tamamlandı)
 - ✅ Tamamlandı:
   - Retention trend (weekly/monthly)

@@ -1,3 +1,28 @@
+## 2026-03-27 — P0 BLOCKER Security & Authentication Hardening (Tamamlandı)
+
+### Kapsam (Tek Atomik Iterasyon)
+- Challenge-based login zorunlu hale getirildi: privileged rollerde (`super_admin/admin/ops`) login artık doğrudan token üretmiyor, `mfa_challenge` döndürüyor.
+- Token üretimi yalnızca MFA doğrulama sonrası: `POST /api/mfa/verify` + `POST /api/auth/mfa/verify`.
+- 24 saat MFA grace akışı eklendi: grace içinde `grace_ack` mümkün, grace sonrası privileged login bloklanıyor.
+
+### Güvenlik Sertleştirmeleri
+- JWT claimleri zorunlu: `mfa_verified`, `device_id`, `mfa_verified_at`.
+- Server-generated device binding: `device_id` httpOnly cookie + token claim eşleşme kontrolü (`deps.py`).
+- Brute-force koruması: login/MFA/step-up için user+IP çifti bazında 5 fail => 30 dk lock.
+- TOTP drift tolerance (±1 window) + anti-replay (timecode-hash) eklendi.
+- Backup code güvenliği: bcrypt hash, tek kullanımlık, regenerate ile invalidate.
+- Step-up auth: `POST /api/auth/step-up`; kritik endpointlerde 10 dk tazelik zorunlu.
+
+### Kritik Endpoint Enforcement
+- API key create/delete/update akışları (user exchange bağlantı endpointleri) step-up bağımlılığına alındı.
+- Trade execution akışları (user platform / user trading / user execution submit endpointleri) step-up bağımlılığına alındı.
+- Withdraw request endpointi step-up bağımlılığına alındı.
+
+### Frontend Uyum
+- Login panel routing düzeltildi: admin -> `/auth/login/admin`, user -> `/auth/login/user`.
+- MFA challenge handling güncellendi (grace_ack dahil).
+- Axios `withCredentials` aktif edildi (device cookie taşınması için).
+
 ## 2026-03-27 — P2-409 + P2-410 + P2-411 Tamamlandı
 
 ### P2-409 — Role-Based Approval Workflow Separation
