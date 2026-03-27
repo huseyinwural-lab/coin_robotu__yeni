@@ -995,17 +995,48 @@ def _build_validation_center_payload(db: Session, *, window_hours: int = 24, lim
         grouped[key].append(row)
 
     drift_alerts = []
+    check_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"PASS": 0, "WARN": 0, "BLOCK": 0})
+    reason_stats: dict[str, int] = defaultdict(int)
+
+    for row in recent_items:
+        for check in row.get("checks") or []:
+            check_name = str((check or {}).get("name") or "unknown_check")
+            check_status = str((check or {}).get("status") or "PASS").upper()
+            if check_status not in {"PASS", "WARN", "BLOCK"}:
+                check_status = "WARN"
+            check_stats[check_name][check_status] += 1
+        for reason in row.get("reason_codes") or []:
+            reason_stats[str(reason)] += 1
+
+    def _root_cause_hints(reason_codes: list[str]) -> list[str]:
+        hints = []
+        normalized = {str(item).lower() for item in reason_codes or []}
+        if {"balance_fetch_mocked", "balance_fetch_failed", "permission_matrix_failed"}.intersection(normalized):
+            hints.append("Credential/permission veya provider bağlantısı validation düşüşünü tetikliyor olabilir.")
+        if {"capability_runtime_partial", "rejection_classification_missing"}.intersection(normalized):
+            hints.append("Capability metadata drift veya rejection mapping eksikliği tespit edildi.")
+        if {"test_order_cancel_retry_partial", "dry_run_simulation_failed"}.intersection(normalized):
+            hints.append("Execution adapter davranışı kararsız; test order/cancel/retry akışını gözden geçirin.")
+        if {"validation_engine_blocked", "validation_engine_warn"}.intersection(normalized):
+            hints.append("Routing kararları validation motoru ile çelişiyor; policy/failover uyumunu kontrol edin.")
+        if not hints:
+            hints.append("Son validation farkları için check-level trend dağılımını inceleyin.")
+        return hints
+
     for strategy_key, logs in grouped.items():
         ordered_logs = sorted(logs, key=lambda item: item.get("created_at") or "")
         first_status = str((ordered_logs[0] or {}).get("net_status") or "PASS").upper()
         last_status = str((ordered_logs[-1] or {}).get("net_status") or "PASS").upper()
         if first_status == "PASS" and last_status in {"WARN", "BLOCK"}:
+            latest_reasons = list((ordered_logs[-1] or {}).get("reason_codes") or [])
             drift_alerts.append(
                 {
                     "strategy_key": strategy_key,
                     "from_status": first_status,
                     "to_status": last_status,
                     "reason_code": "validation_drift_pass_to_warn_or_block",
+                    "latest_reason_codes": latest_reasons,
+                    "root_cause_hints": _root_cause_hints(latest_reasons),
                     "event_count": len(ordered_logs),
                     "latest_at": (ordered_logs[-1] or {}).get("created_at"),
                     "severity": "high" if last_status == "BLOCK" else "medium",
@@ -1035,12 +1066,30 @@ def _build_validation_center_payload(db: Session, *, window_hours: int = 24, lim
         "drift_alert_count": len(drift_alerts),
     }
 
+    check_level_trends = []
+    for check_name, values in sorted(check_stats.items(), key=lambda item: sum(item[1].values()), reverse=True):
+        total = max(1, int(values["PASS"] + values["WARN"] + values["BLOCK"]))
+        check_level_trends.append(
+            {
+                "check_name": check_name,
+                "pass_count": values["PASS"],
+                "warn_count": values["WARN"],
+                "block_count": values["BLOCK"],
+                "total": total,
+                "pass_ratio": round(values["PASS"] / total, 4),
+                "warn_ratio": round(values["WARN"] / total, 4),
+                "block_ratio": round(values["BLOCK"] / total, 4),
+            }
+        )
+
     return {
         "window_hours": window_hours,
         "summary": summary,
         "timeline": recent_items,
         "diff_items": diff_items[:300],
         "drift_alerts": sorted(drift_alerts, key=lambda item: (_status_rank(item.get("to_status")), item.get("latest_at") or ""), reverse=True),
+        "check_level_trends": check_level_trends,
+        "top_reason_codes": sorted(reason_stats.items(), key=lambda item: item[1], reverse=True)[:20],
         "generated_at": now_utc.isoformat(),
     }
 
@@ -1142,6 +1191,59 @@ def _build_strategy_venue_heatmap_payload(db: Session, *, window_hours: int = 24
     }
 
 
+def _build_strategy_heatmap_comparison(db: Session, *, primary_window_hours: int = 24, compare_window_hours: int = 720) -> dict:
+    primary = _build_strategy_venue_heatmap_payload(db, window_hours=primary_window_hours)
+    compare = _build_strategy_venue_heatmap_payload(db, window_hours=compare_window_hours)
+
+    primary_map = {item.get("key"): item for item in (primary.get("strategies") or [])}
+    compare_map = {item.get("key"): item for item in (compare.get("strategies") or [])}
+
+    def _max_drift(row: dict | None) -> float:
+        if not row:
+            return 0.0
+        return max(
+            [float(item.get("allocation_drift") or 0.0) for item in (row.get("venue_distribution") or [])] or [0.0]
+        )
+
+    strategy_deltas = []
+    for key in sorted(set(primary_map.keys()) | set(compare_map.keys())):
+        primary_row = primary_map.get(key)
+        compare_row = compare_map.get(key)
+        primary_churn = int((primary_row or {}).get("route_churn_count") or 0)
+        compare_churn = int((compare_row or {}).get("route_churn_count") or 0)
+        primary_drift = _max_drift(primary_row)
+        compare_drift = _max_drift(compare_row)
+
+        strategy_deltas.append(
+            {
+                "key": key,
+                "strategy_id": (primary_row or compare_row or {}).get("strategy_id"),
+                "primary_window_hours": primary_window_hours,
+                "compare_window_hours": compare_window_hours,
+                "primary_route_churn": primary_churn,
+                "compare_route_churn": compare_churn,
+                "route_churn_delta": primary_churn - compare_churn,
+                "primary_max_allocation_drift": round(primary_drift, 4),
+                "compare_max_allocation_drift": round(compare_drift, 4),
+                "allocation_drift_delta": round(primary_drift - compare_drift, 4),
+            }
+        )
+
+    return {
+        "primary": primary,
+        "compare": compare,
+        "comparison": {
+            "primary_window_hours": primary_window_hours,
+            "compare_window_hours": compare_window_hours,
+            "strategy_deltas": sorted(
+                strategy_deltas,
+                key=lambda item: (abs(item.get("allocation_drift_delta") or 0), abs(item.get("route_churn_delta") or 0)),
+                reverse=True,
+            )[:100],
+        },
+    }
+
+
 def _build_conflict_auto_remediation_drafts(db: Session) -> list[dict]:
     conflict_report = _build_conflict_detection_report(db)
     routing_policy = get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
@@ -1239,6 +1341,24 @@ def _build_conflict_auto_remediation_drafts(db: Session) -> list[dict]:
             drafts.append(draft)
 
     return drafts
+
+
+def _get_conflict_remediation_approvals_config(db: Session) -> dict:
+    return get_control_plane_config(db, config_key="conflict_remediation_approvals", default={"requests": []})
+
+
+def _execute_conflict_remediation_draft(draft: dict, *, current_admin: User, db: Session) -> dict:
+    endpoint = str(draft.get("endpoint") or "")
+    draft_payload = dict(draft.get("payload") or {})
+
+    if endpoint == "PUT /api/venues/admin/routing-policies":
+        return admin_upsert_routing_policies(RoutingPolicyUpsertRequest(**draft_payload), current_admin, db)
+    if endpoint == "PUT /api/venues/admin/failover-policies":
+        return admin_upsert_failover_policy(FailoverPolicyUpsertRequest(**draft_payload), current_admin, db)
+    if endpoint == "POST /api/venues/admin/failover/manual-override":
+        return admin_apply_failover_manual_override(FailoverManualOverrideRequest(**draft_payload), current_admin, db)
+
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported_remediation_endpoint")
 
 
 @router.get("/admin/exchanges", response_model=list[ExchangeRegistryResponse])
@@ -2770,22 +2890,50 @@ def admin_strategy_venue_heatmap(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
     window_hours: int = Query(default=24, ge=1, le=168),
+    compare_window_hours: int = Query(default=720, ge=24, le=24 * 60),
 ):
-    return _build_strategy_venue_heatmap_payload(db, window_hours=window_hours)
+    comparison_payload = _build_strategy_heatmap_comparison(
+        db,
+        primary_window_hours=window_hours,
+        compare_window_hours=compare_window_hours,
+    )
+    primary = comparison_payload.get("primary") or {}
+    return {
+        **primary,
+        "compare_window": comparison_payload.get("compare") or {},
+        "comparison": comparison_payload.get("comparison") or {},
+    }
 
 
 @router.get("/admin/conflict-auto-remediation-drafts")
 def admin_conflict_auto_remediation_drafts(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     drafts = _build_conflict_auto_remediation_drafts(db)
+    approvals_config = _get_conflict_remediation_approvals_config(db)
+    approval_requests = list(approvals_config.get("requests") or [])
     return {
         "drafts": drafts,
+        "approval_requests": approval_requests,
         "summary": {
             "total_drafts": len(drafts),
             "blocking_draft_count": sum(1 for item in drafts if str(item.get("severity") or "").upper() == "BLOCK"),
             "warning_draft_count": sum(1 for item in drafts if str(item.get("severity") or "").upper() == "WARN"),
+            "pending_approval_count": sum(1 for item in approval_requests if str(item.get("status") or "") == "pending"),
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/admin/conflict-auto-remediation-approvals")
+def admin_conflict_auto_remediation_approvals(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    status_filter: str | None = Query(default=None),
+):
+    approvals_config = _get_conflict_remediation_approvals_config(db)
+    requests = list(approvals_config.get("requests") or [])
+    if status_filter:
+        requests = [item for item in requests if str(item.get("status") or "") == status_filter]
+    return {"requests": requests, "count": len(requests)}
 
 
 @router.post("/admin/conflict-auto-remediation-apply")
@@ -2800,18 +2948,82 @@ def admin_conflict_auto_remediation_apply(
     if draft is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="remediation_draft_not_found")
 
-    endpoint = str(draft.get("endpoint") or "")
-    draft_payload = dict(draft.get("payload") or {})
-    apply_result: dict | None = None
+    mode = str(payload.mode or "dry_run").strip().lower()
+    if mode not in {"dry_run", "submit", "approve_apply"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_remediation_mode")
 
-    if endpoint == "PUT /api/venues/admin/routing-policies":
-        apply_result = admin_upsert_routing_policies(RoutingPolicyUpsertRequest(**draft_payload), current_admin, db)
-    elif endpoint == "PUT /api/venues/admin/failover-policies":
-        apply_result = admin_upsert_failover_policy(FailoverPolicyUpsertRequest(**draft_payload), current_admin, db)
-    elif endpoint == "POST /api/venues/admin/failover/manual-override":
-        apply_result = admin_apply_failover_manual_override(FailoverManualOverrideRequest(**draft_payload), current_admin, db)
-    else:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported_remediation_endpoint")
+    approvals_config = _get_conflict_remediation_approvals_config(db)
+
+    if mode == "dry_run":
+        return {
+            "mode": "dry_run",
+            "applied": False,
+            "draft_id": draft_id,
+            "draft": draft,
+            "simulated_result": {
+                "endpoint": draft.get("endpoint"),
+                "payload": draft.get("payload"),
+                "action_summary": draft.get("action_summary"),
+            },
+            "requires_approval": True,
+        }
+
+    if mode == "submit":
+        requests = list(approvals_config.get("requests") or [])
+        approval_request = {
+            "id": str(uuid.uuid4()),
+            "status": "pending",
+            "draft_id": draft_id,
+            "draft": draft,
+            "requested_by": current_admin.id,
+            "requested_at": datetime.now(timezone.utc).isoformat(),
+            "comment": payload.comment,
+            "approved_by": None,
+            "approved_at": None,
+            "apply_result": None,
+        }
+        requests.insert(0, approval_request)
+        approvals_config["requests"] = requests[:1000]
+        upsert_control_plane_config(db, config_key="conflict_remediation_approvals", payload=approvals_config, actor_user_id=current_admin.id)
+
+        create_audit_log(
+            db,
+            action="venue_conflict_auto_remediation_submitted",
+            entity_type="venue_conflict_remediation",
+            entity_id=draft_id,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            details={"draft": draft, "approval_request": approval_request},
+        )
+
+        return {
+            "mode": "submit",
+            "submitted": True,
+            "applied": False,
+            "draft_id": draft_id,
+            "approval_request": approval_request,
+        }
+
+    # mode == approve_apply
+    if not payload.approval_request_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="approval_request_id_required")
+
+    requests = list(approvals_config.get("requests") or [])
+    target_request = next((item for item in requests if item.get("id") == payload.approval_request_id), None)
+    if target_request is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="approval_request_not_found")
+    if str(target_request.get("status") or "") != "pending":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="approval_request_not_pending")
+
+    apply_result = _execute_conflict_remediation_draft(draft, current_admin=current_admin, db=db)
+    target_request["status"] = "approved_applied"
+    target_request["approved_by"] = current_admin.id
+    target_request["approved_at"] = datetime.now(timezone.utc).isoformat()
+    target_request["apply_result"] = apply_result
+    target_request["approval_comment"] = payload.comment
+
+    approvals_config["requests"] = requests
+    upsert_control_plane_config(db, config_key="conflict_remediation_approvals", payload=approvals_config, actor_user_id=current_admin.id)
 
     create_audit_log(
         db,
@@ -2820,14 +3032,16 @@ def admin_conflict_auto_remediation_apply(
         entity_id=draft_id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details={"draft": draft, "apply_result": apply_result},
+        details={"draft": draft, "apply_result": apply_result, "approval_request_id": payload.approval_request_id},
     )
 
     return {
+        "mode": "approve_apply",
         "applied": True,
         "draft_id": draft_id,
         "draft": draft,
         "apply_result": apply_result,
+        "approval_request": target_request,
     }
 
 

@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 
-export const ConflictAutoRemediationPanel = ({ data, loading, error, onRefresh, onApplyDraft }) => {
+export const ConflictAutoRemediationPanel = ({ data, loading, error, onRefresh, onRunDraft }) => {
   const drafts = data?.drafts || [];
   const summary = data?.summary || {};
+  const approvalRequests = data?.approval_requests || [];
 
   return (
     <section className="rounded-2xl border border-amber-500/30 bg-slate-950/80 p-4" data-testid="conflict-auto-remediation-panel">
@@ -35,13 +36,54 @@ export const ConflictAutoRemediationPanel = ({ data, loading, error, onRefresh, 
                   type="button"
                   variant="outline"
                   className="mt-2"
-                  onClick={() => onApplyDraft({ reason_code: draft.reason_code, entity_id: draft.entity_id })}
-                  data-testid={`conflict-auto-remediation-draft-apply-button-${index}`}
+                  onClick={() => onRunDraft({ reason_code: draft.reason_code, entity_id: draft.entity_id, mode: "dry_run" })}
+                  data-testid={`conflict-auto-remediation-draft-dry-run-button-${index}`}
                 >
-                  Draft Uygula
+                  Dry Run
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="ml-2 mt-2"
+                  onClick={() => onRunDraft({ reason_code: draft.reason_code, entity_id: draft.entity_id, mode: "submit", comment: "submitted_from_ui" })}
+                  data-testid={`conflict-auto-remediation-draft-submit-button-${index}`}
+                >
+                  Onaya Gönder
                 </Button>
               </article>
             ))}
+          </div>
+
+          <div className="mt-3" data-testid="conflict-auto-remediation-approvals-list">
+            <p className="text-xs font-semibold text-amber-100" data-testid="conflict-auto-remediation-approvals-title">Approval Queue</p>
+            {approvalRequests.filter((item) => item.status === "pending").length === 0 && (
+              <p className="text-xs text-slate-400" data-testid="conflict-auto-remediation-approvals-empty">Pending approval yok.</p>
+            )}
+            {approvalRequests
+              .filter((item) => item.status === "pending")
+              .slice(0, 20)
+              .map((item, index) => (
+                <div key={item.id} className="mt-2 rounded border border-slate-800 p-2 text-xs" data-testid={`conflict-auto-remediation-approval-${index}`}>
+                  <p data-testid={`conflict-auto-remediation-approval-summary-${index}`}>{item.id} · {item.draft_id} · requested_by={item.requested_by}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-1"
+                    onClick={() =>
+                      onRunDraft({
+                        reason_code: item.draft?.reason_code,
+                        entity_id: item.draft?.entity_id,
+                        mode: "approve_apply",
+                        approval_request_id: item.id,
+                        comment: "approved_from_ui",
+                      })
+                    }
+                    data-testid={`conflict-auto-remediation-approval-apply-button-${index}`}
+                  >
+                    Onayla ve Uygula
+                  </Button>
+                </div>
+              ))}
           </div>
         </>
       )}

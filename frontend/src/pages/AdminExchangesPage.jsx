@@ -137,7 +137,7 @@ export const AdminExchangesPage = () => {
     }
   }, []);
 
-  const loadHeatmap = useCallback(async (params = { window_hours: 24 }) => {
+  const loadHeatmap = useCallback(async (params = { window_hours: 24, compare_window_hours: 720 }) => {
     setHeatmapState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const { data } = await apiClient.get("/venues/admin/strategy-venue-heatmap", { params });
@@ -257,10 +257,16 @@ export const AdminExchangesPage = () => {
     }
   }, [loadValidationCenter, loadControlPlaneCockpit, loadHeatmap]);
 
-  const applyRemediationDraft = useCallback(async (payload) => {
+  const runRemediationDraftWorkflow = useCallback(async (payload) => {
     try {
-      await apiClient.post("/venues/admin/conflict-auto-remediation-apply", payload);
-      toast.success("Remediation draft uygulandı");
+      const { data } = await apiClient.post("/venues/admin/conflict-auto-remediation-apply", payload);
+      if (data?.mode === "dry_run") {
+        toast.success("Dry-run tamamlandı");
+      } else if (data?.mode === "submit") {
+        toast.success("Draft onaya gönderildi");
+      } else {
+        toast.success("Draft onaylandı ve uygulandı");
+      }
       await Promise.all([
         loadConflictDetection(),
         loadRemediationDrafts(),
@@ -338,7 +344,7 @@ export const AdminExchangesPage = () => {
         loading={remediationDraftState.loading}
         error={remediationDraftState.error}
         onRefresh={loadRemediationDrafts}
-        onApplyDraft={applyRemediationDraft}
+        onRunDraft={runRemediationDraftWorkflow}
       />
 
       <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-exchanges-panels-grid">

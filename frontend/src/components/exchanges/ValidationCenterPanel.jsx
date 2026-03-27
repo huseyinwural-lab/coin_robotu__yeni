@@ -14,6 +14,8 @@ export const ValidationCenterPanel = ({ approvedUsers, data, loading, error, onR
   const driftAlerts = data?.drift_alerts || [];
   const timeline = data?.timeline || [];
   const diffItems = data?.diff_items || [];
+  const checkLevelTrends = data?.check_level_trends || [];
+  const topReasons = data?.top_reason_codes || [];
 
   return (
     <section className="rounded-2xl border border-emerald-500/30 bg-slate-950/80 p-4" data-testid="validation-center-panel">
@@ -63,10 +65,23 @@ export const ValidationCenterPanel = ({ approvedUsers, data, loading, error, onR
             <p className="text-xs font-semibold text-emerald-100" data-testid="validation-center-drift-alerts-title">Validation Drift Alerts</p>
             {driftAlerts.length === 0 && <p className="text-xs text-slate-400" data-testid="validation-center-drift-alerts-empty">Drift alert yok.</p>}
             {driftAlerts.slice(0, 20).map((item, index) => (
-              <p key={`${item.strategy_key}-${index}`} className="border-t border-slate-800 py-1 text-xs text-emerald-200" data-testid={`validation-center-drift-alert-${index}`}>
-                {item.strategy_key}: {item.from_status} → {item.to_status} ({item.event_count} event)
+              <article key={`${item.strategy_key}-${index}`} className="border-t border-slate-800 py-1 text-xs text-emerald-200" data-testid={`validation-center-drift-alert-${index}`}>
+                <p data-testid={`validation-center-drift-alert-summary-${index}`}>{item.strategy_key}: {item.from_status} → {item.to_status} ({item.event_count} event)</p>
+                <p className="text-slate-300" data-testid={`validation-center-drift-alert-reasons-${index}`}>reasons: {(item.latest_reason_codes || []).join(", ") || "-"}</p>
+                <p className="text-slate-300" data-testid={`validation-center-drift-alert-hints-${index}`}>hints: {(item.root_cause_hints || []).join(" | ") || "-"}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="mb-3" data-testid="validation-center-check-level-trends-list">
+            <p className="text-xs font-semibold text-slate-100" data-testid="validation-center-check-level-trends-title">Check-Level Trend Chart</p>
+            {checkLevelTrends.length === 0 && <p className="text-xs text-slate-400" data-testid="validation-center-check-level-trends-empty">Check trend verisi yok.</p>}
+            {checkLevelTrends.slice(0, 20).map((item, index) => (
+              <p key={`${item.check_name}-${index}`} className="border-t border-slate-800 py-1 text-xs text-slate-300" data-testid={`validation-center-check-level-trend-${index}`}>
+                {item.check_name}: pass/warn/block={item.pass_count}/{item.warn_count}/{item.block_count}
               </p>
             ))}
+            <p className="mt-1 text-xs text-slate-400" data-testid="validation-center-top-reasons">top reasons: {(topReasons || []).map((item) => `${item[0]}(${item[1]})`).join(", ") || "-"}</p>
           </div>
 
           <div className="mb-3" data-testid="validation-center-diff-list">

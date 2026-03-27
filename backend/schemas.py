@@ -5440,4 +5440,7 @@ class ValidationCenterRerunRequest(BaseModel):
 class ConflictAutoRemediationApplyRequest(BaseModel):
     reason_code: str
     entity_id: str
+    mode: str = "dry_run"
+    approval_request_id: str | None = None
+    comment: str | None = None
 
