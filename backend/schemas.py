@@ -5380,3 +5380,16 @@ class RoutingPreviewRequest(BaseModel):
     order_side: str = "BUY"
     order_size_usd: float = 0
 
+
+class CapabilityMatrixOverrideRequest(BaseModel):
+    exchange_code: str
+    market_type: str
+    environment: str = "testnet"
+    symbol: str
+    support_level: str | None = None
+    supports_leverage: bool | None = None
+    supports_reduce_only: bool | None = None
+    supports_margin_mode: bool | None = None
+    supports_hedge_mode: bool | None = None
+    note: str | None = None
+
