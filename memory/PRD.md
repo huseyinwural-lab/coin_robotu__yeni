@@ -1,3 +1,50 @@
+## 2026-03-27 — P1 Venue Control Plane Operasyon Katmanı (Tamamlandı)
+
+### P1.1 Capability Validation Derinleştirme
+- Yeni endpoint: `POST /api/venues/admin/capability-discovery`
+  - adapter/public metadata üzerinden capability discovery
+  - symbol-level capability matrisi (`supports_leverage`, `reduce_only`, `hedge_mode`, `margin_mode`, `support_level`)
+- Persist endpoint: `GET /api/venues/admin/capability-matrix`
+
+### P1.2 Market Policy Layer Güçlendirme
+- Yeni policy endpointleri:
+  - `PUT /api/venues/admin/market-policy-layer`
+  - `GET /api/venues/admin/market-policy-layer`
+- Policy içeriği:
+  - per-symbol allow/deny
+  - risk tier defaults
+  - restricted symbol classes
+- Credential resolution içine symbol policy enforcement eklendi (`symbol_policy_blocked`, `restricted_symbol_class_blocked`).
+
+### P1.3 Assignment & Routing Katmanı
+- Yeni routing policy endpointleri:
+  - `PUT /api/venues/admin/routing-policies`
+  - `GET /api/venues/admin/routing-policies`
+- Yeni routing preview endpointi:
+  - `POST /api/venues/admin/routing-preview-v2`
+  - çıktı: `net_status`, `checks`, `resolved_execution_path`, `routing_rule`, `capital_allocation`
+
+### P1.4 Operational Health
+- Yeni endpoint: `GET /api/venues/admin/operational-health`
+  - venue health summary + operational scores
+  - degraded/down reason code görünürlüğü
+
+### P1.5 Audit & Traceability
+- Yeni endpoint: `GET /api/venues/admin/audit-timeline`
+  - who/when + old/new value + details + replayable timeline itemları
+- Capability / market policy / routing policy update aksiyonları diff ile audit’e yazılıyor.
+
+### Frontend (AdminExchangesPage)
+- Capability Discovery paneli
+- Routing Preview v2 paneli
+- Operational Health paneli
+- Replayable Audit Timeline paneli
+
+### Test Durumu
+- Testing Agent: `/app/test_reports/iteration_152.json`
+  - Backend: **13/13 PASS**
+  - Frontend: **100% PASS** (test ajanı `routingPreviewForm` runtime hatasını fixledi ve doğruladı)
+
 ## 2026-03-27 — P0 KAPANIŞ (Production Hardening H1-H6)
 
 ### H1 Secret Management (Prod-safe)
