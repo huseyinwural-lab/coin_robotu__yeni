@@ -1,153 +1,149 @@
 <analysis>### original_problem_statement
-Kullanıcı, mevcut temel user list yapısının kaldırılarak yerine uçtan uca kapsamlı bir **Identity + Risk + Trading Control Plane** kurulmasını talep etmiştir.
-**PRODUCT REQUIREMENTS:**
-1. **P0 - Kritik (Sistem Güvenliği / Prod Blocker):**
-   - MFA Standardizasyonu (Primary olarak sadece TOTP + Backup Codes, Email OTP sadece recovery için).
-   - Login protection (IP/User rate limit, brute-force lock, progressive backoff).
-   - Session management (aktif session listesi, revoke yeteneği).
-   - Granular RBAC, privilege escalation koruması, custom role altyapısı.
-   - Tüm kritik işlemlerde (delete, disable, live trading enable, vb.) Two-step approval (request -> approve -> execute) zorunluluğu ve bypass'ların kapatılması.
-   - Soft Delete ve Hard Delete (90 gün retention, dependency check) yaşam döngüsü.
-   - Super Admin silinme/disable edilme koruması.
-   - Eligibility Engine: Belirli şartlar (email_verified, risk_profile_assigned, exchange_connected, vb.) sağlanmadan kullanıcının Live Trading Eligible olmasını engelleyen merkezi karar katmanı.
-2. **P1 - Operasyonel Kontrol & Sistem Tamamlama:**
-   - User Lifecycle (Invite, MOCKED email verification, reactivation).
-   - Risk + Trading + Mapping yüzeylerinin UI entegrasyonu.
-   - Policy-aware Bulk Operations.
-   - Approval Queue ve Policy Management ekranları.
-3. **P2 - UX / Control Surface:**
-   - User Activity Metrics, Error Rates görünürlüğü.
-   - Admin UX iyileştirmeleri (inline edit, validation, empty states).
+The user has mandated a massive P0 / BLOCKER Security and Authentication Hardening update for the platform. Previously, the user successfully orchestrated the completion of the P1 and P2 Venue/Exchange Management Control Plane (Routing, Failover, Validation, and Cockpit UIs). The current mandate shifts entirely to tightening user access.
+
+PRODUCT REQUIREMENTS (P0 Security Mandate):
+- **MFA Enforcement**: Hard mandatory for super_admin, admin, trader. No bypasses. 24-hour grace period for setup, then hard cutover.
+- **Challenge-Based Auth Flow**:  -> returns  (no access token) ->  -> returns .
+- **TOTP Security**: Add drift tolerance, anti-replay (hash last used OTP), encrypt secrets in DB, single-view secret setup.
+- **Backup Codes**: Hash in DB, single-use, auto-invalidate on regenerate.
+- **Session Binding**: JWT must contain  and .  must be a server-generated httpOnly secure cookie.
+- **Brute Force Protection**: 5 failed MFA/Login attempts results in a 30-minute lock (user + IP based).
+- **Step-Up Authentication**: Critical actions (withdraw, API key create/delete, trade execution) require fresh MFA if older than 10 minutes.
 
 **User's preferred language**: Turkish (INSTRUCT NEXT AGENT: KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.)
 
-### what currently exists?
-Önceki faz olan Strategy Control Plane (AdminStrategiesPage, Execution Explain, vs.) 100% tamamlanmış ve test edilmiştir.
-Yeni görev olan Identity Control Plane için **P0 Backend altyapısı tamamen bitmiş ve testleri (51 test) geçmiştir**. TOTP MFA, IP/Rate limiting, 2-step approval, Soft/Hard Delete lifecycle, ve Eligibility Engine backend'e entegre edilmiştir. 
-Şu anda ajan, **P1 Fazı** kapsamında Custom Role Lifecycle, Invite mekanizması ve gelişmiş filtrelemeleri Frontend'e () ve ilgili router'lara bağlama işlemlerini yapmaktadır.
+**what currently exists?**
+The P1 and P2 Venue Control Plane (Failover orchestration, Deterministic Routing Engine, Validation Center with real data checks, Heatmaps, and Conflict Remediation workflows) are fully implemented, tested, and stable. The application currently has a basic authentication and MFA system, but it lacks strict challenge-based flows, device binding, encrypted backup codes, and brute-force protection.
 
-### Last working item
-- **Last item agent was working:** Ajan, P1 gereksinimleri olan Custom Role Management (rol oluşturma, düzenleme) ve Invite/User Lifecycle UI bileşenlerini  dosyasına eklemek için apply_patch işlemleri yapıyordu. Aynı zamanda backend'deki ilgili router/servis fonksiyonlarını (, ) güncelliyordu.
-- **Status:** IN PROGRESS
-- **Agent Testing Done:** N (Frontend yama süreci yarıda kaldı, linter veya render testi henüz yapılmadı).
-- **Which testing method agent to use?** both (Önce  ve screenshot aracı ile 'in kırık olup olmadığı kontrol edilmeli, ardından Backend curl ve  kullanılmalı).
-- **User Testing Done:** N
+**Last working item**:
+- **Last item agent was working**: The agent was exploring backend authentication files (, , , ) to prepare for the massive P0 Security & Auth rewrite.
+- **Status**: IN PROGRESS
+- **Agent Testing Done**: N
+- **Which testing method agent to use?** both (Testing agent will be required as this is a core auth flow change affecting frontend routing and backend middleware).
+- **User Testing Done**: N
 
-### All Pending/In progress Issue list
-**Issue 1: AdminUsersPage.jsx P1 UI Güncellemelerinin Tamamlanması (P0)**
-- **Attempted fixes:** Ajan,  dosyasına Custom Role, Invite List, ve gelişmiş filtreleme (exchange, status) eklemek için yama yapıyordu. Dosya yarıda kalmış olabilir.
-- **Next debug checklist:**  dosyası incelenmeli. Syntax hatası kontrol edilmeli. Custom Role modal/UI, Invite aksiyonları ve filter state'lerinin eksik kısımları tamamlanmalı.
-- **Why fix this issue and what will be achieved with the fix?** Kimlik kontrol panelinin UI kısmı bitmeden yöneticiler backend'deki yetenekleri kullanamaz. 
-- **Status:** IN PROGRESS
-- **Is recurring issue?** N
-- **Should Test frontend/backend/both after fix?** Frontend
+**All Pending/In progress Issue list**:
+- **Issue 1**: Implement P0 Challenge-Based Auth Flow & MFA Enforcement (Highest Priority)
+   - **Attempted fixes**: Agent just started reading the auth files. No code written yet.
+   - **Next debug checklist**: Modify  to return a challenge token instead of a JWT if MFA is required. Create/update  DB logic. Implement 24-hour grace period logic.
+   - **Why fix this issue and what will be achieved with the fix?**: This is a hard blocker for release. Ensures no user can bypass MFA and secures the entry point of the application.
+   - **Status**: IN PROGRESS
+   - **Is recurring issue?**: N
+   - **Should Test frontend/backend/both after fix?**: both
+   - **Blocked on other issue**: None
 
-### In progress Task List
-**Task 1: P1 - Control Plane UI Tamamlanması**
-- **Where to resume:**  ve Approval yönetimi ekranları.
-- **What will be achieved with this?** Custom Role yönetimi, Policy-aware Bulk operasyonlar, Approval Queue (onay bekleyen işlemler) ve User detaylarında risk/trading/exchange bağlarının kontrol edilebilir hale gelmesi sağlanacak.
-- **Status:** IN PROGRESS
-- **Should Test frontend/backend/both after fix?** Both
-- **Blocked on something:** None
+**In progress Task List**:
+- **Task 1: Challenge-Based Auth & Enforcement**
+   - **Where to resume**:  and . Transition login to issue an  token (with TTL). Enforce 24h grace period for MFA setup.
+   - **What will be achieved with this?**: Prevents token issuance before MFA validation.
+   - **Status**: NOT STARTED
+   - **Should Test frontend/backend/both after fix?**: both
+   - **Blocked on something**: None
+- **Task 2: Device Binding & Token Security**
+   - **Where to resume**: Backend login/token generation and frontend API client. Server must issue an httpOnly cookie for  and embed it in the JWT along with .
+   - **What will be achieved with this?**: Ties sessions to specific devices, preventing token theft reuse.
+   - **Status**: NOT STARTED
+   - **Should Test frontend/backend/both after fix?**: both
+   - **Blocked on something**: Task 1
+- **Task 3: TOTP & Backup Code Hardening**
+   - **Where to resume**:  and DB models. Hash backup codes (bcrypt), encrypt TOTP secrets, implement anti-replay (hash last used OTP).
+   - **What will be achieved with this?**: Protects MFA secrets at rest.
+   - **Status**: NOT STARTED
+   - **Should Test frontend/backend/both after fix?**: backend
+   - **Blocked on something**: None
+- **Task 4: Brute Force & Step-Up Auth**
+   - **Where to resume**: . Implement 5 fails / 30 mins lock rule. Implement 10-minute TTL step-up auth for critical endpoints (trades, API keys, withdraws).
+   - **What will be achieved with this?**: Prevents dictionary attacks and secures high-risk actions.
+   - **Status**: NOT STARTED
+   - **Should Test frontend/backend/both after fix?**: both
+   - **Blocked on something**: None
 
-### Upcoming and Future Tasks
-**Upcoming Tasks:**
-- P1: Approval Queue ve Policy Management UI (Ayrı bir sayfa veya panel olarak - pending/approved/rejected filtreleri, approver aksiyon paneli, reason zorunluluğu).
-- P1: Risk + Trading + Mapping UI Entegrasyonu (Kullanıcı detayında risk profili, capital limit, exchange bağlantıları, live trading eligibility görünürlüğü ve yönetimi).
-- P1: Policy-aware Bulk Operations UI (Bulk işlemlerin anında uygulanmayıp, etkilenecek kullanıcıları/riskleri gösteren bir preview ekranından geçmesi).
+**Upcoming and Future Tasks**:
+- **P1 (Next Phase)**: Dış AML provider entegrasyonu (User explicitly selected Sumsub - data to be designed for manual entry initially).
+- **P1 (Next Phase)**: Model destekli risk scoring (Deterministic rules + statistics, strictly NO LLM due to latency/non-determinism).
+- **P2 (Future)**: Multi-tenant capital rebalance automation (Phased approach: policy/simulation/manual -> scheduler/kill-switch later).
 
-**Future Tasks:**
-- P2: User List UI Derinleştirmesi (Satır veya drawer seviyesinde MFA state, risk seviyesi, session count, compliance state gösterimi).
-- P2: Observability Yüzeyleri (Kullanıcı bazlı trade history linki, suspicious login visibility, error rates).
-- P2: UX Hardening (Destructive action'larda kırmızı risk dili, loading skeleton'lar, empty states).
+**Completed work in this session**:
+- Built P2.1, P2.2, P2.3 Multi-venue routing, failover orchestration, and validation engine (DONE)
+- Built P2-401, P2-402 Control Plane Cockpit & Conflict Detection Center (DONE)
+- Built P2-403, P2-404, P2-405 Validation Center, Heatmap, Remediation Drafts (DONE)
+- Built P2-406, P2-407, P2-408 Charts, Time Comparisons, Approval Workflows (DONE)
+- Built P2-409, P2-410, P2-411 Role-based approvals, Stacked charts, Heatmap confidence scores (DONE)
 
-### Completed work in this session
-- Strategy Control Plane P1/P2 tamamlandı (Explain modal, Readiness badge, Concurrency testleri) (DONE)
-- Identity Control Layer P0 Backend Hardening (Soft/Hard delete, Approval Bypass kapatılması, TOTP Standardizasyonu) (DONE)
-- Redis bağlantısı yoksa devreye giren InMemoryRedis fallback mekanizması eklendi (DONE)
-- Eligibility Engine backend entegrasyonu (Grace period ve compliance hesaplamaları) (DONE)
-- Session & Login History backend tabloları ve kayıt mantığı (DONE)
+**Earlier issues found/mentioned but not fixed**:
+- None.
 
-### Earlier issues found/mentioned but not fixed
-None
+**Known issue recurrence from previous fork**:
+- **Issue recurrence in previous fork**: N/A
+- **Recurrence count**: 0
+- **Status**: N/A
 
-### Known issue recurrence from previous fork
-- **Issue recurrence in previous fork:** PostgreSQL connection failure (502 Error / Port 5432)
-- **Recurrence count:** 1 (Bu oturumda çözüldü, ancak preview ortamları ayağa kalkarken yaşanabiliyor. Embedded DB yasaktır, daima Postgres kullanılmalıdır).
-- **Status:** RESOLVED
-- **Issue recurrence in previous fork:** Redis unavailable error.
-- **Recurrence count:** 1
-- **Status:** RESOLVED (Ajan  fallback class'ı yazarak çözdü).
-
-### Code Architecture
+**Code Architecture**:
 
 
-### Key Technical Concepts
-- **Strict Approval Flow:** Kritik işlemler (disable, delete, limit artırımı) doğrudan çalışmaz. Request açılır, başka bir admin onaylar (Two-step approval).
-- **Central Eligibility Engine:** Bir kullanıcının işlem yapabilmesi için birçok parametreye (email verified, risk profile assigned, vs.) bakar. Şartlar sağlanmazsa sistemde var olsa bile Live Trading Eligible olamaz.
-- **Soft/Hard Delete:** Kullanıcılar anında silinmez. Soft delete ile pasife alınır. 90 günlük retention süresi sonrası ve dependency check'ler (açık pozisyon var mı) yapıldıktan sonra hard delete edilir. Super Admin'ler silinemez.
-- **MFA:** Email OTP auth akışından kaldırıldı. Primary auth kesinlikle TOTP (Authenticator) + Backup kodlarıdır.
+**Key Technical Concepts**:
+- **Challenge-Based Authentication**: Decoupling password validation from token issuance.
+- **Server-Controlled Device Binding**: Utilizing secure HTTP-only cookies instead of client-provided headers to identify devices.
+- **Step-Up Authentication**: Requiring re-verification of identity for high-risk actions even within an active session.
 
-### key DB schema
-- : Temel kimlik bilgileri, role, is_active, deleted_at.
-- : Aktif login session'ları ve revoke durumu.
-- : Başarılı/Başarısız girişler, IP ve cihaz logları.
-- : Custom role yetkilendirme (permissions) matrisi.
-- : Kritik işlemler için onay bekleyen kuyruk.
+**key DB schema**:
+- : Needs tracking for failed attempts, lock status, and 24h grace period start.
+- : Tracks pending MFA logins (TTL bound).
+- : Needs to store hashed codes.
 
-### changes in tech stack
-- **Redis Mocking:** Ortamda Redis bulunamadığında çökmeyi önlemek için  içerisinde  sınıfı oluşturuldu.
-- **Postgres Enforced:** SQLite kesinlikle yasaklanmış olup (), sistem Postgres üzerinden Alembic migration'ları ile çalışmaktadır.
+**changes in tech stack**:
+- None, but heavy reliance on password hashing libraries (like  or ) for backup codes and last-used OTPs.
 
-### All files of reference
--  (Yeni P0/P1 logici burada)
--  (Yeni control plane API'leri)
--  (P0 güvenlik testleri)
--  (Ana frontend dosyası - ŞU AN YAMALANIYOR)
-
-### Areas that need refactoring
--  dosyası çok büyümeye başlamıştır. Kullanıcının talebi üzerine ilerleyen aşamalarda 'de yapıldığı gibi komponentlere bölünmesi faydalı olacaktır (örn. , ).
-
-### key api endpoints
+**All files of reference**:
 - 
 - 
 - 
 - 
 - 
 
-### Critical Info for New Agent
-- **KULLANICI TALEBİ KESİNDİR:** Kullanıcı P0 (Güvenlik, Delete lifecycle, Approval Bypass kapatılması) işlemlerinin kusursuz çalıştığından emin olmak istemiş ve bunu tamamlatmıştır. Şu an P1 aşamasındayız.
-- Frontend'deki  dosyası ajan tarafından yamalanırken oturum kapanmıştır. **İlk işiniz bu dosyayı linter ile kontrol edip eksik kalan P1 (Custom Role modal, Invite listesi) yamalarını tamamlamak olmalıdır.**
-- Hiçbir kritik işlem (bulk disable dahil) doğrudan API üzerinden çalışmamalı, her zaman  tablosuna düşmeli ve başka bir admin tarafından onaylanmalıdır.
-- Kullanıcı testlerinde TOTP zorunlu kılınmıştır.
+**Areas that need refactoring**:
+- The entire frontend Login page/flow will need refactoring to handle the  response state instead of immediately storing a JWT.
 
-### documents and test reports created in this job
+**key api endpoints**:
+-  (Will change response schema)
 - 
--  (P0 Closure test başarı raporu)
+-  (To be created/utilized)
 
-### Last 10 User Messages and any pending HUMAN messages
-- *Mesaj 430:* Kullanıcı P0 Eksik Kapatma Emri verdi (Approval Bypass kapat, Delete lifecycle ekle, MFA standardize et).
-- *Mesaj 433:* Kullanıcı kararları kilitledi (Hard delete retention 90 gün, dependency check geniş, TOTP tek auth yöntemi) ve P0 bitmeden başka işe geçme dedi.
-- *Mesaj 538:* Ajan P0'ı bitirip onay istedi, Kullanıcı a (ilerle) dedi. Bunun üzerine ajan P1 (Role Lifecycle ve Invite) geliştirmelerine başladı ve oturum sonlandı.
+**Critical Info for New Agent**:
+- **Atomic Deployment**: The user explicitly stated the P0 Security update must be built and tested as a single, cohesive iteration. Do not break it into smaller deliveries.
+- **Grace Period Logic**: A user has 24 hours from their *first login* (post-update) to setup MFA. After 24 hours, if MFA is not setup, login is blocked. During the 24 hours, they can skip MFA but are highly encouraged to set it up.
+- **Device ID**: MUST be a server-generated  secure cookie. The JWT must contain a claim that matches this cookie.
+- **Step-up Auth**: 10-minute TTL.
 
-### Project Health Check:
-- **Broken:**  dosyasına peş peşe apply_patch atılırken işlem yarıda kaldı. Linter ile syntax kontrolü zorunludur.
-- **Mocked:** Resend Email Provider, Invite servisi (Mocked return), Slack Webhook, Binance, Redis (InMemory).
+**documents and test reports created in this job**:
+- 
+- 
+- 
+- 
+- 
 
-### 3rd Party Integrations
-- Slack Webhook (MOCKED)
-- Binance (MOCKED)
-- Resend Email API (P1 Invite için eklendi ancak Mocked çalışıyor)
+**Last 10 User Messages and any pending HUMAN messages**:
+1. (User) Selected options for AML (Sumsub), Risk Scoring (No LLM), and Rebalance logic. Decided to defer these to future phases and focus ONLY on closing out P2-409/410/411.
+2. (Agent) Implemented and closed out P2-409/410/411 successfully.
+3. (User) Provided the massive **P0 - ZORUNLU / BLOCKER** prompt dictating 7 specific security/MFA architecture changes.
+4. (Agent) Asked human to clarify scope, rollout strategy, device ID handling, step-up TTL, and brute force limits.
+5. (User) Clarified: Do it in one iteration (Atomic), 24h grace period for MFA, Server-controlled cookie for device ID, 10 min step-up TTL, 5 fails/30 min lock. *(LATEST PENDING INSTRUCTION)*
 
-### Testing status
-- Testing agent used after significant changes: YES (iteration_123'te P0 test edildi).
+**Project Health Check**:
+- Backend: Stable (Venue Control Plane is highly robust).
+- Frontend: Stable, but Auth components are about to undergo major surgery.
+
+**3rd Party Integrations**:
+- N/A for this specific auth task (Future tasks include Sumsub).
+
+**Testing status**:
+- Testing agent used after significant changes: YES (iterations 154-158 all passed).
 - Troubleshoot agent used after agent stuck in loop: NO
-- Test files created: , 
-- Known regressions: Yok.
+- Test files created: Extensive  files.
+- Known regressions: None.
 
-### Credentials to test flow:
-- Admin: 
-- MFA Notu: TOTP zorunludur. Local/Test ortamlarında arka planda MFA disable / bypass edilip edilmediğine test agent raporlarından dikkat ediniz.
+**Credentials to test flow**:
+- Canary Admin:  / 
 
-### What agent forgot to execute
-Ajan P1 aşamasına (Custom Roles, Invite Lifecycle) geçmişti. Backend tarafına gerekli endpoint'leri ekledi, ancak Frontend tarafında  dosyasına yeni özellikleri (Role Modal, Invite Tab vb.) eklerken oturum sonlandı. Bu sebeple Frontend entegrasyonu ve P1 gereksinimleri (Approval Queue UI, Bulk Operations Policy-Aware UI, Risk Mapping UI) henüz tamamlanmamıştır. İlk olarak yarım kalan React dosyasını düzeltin.</analysis>
+**What agent forgot to execute**:
+- The agent read the Auth/MFA files but the job ended before writing the code to implement the P0 Security Mandate. The next agent must start immediately on the  and device binding logic.</analysis>

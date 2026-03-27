@@ -184,7 +184,13 @@ def user_login_with_policy(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Yanlış giriş paneli")
 
     _ensure_user_can_login(user)
-    token = create_access_token(subject=user.id, role=user.role.value, email=user.email)
+    token = create_access_token(
+        subject=user.id,
+        role=user.role.value,
+        email=user.email,
+        mfa_verified=False,
+        device_id="legacy-session",
+    )
     return UserLoginSession(user=user, access_token=token)
 
 

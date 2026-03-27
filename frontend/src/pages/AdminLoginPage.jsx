@@ -14,6 +14,21 @@ export const AdminLoginPage = () => {
   const [mfaState, setMfaState] = useState(null);
   const [mfaCode, setMfaCode] = useState("");
 
+  const mfaMethods = Array.isArray(mfaState?.methods) ? mfaState.methods : [];
+  const hasGraceAck = mfaMethods.includes("grace_ack");
+  const hasCodeBasedMfa = mfaMethods.includes("totp") || mfaMethods.includes("backup_code");
+
+  const getErrorMessage = (error, fallback) => {
+    const detail = error?.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
+    if (detail && typeof detail === "object" && typeof detail?.reason_code === "string") {
+      return detail.reason_code;
+    }
+    return fallback;
+  };
+
   const resolveMfaMethod = (rawCode) => {
     const normalized = String(rawCode || "").trim();
     const backupLike = normalized.includes("-") || /[A-Za-z]/.test(normalized);
@@ -50,27 +65,33 @@ export const AdminLoginPage = () => {
       toast.success("Admin girişi başarılı");
       navigate("/admin/dashboard", { replace: true });
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Admin girişi başarısız");
+      toast.error(getErrorMessage(error, "Admin girişi başarısız"));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const onVerifyMfa = async () => {
+  const onVerifyMfa = async (overrideMethod = null, overrideCode = null) => {
     if (!mfaState?.challengeToken) {
       return;
     }
     setSubmitting(true);
     try {
+      const finalCode = overrideCode ?? mfaCode;
+      const finalMethod = overrideMethod ?? resolveMfaMethod(finalCode);
       await verifyMfaChallenge({
         challengeToken: mfaState.challengeToken,
-        method: resolveMfaMethod(mfaCode),
-        code: mfaCode,
+        method: finalMethod,
+        code: finalCode,
       });
-      toast.success("MFA doğrulandı");
+      if (finalMethod === "grace_ack") {
+        toast.success("Grace period ile giriş tamamlandı");
+      } else {
+        toast.success("MFA doğrulandı");
+      }
       navigate("/admin/dashboard", { replace: true });
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "MFA doğrulaması başarısız");
+      toast.error(getErrorMessage(error, "MFA doğrulaması başarısız"));
     } finally {
       setSubmitting(false);
     }
@@ -144,16 +165,39 @@ export const AdminLoginPage = () => {
         {mfaState?.mfaRequired && (
           <div className="mt-4 space-y-2 rounded border border-slate-300 bg-slate-50 p-3" data-testid="admin-login-mfa-panel">
             <p className="text-xs font-semibold uppercase" data-testid="admin-login-mfa-title">MFA Doğrulama</p>
-            <p className="text-xs text-slate-600" data-testid="admin-login-mfa-methods">Yöntem: Authenticator (TOTP) + Backup Code</p>
-            <Input
-              value={mfaCode}
-              onChange={(event) => setMfaCode(event.target.value)}
-              placeholder="Authenticator kodu veya backup code"
-              data-testid="admin-login-mfa-code-input"
-            />
-            <Button type="button" onClick={onVerifyMfa} className="w-full rounded-none bg-black text-orange-300 hover:bg-zinc-900" data-testid="admin-login-mfa-verify-button" disabled={submitting}>
-              {submitting ? "Doğrulanıyor..." : "MFA Doğrula"}
-            </Button>
+            <p className="text-xs text-slate-600" data-testid="admin-login-mfa-methods">
+              Yöntemler: {mfaMethods.length ? mfaMethods.join(", ") : "totp"}
+            </p>
+            {mfaState?.graceActive && (
+              <p className="text-xs text-amber-700" data-testid="admin-login-mfa-grace-note">
+                MFA kurulum grace period aktif. Son tarih: {mfaState?.graceExpiresAt ? new Date(mfaState.graceExpiresAt).toLocaleString() : "yakında"}
+              </p>
+            )}
+            {hasCodeBasedMfa && (
+              <>
+                <Input
+                  value={mfaCode}
+                  onChange={(event) => setMfaCode(event.target.value)}
+                  placeholder="Authenticator kodu veya backup code"
+                  data-testid="admin-login-mfa-code-input"
+                />
+                <Button type="button" onClick={() => onVerifyMfa()} className="w-full rounded-none bg-black text-orange-300 hover:bg-zinc-900" data-testid="admin-login-mfa-verify-button" disabled={submitting}>
+                  {submitting ? "Doğrulanıyor..." : "MFA Doğrula"}
+                </Button>
+              </>
+            )}
+            {hasGraceAck && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-none border-amber-400 text-amber-700 hover:bg-amber-50"
+                onClick={() => onVerifyMfa("grace_ack", "grace_ack")}
+                data-testid="admin-login-mfa-grace-continue-button"
+                disabled={submitting}
+              >
+                {submitting ? "İşleniyor..." : "Grace ile Devam Et"}
+              </Button>
+            )}
           </div>
         )}
       </form>

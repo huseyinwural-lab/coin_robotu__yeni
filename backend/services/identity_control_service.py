@@ -265,12 +265,17 @@ def resolve_device_fingerprint(request: Request) -> str:
     return _token_hash(f"{ip}|{user_agent}")[:40]
 
 
-def _lock_key(email: str, scope: str) -> str:
-    return f"auth:lock:{scope}:{_normalize_email(email)}"
+AUTH_FAILURE_LIMIT = 5
+AUTH_FAILURE_WINDOW_SECONDS = int(timedelta(minutes=30).total_seconds())
+AUTH_LOCK_SECONDS = int(timedelta(minutes=30).total_seconds())
 
 
-def _failure_key(email: str, scope: str) -> str:
-    return f"auth:fail:{scope}:{_normalize_email(email)}"
+def _lock_key(email: str, scope: str, ip_address: str) -> str:
+    return f"auth:lock:{scope}:{_normalize_email(email)}:{str(ip_address or 'unknown').strip().lower()}"
+
+
+def _failure_key(email: str, scope: str, ip_address: str) -> str:
+    return f"auth:fail:{scope}:{_normalize_email(email)}:{str(ip_address or 'unknown').strip().lower()}"
 
 
 def _redis_set_with_ttl(key: str, ttl_seconds: int, value: str) -> None:
@@ -395,7 +400,7 @@ def enforce_login_protection(db: Session, *, request: Request, endpoint_scope: s
             headers={"Retry-After": str(retry_after)},
         )
 
-    lock_key = _lock_key(normalized_email, endpoint_scope)
+    lock_key = _lock_key(normalized_email, endpoint_scope, ip)
     lock_ttl = 0
     if hasattr(redis_client, "ttl"):
         try:
@@ -403,7 +408,7 @@ def enforce_login_protection(db: Session, *, request: Request, endpoint_scope: s
         except Exception:  # pragma: no cover - defensive
             lock_ttl = 0
     else:
-        lock_ttl = 900 if redis_client.get(lock_key) else 0
+        lock_ttl = AUTH_LOCK_SECONDS if redis_client.get(lock_key) else 0
 
     if lock_ttl > 0:
         raise HTTPException(
@@ -423,17 +428,17 @@ def record_login_failure(
     user_id: str | None = None,
 ) -> dict:
     normalized_email = _normalize_email(email)
-    failure_key = _failure_key(normalized_email, endpoint_scope)
-    current_attempt = redis_client.incr(failure_key)
-    redis_client.expire(failure_key, int(timedelta(minutes=15).total_seconds()))
+    ip = resolve_client_ip(request)
+
+    failure_key = _failure_key(normalized_email, endpoint_scope, ip)
+    current_attempt = int(redis_client.incr(failure_key) or 1)
+    redis_client.expire(failure_key, AUTH_FAILURE_WINDOW_SECONDS)
 
     lock_seconds = 0
-    if current_attempt >= 5:
-        progressive_backoff = min(900, 60 * (2 ** max(current_attempt - 5, 0)))
-        lock_seconds = max(900, int(progressive_backoff))
-        _redis_set_with_ttl(_lock_key(normalized_email, endpoint_scope), lock_seconds, str(current_attempt))
+    if current_attempt >= AUTH_FAILURE_LIMIT:
+        lock_seconds = AUTH_LOCK_SECONDS
+        _redis_set_with_ttl(_lock_key(normalized_email, endpoint_scope, ip), lock_seconds, str(current_attempt))
 
-    ip = resolve_client_ip(request)
     user_agent = str(request.headers.get("user-agent") or "")
     fingerprint = resolve_device_fingerprint(request)
     lock_until = _utcnow() + timedelta(seconds=lock_seconds) if lock_seconds > 0 else None
@@ -458,7 +463,7 @@ def record_login_failure(
             ip_address=ip,
             user_agent=user_agent[:300],
             device_fingerprint=fingerprint,
-            attempt_count=int(current_attempt),
+            attempt_count=current_attempt,
             lock_until=lock_until,
         )
     )
@@ -473,7 +478,7 @@ def record_login_failure(
         details={
             "email": normalized_email,
             "endpoint_scope": endpoint_scope,
-            "attempt_count": int(current_attempt),
+            "attempt_count": current_attempt,
             "locked": lock_seconds > 0,
             "lock_seconds": int(lock_seconds),
             "reason": str(reason or "invalid_credentials")[:120],
@@ -484,7 +489,7 @@ def record_login_failure(
     db.commit()
 
     return {
-        "attempt_count": int(current_attempt),
+        "attempt_count": current_attempt,
         "locked": lock_seconds > 0,
         "lock_seconds": int(lock_seconds),
     }
@@ -501,10 +506,10 @@ def record_login_success(
     commit: bool = True,
 ) -> None:
     normalized_email = _normalize_email(email)
-    redis_client.delete(_failure_key(normalized_email, endpoint_scope))
-    redis_client.delete(_lock_key(normalized_email, endpoint_scope))
-
     ip = resolve_client_ip(request)
+    redis_client.delete(_failure_key(normalized_email, endpoint_scope, ip))
+    redis_client.delete(_lock_key(normalized_email, endpoint_scope, ip))
+
     user_agent = str(request.headers.get("user-agent") or "")
     fingerprint = resolve_device_fingerprint(request)
 
@@ -1677,9 +1682,15 @@ def list_identity_users(
 def unlock_user_policy_lock(db: Session, *, actor: User, target_user: User) -> dict:
     enforce_permission(db, actor=actor, permission="identity.users.write")
     normalized_email = _normalize_email(target_user.email)
-    for scope in ["login", "login_admin", "login_user", "mfa_verify"]:
-        redis_client.delete(_failure_key(normalized_email, scope))
-        redis_client.delete(_lock_key(normalized_email, scope))
+    for scope in ["login", "login_admin", "login_user", "mfa_verify", "auth_access"]:
+        if hasattr(redis_client, "keys"):
+            try:
+                for key in redis_client.keys(f"auth:fail:{scope}:{normalized_email}:*"):
+                    redis_client.delete(key)
+                for key in redis_client.keys(f"auth:lock:{scope}:{normalized_email}:*"):
+                    redis_client.delete(key)
+            except Exception:
+                pass
     profile = get_or_create_identity_profile(db, target_user.id)
     profile.policy_locked_until = None
     db.commit()

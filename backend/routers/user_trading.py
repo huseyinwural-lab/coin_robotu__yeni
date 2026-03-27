@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from core.audit.audit_events import AuditEvent
 from db import get_db
-from deps import require_user
+from deps import require_fresh_step_up, require_user
 from models import User, UserExecutionIntent
 from schemas import (
     ExecutionIntentPreviewRequest,
@@ -206,7 +206,11 @@ def preview_trading(
     )
 
 
-@router.post("/execute", response_model=ExecutionIntentSubmitResponse)
+@router.post(
+    "/execute",
+    response_model=ExecutionIntentSubmitResponse,
+    dependencies=[Depends(require_fresh_step_up)],
+)
 def execute_trading(
     payload: ExecutionIntentSubmitRequest,
     current_user: User = Depends(require_user),

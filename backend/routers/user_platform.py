@@ -30,7 +30,7 @@ from core.users.user_risk_settings import (
     serialize_user_risk_settings,
 )
 from db import get_db, redis_client
-from deps import require_user
+from deps import require_fresh_step_up, require_user
 from models import BotProfile, PendingSignal, RiskPolicy, User, UserExecutionIntent
 from services.live_mode_service import validate_exchange_credentials_for_user
 from services.credential_resolution_service import build_user_routing_preview
@@ -168,7 +168,11 @@ def _submit_trade_with_guard(
     )
 
 
-@router.post("/exchange/connect", response_model=UserExchangeConnectResponse)
+@router.post(
+    "/exchange/connect",
+    response_model=UserExchangeConnectResponse,
+    dependencies=[Depends(require_fresh_step_up)],
+)
 def connect_user_exchange(
     payload: UserExchangeConnectRequest,
     current_user: User = Depends(require_user),
@@ -206,7 +210,11 @@ def get_user_exchange(current_user: User = Depends(require_user), db: Session = 
     return UserExchangeConnectResponse(**exchange_connection_view(settings_row))
 
 
-@router.put("/exchange", response_model=UserExchangeConnectResponse)
+@router.put(
+    "/exchange",
+    response_model=UserExchangeConnectResponse,
+    dependencies=[Depends(require_fresh_step_up)],
+)
 def update_user_exchange(
     payload: UserExchangeConnectRequest,
     current_user: User = Depends(require_user),
@@ -222,7 +230,12 @@ def get_user_exchange_connections(current_user: User = Depends(require_user), db
     return [UserExchangeConnectionResponse(**row) for row in enriched]
 
 
-@router.post("/exchange-connections", response_model=UserExchangeConnectionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/exchange-connections",
+    response_model=UserExchangeConnectionResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_fresh_step_up)],
+)
 def create_exchange_connection(
     payload: UserExchangeConnectionUpsertRequest,
     current_user: User = Depends(require_user),
@@ -263,7 +276,11 @@ def create_exchange_connection(
     return UserExchangeConnectionResponse(**_with_routing_metadata(row=row, user_id=current_user.id, db=db))
 
 
-@router.put("/exchange-connections/{connection_id}", response_model=UserExchangeConnectionResponse)
+@router.put(
+    "/exchange-connections/{connection_id}",
+    response_model=UserExchangeConnectionResponse,
+    dependencies=[Depends(require_fresh_step_up)],
+)
 def update_exchange_connection(
     connection_id: str,
     payload: UserExchangeConnectionPatchRequest,
@@ -391,7 +408,7 @@ def revalidate_exchange_connection(
     return UserExchangeConnectionResponse(**_with_routing_metadata(row=refreshed, user_id=current_user.id, db=db))
 
 
-@router.delete("/exchange-connections/{connection_id}")
+@router.delete("/exchange-connections/{connection_id}", dependencies=[Depends(require_fresh_step_up)])
 def remove_exchange_connection(
     connection_id: str,
     current_user: User = Depends(require_user),
@@ -504,7 +521,11 @@ def validate_order(
     return OrderValidationResponse(**result)
 
 
-@router.post("/open-position", response_model=ExecutionIntentSubmitResponse, dependencies=[Depends(execution_guard_dependency)])
+@router.post(
+    "/open-position",
+    response_model=ExecutionIntentSubmitResponse,
+    dependencies=[Depends(execution_guard_dependency), Depends(require_fresh_step_up)],
+)
 def open_position(
     payload: ExecutionIntentSubmitRequest,
     current_user: User = Depends(require_user),
@@ -513,7 +534,11 @@ def open_position(
     return _submit_trade_with_guard(payload=payload, current_user=current_user, db=db, source="user_open_position")
 
 
-@router.post("/execute-order", response_model=ExecutionIntentSubmitResponse, dependencies=[Depends(execution_guard_dependency)])
+@router.post(
+    "/execute-order",
+    response_model=ExecutionIntentSubmitResponse,
+    dependencies=[Depends(execution_guard_dependency), Depends(require_fresh_step_up)],
+)
 def execute_order(
     payload: ExecutionIntentSubmitRequest,
     current_user: User = Depends(require_user),
@@ -522,7 +547,11 @@ def execute_order(
     return _submit_trade_with_guard(payload=payload, current_user=current_user, db=db, source="user_execute_order")
 
 
-@router.post("/manual-trade", response_model=ExecutionIntentSubmitResponse, dependencies=[Depends(execution_guard_dependency)])
+@router.post(
+    "/manual-trade",
+    response_model=ExecutionIntentSubmitResponse,
+    dependencies=[Depends(execution_guard_dependency), Depends(require_fresh_step_up)],
+)
 def manual_trade(
     payload: ExecutionIntentSubmitRequest,
     current_user: User = Depends(require_user),
@@ -587,7 +616,11 @@ def get_user_dashboard(current_user: User = Depends(require_user), db: Session =
     )
 
 
-@router.post("/funds/withdraw-request", response_model=UserFundWithdrawResponse)
+@router.post(
+    "/funds/withdraw-request",
+    response_model=UserFundWithdrawResponse,
+    dependencies=[Depends(require_fresh_step_up)],
+)
 def create_withdraw_request(
     payload: UserFundWithdrawRequest,
     current_user: User = Depends(require_user),

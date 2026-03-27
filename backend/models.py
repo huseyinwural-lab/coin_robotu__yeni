@@ -33,7 +33,13 @@ from model_domains.auth_users import (
     UserOnboardingProfile,
     UserRole,
 )
-from model_domains.security_branding import AuthMfaChallenge, BrandSetting, UserMfaBackupCode, UserMfaPreference
+from model_domains.security_branding import (
+    AuthMfaChallenge,
+    BrandSetting,
+    UserMfaBackupCode,
+    UserMfaPreference,
+    UserMfaSecurityState,
+)
 from model_domains.identity_control import (
     ApprovalPolicyConfig,
     AuthSession,
@@ -275,6 +281,7 @@ __all__ = [
     "ExternalProviderCredential",
     "UserMfaPreference",
     "UserMfaBackupCode",
+    "UserMfaSecurityState",
     "AuthMfaChallenge",
     "BrandSetting",
     "IdentityRolePolicy",

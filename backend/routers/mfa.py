@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from core.users.user_registry import user_login_with_policy
@@ -16,17 +16,26 @@ from schemas import (
     MfaTotpVerifyRequest,
 )
 from services.audit_service import create_audit_log
-from services.identity_control_service import record_login_success, register_auth_session
+from services.auth_session_security_service import resolve_or_create_device_id, set_device_cookie
+from services.identity_control_service import (
+    enforce_login_protection,
+    record_login_failure,
+    record_login_success,
+    register_auth_session,
+)
 from services.mfa_service import (
     begin_totp_setup,
     get_mfa_settings,
     regenerate_backup_codes,
+    resolve_challenge_user,
     update_mfa_settings,
     verify_mfa_challenge,
     verify_totp_setup,
 )
 
 router = APIRouter(prefix="/auth/mfa", tags=["mfa"])
+public_router = APIRouter(prefix="/mfa", tags=["mfa"])
+AUTH_PROTECTION_SCOPE = "auth_access"
 
 
 class MfaChallengeResendRequest(BaseModel):
@@ -56,6 +65,8 @@ def put_settings(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if current_user.role in {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS} and not payload.is_enabled:
+        raise HTTPException(status_code=403, detail="privileged_mfa_disable_forbidden")
     result = update_mfa_settings(
         db,
         current_user.id,
@@ -121,20 +132,50 @@ def post_backup_codes_regenerate(current_user: User = Depends(get_current_user),
     return MfaBackupCodesResponse(**payload)
 
 
-@router.post("/challenge/verify", response_model=AuthResponse)
-def post_mfa_challenge_verify(payload: MfaChallengeVerifyRequest, request: Request, db: Session = Depends(get_db)):
-    result = verify_mfa_challenge(
-        db,
-        challenge_token=payload.challenge_token,
-        method=payload.method,
-        code=payload.code,
-    )
+def _verify_challenge_handler(
+    payload: MfaChallengeVerifyRequest,
+    request: Request,
+    response: Response,
+    db: Session,
+) -> AuthResponse:
+    challenge_user = resolve_challenge_user(db, challenge_token=payload.challenge_token)
+    if challenge_user is not None:
+        enforce_login_protection(
+            db,
+            request=request,
+            endpoint_scope=AUTH_PROTECTION_SCOPE,
+            email=challenge_user.email,
+        )
+
+    device_id, _ = resolve_or_create_device_id(request)
+
+    try:
+        result = verify_mfa_challenge(
+            db,
+            challenge_token=payload.challenge_token,
+            method=payload.method,
+            code=payload.code,
+            device_id=device_id,
+        )
+    except HTTPException as exc:
+        if challenge_user is not None:
+            record_login_failure(
+                db,
+                request=request,
+                endpoint_scope=AUTH_PROTECTION_SCOPE,
+                email=challenge_user.email,
+                reason=f"mfa_verify:{str(exc.detail)}",
+                user_id=challenge_user.id,
+            )
+        raise
+
+    set_device_cookie(response, request, device_id=device_id)
     user = result.get("user")
     if user is not None:
         access_token = result.get("access_token")
         if access_token:
             register_auth_session(db, user=user, access_token=access_token, request=request)
-            record_login_success(db, request=request, endpoint_scope="mfa_verify", email=user.email, user=user)
+            record_login_success(db, request=request, endpoint_scope=AUTH_PROTECTION_SCOPE, email=user.email, user=user)
         create_audit_log(
             db,
             action="mfa_login_verified",
@@ -145,6 +186,36 @@ def post_mfa_challenge_verify(payload: MfaChallengeVerifyRequest, request: Reque
             details={"method": payload.method},
         )
     return AuthResponse(**result)
+
+
+@router.post("/challenge/verify", response_model=AuthResponse)
+def post_mfa_challenge_verify(
+    payload: MfaChallengeVerifyRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    return _verify_challenge_handler(payload, request, response, db)
+
+
+@router.post("/verify", response_model=AuthResponse)
+def post_mfa_verify(
+    payload: MfaChallengeVerifyRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    return _verify_challenge_handler(payload, request, response, db)
+
+
+@public_router.post("/verify", response_model=AuthResponse)
+def post_public_mfa_verify(
+    payload: MfaChallengeVerifyRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    return _verify_challenge_handler(payload, request, response, db)
 
 
 @router.post("/bootstrap/totp/start")

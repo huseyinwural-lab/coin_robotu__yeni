@@ -121,13 +121,17 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async ({ email, password, panel = "user" }) => {
-    const { data } = await apiClient.post("/auth/login", { email, password, panel });
+    const panelPath = panel === "admin" ? "/auth/login/admin" : panel === "user" ? "/auth/login/user" : "/auth/login";
+    const { data } = await apiClient.post(panelPath, { email, password });
     if (data?.mfa_required) {
       return {
         mfaRequired: true,
         challengeToken: data.mfa_challenge_token,
         methods: data.mfa_methods || [],
         expiresAt: data.mfa_expires_at,
+        graceActive: Boolean(data.mfa_grace_active),
+        graceExpiresAt: data.mfa_grace_expires_at || null,
+        mfaSetupRequired: Boolean(data.mfa_setup_required),
         emailDeliveryStatus: data.email_delivery_status,
         emailCodePreview: data.email_code_preview,
         user: data.user || null,
@@ -142,16 +146,25 @@ export const AuthProvider = ({ children }) => {
   };
 
   const verifyMfaChallenge = async ({ challengeToken, method, code }) => {
-    const { data } = await apiClient.post("/auth/mfa/challenge/verify", {
+    const { data } = await apiClient.post("/mfa/verify", {
       challenge_token: challengeToken,
       method,
-      code,
+      code: code || "",
     });
     persistAuthSession({ token: data.access_token, user: data.user || null });
     setAuthToken(data.access_token);
     setToken(data.access_token);
     setUser(data.user);
     return data.user;
+  };
+
+  const stepUpAuth = async ({ method, code }) => {
+    const { data } = await apiClient.post("/auth/step-up", { method, code });
+    persistAuthSession({ token: data.access_token, user: data.user || null });
+    setAuthToken(data.access_token);
+    setToken(data.access_token);
+    setUser(data.user);
+    return data;
   };
 
   const register = async ({ email, password, first_name, last_name, full_name, phone }) => {
@@ -174,7 +187,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const value = useMemo(
-    () => ({ user, token, loading, login, verifyMfaChallenge, register, logout }),
+    () => ({ user, token, loading, login, verifyMfaChallenge, stepUpAuth, register, logout }),
     [user, token, loading],
   );
 

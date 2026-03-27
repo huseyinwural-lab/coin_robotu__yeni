@@ -20,6 +20,7 @@ if (!/^https?:\/\//i.test(BACKEND_URL)) {
 export const apiClient = axios.create({
   baseURL: `${BACKEND_URL.replace(/\/$/, "")}/api`,
   timeout: 15000,
+  withCredentials: true,
 });
 
 const SESSION_STORAGE_KEY = "platform-session-id";
@@ -120,12 +121,24 @@ apiClient.interceptors.response.use(
 
     const status = Number(error?.response?.status || 0);
     const url = String(config.url || "");
-    const isLoginLike = url.includes("/auth/login") || url.includes("/auth/mfa/challenge/verify");
+    const isLoginLike =
+      url.includes("/auth/login") ||
+      url.includes("/auth/mfa/challenge/verify") ||
+      url.includes("/auth/mfa/verify") ||
+      url.includes("/mfa/verify") ||
+      url.includes("/auth/step-up");
     if (status === 401 && !isLoginLike) {
       clearStoredAuth();
       setAuthToken(null);
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("platform-auth-expired"));
+      }
+    }
+
+    if (status === 403) {
+      const detail = String(error?.response?.data?.detail || "").toLowerCase();
+      if (detail.includes("step_up_required") && typeof window !== "undefined") {
+        window.dispatchEvent(new Event("platform-step-up-required"));
       }
     }
 

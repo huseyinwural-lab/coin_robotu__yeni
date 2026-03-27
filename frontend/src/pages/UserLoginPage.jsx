@@ -24,6 +24,18 @@ export const UserLoginPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [mfaState, setMfaState] = useState(null);
   const [mfaCode, setMfaCode] = useState("");
+  const mfaMethods = Array.isArray(mfaState?.methods) ? mfaState.methods : [];
+
+  const getErrorMessage = (error, fallback) => {
+    const detail = error?.response?.data?.detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
+    if (detail && typeof detail === "object" && typeof detail?.reason_code === "string") {
+      return detail.reason_code;
+    }
+    return error?.message || fallback;
+  };
 
   const resolveMfaMethod = (rawCode) => {
     const normalized = String(rawCode || "").trim();
@@ -61,7 +73,7 @@ export const UserLoginPage = () => {
         navigate("/user/dashboard");
       }
     } catch (error) {
-      toast.error(error?.response?.data?.detail || error?.message || "İşlem başarısız");
+      toast.error(getErrorMessage(error, "İşlem başarısız"));
     } finally {
       setSubmitting(false);
     }
@@ -81,7 +93,7 @@ export const UserLoginPage = () => {
       toast.success("MFA doğrulandı");
       navigate("/user/dashboard");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "MFA doğrulaması başarısız");
+      toast.error(getErrorMessage(error, "MFA doğrulaması başarısız"));
     } finally {
       setSubmitting(false);
     }
@@ -149,7 +161,9 @@ export const UserLoginPage = () => {
           {mfaState?.mfaRequired && (
             <div className="space-y-2 rounded border border-slate-300 bg-slate-50 p-3" data-testid="user-login-mfa-panel">
               <p className="text-xs font-semibold uppercase" data-testid="user-login-mfa-title">MFA Doğrulama</p>
-              <p className="text-xs text-slate-600" data-testid="user-login-mfa-methods">Yöntem: Authenticator (TOTP) + Backup Code</p>
+              <p className="text-xs text-slate-600" data-testid="user-login-mfa-methods">
+                Yöntemler: {mfaMethods.length ? mfaMethods.join(", ") : "totp"}
+              </p>
               <Input
                 value={mfaCode}
                 onChange={(event) => setMfaCode(event.target.value)}

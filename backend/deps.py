@@ -1,4 +1,6 @@
-from fastapi import Depends, HTTPException, status
+from datetime import datetime, timezone
+
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -9,6 +11,7 @@ from services.identity_control_service import is_access_token_revoked
 
 bearer_scheme = HTTPBearer(auto_error=False)
 ADMIN_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}
+STEP_UP_MAX_AGE_SECONDS = 10 * 60
 
 
 def is_admin_role(role: UserRole) -> bool:
@@ -23,6 +26,7 @@ def enforce_owner_scope(current_user: User, owner_user_id: str):
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -42,6 +46,20 @@ def get_current_user(
     if not subject:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
+    token_device_id = str(payload.get("device_id") or "").strip()
+    if not token_device_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token_device_binding")
+
+    cookie_device_id = str((request.cookies.get("device_id") if request else "") or "").strip()
+    if not cookie_device_id or cookie_device_id != token_device_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session_device_mismatch")
+
+    if payload.get("mfa_verified") is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token_mfa_claim")
+
+    if request is not None:
+        request.state.auth_payload = payload
+
     user = db.query(User).filter(User.id == subject).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
@@ -58,6 +76,39 @@ def get_current_user(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Kullanıcı onayı tamamlanmadı")
 
     return user
+
+
+def _resolve_mfa_verified_at(payload: dict | None) -> datetime | None:
+    raw_value = (payload or {}).get("mfa_verified_at")
+    if raw_value in {None, ""}:
+        return None
+    try:
+        value = float(raw_value)
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def require_fresh_step_up(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> User:
+    payload = getattr(request.state, "auth_payload", None)
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing_auth_payload")
+
+    if not bool(payload.get("mfa_verified")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="step_up_required")
+
+    verified_at = _resolve_mfa_verified_at(payload)
+    if verified_at is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="step_up_required")
+
+    age_seconds = (datetime.now(timezone.utc) - verified_at).total_seconds()
+    if age_seconds > STEP_UP_MAX_AGE_SECONDS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="step_up_required")
+
+    return current_user
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:

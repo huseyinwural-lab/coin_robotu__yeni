@@ -188,6 +188,12 @@ class AuthResponse(BaseModel):
     mfa_challenge_token: str | None = None
     mfa_methods: list[str] = Field(default_factory=list)
     mfa_expires_at: datetime | None = None
+    mfa_grace_active: bool = False
+    mfa_grace_expires_at: datetime | None = None
+    mfa_setup_required: bool = False
+    mfa_verified: bool = False
+    step_up_required: bool = False
+    step_up_valid_until: datetime | None = None
     email_delivery_status: str | None = None
     email_code_preview: str | None = None
 
@@ -226,6 +232,11 @@ class MfaBackupCodesResponse(BaseModel):
 
 class MfaChallengeVerifyRequest(BaseModel):
     challenge_token: str = Field(min_length=20, max_length=200)
+    method: str = Field(min_length=4, max_length=20)
+    code: str = Field(default="", max_length=12)
+
+
+class AuthStepUpVerifyRequest(BaseModel):
     method: str = Field(min_length=4, max_length=20)
     code: str = Field(min_length=4, max_length=12)
 

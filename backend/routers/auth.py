@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import logging
@@ -15,12 +15,14 @@ from core.users.user_registry import (
     verify_email_code,
     user_login_with_policy,
 )
+from core.security import create_access_token
 from db import get_db
 from deps import get_current_user, require_admin
 from models import User, UserRole
 from schemas import (
     AuthOnboardingStatusResponse,
     AuthResponse,
+    AuthStepUpVerifyRequest,
     EmailVerificationRequest,
     EmailVerificationResponse,
     EmailVerificationVerifyRequest,
@@ -34,12 +36,14 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.admin_profile_service import change_admin_password, update_admin_profile
-from services.mfa_service import get_mfa_enforcement_context, get_mfa_settings, start_mfa_challenge_if_required
+from services.auth_session_security_service import resolve_or_create_device_id, set_device_cookie
+from services.mfa_service import start_mfa_challenge_if_required, verify_step_up_code
 from services.identity_control_service import (
     enforce_login_protection,
     get_or_create_identity_profile,
     list_active_sessions,
     record_login_failure,
+    record_login_success,
     register_auth_session,
     revoke_session,
 )
@@ -52,6 +56,7 @@ from services.password_reset_service import (
 from services.onboarding_approval_service import execute_onboarding_decision
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
+AUTH_PROTECTION_SCOPE = "auth_access"
 
 
 class AdminProfileUpdateRequest(BaseModel):
@@ -124,19 +129,20 @@ def get_auth_onboarding_status(email: str, db: Session = Depends(get_db)):
 def _login_with_policy(
     payload: LocalLoginRequest,
     request: Request,
+    response: Response,
     endpoint_scope: str,
     db: Session,
     target_role: UserRole | None = None,
     allowed_roles: set[UserRole] | None = None,
 ) -> AuthResponse:
-    enforce_login_protection(db, request=request, endpoint_scope=endpoint_scope, email=payload.email)
+    enforce_login_protection(db, request=request, endpoint_scope=AUTH_PROTECTION_SCOPE, email=payload.email)
     try:
         session = user_login_with_policy(db, payload, target_role=target_role, allowed_roles=allowed_roles)
     except HTTPException as exc:
         record_login_failure(
             db,
             request=request,
-            endpoint_scope=endpoint_scope,
+            endpoint_scope=AUTH_PROTECTION_SCOPE,
             email=payload.email,
             reason=str(exc.detail),
             user_id=None,
@@ -153,46 +159,30 @@ def _login_with_policy(
             record_login_failure(
                 db,
                 request=request,
-                endpoint_scope=endpoint_scope,
+                endpoint_scope=AUTH_PROTECTION_SCOPE,
                 email=user.email,
                 reason="password_rotation_required",
                 user_id=user.id,
             )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="password_rotation_required")
 
-    mfa_context = get_mfa_enforcement_context(user_email=user.email, endpoint_scope=endpoint_scope)
-    if bool(mfa_context.get("bypass_active")):
-        create_audit_log(
-            db,
-            action="MFA_ENFORCEMENT_BYPASS_ACTIVE",
-            entity_type="user",
-            entity_id=user.id,
-            actor_user_id=user.id,
-            actor_role=user.role.value,
-            severity="warning",
-            details={
-                "email": user.email,
-                "reason": mfa_context.get("bypass_reason") or "allow_list",
-                "environment": mfa_context.get("environment") or "unknown",
-                "endpoint_scope": endpoint_scope,
-            },
-        )
-
-    if bool(mfa_context.get("enforcement_required")):
-        mfa_settings = get_mfa_settings(db, user.id)
-        if not bool(mfa_settings.get("is_enabled")) or "totp" not in (mfa_settings.get("enabled_methods") or []):
-            record_login_failure(
-                db,
-                request=request,
-                endpoint_scope=endpoint_scope,
-                email=user.email,
-                reason="mfa_enforced_not_configured",
-                user_id=user.id,
-            )
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="mfa_enforced_not_configured")
+    device_id, _ = resolve_or_create_device_id(request)
 
     mfa_payload = start_mfa_challenge_if_required(db, user=user)
     if mfa_payload:
+        if bool(mfa_payload.get("login_blocked")):
+            block_reason = str(mfa_payload.get("block_reason") or "mfa_setup_required_after_grace")
+            record_login_failure(
+                db,
+                request=request,
+                endpoint_scope=AUTH_PROTECTION_SCOPE,
+                email=user.email,
+                reason=block_reason,
+                user_id=user.id,
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=block_reason)
+
+        set_device_cookie(response, request, device_id=device_id)
         create_audit_log(
             db,
             action="user_login_mfa_required",
@@ -212,11 +202,31 @@ def _login_with_policy(
             mfa_challenge_token=mfa_payload.get("mfa_challenge_token"),
             mfa_methods=list(mfa_payload.get("mfa_methods") or []),
             mfa_expires_at=mfa_payload.get("mfa_expires_at"),
+            mfa_grace_active=bool(mfa_payload.get("mfa_grace_active")),
+            mfa_grace_expires_at=mfa_payload.get("mfa_grace_expires_at"),
+            mfa_setup_required=bool(mfa_payload.get("mfa_setup_required")),
             email_delivery_status=mfa_payload.get("email_delivery_status"),
             email_code_preview=mfa_payload.get("email_code_preview"),
         )
 
-    register_auth_session(db, user=user, access_token=session.access_token, request=request, commit=False)
+    access_token = create_access_token(
+        subject=user.id,
+        role=user.role.value,
+        email=user.email,
+        mfa_verified=False,
+        device_id=device_id,
+    )
+    set_device_cookie(response, request, device_id=device_id)
+    register_auth_session(db, user=user, access_token=access_token, request=request, commit=False)
+    record_login_success(
+        db,
+        request=request,
+        endpoint_scope=AUTH_PROTECTION_SCOPE,
+        email=user.email,
+        user=user,
+        identity_profile=identity_profile,
+        commit=False,
+    )
     create_audit_log(
         db,
         action="user_login",
@@ -229,27 +239,94 @@ def _login_with_policy(
     )
     db.commit()
     return AuthResponse(
-        access_token=session.access_token,
-        token=session.access_token,
+        access_token=access_token,
+        token=access_token,
         token_type="bearer",
         role=user.role.value,
         user=user,
+        mfa_verified=False,
     )
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: LocalLoginRequest, request: Request, db: Session = Depends(get_db)):
-    return _login_with_policy(payload, request, "login", db)
+def login(payload: LocalLoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    return _login_with_policy(payload, request, response, "login", db)
 
 
 @router.post("/login/admin", response_model=AuthResponse)
-def admin_login(payload: LocalLoginRequest, request: Request, db: Session = Depends(get_db)):
-    return _login_with_policy(payload, request, "login_admin", db, allowed_roles={UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS})
+def admin_login(payload: LocalLoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    return _login_with_policy(
+        payload,
+        request,
+        response,
+        "login_admin",
+        db,
+        allowed_roles={UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS},
+    )
 
 
 @router.post("/login/user", response_model=AuthResponse)
-def user_login(payload: LocalLoginRequest, request: Request, db: Session = Depends(get_db)):
-    return _login_with_policy(payload, request, "login_user", db, target_role=UserRole.USER)
+def user_login(payload: LocalLoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    return _login_with_policy(payload, request, response, "login_user", db, target_role=UserRole.USER)
+
+
+@router.post("/step-up", response_model=AuthResponse)
+def post_step_up_auth(
+    payload: AuthStepUpVerifyRequest,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    enforce_login_protection(
+        db,
+        request=request,
+        endpoint_scope=AUTH_PROTECTION_SCOPE,
+        email=current_user.email,
+    )
+    device_id, _ = resolve_or_create_device_id(request)
+    try:
+        result = verify_step_up_code(
+            db,
+            user=current_user,
+            method=payload.method,
+            code=payload.code,
+            device_id=device_id,
+        )
+    except HTTPException as exc:
+        record_login_failure(
+            db,
+            request=request,
+            endpoint_scope=AUTH_PROTECTION_SCOPE,
+            email=current_user.email,
+            reason=f"step_up:{str(exc.detail)}",
+            user_id=current_user.id,
+        )
+        raise
+    access_token = result.get("access_token")
+    if access_token:
+        register_auth_session(db, user=current_user, access_token=access_token, request=request, commit=False)
+    record_login_success(
+        db,
+        request=request,
+        endpoint_scope=AUTH_PROTECTION_SCOPE,
+        email=current_user.email,
+        user=current_user,
+        commit=False,
+    )
+    set_device_cookie(response, request, device_id=device_id)
+    create_audit_log(
+        db,
+        action="auth_step_up_verified",
+        entity_type="user",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"method": payload.method},
+        commit=False,
+    )
+    db.commit()
+    return AuthResponse(**result)
 
 
 @router.get("/sessions/active")
