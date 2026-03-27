@@ -1,3 +1,51 @@
+## 2026-03-27 — P2-409 + P2-410 + P2-411 Tamamlandı
+
+### P2-409 — Role-Based Approval Workflow Separation
+- Yeni workflow policy endpointleri:
+  - `GET /api/venues/admin/conflict-auto-remediation-workflow-policy`
+  - `PUT /api/venues/admin/conflict-auto-remediation-workflow-policy`
+- Workflow policy alanları:
+  - `requester_roles`
+  - `approver_roles`
+  - `strict_actor_separation`
+- Remediation endpointi (`POST /api/venues/admin/conflict-auto-remediation-apply`) role-aware hale getirildi:
+  - `mode=dry_run`
+  - `mode=submit` (requester role kontrolü)
+  - `mode=approve_apply` (approver role kontrolü)
+- Draft response genişletildi:
+  - `workflow_policy`
+  - `pending_approval_count`
+
+### P2-410 — Validation Center Check-Level Trend Chart
+- `GET /api/venues/admin/validation-center` genişletildi:
+  - `check_level_trends`
+  - `top_reason_codes`
+  - `drift_alerts.latest_reason_codes`
+  - `drift_alerts.root_cause_hints`
+- UI: `ValidationCenterPanel` içinde pass/warn/block stacked segment gösterimi eklendi.
+
+### P2-411 — Heatmap Confidence Score + Anomaly Band
+- `GET /api/venues/admin/strategy-venue-heatmap` genişletildi:
+  - strategy bazında `confidence_score`, `anomaly_band`, `anomaly_reasons`
+  - `top_anomalies`
+  - karşılaştırma çıktısı: `confidence_score_delta`
+- 24h vs 30d karşılaştırması (varsayılan `compare_window_hours=720`) korunarak zenginleştirildi.
+
+### Frontend Kapsam
+- `ConflictAutoRemediationPanel`:
+  - workflow policy edit alanları + update aksiyonu
+  - dry-run / onaya gönder / onayla-uygula akışlarının rol ayrımıyla uyumlu görünümü
+- `ValidationCenterPanel`:
+  - stacked trend segmentleri + root-cause hint görünümü
+- `StrategyVenueHeatmapPanel`:
+  - confidence/anomaly görünümü + top anomalies listesi + 24h vs 30d delta alanları
+
+### Test / Doğrulama
+- Testing Agent raporu: `/app/test_reports/iteration_158.json`
+  - Backend: **24/26 PASS, 2 SKIPPED** (draft veri yokken skip)
+  - Frontend: **100% PASS** (data-testid coverage)
+- Test dosyası: `/app/backend/tests/test_iteration158_p2_409_410_411.py`
+
 ## 2026-03-27 — P2-406 + P2-407 + P2-408 Tamamlandı
 
 ### P2-406 — Validation Center Trend Chart + Root-Cause Hints
