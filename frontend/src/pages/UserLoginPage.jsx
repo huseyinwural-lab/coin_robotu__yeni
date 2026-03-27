@@ -24,6 +24,7 @@ export const UserLoginPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [mfaState, setMfaState] = useState(null);
   const [mfaCode, setMfaCode] = useState("");
+  const [selectedMfaMethod, setSelectedMfaMethod] = useState("totp");
   const mfaMethods = Array.isArray(mfaState?.methods) ? mfaState.methods : [];
 
   const getErrorMessage = (error, fallback) => {
@@ -66,7 +67,8 @@ export const UserLoginPage = () => {
         if (loginResult?.mfaRequired) {
           setMfaState(loginResult);
           setMfaCode("");
-          toast.info("MFA doğrulama kodunu giriniz");
+          setSelectedMfaMethod((loginResult?.methods || [])[0] || "totp");
+          toast.info("MFA doğrulama adımı gerekli");
           return;
         }
         toast.success(`Giriş başarılı${rememberMe ? "" : " (oturum cihazda saklanmayacak)"}`);
@@ -87,13 +89,31 @@ export const UserLoginPage = () => {
     try {
       await verifyMfaChallenge({
         challengeToken: mfaState.challengeToken,
-        method: resolveMfaMethod(mfaCode),
+        method: selectedMfaMethod || resolveMfaMethod(mfaCode),
         code: mfaCode,
       });
       toast.success("MFA doğrulandı");
       navigate("/user/dashboard");
     } catch (error) {
       toast.error(getErrorMessage(error, "MFA doğrulaması başarısız"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const onResendEmailOtp = async () => {
+    if (!mfaState?.challengeToken) return;
+    setSubmitting(true);
+    try {
+      const { data } = await apiClient.post("/mfa/challenge/resend", { challenge_token: mfaState.challengeToken });
+      setMfaState((prev) => ({
+        ...(prev || {}),
+        emailDeliveryStatus: data?.email_delivery_status || prev?.emailDeliveryStatus,
+        expiresAt: data?.mfa_expires_at || prev?.expiresAt,
+      }));
+      toast.success("Email OTP yeniden gönderildi");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Email OTP yeniden gönderilemedi"));
     } finally {
       setSubmitting(false);
     }
@@ -164,15 +184,47 @@ export const UserLoginPage = () => {
               <p className="text-xs text-slate-600" data-testid="user-login-mfa-methods">
                 Yöntemler: {mfaMethods.length ? mfaMethods.join(", ") : "totp"}
               </p>
+              {mfaState?.emailDeliveryStatus && (
+                <p className="text-xs text-slate-600" data-testid="user-login-mfa-email-delivery-status">
+                  email_delivery_status: {mfaState.emailDeliveryStatus}
+                </p>
+              )}
+              <label className="text-xs text-slate-600" data-testid="user-login-mfa-method-select-wrapper">
+                Doğrulama yöntemi
+                <select
+                  className="mt-1 w-full border border-slate-300 bg-white px-2 py-1 text-xs"
+                  value={selectedMfaMethod}
+                  onChange={(event) => setSelectedMfaMethod(event.target.value)}
+                  data-testid="user-login-mfa-method-select"
+                >
+                  {mfaMethods.map((method) => (
+                    <option key={method} value={method}>
+                      {method}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <Input
                 value={mfaCode}
                 onChange={(event) => setMfaCode(event.target.value)}
-                placeholder="Authenticator kodu veya backup code"
+                placeholder={selectedMfaMethod === "email_otp" ? "E-posta OTP kodu" : "Authenticator kodu veya backup code"}
                 data-testid="user-login-mfa-code-input"
               />
               <Button type="button" onClick={onVerifyMfa} className="w-full bg-black text-orange-300 hover:bg-zinc-900" data-testid="user-login-mfa-verify-button" disabled={submitting}>
                 {submitting ? "Doğrulanıyor..." : "MFA Doğrula"}
               </Button>
+              {mfaMethods.includes("email_otp") && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-none"
+                  onClick={onResendEmailOtp}
+                  data-testid="user-login-mfa-resend-email-otp-button"
+                  disabled={submitting}
+                >
+                  Email OTP Yeniden Gönder
+                </Button>
+              )}
             </div>
           )}
         </form>

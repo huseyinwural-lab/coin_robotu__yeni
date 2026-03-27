@@ -4,11 +4,13 @@ from sqlalchemy.orm import Session
 
 from core.users.user_registry import user_login_with_policy
 from db import get_db
-from deps import get_current_user
+from deps import get_current_user, require_admin
 from models import User, UserRole
 from schemas import (
     AuthResponse,
     MfaBackupCodesResponse,
+    MfaChallengeCreateRequest,
+    MfaChallengeResendResponse,
     MfaChallengeVerifyRequest,
     MfaSettingsResponse,
     MfaSettingsUpdateRequest,
@@ -21,21 +23,36 @@ from services.identity_control_service import (
     enforce_login_protection,
     record_login_failure,
     record_login_success,
+    revoke_all_active_sessions_for_user,
     register_auth_session,
+    resolve_device_fingerprint,
+    resolve_ip_hash,
+    resolve_client_ip,
 )
 from services.mfa_service import (
+    admin_reset_user_mfa,
     begin_totp_setup,
+    create_authenticated_mfa_challenge,
+    disable_user_mfa,
     get_mfa_settings,
     regenerate_backup_codes,
+    resend_email_otp_for_challenge,
     resolve_challenge_user,
     update_mfa_settings,
     verify_mfa_challenge,
     verify_totp_setup,
 )
+from services.security_audit_context_service import build_security_audit_context
 
 router = APIRouter(prefix="/auth/mfa", tags=["mfa"])
 public_router = APIRouter(prefix="/mfa", tags=["mfa"])
 AUTH_PROTECTION_SCOPE = "auth_access"
+
+
+def _set_deprecated_headers(response: Response) -> None:
+    response.headers["Deprecation"] = "true"
+    response.headers["X-Deprecated-Endpoint"] = "true"
+    response.headers["Link"] = '</api/mfa>; rel="successor-version"'
 
 
 class MfaChallengeResendRequest(BaseModel):
@@ -54,39 +71,53 @@ class MfaBootstrapVerifyRequest(BaseModel):
 
 
 @router.get("/settings", response_model=MfaSettingsResponse)
-def get_settings(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_settings(response: Response, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _set_deprecated_headers(response)
     payload = get_mfa_settings(db, current_user.id)
     return MfaSettingsResponse(**payload)
 
 
 @router.put("/settings", response_model=MfaSettingsResponse)
 def put_settings(
+    response: Response,
     payload: MfaSettingsUpdateRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _set_deprecated_headers(response)
     if current_user.role in {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS} and not payload.is_enabled:
         raise HTTPException(status_code=403, detail="privileged_mfa_disable_forbidden")
+    before = get_mfa_settings(db, current_user.id)
     result = update_mfa_settings(
         db,
         current_user.id,
         is_enabled=payload.is_enabled,
         enabled_methods=payload.enabled_methods,
     )
+    audit_context = build_security_audit_context(request)
+    state_action = "mfa_enabled" if (not before.get("is_enabled") and result.get("is_enabled")) else "mfa_disabled"
+    if before.get("is_enabled") == result.get("is_enabled"):
+        state_action = "mfa_settings_updated"
     create_audit_log(
         db,
-        action="mfa_settings_updated",
+        action=state_action,
         entity_type="user",
         entity_id=current_user.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
-        details={"is_enabled": result.get("is_enabled"), "enabled_methods": result.get("enabled_methods")},
+        details={
+            "is_enabled": result.get("is_enabled"),
+            "enabled_methods": result.get("enabled_methods"),
+            **audit_context,
+        },
     )
     return MfaSettingsResponse(**result)
 
 
 @router.post("/totp/setup", response_model=MfaTotpSetupResponse)
-def post_totp_setup(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def post_totp_setup(response: Response, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _set_deprecated_headers(response)
     payload = begin_totp_setup(db, user=current_user)
     create_audit_log(
         db,
@@ -95,16 +126,20 @@ def post_totp_setup(current_user: User = Depends(get_current_user), db: Session 
         entity_id=current_user.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
+        details=build_security_audit_context(request),
     )
     return MfaTotpSetupResponse(**payload)
 
 
 @router.post("/totp/verify-setup", response_model=MfaSettingsResponse)
 def post_totp_verify_setup(
+    response: Response,
     payload: MfaTotpVerifyRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _set_deprecated_headers(response)
     result = verify_totp_setup(db, user_id=current_user.id, code=payload.code)
     create_audit_log(
         db,
@@ -113,12 +148,19 @@ def post_totp_verify_setup(
         entity_id=current_user.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
+        details=build_security_audit_context(request),
     )
     return MfaSettingsResponse(**result)
 
 
 @router.post("/backup-codes/regenerate", response_model=MfaBackupCodesResponse)
-def post_backup_codes_regenerate(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def post_backup_codes_regenerate(
+    response: Response,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _set_deprecated_headers(response)
     payload = regenerate_backup_codes(db, user_id=current_user.id)
     create_audit_log(
         db,
@@ -127,7 +169,7 @@ def post_backup_codes_regenerate(current_user: User = Depends(get_current_user),
         entity_id=current_user.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
-        details={"count": payload.get("backup_codes_remaining", 0)},
+        details={"count": payload.get("backup_codes_remaining", 0), **build_security_audit_context(request)},
     )
     return MfaBackupCodesResponse(**payload)
 
@@ -138,6 +180,7 @@ def _verify_challenge_handler(
     response: Response,
     db: Session,
 ) -> AuthResponse:
+    audit_context = build_security_audit_context(request)
     challenge_user = resolve_challenge_user(db, challenge_token=payload.challenge_token)
     if challenge_user is not None:
         enforce_login_protection(
@@ -148,6 +191,10 @@ def _verify_challenge_handler(
         )
 
     device_id, _ = resolve_or_create_device_id(request)
+    session_context = {
+        "ip_hash": resolve_ip_hash(request),
+        "device_fingerprint": resolve_device_fingerprint(request),
+    }
 
     try:
         result = verify_mfa_challenge(
@@ -156,6 +203,7 @@ def _verify_challenge_handler(
             method=payload.method,
             code=payload.code,
             device_id=device_id,
+            session_context=session_context,
         )
     except HTTPException as exc:
         if challenge_user is not None:
@@ -166,6 +214,20 @@ def _verify_challenge_handler(
                 email=challenge_user.email,
                 reason=f"mfa_verify:{str(exc.detail)}",
                 user_id=challenge_user.id,
+            )
+            create_audit_log(
+                db,
+                action="mfa_verification_failed",
+                entity_type="user",
+                entity_id=challenge_user.id,
+                actor_user_id=challenge_user.id,
+                actor_role=challenge_user.role.value,
+                severity="warning",
+                details={
+                    "method": payload.method,
+                    "error": str(exc.detail),
+                    **audit_context,
+                },
             )
         raise
 
@@ -183,8 +245,19 @@ def _verify_challenge_handler(
             entity_id=user.id,
             actor_user_id=user.id,
             actor_role=user.role.value,
-            details={"method": payload.method},
+            details={"method": payload.method, **audit_context},
         )
+        if str(payload.method or "").strip().lower() == "backup_code":
+            create_audit_log(
+                db,
+                action="mfa_backup_code_used",
+                entity_type="user",
+                entity_id=user.id,
+                actor_user_id=user.id,
+                actor_role=user.role.value,
+                severity="warning",
+                details=audit_context,
+            )
     return AuthResponse(**result)
 
 
@@ -195,6 +268,7 @@ def post_mfa_challenge_verify(
     response: Response,
     db: Session = Depends(get_db),
 ):
+    _set_deprecated_headers(response)
     return _verify_challenge_handler(payload, request, response, db)
 
 
@@ -205,6 +279,7 @@ def post_mfa_verify(
     response: Response,
     db: Session = Depends(get_db),
 ):
+    _set_deprecated_headers(response)
     return _verify_challenge_handler(payload, request, response, db)
 
 
@@ -216,6 +291,179 @@ def post_public_mfa_verify(
     db: Session = Depends(get_db),
 ):
     return _verify_challenge_handler(payload, request, response, db)
+
+
+@router.post("/challenge/resend", response_model=MfaChallengeResendResponse)
+def post_mfa_challenge_resend(
+    payload: MfaChallengeResendRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    _set_deprecated_headers(response)
+    result = resend_email_otp_for_challenge(
+        db,
+        challenge_token=payload.challenge_token,
+        request_ip=resolve_client_ip(request),
+    )
+    challenge_user = resolve_challenge_user(db, challenge_token=payload.challenge_token)
+    if challenge_user is not None:
+        create_audit_log(
+            db,
+            action="mfa_email_otp_resent",
+            entity_type="user",
+            entity_id=challenge_user.id,
+            actor_user_id=challenge_user.id,
+            actor_role=challenge_user.role.value,
+            details=build_security_audit_context(request),
+        )
+    return MfaChallengeResendResponse(**result)
+
+
+@public_router.post("/challenge/resend", response_model=MfaChallengeResendResponse)
+def post_public_mfa_challenge_resend(
+    payload: MfaChallengeResendRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    result = resend_email_otp_for_challenge(
+        db,
+        challenge_token=payload.challenge_token,
+        request_ip=resolve_client_ip(request),
+    )
+    return MfaChallengeResendResponse(**result)
+
+
+@public_router.post("/setup", response_model=MfaTotpSetupResponse)
+def post_public_mfa_setup(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    payload = begin_totp_setup(db, user=current_user)
+    create_audit_log(
+        db,
+        action="mfa_setup_started",
+        entity_type="user",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details=build_security_audit_context(request),
+    )
+    return MfaTotpSetupResponse(**payload)
+
+
+@public_router.post("/challenge", response_model=AuthResponse)
+def post_public_mfa_challenge(
+    payload: MfaChallengeCreateRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    challenge = create_authenticated_mfa_challenge(
+        db,
+        user=current_user,
+        request_ip=resolve_client_ip(request),
+        challenge_reason=payload.reason,
+    )
+    create_audit_log(
+        db,
+        action="mfa_challenge_created",
+        entity_type="user",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"reason": payload.reason, **build_security_audit_context(request)},
+    )
+    return AuthResponse(
+        access_token=None,
+        token=None,
+        token_type="mfa_challenge",
+        role=current_user.role.value,
+        user=current_user,
+        mfa_required=True,
+        mfa_challenge_token=challenge.get("mfa_challenge_token"),
+        mfa_methods=list(challenge.get("mfa_methods") or []),
+        mfa_expires_at=challenge.get("mfa_expires_at"),
+        email_delivery_status=challenge.get("email_delivery_status"),
+        email_code_preview=challenge.get("email_code_preview"),
+    )
+
+
+@public_router.post("/disable", response_model=MfaSettingsResponse)
+def post_public_mfa_disable(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role in {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}:
+        raise HTTPException(status_code=403, detail="privileged_mfa_disable_forbidden")
+    result = disable_user_mfa(db, user_id=current_user.id)
+    create_audit_log(
+        db,
+        action="mfa_disabled",
+        entity_type="user",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning",
+        details=build_security_audit_context(request),
+    )
+    return MfaSettingsResponse(**result)
+
+
+@router.post("/disable", response_model=MfaSettingsResponse)
+def post_mfa_disable(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _set_deprecated_headers(response)
+    return post_public_mfa_disable(request=request, current_user=current_user, db=db)
+
+
+@router.post("/admin/reset/{target_user_id}")
+def post_admin_mfa_reset(
+    target_user_id: str,
+    request: Request,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    target = db.query(User).filter(User.id == target_user_id).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="user_not_found")
+
+    payload = admin_reset_user_mfa(db, user_id=target_user_id)
+    revoked = revoke_all_active_sessions_for_user(
+        db,
+        target_user_id=target_user_id,
+        actor=current_admin,
+        reason="admin_mfa_reset",
+    )
+    db.commit()
+
+    create_audit_log(
+        db,
+        action="admin_mfa_reset",
+        entity_type="user",
+        entity_id=target_user_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="critical",
+        details={
+            "revoked_sessions": revoked,
+            "target_email": target.email,
+            **build_security_audit_context(request),
+        },
+    )
+    create_audit_log(
+        db,
+        action="fraud_recovery_mfa_reset",
+        entity_type="user",
+        entity_id=target_user_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={"revoked_sessions": revoked, "target_email": target.email},
+    )
+    return {"status": "ok", "target_user_id": target_user_id, "revoked_sessions": revoked, "mfa": payload}
 
 
 @router.post("/bootstrap/totp/start")

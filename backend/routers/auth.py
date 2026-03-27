@@ -41,12 +41,16 @@ from services.mfa_service import start_mfa_challenge_if_required, verify_step_up
 from services.identity_control_service import (
     enforce_login_protection,
     get_or_create_identity_profile,
+    is_known_device,
     list_active_sessions,
     record_login_failure,
     record_login_success,
     register_auth_session,
+    resolve_device_fingerprint,
+    resolve_ip_hash,
     revoke_session,
 )
+from services.security_audit_context_service import build_security_audit_context
 from services.password_reset_service import (
     build_password_reset_link,
     consume_password_reset_token,
@@ -135,6 +139,7 @@ def _login_with_policy(
     target_role: UserRole | None = None,
     allowed_roles: set[UserRole] | None = None,
 ) -> AuthResponse:
+    audit_context = build_security_audit_context(request)
     enforce_login_protection(db, request=request, endpoint_scope=AUTH_PROTECTION_SCOPE, email=payload.email)
     try:
         session = user_login_with_policy(db, payload, target_role=target_role, allowed_roles=allowed_roles)
@@ -150,6 +155,12 @@ def _login_with_policy(
         raise
 
     user = session.user
+    current_device_fingerprint = resolve_device_fingerprint(request)
+    is_new_device = not is_known_device(db, user_id=user.id, device_fingerprint=current_device_fingerprint)
+    session_context = {
+        "ip_hash": resolve_ip_hash(request),
+        "device_fingerprint": current_device_fingerprint,
+    }
     identity_profile = get_or_create_identity_profile(db, user.id)
     if identity_profile.password_expires_at is not None:
         expires_at = identity_profile.password_expires_at
@@ -168,7 +179,13 @@ def _login_with_policy(
 
     device_id, _ = resolve_or_create_device_id(request)
 
-    mfa_payload = start_mfa_challenge_if_required(db, user=user)
+    mfa_payload = start_mfa_challenge_if_required(
+        db,
+        user=user,
+        force_challenge=is_new_device,
+        challenge_reason="new_device" if is_new_device else "standard_login",
+        request_ip=audit_context.get("ip_address"),
+    )
     if mfa_payload:
         if bool(mfa_payload.get("login_blocked")):
             block_reason = str(mfa_payload.get("block_reason") or "mfa_setup_required_after_grace")
@@ -190,7 +207,12 @@ def _login_with_policy(
             entity_id=user.id,
             actor_user_id=user.id,
             actor_role=user.role.value,
-            details={"email": user.email, "mfa_methods": mfa_payload.get("mfa_methods")},
+            details={
+                "email": user.email,
+                "mfa_methods": mfa_payload.get("mfa_methods"),
+                **audit_context,
+                "new_device": is_new_device,
+            },
         )
         return AuthResponse(
             access_token=None,
@@ -215,6 +237,8 @@ def _login_with_policy(
         email=user.email,
         mfa_verified=False,
         device_id=device_id,
+        ip_hash=session_context.get("ip_hash"),
+        device_fingerprint=session_context.get("device_fingerprint"),
     )
     set_device_cookie(response, request, device_id=device_id)
     register_auth_session(db, user=user, access_token=access_token, request=request, commit=False)
@@ -234,7 +258,7 @@ def _login_with_policy(
         entity_id=user.id,
         actor_user_id=user.id,
         actor_role=user.role.value,
-        details={"email": user.email},
+        details={"email": user.email, **audit_context, "new_device": is_new_device},
         commit=False,
     )
     db.commit()
@@ -278,6 +302,11 @@ def post_step_up_auth(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    audit_context = build_security_audit_context(request)
+    session_context = {
+        "ip_hash": resolve_ip_hash(request),
+        "device_fingerprint": resolve_device_fingerprint(request),
+    }
     enforce_login_protection(
         db,
         request=request,
@@ -292,6 +321,7 @@ def post_step_up_auth(
             method=payload.method,
             code=payload.code,
             device_id=device_id,
+            session_context=session_context,
         )
     except HTTPException as exc:
         record_login_failure(
@@ -322,7 +352,7 @@ def post_step_up_auth(
         entity_id=current_user.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
-        details={"method": payload.method},
+        details={"method": payload.method, **audit_context},
         commit=False,
     )
     db.commit()

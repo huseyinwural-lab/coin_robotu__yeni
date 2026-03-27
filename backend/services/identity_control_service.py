@@ -265,6 +265,10 @@ def resolve_device_fingerprint(request: Request) -> str:
     return _token_hash(f"{ip}|{user_agent}")[:40]
 
 
+def resolve_ip_hash(request: Request) -> str:
+    return _token_hash(resolve_client_ip(request))[:40]
+
+
 AUTH_FAILURE_LIMIT = 5
 AUTH_FAILURE_WINDOW_SECONDS = int(timedelta(minutes=30).total_seconds())
 AUTH_LOCK_SECONDS = int(timedelta(minutes=30).total_seconds())
@@ -606,6 +610,55 @@ def register_auth_session(
     else:
         db.flush()
     return row
+
+
+def is_known_device(db: Session, *, user_id: str, device_fingerprint: str) -> bool:
+    normalized = str(device_fingerprint or "").strip()
+    if not normalized:
+        return False
+    row = (
+        db.query(AuthSession)
+        .filter(
+            AuthSession.user_id == user_id,
+            AuthSession.device_fingerprint == normalized,
+            AuthSession.is_revoked.is_(False),
+        )
+        .order_by(AuthSession.last_seen_at.desc())
+        .first()
+    )
+    return row is not None
+
+
+def invalidate_session_by_token(
+    db: Session,
+    *,
+    access_token: str,
+    reason: str,
+    actor_user_id: str | None = None,
+) -> dict:
+    token_hash = _token_hash(access_token)
+    row = db.query(AuthSession).filter(AuthSession.token_hash == token_hash).first()
+    if row is None:
+        return {"revoked": False, "reason": "session_not_found"}
+    if row.is_revoked:
+        return {"revoked": False, "reason": "already_revoked", "session_id": row.id}
+
+    row.is_revoked = True
+    row.revoked_reason = str(reason or "security_reauth_required")[:255]
+    row.revoked_by = actor_user_id or row.user_id
+    row.revoked_at = _utcnow()
+    db.commit()
+    return {"revoked": True, "session_id": row.id, "reason": row.revoked_reason}
+
+
+def revoke_all_active_sessions_for_user(
+    db: Session,
+    *,
+    target_user_id: str,
+    actor: User,
+    reason: str,
+) -> int:
+    return _revoke_all_sessions_for_user(db, target_user_id=target_user_id, actor=actor, reason=reason)
 
 
 def is_access_token_revoked(db: Session, *, access_token: str) -> bool:

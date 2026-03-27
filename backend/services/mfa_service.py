@@ -14,15 +14,20 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.security import create_access_token
+from db import redis_client
 from models import AuthMfaChallenge, User, UserMfaBackupCode, UserMfaPreference, UserMfaSecurityState
+from services.mfa_email_otp_service import send_mfa_email_otp
 
-MFA_ALLOWED_METHODS = {"totp"}
+MFA_ALLOWED_METHODS = {"totp", "email_otp"}
 MFA_CHALLENGE_TTL_MINUTES = 10
+EMAIL_OTP_TTL_MINUTES = 5
 MFA_GRACE_PERIOD_HOURS = 24
 MFA_STEP_UP_TTL_MINUTES = 10
 PRIVILEGED_MFA_ROLES = {"super_admin", "admin", "ops", "trader"}
 BACKUP_CODE_HASHER = CryptContext(schemes=["bcrypt"], deprecated="auto")
 MFA_SECRET_PREFIX = "mfa_aes:v1"
+EMAIL_OTP_RESEND_LIMIT = 3
+EMAIL_OTP_RATE_LIMIT_PER_MINUTE = 5
 
 
 def _runtime_environment() -> str:
@@ -75,6 +80,32 @@ def _now() -> datetime:
 
 def _hash_token(value: str) -> str:
     return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()
+
+
+def _allow_email_code_preview() -> bool:
+    runtime = _runtime_environment()
+    return runtime not in {"prod", "production"}
+
+
+def _generate_email_otp_code() -> str:
+    digits = "0123456789"
+    return "".join(secrets.choice(digits) for _ in range(6))
+
+
+def _check_email_otp_rate_limit(user_id: str, ip_address: str) -> None:
+    key = f"mfa:email_otp:rate:{user_id}:{str(ip_address or 'unknown').strip().lower()}"
+    count = int(redis_client.incr(key) or 1)
+    redis_client.expire(key, 60)
+    if count > EMAIL_OTP_RATE_LIMIT_PER_MINUTE:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="email_otp_rate_limited")
+
+
+def _check_email_otp_resend_limit(challenge_hash: str, ttl_seconds: int) -> None:
+    key = f"mfa:email_otp:resend:{challenge_hash}"
+    count = int(redis_client.incr(key) or 1)
+    redis_client.expire(key, max(int(ttl_seconds), 60))
+    if count > EMAIL_OTP_RESEND_LIMIT:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="email_otp_resend_limit_exceeded")
 
 
 def _is_privileged_role(user: User) -> bool:
@@ -275,15 +306,40 @@ def _consume_backup_code_or_raise(db: Session, *, user_id: str, code: str, now: 
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_backup_code")
 
 
-def _create_challenge(db: Session, *, user_id: str, challenge_methods: list[str], now: datetime) -> dict:
+def _create_challenge(
+    db: Session,
+    *,
+    user: User,
+    challenge_methods: list[str],
+    now: datetime,
+    request_ip: str | None = None,
+    challenge_reason: str | None = None,
+) -> dict:
     challenge_token = secrets.token_urlsafe(32)
+    ttl_minutes = EMAIL_OTP_TTL_MINUTES if "email_otp" in challenge_methods else MFA_CHALLENGE_TTL_MINUTES
+    email_code_preview = None
+    email_delivery_status = "DISABLED"
+    email_otp_hash = None
+
+    if "email_otp" in challenge_methods:
+        _check_email_otp_rate_limit(user.id, str(request_ip or "unknown"))
+        raw_email_code = _generate_email_otp_code()
+        email_otp_hash = _hash_token(raw_email_code)
+        try:
+            send_mfa_email_otp(user.email, code=raw_email_code, ttl_minutes=ttl_minutes)
+            email_delivery_status = "SENT"
+        except Exception:
+            email_delivery_status = "FAILED"
+        if _allow_email_code_preview():
+            email_code_preview = raw_email_code
+
     challenge = AuthMfaChallenge(
-        user_id=user_id,
+        user_id=user.id,
         challenge_token_hash=_hash_token(challenge_token),
         allowed_methods=challenge_methods,
-        email_otp_hash=None,
-        email_delivery_status="DISABLED",
-        expires_at=now + timedelta(minutes=MFA_CHALLENGE_TTL_MINUTES),
+        email_otp_hash=email_otp_hash,
+        email_delivery_status=email_delivery_status,
+        expires_at=now + timedelta(minutes=ttl_minutes),
     )
     db.add(challenge)
     db.commit()
@@ -293,11 +349,12 @@ def _create_challenge(db: Session, *, user_id: str, challenge_methods: list[str]
         "mfa_challenge_token": challenge_token,
         "mfa_methods": challenge_methods,
         "mfa_expires_at": challenge.expires_at,
-        "email_delivery_status": "DISABLED",
-        "email_code_preview": None,
+        "email_delivery_status": email_delivery_status,
+        "email_code_preview": email_code_preview,
         "mfa_grace_active": False,
         "mfa_grace_expires_at": None,
         "mfa_setup_required": False,
+        "challenge_reason": challenge_reason,
     }
 
 
@@ -319,6 +376,8 @@ def get_mfa_settings(db: Session, user_id: str) -> dict:
         "totp_verified": bool(pref.totp_verified),
         "email_otp_verified": False,
         "backup_codes_remaining": _active_backup_codes_count(db, user_id),
+        "mfa_enabled_not_verified": bool(pref.is_enabled and not pref.totp_verified),
+        "backup_download_required": bool(pref.totp_verified and _active_backup_codes_count(db, user_id) == 0),
         "updated_at": pref.updated_at,
     }
 
@@ -369,12 +428,14 @@ def update_mfa_settings(db: Session, user_id: str, *, is_enabled: bool, enabled_
 
 def begin_totp_setup(db: Session, *, user: User) -> dict:
     pref = _get_or_create_preference(db, user.id)
-    secret = pyotp.random_base32()
-    pref.totp_secret = _encrypt_totp_secret(secret)
-    pref.totp_verified = False
-    pref.updated_at = _now()
-    db.commit()
-    db.refresh(pref)
+    secret = _decrypt_totp_secret(pref.totp_secret)
+    if pref.totp_verified or not secret:
+        secret = pyotp.random_base32()
+        pref.totp_secret = _encrypt_totp_secret(secret)
+        pref.totp_verified = False
+        pref.updated_at = _now()
+        db.commit()
+        db.refresh(pref)
 
     uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user.email, issuer_name="XILO")
     return {
@@ -409,7 +470,14 @@ def verify_totp_setup(db: Session, *, user_id: str, code: str) -> dict:
     return get_mfa_settings(db, user_id)
 
 
-def start_mfa_challenge_if_required(db: Session, *, user: User) -> dict | None:
+def start_mfa_challenge_if_required(
+    db: Session,
+    *,
+    user: User,
+    force_challenge: bool = False,
+    challenge_reason: str | None = None,
+    request_ip: str | None = None,
+) -> dict | None:
     pref = _get_or_create_preference(db, user.id)
     now = _now()
     role_is_privileged = _is_privileged_role(user)
@@ -417,11 +485,45 @@ def start_mfa_challenge_if_required(db: Session, *, user: User) -> dict | None:
     backup_codes_remaining = _active_backup_codes_count(db, user.id)
     totp_ready = _totp_ready(pref)
 
+    if force_challenge:
+        challenge_methods: list[str] = []
+        if totp_ready:
+            challenge_methods = ["totp"]
+            if backup_codes_remaining > 0:
+                challenge_methods.append("backup_code")
+            challenge_methods.append("email_otp")
+        else:
+            challenge_methods = ["email_otp"]
+
+        payload = _create_challenge(
+            db,
+            user=user,
+            challenge_methods=challenge_methods,
+            now=now,
+            request_ip=request_ip,
+            challenge_reason=challenge_reason or "new_device",
+        )
+        if payload.get("email_delivery_status") == "FAILED" and challenge_methods == ["email_otp"]:
+            return {
+                "mfa_required": True,
+                "login_blocked": True,
+                "block_reason": "email_otp_delivery_failed",
+                "email_delivery_status": "FAILED",
+            }
+        return payload
+
     if totp_ready:
         challenge_methods = ["totp"]
         if backup_codes_remaining > 0:
             challenge_methods.append("backup_code")
-        payload = _create_challenge(db, user_id=user.id, challenge_methods=challenge_methods, now=now)
+        payload = _create_challenge(
+            db,
+            user=user,
+            challenge_methods=challenge_methods,
+            now=now,
+            request_ip=request_ip,
+            challenge_reason=challenge_reason,
+        )
         payload["mfa_setup_required"] = False
         return payload
 
@@ -446,9 +548,11 @@ def start_mfa_challenge_if_required(db: Session, *, user: User) -> dict | None:
 
         challenge_payload = _create_challenge(
             db,
-            user_id=user.id,
+            user=user,
             challenge_methods=["grace_ack"],
             now=now,
+            request_ip=request_ip,
+            challenge_reason="privileged_grace",
         )
         challenge_payload["mfa_grace_active"] = True
         challenge_payload["mfa_grace_expires_at"] = grace_expires_at
@@ -457,9 +561,18 @@ def start_mfa_challenge_if_required(db: Session, *, user: User) -> dict | None:
 
     if pref.is_enabled and methods:
         challenge_methods = list(methods)
+        if "email_otp" not in challenge_methods:
+            challenge_methods.append("email_otp")
         if backup_codes_remaining > 0 and "backup_code" not in challenge_methods:
             challenge_methods.append("backup_code")
-        return _create_challenge(db, user_id=user.id, challenge_methods=challenge_methods, now=now)
+        return _create_challenge(
+            db,
+            user=user,
+            challenge_methods=challenge_methods,
+            now=now,
+            request_ip=request_ip,
+            challenge_reason=challenge_reason,
+        )
 
     return None
 
@@ -478,6 +591,52 @@ def resolve_challenge_user(db: Session, *, challenge_token: str) -> User | None:
     except HTTPException:
         return None
     return db.query(User).filter(User.id == row.user_id).first()
+
+
+def resend_email_otp_for_challenge(
+    db: Session,
+    *,
+    challenge_token: str,
+    request_ip: str | None,
+) -> dict:
+    row = _resolve_challenge_row(db, challenge_token)
+    if row.consumed_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="mfa_challenge_already_used")
+
+    now = _now()
+    expires_at = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
+    if now > expires_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="mfa_challenge_expired")
+
+    methods = _normalize_methods(row.allowed_methods, include_backup=True, include_grace_ack=True)
+    if "email_otp" not in methods:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email_otp_not_enabled_for_challenge")
+
+    ttl_seconds = int((expires_at - now).total_seconds())
+    _check_email_otp_resend_limit(row.challenge_token_hash, ttl_seconds)
+
+    user = db.query(User).filter(User.id == row.user_id).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+
+    _check_email_otp_rate_limit(user.id, str(request_ip or "unknown"))
+    new_code = _generate_email_otp_code()
+    row.email_otp_hash = _hash_token(new_code)
+
+    try:
+        send_mfa_email_otp(user.email, code=new_code, ttl_minutes=EMAIL_OTP_TTL_MINUTES)
+        row.email_delivery_status = "SENT"
+    except Exception:
+        row.email_delivery_status = "FAILED"
+
+    db.commit()
+
+    return {
+        "mfa_challenge_token": challenge_token,
+        "email_delivery_status": row.email_delivery_status,
+        "email_code_preview": new_code if _allow_email_code_preview() else None,
+        "mfa_expires_at": row.expires_at,
+    }
 
 
 def _perform_mfa_method_verification(
@@ -502,6 +661,22 @@ def _perform_mfa_method_verification(
 
     if normalized_method == "backup_code":
         _consume_backup_code_or_raise(db, user_id=user.id, code=code, now=now)
+        security_state = _get_or_create_security_state(db, user.id)
+        security_state.last_mfa_verified_at = now
+        return {"mfa_verified": True}
+
+    if normalized_method == "email_otp":
+        if challenge_context is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email_otp_not_available")
+        expected_hash = str(challenge_context.email_otp_hash or "").strip()
+        if not expected_hash:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email_otp_not_available")
+        normalized_code = "".join(ch for ch in str(code or "") if ch.isdigit())
+        if len(normalized_code) != 6:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_email_otp_code")
+        if not secrets.compare_digest(expected_hash, _hash_token(normalized_code)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_email_otp_code")
+        challenge_context.email_otp_hash = None
         security_state = _get_or_create_security_state(db, user.id)
         security_state.last_mfa_verified_at = now
         return {"mfa_verified": True}
@@ -533,6 +708,7 @@ def verify_mfa_challenge(
     method: str,
     code: str,
     device_id: str,
+    session_context: dict | None = None,
 ) -> dict:
     _ensure_mfa_tables(db)
     row = _resolve_challenge_row(db, challenge_token)
@@ -575,6 +751,8 @@ def verify_mfa_challenge(
         mfa_verified=mfa_verified,
         mfa_verified_at=now if mfa_verified else None,
         device_id=device_id,
+        ip_hash=(session_context or {}).get("ip_hash"),
+        device_fingerprint=(session_context or {}).get("device_fingerprint"),
     )
     step_up_valid_until = now + timedelta(minutes=MFA_STEP_UP_TTL_MINUTES) if mfa_verified else None
 
@@ -601,6 +779,7 @@ def verify_step_up_code(
     method: str,
     code: str,
     device_id: str,
+    session_context: dict | None = None,
 ) -> dict:
     now = _now()
     pref = _get_or_create_preference(db, user.id)
@@ -625,6 +804,8 @@ def verify_step_up_code(
         mfa_verified=True,
         mfa_verified_at=now,
         device_id=device_id,
+        ip_hash=(session_context or {}).get("ip_hash"),
+        device_fingerprint=(session_context or {}).get("device_fingerprint"),
     )
     return {
         "access_token": token,
@@ -636,3 +817,54 @@ def verify_step_up_code(
         "step_up_valid_until": now + timedelta(minutes=MFA_STEP_UP_TTL_MINUTES),
         "mfa_methods": [],
     }
+
+
+def disable_user_mfa(db: Session, *, user_id: str) -> dict:
+    pref = _get_or_create_preference(db, user_id)
+    pref.is_enabled = False
+    pref.enabled_methods = []
+    pref.totp_secret = None
+    pref.totp_verified = False
+    pref.updated_at = _now()
+    db.query(UserMfaBackupCode).filter(UserMfaBackupCode.user_id == user_id).delete(synchronize_session=False)
+    db.query(AuthMfaChallenge).filter(AuthMfaChallenge.user_id == user_id, AuthMfaChallenge.consumed_at.is_(None)).update(
+        {AuthMfaChallenge.consumed_at: _now()},
+        synchronize_session=False,
+    )
+    db.commit()
+    return get_mfa_settings(db, user_id)
+
+
+def admin_reset_user_mfa(db: Session, *, user_id: str) -> dict:
+    state = _get_or_create_security_state(db, user_id)
+    settings_payload = disable_user_mfa(db, user_id=user_id)
+    state.mfa_grace_started_at = _now()
+    state.mfa_grace_expires_at = _now() + timedelta(hours=MFA_GRACE_PERIOD_HOURS)
+    state.last_mfa_verified_at = None
+    state.last_totp_code_hash = None
+    state.last_totp_verified_at = None
+    db.commit()
+    settings_payload["mfa_grace_active"] = True
+    settings_payload["mfa_grace_expires_at"] = _to_utc(state.mfa_grace_expires_at)
+    return settings_payload
+
+
+def create_authenticated_mfa_challenge(
+    db: Session,
+    *,
+    user: User,
+    request_ip: str | None,
+    challenge_reason: str = "manual_challenge",
+) -> dict:
+    payload = start_mfa_challenge_if_required(
+        db,
+        user=user,
+        force_challenge=True,
+        challenge_reason=challenge_reason,
+        request_ip=request_ip,
+    )
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="mfa_challenge_not_available")
+    if payload.get("login_blocked"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(payload.get("block_reason") or "mfa_challenge_blocked"))
+    return payload

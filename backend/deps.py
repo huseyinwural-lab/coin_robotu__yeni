@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session
 from core.security import decode_access_token
 from db import get_db
 from models import User, UserRole
-from services.identity_control_service import is_access_token_revoked
+from services.identity_control_service import (
+    invalidate_session_by_token,
+    is_access_token_revoked,
+    resolve_device_fingerprint,
+    resolve_ip_hash,
+)
 
 bearer_scheme = HTTPBearer(auto_error=False)
 ADMIN_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}
@@ -52,10 +57,39 @@ def get_current_user(
 
     cookie_device_id = str((request.cookies.get("device_id") if request else "") or "").strip()
     if not cookie_device_id or cookie_device_id != token_device_id:
+        invalidate_session_by_token(
+            db,
+            access_token=raw_token,
+            reason="session_device_mismatch",
+            actor_user_id=str(subject),
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session_device_mismatch")
 
     if payload.get("mfa_verified") is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token_mfa_claim")
+
+    token_ip_hash = str(payload.get("ip_hash") or "").strip()
+    token_device_fingerprint = str(payload.get("device_fingerprint") or "").strip()
+    current_ip_hash = resolve_ip_hash(request)
+    current_device_fingerprint = resolve_device_fingerprint(request)
+
+    if not token_ip_hash or token_ip_hash != current_ip_hash:
+        invalidate_session_by_token(
+            db,
+            access_token=raw_token,
+            reason="reauth_required_ip_change",
+            actor_user_id=str(subject),
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="reauth_required_ip_change")
+
+    if not token_device_fingerprint or token_device_fingerprint != current_device_fingerprint:
+        invalidate_session_by_token(
+            db,
+            access_token=raw_token,
+            reason="reauth_required_device_change",
+            actor_user_id=str(subject),
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="reauth_required_device_change")
 
     if request is not None:
         request.state.auth_payload = payload

@@ -24,6 +24,8 @@ def create_access_token(
     mfa_verified: bool = False,
     device_id: str,
     mfa_verified_at: datetime | None = None,
+    ip_hash: str | None = None,
+    device_fingerprint: str | None = None,
 ) -> str:
     expire_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
     verified_at = mfa_verified_at or (datetime.now(timezone.utc) if mfa_verified else None)
@@ -35,6 +37,8 @@ def create_access_token(
         "mfa_verified": bool(mfa_verified),
         "device_id": str(device_id or "").strip(),
         "mfa_verified_at": int(verified_at.timestamp()) if verified_at else None,
+        "ip_hash": str(ip_hash or "").strip() or None,
+        "device_fingerprint": str(device_fingerprint or "").strip() or None,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 

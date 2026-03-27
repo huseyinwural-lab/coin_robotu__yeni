@@ -210,6 +210,8 @@ class MfaSettingsResponse(BaseModel):
     totp_verified: bool
     email_otp_verified: bool
     backup_codes_remaining: int = 0
+    mfa_enabled_not_verified: bool = False
+    backup_download_required: bool = False
     updated_at: datetime | None = None
 
 
@@ -239,6 +241,17 @@ class MfaChallengeVerifyRequest(BaseModel):
 class AuthStepUpVerifyRequest(BaseModel):
     method: str = Field(min_length=4, max_length=20)
     code: str = Field(min_length=4, max_length=12)
+
+
+class MfaChallengeCreateRequest(BaseModel):
+    reason: str = Field(default="manual_challenge", min_length=3, max_length=80)
+
+
+class MfaChallengeResendResponse(BaseModel):
+    mfa_challenge_token: str
+    email_delivery_status: str
+    email_code_preview: str | None = None
+    mfa_expires_at: datetime | None = None
 
 
 class BrandSettingsUpdateRequest(BaseModel):

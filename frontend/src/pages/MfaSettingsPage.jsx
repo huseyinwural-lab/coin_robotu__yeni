@@ -18,11 +18,15 @@ export const MfaSettingsPage = () => {
     totp_verified: false,
     email_otp_verified: false,
     backup_codes_remaining: 0,
+    mfa_enabled_not_verified: false,
+    backup_download_required: false,
   });
   const [totpSetup, setTotpSetup] = useState(null);
   const [totpCode, setTotpCode] = useState("");
   const [backupCodes, setBackupCodes] = useState([]);
   const [isGeneratingBackupCodes, setIsGeneratingBackupCodes] = useState(false);
+  const [backupCodesConfirmed, setBackupCodesConfirmed] = useState(false);
+  const [mustConfirmBackup, setMustConfirmBackup] = useState(false);
 
   const roleLabel = useMemo(() => (user?.role === "user" ? "User" : "Admin"), [user?.role]);
 
@@ -31,6 +35,8 @@ export const MfaSettingsPage = () => {
     try {
       const { data } = await apiClient.get("/auth/mfa/settings");
       setSettings(data);
+      setMustConfirmBackup(false);
+      setBackupCodesConfirmed(false);
     } catch {
       toast.error("MFA ayarları alınamadı");
     } finally {
@@ -43,6 +49,13 @@ export const MfaSettingsPage = () => {
   }, []);
 
   const saveSettings = async () => {
+    const requiresBackupConfirmation = Boolean(settings.is_enabled) && Boolean(settings.totp_verified) && mustConfirmBackup && !backupCodesConfirmed;
+
+    if (requiresBackupConfirmation) {
+      toast.error("Backup kodlarını indirdiğinizi/kopyaladığınızı onaylamadan MFA kaydedilemez");
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -61,8 +74,9 @@ export const MfaSettingsPage = () => {
 
   const generateTotpSetup = async () => {
     try {
-      const { data } = await apiClient.post("/auth/mfa/totp/setup");
+      const { data } = await apiClient.post("/mfa/setup");
       setTotpSetup(data);
+      setBackupCodesConfirmed(false);
       toast.success("TOTP secret üretildi");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "TOTP setup başlatılamadı");
@@ -75,6 +89,8 @@ export const MfaSettingsPage = () => {
       const { data } = await apiClient.post("/auth/mfa/totp/verify-setup", { code: totpCode });
       setSettings(data);
       setTotpCode("");
+      setMustConfirmBackup(true);
+      setBackupCodesConfirmed(false);
       toast.success("TOTP doğrulandı");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "TOTP kodu doğrulanamadı");
@@ -92,6 +108,8 @@ export const MfaSettingsPage = () => {
         ...prev,
         backup_codes_remaining: Number(data?.backup_codes_remaining || 0),
       }));
+      setBackupCodesConfirmed(false);
+      setMustConfirmBackup(true);
       toast.success("Backup kodları yenilendi");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Backup kodları üretilemedi");
@@ -99,6 +117,27 @@ export const MfaSettingsPage = () => {
       setIsGeneratingBackupCodes(false);
     }
   };
+
+  const markBackupCodesSaved = async () => {
+    if (backupCodes.length > 0) {
+      const payload = backupCodes.join("\n");
+      try {
+        await navigator.clipboard.writeText(payload);
+        toast.success("Backup kodları panoya kopyalandı");
+      } catch {
+        toast.message("Panoya kopyalama başarısız, lütfen manuel kaydedin");
+      }
+    }
+    setBackupCodesConfirmed(true);
+    setMustConfirmBackup(false);
+  };
+
+  const wizardStep = useMemo(() => {
+    if (!settings.totp_configured) return "setup";
+    if (settings.totp_configured && !settings.totp_verified) return "verify";
+    if (settings.totp_verified && Number(settings.backup_codes_remaining || 0) === 0) return "backup";
+    return "completed";
+  }, [settings.totp_configured, settings.totp_verified, settings.backup_codes_remaining]);
 
   if (loading) {
     return (
@@ -112,7 +151,13 @@ export const MfaSettingsPage = () => {
     <section className="space-y-4" data-testid="mfa-settings-page">
       <header className="border border-slate-800 bg-slate-900 p-4" data-testid="mfa-settings-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="mfa-settings-title">{roleLabel} MFA Settings</h2>
-        <p className="mt-2 text-sm text-slate-400" data-testid="mfa-settings-description">Giriş sonrası opsiyonel ikinci doğrulama katmanı.</p>
+        <p className="mt-2 text-sm text-slate-400" data-testid="mfa-settings-description">MFA setup wizard: setup → verify → backup code confirmation.</p>
+        <p className="mt-1 text-xs text-slate-500" data-testid="mfa-settings-wizard-step">wizard_step: {wizardStep}</p>
+        {Boolean(settings.mfa_enabled_not_verified) && (
+          <p className="mt-2 text-xs font-semibold text-amber-300" data-testid="mfa-settings-enabled-not-verified-warning">
+            MFA enabled but not verified state aktif. TOTP doğrulama tamamlanana kadar riskli durumdasınız.
+          </p>
+        )}
       </header>
 
       <section className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="mfa-settings-main-card">
@@ -133,7 +178,7 @@ export const MfaSettingsPage = () => {
         <div className="rounded border border-slate-700 bg-slate-950 p-3" data-testid="mfa-settings-method-fixed-card">
           <p className="text-xs text-slate-300" data-testid="mfa-settings-method-fixed-title">MFA yöntemi sabit</p>
           <p className="text-xs text-slate-400" data-testid="mfa-settings-method-fixed-value">Authenticator (TOTP) + Backup Code</p>
-          <p className="text-xs text-slate-500" data-testid="mfa-settings-method-fixed-note">Email OTP login MFA akışında kapalıdır.</p>
+          <p className="text-xs text-slate-500" data-testid="mfa-settings-method-fixed-note">Yeni device girişlerinde Email OTP challenge otomatik devreye girer.</p>
         </div>
 
         <div className="flex flex-wrap gap-2" data-testid="mfa-settings-actions-row">
@@ -146,6 +191,8 @@ export const MfaSettingsPage = () => {
           <p className="text-xs text-slate-400" data-testid="mfa-settings-status-methods">methods: {(settings.enabled_methods || []).join(",") || "-"}</p>
           <p className="text-xs text-slate-400" data-testid="mfa-settings-status-totp-configured">totp_configured: {String(Boolean(settings.totp_configured))}</p>
           <p className="text-xs text-slate-400" data-testid="mfa-settings-status-totp-verified">totp_verified: {String(Boolean(settings.totp_verified))}</p>
+          <p className="text-xs text-slate-400" data-testid="mfa-settings-status-enabled-not-verified">mfa_enabled_not_verified: {String(Boolean(settings.mfa_enabled_not_verified))}</p>
+          <p className="text-xs text-slate-400" data-testid="mfa-settings-status-backup-required">backup_download_required: {String(Boolean(settings.backup_download_required))}</p>
         </div>
       </section>
 
@@ -171,7 +218,7 @@ export const MfaSettingsPage = () => {
           <p className="text-xs text-amber-100" data-testid="mfa-backup-codes-remaining">remaining: {settings.backup_codes_remaining || 0}</p>
         </div>
         <p className="text-xs text-amber-100" data-testid="mfa-backup-codes-description">
-          Tek kullanımlık kurtarma kodlarıdır. Girişte MFA method olarak <b>backup_code</b> seçip kullanabilirsiniz.
+          Tek kullanımlık kurtarma kodlarıdır. MFA setup tamamlanması için kodları kaydettiğinizi onaylamanız zorunludur.
         </p>
         <Button
           type="button"
@@ -193,6 +240,15 @@ export const MfaSettingsPage = () => {
                 </p>
               ))}
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3"
+              onClick={markBackupCodesSaved}
+              data-testid="mfa-backup-codes-confirm-saved-button"
+            >
+              {backupCodesConfirmed ? "Backup Kodları Kaydedildi" : "Kodları Kaydettim / Panoya Kopyala"}
+            </Button>
           </div>
         )}
       </section>
