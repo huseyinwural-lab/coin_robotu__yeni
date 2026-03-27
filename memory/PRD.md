@@ -1,3 +1,12 @@
+## 2026-03-27 — Geçici Policy Değişikliği (Kullanıcı Talebi)
+
+- Admin ve Super Admin için MFA zorunluluğu kaldırıldı (opsiyonel hale getirildi).
+- OPS rolü için mandatory MFA korunmaya devam ediyor.
+- `canary.admin@platform.local` için geçici MFA bypass etkinleştirildi.
+  - Uygulama: `services/auth_policy_service.py` (`MFA_TEMP_BYPASS_EMAILS`, varsayılan canary)
+  - Sonuç: admin login MFA challenge olmadan token dönebiliyor.
+- Canary için `/api/mfa/disable` + `/api/auth/mfa/settings` akışı doğrulandı (`is_enabled=false`).
+
 ## 2026-03-27 — P2 Risk-Based Stateful Auth Layer (Implementasyon)
 
 ### Uygulanan kapsam (onaylı task listesine göre)

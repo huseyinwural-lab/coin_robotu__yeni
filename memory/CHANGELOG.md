@@ -1,5 +1,11 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-27 (Geçici MFA Policy Override - Canary)
+- Admin/Super Admin mandatory MFA kaldırıldı; OPS mandatory MFA korundu.
+- Geçici bypass servisi eklendi: `auth_policy_service.is_temporary_mfa_bypass_user()`.
+- Varsayılan bypass kullanıcı: `canary.admin@platform.local` (`MFA_TEMP_BYPASS_EMAILS` ile yönetilebilir).
+- Doğrulama: `/api/auth/login/admin` canary için `mfa_required=false`; `/api/mfa/disable` başarılı.
+
 ## 2026-03-27 (P2 Risk-Based Stateful Auth Layer)
 - Yeni deterministic risk motoru eklendi (`risk_policy_service`): context + action risk değerlendirmesi.
 - Scope-aware step-up eklendi (`step_up_at`, `step_up_scope`, `require_step_up_for`).
