@@ -1,3 +1,55 @@
+## 2026-03-27 — P1 Control/Observability/Stability Expansion (İlk Teslim Tamamlandı)
+
+### Kullanıcı kararlarına göre uygulanan sıra
+1. Violation + Audit + Auto-Action (manual recommendation mode)
+2. Policy Versioning / Canary / Rollback
+3. Strategy Governance Layer
+4. Release Gate actionable integration
+
+### P1’de eklenen ana yetenekler
+- **Violation Tracking genişletmesi**
+  - Decision log modeli; `portfolio_id`, `trace_id`, `execution_mode`, `simulation_mode`, `violation_id`, `triggered_policy`, `triggered_rule`, `metrics_snapshot` alanlarıyla genişletildi.
+  - Severity sınıflandırma + reason bazlı action recommendation üretimi eklendi.
+  - Event payload standardizasyonu (`violation.created`, `violation.severity_escalated`, `strategy.disabled`, `throttle.applied`, `release_gate.escalated`) eklendi.
+
+- **Audit & Explainability**
+  - Decision trace detaylandırıldı: matched policies/rules, overrides, decision steps, final decision path.
+  - Scoped debug mode (env/strategy/request scope) eklendi.
+  - Human-readable decision summary alanları eklendi.
+
+- **Policy Versioning**
+  - Yeni model: `execution_policy_versions` (DRAFT/PASSIVE/ACTIVE/CANARY/DEPRECATED/ROLLED_BACK).
+  - Endpoints: create/list/approve/activate/rollback/ab-compare.
+  - Prod active activation için approval zorunluluğu aktif.
+  - Canary routing + deterministic rollout matching eklendi (traffic_percentage=0 bug fix uygulandı).
+
+- **Strategy Governance**
+  - Yeni model: `execution_strategy_bindings`.
+  - Strategy binding/allowed scope/risk class/state doğrulamaları eklendi.
+  - Strategy health summary metrikleri eklendi.
+
+- **Release Gate Integration**
+  - Actionable gate output: `status`, `summary`, `blocking_reasons`, `recommended_actions`, `affected_scopes`, `safe_rollout_suggestion`.
+  - Manual remediation queue modeli + approve/reject akışı eklendi (otomatik uygulama kapalı; yalnız öneri + manuel onay).
+
+### Yeni migration ve temel dosyalar
+- Migration: `20260327_0092_execution_governance_p1_foundation.py`
+- Yeni servis: `services/execution_governance_service.py`
+- Genişletilenler: `services/execution_policy_service.py`, `routers/admin_execution.py`, `pages/ExecutionPoliciesPage.jsx`
+
+### Admin operasyon görünürlüğü (hafif ama gerçek)
+- Severity distribution
+- Recent critical violations
+- Policy version state (active/canary/approval)
+- Strategy health state
+- Release gate status + recommended actions
+- Remediation recommendation listesi
+
+### Test durumu
+- Local test: `/app/backend/tests/test_execution_governance_p1.py` → 7 PASS
+- Testing agent raporu: `/app/test_reports/iteration_165.json` (backend+frontend doğrulama, kapsam PASS)
+- Rapor sonrası canary `traffic_percentage=0` routing bug’ı düzeltildi.
+
 ## 2026-03-27 — P0 HARD CLOSE (Execution Policy Engine) Tamamlandı
 
 ### Kapanan kritik açıklar
