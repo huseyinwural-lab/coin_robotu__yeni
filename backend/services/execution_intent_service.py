@@ -825,6 +825,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
 
     pipeline_context = {
         "intent_token": token,
+        "request_id": token,
         "user_id": user_id,
         "portfolio_id": normalized.get("portfolio_id") or f"default:{user_id}",
         "strategy_binding": strategy_binding,
@@ -839,6 +840,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         "requested_price": _to_float(normalized.get("requested_price"), 0.0),
         "requested_qty": _to_float(normalized.get("requested_qty"), 0.0),
         "execution_result": dict(normalized.get("execution_result") or {}),
+        "execution_mode": "REAL" if str(requested_environment).lower() in {"live", "prod", "production"} else "SIMULATION",
         "market_data_available": _has_market_data(symbol),
         "portfolio_drawdown_pct": payload.get("portfolio_drawdown_pct"),
         "market_snapshot": scanner_snapshot or payload.get("market_snapshot") or {},
@@ -1090,6 +1092,7 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
     submit_pipeline_context = {
         "intent_id": intent.id,
         "intent_token": intent.intent_token,
+        "request_id": intent.intent_token,
         "user_id": user_id,
         "portfolio_id": normalized_payload.get("portfolio_id") or f"default:{user_id}",
         "strategy_binding": normalized_payload.get("strategy_binding") or "",
@@ -1104,6 +1107,7 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         "requested_price": _to_float(normalized_payload.get("requested_price"), 0.0),
         "requested_qty": _to_float(normalized_payload.get("requested_qty"), 0.0),
         "execution_result": dict(normalized_payload.get("execution_result") or {}),
+        "execution_mode": str(normalized_payload.get("execution_mode") or ("REAL" if str(normalized_payload.get("environment") or "").lower() in {"live", "prod", "production"} else "SIMULATION")).upper(),
         "exposure_after_trade": _to_float((normalized_payload.get("execution_result") or {}).get("exposure_after_trade"), 0.0),
         "leverage_after_trade": _to_float((normalized_payload.get("execution_result") or {}).get("leverage_after_trade"), 0.0),
         "liquidation_distance_after_trade": _to_float((normalized_payload.get("execution_result") or {}).get("liquidation_distance_after_trade"), 0.0),

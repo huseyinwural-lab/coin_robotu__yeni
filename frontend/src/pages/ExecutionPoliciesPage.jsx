@@ -41,6 +41,11 @@ export const ExecutionPoliciesPage = () => {
   const decisionLog = payload?.policy_decision_log || [];
   const topReasonCodes = observability?.top_reason_codes || [];
   const criticalViolations = observability?.recent_critical_violations || [];
+  const policyVersions = payload?.policy_versions || [];
+  const strategyHealth = payload?.strategy_health || [];
+  const releaseGate = payload?.release_gate || {};
+  const remediationRecommendations = payload?.remediation_recommendations || [];
+  const severityDistribution = observability?.violation_aggregations?.["24h"]?.severity_distribution || {};
   const violations = payload?.recent_policy_violations || [];
 
   return (
@@ -118,6 +123,14 @@ export const ExecutionPoliciesPage = () => {
               </p>
             ))}
           </div>
+
+          <div className="mt-3" data-testid="execution-policies-severity-distribution">
+            <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="execution-policies-severity-distribution-title">Severity Distribution (24h)</p>
+            {Object.keys(severityDistribution).length === 0 && <p className="text-[11px] text-slate-500" data-testid="execution-policies-severity-distribution-empty">Veri yok.</p>}
+            {Object.entries(severityDistribution).map(([key, value], idx) => (
+              <p key={`${key}-${idx}`} className="text-[11px] text-slate-300" data-testid={`execution-policies-severity-distribution-row-${idx}`}>{key}: {value}</p>
+            ))}
+          </div>
         </div>
 
         <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-registry-card">
@@ -163,6 +176,61 @@ export const ExecutionPoliciesPage = () => {
               <p className="text-xs text-slate-300" data-testid={`execution-policies-critical-violation-reason-${idx}`}>{item.reason_code} · {item.stage}</p>
               <p className="text-[11px] text-slate-400" data-testid={`execution-policies-critical-violation-rule-${idx}`}>rule: {item.triggered_rule || "-"}</p>
               <p className="text-[11px] text-slate-500" data-testid={`execution-policies-critical-violation-time-${idx}`}>{item.created_at ? new Date(item.created_at).toLocaleString() : "-"}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3" data-testid="execution-policies-governance-grid">
+        <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-policy-versions-card">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-policy-versions-title">Policy Versions</p>
+          {policyVersions.length === 0 && <p className="mt-2 text-sm text-slate-400" data-testid="execution-policies-policy-versions-empty">Version kaydı yok.</p>}
+          <div className="mt-2 space-y-2" data-testid="execution-policies-policy-versions-list">
+            {policyVersions.slice(0, 10).map((item, idx) => (
+              <article key={`${item.version_id}-${idx}`} className="rounded border border-slate-800 p-2" data-testid={`execution-policies-policy-version-row-${idx}`}>
+                <p className="text-xs text-slate-200" data-testid={`execution-policies-policy-version-code-${idx}`}>{item.policy_code}</p>
+                <p className="text-[11px] text-slate-400" data-testid={`execution-policies-policy-version-state-${idx}`}>{item.state} · {item.approval_status}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-strategy-health-card">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-strategy-health-title">Strategy Health</p>
+          {strategyHealth.length === 0 && <p className="mt-2 text-sm text-slate-400" data-testid="execution-policies-strategy-health-empty">Strategy health verisi yok.</p>}
+          <div className="mt-2 space-y-2" data-testid="execution-policies-strategy-health-list">
+            {strategyHealth.slice(0, 10).map((item, idx) => (
+              <article key={`${item.strategy_id}-${idx}`} className="rounded border border-slate-800 p-2" data-testid={`execution-policies-strategy-health-row-${idx}`}>
+                <p className="text-xs text-slate-200" data-testid={`execution-policies-strategy-health-id-${idx}`}>{item.strategy_id}</p>
+                <p className="text-[11px] text-slate-400" data-testid={`execution-policies-strategy-health-state-${idx}`}>{item.state} · risk={item.risk_class}</p>
+                <p className="text-[11px] text-slate-500" data-testid={`execution-policies-strategy-health-violations-${idx}`}>violations={item.violation_count}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-release-gate-card">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-release-gate-title">Release Gate</p>
+          <p className="mt-2 text-sm text-slate-200" data-testid="execution-policies-release-gate-status">status: {releaseGate?.status || "UNKNOWN"}</p>
+          <p className="text-[11px] text-slate-400" data-testid="execution-policies-release-gate-summary">critical: {releaseGate?.summary?.critical_violation_count ?? 0} · failsafe: {releaseGate?.summary?.failsafe_hard_block_count ?? 0}</p>
+          <div className="mt-2" data-testid="execution-policies-release-gate-recommendations">
+            <p className="text-[11px] uppercase tracking-wider text-slate-400" data-testid="execution-policies-release-gate-recommendations-title">Recommended Actions</p>
+            {(releaseGate?.recommended_actions || []).slice(0, 5).map((item, idx) => (
+              <p key={`${idx}-${item}`} className="text-[11px] text-slate-300" data-testid={`execution-policies-release-gate-recommendation-${idx}`}>- {item}</p>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-remediation-card">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-remediation-title">Remediation Recommendations</p>
+        {remediationRecommendations.length === 0 && <p className="mt-2 text-sm text-slate-400" data-testid="execution-policies-remediation-empty">Öneri yok.</p>}
+        <div className="mt-2 space-y-2" data-testid="execution-policies-remediation-list">
+          {remediationRecommendations.slice(0, 10).map((item, idx) => (
+            <article key={`${item.recommendation_id}-${idx}`} className="rounded border border-slate-800 p-2" data-testid={`execution-policies-remediation-row-${idx}`}>
+              <p className="text-xs text-slate-200" data-testid={`execution-policies-remediation-type-${idx}`}>{item.recommendation_type} · {item.status}</p>
+              <p className="text-[11px] text-slate-400" data-testid={`execution-policies-remediation-reason-${idx}`}>{item.reason_code || "-"}</p>
+              <p className="text-[11px] text-slate-500" data-testid={`execution-policies-remediation-summary-${idx}`}>{item.summary}</p>
             </article>
           ))}
         </div>

@@ -51,8 +51,22 @@ from services.execution_intent_service import (
 from services.execution_precheck_service import load_execution_policy_registry
 from services.execution_policy_service import (
     build_execution_policy_observability,
+    get_decision_trace_detail,
     get_execution_policy_engine_config,
     list_recent_execution_policy_decisions,
+)
+from services.execution_governance_service import (
+    activate_policy_version,
+    approve_policy_version,
+    build_release_gate_status,
+    build_strategy_health_state,
+    build_violation_aggregation,
+    compare_policy_versions_ab,
+    create_policy_version,
+    list_policy_versions,
+    list_remediation_recommendations,
+    rollback_policy_version,
+    update_remediation_recommendation_status,
 )
 from services.execution_readiness_service import evaluate_execution_readiness
 from services.guard_metrics_service import build_guard_telemetry_payload
@@ -211,6 +225,29 @@ def _resolve_execution_mode_from_intent(row) -> str:
 class ApproveTradeRequest(BaseModel):
     intent_id: str
     note: str = ""
+
+
+class PolicyVersionCreateRequest(BaseModel):
+    policy_code: str
+    change_summary: str
+    conditions_payload: dict = {}
+    rules_payload: dict = {}
+    state: str = "DRAFT"
+
+
+class PolicyVersionActivateRequest(BaseModel):
+    environment: str = "testnet"
+
+
+class PolicyVersionRollbackRequest(BaseModel):
+    target_version_id: str
+    reason: str
+
+
+class PolicyVersionABCompareRequest(BaseModel):
+    policy_code: str
+    primary_version_id: str
+    shadow_version_id: str
 
 
 @router.get("/execution-queue", response_model=list[ExecutionIntentQueueItemResponse])
@@ -1289,6 +1326,10 @@ def execution_policies(current_user: User = Depends(require_admin), db: Session 
     engine_config = get_execution_policy_engine_config(db)
     observability = build_execution_policy_observability(db, hours=24)
     recent_decisions = list_recent_execution_policy_decisions(db, limit=40)
+    policy_versions = list_policy_versions(db, limit=200)
+    strategy_health = build_strategy_health_state(db, window_hours=24)
+    release_gate = build_release_gate_status(db, window_hours=24)
+    remediations = list_remediation_recommendations(db, limit=100)
     recent_violations = (
         db.query(AuditLog)
         .filter(
@@ -1310,6 +1351,10 @@ def execution_policies(current_user: User = Depends(require_admin), db: Session 
         "engine_config": engine_config,
         "observability_metrics": observability,
         "policy_decision_log": recent_decisions,
+        "policy_versions": policy_versions,
+        "strategy_health": strategy_health,
+        "release_gate": release_gate,
+        "remediation_recommendations": remediations,
         "recent_policy_violations": [
             {
                 "entity_id": row.entity_id,
@@ -1319,4 +1364,221 @@ def execution_policies(current_user: User = Depends(require_admin), db: Session 
             }
             for row in recent_violations
         ],
+    }
+
+
+@router.get("/execution-policies/violations")
+def execution_policy_violation_windows(
+    window: str = Query(default="24h"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return build_violation_aggregation(db, window=window)
+
+
+@router.get("/execution-policies/decisions/{trace_id}")
+def execution_policy_decision_detail(
+    trace_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    try:
+        return get_decision_trace_detail(db, trace_id=trace_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/execution-policies/release-gate")
+def execution_policy_release_gate(
+    window_hours: int = Query(default=24, ge=1, le=168),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return build_release_gate_status(db, window_hours=window_hours)
+
+
+@router.get("/execution-policies/strategy-health")
+def execution_policy_strategy_health(
+    window_hours: int = Query(default=24, ge=1, le=168),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return build_strategy_health_state(db, window_hours=window_hours)
+
+
+@router.get("/execution-policies/remediations")
+def execution_policy_remediations(
+    status_filter: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return list_remediation_recommendations(db, status_filter=status_filter, limit=200)
+
+
+@router.post("/execution-policies/remediations/{recommendation_id}/approve")
+def approve_execution_remediation(
+    recommendation_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = update_remediation_recommendation_status(
+        db,
+        recommendation_id=recommendation_id,
+        action="approve",
+        actor_user_id=current_user.id,
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "recommendation_id": row.recommendation_id,
+        "status": row.status,
+        "approved_by": row.approved_by,
+        "approved_at": row.approved_at,
+    }
+
+
+@router.post("/execution-policies/remediations/{recommendation_id}/reject")
+def reject_execution_remediation(
+    recommendation_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = update_remediation_recommendation_status(
+        db,
+        recommendation_id=recommendation_id,
+        action="reject",
+        actor_user_id=current_user.id,
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "recommendation_id": row.recommendation_id,
+        "status": row.status,
+        "rejected_by": row.rejected_by,
+        "rejected_at": row.rejected_at,
+    }
+
+
+@router.get("/execution-policies/versions")
+def execution_policy_versions(
+    policy_code: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return list_policy_versions(db, policy_code=policy_code, limit=300)
+
+
+@router.post("/execution-policies/versions")
+def create_execution_policy_version(
+    payload: PolicyVersionCreateRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = create_policy_version(
+        db,
+        policy_code=payload.policy_code,
+        conditions_payload=dict(payload.conditions_payload or {}),
+        rules_payload=dict(payload.rules_payload or {}),
+        change_summary=payload.change_summary,
+        created_by=current_user.id,
+        state=str(payload.state or "DRAFT").upper(),
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "version_id": row.version_id,
+        "policy_code": row.policy_code,
+        "version_number": row.version_number,
+        "state": row.state,
+        "approval_status": row.approval_status,
+        "created_at": row.created_at,
+    }
+
+
+@router.post("/execution-policies/versions/{version_id}/activate")
+def activate_execution_policy_version(
+    version_id: str,
+    payload: PolicyVersionActivateRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = activate_policy_version(
+        db,
+        version_id=version_id,
+        actor_user_id=current_user.id,
+        environment=payload.environment,
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "version_id": row.version_id,
+        "policy_code": row.policy_code,
+        "state": row.state,
+        "approval_status": row.approval_status,
+        "effective_from": row.effective_from,
+    }
+
+
+@router.post("/execution-policies/versions/{version_id}/approve")
+def approve_execution_policy_version(
+    version_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = approve_policy_version(
+        db,
+        version_id=version_id,
+        actor_user_id=current_user.id,
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "version_id": row.version_id,
+        "approval_status": row.approval_status,
+        "approved_by": row.approved_by,
+    }
+
+
+@router.post("/execution-policies/versions/ab-compare")
+def compare_execution_policy_versions(
+    payload: PolicyVersionABCompareRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return compare_policy_versions_ab(
+        db,
+        policy_code=payload.policy_code,
+        primary_version_id=payload.primary_version_id,
+        shadow_version_id=payload.shadow_version_id,
+    )
+
+
+@router.post("/execution-policies/versions/{policy_code}/rollback")
+def rollback_execution_policy(
+    policy_code: str,
+    payload: PolicyVersionRollbackRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = rollback_policy_version(
+        db,
+        policy_code=policy_code,
+        target_version_id=payload.target_version_id,
+        actor_user_id=current_user.id,
+        reason=payload.reason,
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "policy_code": row.policy_code,
+        "active_version_id": row.version_id,
+        "state": row.state,
+        "rollback_target_version": payload.target_version_id,
     }

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
@@ -302,6 +302,10 @@ class ExecutionPolicyDecisionLog(Base):
     intent_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     intent_token: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    portfolio_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    execution_mode: Mapped[str] = mapped_column(String(20), default="SIMULATION", index=True)
+    simulation_mode: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     symbol: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
     strategy_binding: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     environment: Mapped[str] = mapped_column(String(30), default="testnet", index=True)
@@ -523,6 +527,85 @@ class ExecutionPortfolio(Base):
     drawdown: Mapped[float] = mapped_column(Float, default=0)
     limits: Mapped[dict] = mapped_column(JSON, default=dict)
     risk_profile: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExecutionPolicyVersion(Base):
+    __tablename__ = "execution_policy_versions"
+    __table_args__ = (UniqueConstraint("policy_code", "version_number", name="uq_execution_policy_version_number"),)
+
+    version_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    policy_code: Mapped[str] = mapped_column(String(160), index=True)
+    version_number: Mapped[int] = mapped_column(Integer, default=1)
+    state: Mapped[str] = mapped_column(String(20), default="DRAFT", index=True)
+    approval_status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    created_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    effective_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rollback_target_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    rollout_strategy: Mapped[dict] = mapped_column(JSON, default=dict)
+    conditions_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    rules_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExecutionStrategyBinding(Base):
+    __tablename__ = "execution_strategy_bindings"
+
+    strategy_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    bound_policy_set: Mapped[str] = mapped_column(String(160), index=True)
+    risk_class: Mapped[str] = mapped_column(String(20), default="MEDIUM", index=True)
+    execution_mode: Mapped[str] = mapped_column(String(20), default="SIMULATION")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    auto_disable_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    max_violation_count: Mapped[int] = mapped_column(Integer, default=5)
+    limits: Mapped[dict] = mapped_column(JSON, default=dict)
+    allowed_symbols: Mapped[list[str]] = mapped_column(JSON, default=list)
+    allowed_margin_modes: Mapped[list[str]] = mapped_column(JSON, default=list)
+    allowed_environments: Mapped[list[str]] = mapped_column(JSON, default=list)
+    state: Mapped[str] = mapped_column(String(20), default="enabled", index=True)
+    state_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExecutionRemediationRecommendation(Base):
+    __tablename__ = "execution_remediation_recommendations"
+
+    recommendation_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    trace_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    source_violation_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    recommendation_type: Mapped[str] = mapped_column(String(40), index=True)
+    severity: Mapped[str] = mapped_column(String(20), index=True)
+    reason_code: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    summary: Mapped[str] = mapped_column(Text)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    requires_manual_approval: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", index=True)
+    created_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    approved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class ExecutionGovernanceEvent(Base):
+    __tablename__ = "execution_governance_events"
+
+    event_id: Mapped[str] = mapped_column(String(120), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_type: Mapped[str] = mapped_column(String(80), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", index=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

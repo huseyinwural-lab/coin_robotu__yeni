@@ -13,6 +13,7 @@ from core.security import hash_password
 from models import BrandSetting, ExecutionPolicy, LiveActivationConfig, Position, User, UserRole
 from services.execution_pipeline_orchestrator import run_execution_pipeline
 import services.execution_policy_service as execution_policy_service
+from services.execution_governance_service import seed_default_strategy_bindings
 from services.execution_policy_service import (
     ensure_dynamic_execution_policies,
     ensure_user_default_portfolio,
@@ -388,6 +389,7 @@ def test_shadow_mode_failsafe_market_data_missing_hard_blocks():
         _set_rollout_mode(db, "shadow")
         _set_live_safety(db, trading_enabled=True, kill_switch_enabled=False)
         _upsert_strategy_policy(db, strategy_id="sprint1_failsafe_strategy", max_order_notional=100000)
+        seed_default_strategy_bindings(db, strategy_ids=["sprint1_failsafe_strategy"])
         user = _create_user(db)
 
         result = run_execution_pipeline(
@@ -613,6 +615,7 @@ def test_portfolio_domain_separated_from_user_and_limit_breach_blocks():
         _set_rollout_mode(db, "full")
         _set_live_safety(db, trading_enabled=True, kill_switch_enabled=False)
         _upsert_strategy_policy(db, strategy_id="sprint1_portfolio_domain_strategy", max_order_notional=100000)
+        seed_default_strategy_bindings(db, strategy_ids=["sprint1_portfolio_domain_strategy"])
         user = _create_user(db)
         _seed_market_data()
 

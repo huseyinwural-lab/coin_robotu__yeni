@@ -47,6 +47,16 @@ def run_execution_pipeline(
     stage_results: list[dict] = []
     decision_path: list[dict] = []
     pretrade = evaluate_execution_policy_engine(db, context_payload, stage="PRE_TRADE")
+    strategy_risk_class = str(
+        ((pretrade.get("trace") or {}).get("strategy_governance") or {}).get("risk_class")
+        or context_payload.get("strategy_risk_class")
+        or "MEDIUM"
+    )
+    context_payload = {
+        **context_payload,
+        "strategy_risk_class": strategy_risk_class,
+        "trace_id": context_payload.get("trace_id") or context_payload.get("pipeline_id"),
+    }
     pretrade_action_taken = str((pretrade.get("trace") or {}).get("action_taken") or pretrade.get("enforced_action") or "ALLOW")
     pretrade_violation = bool(pretrade.get("standardized_reject"))
     append_execution_policy_decision_log(

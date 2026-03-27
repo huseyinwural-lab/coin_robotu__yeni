@@ -7,6 +7,23 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from services.execution_governance_service import (
+    build_release_gate_status,
+    build_strategy_health_state,
+    build_violation_aggregation,
+    classify_violation_severity,
+    create_remediation_recommendation,
+    emit_governance_event,
+    evaluate_strategy_binding_constraints,
+    get_governance_config,
+    is_debug_mode_enabled,
+    list_policy_versions,
+    list_remediation_recommendations,
+    resolve_policy_version_override,
+    seed_default_strategy_bindings,
+    select_auto_action,
+)
+
 from models import (
     BrandSetting,
     ExecutionPolicy,
@@ -508,6 +525,8 @@ def ensure_dynamic_execution_policies(db: Session) -> None:
             execution_defaults=defaults,
         )
 
+    seed_default_strategy_bindings(db, strategy_ids=list(DEFAULT_POLICY_MAP.keys()))
+
 
 def _load_active_policies(db: Session) -> list[ExecutionPolicy]:
     return db.query(ExecutionPolicy).filter(ExecutionPolicy.is_active.is_(True)).all()
@@ -539,13 +558,28 @@ def _resolve_effective_rules(db: Session, context: dict) -> tuple[list[Execution
     matched_rows: list[ExecutionPolicy] = []
     for row, _ in matched:
         matched_rows.append(row)
-        incoming = dict(getattr(row, "rules_payload", None) or {})
+        version_override = None
+        if getattr(row, "policy_code", None):
+            version_override = resolve_policy_version_override(
+                db,
+                policy_code=str(row.policy_code),
+                context=context,
+            )
+        incoming = dict((version_override or {}).get("rules_payload") or getattr(row, "rules_payload", None) or {})
         if not incoming:
             incoming = _legacy_policy_to_rules(row)
         if str(getattr(row, "override_behavior", "merge") or "merge").lower() == "replace":
             effective_rules = dict(incoming)
         else:
             effective_rules = _deep_merge(effective_rules, incoming)
+
+        traces.append(
+            {
+                "policy_id": row.id,
+                "policy_code": getattr(row, "policy_code", None),
+                "version_override": version_override,
+            }
+        )
 
     return matched_rows, effective_rules, traces
 
@@ -868,6 +902,7 @@ def _compute_safety_layer(db: Session, context: dict, rules: dict) -> dict:
 
 
 def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str = "PRE_TRADE") -> dict:
+    decision_id = str(uuid.uuid4())
     started = datetime.now(timezone.utc)
     config = get_execution_policy_engine_config(db)
     rollout_mode = str(config.get("rollout_mode") or "shadow").lower()
@@ -892,12 +927,15 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
             rule_id="failsafe.policy_load",
         )
         return {
+            "decision_id": decision_id,
             "recommended_action": "BLOCK",
             "enforced_action": "BLOCK",
             "rollout_mode": rollout_mode,
             "standardized_reject": reject,
             "trace": {
                 "stage": stage,
+                "decision_id": decision_id,
+                "trace_id": str(context.get("trace_id") or context.get("pipeline_id") or context.get("intent_token") or decision_id),
                 "scope_trace": [],
                 "effective_rules": {},
                 "error": str(exc),
@@ -906,6 +944,12 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
         }
 
     strategy_binding = str(context.get("strategy_binding") or "").strip()
+    strategy_binding_eval = evaluate_strategy_binding_constraints(db, context=context)
+    strategy_risk_class = str(strategy_binding_eval.get("risk_class") or "MEDIUM").upper()
+    strategy_limits = dict(strategy_binding_eval.get("limits") or {})
+    if strategy_limits:
+        effective_rules = _deep_merge(effective_rules, {"risk": strategy_limits})
+
     has_strategy_policy = any(
         _normalize_scope_value(getattr(row, "policy_scope", None) or "strategy") == "strategy"
         and _normalize_scope_value(getattr(row, "scope_key", None) or row.strategy_type) == _normalize_scope_value(strategy_binding)
@@ -914,6 +958,23 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
 
     findings: list[dict] = []
     soft_non_live = False
+    for strategy_violation in list(strategy_binding_eval.get("violations") or []):
+        is_live_binding = _is_live_environment(context.get("environment"))
+        finding_action = "BLOCK" if is_live_binding else "SOFT_ALLOW_NON_LIVE"
+        findings.append(
+            _reject_contract(
+                reason_code=str(strategy_violation.get("reason_code") or "STRATEGY_GOVERNANCE_VIOLATION"),
+                reason_message=str(strategy_violation.get("reason_message") or "Strategy governance violation"),
+                stage=stage,
+                severity=str(strategy_violation.get("severity") or "HIGH"),
+                action_taken=finding_action,
+                policy_id=matched_rows[-1].id if matched_rows else None,
+                rule_id=str(strategy_violation.get("rule_id") or "strategy.governance"),
+            )
+        )
+        if not is_live_binding:
+            soft_non_live = True
+
     if not strategy_binding or not has_strategy_policy:
         is_live = _is_live_environment(context.get("environment"))
         soft_non_live = not is_live
@@ -1007,6 +1068,36 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
             )
         )
 
+    governance_config = get_governance_config(db)
+    debug_enabled = is_debug_mode_enabled(db, context=context)
+    enriched_findings = []
+    for item in findings:
+        severity = classify_violation_severity(
+            db,
+            reason_code=str(item.get("reason_code") or ""),
+            default_severity=str(item.get("severity") or "LOW"),
+            strategy_risk_class=strategy_risk_class,
+        )
+        auto_action = select_auto_action(
+            db,
+            severity=severity,
+            reason_code=str(item.get("reason_code") or ""),
+            environment=str(context.get("environment") or "testnet"),
+            strategy_risk_class=strategy_risk_class,
+            strategy_id=str(strategy_binding or ""),
+        )
+        enriched_findings.append(
+            {
+                **item,
+                "severity": severity,
+                "auto_action_recommendation": auto_action,
+                "manual_approval_required": bool(
+                    str(governance_config.get("auto_remediation_mode") or "manual_recommend").lower() == "manual_recommend"
+                ),
+            }
+        )
+    findings = enriched_findings
+
     recommended_action = "BLOCK" if findings else "ALLOW"
     has_hard_failsafe = any(_is_failsafe_reason_code(item.get("reason_code")) for item in findings)
     if has_hard_failsafe:
@@ -1035,11 +1126,58 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
         else:
             primary_reject = {**primary_reject, "action_taken": action_taken}
 
+    decision_steps: list[dict] = []
+    for idx, item in enumerate(scope_trace):
+        decision_steps.append(
+            {
+                "step_index": idx,
+                "step_type": "POLICY_MATCH" if item.get("matched") else "POLICY_SKIP",
+                "policy_id": item.get("policy_id"),
+                "rule_id": None,
+                "condition_result": bool(item.get("condition_match")),
+                "previous_state": "EVALUATING",
+                "new_state": "MATCHED" if item.get("matched") else "SKIPPED",
+                "comment": f"scope={item.get('scope')} key={item.get('scope_key')}",
+            }
+        )
+    start_index = len(decision_steps)
+    for offset, finding in enumerate(findings):
+        decision_steps.append(
+            {
+                "step_index": start_index + offset,
+                "step_type": "SEVERITY_ESCALATED",
+                "policy_id": finding.get("policy_id"),
+                "rule_id": finding.get("rule_id"),
+                "condition_result": True,
+                "previous_state": "ALLOW",
+                "new_state": finding.get("severity"),
+                "comment": f"{finding.get('reason_code')} -> {finding.get('auto_action_recommendation')}",
+            }
+        )
+    decision_steps.append(
+        {
+            "step_index": len(decision_steps),
+            "step_type": "ACTION_FINALIZED",
+            "policy_id": primary_reject.get("policy_id") if primary_reject else None,
+            "rule_id": primary_reject.get("rule_id") if primary_reject else None,
+            "condition_result": True,
+            "previous_state": recommended_action,
+            "new_state": enforced_action,
+            "comment": f"action={action_taken}",
+        }
+    )
+
     return {
+        "decision_id": decision_id,
         "recommended_action": recommended_action,
         "enforced_action": enforced_action,
         "rollout_mode": rollout_mode,
         "standardized_reject": primary_reject,
+        "decision_reason_summary": (
+            primary_reject.get("reason_message")
+            if primary_reject
+            else "Order allowed after policy/risk/safety evaluation"
+        ),
         "all_findings": findings,
         "effective_rules": effective_rules,
         "matched_policies": [
@@ -1055,6 +1193,8 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
         ],
         "trace": {
             "stage": stage,
+            "decision_id": decision_id,
+            "trace_id": str(context.get("trace_id") or context.get("pipeline_id") or context.get("intent_token") or decision_id),
             "evaluated_at": datetime.now(timezone.utc).isoformat(),
             "scope_trace": scope_trace,
             "matched_policies": [
@@ -1085,6 +1225,24 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
                 "recommended_action": recommended_action,
                 "enforced_action": enforced_action,
                 "rollout_mode": rollout_mode,
+            },
+            "strategy_governance": {
+                "risk_class": strategy_risk_class,
+                "binding": {
+                    "strategy_id": getattr(strategy_binding_eval.get("binding"), "strategy_id", None),
+                    "bound_policy_set": getattr(strategy_binding_eval.get("binding"), "bound_policy_set", None),
+                    "state": getattr(strategy_binding_eval.get("binding"), "state", None),
+                    "enabled": bool(getattr(strategy_binding_eval.get("binding"), "enabled", False)) if strategy_binding_eval.get("binding") else False,
+                },
+                "violations": list(strategy_binding_eval.get("violations") or []),
+                "limits": strategy_limits,
+            },
+            "execution_mode": "REAL" if _is_live_environment(context.get("environment")) else "SIMULATION",
+            "decision_steps": decision_steps,
+            "debug": {
+                "enabled": debug_enabled,
+                "input_snapshot": dict(context) if debug_enabled else {},
+                "timing": {"elapsed_ms": elapsed_ms} if debug_enabled else {},
             },
         },
     }
@@ -1358,6 +1516,9 @@ def append_execution_policy_decision_log(
     reject = dict(policy_result.get("standardized_reject") or {})
     trace_payload = dict(policy_result.get("trace") or {})
     metrics_snapshot = dict(policy_result.get("metrics_snapshot") or trace_payload.get("metrics_snapshot") or {})
+    trace_id = str(context.get("trace_id") or context.get("pipeline_id") or context.get("intent_token") or "") or None
+    execution_mode = str(context.get("execution_mode") or ("REAL" if _is_live_environment(context.get("environment")) else "SIMULATION")).upper()
+    simulation_mode = execution_mode == "SIMULATION"
     violation_id = str(context.get("violation_id") or "") or None
     if is_violation and violation_id is None:
         violation_id = str(uuid.uuid4())
@@ -1369,6 +1530,10 @@ def append_execution_policy_decision_log(
         intent_id=str(context.get("intent_id") or "") or None,
         intent_token=str(context.get("intent_token") or "") or None,
         user_id=str(context.get("user_id") or "") or None,
+        portfolio_id=str(context.get("portfolio_id") or "") or None,
+        trace_id=trace_id,
+        execution_mode=execution_mode,
+        simulation_mode=simulation_mode,
         symbol=str(context.get("symbol") or "").upper() or None,
         strategy_binding=str(context.get("strategy_binding") or "") or None,
         environment=str(context.get("environment") or "testnet").lower(),
@@ -1389,6 +1554,96 @@ def append_execution_policy_decision_log(
         trace_payload=trace_payload,
         created_at=datetime.now(timezone.utc),
     )
+
+    auto_action = str(
+        reject.get("auto_action_recommendation")
+        or trace_payload.get("auto_action_recommendation")
+        or select_auto_action(
+            db,
+            severity=str(reject.get("severity") or row.severity),
+            reason_code=str(reject.get("reason_code") or ""),
+            environment=str(context.get("environment") or "testnet"),
+            strategy_risk_class=str(context.get("strategy_risk_class") or "MEDIUM"),
+            strategy_id=str(context.get("strategy_binding") or ""),
+        )
+    ).upper()
+    row.trace_payload = {
+        **trace_payload,
+        "decision_id": policy_result.get("decision_id") or trace_payload.get("decision_id"),
+        "decision_reason_summary": policy_result.get("decision_reason_summary"),
+        "auto_action_recommendation": auto_action,
+        "execution_mode": execution_mode,
+        "simulation_mode": simulation_mode,
+    }
+
+    if is_violation:
+        emit_governance_event(
+            db,
+            event_type="violation.created",
+            payload={
+                "violation_id": violation_id or row.id,
+                "trace_id": trace_id,
+                "reason_code": row.reason_code,
+                "severity": row.severity,
+                "stage": row.stage,
+                "execution_mode": execution_mode,
+            },
+            idempotency_key=f"violation.created:{violation_id or row.id}",
+        )
+        if str(row.severity or "").upper() == "CRITICAL":
+            emit_governance_event(
+                db,
+                event_type="violation.severity_escalated",
+                payload={
+                    "violation_id": violation_id or row.id,
+                    "severity": row.severity,
+                    "reason_code": row.reason_code,
+                },
+                idempotency_key=f"violation.severity_escalated:{violation_id or row.id}",
+            )
+
+        if auto_action not in {"NONE", "WARN"}:
+            rec = create_remediation_recommendation(
+                db,
+                trace_id=trace_id,
+                source_violation_id=violation_id or row.id,
+                recommendation_type=auto_action,
+                severity=row.severity,
+                reason_code=row.reason_code,
+                summary=f"{auto_action} önerisi: {row.reason_code}",
+                payload={
+                    "stage": row.stage,
+                    "reason_message": row.reason_message,
+                    "strategy_id": row.strategy_binding,
+                    "environment": row.environment,
+                    "metrics_snapshot": row.metrics_snapshot,
+                    "manual_required": True,
+                },
+                created_by=context.get("user_id"),
+            )
+            row.trace_payload = {
+                **dict(row.trace_payload or {}),
+                "remediation_recommendation_id": rec.recommendation_id,
+            }
+            event_map = {
+                "DISABLE_STRATEGY": "strategy.disabled",
+                "THROTTLE": "throttle.applied",
+                "ESCALATE_RELEASE_GATE": "release_gate.escalated",
+            }
+            mapped_event = event_map.get(auto_action)
+            if mapped_event:
+                emit_governance_event(
+                    db,
+                    event_type=mapped_event,
+                    payload={
+                        "trace_id": trace_id,
+                        "violation_id": violation_id or row.id,
+                        "recommendation_id": rec.recommendation_id,
+                        "action": auto_action,
+                    },
+                    idempotency_key=f"{mapped_event}:{violation_id or row.id}",
+                )
+
     db.add(row)
     return row
 
@@ -1408,6 +1663,10 @@ def list_recent_execution_policy_decisions(db: Session, *, limit: int = 50) -> l
             "stage": row.stage,
             "intent_id": row.intent_id,
             "user_id": row.user_id,
+            "portfolio_id": row.portfolio_id,
+            "trace_id": row.trace_id,
+            "execution_mode": row.execution_mode,
+            "simulation_mode": bool(row.simulation_mode),
             "symbol": row.symbol,
             "strategy_binding": row.strategy_binding,
             "environment": row.environment,
@@ -1420,6 +1679,11 @@ def list_recent_execution_policy_decisions(db: Session, *, limit: int = 50) -> l
             "triggered_policy": row.triggered_policy,
             "triggered_rule": row.triggered_rule,
             "metrics_snapshot": row.metrics_snapshot or {},
+            "decision_reason_summary": (
+                f"{row.stage} stage decision: {row.reason_message}"
+                if row.reason_message
+                else f"{row.stage} stage decision: {row.enforced_action}"
+            ),
             "severity": row.severity,
             "action_taken": row.action_taken,
             "is_violation": bool(row.is_violation),
@@ -1427,6 +1691,62 @@ def list_recent_execution_policy_decisions(db: Session, *, limit: int = 50) -> l
         }
         for row in rows
     ]
+
+
+def get_decision_trace_detail(db: Session, *, trace_id: str) -> dict:
+    rows = (
+        db.query(ExecutionPolicyDecisionLog)
+        .filter(ExecutionPolicyDecisionLog.trace_id == trace_id)
+        .order_by(ExecutionPolicyDecisionLog.created_at.asc())
+        .all()
+    )
+    if not rows:
+        rows = (
+            db.query(ExecutionPolicyDecisionLog)
+            .filter(ExecutionPolicyDecisionLog.pipeline_id == trace_id)
+            .order_by(ExecutionPolicyDecisionLog.created_at.asc())
+            .all()
+        )
+    if not rows:
+        raise ValueError("decision_trace_not_found")
+
+    first = rows[0]
+    step_rows = []
+    for idx, row in enumerate(rows):
+        trace_payload = dict(row.trace_payload or {})
+        step_rows.append(
+            {
+                "step_index": idx,
+                "step_type": row.stage,
+                "policy_id": row.policy_id,
+                "rule_id": row.rule_id,
+                "condition_result": True,
+                "previous_state": row.recommended_action,
+                "new_state": row.enforced_action,
+                "comment": row.reason_message or row.action_taken,
+                "metrics_snapshot": row.metrics_snapshot or {},
+                "trace_payload": trace_payload,
+            }
+        )
+
+    return {
+        "decision_id": (first.trace_payload or {}).get("decision_id") or first.id,
+        "trace_id": trace_id,
+        "final_decision": rows[-1].enforced_action,
+        "decision_reason_summary": rows[-1].reason_message or rows[-1].action_taken,
+        "matched_policies": (first.trace_payload or {}).get("matched_policies") or [],
+        "matched_rules": [row.rule_id for row in rows if row.rule_id],
+        "applied_overrides": (first.trace_payload or {}).get("applied_overrides") or [],
+        "evaluation_order": [row.stage for row in rows],
+        "input_snapshot": (first.trace_payload or {}).get("debug", {}).get("input_snapshot") or {},
+        "output_snapshot": {
+            "recommended_action": rows[-1].recommended_action,
+            "enforced_action": rows[-1].enforced_action,
+            "severity": rows[-1].severity,
+            "reason_code": rows[-1].reason_code,
+        },
+        "steps": step_rows,
+    }
 
 
 def build_execution_policy_observability(db: Session, *, hours: int = 24) -> dict:
@@ -1446,6 +1766,8 @@ def build_execution_policy_observability(db: Session, *, hours: int = 24) -> dic
     execution_stage_violation_count = 0
     post_trade_violation_count = 0
     failsafe_hard_block_count = 0
+    simulation_violation_count = 0
+    real_violation_count = 0
     critical_violations: list[dict] = []
     for row in rows:
         stage = str(row.stage or "UNKNOWN").upper()
@@ -1463,6 +1785,10 @@ def build_execution_policy_observability(db: Session, *, hours: int = 24) -> dic
         if bool(row.is_violation):
             violation_count += 1
             stage_violation_distribution[stage] = stage_violation_distribution.get(stage, 0) + 1
+            if bool(row.simulation_mode):
+                simulation_violation_count += 1
+            else:
+                real_violation_count += 1
             if stage == "EXECUTION":
                 execution_stage_violation_count += 1
             if stage == "POST_TRADE":
@@ -1501,6 +1827,8 @@ def build_execution_policy_observability(db: Session, *, hours: int = 24) -> dic
         "execution_stage_violation_count": execution_stage_violation_count,
         "post_trade_violation_count": post_trade_violation_count,
         "failsafe_hard_block_count": failsafe_hard_block_count,
+        "simulation_violation_count": simulation_violation_count,
+        "real_violation_count": real_violation_count,
         "risk_breach_metrics": {
             "breach_count": risk_breach_count,
             "breach_rate": round(risk_breach_count / max(len(rows), 1), 6),
@@ -1517,6 +1845,16 @@ def build_execution_policy_observability(db: Session, *, hours: int = 24) -> dic
             stage.lower(): count for stage, count in sorted(stage_violation_distribution.items(), key=lambda item: item[0])
         },
         "recent_critical_violations": critical_violations,
+        "violation_aggregations": {
+            "5m": build_violation_aggregation(db, window="5m"),
+            "1h": build_violation_aggregation(db, window="1h"),
+            "24h": build_violation_aggregation(db, window="24h"),
+            "7d": build_violation_aggregation(db, window="7d"),
+        },
+        "strategy_health": build_strategy_health_state(db, window_hours=24),
+        "policy_versions": list_policy_versions(db, limit=100),
+        "remediation_recommendations": list_remediation_recommendations(db, limit=100),
+        "release_gate": build_release_gate_status(db, window_hours=24),
         "stage_decision_rates": stage_decision_rates,
         "pre_post_ratio": {
             "pre_trade_total": stage_stats.get("PRE_TRADE", {}).get("total", 0),
