@@ -1,3 +1,14 @@
+## 2026-03-27 — P2 Refactor Plan Tasklaştırma (Onaylandı)
+
+- Kullanıcı onayıyla P2 için kod-seviyesi refactor planı task formatına dönüştürüldü.
+- Kritik kararlar plana işlendi:
+  - Risk engine stateless + deterministic
+  - Device trust soft-trust (hard bypass yok)
+  - Step-up token scope-aware (`step_up_at`, `step_up_scope`)
+  - Standard risk response contract (`requires_step_up`, `risk_level`, `risk_reasons`)
+  - Grace + risk interaction: risk varsa grace override
+- Sonraki adım: Bu task listesine göre implementasyon fazına geçiş.
+
 ## 2026-03-27 — P1 Production Security Hardening (Tek Atomik İterasyon)
 
 ### Uygulanan Karar Seti
