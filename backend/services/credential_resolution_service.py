@@ -1084,6 +1084,7 @@ def resolve_exchange_credentials(
     tenant_id: str | None = None,
     group_id: str | None = None,
     include_secrets: bool = True,
+    symbol: str | None = None,
 ) -> dict:
     normalized_exchange = _norm(exchange)
     normalized_market = _normalize_market_type(market_type)

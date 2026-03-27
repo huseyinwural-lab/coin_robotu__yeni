@@ -5343,3 +5343,40 @@ class ProductionGateTimelineEventResponse(BaseModel):
 
 class ProductionGateTimelineResponse(BaseModel):
     items: list[ProductionGateTimelineEventResponse] = Field(default_factory=list)
+
+
+class CapabilityDiscoveryRequest(BaseModel):
+    exchange_code: str
+    market_type: str = "spot"
+    environment: str = "testnet"
+    symbols: list[str] = Field(default_factory=list)
+
+
+class MarketPolicyLayerUpdateRequest(BaseModel):
+    exchange_code: str
+    market_type: str
+    environment: str = "testnet"
+    symbol_rules: list[dict] = Field(default_factory=list)
+    restricted_symbol_classes: list[str] = Field(default_factory=list)
+    risk_tier_defaults: dict = Field(default_factory=dict)
+
+
+class RoutingPolicyUpsertRequest(BaseModel):
+    user_id: str
+    strategy_id: str
+    default_venue: str | None = None
+    preferred_venues: list[str] = Field(default_factory=list)
+    blocked_venues: list[str] = Field(default_factory=list)
+    capital_allocation: list[dict] = Field(default_factory=list)
+    execution_policy_override: dict = Field(default_factory=dict)
+
+
+class RoutingPreviewRequest(BaseModel):
+    user_id: str
+    strategy_id: str
+    symbol: str
+    market_type: str
+    environment: str
+    order_side: str = "BUY"
+    order_size_usd: float = 0
+

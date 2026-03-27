@@ -59,6 +59,16 @@ const executionCredentialSeedForm = {
   okx_passphrase: "",
 };
 
+const routingPreviewSeedForm = {
+  user_id: "",
+  strategy_id: "",
+  symbol: "BTCUSDT",
+  market_type: "spot",
+  environment: "testnet",
+  order_side: "BUY",
+  order_size_usd: 100,
+};
+
 const boolLabel = (value) => (value ? "true" : "false");
 
 export const AdminExchangesPage = () => {
@@ -72,6 +82,11 @@ export const AdminExchangesPage = () => {
   const [executionCredentials, setExecutionCredentials] = useState(null);
   const [executionValidation, setExecutionValidation] = useState(null);
   const [controlPlaneSanity, setControlPlaneSanity] = useState(null);
+  const [capabilityDiscovery, setCapabilityDiscovery] = useState(null);
+  const [marketPolicyLayer, setMarketPolicyLayer] = useState(null);
+  const [routingPreview, setRoutingPreview] = useState(null);
+  const [operationalHealth, setOperationalHealth] = useState(null);
+  const [auditTimeline, setAuditTimeline] = useState([]);
 
   const [exchangeDrafts, setExchangeDrafts] = useState({});
   const [capabilityDrafts, setCapabilityDrafts] = useState({});
@@ -81,6 +96,7 @@ export const AdminExchangesPage = () => {
   const [allowedMarketForm, setAllowedMarketForm] = useState(allowedMarketSeedForm);
   const [assignmentForm, setAssignmentForm] = useState(assignmentSeedForm);
   const [executionCredentialForm, setExecutionCredentialForm] = useState(executionCredentialSeedForm);
+  const [routingPreviewForm, setRoutingPreviewForm] = useState(routingPreviewSeedForm);
 
   const exchangeCodes = useMemo(() => exchanges.map((item) => item.exchange_code), [exchanges]);
 
@@ -115,6 +131,7 @@ export const AdminExchangesPage = () => {
       setApprovedUsers(usersRes.data || []);
       setHealthSummary(healthRes.data || null);
       setExecutionCredentials(credentialsRes.data || null);
+      await Promise.all([loadMarketPolicyLayer(), loadOperationalHealth(), loadAuditTimeline()]);
 
       setExchangeDrafts(
         Object.fromEntries(
@@ -342,6 +359,61 @@ export const AdminExchangesPage = () => {
       toast.error(error?.response?.data?.detail || "Control plane sanity check başarısız");
     }
   };
+
+  const runCapabilityDiscovery = async () => {
+    try {
+      const payload = {
+        ...capabilityForm,
+        symbols: String(capabilityForm.symbols || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      };
+      const { data } = await apiClient.post("/venues/admin/capability-discovery", payload);
+      setCapabilityDiscovery(data || null);
+      toast.success("Capability discovery tamamlandı");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Capability discovery başarısız");
+    }
+  };
+
+  const loadMarketPolicyLayer = async () => {
+    try {
+      const { data } = await apiClient.get("/venues/admin/market-policy-layer");
+      setMarketPolicyLayer(data || null);
+    } catch {
+      setMarketPolicyLayer(null);
+    }
+  };
+
+  const runRoutingPreviewV2 = async () => {
+    try {
+      const { data } = await apiClient.post("/venues/admin/routing-preview-v2", routingPreviewForm);
+      setRoutingPreview(data || null);
+      toast.success(`Routing preview: ${data?.net_status || "UNKNOWN"}`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Routing preview başarısız");
+    }
+  };
+
+  const loadOperationalHealth = async () => {
+    try {
+      const { data } = await apiClient.get("/venues/admin/operational-health");
+      setOperationalHealth(data || null);
+    } catch {
+      setOperationalHealth(null);
+    }
+  };
+
+  const loadAuditTimeline = async () => {
+    try {
+      const { data } = await apiClient.get("/venues/admin/audit-timeline", { params: { limit: 50 } });
+      setAuditTimeline(data?.items || []);
+    } catch {
+      setAuditTimeline([]);
+    }
+  };
+
 
   return (
     <section className="space-y-4" data-testid="admin-exchanges-page">
@@ -697,6 +769,47 @@ export const AdminExchangesPage = () => {
             ))}
           </div>
         </div>
+
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-capability-discovery-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-capability-discovery-title">Capability Discovery</p>
+          <div className="grid gap-2 md:grid-cols-4" data-testid="admin-capability-discovery-form-grid">
+            <Input value={capabilityForm.exchange_code} onChange={(e) => setCapabilityForm((p) => ({ ...p, exchange_code: e.target.value }))} data-testid="admin-capability-discovery-exchange-input" />
+            <Input value={capabilityForm.market_type} onChange={(e) => setCapabilityForm((p) => ({ ...p, market_type: e.target.value }))} data-testid="admin-capability-discovery-market-input" />
+            <Input value={capabilityForm.environment} onChange={(e) => setCapabilityForm((p) => ({ ...p, environment: e.target.value }))} data-testid="admin-capability-discovery-environment-input" />
+            <Input value={capabilityForm.symbols} onChange={(e) => setCapabilityForm((p) => ({ ...p, symbols: e.target.value }))} data-testid="admin-capability-discovery-symbols-input" />
+          </div>
+          <Button type="button" onClick={runCapabilityDiscovery} data-testid="admin-capability-discovery-run-button">Discovery Çalıştır</Button>
+          <p className="text-xs text-slate-300" data-testid="admin-capability-discovery-result">symbols: {(capabilityDiscovery?.capability?.symbol_capabilities || []).length}</p>
+        </div>
+
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-routing-preview-v2-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-routing-preview-v2-title">Routing Preview v2</p>
+          <div className="grid gap-2 md:grid-cols-3" data-testid="admin-routing-preview-v2-form-grid">
+            <Input placeholder="user_id" value={routingPreviewForm.user_id} onChange={(e) => setRoutingPreviewForm((p) => ({ ...p, user_id: e.target.value }))} data-testid="admin-routing-preview-v2-user-input" />
+            <Input placeholder="strategy_id" value={routingPreviewForm.strategy_id} onChange={(e) => setRoutingPreviewForm((p) => ({ ...p, strategy_id: e.target.value }))} data-testid="admin-routing-preview-v2-strategy-input" />
+            <Input placeholder="symbol" value={routingPreviewForm.symbol} onChange={(e) => setRoutingPreviewForm((p) => ({ ...p, symbol: e.target.value }))} data-testid="admin-routing-preview-v2-symbol-input" />
+          </div>
+          <Button type="button" onClick={runRoutingPreviewV2} data-testid="admin-routing-preview-v2-run-button">Preview Çalıştır</Button>
+          <p className="text-xs text-slate-300" data-testid="admin-routing-preview-v2-result">status: {routingPreview?.net_status || 'n/a'} · route: {routingPreview?.resolved_execution_path?.source || '-'}</p>
+        </div>
+
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-operational-health-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-operational-health-title">Operational Health</p>
+          <Button type="button" onClick={loadOperationalHealth} data-testid="admin-operational-health-refresh-button">Health Yenile</Button>
+          <p className="text-xs text-slate-300" data-testid="admin-operational-health-net-status">net_status: {operationalHealth?.net_status || 'n/a'}</p>
+          <p className="text-xs text-slate-300" data-testid="admin-operational-health-reasons">reason_codes: {(operationalHealth?.reason_codes || []).join(', ') || '-'}</p>
+        </div>
+
+        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-audit-timeline-panel">
+          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-audit-timeline-title">Replayable Audit Timeline</p>
+          <Button type="button" onClick={loadAuditTimeline} data-testid="admin-audit-timeline-refresh-button">Timeline Yenile</Button>
+          <div className="space-y-1 text-xs text-slate-300" data-testid="admin-audit-timeline-list">
+            {(auditTimeline || []).slice(0, 5).map((item, index) => (
+              <p key={`${item.id}-${index}`} data-testid={`admin-audit-timeline-item-${index}`}>{item.action} · {item.entity_type} · {item.created_at}</p>
+            ))}
+          </div>
+        </div>
+
       </div>
     </section>
   );

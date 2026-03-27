@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, require_admin, require_super_admin
-from models import AdminExchangeCredential, AllowedMarket, ExchangeCapability, ExchangeRegistry, User, UserVenueAssignment
+from models import AuditLog, AdminExchangeCredential, AllowedMarket, ExchangeCapability, ExchangeRegistry, User, UserVenueAssignment
 from schemas import (
     AdminExchangeCredentialCreateRequest,
     AdminExchangeCredentialPatchRequest,
@@ -28,6 +28,10 @@ from schemas import (
     UserVenueAssignmentUpdate,
     UserVenueOptionResponse,
     VenueHealthSummaryResponse,
+    CapabilityDiscoveryRequest,
+    MarketPolicyLayerUpdateRequest,
+    RoutingPolicyUpsertRequest,
+    RoutingPreviewRequest,
 )
 from services.audit_service import create_audit_log
 from services.admin_exchange_credentials_service import (
@@ -55,6 +59,8 @@ from services.venue_control_plane_service import (
     run_and_cache_venue_control_plane_sanity,
 )
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry, user_allowed_venue_options, venue_health_summary
+from services.control_plane_config_service import get_control_plane_config, upsert_control_plane_config
+from services.venue_discovery_service import discover_exchange_capabilities
 
 router = APIRouter(prefix="/venues", tags=["venues"])
 
@@ -81,6 +87,8 @@ def _credential_error(exc: Exception) -> HTTPException:
         "mode_mismatch_live_blocked": (status.HTTP_409_CONFLICT, "mode_mismatch_live_blocked"),
         "venue_not_allowed": (status.HTTP_409_CONFLICT, "venue_not_allowed"),
         "approved_credential_required": (status.HTTP_409_CONFLICT, "approved_credential_required"),
+        "symbol_policy_blocked": (status.HTTP_409_CONFLICT, "symbol_policy_blocked"),
+        "restricted_symbol_class_blocked": (status.HTTP_409_CONFLICT, "restricted_symbol_class_blocked"),
         "sanity_gate_blocked": (status.HTTP_409_CONFLICT, "sanity_gate_blocked"),
         "canary_allowlist_blocked": (status.HTTP_409_CONFLICT, "canary_allowlist_blocked"),
         "two_step_approval_missing": (status.HTTP_409_CONFLICT, "two_step_approval_missing"),
@@ -549,6 +557,260 @@ def admin_delete_user_assignment(
 def admin_health_summary(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     seed_binance_venue_registry(db)
     return VenueHealthSummaryResponse(**venue_health_summary(db))
+
+
+@router.post("/admin/capability-discovery")
+def admin_capability_discovery(
+    payload: CapabilityDiscoveryRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    discovery = discover_exchange_capabilities(
+        exchange_code=payload.exchange_code,
+        market_type=payload.market_type,
+        environment=payload.environment,
+        symbols=payload.symbols,
+    )
+    matrix = get_control_plane_config(db, config_key="capability_matrix", default={})
+    key = f"{payload.exchange_code.lower()}:{payload.market_type.lower()}:{payload.environment.lower()}"
+    old_value = matrix.get(key)
+    matrix[key] = discovery
+    upsert_control_plane_config(db, config_key="capability_matrix", payload=matrix, actor_user_id=current_admin.id)
+    create_audit_log(
+        db,
+        action="venue_capability_discovery_synced",
+        entity_type="venue_capability_matrix",
+        entity_id=key,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"old_value": old_value, "new_value": discovery},
+    )
+    return {
+        "net_status": "PASS",
+        "reason_codes": discovery.get("reason_codes") or [],
+        "remediation_suggestions": [],
+        "checks": [
+            {
+                "name": "adapter_capability_discovery",
+                "status": "PASS",
+                "reason_code": "discovery_synced",
+                "severity": "low",
+                "remediation_suggestions": [],
+            }
+        ],
+        "capability": discovery,
+    }
+
+
+@router.get("/admin/capability-matrix")
+def admin_get_capability_matrix(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return get_control_plane_config(db, config_key="capability_matrix", default={})
+
+
+@router.put("/admin/market-policy-layer")
+def admin_upsert_market_policy_layer(
+    payload: MarketPolicyLayerUpdateRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    policy = get_control_plane_config(db, config_key="market_policy", default={"rules": {}})
+    rules = dict(policy.get("rules") or {})
+    key = f"{payload.exchange_code.lower()}:{payload.market_type.lower()}:{payload.environment.lower()}"
+    old_value = rules.get(key)
+    rules[key] = {
+        "symbol_rules": payload.symbol_rules,
+        "restricted_symbol_classes": payload.restricted_symbol_classes,
+        "risk_tier_defaults": payload.risk_tier_defaults,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    policy["rules"] = rules
+    upsert_control_plane_config(db, config_key="market_policy", payload=policy, actor_user_id=current_admin.id)
+    create_audit_log(
+        db,
+        action="venue_market_policy_updated",
+        entity_type="venue_market_policy",
+        entity_id=key,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"old_value": old_value, "new_value": rules[key]},
+    )
+    return {"updated": True, "key": key, "policy": rules[key]}
+
+
+@router.get("/admin/market-policy-layer")
+def admin_get_market_policy_layer(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return get_control_plane_config(db, config_key="market_policy", default={"rules": {}})
+
+
+@router.put("/admin/routing-policies")
+def admin_upsert_routing_policies(
+    payload: RoutingPolicyUpsertRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    routing = get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
+    rules = dict(routing.get("rules") or {})
+    key = f"{payload.user_id}:{payload.strategy_id}"
+    old_value = rules.get(key)
+    rules[key] = {
+        "default_venue": payload.default_venue,
+        "preferred_venues": payload.preferred_venues,
+        "blocked_venues": payload.blocked_venues,
+        "capital_allocation": payload.capital_allocation,
+        "execution_policy_override": payload.execution_policy_override,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    routing["rules"] = rules
+    upsert_control_plane_config(db, config_key="routing_policy", payload=routing, actor_user_id=current_admin.id)
+    create_audit_log(
+        db,
+        action="venue_routing_policy_updated",
+        entity_type="venue_routing_policy",
+        entity_id=key,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"old_value": old_value, "new_value": rules[key]},
+    )
+    return {"updated": True, "key": key, "routing_rule": rules[key]}
+
+
+@router.get("/admin/routing-policies")
+def admin_get_routing_policies(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
+
+
+@router.post("/admin/routing-preview-v2")
+def admin_routing_preview_v2(
+    payload: RoutingPreviewRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    routing = get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
+    key = f"{payload.user_id}:{payload.strategy_id}"
+    rule = (routing.get("rules") or {}).get(key) or {}
+
+    try:
+        resolved = resolve_exchange_credentials(
+            db,
+            user_id=payload.user_id,
+            exchange=(rule.get("default_venue") or "binance"),
+            market_type=payload.market_type,
+            environment=payload.environment,
+            purpose="execution",
+            symbol=payload.symbol,
+            include_secrets=False,
+        )
+    except Exception as exc:
+        raise _credential_error(exc) from exc
+
+    selected_exchange = str(resolved.get("exchange") or "")
+    blocked = set(rule.get("blocked_venues") or [])
+    preferred = set(rule.get("preferred_venues") or [])
+
+    status_value = "PASS"
+    reason_codes: list[str] = []
+    remediation: list[str] = []
+    if selected_exchange in blocked:
+        status_value = "BLOCK"
+        reason_codes.append("selected_venue_blocked_by_routing_policy")
+        remediation.append("Routing policy içindeki blocked_venues listesini güncelleyin.")
+    elif preferred and selected_exchange not in preferred:
+        status_value = "WARN"
+        reason_codes.append("selected_venue_not_in_preferred")
+        remediation.append("Default venue değerini preferred listesiyle hizalayın.")
+
+    return {
+        "net_status": status_value,
+        "reason_codes": reason_codes,
+        "remediation_suggestions": remediation,
+        "checks": [
+            {
+                "name": "strategy_level_venue_selection",
+                "status": status_value,
+                "reason_code": reason_codes[0] if reason_codes else "routing_ok",
+                "severity": "high" if status_value == "BLOCK" else ("medium" if status_value == "WARN" else "low"),
+                "remediation_suggestions": remediation,
+            }
+        ],
+        "resolved_execution_path": resolved,
+        "routing_rule": rule,
+        "capital_allocation": rule.get("capital_allocation") or [],
+    }
+
+
+@router.get("/admin/operational-health")
+def admin_operational_health(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    summary = venue_health_summary(db)
+    sanity = get_cached_venue_control_plane_sanity() or {"net_status": "WARN", "reason_codes": ["sanity_not_run"]}
+
+    exchange_rows = db.query(ExchangeRegistry).all()
+    exchange_scores = []
+    for row in exchange_rows:
+        score = 100
+        reason_codes = []
+        if row.health_status == "degraded":
+            score -= 30
+            reason_codes.append("health_degraded")
+        if row.health_status == "down":
+            score -= 70
+            reason_codes.append("health_down")
+        if row.rate_limit_status not in {"ok", "healthy"}:
+            score -= 20
+            reason_codes.append("rate_limit_pressure")
+        exchange_scores.append(
+            {
+                "exchange": row.exchange_code,
+                "health_score": max(0, score),
+                "health_status": row.health_status,
+                "rate_limit_status": row.rate_limit_status,
+                "latency_ms_p95": None,
+                "validation_success_rate": None,
+                "permission_drift": None,
+                "websocket_sync_health": "unknown",
+                "orderbook_sync_health": "unknown",
+                "reason_codes": reason_codes,
+            }
+        )
+
+    return {
+        "net_status": "PASS" if sanity.get("net_status") == "PASS" else "WARN",
+        "reason_codes": sanity.get("reason_codes") or [],
+        "remediation_suggestions": sanity.get("remediation_suggestions") or [],
+        "checks": sanity.get("checks") or [],
+        "exchange_health": summary.get("exchange_health") or {},
+        "market_availability": summary.get("market_availability") or {},
+        "operational_scores": exchange_scores,
+    }
+
+
+@router.get("/admin/audit-timeline")
+def admin_audit_timeline(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    entity_type: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    query = db.query(AuditLog)
+    if entity_type:
+        query = query.filter(AuditLog.entity_type == entity_type)
+    rows = query.order_by(AuditLog.created_at.desc()).limit(limit).all()
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "action": row.action,
+                "entity_type": row.entity_type,
+                "entity_id": row.entity_id,
+                "actor_user_id": row.actor_user_id,
+                "actor_role": row.actor_role,
+                "old_value": (row.details or {}).get("old_value"),
+                "new_value": (row.details or {}).get("new_value"),
+                "details": row.details or {},
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ]
+    }
 
 
 @router.get("/admin/adapter-smoke")
