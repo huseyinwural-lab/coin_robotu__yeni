@@ -470,13 +470,6 @@ def test_portfolio_auto_provision_via_ensure_function():
     try:
         user = _create_user(db)
 
-        # Verify no portfolio exists yet for this new user
-        existing = db.query(ExecutionPortfolio).filter(
-            ExecutionPortfolio.user_id == user.id,
-            ExecutionPortfolio.is_default.is_(True)
-        ).first()
-        # Note: Migration may have created portfolios for existing users, but new user should not have one
-        
         # Call ensure_user_default_portfolio - should create portfolio
         portfolio = ensure_user_default_portfolio(db, user_id=user.id, portfolio_id=None)
         db.commit()

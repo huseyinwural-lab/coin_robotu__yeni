@@ -1,3 +1,44 @@
+## 2026-03-27 — P0 HARD CLOSE (Execution Policy Engine) Tamamlandı
+
+### Kapanan kritik açıklar
+- **Fail-safe hard block düzeltmesi**: `FAILSAFE_*` reason kodlarında rollout modundan bağımsız zorunlu `BLOCK` + `action_taken=HARD_BLOCK` aktif edildi.
+- **Execution/Post-trade gerçek enforcement**: placeholder akış kaldırıldı; execution ve post-trade aşamalarında gerçek validation + violation üretimi eklendi.
+- **Portfolio domain ayrımı**: `execution_portfolios` domain’i eklendi, default portfolio auto-provision + migration/backfill aktif edildi.
+
+### Yeni/iyileştirilen davranışlar
+- Fail-safe listesi (hard block):
+  - `FAILSAFE_POLICY_LOAD_ERROR`
+  - `FAILSAFE_RISK_COMPUTE_ERROR`
+  - `FAILSAFE_MARKET_DATA_MISSING`
+  - `FAILSAFE_DEPENDENCY_TIMEOUT`
+  - `FAILSAFE_ENGINE_UNAVAILABLE`
+- Execution stage zorunlu input yoksa (`requested_price`, `requested_qty`, `execution_result`) her ortamda hard block.
+- Execution kontrolleri: price deviation, fill ratio, fill latency, execution status.
+- Post-trade kontrolleri: actual slippage, exposure/leverage/liquidation distance sonrası breach kontrolü.
+- Violation kaydı zorunlu alanları decision log’da taşınıyor: `violation_id`, `reason_code`, `stage`, `severity`, `triggered_policy`, `triggered_rule`, `metrics_snapshot`.
+
+### Veri modeli / migration
+- Migration: `20260327_0091_execution_portfolio_domain_hard_close.py`
+  - `execution_portfolios` tablosu eklendi
+  - `execution_policy_decision_logs` tablosuna violation alanları eklendi
+  - default portfolio backfill eklendi
+
+### Admin gözlem katmanı (mevcut endpoint genişletmesi)
+- `/api/admin/execution-policies` içinde genişletilen metrikler:
+  - `execution_stage_violation_count`
+  - `post_trade_violation_count`
+  - `failsafe_hard_block_count`
+  - `top_reason_codes`
+  - `recent_critical_violations`
+  - `stage_violation_distribution`
+
+### Test durumu
+- Testing agent raporu: `/app/test_reports/iteration_164.json`
+  - Özet: P0 Hard Close senaryoları PASS (28/28)
+- Ek lokal doğrulama:
+  - `test_execution_policy_engine_sprint1.py` kritik subset PASS
+  - `test_execution_policy_engine_p0_hardclose.py` kritik subset PASS
+
 ## 2026-03-27 — P0 Sprint-1 Execution Policy Engine + Enforcement Pipeline (Tamamlandı)
 
 ### Uygulanan kapsam (onaylı kararlarla)
