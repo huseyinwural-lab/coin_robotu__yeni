@@ -1136,8 +1136,39 @@ def _build_strategy_venue_heatmap_payload(db: Session, *, window_hours: int = 24
     for item in transition_logs:
         transition_count_map[str(item.get("key") or "")] += 1
 
+    def _compute_confidence_and_anomaly(*, total_routes: int, route_churn_count: int, max_drift: float) -> dict:
+        score = 88.0
+        score += min(12.0, total_routes * 1.2)
+        score -= min(40.0, route_churn_count * 4.0)
+        score -= min(35.0, max_drift * 120.0)
+        confidence_score = int(max(0.0, min(100.0, round(score))))
+
+        anomaly_reasons = []
+        if max_drift >= 0.25:
+            anomaly_reasons.append("allocation_drift_critical")
+        elif max_drift >= 0.12:
+            anomaly_reasons.append("allocation_drift_elevated")
+
+        if route_churn_count >= 8:
+            anomaly_reasons.append("route_churn_critical")
+        elif route_churn_count >= 4:
+            anomaly_reasons.append("route_churn_elevated")
+
+        anomaly_band = "low"
+        if confidence_score < 50 or any(code.endswith("critical") for code in anomaly_reasons):
+            anomaly_band = "high"
+        elif confidence_score < 72 or any(code.endswith("elevated") for code in anomaly_reasons):
+            anomaly_band = "medium"
+
+        return {
+            "confidence_score": confidence_score,
+            "anomaly_band": anomaly_band,
+            "anomaly_reasons": anomaly_reasons,
+        }
+
     strategy_rows = []
     drift_rows = []
+    anomaly_rows = []
     routing_rules = routing_policy.get("rules") or {}
     for key, bucket in by_strategy.items():
         user_id = str(bucket.get("user_id") or "")
@@ -1169,6 +1200,14 @@ def _build_strategy_venue_heatmap_payload(db: Session, *, window_hours: int = 24
             if drift is not None:
                 drift_rows.append({"strategy_key": key, "venue": venue, "allocation_drift": drift})
 
+        max_drift = max([float((item or {}).get("allocation_drift") or 0.0) for item in distribution] or [0.0])
+        route_churn_count = int(transition_count_map.get(key, 0))
+        confidence = _compute_confidence_and_anomaly(
+            total_routes=int(bucket.get("total_routes") or 0),
+            route_churn_count=route_churn_count,
+            max_drift=max_drift,
+        )
+
         strategy_rows.append(
             {
                 "key": key,
@@ -1176,9 +1215,25 @@ def _build_strategy_venue_heatmap_payload(db: Session, *, window_hours: int = 24
                 "strategy_id": bucket.get("strategy_id"),
                 "market_type": bucket.get("market_type"),
                 "environment": bucket.get("environment"),
-                "route_churn_count": transition_count_map.get(key, 0),
+                "route_churn_count": route_churn_count,
                 "total_routes": bucket.get("total_routes") or 0,
+                "max_allocation_drift": round(max_drift, 4),
+                "confidence_score": confidence["confidence_score"],
+                "anomaly_band": confidence["anomaly_band"],
+                "anomaly_reasons": confidence["anomaly_reasons"],
                 "venue_distribution": distribution,
+            }
+        )
+
+        anomaly_rows.append(
+            {
+                "strategy_key": key,
+                "strategy_id": bucket.get("strategy_id"),
+                "confidence_score": confidence["confidence_score"],
+                "anomaly_band": confidence["anomaly_band"],
+                "anomaly_reasons": confidence["anomaly_reasons"],
+                "route_churn_count": route_churn_count,
+                "max_allocation_drift": round(max_drift, 4),
             }
         )
 
@@ -1187,6 +1242,15 @@ def _build_strategy_venue_heatmap_payload(db: Session, *, window_hours: int = 24
         "window_hours": window_hours,
         "strategies": strategy_rows,
         "top_allocation_drifts": top_drifts,
+        "top_anomalies": sorted(
+            anomaly_rows,
+            key=lambda item: (
+                2 if str(item.get("anomaly_band") or "low") == "high" else (1 if str(item.get("anomaly_band") or "low") == "medium" else 0),
+                -float(item.get("max_allocation_drift") or 0),
+                -int(item.get("route_churn_count") or 0),
+            ),
+            reverse=True,
+        )[:30],
         "generated_at": now_utc.isoformat(),
     }
 
@@ -1226,6 +1290,10 @@ def _build_strategy_heatmap_comparison(db: Session, *, primary_window_hours: int
                 "primary_max_allocation_drift": round(primary_drift, 4),
                 "compare_max_allocation_drift": round(compare_drift, 4),
                 "allocation_drift_delta": round(primary_drift - compare_drift, 4),
+                "primary_confidence_score": int((primary_row or {}).get("confidence_score") or 0),
+                "compare_confidence_score": int((compare_row or {}).get("confidence_score") or 0),
+                "confidence_score_delta": int((primary_row or {}).get("confidence_score") or 0)
+                - int((compare_row or {}).get("confidence_score") or 0),
             }
         )
 
@@ -1345,6 +1413,27 @@ def _build_conflict_auto_remediation_drafts(db: Session) -> list[dict]:
 
 def _get_conflict_remediation_approvals_config(db: Session) -> dict:
     return get_control_plane_config(db, config_key="conflict_remediation_approvals", default={"requests": []})
+
+
+def _get_conflict_remediation_workflow_policy_config(db: Session) -> dict:
+    default_value = {
+        "requester_roles": ["ops", "admin", "super_admin"],
+        "approver_roles": ["admin", "super_admin"],
+        "strict_actor_separation": False,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    config = get_control_plane_config(db, config_key="conflict_remediation_workflow_policy", default=default_value)
+    return {
+        "requester_roles": _normalize_venue_list(config.get("requester_roles") or default_value["requester_roles"]),
+        "approver_roles": _normalize_venue_list(config.get("approver_roles") or default_value["approver_roles"]),
+        "strict_actor_separation": bool(config.get("strict_actor_separation", default_value["strict_actor_separation"])),
+        "updated_at": str(config.get("updated_at") or default_value["updated_at"]),
+    }
+
+
+def _is_role_allowed(role_value: str, allowed_roles: list[str]) -> bool:
+    role = str(role_value or "").strip().lower()
+    return role in {str(item or "").strip().lower() for item in (allowed_roles or []) if str(item or "").strip()}
 
 
 def _execute_conflict_remediation_draft(draft: dict, *, current_admin: User, db: Session) -> dict:
@@ -2821,6 +2910,9 @@ def admin_control_plane_cockpit(
         "strategy_heatmap_summary": {
             "strategy_count": len(heatmap.get("strategies") or []),
             "top_allocation_drifts": heatmap.get("top_allocation_drifts") or [],
+            "top_anomalies": heatmap.get("top_anomalies") or [],
+            "high_anomaly_count": sum(1 for row in (heatmap.get("strategies") or []) if str(row.get("anomaly_band") or "") == "high"),
+            "medium_anomaly_count": sum(1 for row in (heatmap.get("strategies") or []) if str(row.get("anomaly_band") or "") == "medium"),
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -2909,10 +3001,12 @@ def admin_strategy_venue_heatmap(
 def admin_conflict_auto_remediation_drafts(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     drafts = _build_conflict_auto_remediation_drafts(db)
     approvals_config = _get_conflict_remediation_approvals_config(db)
+    workflow_policy = _get_conflict_remediation_workflow_policy_config(db)
     approval_requests = list(approvals_config.get("requests") or [])
     return {
         "drafts": drafts,
         "approval_requests": approval_requests,
+        "workflow_policy": workflow_policy,
         "summary": {
             "total_drafts": len(drafts),
             "blocking_draft_count": sum(1 for item in drafts if str(item.get("severity") or "").upper() == "BLOCK"),
@@ -2921,6 +3015,47 @@ def admin_conflict_auto_remediation_drafts(_: User = Depends(require_admin), db:
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/admin/conflict-auto-remediation-workflow-policy")
+def admin_conflict_auto_remediation_workflow_policy(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return _get_conflict_remediation_workflow_policy_config(db)
+
+
+@router.put("/admin/conflict-auto-remediation-workflow-policy")
+def admin_update_conflict_auto_remediation_workflow_policy(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    requester_roles = _normalize_venue_list(payload.get("requester_roles") or [])
+    approver_roles = _normalize_venue_list(payload.get("approver_roles") or [])
+    strict_actor_separation = bool(payload.get("strict_actor_separation", False))
+
+    if not requester_roles:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="requester_roles_required")
+    if not approver_roles:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="approver_roles_required")
+
+    next_policy = {
+        "requester_roles": requester_roles,
+        "approver_roles": approver_roles,
+        "strict_actor_separation": strict_actor_separation,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    upsert_control_plane_config(db, config_key="conflict_remediation_workflow_policy", payload=next_policy, actor_user_id=current_admin.id)
+
+    create_audit_log(
+        db,
+        action="venue_conflict_remediation_workflow_policy_updated",
+        entity_type="venue_conflict_remediation_workflow_policy",
+        entity_id="global",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"new_value": next_policy},
+    )
+
+    return {"updated": True, "workflow_policy": next_policy}
 
 
 @router.get("/admin/conflict-auto-remediation-approvals")
@@ -2953,6 +3088,11 @@ def admin_conflict_auto_remediation_apply(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_remediation_mode")
 
     approvals_config = _get_conflict_remediation_approvals_config(db)
+    workflow_policy = _get_conflict_remediation_workflow_policy_config(db)
+    requester_roles = list(workflow_policy.get("requester_roles") or [])
+    approver_roles = list(workflow_policy.get("approver_roles") or [])
+    strict_actor_separation = bool(workflow_policy.get("strict_actor_separation", False))
+    current_role = str(current_admin.role.value)
 
     if mode == "dry_run":
         return {
@@ -2966,9 +3106,13 @@ def admin_conflict_auto_remediation_apply(
                 "action_summary": draft.get("action_summary"),
             },
             "requires_approval": True,
+            "workflow_policy": workflow_policy,
         }
 
     if mode == "submit":
+        if not _is_role_allowed(current_role, requester_roles):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="role_not_allowed_for_submit")
+
         requests = list(approvals_config.get("requests") or [])
         approval_request = {
             "id": str(uuid.uuid4()),
@@ -2976,9 +3120,11 @@ def admin_conflict_auto_remediation_apply(
             "draft_id": draft_id,
             "draft": draft,
             "requested_by": current_admin.id,
+            "requested_by_role": current_role,
             "requested_at": datetime.now(timezone.utc).isoformat(),
             "comment": payload.comment,
             "approved_by": None,
+            "approved_by_role": None,
             "approved_at": None,
             "apply_result": None,
         }
@@ -3002,6 +3148,7 @@ def admin_conflict_auto_remediation_apply(
             "applied": False,
             "draft_id": draft_id,
             "approval_request": approval_request,
+            "workflow_policy": workflow_policy,
         }
 
     # mode == approve_apply
@@ -3014,13 +3161,19 @@ def admin_conflict_auto_remediation_apply(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="approval_request_not_found")
     if str(target_request.get("status") or "") != "pending":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="approval_request_not_pending")
+    if not _is_role_allowed(current_role, approver_roles):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="role_not_allowed_for_approve")
+    if strict_actor_separation and str(target_request.get("requested_by") or "") == current_admin.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="strict_actor_separation_violation")
 
     apply_result = _execute_conflict_remediation_draft(draft, current_admin=current_admin, db=db)
     target_request["status"] = "approved_applied"
     target_request["approved_by"] = current_admin.id
+    target_request["approved_by_role"] = current_role
     target_request["approved_at"] = datetime.now(timezone.utc).isoformat()
     target_request["apply_result"] = apply_result
     target_request["approval_comment"] = payload.comment
+    target_request["approved_with_single_actor"] = str(target_request.get("requested_by") or "") == current_admin.id
 
     approvals_config["requests"] = requests
     upsert_control_plane_config(db, config_key="conflict_remediation_approvals", payload=approvals_config, actor_user_id=current_admin.id)
@@ -3042,6 +3195,7 @@ def admin_conflict_auto_remediation_apply(
         "draft": draft,
         "apply_result": apply_result,
         "approval_request": target_request,
+        "workflow_policy": workflow_policy,
     }
 
 

@@ -281,6 +281,16 @@ export const AdminExchangesPage = () => {
     }
   }, [loadConflictDetection, loadRemediationDrafts, loadControlPlaneCockpit, loadRoutingPolicies, loadFailoverPolicies, loadHeatmap, loadAuditTimeline, lastAuditFilters]);
 
+  const updateRemediationWorkflowPolicy = useCallback(async (payload) => {
+    try {
+      await apiClient.put("/venues/admin/conflict-auto-remediation-workflow-policy", payload);
+      toast.success("Workflow policy güncellendi");
+      await loadRemediationDrafts();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Workflow policy güncellenemedi");
+    }
+  }, [loadRemediationDrafts]);
+
   const runRoutingPreview = useCallback(async (payload) => {
     setRoutingPreviewState({ data: null, loading: true, error: null });
     try {
@@ -345,6 +355,7 @@ export const AdminExchangesPage = () => {
         error={remediationDraftState.error}
         onRefresh={loadRemediationDrafts}
         onRunDraft={runRemediationDraftWorkflow}
+        onUpdateWorkflowPolicy={updateRemediationWorkflowPolicy}
       />
 
       <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-exchanges-panels-grid">

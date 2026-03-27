@@ -1,9 +1,37 @@
-import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
 
-export const ConflictAutoRemediationPanel = ({ data, loading, error, onRefresh, onRunDraft }) => {
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+export const ConflictAutoRemediationPanel = ({ data, loading, error, onRefresh, onRunDraft, onUpdateWorkflowPolicy }) => {
   const drafts = data?.drafts || [];
   const summary = data?.summary || {};
   const approvalRequests = data?.approval_requests || [];
+  const workflowPolicy = data?.workflow_policy || {};
+
+  const [requesterRolesText, setRequesterRolesText] = useState("");
+  const [approverRolesText, setApproverRolesText] = useState("");
+  const [strictActorSeparation, setStrictActorSeparation] = useState(false);
+
+  useEffect(() => {
+    setRequesterRolesText((workflowPolicy.requester_roles || []).join(","));
+    setApproverRolesText((workflowPolicy.approver_roles || []).join(","));
+    setStrictActorSeparation(Boolean(workflowPolicy.strict_actor_separation));
+  }, [workflowPolicy.requester_roles, workflowPolicy.approver_roles, workflowPolicy.strict_actor_separation]);
+
+  const updatePolicy = async () => {
+    await onUpdateWorkflowPolicy({
+      requester_roles: String(requesterRolesText || "")
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean),
+      approver_roles: String(approverRolesText || "")
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean),
+      strict_actor_separation: strictActorSeparation,
+    });
+  };
 
   return (
     <section className="rounded-2xl border border-amber-500/30 bg-slate-950/80 p-4" data-testid="conflict-auto-remediation-panel">
@@ -21,6 +49,19 @@ export const ConflictAutoRemediationPanel = ({ data, loading, error, onRefresh, 
       {!loading && !error && (
         <>
           <p className="mb-2 text-xs text-slate-300" data-testid="conflict-auto-remediation-summary">total={summary.total_drafts ?? 0}, block={summary.blocking_draft_count ?? 0}, warn={summary.warning_draft_count ?? 0}</p>
+
+          <div className="mb-3 rounded border border-slate-800 p-2 text-xs" data-testid="conflict-auto-remediation-workflow-policy-section">
+            <p className="font-semibold text-amber-100" data-testid="conflict-auto-remediation-workflow-policy-title">Workflow Policy (P2-409)</p>
+            <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="conflict-auto-remediation-workflow-policy-grid">
+              <Input value={requesterRolesText} onChange={(event) => setRequesterRolesText(event.target.value)} placeholder="requester_roles csv" data-testid="conflict-auto-remediation-workflow-requester-roles-input" />
+              <Input value={approverRolesText} onChange={(event) => setApproverRolesText(event.target.value)} placeholder="approver_roles csv" data-testid="conflict-auto-remediation-workflow-approver-roles-input" />
+              <label className="flex items-center gap-2 text-slate-300" data-testid="conflict-auto-remediation-workflow-strict-row">
+                <input type="checkbox" checked={strictActorSeparation} onChange={(event) => setStrictActorSeparation(event.target.checked)} data-testid="conflict-auto-remediation-workflow-strict-checkbox" />
+                strict_actor_separation
+              </label>
+            </div>
+            <Button type="button" variant="outline" className="mt-2" onClick={updatePolicy} data-testid="conflict-auto-remediation-workflow-update-button">Workflow Policy Güncelle</Button>
+          </div>
 
           <div className="space-y-2" data-testid="conflict-auto-remediation-drafts-list">
             {drafts.length === 0 && <p className="text-xs text-slate-400" data-testid="conflict-auto-remediation-drafts-empty">Remediation draft bulunamadı.</p>}

@@ -76,11 +76,23 @@ export const ValidationCenterPanel = ({ approvedUsers, data, loading, error, onR
           <div className="mb-3" data-testid="validation-center-check-level-trends-list">
             <p className="text-xs font-semibold text-slate-100" data-testid="validation-center-check-level-trends-title">Check-Level Trend Chart</p>
             {checkLevelTrends.length === 0 && <p className="text-xs text-slate-400" data-testid="validation-center-check-level-trends-empty">Check trend verisi yok.</p>}
-            {checkLevelTrends.slice(0, 20).map((item, index) => (
-              <p key={`${item.check_name}-${index}`} className="border-t border-slate-800 py-1 text-xs text-slate-300" data-testid={`validation-center-check-level-trend-${index}`}>
-                {item.check_name}: pass/warn/block={item.pass_count}/{item.warn_count}/{item.block_count}
-              </p>
-            ))}
+            {checkLevelTrends.slice(0, 20).map((item, index) => {
+              const passPct = Math.round(Number(item.pass_ratio || 0) * 100);
+              const warnPct = Math.round(Number(item.warn_ratio || 0) * 100);
+              const blockPct = Math.max(0, 100 - passPct - warnPct);
+              return (
+                <div key={`${item.check_name}-${index}`} className="border-t border-slate-800 py-2" data-testid={`validation-center-check-level-trend-${index}`}>
+                  <p className="mb-1 text-xs text-slate-300" data-testid={`validation-center-check-level-trend-label-${index}`}>
+                    {item.check_name}: pass/warn/block={item.pass_count}/{item.warn_count}/{item.block_count}
+                  </p>
+                  <div className="flex h-2 overflow-hidden rounded bg-slate-800" data-testid={`validation-center-check-level-trend-bar-${index}`}>
+                    <div className="bg-emerald-500" style={{ width: `${passPct}%` }} data-testid={`validation-center-check-level-trend-pass-segment-${index}`} />
+                    <div className="bg-amber-500" style={{ width: `${warnPct}%` }} data-testid={`validation-center-check-level-trend-warn-segment-${index}`} />
+                    <div className="bg-rose-500" style={{ width: `${blockPct}%` }} data-testid={`validation-center-check-level-trend-block-segment-${index}`} />
+                  </div>
+                </div>
+              );
+            })}
             <p className="mt-1 text-xs text-slate-400" data-testid="validation-center-top-reasons">top reasons: {(topReasons || []).map((item) => `${item[0]}(${item[1]})`).join(", ") || "-"}</p>
           </div>
 

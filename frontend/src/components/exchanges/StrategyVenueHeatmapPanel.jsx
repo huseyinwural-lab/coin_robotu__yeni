@@ -8,6 +8,7 @@ export const StrategyVenueHeatmapPanel = ({ data, loading, error, onRefresh }) =
   const [compareWindowHours, setCompareWindowHours] = useState(720);
   const strategies = data?.strategies || [];
   const topDrifts = data?.top_allocation_drifts || [];
+  const topAnomalies = data?.top_anomalies || [];
   const strategyDeltas = data?.comparison?.strategy_deltas || [];
 
   return (
@@ -48,12 +49,23 @@ export const StrategyVenueHeatmapPanel = ({ data, loading, error, onRefresh }) =
             ))}
           </div>
 
+          <div className="mb-3" data-testid="strategy-venue-heatmap-top-anomalies-list">
+            <p className="text-xs font-semibold text-cyan-100" data-testid="strategy-venue-heatmap-top-anomalies-title">Top Anomaly Bands</p>
+            {topAnomalies.length === 0 && <p className="text-xs text-slate-400" data-testid="strategy-venue-heatmap-top-anomalies-empty">Anomali kaydı yok.</p>}
+            {topAnomalies.slice(0, 20).map((item, index) => (
+              <p key={`${item.strategy_key}-${index}`} className="border-t border-slate-800 py-1 text-xs text-cyan-200" data-testid={`strategy-venue-heatmap-top-anomaly-${index}`}>
+                {item.strategy_key}: confidence={item.confidence_score} · band={item.anomaly_band} · reasons={(item.anomaly_reasons || []).join(", ") || "-"}
+              </p>
+            ))}
+          </div>
+
           <div data-testid="strategy-venue-heatmap-strategies-list">
             <p className="text-xs font-semibold text-slate-100" data-testid="strategy-venue-heatmap-strategies-title">Strategies</p>
             {strategies.length === 0 && <p className="text-xs text-slate-400" data-testid="strategy-venue-heatmap-strategies-empty">Heatmap verisi yok.</p>}
             {strategies.slice(0, 30).map((row, index) => (
               <article key={`${row.key}-${index}`} className="mb-2 rounded border border-slate-800 p-2 text-xs" data-testid={`strategy-venue-heatmap-strategy-row-${index}`}>
                 <p data-testid={`strategy-venue-heatmap-strategy-header-${index}`}>{row.strategy_id} · churn={row.route_churn_count} · routes={row.total_routes}</p>
+                <p className="text-slate-300" data-testid={`strategy-venue-heatmap-strategy-confidence-${index}`}>confidence={row.confidence_score ?? "-"} · anomaly_band={row.anomaly_band || "low"} · reasons={(row.anomaly_reasons || []).join(", ") || "-"}</p>
                 {(row.venue_distribution || []).map((venueRow, venueIndex) => (
                   <p key={`${venueRow.venue}-${venueIndex}`} className="text-slate-300" data-testid={`strategy-venue-heatmap-strategy-venue-${index}-${venueIndex}`}>
                     {venueRow.venue}: actual={venueRow.actual_ratio} target={venueRow.target_ratio ?? "-"} drift={venueRow.allocation_drift ?? "-"}
