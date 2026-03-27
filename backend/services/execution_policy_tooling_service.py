@@ -22,8 +22,18 @@ SEVERITY_PRIORITY = {
     "HIGH": 3,
     "CRITICAL": 4,
 }
-ALLOWED_OPERATORS = {">", "<", "=", "!=", ">=", "<="}
-ALLOWED_ACTIONS = {"BLOCK", "WARN", "THROTTLE", "REDUCE_ONLY", "DISABLE_STRATEGY"}
+ALLOWED_OPERATORS = {">", "<", ">=", "<=", "=="}
+ALLOWED_ACTIONS = {"BLOCK", "WARN", "THROTTLE", "REDUCE_ONLY"}
+ALLOWED_FIELDS = {
+    "exposure",
+    "pnl",
+    "drawdown",
+    "leverage",
+    "margin_utilization",
+    "volatility",
+    "environment",
+    "strategy_risk_class",
+}
 
 
 @dataclass
@@ -114,6 +124,8 @@ def validate_policy_schema(policy_schema: dict) -> ValidationResult:
             value = cond.get("value")
             if not field:
                 errors.append(f"{rule_id}.conditions[{c_idx}]: field zorunlu")
+            if field and field not in ALLOWED_FIELDS:
+                errors.append(f"{rule_id}.conditions[{c_idx}]: field desteklenmiyor")
             if operator not in ALLOWED_OPERATORS:
                 errors.append(f"{rule_id}.conditions[{c_idx}]: operator geçersiz")
             if value is None or str(value) == "":
@@ -164,7 +176,7 @@ def _condition_passes(condition: dict, values: dict) -> bool:
     if actual is None:
         return False
 
-    if operator == "=":
+    if operator in {"==", "="}:
         return str(actual) == str(expected)
     if operator == "!=":
         return str(actual) != str(expected)

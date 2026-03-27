@@ -125,6 +125,75 @@ def get_strategy_binding(db: Session, strategy_id: str) -> ExecutionStrategyBind
     return db.query(ExecutionStrategyBinding).filter(ExecutionStrategyBinding.strategy_id == strategy_id).first()
 
 
+def upsert_strategy_binding(
+    db: Session,
+    *,
+    strategy_id: str,
+    bound_policy_set: str,
+    risk_class: str = "MEDIUM",
+    execution_mode: str = "SIMULATION",
+    enabled: bool = True,
+    state: str = "enabled",
+    allowed_symbols: list[str] | None = None,
+    allowed_environments: list[str] | None = None,
+    allowed_margin_modes: list[str] | None = None,
+    limits: dict | None = None,
+    actor_user_id: str | None = None,
+    state_reason: str | None = None,
+) -> ExecutionStrategyBinding:
+    normalized_strategy = str(strategy_id or "").strip()
+    if not normalized_strategy:
+        raise ValueError("strategy_id_required")
+
+    row = db.query(ExecutionStrategyBinding).filter(ExecutionStrategyBinding.strategy_id == normalized_strategy).first()
+    payload = {
+        "bound_policy_set": str(bound_policy_set or "").strip(),
+        "risk_class": str(risk_class or "MEDIUM").upper(),
+        "execution_mode": str(execution_mode or "SIMULATION").upper(),
+        "enabled": bool(enabled),
+        "state": str(state or "enabled").lower(),
+        "allowed_symbols": [str(item).upper() for item in list(allowed_symbols or []) if str(item).strip()],
+        "allowed_environments": [str(item).lower() for item in list(allowed_environments or []) if str(item).strip()],
+        "allowed_margin_modes": [str(item).lower() for item in list(allowed_margin_modes or []) if str(item).strip()],
+        "limits": dict(limits or {}),
+    }
+
+    if row is None:
+        row = ExecutionStrategyBinding(
+            strategy_id=normalized_strategy,
+            bound_policy_set=payload["bound_policy_set"],
+            risk_class=payload["risk_class"],
+            execution_mode=payload["execution_mode"],
+            enabled=payload["enabled"],
+            state=payload["state"],
+            allowed_symbols=payload["allowed_symbols"],
+            allowed_environments=payload["allowed_environments"],
+            allowed_margin_modes=payload["allowed_margin_modes"],
+            limits=payload["limits"],
+            updated_by=actor_user_id,
+            state_reason=state_reason,
+        )
+        db.add(row)
+    else:
+        row.bound_policy_set = payload["bound_policy_set"]
+        row.risk_class = payload["risk_class"]
+        row.execution_mode = payload["execution_mode"]
+        row.enabled = payload["enabled"]
+        row.state = payload["state"]
+        row.allowed_symbols = payload["allowed_symbols"]
+        row.allowed_environments = payload["allowed_environments"]
+        row.allowed_margin_modes = payload["allowed_margin_modes"]
+        row.limits = payload["limits"]
+        if state_reason is not None:
+            row.state_reason = state_reason
+        if actor_user_id:
+            row.updated_by = actor_user_id
+        row.updated_at = _utcnow()
+
+    db.flush()
+    return row
+
+
 def evaluate_strategy_binding_constraints(db: Session, *, context: dict) -> dict:
     strategy_id = str(context.get("strategy_binding") or "")
     env = str(context.get("environment") or "testnet").lower()
@@ -473,13 +542,30 @@ def activate_policy_version(
     version_id: str,
     actor_user_id: str,
     environment: str,
+    activation_mode: str = "ACTIVE",
 ) -> ExecutionPolicyVersion:
     row = db.query(ExecutionPolicyVersion).filter(ExecutionPolicyVersion.version_id == version_id).first()
     if row is None:
         raise ValueError("policy_version_not_found")
     env = str(environment or "testnet").lower()
+    mode = str(activation_mode or "ACTIVE").upper()
+    if mode not in {"ACTIVE", "CANARY"}:
+        raise ValueError("invalid_activation_mode")
     if env in {"live", "prod", "production"} and str(row.approval_status or "pending").lower() != "approved":
         raise ValueError("approval_required_for_prod_activation")
+
+    if mode == "CANARY":
+        db.query(ExecutionPolicyVersion).filter(
+            ExecutionPolicyVersion.policy_code == row.policy_code,
+            ExecutionPolicyVersion.state == "CANARY",
+            ExecutionPolicyVersion.version_id != row.version_id,
+        ).update({"state": "DEPRECATED", "updated_at": _utcnow()}, synchronize_session=False)
+
+        row.state = "CANARY"
+        row.effective_from = _utcnow()
+        row.updated_at = _utcnow()
+        db.flush()
+        return row
 
     db.query(ExecutionPolicyVersion).filter(
         ExecutionPolicyVersion.policy_code == row.policy_code,

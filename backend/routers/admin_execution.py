@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 from dependencies.execution_guard_dependency import execution_guard_admin_approve_trade_dependency
 from db import get_db, redis_client
 from deps import require_admin, require_super_admin
-from models import AuditLog, BrandSetting, SystemAlert, User, UserExchangeConnection, UserExecutionIntent
+from models import (
+    AuditLog,
+    BrandSetting,
+    ExecutionPolicyVersion,
+    SystemAlert,
+    User,
+    UserExchangeConnection,
+    UserExecutionIntent,
+)
 from schemas import (
     AdminExecutionQueueBulkDecisionRequest,
     AdminExecutionQueueBulkDecisionResponse,
@@ -67,6 +75,14 @@ from services.execution_governance_service import (
     list_remediation_recommendations,
     rollback_policy_version,
     update_remediation_recommendation_status,
+    upsert_strategy_binding,
+)
+from services.execution_policy_tooling_service import (
+    build_internal_policy_schema,
+    generate_human_readable_policy,
+    get_policy_version_diff,
+    simulate_policy_schema,
+    validate_policy_schema,
 )
 from services.execution_environment_control_service import (
     deactivate_safe_mode,
@@ -228,6 +244,64 @@ def _resolve_execution_mode_from_intent(row) -> str:
     return "live"
 
 
+def _builder_schema_from_version(row) -> dict:
+    rules_payload = dict(getattr(row, "rules_payload", None) or {})
+    return {
+        "policy_code": getattr(row, "policy_code", None),
+        "rules": list(rules_payload.get("builder_rules") or []),
+        "scope": dict(rules_payload.get("builder_scope") or {}),
+    }
+
+
+def _evaluate_policy_activation_gate(
+    db: Session,
+    *,
+    version_row: ExecutionPolicyVersion,
+    override_high_risk: bool,
+    override_reason: str | None,
+    actor: User,
+) -> dict:
+    schema = _builder_schema_from_version(version_row)
+    validation = validate_policy_schema(schema)
+    validation_payload = {
+        "errors": validation.errors,
+        "warnings": validation.warnings,
+        "risk_level": validation.risk_level,
+    }
+
+    if validation.errors:
+        return {
+            "ok": False,
+            "error": "policy_validation_failed",
+            "validation": validation_payload,
+        }
+
+    if validation.risk_level == "HIGH" and validation.warnings:
+        if not override_high_risk or not str(override_reason or "").strip():
+            return {
+                "ok": False,
+                "error": "high_risk_override_required",
+                "validation": validation_payload,
+            }
+        create_audit_log(
+            db,
+            action="EXECUTION_POLICY_HIGH_RISK_OVERRIDE",
+            entity_type="execution_policy_version",
+            entity_id=version_row.version_id,
+            actor_user_id=actor.id,
+            actor_role=actor.role.value,
+            severity="warning",
+            details={
+                "policy_code": version_row.policy_code,
+                "override_reason": override_reason,
+                "warnings": validation.warnings,
+                "risk_level": validation.risk_level,
+            },
+        )
+
+    return {"ok": True, "validation": validation_payload}
+
+
 class ApproveTradeRequest(BaseModel):
     intent_id: str
     note: str = ""
@@ -243,6 +317,9 @@ class PolicyVersionCreateRequest(BaseModel):
 
 class PolicyVersionActivateRequest(BaseModel):
     environment: str = "testnet"
+    activation_mode: str = "ACTIVE"
+    override_high_risk: bool = False
+    override_reason: str | None = None
 
 
 class PolicyVersionRollbackRequest(BaseModel):
@@ -267,6 +344,73 @@ class EnvironmentOverrideUpsertRequest(BaseModel):
 
 class SafeModeDeactivateRequest(BaseModel):
     reason: str
+
+
+class PolicyBuilderRequest(BaseModel):
+    policy_code: str
+    version_label: str | None = "builder"
+    description: str | None = ""
+    scope: dict = {}
+    rules: list[dict] = []
+
+    class Config:
+        extra = "allow"
+
+
+class PolicyBuilderCreateRequest(PolicyBuilderRequest):
+    change_summary: str | None = ""
+
+
+class PolicyDiffRequest(BaseModel):
+    policy_code: str
+    version_a: str
+    version_b: str
+
+
+class PolicySimulationRequest(BaseModel):
+    policy_code: str
+    version_id: str
+    simulation_input: dict = {}
+
+
+class BulkActivateItem(BaseModel):
+    version_id: str
+    environment: str = "testnet"
+    activation_mode: str = "ACTIVE"
+    override_high_risk: bool = False
+    override_reason: str | None = None
+
+
+class BulkActivateRequest(BaseModel):
+    items: list[BulkActivateItem]
+
+
+class BulkRollbackItem(BaseModel):
+    policy_code: str
+    target_version_id: str
+    reason: str
+
+
+class BulkRollbackRequest(BaseModel):
+    items: list[BulkRollbackItem]
+
+
+class BulkStrategyBindingItem(BaseModel):
+    strategy_id: str
+    bound_policy_set: str
+    risk_class: str = "MEDIUM"
+    execution_mode: str = "SIMULATION"
+    enabled: bool = True
+    state: str = "enabled"
+    allowed_symbols: list[str] = []
+    allowed_environments: list[str] = []
+    allowed_margin_modes: list[str] = []
+    limits: dict = {}
+    state_reason: str | None = None
+
+
+class BulkStrategyBindingRequest(BaseModel):
+    items: list[BulkStrategyBindingItem]
 
 
 @router.get("/execution-queue", response_model=list[ExecutionIntentQueueItemResponse])
@@ -1563,6 +1707,147 @@ def reject_execution_remediation(
     }
 
 
+@router.post("/execution-policies/validate")
+def validate_execution_policy_builder(
+    payload: PolicyBuilderRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    built = build_internal_policy_schema(payload.dict(exclude_none=True))
+    schema = built.get("schema") or {}
+    validation = validate_policy_schema(schema)
+    return {
+        "policy_code": schema.get("policy_code"),
+        "errors": validation.errors,
+        "warnings": validation.warnings,
+        "risk_level": validation.risk_level,
+        "schema": schema,
+        "conditions_payload": built.get("conditions_payload") or {},
+        "rules_payload": built.get("rules_payload") or {},
+        "human_readable": generate_human_readable_policy(schema),
+    }
+
+
+@router.post("/execution-policies/builder/versions")
+def create_execution_policy_version_from_builder(
+    payload: PolicyBuilderCreateRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    built = build_internal_policy_schema(payload.dict(exclude_none=True))
+    schema = built.get("schema") or {}
+    validation = validate_policy_schema(schema)
+    validation_payload = {
+        "errors": validation.errors,
+        "warnings": validation.warnings,
+        "risk_level": validation.risk_level,
+    }
+    if validation.errors:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+            "error": "policy_validation_failed",
+            "validation": validation_payload,
+        })
+
+    row = create_policy_version(
+        db,
+        policy_code=schema.get("policy_code"),
+        conditions_payload=built.get("conditions_payload") or {},
+        rules_payload=built.get("rules_payload") or {},
+        change_summary=str(payload.change_summary or schema.get("metadata", {}).get("description") or ""),
+        created_by=current_user.id,
+        state="DRAFT",
+    )
+    create_audit_log(
+        db,
+        action="EXECUTION_POLICY_VERSION_CREATED",
+        entity_type="execution_policy_version",
+        entity_id=row.version_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="info",
+        details={
+            "policy_code": row.policy_code,
+            "version_number": row.version_number,
+            "risk_level": validation.risk_level,
+            "warnings": validation.warnings,
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    return {
+        "version_id": row.version_id,
+        "policy_code": row.policy_code,
+        "version_number": row.version_number,
+        "state": row.state,
+        "approval_status": row.approval_status,
+        "created_at": row.created_at,
+        "validation": validation_payload,
+        "human_readable": generate_human_readable_policy(schema),
+    }
+
+
+@router.post("/execution-policies/versions/{version_id}/validate")
+def validate_execution_policy_version(
+    version_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    row = db.query(ExecutionPolicyVersion).filter(ExecutionPolicyVersion.version_id == version_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="policy_version_not_found")
+    schema = _builder_schema_from_version(row)
+    validation = validate_policy_schema(schema)
+    return {
+        "version_id": row.version_id,
+        "policy_code": row.policy_code,
+        "errors": validation.errors,
+        "warnings": validation.warnings,
+        "risk_level": validation.risk_level,
+        "schema": schema,
+    }
+
+
+@router.post("/execution-policies/diff")
+def diff_execution_policy_versions(
+    payload: PolicyDiffRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    try:
+        return get_policy_version_diff(
+            db,
+            policy_code=payload.policy_code,
+            version_a=payload.version_a,
+            version_b=payload.version_b,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/execution-policies/simulate")
+def simulate_execution_policy(
+    payload: PolicySimulationRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    row = db.query(ExecutionPolicyVersion).filter(ExecutionPolicyVersion.version_id == payload.version_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="policy_version_not_found")
+    if row.policy_code != payload.policy_code:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="policy_code_mismatch")
+    schema = _builder_schema_from_version(row)
+    simulation = simulate_policy_schema(schema, dict(payload.simulation_input or {}))
+    return {
+        "policy_code": row.policy_code,
+        "version_id": row.version_id,
+        "simulation": simulation,
+    }
+
+
 @router.get("/execution-policies/versions")
 def execution_policy_versions(
     policy_code: str | None = Query(default=None),
@@ -1607,11 +1892,48 @@ def activate_execution_policy_version(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    row = activate_policy_version(
+    row = db.query(ExecutionPolicyVersion).filter(ExecutionPolicyVersion.version_id == version_id).first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="policy_version_not_found")
+
+    gate = _evaluate_policy_activation_gate(
         db,
-        version_id=version_id,
+        version_row=row,
+        override_high_risk=bool(payload.override_high_risk),
+        override_reason=payload.override_reason,
+        actor=current_user,
+    )
+    if not gate.get("ok"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={
+            "error": gate.get("error"),
+            "validation": gate.get("validation"),
+        })
+
+    try:
+        row = activate_policy_version(
+            db,
+            version_id=version_id,
+            actor_user_id=current_user.id,
+            environment=payload.environment,
+            activation_mode=payload.activation_mode,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="EXECUTION_POLICY_VERSION_ACTIVATED",
+        entity_type="execution_policy_version",
+        entity_id=row.version_id,
         actor_user_id=current_user.id,
-        environment=payload.environment,
+        actor_role=current_user.role.value,
+        severity="info",
+        details={
+            "policy_code": row.policy_code,
+            "activation_mode": payload.activation_mode,
+            "environment": payload.environment,
+        },
     )
     db.commit()
     db.refresh(row)
@@ -1621,6 +1943,7 @@ def activate_execution_policy_version(
         "state": row.state,
         "approval_status": row.approval_status,
         "effective_from": row.effective_from,
+        "validation": gate.get("validation"),
     }
 
 
@@ -1680,4 +2003,206 @@ def rollback_execution_policy(
         "active_version_id": row.version_id,
         "state": row.state,
         "rollback_target_version": payload.target_version_id,
+    }
+
+
+@router.post("/execution-policies/bulk/activate")
+def bulk_activate_execution_policy_versions(
+    payload: BulkActivateRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    results = []
+    success = 0
+    for item in payload.items:
+        row = db.query(ExecutionPolicyVersion).filter(ExecutionPolicyVersion.version_id == item.version_id).first()
+        if row is None:
+            results.append({"version_id": item.version_id, "status": "failed", "error": "policy_version_not_found"})
+            continue
+        gate = _evaluate_policy_activation_gate(
+            db,
+            version_row=row,
+            override_high_risk=bool(item.override_high_risk),
+            override_reason=item.override_reason,
+            actor=current_user,
+        )
+        if not gate.get("ok"):
+            results.append({
+                "version_id": item.version_id,
+                "status": "failed",
+                "error": gate.get("error"),
+                "validation": gate.get("validation"),
+            })
+            continue
+        try:
+            activated = activate_policy_version(
+                db,
+                version_id=item.version_id,
+                actor_user_id=current_user.id,
+                environment=item.environment,
+                activation_mode=item.activation_mode,
+            )
+            create_audit_log(
+                db,
+                action="EXECUTION_POLICY_VERSION_ACTIVATED_BULK",
+                entity_type="execution_policy_version",
+                entity_id=activated.version_id,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                severity="info",
+                details={
+                    "policy_code": activated.policy_code,
+                    "activation_mode": item.activation_mode,
+                    "environment": item.environment,
+                },
+            )
+            db.commit()
+            db.refresh(activated)
+            success += 1
+            results.append({
+                "version_id": activated.version_id,
+                "policy_code": activated.policy_code,
+                "state": activated.state,
+                "approval_status": activated.approval_status,
+                "status": "success",
+            })
+        except ValueError as exc:
+            db.rollback()
+            results.append({"version_id": item.version_id, "status": "failed", "error": str(exc)})
+
+    return {
+        "summary": {
+            "total": len(payload.items),
+            "success": success,
+            "failed": len(payload.items) - success,
+        },
+        "results": results,
+    }
+
+
+@router.post("/execution-policies/bulk/rollback")
+def bulk_rollback_execution_policies(
+    payload: BulkRollbackRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    results = []
+    success = 0
+    for item in payload.items:
+        try:
+            row = rollback_policy_version(
+                db,
+                policy_code=item.policy_code,
+                target_version_id=item.target_version_id,
+                actor_user_id=current_user.id,
+                reason=item.reason,
+            )
+            create_audit_log(
+                db,
+                action="EXECUTION_POLICY_VERSION_ROLLBACK_BULK",
+                entity_type="execution_policy_version",
+                entity_id=row.version_id,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                severity="warning",
+                details={
+                    "policy_code": item.policy_code,
+                    "target_version_id": item.target_version_id,
+                    "reason": item.reason,
+                },
+            )
+            db.commit()
+            db.refresh(row)
+            success += 1
+            results.append({
+                "policy_code": row.policy_code,
+                "active_version_id": row.version_id,
+                "state": row.state,
+                "status": "success",
+            })
+        except ValueError as exc:
+            db.rollback()
+            results.append({
+                "policy_code": item.policy_code,
+                "target_version_id": item.target_version_id,
+                "status": "failed",
+                "error": str(exc),
+            })
+
+    return {
+        "summary": {
+            "total": len(payload.items),
+            "success": success,
+            "failed": len(payload.items) - success,
+        },
+        "results": results,
+    }
+
+
+@router.post("/execution-policies/bulk/strategy-binding")
+def bulk_strategy_binding_upsert(
+    payload: BulkStrategyBindingRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    results = []
+    success = 0
+    for item in payload.items:
+        try:
+            row = upsert_strategy_binding(
+                db,
+                strategy_id=item.strategy_id,
+                bound_policy_set=item.bound_policy_set,
+                risk_class=item.risk_class,
+                execution_mode=item.execution_mode,
+                enabled=item.enabled,
+                state=item.state,
+                allowed_symbols=item.allowed_symbols,
+                allowed_environments=item.allowed_environments,
+                allowed_margin_modes=item.allowed_margin_modes,
+                limits=item.limits,
+                state_reason=item.state_reason,
+                actor_user_id=current_user.id,
+            )
+            create_audit_log(
+                db,
+                action="EXECUTION_STRATEGY_BINDING_BULK_UPSERT",
+                entity_type="execution_strategy_binding",
+                entity_id=row.strategy_id,
+                actor_user_id=current_user.id,
+                actor_role=current_user.role.value,
+                severity="info",
+                details={
+                    "bound_policy_set": row.bound_policy_set,
+                    "risk_class": row.risk_class,
+                    "state": row.state,
+                    "enabled": bool(row.enabled),
+                },
+            )
+            db.commit()
+            db.refresh(row)
+            success += 1
+            results.append({
+                "strategy_id": row.strategy_id,
+                "bound_policy_set": row.bound_policy_set,
+                "risk_class": row.risk_class,
+                "state": row.state,
+                "enabled": bool(row.enabled),
+                "status": "success",
+            })
+        except ValueError as exc:
+            db.rollback()
+            results.append({
+                "strategy_id": item.strategy_id,
+                "status": "failed",
+                "error": str(exc),
+            })
+
+    return {
+        "summary": {
+            "total": len(payload.items),
+            "success": success,
+            "failed": len(payload.items) - success,
+        },
+        "results": results,
     }

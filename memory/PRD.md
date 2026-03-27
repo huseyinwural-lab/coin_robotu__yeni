@@ -1,3 +1,23 @@
+## 2026-03-27 — P2 Hard Close (Policy UX & Tooling) Başlatıldı
+
+### Backend kapsamı
+- Builder/validation/diff/simulation/bulk endpointleri `/api/admin/execution-policies/*` altında yayınlandı
+- Activation gate: `errors>0` blok, HIGH risk için `override_high_risk + reason` zorunlu + audit
+- ACTIVE/CANARY aktivasyon modu desteklendi (CANARY aktifte ana policy override edilmiyor)
+- Bulk activate/rollback/strategy binding + satır bazlı sonuç + audit log eklendi
+
+### Frontend kapsamı
+- ExecutionPoliciesPage tab yapısı: Builder, Diff, Simulation, Bulk Ops, Observability
+- Form-based Policy Builder (sınırlı condition set) + read-only JSON view
+- Validation panel + version activation gate UI
+- Diff viewer (yan yana + risk etiketi highlight)
+- Single-intent Simulation panel + Bulk operations panel
+
+### Test durumu
+- Python/Eslint lint PASS
+- Preview URL (REACT_APP_BACKEND_URL) 502 döndüğü için curl/screenshot testleri tamamlanamadı
+- Kullanıcı doğrulaması: validation endpoint / activation gate / builder create akışı
+
 ## 2026-03-27 — P2 Phase-1 (Backend: Multi-Env + Override + Safe Mode) Tamamlandı
 
 ### Uygulanan kapsam (kullanıcı kararlarına uygun)
