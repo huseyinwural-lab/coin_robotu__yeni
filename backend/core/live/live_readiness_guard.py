@@ -2,10 +2,10 @@ from datetime import datetime, timezone
 
 
 def evaluate_live_readiness_guard(readiness_payload: dict) -> dict:
-    state = str(readiness_payload.get("readiness_state") or "READY")
+    state = str(readiness_payload.get("readiness_state") or "UNKNOWN")
     score = float(readiness_payload.get("readiness_confidence_score") or 0.0)
 
-    if state == "BLOCKED":
+    if state != "READY":
         return {
             "action": "BLOCK",
             "reject_trade": True,
@@ -14,17 +14,9 @@ def evaluate_live_readiness_guard(readiness_payload: dict) -> dict:
             "event": {
                 "event": "LIVE_READINESS_BLOCK",
                 "readiness_score": round(score, 2),
+                "readiness_state": state,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             },
-        }
-
-    if state == "WARNING":
-        return {
-            "action": "DOWNSHIFT",
-            "reject_trade": False,
-            "pause_engine": False,
-            "size_multiplier": 0.7,
-            "event": None,
         }
 
     return {

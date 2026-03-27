@@ -39,12 +39,12 @@ def test_execution_readiness_blocked_when_no_connection():
         user = _create_user(db, email_prefix="readiness-none")
         readiness = evaluate_execution_readiness(db, user_id=user.id)
         assert readiness["final_status"] == "BLOCKED"
-        assert "no_exchange_connection" in (readiness.get("reason_codes") or [])
+        assert "EXCHANGE_CONNECTION_MISSING" in (readiness.get("reason_codes") or [])
     finally:
         db.close()
 
 
-def test_execution_readiness_mocked_ready_when_connection_exists():
+def test_execution_readiness_mocked_blocked_when_connection_exists():
     db = SessionLocal()
     try:
         user = _create_user(db, email_prefix="readiness-mocked")
@@ -70,7 +70,7 @@ def test_execution_readiness_mocked_ready_when_connection_exists():
         readiness = evaluate_execution_readiness(db, user_id=user.id)
         assert readiness["mode"] == "MOCKED"
         assert readiness["mocked_flag"] is True
-        assert readiness["final_status"] == "READY"
+        assert readiness["final_status"] == "BLOCKED"
     finally:
         db.close()
 

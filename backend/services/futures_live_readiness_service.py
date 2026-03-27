@@ -10,6 +10,7 @@ from core.live.live_readiness_guard import evaluate_live_readiness_guard
 from core.live.order_reconciliation_engine import reconcile_order_state
 from core.live.position_sync_engine import reconcile_position_state
 from core.live.readiness_score_engine import compute_readiness_score
+from core.readiness.go_live_validator import evaluate_go_live_readiness
 from core.observability.live_readiness_audit import build_live_readiness_audit_events
 from models import ExecutionMetric, PaperPosition, UserExecutionIntent
 from services.risk_engine_service import build_admin_risk_status
@@ -183,8 +184,10 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
     cache_key = f"futures:live-readiness:{user_id}"
     if cache and not refresh:
         cached = _safe_json(cache.get(cache_key), None)
-        if isinstance(cached, dict):
+        if isinstance(cached, dict) and cached.get("go_live_validator"):
             return cached
+
+    validator = evaluate_go_live_readiness(db, cache, user_id=user_id, refresh=refresh)
 
     engine_positions = _engine_positions(db, user_id)
     exchange_positions = _safe_json(cache.get("exchange:futures:positions"), []) if cache else []
@@ -213,7 +216,13 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
         balance_integrity_state=balance_integrity.get("balance_integrity_state", "UNVERIFIED"),
         exchange_latency_state=latency.get("exchange_latency_state", "ELEVATED"),
     )
-    readiness_guard = evaluate_live_readiness_guard(score_payload)
+
+    readiness_guard = evaluate_live_readiness_guard(
+        {
+            "readiness_state": validator.get("readiness_state"),
+            "readiness_confidence_score": validator.get("score"),
+        }
+    )
 
     alerts = [
         item
@@ -250,8 +259,16 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
 
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "readiness_score": score_payload.get("readiness_confidence_score", 0.0),
-        "readiness_state": score_payload.get("readiness_state", "BLOCKED"),
+        "readiness_score": validator.get("score", 0.0),
+        "readiness_state": validator.get("readiness_state", "UNKNOWN"),
+        "go_live_allowed": validator.get("go_live_allowed", False),
+        "execution_allowed": validator.get("execution_allowed", False),
+        "reason_codes": validator.get("reason_codes") or [],
+        "summary": validator.get("summary") or {},
+        "steps": validator.get("steps") or [],
+        "degraded": validator.get("degraded", True),
+        "data_freshness": validator.get("data_freshness") or {},
+        "execution_mode": validator.get("execution_mode"),
         "position_sync_state": position_sync.get("position_sync_state", "UNVERIFIED"),
         "order_reconciliation_state": order_reconciliation.get("order_reconciliation_state", "UNVERIFIED"),
         "balance_integrity_state": balance_integrity.get("balance_integrity_state", "UNVERIFIED"),
@@ -273,6 +290,9 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
         "active_universe_count": active_universe_count,
         "cluster_bias_distribution": cluster_bias_distribution,
         "market_bias_regime": market_bias_regime,
+        "legacy_readiness_score": score_payload.get("readiness_confidence_score", 0.0),
+        "legacy_readiness_state": score_payload.get("readiness_state", "BLOCKED"),
+        "go_live_validator": validator,
     }
 
     if cache:
@@ -287,6 +307,10 @@ def get_futures_readiness_score(db: Session, cache, user_id: str, refresh: bool 
         "generated_at": payload.get("generated_at"),
         "readiness_score": payload.get("readiness_score", 0.0),
         "readiness_state": payload.get("readiness_state", "BLOCKED"),
+        "go_live_allowed": payload.get("go_live_allowed", False),
+        "execution_allowed": payload.get("execution_allowed", False),
+        "reason_codes": payload.get("reason_codes") or [],
+        "summary": payload.get("summary") or {},
         "position_sync_state": payload.get("position_sync_state", "UNVERIFIED"),
         "order_reconciliation_state": payload.get("order_reconciliation_state", "UNVERIFIED"),
         "balance_integrity_state": payload.get("balance_integrity_state", "UNVERIFIED"),
@@ -299,7 +323,6 @@ def apply_live_readiness_guard_to_decisions(db: Session, cache, user_id: str, de
     readiness = get_futures_live_readiness(db, cache, user_id, refresh=False)
     guard = readiness.get("readiness_guard") or {}
     action = str(guard.get("action") or "ALLOW")
-    size_multiplier = float(guard.get("size_multiplier") or 1.0)
 
     events: list[dict] = []
     adjusted: list[dict] = []
@@ -316,12 +339,6 @@ def apply_live_readiness_guard_to_decisions(db: Session, cache, user_id: str, de
             item["reasons"] = sorted(set((item.get("reasons") or []) + ["LIVE_READINESS_BLOCK"]))
             if guard.get("event"):
                 events.append(guard["event"])
-        elif action == "DOWNSHIFT":
-            leverage_decision = {**(item.get("leverage_decision") or {})}
-            old_ratio = float(leverage_decision.get("position_size_ratio") or 1.0)
-            leverage_decision["position_size_ratio"] = round(max(0.05, old_ratio * size_multiplier), 4)
-            item["leverage_decision"] = leverage_decision
-            item["reasons"] = sorted(set((item.get("reasons") or []) + ["LIVE_READINESS_DOWNSHIFT"]))
 
         adjusted.append(item)
 

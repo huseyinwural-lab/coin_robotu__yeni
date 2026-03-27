@@ -1,3 +1,26 @@
+## 2026-03-27 — P0 Futures Live Readiness Hardening (Go-Live Validator)
+
+### Mimari değişiklikler
+- Yeni merkezi motor: `backend/core/readiness/go_live_validator.py` (tek readiness state + step-based çıktı)
+- Execution gate: `services/execution_readiness_service.enforce_execution_guard_or_raise` validator sonucuna bağlandı
+- Legacy readiness servisleri/endpointleri alias olarak validator çıktısını projekte ediyor
+- Live readiness guard artık READY dışındaki tüm durumlarda BLOCK
+
+### Kapsanan blocking check’ler (P0 kanonik)
+- mode_integrity, explicit_live_enabled, kill_switch_clear, release_gate_pass
+- exchange_connection_ready, credentials_env_match
+- balances_present, positions_present, open_orders_present, market_data_present
+
+### Veri katmanı güvenliği
+- Cache/fallback kaynakları işaretleniyor, eksik veri READY üretmiyor
+- Degraded/unknown durumlarında response shape korunuyor
+
+### Test durumu
+- Yeni unit testler: `test_go_live_validator_p0.py`
+- Güncellenen regression: execution_readiness_contract + live_readiness_guard
+- Pytest: `pytest test_go_live_validator_p0.py test_execution_readiness_contract.py test_live_readiness_guard.py` (PASS)
+- Smoke: `/api/admin/futures/live-readiness` -> readiness_state BLOCKED, steps=10
+
 ## 2026-03-27 — P2 Final Close Verification (E2E)
 
 ### Doğrulanan akışlar

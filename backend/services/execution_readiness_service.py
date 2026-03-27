@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from models import PaperPosition, UserExchangeConnection
 from services.audit_service import create_guard_audit_event
-from services.exchange_adapter.execution_adapter import ExchangeExecutionAdapter
 from services.explainability_rules_service import build_trade_explain
 
 
@@ -18,102 +17,54 @@ def _latest_connection(db: Session, user_id: str | None) -> UserExchangeConnecti
 
 def evaluate_execution_readiness(db: Session, *, user_id: str | None = None) -> dict:
     from services.live_mode_service import release_gate_view
+    from services.pipeline.runtime import pipeline_runtime
+    from core.readiness.go_live_validator import evaluate_go_live_readiness
+
+    cache = pipeline_runtime.cache if pipeline_runtime else None
+    validator = evaluate_go_live_readiness(db, cache, user_id=user_id)
+    step_index = {step.get("step_key"): step for step in validator.get("steps") or []}
 
     row = _latest_connection(db, user_id)
     snapshot = dict(row.readiness_snapshot or {}) if row else {}
-
-    has_connection = row is not None
-    connection_health = str(snapshot.get("connection_health") or "").lower()
-    exchange_connection_ok = has_connection and connection_health in {"online", "degraded"}
-    permissions_ok = has_connection and bool(snapshot.get("can_trade"))
-
-    mode = "MOCKED"
-    order_test_ok = False
-    probe: dict = {}
-
-    if row and str(row.exchange or "").strip().lower() == "binance" and user_id:
-        validation_success = bool(snapshot.get("validation_success") or snapshot.get("is_valid"))
-        can_trade_snapshot = bool(snapshot.get("can_trade"))
-        last_error_reason = str(snapshot.get("last_error_reason") or "").strip().lower()
-
-        order_test_ok = validation_success and can_trade_snapshot
-        mode = "LIVE" if order_test_ok else "MOCKED"
-        probe = {
-            "status": "SUBMITTED" if order_test_ok else "MOCKED",
-            "mocked": not order_test_ok,
-            "source": "exchange_connection_snapshot",
-            "last_error_reason": last_error_reason,
-            "exchange": row.exchange,
-            "market_type": row.market_type,
-            "environment": row.environment,
-            "validation_success": validation_success,
-            "can_trade": can_trade_snapshot,
-        }
-    else:
-        adapter = ExchangeExecutionAdapter()
-        probe = adapter.submit_order(
-            exchange=(row.exchange if row else "bybit"),
-            symbol="BTCUSDT",
-            side="buy",
-            price=50000,
-            qty=0.001,
-            leverage=1,
-            environment=(row.environment if row else "testnet"),
-        )
-        order_test_ok = str(probe.get("status") or "").upper() in {"MOCKED", "SUBMITTED"}
-        mode = "MOCKED" if bool(probe.get("mocked")) else "LIVE"
-
     latency_ms = snapshot.get("validation_latency_ms") or snapshot.get("latency_ms") or 0
     try:
         latency_ms = max(int(float(latency_ms)), 0)
     except (TypeError, ValueError):
         latency_ms = 0
 
-    reason_codes: list[str] = []
-    if not has_connection:
-        reason_codes.append("no_exchange_connection")
-    if not exchange_connection_ok and has_connection:
-        reason_codes.append("exchange_connection_unhealthy")
-    if not permissions_ok and has_connection:
-        reason_codes.append("missing_trade_permission")
-    if not order_test_ok:
-        reason_codes.append("order_test_failed")
-        if str(probe.get("last_error_reason") or "").strip():
-            reason_codes.append(str(probe.get("last_error_reason")).strip())
+    connection_step = step_index.get("exchange_connection_ready") or {}
+    permissions_status = "OK" if connection_step.get("status") == "PASS" else "FAIL"
+    exchange_connection_status = "OK" if connection_step.get("status") == "PASS" else "FAIL"
 
-    if mode == "MOCKED":
-        mocked_source = str(probe.get("source") or "")
-        if mocked_source == "exchange_connection_snapshot":
-            final_status = "READY" if (exchange_connection_ok and permissions_ok) else "BLOCKED"
-        else:
-            final_status = "READY" if has_connection else "BLOCKED"
-        if final_status == "READY":
-            reason_codes.append("mocked_mode_active")
-    else:
-        final_status = "READY" if (exchange_connection_ok and permissions_ok and order_test_ok) else "BLOCKED"
+    mode = "LIVE" if str(validator.get("execution_mode") or "").upper() == "LIVE" else "MOCKED"
+    mocked_flag = mode != "LIVE"
+
+    readiness_state = validator.get("readiness_state") or "UNKNOWN"
+    final_status = "READY" if readiness_state == "READY" else "BLOCKED"
 
     try:
         gate_snapshot = release_gate_view(db, environment="prod")
     except Exception:  # pragma: no cover - runtime defensive fallback
         gate_snapshot = {}
     override_active = bool(gate_snapshot.get("override_id"))
-    if final_status == "BLOCKED" and override_active:
-        final_status = "READY"
-        reason_codes.append("execution_guard_override_active")
 
-    exchange_connection_status = "OK" if exchange_connection_ok else "FAIL"
-    permissions_status = "OK" if permissions_ok else "FAIL"
+    reason_codes = list(validator.get("reason_codes") or [])
+    if not reason_codes and final_status != "READY":
+        reason_codes.append("READINESS_FAIL")
 
     return {
         "exchange_connection": exchange_connection_status,
         "permissions": permissions_status,
         "latency_ms": latency_ms,
-        "order_test": "OK" if order_test_ok else "FAIL",
+        "order_test": "OK" if validator.get("execution_allowed") else "FAIL",
         "mode": mode,
         "final_status": final_status,
-        "mocked_flag": mode == "MOCKED",
+        "mocked_flag": mocked_flag,
         "override_active": override_active,
         "reason_codes": sorted(set(reason_codes)),
+        "readiness_state": readiness_state,
+        "execution_allowed": bool(validator.get("execution_allowed")),
+        "go_live_allowed": bool(validator.get("go_live_allowed")),
     }
 
 
@@ -131,8 +82,8 @@ def enforce_execution_guard_or_raise(
     primary_reason = str((reason_codes[0] if reason_codes else "READINESS_FAIL") or "READINESS_FAIL").strip().upper()
     mode = str(readiness.get("mode") or "MOCKED").lower()
 
-    if str(readiness.get("final_status") or "") == "READY":
-        allowed_reason = "OVERRIDE_ACTIVE" if bool(readiness.get("override_active")) else "READY"
+    if bool(readiness.get("execution_allowed")):
+        allowed_reason = "READY"
         create_guard_audit_event(
             db,
             event="EXECUTION_ALLOWED",
@@ -144,18 +95,6 @@ def enforce_execution_guard_or_raise(
             severity="info",
             metadata={"source": source, "mode": mode, "reason_codes": reason_codes},
         )
-        if bool(readiness.get("override_active")):
-            create_guard_audit_event(
-                db,
-                event="EXECUTION_OVERRIDE_ENABLED",
-                reason="OVERRIDE_ACTIVE",
-                symbol=symbol,
-                user_id=user_id,
-                actor_user_id=actor_user_id,
-                actor_role=actor_role,
-                severity="warning",
-                metadata={"source": source, "mode": mode, "reason_codes": reason_codes},
-            )
         return readiness
 
     create_guard_audit_event(

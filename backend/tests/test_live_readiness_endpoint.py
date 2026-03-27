@@ -29,6 +29,13 @@ def test_live_readiness_endpoint_contract(admin_headers):
     payload = response.json()
     fields = [
         "readiness_score",
+        "readiness_state",
+        "go_live_allowed",
+        "execution_allowed",
+        "summary",
+        "steps",
+        "reason_codes",
+        "data_freshness",
         "position_sync_state",
         "order_reconciliation_state",
         "balance_integrity_state",

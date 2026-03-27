@@ -13,3 +13,8 @@ def test_live_readiness_guard_blocks_when_state_blocked():
     payload = evaluate_live_readiness_guard({"readiness_state": "BLOCKED", "readiness_confidence_score": 62})
     assert payload["action"] == "BLOCK"
     assert payload["event"]["event"] == "LIVE_READINESS_BLOCK"
+
+
+def test_live_readiness_guard_blocks_when_state_warning():
+    payload = evaluate_live_readiness_guard({"readiness_state": "WARNING", "readiness_confidence_score": 80})
+    assert payload["action"] == "BLOCK"

@@ -70,6 +70,18 @@ class FuturesOrderPreflight:
             }
         )
 
+        go_live_validator = context.get("go_live_validator")
+        env = str(context.get("environment") or "").lower()
+        if go_live_validator and env in {"live", "prod", "production"}:
+            allowed = bool(go_live_validator.get("execution_allowed"))
+            checks.append(
+                {
+                    "key": "go_live_validator",
+                    "pass": allowed,
+                    "reason": "GO_LIVE_BLOCKED" if not allowed else "PASS",
+                }
+            )
+
         environment = str(context.get("environment") or "testnet").lower()
         live_endpoint_forbidden = environment == "testnet"
         checks.append(
