@@ -5,11 +5,14 @@ import { AuditTimelinePanel } from "@/components/exchanges/AuditTimelinePanel";
 import { CapabilityDiscoveryPanel } from "@/components/exchanges/CapabilityDiscoveryPanel";
 import { CapabilityMatrixPanel } from "@/components/exchanges/CapabilityMatrixPanel";
 import { ConflictDetectionPanel } from "@/components/exchanges/ConflictDetectionPanel";
+import { ConflictAutoRemediationPanel } from "@/components/exchanges/ConflictAutoRemediationPanel";
 import { ControlPlaneCockpitPanel } from "@/components/exchanges/ControlPlaneCockpitPanel";
 import { MarketPolicyPanel } from "@/components/exchanges/MarketPolicyPanel";
 import { OperationalHealthPanel } from "@/components/exchanges/OperationalHealthPanel";
 import { RoutingPolicyPanel } from "@/components/exchanges/RoutingPolicyPanel";
 import { RoutingPreviewPanel } from "@/components/exchanges/RoutingPreviewPanel";
+import { StrategyVenueHeatmapPanel } from "@/components/exchanges/StrategyVenueHeatmapPanel";
+import { ValidationCenterPanel } from "@/components/exchanges/ValidationCenterPanel";
 import { apiClient } from "@/lib/api";
 
 const defaultAuditFilters = { limit: 50 };
@@ -28,6 +31,9 @@ export const AdminExchangesPage = () => {
   const [failoverPolicyState, setFailoverPolicyState] = useState({ data: { rules: {}, runtime_state: {}, transition_logs: [], routing_decision_logs: [] }, loading: true, error: null });
   const [cockpitState, setCockpitState] = useState({ data: null, loading: true, error: null });
   const [conflictState, setConflictState] = useState({ data: null, loading: true, error: null });
+  const [validationCenterState, setValidationCenterState] = useState({ data: null, loading: true, error: null });
+  const [heatmapState, setHeatmapState] = useState({ data: null, loading: true, error: null });
+  const [remediationDraftState, setRemediationDraftState] = useState({ data: null, loading: true, error: null });
   const [routingPreviewState, setRoutingPreviewState] = useState(defaultPanelState);
   const [operationalHealthState, setOperationalHealthState] = useState({ data: null, loading: true, error: null });
   const [auditTimelineState, setAuditTimelineState] = useState({ data: { items: [] }, loading: true, error: null });
@@ -121,6 +127,36 @@ export const AdminExchangesPage = () => {
     }
   }, []);
 
+  const loadValidationCenter = useCallback(async (params = { window_hours: 24, limit: 200 }) => {
+    setValidationCenterState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const { data } = await apiClient.get("/venues/admin/validation-center", { params });
+      setValidationCenterState({ data: data || null, loading: false, error: null });
+    } catch (error) {
+      setValidationCenterState({ data: null, loading: false, error: error?.response?.data?.detail || "Validation center yüklenemedi" });
+    }
+  }, []);
+
+  const loadHeatmap = useCallback(async (params = { window_hours: 24 }) => {
+    setHeatmapState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const { data } = await apiClient.get("/venues/admin/strategy-venue-heatmap", { params });
+      setHeatmapState({ data: data || null, loading: false, error: null });
+    } catch (error) {
+      setHeatmapState({ data: null, loading: false, error: error?.response?.data?.detail || "Strategy heatmap yüklenemedi" });
+    }
+  }, []);
+
+  const loadRemediationDrafts = useCallback(async () => {
+    setRemediationDraftState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const { data } = await apiClient.get("/venues/admin/conflict-auto-remediation-drafts");
+      setRemediationDraftState({ data: data || null, loading: false, error: null });
+    } catch (error) {
+      setRemediationDraftState({ data: null, loading: false, error: error?.response?.data?.detail || "Conflict remediation draft yüklenemedi" });
+    }
+  }, []);
+
   const loadAuditTimeline = useCallback(async (filters = defaultAuditFilters) => {
     setAuditTimelineState((prev) => ({ ...prev, loading: true, error: null }));
     setLastAuditFilters(filters);
@@ -141,8 +177,11 @@ export const AdminExchangesPage = () => {
     loadOperationalHealth();
     loadControlPlaneCockpit();
     loadConflictDetection();
+    loadValidationCenter();
+    loadHeatmap();
+    loadRemediationDrafts();
     loadAuditTimeline(defaultAuditFilters);
-  }, [loadBootstrap, loadCapabilityMatrix, loadMarketPolicy, loadRoutingPolicies, loadFailoverPolicies, loadOperationalHealth, loadControlPlaneCockpit, loadConflictDetection, loadAuditTimeline]);
+  }, [loadBootstrap, loadCapabilityMatrix, loadMarketPolicy, loadRoutingPolicies, loadFailoverPolicies, loadOperationalHealth, loadControlPlaneCockpit, loadConflictDetection, loadValidationCenter, loadHeatmap, loadRemediationDrafts, loadAuditTimeline]);
 
   const runCapabilityDiscovery = useCallback(async (payload) => {
     setCapabilityDiscoveryState({ data: null, loading: true, error: null });
@@ -150,63 +189,91 @@ export const AdminExchangesPage = () => {
       const { data } = await apiClient.post("/venues/admin/capability-discovery", payload);
       setCapabilityDiscoveryState({ data: data || null, loading: false, error: null });
       toast.success("Capability discovery tamamlandı");
-      await Promise.all([loadCapabilityMatrix(), loadConflictDetection(), loadAuditTimeline(lastAuditFilters)]);
+      await Promise.all([loadCapabilityMatrix(), loadConflictDetection(), loadRemediationDrafts(), loadAuditTimeline(lastAuditFilters)]);
     } catch (error) {
       const message = error?.response?.data?.detail || "Capability discovery başarısız";
       setCapabilityDiscoveryState({ data: null, loading: false, error: message });
       toast.error(message);
     }
-  }, [loadAuditTimeline, loadCapabilityMatrix, lastAuditFilters]);
+  }, [loadAuditTimeline, loadCapabilityMatrix, loadConflictDetection, loadRemediationDrafts, lastAuditFilters]);
 
   const saveCapabilityOverride = useCallback(async (payload) => {
     try {
       await apiClient.put("/venues/admin/capability-matrix/override", payload);
       toast.success("Capability override kaydedildi");
-      await Promise.all([loadCapabilityMatrix(), loadConflictDetection(), loadAuditTimeline(lastAuditFilters)]);
+      await Promise.all([loadCapabilityMatrix(), loadConflictDetection(), loadRemediationDrafts(), loadAuditTimeline(lastAuditFilters)]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Capability override kaydedilemedi");
     }
-  }, [loadAuditTimeline, loadCapabilityMatrix, lastAuditFilters]);
+  }, [loadAuditTimeline, loadCapabilityMatrix, loadConflictDetection, loadRemediationDrafts, lastAuditFilters]);
 
   const saveMarketPolicy = useCallback(async (payload) => {
     try {
       await apiClient.put("/venues/admin/market-policy-layer", payload);
       toast.success("Market policy güncellendi");
-      await Promise.all([loadMarketPolicy(), loadConflictDetection(), loadAuditTimeline(lastAuditFilters)]);
+      await Promise.all([loadMarketPolicy(), loadConflictDetection(), loadRemediationDrafts(), loadAuditTimeline(lastAuditFilters)]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Market policy kaydedilemedi");
     }
-  }, [loadAuditTimeline, loadMarketPolicy, lastAuditFilters]);
+  }, [loadAuditTimeline, loadMarketPolicy, loadConflictDetection, loadRemediationDrafts, lastAuditFilters]);
 
   const saveRoutingPolicy = useCallback(async (payload) => {
     try {
       await apiClient.put("/venues/admin/routing-policies", payload);
       toast.success("Routing policy güncellendi");
-      await Promise.all([loadRoutingPolicies(), loadControlPlaneCockpit(), loadConflictDetection(), loadAuditTimeline(lastAuditFilters)]);
+      await Promise.all([loadRoutingPolicies(), loadControlPlaneCockpit(), loadConflictDetection(), loadHeatmap(), loadRemediationDrafts(), loadAuditTimeline(lastAuditFilters)]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Routing policy kaydedilemedi");
     }
-  }, [loadAuditTimeline, loadRoutingPolicies, loadControlPlaneCockpit, loadConflictDetection, lastAuditFilters]);
+  }, [loadAuditTimeline, loadRoutingPolicies, loadControlPlaneCockpit, loadConflictDetection, loadHeatmap, loadRemediationDrafts, lastAuditFilters]);
 
   const saveFailoverPolicy = useCallback(async (payload) => {
     try {
       await apiClient.put("/venues/admin/failover-policies", payload);
       toast.success("Failover policy güncellendi");
-      await Promise.all([loadFailoverPolicies(), loadControlPlaneCockpit(), loadConflictDetection(), loadAuditTimeline(lastAuditFilters)]);
+      await Promise.all([loadFailoverPolicies(), loadControlPlaneCockpit(), loadConflictDetection(), loadHeatmap(), loadRemediationDrafts(), loadAuditTimeline(lastAuditFilters)]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Failover policy kaydedilemedi");
     }
-  }, [loadAuditTimeline, loadFailoverPolicies, loadControlPlaneCockpit, loadConflictDetection, lastAuditFilters]);
+  }, [loadAuditTimeline, loadFailoverPolicies, loadControlPlaneCockpit, loadConflictDetection, loadHeatmap, loadRemediationDrafts, lastAuditFilters]);
 
   const applyFailoverManualOverride = useCallback(async (payload) => {
     try {
       await apiClient.post("/venues/admin/failover/manual-override", payload);
       toast.success("Failover manual override uygulandı");
-      await Promise.all([loadFailoverPolicies(), loadControlPlaneCockpit(), loadConflictDetection(), loadAuditTimeline(lastAuditFilters)]);
+      await Promise.all([loadFailoverPolicies(), loadControlPlaneCockpit(), loadConflictDetection(), loadHeatmap(), loadRemediationDrafts(), loadAuditTimeline(lastAuditFilters)]);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Failover manual override başarısız");
     }
-  }, [loadAuditTimeline, loadFailoverPolicies, loadControlPlaneCockpit, loadConflictDetection, lastAuditFilters]);
+  }, [loadAuditTimeline, loadFailoverPolicies, loadControlPlaneCockpit, loadConflictDetection, loadHeatmap, loadRemediationDrafts, lastAuditFilters]);
+
+  const rerunValidationCenter = useCallback(async (payload) => {
+    try {
+      await apiClient.post("/venues/admin/validation-center/rerun", payload);
+      toast.success("Validation rerun tamamlandı");
+      await Promise.all([loadValidationCenter(), loadControlPlaneCockpit(), loadHeatmap()]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Validation rerun başarısız");
+    }
+  }, [loadValidationCenter, loadControlPlaneCockpit, loadHeatmap]);
+
+  const applyRemediationDraft = useCallback(async (payload) => {
+    try {
+      await apiClient.post("/venues/admin/conflict-auto-remediation-apply", payload);
+      toast.success("Remediation draft uygulandı");
+      await Promise.all([
+        loadConflictDetection(),
+        loadRemediationDrafts(),
+        loadControlPlaneCockpit(),
+        loadRoutingPolicies(),
+        loadFailoverPolicies(),
+        loadHeatmap(),
+        loadAuditTimeline(lastAuditFilters),
+      ]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Remediation draft uygulanamadı");
+    }
+  }, [loadConflictDetection, loadRemediationDrafts, loadControlPlaneCockpit, loadRoutingPolicies, loadFailoverPolicies, loadHeatmap, loadAuditTimeline, lastAuditFilters]);
 
   const runRoutingPreview = useCallback(async (payload) => {
     setRoutingPreviewState({ data: null, loading: true, error: null });
@@ -247,6 +314,32 @@ export const AdminExchangesPage = () => {
           onRefresh={loadConflictDetection}
         />
       </div>
+
+      <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-exchanges-validation-heatmap-grid">
+        <ValidationCenterPanel
+          approvedUsers={approvedUsers}
+          data={validationCenterState.data}
+          loading={validationCenterState.loading}
+          error={validationCenterState.error}
+          onRefresh={loadValidationCenter}
+          onRerun={rerunValidationCenter}
+        />
+
+        <StrategyVenueHeatmapPanel
+          data={heatmapState.data}
+          loading={heatmapState.loading}
+          error={heatmapState.error}
+          onRefresh={loadHeatmap}
+        />
+      </div>
+
+      <ConflictAutoRemediationPanel
+        data={remediationDraftState.data}
+        loading={remediationDraftState.loading}
+        error={remediationDraftState.error}
+        onRefresh={loadRemediationDrafts}
+        onApplyDraft={applyRemediationDraft}
+      />
 
       <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-exchanges-panels-grid">
         <OperationalHealthPanel

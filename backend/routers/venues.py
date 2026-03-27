@@ -44,6 +44,8 @@ from schemas import (
     MarketPolicyLayerUpdateRequest,
     FailoverPolicyUpsertRequest,
     FailoverManualOverrideRequest,
+    ValidationCenterRerunRequest,
+    ConflictAutoRemediationApplyRequest,
     RoutingPolicyUpsertRequest,
     RoutingPreviewRequest,
 )
@@ -957,6 +959,286 @@ def _build_conflict_detection_report(db: Session) -> dict:
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def _status_rank(status_value: str) -> int:
+    normalized = str(status_value or "PASS").upper()
+    return 2 if normalized == "BLOCK" else (1 if normalized == "WARN" else 0)
+
+
+def _append_validation_timeline_event(config: dict, payload: dict) -> dict:
+    timeline = list(config.get("items") or [])
+    event = {
+        "id": str(uuid.uuid4()),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        **payload,
+    }
+    timeline.insert(0, event)
+    config["items"] = timeline[:1000]
+    return event
+
+
+def _build_validation_center_payload(db: Session, *, window_hours: int = 24, limit: int = 200) -> dict:
+    config = get_control_plane_config(db, config_key="validation_center_timeline", default={"items": []})
+    items = list(config.get("items") or [])
+
+    now_utc = datetime.now(timezone.utc)
+    lower_bound = now_utc - timedelta(hours=window_hours)
+    recent_items = [
+        row for row in items if (_parse_iso_datetime(row.get("created_at")) or now_utc) >= lower_bound
+    ]
+    recent_items = recent_items[:limit]
+
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for row in recent_items:
+        key = str(row.get("strategy_key") or "global")
+        grouped[key].append(row)
+
+    drift_alerts = []
+    for strategy_key, logs in grouped.items():
+        ordered_logs = sorted(logs, key=lambda item: item.get("created_at") or "")
+        first_status = str((ordered_logs[0] or {}).get("net_status") or "PASS").upper()
+        last_status = str((ordered_logs[-1] or {}).get("net_status") or "PASS").upper()
+        if first_status == "PASS" and last_status in {"WARN", "BLOCK"}:
+            drift_alerts.append(
+                {
+                    "strategy_key": strategy_key,
+                    "from_status": first_status,
+                    "to_status": last_status,
+                    "reason_code": "validation_drift_pass_to_warn_or_block",
+                    "event_count": len(ordered_logs),
+                    "latest_at": (ordered_logs[-1] or {}).get("created_at"),
+                    "severity": "high" if last_status == "BLOCK" else "medium",
+                }
+            )
+
+    diff_items = []
+    for strategy_key, logs in grouped.items():
+        ordered_logs = sorted(logs, key=lambda item: item.get("created_at") or "")
+        for previous, current in zip(ordered_logs, ordered_logs[1:]):
+            if previous.get("net_status") != current.get("net_status"):
+                diff_items.append(
+                    {
+                        "strategy_key": strategy_key,
+                        "from_status": previous.get("net_status"),
+                        "to_status": current.get("net_status"),
+                        "from_at": previous.get("created_at"),
+                        "to_at": current.get("created_at"),
+                    }
+                )
+
+    summary = {
+        "total_events": len(recent_items),
+        "pass_count": sum(1 for row in recent_items if str(row.get("net_status") or "PASS").upper() == "PASS"),
+        "warn_count": sum(1 for row in recent_items if str(row.get("net_status") or "PASS").upper() == "WARN"),
+        "block_count": sum(1 for row in recent_items if str(row.get("net_status") or "PASS").upper() == "BLOCK"),
+        "drift_alert_count": len(drift_alerts),
+    }
+
+    return {
+        "window_hours": window_hours,
+        "summary": summary,
+        "timeline": recent_items,
+        "diff_items": diff_items[:300],
+        "drift_alerts": sorted(drift_alerts, key=lambda item: (_status_rank(item.get("to_status")), item.get("latest_at") or ""), reverse=True),
+        "generated_at": now_utc.isoformat(),
+    }
+
+
+def _build_strategy_venue_heatmap_payload(db: Session, *, window_hours: int = 24) -> dict:
+    runtime_config = _get_failover_runtime_config(db)
+    routing_policy = get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
+
+    now_utc = datetime.now(timezone.utc)
+    lower_bound = now_utc - timedelta(hours=window_hours)
+
+    decision_logs = [
+        row
+        for row in (runtime_config.get("routing_decision_logs") or [])
+        if (_parse_iso_datetime(row.get("created_at")) or now_utc) >= lower_bound
+    ]
+    transition_logs = [
+        row
+        for row in (runtime_config.get("transition_logs") or [])
+        if (_parse_iso_datetime(row.get("created_at")) or now_utc) >= lower_bound
+    ]
+
+    by_strategy: dict[str, dict] = {}
+    for row in decision_logs:
+        key = str(row.get("key") or "")
+        strategy_bucket = by_strategy.setdefault(
+            key,
+            {
+                "key": key,
+                "user_id": row.get("user_id"),
+                "strategy_id": row.get("strategy_id"),
+                "market_type": row.get("market_type"),
+                "environment": row.get("environment"),
+                "selections": defaultdict(int),
+                "total_routes": 0,
+            },
+        )
+        selected = str(row.get("selected_venue") or "").strip().lower()
+        if selected:
+            strategy_bucket["selections"][selected] += 1
+            strategy_bucket["total_routes"] += 1
+
+    transition_count_map: dict[str, int] = defaultdict(int)
+    for item in transition_logs:
+        transition_count_map[str(item.get("key") or "")] += 1
+
+    strategy_rows = []
+    drift_rows = []
+    routing_rules = routing_policy.get("rules") or {}
+    for key, bucket in by_strategy.items():
+        user_id = str(bucket.get("user_id") or "")
+        strategy_id = str(bucket.get("strategy_id") or "")
+        rule_key = f"{user_id}:{strategy_id}"
+        routing_rule = dict(routing_rules.get(rule_key) or {})
+        allocation_rows = list(routing_rule.get("capital_allocation") or [])
+        allocation_map = {
+            str((row or {}).get("venue") or "").strip().lower(): float((row or {}).get("weight") or (row or {}).get("allocation_pct") or 0)
+            for row in allocation_rows
+            if str((row or {}).get("venue") or "").strip()
+        }
+
+        total_routes = max(1, int(bucket.get("total_routes") or 0))
+        distribution = []
+        for venue, count in sorted((bucket.get("selections") or {}).items(), key=lambda pair: pair[1], reverse=True):
+            actual_ratio = round(count / total_routes, 4)
+            target_ratio = allocation_map.get(venue)
+            drift = round(abs(actual_ratio - float(target_ratio)), 4) if target_ratio is not None else None
+            distribution.append(
+                {
+                    "venue": venue,
+                    "selected_count": count,
+                    "actual_ratio": actual_ratio,
+                    "target_ratio": target_ratio,
+                    "allocation_drift": drift,
+                }
+            )
+            if drift is not None:
+                drift_rows.append({"strategy_key": key, "venue": venue, "allocation_drift": drift})
+
+        strategy_rows.append(
+            {
+                "key": key,
+                "user_id": bucket.get("user_id"),
+                "strategy_id": bucket.get("strategy_id"),
+                "market_type": bucket.get("market_type"),
+                "environment": bucket.get("environment"),
+                "route_churn_count": transition_count_map.get(key, 0),
+                "total_routes": bucket.get("total_routes") or 0,
+                "venue_distribution": distribution,
+            }
+        )
+
+    top_drifts = sorted(drift_rows, key=lambda item: item.get("allocation_drift") or 0, reverse=True)[:30]
+    return {
+        "window_hours": window_hours,
+        "strategies": strategy_rows,
+        "top_allocation_drifts": top_drifts,
+        "generated_at": now_utc.isoformat(),
+    }
+
+
+def _build_conflict_auto_remediation_drafts(db: Session) -> list[dict]:
+    conflict_report = _build_conflict_detection_report(db)
+    routing_policy = get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
+    failover_policy = _get_failover_policy_config(db)
+
+    drafts = []
+    for alert in conflict_report.get("alerts") or []:
+        reason_code = str(alert.get("reason_code") or "")
+        entity_id = str(alert.get("entity_id") or "")
+        draft = {
+            "draft_id": f"{reason_code}:{entity_id}",
+            "reason_code": reason_code,
+            "entity_id": entity_id,
+            "severity": alert.get("severity"),
+            "message": alert.get("message"),
+            "endpoint": None,
+            "payload": None,
+            "action_summary": None,
+        }
+
+        if reason_code == "default_venue_blocked":
+            rule = dict((routing_policy.get("rules") or {}).get(entity_id) or {})
+            default_venue = str(rule.get("default_venue") or "").strip().lower()
+            blocked = [item for item in _normalize_venue_list(rule.get("blocked_venues") or []) if item != default_venue]
+            draft["endpoint"] = "PUT /api/venues/admin/routing-policies"
+            user_id, strategy_id = entity_id.split(":")[:2]
+            draft["payload"] = {
+                "user_id": user_id,
+                "strategy_id": strategy_id,
+                "default_venue": default_venue,
+                "preferred_venues": _normalize_venue_list(rule.get("preferred_venues") or []),
+                "blocked_venues": blocked,
+                "capital_allocation": rule.get("capital_allocation") or [],
+                "execution_policy_override": rule.get("execution_policy_override") or {},
+            }
+            draft["action_summary"] = "Default venue'yu blocked listeden kaldır"
+
+        elif reason_code == "capital_allocation_missing":
+            rule = dict((routing_policy.get("rules") or {}).get(entity_id) or {})
+            venues = _normalize_venue_list([rule.get("default_venue"), *(rule.get("preferred_venues") or [])]) or ["binance"]
+            weight = round(1 / len(venues), 4)
+            user_id, strategy_id = entity_id.split(":")[:2]
+            draft["endpoint"] = "PUT /api/venues/admin/routing-policies"
+            draft["payload"] = {
+                "user_id": user_id,
+                "strategy_id": strategy_id,
+                "default_venue": str(rule.get("default_venue") or venues[0]).strip().lower(),
+                "preferred_venues": _normalize_venue_list(rule.get("preferred_venues") or []),
+                "blocked_venues": _normalize_venue_list(rule.get("blocked_venues") or []),
+                "capital_allocation": [{"venue": venue, "weight": weight} for venue in venues],
+                "execution_policy_override": rule.get("execution_policy_override") or {},
+            }
+            draft["action_summary"] = "Eksik capital_allocation için eşit dağılım öner"
+
+        elif reason_code == "primary_force_disabled":
+            rule = dict((failover_policy.get("rules") or {}).get(entity_id) or {})
+            manual_override = dict(rule.get("manual_override") or {})
+            primary_venue = str(rule.get("primary_venue") or "").strip().lower()
+            force_disable = [item for item in _normalize_venue_list(manual_override.get("force_disable") or []) if item != primary_venue]
+            draft["endpoint"] = "POST /api/venues/admin/failover/manual-override"
+            user_id, strategy_id, market_type, environment = entity_id.split(":")[:4]
+            draft["payload"] = {
+                "user_id": user_id,
+                "strategy_id": strategy_id,
+                "market_type": market_type,
+                "environment": environment,
+                "force_route": manual_override.get("force_route"),
+                "force_disable": force_disable,
+                "reason": "auto_remediation_primary_force_disabled",
+                "clear_override": False,
+            }
+            draft["action_summary"] = "Primary venue'yu force_disable listesinden çıkar"
+
+        elif reason_code == "primary_secondary_same":
+            rule = dict((failover_policy.get("rules") or {}).get(entity_id) or {})
+            fallback_chain = _normalize_venue_list(rule.get("fallback_chain") or [])
+            new_secondary = fallback_chain[0] if fallback_chain else None
+            user_id, strategy_id, market_type, environment = entity_id.split(":")[:4]
+            draft["endpoint"] = "PUT /api/venues/admin/failover-policies"
+            draft["payload"] = {
+                "user_id": user_id,
+                "strategy_id": strategy_id,
+                "market_type": market_type,
+                "environment": environment,
+                "primary_venue": rule.get("primary_venue"),
+                "secondary_venue": new_secondary,
+                "fallback_chain": fallback_chain,
+                "auto_reroute_enabled": bool(rule.get("auto_reroute_enabled", True)),
+                "auto_trigger_thresholds": rule.get("auto_trigger_thresholds") or {"latency_ms": 1200, "error_rate_pct": 20, "validation_failure_pct": 25},
+                "manual_override": rule.get("manual_override") or {"force_route": None, "force_disable": [], "reason": None},
+            }
+            draft["action_summary"] = "Secondary venue değerini primary'den farklı olacak şekilde güncelle"
+
+        if draft.get("endpoint"):
+            drafts.append(draft)
+
+    return drafts
 
 
 @router.get("/admin/exchanges", response_model=list[ExchangeRegistryResponse])
@@ -2246,7 +2528,25 @@ def admin_routing_preview_v2(
             "selection_reason": failover_plan.get("selection_reason"),
         },
     )
+
+    validation_timeline_config = get_control_plane_config(db, config_key="validation_center_timeline", default={"items": []})
+    validation_timeline_event = _append_validation_timeline_event(
+        validation_timeline_config,
+        {
+            "strategy_key": failover_key,
+            "user_id": payload.user_id,
+            "strategy_id": payload.strategy_id,
+            "market_type": payload.market_type,
+            "environment": payload.environment,
+            "net_status": validation_report.get("net_status"),
+            "reason_codes": validation_report.get("reason_codes") or [],
+            "checks": validation_report.get("checks") or [],
+            "source": "routing_preview_v2",
+        },
+    )
+
     upsert_control_plane_config(db, config_key="failover_runtime", payload=failover_runtime_config, actor_user_id=current_admin.id)
+    upsert_control_plane_config(db, config_key="validation_center_timeline", payload=validation_timeline_config, actor_user_id=current_admin.id)
 
     if failover_transition:
         create_audit_log(
@@ -2288,6 +2588,7 @@ def admin_routing_preview_v2(
         "failover_transition": failover_transition,
         "failover_transition_logs": [row for row in (failover_runtime_config.get("transition_logs") or []) if row.get("key") == failover_key][:20],
         "routing_decision_log": decision_log,
+        "validation_timeline_event": validation_timeline_event,
         "routing_decision_trace": ordered,
         "policy_impact": selected_path.get("policy_effect") or {},
         "capability_impact": selected_path.get("capability_effect") or {},
@@ -2317,6 +2618,8 @@ def admin_control_plane_cockpit(
 ):
     operational_health = _build_operational_health_payload(db)
     conflict_report = _build_conflict_detection_report(db)
+    validation_center = _build_validation_center_payload(db, window_hours=24, limit=200)
+    heatmap = _build_strategy_venue_heatmap_payload(db, window_hours=24)
 
     routing_policy = get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
     failover_policy = _get_failover_policy_config(db)
@@ -2393,6 +2696,12 @@ def admin_control_plane_cockpit(
         "last_critical_changes": latest_changes,
         "operational_health": operational_health,
         "conflict_detection_center": conflict_report,
+        "validation_center_summary": validation_center.get("summary") or {},
+        "validation_drift_alerts": validation_center.get("drift_alerts") or [],
+        "strategy_heatmap_summary": {
+            "strategy_count": len(heatmap.get("strategies") or []),
+            "top_allocation_drifts": heatmap.get("top_allocation_drifts") or [],
+        },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -2400,6 +2709,126 @@ def admin_control_plane_cockpit(
 @router.get("/admin/conflict-detection-center")
 def admin_conflict_detection_center(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     return _build_conflict_detection_report(db)
+
+
+@router.get("/admin/validation-center")
+def admin_validation_center(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    window_hours: int = Query(default=24, ge=1, le=168),
+    limit: int = Query(default=200, ge=10, le=1000),
+):
+    return _build_validation_center_payload(db, window_hours=window_hours, limit=limit)
+
+
+@router.post("/admin/validation-center/rerun")
+def admin_validation_center_rerun(
+    payload: ValidationCenterRerunRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    report = _build_execution_validation_report(db)
+    strategy_key = (
+        _failover_rule_key(
+            user_id=payload.user_id,
+            strategy_id=payload.strategy_id,
+            market_type=(payload.market_type or "spot"),
+            environment=payload.environment,
+        )
+        if payload.user_id and payload.strategy_id
+        else "global"
+    )
+
+    timeline_config = get_control_plane_config(db, config_key="validation_center_timeline", default={"items": []})
+    timeline_event = _append_validation_timeline_event(
+        timeline_config,
+        {
+            "strategy_key": strategy_key,
+            "user_id": payload.user_id,
+            "strategy_id": payload.strategy_id,
+            "market_type": payload.market_type,
+            "environment": payload.environment,
+            "net_status": report.get("net_status"),
+            "reason_codes": report.get("reason_codes") or [],
+            "checks": report.get("checks") or [],
+            "source": "validation_center_rerun",
+        },
+    )
+    upsert_control_plane_config(db, config_key="validation_center_timeline", payload=timeline_config, actor_user_id=current_admin.id)
+
+    return {
+        "rerun": True,
+        "strategy_key": strategy_key,
+        "validation_report": report,
+        "timeline_event": timeline_event,
+        "validation_center": _build_validation_center_payload(db, window_hours=24, limit=200),
+    }
+
+
+@router.get("/admin/strategy-venue-heatmap")
+def admin_strategy_venue_heatmap(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    window_hours: int = Query(default=24, ge=1, le=168),
+):
+    return _build_strategy_venue_heatmap_payload(db, window_hours=window_hours)
+
+
+@router.get("/admin/conflict-auto-remediation-drafts")
+def admin_conflict_auto_remediation_drafts(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    drafts = _build_conflict_auto_remediation_drafts(db)
+    return {
+        "drafts": drafts,
+        "summary": {
+            "total_drafts": len(drafts),
+            "blocking_draft_count": sum(1 for item in drafts if str(item.get("severity") or "").upper() == "BLOCK"),
+            "warning_draft_count": sum(1 for item in drafts if str(item.get("severity") or "").upper() == "WARN"),
+        },
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post("/admin/conflict-auto-remediation-apply")
+def admin_conflict_auto_remediation_apply(
+    payload: ConflictAutoRemediationApplyRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    drafts = _build_conflict_auto_remediation_drafts(db)
+    draft_id = f"{payload.reason_code}:{payload.entity_id}"
+    draft = next((item for item in drafts if item.get("draft_id") == draft_id), None)
+    if draft is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="remediation_draft_not_found")
+
+    endpoint = str(draft.get("endpoint") or "")
+    draft_payload = dict(draft.get("payload") or {})
+    apply_result: dict | None = None
+
+    if endpoint == "PUT /api/venues/admin/routing-policies":
+        apply_result = admin_upsert_routing_policies(RoutingPolicyUpsertRequest(**draft_payload), current_admin, db)
+    elif endpoint == "PUT /api/venues/admin/failover-policies":
+        apply_result = admin_upsert_failover_policy(FailoverPolicyUpsertRequest(**draft_payload), current_admin, db)
+    elif endpoint == "POST /api/venues/admin/failover/manual-override":
+        apply_result = admin_apply_failover_manual_override(FailoverManualOverrideRequest(**draft_payload), current_admin, db)
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported_remediation_endpoint")
+
+    create_audit_log(
+        db,
+        action="venue_conflict_auto_remediation_applied",
+        entity_type="venue_conflict_remediation",
+        entity_id=draft_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"draft": draft, "apply_result": apply_result},
+    )
+
+    return {
+        "applied": True,
+        "draft_id": draft_id,
+        "draft": draft,
+        "apply_result": apply_result,
+    }
 
 
 @router.get("/admin/audit-timeline")
@@ -2529,6 +2958,21 @@ def admin_patch_execution_credentials(
 @router.post("/admin/execution-validation")
 def admin_execution_validation(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     report = _build_execution_validation_report(db)
+    timeline_config = get_control_plane_config(db, config_key="validation_center_timeline", default={"items": []})
+    timeline_event = _append_validation_timeline_event(
+        timeline_config,
+        {
+            "strategy_key": "global",
+            "user_id": None,
+            "strategy_id": None,
+            "net_status": report.get("net_status"),
+            "reason_codes": report.get("reason_codes") or [],
+            "checks": report.get("checks") or [],
+            "source": "admin_execution_validation",
+        },
+    )
+    upsert_control_plane_config(db, config_key="validation_center_timeline", payload=timeline_config, actor_user_id="system")
+
     checks_by_name = {item.get("name"): item for item in (report.get("checks") or [])}
     return {
         "net_status": report.get("net_status"),
@@ -2545,6 +2989,7 @@ def admin_execution_validation(_: User = Depends(require_admin), db: Session = D
             "bybit_testnet_live_ready": checks_by_name.get("permission_matrix_test", {}).get("status", "WARN"),
         },
         "validation_report": report,
+        "timeline_event": timeline_event,
     }
 
 

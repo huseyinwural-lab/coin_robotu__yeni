@@ -5429,3 +5429,15 @@ class FailoverManualOverrideRequest(BaseModel):
     reason: str | None = None
     clear_override: bool = False
 
+
+class ValidationCenterRerunRequest(BaseModel):
+    user_id: str | None = None
+    strategy_id: str | None = None
+    market_type: str | None = None
+    environment: str = "testnet"
+
+
+class ConflictAutoRemediationApplyRequest(BaseModel):
+    reason_code: str
+    entity_id: str
+
