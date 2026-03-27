@@ -1,3 +1,43 @@
+## 2026-03-27 — P1-C TAM KAPANIŞ (Control Plane UI + Contract Stabilization)
+
+### Tamamlanan Backend (Faz 1)
+- `GET /api/venues/admin/operational-health` gerçek telemetry türetimi ile güncellendi:
+  - `latency_ms_p95`, `validation_success_rate`, `rate_limit_pressure`, `websocket_sync_health`, `orderbook_sync_health`
+  - telemetry’den türeyen `health_score`, `health_status`, deterministic `reason_codes`
+  - `generated_at` eklendi
+- `POST /api/venues/admin/routing-preview-v2` explainability genişletildi:
+  - `selected_path`, `alternative_paths[]`, `decision_factors[]`, `explainability`
+  - `policy_impact`, `capability_impact`, `health_impact`
+  - routing sonucu policy/capability/health etkisiyle skorlanıyor
+- Yeni endpoint: `PUT /api/venues/admin/capability-matrix/override`
+  - symbol-level manual override persist + audit diff
+- `GET /api/venues/admin/audit-timeline` filtreleri genişletildi:
+  - `entity_type`, `entity_id`, `actor_user_id`, `action`, `from_date`, `to_date`, `limit`
+  - item bazında `diff_keys` + `diff_highlights`
+
+### Tamamlanan Frontend (Faz 2)
+- `AdminExchangesPage.jsx` modüler yapıya geçirildi; panel bazlı mimari tamamlandı:
+  - `CapabilityDiscoveryPanel`
+  - `CapabilityMatrixPanel`
+  - `MarketPolicyPanel`
+  - `RoutingPolicyPanel`
+  - `RoutingPreviewPanel`
+  - `OperationalHealthPanel`
+  - `AuditTimelinePanel`
+- Her panelde loading / empty / error durumları gösteriliyor.
+- Kritik etkileşim/çıktı elemanlarına `data-testid` eklendi.
+
+### Doğrulama / Test
+- Testing Agent raporu: `/app/test_reports/iteration_153.json`
+  - Backend: **31/31 PASS**
+  - Frontend panel doğrulaması: **7/7 PASS**
+- Ek test dosyası: `/app/backend/tests/test_iteration153_p1c_venue_control_plane.py`
+
+### Açık Kalanlar (Roadmap)
+- P2: Failover + multi-venue orchestration
+- Backlog: Dış AML provider entegrasyonu, model destekli risk scoring
+- Enhancement adayı: What-if routing simulation (policy kombinasyon karşılaştırma)
+
 ## 2026-03-27 — P1 Venue Control Plane Operasyon Katmanı (Tamamlandı)
 
 ### P1.1 Capability Validation Derinleştirme
