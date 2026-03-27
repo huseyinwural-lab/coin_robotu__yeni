@@ -1,3 +1,50 @@
+## 2026-03-27 — P0 Sprint-1 Execution Policy Engine + Enforcement Pipeline (Tamamlandı)
+
+### Uygulanan kapsam (onaylı kararlarla)
+- Dinamik policy motoru aktive edildi: scope zinciri `global < environment < portfolio < user < strategy < symbol`, priority + override + condition değerlendirmesi eklendi.
+- Enforcement pipeline orkestrasyonu eklendi: `PRE_TRADE -> EXECUTION -> POST_TRADE -> VIOLATION`.
+- Rollout feature-flag davranışı aktive edildi: `shadow/soft/partial/full` (default: `shadow`).
+- Strategy policy yoksa davranış eklendi:
+  - `live/prod`: BLOCK
+  - `testnet/staging/dev`: SOFT allow + violation log (`HIGH`).
+- Fail-safe reason contract eklendi (policy load/risk compute/market data/dependency timeout yolları), standart reject mapping ile döndürülüyor.
+
+### Teknik değişiklikler
+- Backend policy motoru genişletildi:
+  - `services/execution_policy_service.py`
+  - `services/execution_pipeline_orchestrator.py` (yeni)
+- Preview/submit akışlarına pipeline hook eklendi:
+  - `services/execution_intent_service.py`
+  - `routers/user_execution.py`, `routers/user_trading.py`, `routers/user_platform.py`
+- Şema/model genişletmeleri:
+  - `ExecutionPolicy` için dynamic alanlar (scope, priority, conditions, rules, severity vb.)
+  - `ExecutionPolicyDecisionLog` tablosu (decision trace + observability)
+  - Migration: `20260327_0090_execution_policy_engine_sprint1.py`
+- Admin gözlem katmanı eklendi:
+  - `/api/admin/execution-policies` artık `engine_config`, `observability_metrics`, `policy_decision_log` döndürüyor.
+
+### Frontend (hafif operasyonel görünürlük)
+- `ExecutionPoliciesPage` genişletildi:
+  - rollout mode, decision log sayısı, violation/risk breach metrikleri
+  - stage decision rates
+  - policy decision log kartı
+- API base-url çözümü sertleştirildi (`frontend/src/lib/api.js`): preview ortamında loopback CORS bloklarını önlemek için güvenli runtime fallback eklendi.
+
+### Test durumu
+- Backend servis testi: `5/5 PASS`
+  - `/app/backend/tests/test_execution_policy_engine_sprint1.py`
+- Testing agent raporu:
+  - `/app/test_reports/iteration_163.json`
+  - Policy engine doğrulamaları PASS; HTTP-level bazı curl senaryoları auth device/session güvenlik modeli nedeniyle sınırlı.
+- Frontend testing agent doğrulaması PASS:
+  - Admin login + `/admin/execution-policies` ve gerekli `data-testid` elementleri doğrulandı.
+
+### Kalan backlog (güncel)
+- **P1**: Order Constraint Engine (slippage, price band, TIF, partial fill)
+- **P1**: Leverage/Margin Engine (cross/isolated, dynamic leverage reduction, liquidation distance)
+- **P2**: Violation event external integrations (Slack/PagerDuty/Kafka)
+- **P2**: Vault/KMS secret management tamamlayıcı implementasyonu
+
 ## 2026-03-27 — Geçici Policy Değişikliği (Kullanıcı Talebi)
 
 - Admin ve Super Admin için MFA zorunluluğu kaldırıldı (opsiyonel hale getirildi).
