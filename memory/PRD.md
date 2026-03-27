@@ -1,3 +1,34 @@
+## 2026-03-27 — P2 Risk-Based Stateful Auth Layer (Implementasyon)
+
+### Uygulanan kapsam (onaylı task listesine göre)
+- Deterministic/stateless risk motoru eklendi: `services/risk_policy_service.py`
+  - Context risk: `ip_change`, `country_change`, `new_device`
+  - Action risk: `withdraw`, `api_key_create/delete`, `exchange_credential_update`, `manual_trade/execute_order/trade_execution`, `high_amount`
+- Device trust soft-trust olarak uygulandı (known device riski azaltır, kritik aksiyonları bypass etmez).
+- Scope-aware step-up uygulandı:
+  - JWT claim: `step_up_at`, `step_up_scope`
+  - Endpoint bağımlılığı: `require_step_up_for(action)`
+  - `POST /api/auth/step-up` artık `scope` ister.
+- Risk response contract standardize edildi (`requires_step_up`, `risk_level`, `risk_reasons`).
+- Grace x Risk kuralı uygulandı: privileged grace aktif olsa bile risk tetiklenirse grace override edilir ve TOTP setup zorunlu blok uygulanır.
+
+### Güvenlik & Operasyon genişletmeleri
+- Suspicious activity pipeline eklendi:
+  - `AuthRiskEvent`, `SuspiciousActivityAlert` modelleri
+  - Open alert listeleme/resolve endpointleri (`/api/admin/identity/security/suspicious-alerts`)
+- Recovery flow eklendi (2+ admin onayı + gecikmeli finalize):
+  - `MfaRecoveryRequest`, `MfaRecoveryApprovalVote`
+  - `/api/auth/mfa/recovery/request|approve|finalize|requests`
+- Monitoring endpoint eklendi:
+  - `/api/admin/identity/security/metrics`
+- Enumeration hardening güçlendirildi (dummy hash doğrulama ile timing/flow normalize edildi).
+
+### Secret management (plan-to-code abstraction)
+- Provider-agnostic secret abstraction eklendi: `services/secret_provider_abstraction.py`
+  - `SecretProvider` interface
+  - `LocalEncryptionProvider` aktif
+  - `AwsKmsProvider` / `VaultProvider` stub (sonraki faz implementasyonu)
+
 ## 2026-03-27 — P2 Refactor Plan Tasklaştırma (Onaylandı)
 
 - Kullanıcı onayıyla P2 için kod-seviyesi refactor planı task formatına dönüştürüldü.

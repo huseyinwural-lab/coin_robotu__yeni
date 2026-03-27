@@ -1,5 +1,20 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-27 (P2 Risk-Based Stateful Auth uygulandı)
+- ✅ Tamamlanan çekirdek:
+  - Deterministic/stateless risk engine
+  - Scope-aware step-up auth
+  - Risk response standardizasyonu
+  - Grace-risk override
+  - Suspicious activity + security metrics endpointleri
+  - Recovery quorum + delay flow
+  - Secret provider abstraction (plan-to-code)
+
+### Kalan geliştirmeler (P2 devam)
+- Suspicious activity için daha gelişmiş anomaly kural setleri
+- Recovery akışına domain-level SLA/notification genişletmeleri
+- AWS KMS / Vault gerçek provider implementasyonu
+
 ## 2026-03-27 (P1 Production Security Hardening Kapandı)
 - ✅ Tamamlandı:
   - All-users new-device MFA challenge enforcement

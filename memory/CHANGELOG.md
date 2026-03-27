@@ -1,5 +1,18 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-27 (P2 Risk-Based Stateful Auth Layer)
+- Yeni deterministic risk motoru eklendi (`risk_policy_service`): context + action risk değerlendirmesi.
+- Scope-aware step-up eklendi (`step_up_at`, `step_up_scope`, `require_step_up_for`).
+- Kritik endpointler action-scope bazlı step-up bağımlılığına alındı.
+- Risk response contract standardize edildi (`requires_step_up`, `risk_level`, `risk_reasons`).
+- Grace-risk interaction hardened: risk tetiklenirse privileged grace bypass kapatıldı.
+- Suspicious activity pipeline eklendi (`AuthRiskEvent`, `SuspiciousActivityAlert` + admin security alert endpointleri).
+- Recovery approval akışı eklendi (request/approve/finalize + delay + quorum).
+- Security metrics endpointi eklendi (`/api/admin/identity/security/metrics`).
+- Secret provider abstraction eklendi (Local provider + KMS/Vault stub).
+- Frontend auth tarafında risk reason gösterimi ve step-up scope uyumu güçlendirildi.
+- Test raporu: `/app/test_reports/iteration_161.json` (P2 endpoint/flow doğrulamaları PASS; login latency için timeout 30s güncellendi).
+
 ## 2026-03-27 (P1 Production Security Hardening)
 - Tüm kullanıcılar için new-device MFA challenge enforcement eklendi.
 - Session hijack koruması genişletildi: JWT `ip_hash` + `device_fingerprint`; değişimde session invalidation + re-auth.

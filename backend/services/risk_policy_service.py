@@ -66,13 +66,15 @@ def evaluate_context_risk(db: Session, *, user: User, request: Request) -> RiskE
 
     previous_ip_hash = str(security_context.get("ip_hash") or "").strip()
     previous_country_iso = str(security_context.get("country_iso") or "").strip().upper()
+    previous_device_fingerprint = str(security_context.get("device_fingerprint") or "").strip()
+    has_baseline_context = bool(previous_ip_hash or previous_country_iso or previous_device_fingerprint)
 
     reasons: list[str] = []
     if previous_ip_hash and previous_ip_hash != ip_hash:
         reasons.append("ip_change")
     if previous_country_iso and country_iso and previous_country_iso != country_iso:
         reasons.append("country_change")
-    if not known_device:
+    if has_baseline_context and not known_device:
         reasons.append("new_device")
 
     deduped = _dedupe_keep_order(reasons)
