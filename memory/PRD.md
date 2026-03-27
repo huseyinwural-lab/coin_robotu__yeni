@@ -1,3 +1,46 @@
+## 2026-03-27 — P2-403 + P2-404 + P2-405 Tamamlandı
+
+### P2-403 — Validation Center UI
+- Yeni backend endpointleri:
+  - `GET /api/venues/admin/validation-center`
+  - `POST /api/venues/admin/validation-center/rerun`
+- Validation timeline kalıcı hale getirildi (`validation_center_timeline` config).
+- Drift kuralı uygulandı: **son 24 saatte PASS→WARN/BLOCK** geçişleri `drift_alerts` olarak üretiliyor.
+- Standard çıktı blokları: `summary`, `timeline`, `diff_items`, `drift_alerts`.
+
+### P2-404 — Strategy-to-Venue Heatmap
+- Yeni endpoint: `GET /api/venues/admin/strategy-venue-heatmap`
+- Çıktılar:
+  - strategy bazlı `venue_distribution`
+  - `route_churn_count`
+  - `allocation_drift` hesapları
+  - `top_allocation_drifts`
+
+### P2-405 — Conflict Auto-Remediation Drafts
+- Yeni endpointler:
+  - `GET /api/venues/admin/conflict-auto-remediation-drafts`
+  - `POST /api/venues/admin/conflict-auto-remediation-apply`
+- Conflict reason’larına göre otomatik draft payload üretimi ve uygulanması eklendi.
+
+### Cockpit Entegrasyonu
+- `GET /api/venues/admin/control-plane-cockpit` genişletildi:
+  - `validation_center_summary`
+  - `validation_drift_alerts`
+  - `strategy_heatmap_summary`
+
+### Frontend Entegrasyonu
+- Yeni paneller:
+  - `ValidationCenterPanel.jsx`
+  - `StrategyVenueHeatmapPanel.jsx`
+  - `ConflictAutoRemediationPanel.jsx`
+- `AdminExchangesPage.jsx` içinde panel bağlantıları + refresh/rerun/apply aksiyonları tamamlandı.
+
+### Test / Doğrulama
+- Testing Agent raporu: `/app/test_reports/iteration_156.json`
+  - Backend: **28/28 PASS**
+  - Frontend: **35/35 PASS (data-testid coverage)**
+- Test dosyası: `/app/backend/tests/test_iteration156_p2_validation_heatmap_remediation.py`
+
 ## 2026-03-27 — P2-401 + P2-402 Başlangıç İskeleti Tamamlandı
 
 ### Uygulanan Kapsam
