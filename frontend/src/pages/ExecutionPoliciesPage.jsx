@@ -39,6 +39,8 @@ export const ExecutionPoliciesPage = () => {
   const engineConfig = payload?.engine_config || {};
   const observability = payload?.observability_metrics || {};
   const decisionLog = payload?.policy_decision_log || [];
+  const topReasonCodes = observability?.top_reason_codes || [];
+  const criticalViolations = observability?.recent_critical_violations || [];
   const violations = payload?.recent_policy_violations || [];
 
   return (
@@ -87,6 +89,9 @@ export const ExecutionPoliciesPage = () => {
             <p data-testid="execution-policies-log-count">decision_log_count: {observability?.decision_log_count ?? 0}</p>
             <p data-testid="execution-policies-violation-count">violation_count: {observability?.violation_count ?? 0}</p>
             <p data-testid="execution-policies-risk-breach-count">risk_breach_count: {observability?.risk_breach_metrics?.breach_count ?? 0}</p>
+            <p data-testid="execution-policies-execution-stage-violation-count">execution_stage_violation_count: {observability?.execution_stage_violation_count ?? 0}</p>
+            <p data-testid="execution-policies-post-trade-violation-count">post_trade_violation_count: {observability?.post_trade_violation_count ?? 0}</p>
+            <p data-testid="execution-policies-failsafe-hard-block-count">failsafe_hard_block_count: {observability?.failsafe_hard_block_count ?? 0}</p>
             <p data-testid="execution-policies-pretrade-total">pre_trade_total: {observability?.pre_post_ratio?.pre_trade_total ?? 0}</p>
             <p data-testid="execution-policies-posttrade-total">post_trade_total: {observability?.pre_post_ratio?.post_trade_total ?? 0}</p>
           </div>
@@ -101,6 +106,16 @@ export const ExecutionPoliciesPage = () => {
                 <p className="text-[11px] text-slate-400" data-testid={`execution-policies-stage-rate-allow-${stage}`}>allow_rate: {values?.allow_rate ?? 0}</p>
                 <p className="text-[11px] text-slate-400" data-testid={`execution-policies-stage-rate-block-${stage}`}>block_rate: {values?.block_rate ?? 0}</p>
               </article>
+            ))}
+          </div>
+
+          <div className="mt-3" data-testid="execution-policies-top-reason-codes">
+            <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="execution-policies-top-reason-codes-title">Top Reason Codes</p>
+            {topReasonCodes.length === 0 && <p className="text-[11px] text-slate-500" data-testid="execution-policies-top-reason-codes-empty">Veri yok.</p>}
+            {topReasonCodes.slice(0, 5).map((item, idx) => (
+              <p key={`${item.reason_code}-${idx}`} className="text-[11px] text-slate-300" data-testid={`execution-policies-top-reason-code-${idx}`}>
+                {item.reason_code}: {item.count}
+              </p>
             ))}
           </div>
         </div>
@@ -134,6 +149,20 @@ export const ExecutionPoliciesPage = () => {
               <p className="text-xs text-slate-300" data-testid={`execution-policies-decision-log-stage-${index}`}>{item.stage} · {item.enforced_action}</p>
               <p className="text-[11px] text-slate-400" data-testid={`execution-policies-decision-log-reason-${index}`}>reason_code: {item.reason_code || "-"}</p>
               <p className="text-[11px] text-slate-400" data-testid={`execution-policies-decision-log-time-${index}`}>{item.created_at ? new Date(item.created_at).toLocaleString() : "-"}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-critical-violations-card">
+        <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-critical-violations-title">Recent Critical Violations</p>
+        <div className="mt-3 space-y-2" data-testid="execution-policies-critical-violations-list">
+          {criticalViolations.length === 0 && <p className="text-sm text-slate-400" data-testid="execution-policies-critical-violations-empty">Critical violation yok.</p>}
+          {criticalViolations.slice(0, 8).map((item, idx) => (
+            <article key={`${item.violation_id}-${idx}`} className="rounded border border-slate-800 p-3" data-testid={`execution-policies-critical-violation-row-${idx}`}>
+              <p className="text-xs text-slate-300" data-testid={`execution-policies-critical-violation-reason-${idx}`}>{item.reason_code} · {item.stage}</p>
+              <p className="text-[11px] text-slate-400" data-testid={`execution-policies-critical-violation-rule-${idx}`}>rule: {item.triggered_rule || "-"}</p>
+              <p className="text-[11px] text-slate-500" data-testid={`execution-policies-critical-violation-time-${idx}`}>{item.created_at ? new Date(item.created_at).toLocaleString() : "-"}</p>
             </article>
           ))}
         </div>

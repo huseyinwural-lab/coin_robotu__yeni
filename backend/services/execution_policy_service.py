@@ -11,8 +11,10 @@ from models import (
     BrandSetting,
     ExecutionPolicy,
     ExecutionPolicyDecisionLog,
+    ExecutionPortfolio,
     LiveActivationConfig,
     Position,
+    User,
     UserExecutionIntent,
 )
 
@@ -100,6 +102,18 @@ SCOPE_ORDER = {
     "strategy": 4,
     "symbol": 5,
 }
+FAILSAFE_REASON_CODES = {
+    "FAILSAFE_POLICY_LOAD_ERROR",
+    "FAILSAFE_RISK_COMPUTE_ERROR",
+    "FAILSAFE_MARKET_DATA_MISSING",
+    "FAILSAFE_DEPENDENCY_TIMEOUT",
+    "FAILSAFE_ENGINE_UNAVAILABLE",
+}
+DEFAULT_PORTFOLIO_LIMITS = {
+    "max_portfolio_exposure": 300000.0,
+    "max_drawdown_pct": 25.0,
+    "max_leverage": 4.0,
+}
 
 
 def _safe_float(value, fallback: float = 0.0) -> float:
@@ -117,6 +131,10 @@ def _normalize_scope_value(value: str | None) -> str:
     return str(value or "").strip().lower()
 
 
+def _is_failsafe_reason_code(reason_code: str | None) -> bool:
+    return str(reason_code or "").strip().upper() in FAILSAFE_REASON_CODES
+
+
 def _scope_strategy_type(scope: str, scope_key: str) -> str:
     seed = f"{scope}:{scope_key}"
     digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:18]
@@ -131,6 +149,61 @@ def _deep_merge(base: dict, patch: dict) -> dict:
         else:
             result[key] = value
     return result
+
+
+def _default_portfolio_id(user_id: str) -> str:
+    return f"default:{user_id}"
+
+
+def ensure_user_default_portfolio(db: Session, *, user_id: str, portfolio_id: str | None = None) -> ExecutionPortfolio:
+    normalized_user = str(user_id or "").strip()
+    if not normalized_user:
+        raise ValueError("user_id_required_for_portfolio")
+
+    target_portfolio_id = str(portfolio_id or _default_portfolio_id(normalized_user)).strip()
+    row = db.query(ExecutionPortfolio).filter(ExecutionPortfolio.portfolio_id == target_portfolio_id).first()
+    if row is not None:
+        return row
+
+    default_row = (
+        db.query(ExecutionPortfolio)
+        .filter(ExecutionPortfolio.user_id == normalized_user, ExecutionPortfolio.is_default.is_(True))
+        .first()
+    )
+    if default_row is not None and (portfolio_id is None or target_portfolio_id == default_row.portfolio_id):
+        return default_row
+
+    row = ExecutionPortfolio(
+        portfolio_id=target_portfolio_id,
+        user_id=normalized_user,
+        name="default" if portfolio_id is None else str(portfolio_id),
+        is_default=portfolio_id is None,
+        exposure=0.0,
+        gross_exposure=0.0,
+        net_exposure=0.0,
+        concentration=0.0,
+        drawdown=0.0,
+        limits=dict(DEFAULT_PORTFOLIO_LIMITS),
+        risk_profile={"version": "portfolio_v1", "created_by": "execution_policy_engine"},
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def backfill_default_portfolios(db: Session) -> int:
+    created = 0
+    users = db.query(User.id).all()
+    for (user_id,) in users:
+        existing = (
+            db.query(ExecutionPortfolio)
+            .filter(ExecutionPortfolio.user_id == user_id, ExecutionPortfolio.is_default.is_(True))
+            .first()
+        )
+        if existing is None:
+            ensure_user_default_portfolio(db, user_id=user_id, portfolio_id=None)
+            created += 1
+    return created
 
 
 def _legacy_policy_to_rules(policy: ExecutionPolicy) -> dict:
@@ -357,7 +430,7 @@ def ensure_dynamic_execution_policies(db: Session) -> None:
     global_rules = {
         "runtime": {
             "require_market_data": True,
-            "dependency_timeout_ms": 250,
+            "dependency_timeout_ms": 5000,
         },
         "risk": default_risk,
         "safety": {
@@ -482,6 +555,21 @@ def _compute_multi_layer_risk(db: Session, context: dict, rules: dict) -> dict:
     symbol = str(context.get("symbol") or "").upper()
     strategy_binding = str(context.get("strategy_binding") or "")
     proposed_notional = max(_safe_float(context.get("proposed_notional"), 0.0), 0.0)
+    portfolio_id = str(context.get("portfolio_id") or _default_portfolio_id(user_id))
+    side = str(context.get("side") or "buy").lower()
+
+    portfolio = ensure_user_default_portfolio(db, user_id=user_id, portfolio_id=portfolio_id)
+    portfolio_limits = dict(DEFAULT_PORTFOLIO_LIMITS)
+    portfolio_limits.update(dict(portfolio.limits or {}))
+    portfolio_profile = dict(portfolio.risk_profile or {})
+    profile_symbol_exposure = {
+        str(key).upper(): _safe_float(value)
+        for key, value in dict(portfolio_profile.get("symbol_exposure") or {}).items()
+    }
+    profile_strategy_exposure = {
+        str(key): _safe_float(value)
+        for key, value in dict(portfolio_profile.get("strategy_exposure") or {}).items()
+    }
 
     open_rows = (
         db.query(Position.symbol, Position.strategy_id, Position.size, Position.entry_price)
@@ -497,6 +585,13 @@ def _compute_multi_layer_risk(db: Session, context: dict, rules: dict) -> dict:
     symbol_exposure = 0.0
     strategy_exposure = 0.0
     user_exposure = 0.0
+    portfolio_symbol_exposure = profile_symbol_exposure.get(symbol, 0.0)
+    portfolio_strategy_exposure = profile_strategy_exposure.get(strategy_binding, 0.0)
+    portfolio_exposure = max(_safe_float(portfolio.exposure), 0.0)
+    portfolio_gross_exposure = max(_safe_float(portfolio.gross_exposure), portfolio_exposure)
+    portfolio_net_exposure = _safe_float(portfolio.net_exposure)
+    portfolio_drawdown = _safe_float(portfolio.drawdown)
+
     for row_symbol, row_strategy, size, entry_price in open_rows:
         notional = abs(_safe_float(size) * _safe_float(entry_price))
         user_exposure += notional
@@ -509,27 +604,48 @@ def _compute_multi_layer_risk(db: Session, context: dict, rules: dict) -> dict:
         pending_notional = abs(_safe_float(row_notional))
         user_exposure += pending_notional
         payload_strategy = str((payload or {}).get("strategy_binding") or "")
+        payload_portfolio = str((payload or {}).get("portfolio_id") or _default_portfolio_id(user_id))
         if str(row_symbol or "").upper() == symbol:
             symbol_exposure += pending_notional
         if strategy_binding and payload_strategy == strategy_binding:
             strategy_exposure += pending_notional
+        if payload_portfolio == portfolio.portfolio_id:
+            portfolio_exposure += pending_notional
+            portfolio_gross_exposure += pending_notional
+            portfolio_symbol_exposure += pending_notional if str(row_symbol or "").upper() == symbol else 0.0
+            portfolio_strategy_exposure += pending_notional if payload_strategy == strategy_binding else 0.0
 
-    portfolio_exposure = user_exposure
+    side_sign = -1.0 if side == "sell" else 1.0
+    projected_portfolio_exposure = portfolio_exposure + proposed_notional
+    projected_portfolio_gross = portfolio_gross_exposure + proposed_notional
+    projected_portfolio_net = portfolio_net_exposure + (proposed_notional * side_sign)
+    concentration_pct = (
+        (portfolio_symbol_exposure + proposed_notional) / max(projected_portfolio_gross, 1.0)
+    ) * 100.0
+
     projected = {
         "symbol": symbol_exposure + proposed_notional,
         "strategy": strategy_exposure + proposed_notional,
         "user": user_exposure + proposed_notional,
-        "portfolio": portfolio_exposure + proposed_notional,
+        "portfolio": projected_portfolio_exposure,
         "order": proposed_notional,
     }
 
     risk_rules = dict(rules.get("risk") or {})
+    policy_portfolio_limit = _safe_float(risk_rules.get("max_portfolio_exposure"), 0.0)
+    portfolio_domain_limit = _safe_float(portfolio_limits.get("max_portfolio_exposure"), 300000)
+    effective_portfolio_limit = portfolio_domain_limit
+    if policy_portfolio_limit > 0 and portfolio_domain_limit > 0:
+        effective_portfolio_limit = min(policy_portfolio_limit, portfolio_domain_limit)
+    elif policy_portfolio_limit > 0:
+        effective_portfolio_limit = policy_portfolio_limit
+
     thresholds = {
         "order": _safe_float(risk_rules.get("max_order_notional"), 50000),
         "symbol": _safe_float(risk_rules.get("max_symbol_exposure"), 120000),
         "strategy": _safe_float(risk_rules.get("max_strategy_exposure"), 180000),
         "user": _safe_float(risk_rules.get("max_user_exposure"), 250000),
-        "portfolio": _safe_float(risk_rules.get("max_portfolio_exposure"), 300000),
+        "portfolio": effective_portfolio_limit,
     }
     breaches: list[dict] = []
     for key, projected_value in projected.items():
@@ -545,7 +661,33 @@ def _compute_multi_layer_risk(db: Session, context: dict, rules: dict) -> dict:
                 }
             )
 
+    has_concentration_rule = "max_concentration_pct" in risk_rules
+    max_concentration_pct = _safe_float(risk_rules.get("max_concentration_pct"), 100.0)
+    if has_concentration_rule and max_concentration_pct > 0 and concentration_pct > max_concentration_pct:
+        breaches.append(
+            {
+                "reason_code": "RISK_PORTFOLIO_CONCENTRATION_BREACH",
+                "reason_message": "portfolio concentration limit exceeded",
+                "rule_id": "risk.max_concentration_pct",
+                "projected": round(concentration_pct, 6),
+                "limit": round(max_concentration_pct, 6),
+            }
+        )
+
+    max_drawdown_pct = _safe_float(portfolio_limits.get("max_drawdown_pct"), 0.0)
+    if max_drawdown_pct > 0 and portfolio_drawdown >= max_drawdown_pct:
+        breaches.append(
+            {
+                "reason_code": "RISK_PORTFOLIO_DRAWDOWN_BREACH",
+                "reason_message": "portfolio drawdown limit exceeded",
+                "rule_id": "risk.max_drawdown_pct",
+                "projected": round(portfolio_drawdown, 6),
+                "limit": round(max_drawdown_pct, 6),
+            }
+        )
+
     return {
+        "portfolio_id": portfolio.portfolio_id,
         "thresholds": thresholds,
         "current": {
             "symbol": round(symbol_exposure, 6),
@@ -554,8 +696,52 @@ def _compute_multi_layer_risk(db: Session, context: dict, rules: dict) -> dict:
             "portfolio": round(portfolio_exposure, 6),
         },
         "projected": {k: round(v, 6) for k, v in projected.items()},
+        "portfolio_domain": {
+            "portfolio_id": portfolio.portfolio_id,
+            "gross_exposure": round(projected_portfolio_gross, 6),
+            "net_exposure": round(projected_portfolio_net, 6),
+            "concentration_pct": round(concentration_pct, 6),
+            "drawdown_pct": round(portfolio_drawdown, 6),
+            "limits": {
+                "max_portfolio_exposure": round(thresholds["portfolio"], 6),
+                "max_concentration_pct": round(max_concentration_pct, 6),
+                "max_drawdown_pct": round(max_drawdown_pct, 6),
+            },
+        },
         "breaches": breaches,
     }
+
+
+def apply_portfolio_post_trade_update(db: Session, *, context: dict, post_trade_metrics: dict) -> ExecutionPortfolio | None:
+    user_id = str(context.get("user_id") or "")
+    if not user_id:
+        return None
+    portfolio_id = str(context.get("portfolio_id") or _default_portfolio_id(user_id))
+    row = ensure_user_default_portfolio(db, user_id=user_id, portfolio_id=portfolio_id)
+
+    gross_exposure = max(_safe_float(post_trade_metrics.get("exposure_after_trade"), _safe_float(row.gross_exposure)), 0.0)
+    net_exposure = _safe_float(post_trade_metrics.get("net_exposure_after_trade"), _safe_float(row.net_exposure))
+    concentration = max(_safe_float(post_trade_metrics.get("concentration_pct"), _safe_float(row.concentration)), 0.0)
+    drawdown = max(_safe_float(post_trade_metrics.get("drawdown_pct"), _safe_float(row.drawdown)), 0.0)
+
+    row.exposure = gross_exposure
+    row.gross_exposure = gross_exposure
+    row.net_exposure = net_exposure
+    row.concentration = concentration
+    row.drawdown = drawdown
+    row.risk_profile = {
+        **dict(row.risk_profile or {}),
+        "last_post_trade_update": datetime.now(timezone.utc).isoformat(),
+        "last_metrics": {
+            "gross_exposure": round(gross_exposure, 6),
+            "net_exposure": round(net_exposure, 6),
+            "concentration_pct": round(concentration, 6),
+            "drawdown_pct": round(drawdown, 6),
+        },
+    }
+    row.updated_at = datetime.now(timezone.utc)
+    db.flush()
+    return row
 
 
 def _compute_safety_layer(db: Session, context: dict, rules: dict) -> dict:
@@ -685,6 +871,13 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
     started = datetime.now(timezone.utc)
     config = get_execution_policy_engine_config(db)
     rollout_mode = str(config.get("rollout_mode") or "shadow").lower()
+    user_id = str(context.get("user_id") or "").strip()
+    if user_id:
+        ensure_user_default_portfolio(
+            db,
+            user_id=user_id,
+            portfolio_id=str(context.get("portfolio_id") or _default_portfolio_id(user_id)),
+        )
 
     try:
         matched_rows, effective_rules, scope_trace = _resolve_effective_rules(db, context)
@@ -694,15 +887,13 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
             reason_message=f"Policy loading failed: {exc}",
             stage=stage,
             severity="CRITICAL",
-            action_taken="FAILSAFE_BLOCK",
+            action_taken="HARD_BLOCK",
             policy_id=None,
             rule_id="failsafe.policy_load",
         )
-        enforced, action_taken = _resolve_rollout_action(rollout_mode=rollout_mode, recommended_action="BLOCK", context=context)
-        reject["action_taken"] = action_taken
         return {
             "recommended_action": "BLOCK",
-            "enforced_action": enforced,
+            "enforced_action": "BLOCK",
             "rollout_mode": rollout_mode,
             "standardized_reject": reject,
             "trace": {
@@ -710,6 +901,7 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
                 "scope_trace": [],
                 "effective_rules": {},
                 "error": str(exc),
+                "action_taken": "HARD_BLOCK",
             },
         }
 
@@ -752,9 +944,15 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
             )
         )
 
-    dependency_timeout_ms = int(_safe_float(runtime_rules.get("dependency_timeout_ms"), 250))
+    dependency_timeout_ms = int(_safe_float(runtime_rules.get("dependency_timeout_ms"), 5000))
     elapsed_ms = int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
-    if dependency_timeout_ms > 0 and elapsed_ms > dependency_timeout_ms:
+    timeout_signal = bool(context.get("dependency_timeout"))
+    enforce_wall_clock_timeout = bool(context.get("enforce_dependency_timeout"))
+    if timeout_signal or (
+        enforce_wall_clock_timeout
+        and dependency_timeout_ms > 0
+        and elapsed_ms > dependency_timeout_ms
+    ):
         findings.append(
             _reject_contract(
                 reason_code="FAILSAFE_DEPENDENCY_TIMEOUT",
@@ -810,16 +1008,32 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
         )
 
     recommended_action = "BLOCK" if findings else "ALLOW"
-    enforced_action, action_taken = _resolve_rollout_action(
-        rollout_mode=rollout_mode,
-        recommended_action=recommended_action,
-        context=context,
-        soft_non_live=soft_non_live,
-    )
+    has_hard_failsafe = any(_is_failsafe_reason_code(item.get("reason_code")) for item in findings)
+    if has_hard_failsafe:
+        findings = [
+            {
+                **item,
+                "severity": "CRITICAL" if _is_failsafe_reason_code(item.get("reason_code")) else item.get("severity"),
+                "action_taken": "HARD_BLOCK" if _is_failsafe_reason_code(item.get("reason_code")) else item.get("action_taken"),
+            }
+            for item in findings
+        ]
+    if has_hard_failsafe:
+        enforced_action, action_taken = "BLOCK", "HARD_BLOCK"
+    else:
+        enforced_action, action_taken = _resolve_rollout_action(
+            rollout_mode=rollout_mode,
+            recommended_action=recommended_action,
+            context=context,
+            soft_non_live=soft_non_live,
+        )
 
     primary_reject = findings[0] if findings else None
     if primary_reject is not None:
-        primary_reject = {**primary_reject, "action_taken": action_taken}
+        if has_hard_failsafe and _is_failsafe_reason_code(primary_reject.get("reason_code")):
+            primary_reject = {**primary_reject, "severity": "CRITICAL", "action_taken": "HARD_BLOCK"}
+        else:
+            primary_reject = {**primary_reject, "action_taken": action_taken}
 
     return {
         "recommended_action": recommended_action,
@@ -843,12 +1057,291 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
             "stage": stage,
             "evaluated_at": datetime.now(timezone.utc).isoformat(),
             "scope_trace": scope_trace,
+            "matched_policies": [
+                {
+                    "policy_id": row.id,
+                    "policy_code": getattr(row, "policy_code", None),
+                    "policy_scope": getattr(row, "policy_scope", None),
+                    "scope_key": getattr(row, "scope_key", None),
+                }
+                for row in matched_rows
+            ],
+            "applied_overrides": [
+                {
+                    "policy_id": row.id,
+                    "policy_code": getattr(row, "policy_code", None),
+                    "override_behavior": getattr(row, "override_behavior", None),
+                    "priority": int(getattr(row, "priority", 100) or 100),
+                }
+                for row in matched_rows
+            ],
             "risk": risk_result,
             "safety": safety_result,
             "findings": findings,
             "effective_rules": effective_rules,
             "action_taken": action_taken,
+            "hard_failsafe_applied": has_hard_failsafe,
+            "final_decision_path": {
+                "recommended_action": recommended_action,
+                "enforced_action": enforced_action,
+                "rollout_mode": rollout_mode,
+            },
         },
+    }
+
+
+def evaluate_execution_stage_enforcement(*, context: dict, effective_rules: dict, rollout_mode: str) -> dict:
+    execution_rules = dict((effective_rules or {}).get("execution") or {})
+    requested_price = _safe_float(context.get("requested_price"), 0.0)
+    requested_qty = _safe_float(context.get("requested_qty"), 0.0)
+    execution_result = dict(context.get("execution_result") or {})
+
+    if requested_price <= 0 or requested_qty <= 0 or not execution_result:
+        reject = _reject_contract(
+            reason_code="FAILSAFE_ENGINE_UNAVAILABLE",
+            reason_message="Execution stage required inputs are missing",
+            stage="EXECUTION",
+            severity="CRITICAL",
+            action_taken="HARD_BLOCK",
+            policy_id=None,
+            rule_id="execution.required_inputs",
+        )
+        return {
+            "recommended_action": "BLOCK",
+            "enforced_action": "BLOCK",
+            "rollout_mode": str(rollout_mode or "shadow").lower(),
+            "standardized_reject": reject,
+            "stage_decision": "VIOLATION",
+            "trace": {
+                "stage": "EXECUTION",
+                "required_inputs": {
+                    "requested_price": requested_price,
+                    "requested_qty": requested_qty,
+                    "execution_result_present": bool(execution_result),
+                },
+                "metrics_snapshot": {},
+                "action_taken": "HARD_BLOCK",
+            },
+            "metrics_snapshot": {},
+        }
+
+    executed_price = _safe_float(execution_result.get("executed_price") or execution_result.get("price"), requested_price)
+    executed_qty = _safe_float(execution_result.get("executed_qty") or execution_result.get("filled_qty"), requested_qty)
+    status = str(execution_result.get("status") or "").lower()
+    latency_ms = _safe_float(execution_result.get("latency_ms"), -1)
+
+    max_deviation_bps = _safe_float(execution_rules.get("max_price_deviation_bps"), 50.0)
+    min_fill_ratio = _safe_float(execution_rules.get("min_fill_ratio"), 0.7)
+    max_latency_ms = _safe_float(execution_rules.get("max_fill_latency_ms"), 5000.0)
+
+    deviation_bps = abs(executed_price - requested_price) / max(requested_price, 1e-9) * 10000.0
+    fill_ratio = executed_qty / max(requested_qty, 1e-9)
+
+    violations: list[dict] = []
+    if deviation_bps > max_deviation_bps:
+        violations.append(
+            {
+                "reason_code": "EXECUTION_PRICE_DEVIATION",
+                "reason_message": "Execution price deviation exceeded threshold",
+                "severity": "HIGH",
+                "rule_id": "execution.max_price_deviation_bps",
+            }
+        )
+    if fill_ratio < min_fill_ratio:
+        violations.append(
+            {
+                "reason_code": "EXECUTION_PARTIAL_FILL_LOW_RATIO",
+                "reason_message": "Execution fill ratio below threshold",
+                "severity": "HIGH",
+                "rule_id": "execution.min_fill_ratio",
+            }
+        )
+    if latency_ms < 0 or latency_ms > max_latency_ms:
+        violations.append(
+            {
+                "reason_code": "EXECUTION_TIMEOUT",
+                "reason_message": "Execution latency threshold breached",
+                "severity": "CRITICAL",
+                "rule_id": "execution.max_fill_latency_ms",
+            }
+        )
+    if status not in {"filled", "partial_fill", "accepted"}:
+        violations.append(
+            {
+                "reason_code": "EXECUTION_STATUS_INVALID",
+                "reason_message": "Execution status is invalid for enforcement",
+                "severity": "CRITICAL",
+                "rule_id": "execution.status",
+            }
+        )
+
+    metrics_snapshot = {
+        "requested_price": round(requested_price, 8),
+        "requested_qty": round(requested_qty, 8),
+        "executed_price": round(executed_price, 8),
+        "executed_qty": round(executed_qty, 8),
+        "deviation_bps": round(deviation_bps, 6),
+        "fill_ratio": round(fill_ratio, 6),
+        "latency_ms": round(latency_ms, 6),
+        "status": status,
+    }
+
+    if not violations:
+        return {
+            "recommended_action": "ALLOW",
+            "enforced_action": "ALLOW",
+            "rollout_mode": str(rollout_mode or "shadow").lower(),
+            "standardized_reject": None,
+            "stage_decision": "ACCEPT",
+            "trace": {
+                "stage": "EXECUTION",
+                "metrics_snapshot": metrics_snapshot,
+                "action_taken": "ACCEPT",
+            },
+            "metrics_snapshot": metrics_snapshot,
+        }
+
+    has_critical = any(str(item.get("severity") or "").upper() == "CRITICAL" for item in violations)
+    first = violations[0]
+    action_taken = "HARD_BLOCK" if has_critical else "THROTTLE_FUTURE"
+    reject = _reject_contract(
+        reason_code=str(first.get("reason_code") or "EXECUTION_VIOLATION"),
+        reason_message=str(first.get("reason_message") or "Execution stage violation"),
+        stage="EXECUTION",
+        severity="CRITICAL" if has_critical else "HIGH",
+        action_taken=action_taken,
+        policy_id=None,
+        rule_id=str(first.get("rule_id") or "execution.validation"),
+    )
+    return {
+        "recommended_action": "BLOCK" if has_critical else "ALLOW",
+        "enforced_action": "BLOCK" if has_critical else "ALLOW",
+        "rollout_mode": str(rollout_mode or "shadow").lower(),
+        "standardized_reject": reject,
+        "stage_decision": "VIOLATION" if has_critical else "FLAG",
+        "trace": {
+            "stage": "EXECUTION",
+            "metrics_snapshot": metrics_snapshot,
+            "violations": violations,
+            "action_taken": action_taken,
+        },
+        "metrics_snapshot": metrics_snapshot,
+    }
+
+
+def evaluate_post_trade_enforcement(*, context: dict, effective_rules: dict, risk_reference: dict, rollout_mode: str) -> dict:
+    post_rules = dict((effective_rules or {}).get("post_trade") or {})
+    execution_result = dict(context.get("execution_result") or {})
+    requested_price = _safe_float(context.get("requested_price"), 0.0)
+    executed_price = _safe_float(execution_result.get("executed_price") or execution_result.get("price"), 0.0)
+    executed_qty = _safe_float(execution_result.get("executed_qty") or execution_result.get("filled_qty"), 0.0)
+    slippage_bps = abs(executed_price - requested_price) / max(requested_price, 1e-9) * 10000.0
+
+    projected = dict((risk_reference or {}).get("projected") or {})
+    portfolio_domain = dict((risk_reference or {}).get("portfolio_domain") or {})
+    exposure_after_trade = _safe_float(context.get("exposure_after_trade"), _safe_float(projected.get("portfolio"), 0.0))
+    leverage_after_trade = _safe_float(context.get("leverage_after_trade"), exposure_after_trade / max(_safe_float(context.get("portfolio_equity"), 1.0), 1.0))
+    liquidation_distance = _safe_float(
+        context.get("liquidation_distance_after_trade")
+        or execution_result.get("liquidation_distance_pct"),
+        -1,
+    )
+
+    max_slippage_bps = _safe_float(post_rules.get("max_slippage_bps"), 80.0)
+    max_exposure_after = _safe_float(post_rules.get("max_exposure_after_trade"), _safe_float(projected.get("portfolio"), 300000.0))
+    min_liq_distance = _safe_float(post_rules.get("min_liquidation_distance_pct"), 3.0)
+    max_leverage_after = _safe_float(post_rules.get("max_leverage_after_trade"), _safe_float(portfolio_domain.get("limits", {}).get("max_leverage"), 4.0))
+
+    violations: list[dict] = []
+    if slippage_bps > max_slippage_bps:
+        violations.append(
+            {
+                "reason_code": "POST_TRADE_SLIPPAGE_BREACH",
+                "reason_message": "Post-trade slippage limit exceeded",
+                "severity": "HIGH",
+                "rule_id": "post_trade.max_slippage_bps",
+            }
+        )
+    if exposure_after_trade > max_exposure_after:
+        violations.append(
+            {
+                "reason_code": "POST_TRADE_EXPOSURE_BREACH",
+                "reason_message": "Post-trade portfolio exposure limit exceeded",
+                "severity": "CRITICAL",
+                "rule_id": "post_trade.max_exposure_after_trade",
+            }
+        )
+    if leverage_after_trade > max_leverage_after:
+        violations.append(
+            {
+                "reason_code": "POST_TRADE_LEVERAGE_BREACH",
+                "reason_message": "Post-trade leverage limit exceeded",
+                "severity": "CRITICAL",
+                "rule_id": "post_trade.max_leverage_after_trade",
+            }
+        )
+    if liquidation_distance < min_liq_distance:
+        violations.append(
+            {
+                "reason_code": "POST_TRADE_LIQUIDATION_RISK_BREACH",
+                "reason_message": "Liquidation distance below safety threshold",
+                "severity": "CRITICAL",
+                "rule_id": "post_trade.min_liquidation_distance_pct",
+            }
+        )
+
+    metrics_snapshot = {
+        "requested_price": round(requested_price, 8),
+        "executed_price": round(executed_price, 8),
+        "executed_qty": round(executed_qty, 8),
+        "actual_slippage_bps": round(slippage_bps, 6),
+        "exposure_after_trade": round(exposure_after_trade, 6),
+        "leverage_after_trade": round(leverage_after_trade, 6),
+        "liquidation_distance_after_trade": round(liquidation_distance, 6),
+    }
+
+    if not violations:
+        return {
+            "recommended_action": "ALLOW",
+            "enforced_action": "ALLOW",
+            "rollout_mode": str(rollout_mode or "shadow").lower(),
+            "standardized_reject": None,
+            "stage_decision": "ACCEPT",
+            "trace": {
+                "stage": "POST_TRADE",
+                "metrics_snapshot": metrics_snapshot,
+                "action_taken": "WARN",
+            },
+            "metrics_snapshot": metrics_snapshot,
+            "action_recommendation": "WARN",
+        }
+
+    first = violations[0]
+    has_critical = any(str(item.get("severity") or "").upper() == "CRITICAL" for item in violations)
+    action_taken = "BLOCK_FUTURE" if has_critical else "THROTTLE_FUTURE"
+    reject = _reject_contract(
+        reason_code=str(first.get("reason_code") or "POST_TRADE_VIOLATION"),
+        reason_message=str(first.get("reason_message") or "Post-trade violation"),
+        stage="POST_TRADE",
+        severity="CRITICAL" if has_critical else "HIGH",
+        action_taken=action_taken,
+        policy_id=None,
+        rule_id=str(first.get("rule_id") or "post_trade.validation"),
+    )
+    return {
+        "recommended_action": "BLOCK" if has_critical else "ALLOW",
+        "enforced_action": "ALLOW",
+        "rollout_mode": str(rollout_mode or "shadow").lower(),
+        "standardized_reject": reject,
+        "stage_decision": "VIOLATION",
+        "trace": {
+            "stage": "POST_TRADE",
+            "metrics_snapshot": metrics_snapshot,
+            "violations": violations,
+            "action_taken": action_taken,
+        },
+        "metrics_snapshot": metrics_snapshot,
+        "action_recommendation": action_taken,
     }
 
 
@@ -863,6 +1356,11 @@ def append_execution_policy_decision_log(
     is_violation: bool,
 ) -> ExecutionPolicyDecisionLog:
     reject = dict(policy_result.get("standardized_reject") or {})
+    trace_payload = dict(policy_result.get("trace") or {})
+    metrics_snapshot = dict(policy_result.get("metrics_snapshot") or trace_payload.get("metrics_snapshot") or {})
+    violation_id = str(context.get("violation_id") or "") or None
+    if is_violation and violation_id is None:
+        violation_id = str(uuid.uuid4())
     row = ExecutionPolicyDecisionLog(
         id=str(uuid.uuid4()),
         pipeline_id=str(context.get("pipeline_id") or ""),
@@ -881,10 +1379,14 @@ def append_execution_policy_decision_log(
         reason_message=reject.get("reason_message"),
         policy_id=reject.get("policy_id"),
         rule_id=reject.get("rule_id"),
+        violation_id=violation_id,
+        triggered_policy=reject.get("policy_id"),
+        triggered_rule=reject.get("rule_id"),
+        metrics_snapshot=metrics_snapshot,
         severity=str(reject.get("severity") or "INFO").upper(),
         action_taken=action_taken,
         is_violation=bool(is_violation),
-        trace_payload=dict(policy_result.get("trace") or {}),
+        trace_payload=trace_payload,
         created_at=datetime.now(timezone.utc),
     )
     db.add(row)
@@ -914,6 +1416,10 @@ def list_recent_execution_policy_decisions(db: Session, *, limit: int = 50) -> l
             "enforced_action": row.enforced_action,
             "reason_code": row.reason_code,
             "reason_message": row.reason_message,
+            "violation_id": row.violation_id,
+            "triggered_policy": row.triggered_policy,
+            "triggered_rule": row.triggered_rule,
+            "metrics_snapshot": row.metrics_snapshot or {},
             "severity": row.severity,
             "action_taken": row.action_taken,
             "is_violation": bool(row.is_violation),
@@ -934,8 +1440,13 @@ def build_execution_policy_observability(db: Session, *, hours: int = 24) -> dic
 
     reason_distribution: dict[str, int] = {}
     stage_stats: dict[str, dict[str, int]] = {}
+    stage_violation_distribution: dict[str, int] = {}
     violation_count = 0
     risk_breach_count = 0
+    execution_stage_violation_count = 0
+    post_trade_violation_count = 0
+    failsafe_hard_block_count = 0
+    critical_violations: list[dict] = []
     for row in rows:
         stage = str(row.stage or "UNKNOWN").upper()
         stage_bucket = stage_stats.setdefault(stage, {"allow": 0, "block": 0, "total": 0})
@@ -951,6 +1462,26 @@ def build_execution_policy_observability(db: Session, *, hours: int = 24) -> dic
                 risk_breach_count += 1
         if bool(row.is_violation):
             violation_count += 1
+            stage_violation_distribution[stage] = stage_violation_distribution.get(stage, 0) + 1
+            if stage == "EXECUTION":
+                execution_stage_violation_count += 1
+            if stage == "POST_TRADE":
+                post_trade_violation_count += 1
+        if str(row.action_taken or "").upper() == "HARD_BLOCK" and _is_failsafe_reason_code(row.reason_code):
+            failsafe_hard_block_count += 1
+        if bool(row.is_violation) and str(row.severity or "").upper() == "CRITICAL" and len(critical_violations) < 20:
+            critical_violations.append(
+                {
+                    "violation_id": row.violation_id or row.id,
+                    "reason_code": row.reason_code,
+                    "stage": row.stage,
+                    "severity": row.severity,
+                    "triggered_policy": row.triggered_policy,
+                    "triggered_rule": row.triggered_rule,
+                    "metrics_snapshot": row.metrics_snapshot or {},
+                    "created_at": row.created_at,
+                }
+            )
 
     stage_decision_rates = {
         stage.lower(): {
@@ -967,6 +1498,9 @@ def build_execution_policy_observability(db: Session, *, hours: int = 24) -> dic
         "window_hours": max(hours, 1),
         "decision_log_count": len(rows),
         "violation_count": violation_count,
+        "execution_stage_violation_count": execution_stage_violation_count,
+        "post_trade_violation_count": post_trade_violation_count,
+        "failsafe_hard_block_count": failsafe_hard_block_count,
         "risk_breach_metrics": {
             "breach_count": risk_breach_count,
             "breach_rate": round(risk_breach_count / max(len(rows), 1), 6),
@@ -975,6 +1509,14 @@ def build_execution_policy_observability(db: Session, *, hours: int = 24) -> dic
             {"reason_code": code, "count": count}
             for code, count in sorted(reason_distribution.items(), key=lambda item: item[1], reverse=True)
         ],
+        "top_reason_codes": [
+            {"reason_code": code, "count": count}
+            for code, count in sorted(reason_distribution.items(), key=lambda item: item[1], reverse=True)[:10]
+        ],
+        "stage_violation_distribution": {
+            stage.lower(): count for stage, count in sorted(stage_violation_distribution.items(), key=lambda item: item[0])
+        },
+        "recent_critical_violations": critical_violations,
         "stage_decision_rates": stage_decision_rates,
         "pre_post_ratio": {
             "pre_trade_total": stage_stats.get("PRE_TRADE", {}).get("total", 0),

@@ -312,6 +312,10 @@ class ExecutionPolicyDecisionLog(Base):
     reason_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     policy_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     rule_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    violation_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    triggered_policy: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    triggered_rule: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    metrics_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     severity: Mapped[str] = mapped_column(String(20), default="INFO", index=True)
     action_taken: Mapped[str] = mapped_column(String(80), default="ALLOW")
     is_violation: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
@@ -503,6 +507,24 @@ class PortfolioExposureSnapshot(Base):
     strategy_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     cluster_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     exposure_weight: Mapped[float] = mapped_column(Float, default=0)
+
+
+class ExecutionPortfolio(Base):
+    __tablename__ = "execution_portfolios"
+
+    portfolio_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120), default="default")
+    is_default: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    exposure: Mapped[float] = mapped_column(Float, default=0)
+    gross_exposure: Mapped[float] = mapped_column(Float, default=0)
+    net_exposure: Mapped[float] = mapped_column(Float, default=0)
+    concentration: Mapped[float] = mapped_column(Float, default=0)
+    drawdown: Mapped[float] = mapped_column(Float, default=0)
+    limits: Mapped[dict] = mapped_column(JSON, default=dict)
+    risk_profile: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class Position(Base):
     __tablename__ = "positions"

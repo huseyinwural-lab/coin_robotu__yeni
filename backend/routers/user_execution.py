@@ -246,6 +246,7 @@ def preview_intent(
         policy_decision=validation.get("policy_decision") or {},
         policy_trace=validation.get("policy_trace") or {},
         pipeline_stage_results=validation.get("pipeline_stage_results") or [],
+        decision_trace=validation.get("decision_trace") or {},
         standardized_reject=validation.get("standardized_reject"),
         rollout_mode=str(validation.get("rollout_mode") or "shadow"),
     )
@@ -396,6 +397,7 @@ def preview_position_action(
         policy_decision=validation.get("policy_decision") or {},
         policy_trace=validation.get("policy_trace") or {},
         pipeline_stage_results=validation.get("pipeline_stage_results") or [],
+        decision_trace=validation.get("decision_trace") or {},
         standardized_reject=validation.get("standardized_reject"),
         rollout_mode=str(validation.get("rollout_mode") or "shadow"),
     )

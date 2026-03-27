@@ -568,6 +568,22 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     normalized["account_label"] = account_label
     normalized["exchange_connection_id"] = exchange_connection_id
     normalized["venue_context"] = venue_context
+    normalized["portfolio_id"] = str(payload.get("portfolio_id") or normalized.get("portfolio_id") or f"default:{user_id}")
+    normalized["requested_price"] = _to_float(
+        payload.get("requested_price")
+        or normalized.get("requested_price")
+        or normalized.get("price")
+        or _safe_price(symbol)
+        or 0.0
+    )
+    normalized["requested_qty"] = _to_float(
+        payload.get("requested_qty")
+        or normalized.get("requested_qty")
+        or normalized.get("size")
+        or normalized.get("position_size_value")
+        or 0.0
+    )
+    normalized["execution_result"] = dict(payload.get("execution_result") or normalized.get("execution_result") or {})
 
     meta_summary = run_meta_strategy_engine(
         db,
@@ -810,15 +826,19 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     pipeline_context = {
         "intent_token": token,
         "user_id": user_id,
-        "portfolio_id": payload.get("portfolio_id") or user_id,
+        "portfolio_id": normalized.get("portfolio_id") or f"default:{user_id}",
         "strategy_binding": strategy_binding,
         "symbol": symbol,
+        "side": str(normalized.get("side") or payload.get("side") or "buy"),
         "environment": requested_environment,
         "market_type": str(normalized.get("market_type") or payload.get("market_type") or "spot"),
         "margin_mode": str(normalized.get("margin_mode") or payload.get("margin_mode") or ""),
         "volatility_pct": float(payload.get("volatility_pct") or 0.0),
         "risk_score": float(risk_impact.get("risk_score") or 0.0),
         "proposed_notional": max(adjusted_notional, 0.0),
+        "requested_price": _to_float(normalized.get("requested_price"), 0.0),
+        "requested_qty": _to_float(normalized.get("requested_qty"), 0.0),
+        "execution_result": dict(normalized.get("execution_result") or {}),
         "market_data_available": _has_market_data(symbol),
         "portfolio_drawdown_pct": payload.get("portfolio_drawdown_pct"),
         "market_snapshot": scanner_snapshot or payload.get("market_snapshot") or {},
@@ -873,6 +893,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         "recommended_action": pipeline_result.get("recommended_action"),
         "enforced_action": pipeline_result.get("enforced_action"),
         "stage_results": pipeline_result.get("stages") or [],
+        "decision_trace": pipeline_result.get("decision_trace") or {},
         "standardized_reject": pipeline_reject,
     }
 
@@ -1021,6 +1042,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     validation["policy_decision"] = policy_decision
     validation["policy_trace"] = policy_decision.get("trace") or {}
     validation["pipeline_stage_results"] = pipeline_result.get("stages") or []
+    validation["decision_trace"] = pipeline_result.get("decision_trace") or {}
     validation["standardized_reject"] = pipeline_reject if pipeline_reject else None
     validation["rollout_mode"] = pipeline_result.get("rollout_mode") or "shadow"
     validation["execution_mode"] = str(requested_environment or "testnet").lower()
@@ -1069,15 +1091,22 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         "intent_id": intent.id,
         "intent_token": intent.intent_token,
         "user_id": user_id,
-        "portfolio_id": normalized_payload.get("portfolio_id") or user_id,
+        "portfolio_id": normalized_payload.get("portfolio_id") or f"default:{user_id}",
         "strategy_binding": normalized_payload.get("strategy_binding") or "",
         "symbol": str(intent.symbol or ""),
+        "side": str(normalized_payload.get("side") or "buy"),
         "environment": normalized_payload.get("environment") or "testnet",
         "market_type": str(intent.market_type or "spot"),
         "margin_mode": normalized_payload.get("margin_mode") or "",
         "volatility_pct": _to_float(normalized_payload.get("volatility_pct"), 0.0),
         "risk_score": float(intent.risk_score or 0.0),
         "proposed_notional": float(intent.notional or 0.0),
+        "requested_price": _to_float(normalized_payload.get("requested_price"), 0.0),
+        "requested_qty": _to_float(normalized_payload.get("requested_qty"), 0.0),
+        "execution_result": dict(normalized_payload.get("execution_result") or {}),
+        "exposure_after_trade": _to_float((normalized_payload.get("execution_result") or {}).get("exposure_after_trade"), 0.0),
+        "leverage_after_trade": _to_float((normalized_payload.get("execution_result") or {}).get("leverage_after_trade"), 0.0),
+        "liquidation_distance_after_trade": _to_float((normalized_payload.get("execution_result") or {}).get("liquidation_distance_after_trade"), 0.0),
         "market_data_available": _has_market_data(str(intent.symbol or "")),
         "portfolio_drawdown_pct": normalized_payload.get("portfolio_drawdown_pct"),
         "market_snapshot": normalized_payload.get("market_snapshot") or normalized_payload.get("scanner_signal_snapshot") or {},
@@ -1094,6 +1123,7 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         "recommended_action": submit_pipeline_result.get("recommended_action"),
         "enforced_action": submit_pipeline_result.get("enforced_action"),
         "stage_results": submit_pipeline_result.get("stages") or [],
+        "decision_trace": submit_pipeline_result.get("decision_trace") or {},
         "standardized_reject": submit_pipeline_reject,
     }
     if submit_pipeline_reject:

@@ -2766,6 +2766,7 @@ class ExecutionIntentPreviewResponse(BaseModel):
     policy_decision: dict = Field(default_factory=dict)
     policy_trace: dict = Field(default_factory=dict)
     pipeline_stage_results: list[dict] = Field(default_factory=list)
+    decision_trace: dict = Field(default_factory=dict)
     standardized_reject: dict | None = None
     rollout_mode: str = "shadow"
 
