@@ -172,16 +172,30 @@ export const ExecutionPoliciesPage = () => {
 
   const load = async () => {
     setIsLoading(true);
+    const fallbackTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 20000);
     try {
-      const [{ data: policyData }, { data: remediationData }] = await Promise.all([
+      const [policyResult, remediationResult] = await Promise.allSettled([
         apiClient.get("/admin/execution-policies"),
         apiClient.get("/admin/system/remediate-config"),
       ]);
-      setPayload(policyData);
-      setRemediationState(remediationData);
+
+      if (policyResult.status === "fulfilled") {
+        setPayload(policyResult.value.data);
+      } else {
+        toast.error("Execution policy verisi alınamadı");
+      }
+
+      if (remediationResult.status === "fulfilled") {
+        setRemediationState(remediationResult.value.data);
+      } else {
+        toast.error("Remediation durumu alınamadı");
+      }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Execution policy verisi alınamadı");
     } finally {
+      clearTimeout(fallbackTimer);
       setIsLoading(false);
     }
   };

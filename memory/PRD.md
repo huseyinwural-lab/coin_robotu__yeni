@@ -1,3 +1,26 @@
+## 2026-03-27 — P2 Final Close Verification (E2E)
+
+### Doğrulanan akışlar
+- Preview erişimi: /api/health 200, admin login PASS
+- Builder: policy draft oluşturma + validation + version create
+- Validation engine: errors>0 blok, HIGH warning üretimi, override gereksinimi
+- Activation gate: override zorunlu, prod approval gate PASS
+- Diff viewer: A/B değişim + risk etiketi PASS
+- Simulation: tek intent karar üretimi PASS
+- Bulk ops: activate/rollback/strategy binding summary + item-level sonuç PASS
+- Advanced JSON: read-only view doğrulandı
+- Audit log: `EXECUTION_POLICY_*` aksiyonları `/api/venues/admin/audit-timeline` üzerinden doğrulandı
+
+### UI doğrulama
+- Builder/Diff/Simulation/Bulk/Observability tabları Playwright ile görüntülendi
+- Risk preset kütüphanesi görünür ve uygulanabilir
+- Loading fallback: 20s timeout ile skeleton takılma riski düşürüldü
+
+### Test durumu
+- Backend smoke (curl) PASS
+- Frontend smoke (Playwright screenshot) PASS
+- Testing agent: /app/test_reports/iteration_167.json (yüksek öncelikli loading issue) → timeout/retry ile giderildi
+
 ## 2026-03-27 — P2 Hard Close (Policy UX & Tooling) Başlatıldı
 
 ### Backend kapsamı
