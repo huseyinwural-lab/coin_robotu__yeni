@@ -1,3 +1,40 @@
+## 2026-03-27 — P2 Phase-1 (Backend: Multi-Env + Override + Safe Mode) Tamamlandı
+
+### Uygulanan kapsam (kullanıcı kararlarına uygun)
+- Multi-environment execution katmanı aktif:
+  - `DEV / STAGING / PROD` normalize edildi
+  - Policy trace içinde `environment.input`, `environment.normalized`, `environment.override_trace` görünür
+- Deterministic environment override mekanizması eklendi:
+  - Yeni model: `execution_environment_overrides`
+  - Scope: `GLOBAL/ENVIRONMENT/STRATEGY/SYMBOL/USER/PORTFOLIO`
+  - Override türleri: set_rules, disable_rules, rule_merge
+- Safe mode (CRITICAL) eklendi:
+  - Auto trigger: critical violation spike / failsafe spike / release gate fail
+  - Auto activate + manual deactivate
+  - Enforcement override: risk sıkılaştırma, reduce-only zorlaması, yeni strategy execution kısıtı
+  - Audit zorunlu (`SAFE_MODE_ACTIVATED`, `SAFE_MODE_DEACTIVATED`)
+  - Yeni model: `execution_safe_mode_states`
+
+### Admin görünürlük (Phase-1 hedefi)
+- `/api/admin/execution-policies` artık:
+  - `environment_overrides`
+  - `safe_mode_states`
+  döndürüyor
+- Yeni minimal endpointler:
+  - `GET/POST /api/admin/execution-policies/environment-overrides`
+  - `GET /api/admin/execution-policies/safe-mode`
+  - `POST /api/admin/execution-policies/safe-mode/{safe_mode_id}/deactivate`
+
+### Migration / dosyalar
+- Migration: `20260327_0093_execution_environment_safe_mode.py`
+- Yeni servis: `services/execution_environment_control_service.py`
+- Genişletilenler: `execution_policy_service.py`, `admin_execution.py`, `ExecutionPoliciesPage.jsx`
+
+### Test durumu
+- Local test: `test_execution_environment_phase1.py` → 3 PASS
+- Testing agent raporu: `/app/test_reports/iteration_166.json` → backend kapsam PASS (28/28)
+- Raporda yakalanan 500→404 safe-mode deactivate bug’ı düzeltilmiş durumda.
+
 ## 2026-03-27 — P1 Control/Observability/Stability Expansion (İlk Teslim Tamamlandı)
 
 ### Kullanıcı kararlarına göre uygulanan sıra
