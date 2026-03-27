@@ -1,5 +1,19 @@
 # ROADMAP — Prioritized Backlog
 
+## 2026-03-27 (P1 Production Security Hardening Kapandı)
+- ✅ Tamamlandı:
+  - All-users new-device MFA challenge enforcement
+  - Session hijack koruması (IP/device değişiminde re-auth + invalidation)
+  - Local GeoIP audit context
+  - Email OTP hardening + resend/rate controls
+  - API standardizasyonu + backward compatibility/deprecation
+  - Admin MFA reset/recovery + audit genişletmeleri
+  - MFA UX wizard/state iyileştirmeleri
+
+### Kalan Öncelikler
+- P1 devam: Sumsub AML entegrasyonu (manuel veri fazı)
+- P1 devam: Deterministik risk scoring genişletmesi (LLM yok)
+
 ## 2026-03-27 (P0 Security BLOCKER Kapandı)
 - ✅ Tamamlandı (P0):
   - Challenge-based login + token-after-MFA

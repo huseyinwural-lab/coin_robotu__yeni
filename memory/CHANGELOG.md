@@ -1,5 +1,16 @@
 # CHANGELOG — Algorithmic Trading Platform
 
+## 2026-03-27 (P1 Production Security Hardening)
+- Tüm kullanıcılar için new-device MFA challenge enforcement eklendi.
+- Session hijack koruması genişletildi: JWT `ip_hash` + `device_fingerprint`; değişimde session invalidation + re-auth.
+- Local GeoIP (offline) servisi eklendi; güvenlik audit context’ine location dahil edildi.
+- Email OTP hardening eklendi: TTL, resend limit, rate limit, delivery status handling.
+- Yeni standart endpointler eklendi: `/api/mfa/setup`, `/api/mfa/challenge`, `/api/mfa/verify`, `/api/mfa/disable` (+ resend).
+- Eski `/api/auth/mfa/*` endpointleri korunup deprecated header’ları eklendi.
+- Admin MFA reset/recovery endpointi eklendi ve audit/fraud-recovery logları bağlandı.
+- Frontend MFA UX güncellendi: method select (email_otp dahil), resend OTP, wizard-state + backup confirmation.
+- Test kanıtı: `/app/test_reports/iteration_160.json` (P1 acceptance PASS).
+
 ## 2026-03-27 (P0 BLOCKER Security Hardening)
 - Challenge-based auth flow tamamlandı: privileged login artık doğrudan token dönmüyor, `mfa_challenge` dönüyor.
 - MFA verify endpointleri birleştirildi/genişletildi: `/api/mfa/verify`, `/api/auth/mfa/verify`, `/api/auth/mfa/challenge/verify`.

@@ -1,3 +1,20 @@
+## 2026-03-27 — P1 Production Security Hardening (Tek Atomik İterasyon)
+
+### Uygulanan Karar Seti
+- Tek parça implementasyon uygulandı (backend + frontend birlikte).
+- Re-auth kapsamı tüm kullanıcılar için etkinleştirildi.
+- GeoIP kaynağı local/offline olarak eklendi.
+- Email OTP gerçek mail altyapısı üzerinden gönderim mantığıyla entegre edildi; provider eksikse delivery failure görünür şekilde raporlanıyor.
+- API standardizasyonu: yeni `/mfa/*` endpointleri eklendi, eski `/auth/mfa/*` endpointlerinde deprecation header’ları aktif.
+
+### P1 Teknik Çıktılar
+- New-device MFA zorunluluğu (tüm kullanıcılar): login sırasında yeni cihaz tespiti ile challenge zorunlu.
+- Session hijack koruması: JWT içine `ip_hash` + `device_fingerprint` claimleri eklendi; değişimde re-auth + session invalidation.
+- Email OTP hardening: 5dk TTL, resend limit, rate limit, brute-force koruması ile entegre verify akışı, delivery status yönetimi.
+- Audit logging genişletildi: MFA enable/disable, failed MFA attempt, backup code kullanım, admin MFA reset, IP+location context.
+- Recovery/reset: admin MFA reset endpointi + aktif session revoke + fraud recovery audit.
+- UX state: `mfa_enabled_not_verified`, `backup_download_required`; MFA ayarlarında wizard + backup confirmation akışı.
+
 ## 2026-03-27 — P0 BLOCKER Security & Authentication Hardening (Tamamlandı)
 
 ### Kapsam (Tek Atomik Iterasyon)
