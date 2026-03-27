@@ -1,3 +1,49 @@
+## 2026-03-27 — P0 KAPANIŞ (Production Hardening H1-H6)
+
+### H1 Secret Management (Prod-safe)
+- `secret_provider_service.py` gerçek provider adaptörleri ile genişletildi: `vault`, `aws_kms`, `gcp_kms`, `local`.
+- `set/get/rotate/revoke` operasyonları provider üstünden çalışıyor.
+- `local` provider artık production env'de (`prod/production/live`) hard-block.
+- Rotate sonrası eski secret reference erişimi provider seviyesinde revoke ile engelleniyor.
+
+### H2 Execution Validation (MOCK kaldırma)
+- `/api/venues/admin/execution-validation` unified contracta geçirildi:
+  - `net_status`
+  - `checks[]` -> `name/status/reason_code/severity/remediation_suggestions`
+- Response'tan `MOCKED` state ve raw mocked detayları çıkarıldı; kritik kontroller PASS/WARN/BLOCK standardında.
+
+### H3 UI Secret Handling
+- `AdminCredentialOrchestrationPage` secret inputları `type=password` oldu.
+- `AdminExchangesPage` execution credential inputları `type=password` oldu.
+- UI'da reveal/prompt tabanlı plain secret akışı kaldırıldı.
+
+### H4 Live Hard Gate (Final)
+- Live execution credential resolution için zorunlu ek gate'ler:
+  - environment lock / prod freeze
+  - live route approved
+  - execution mode live
+  - cached sanity sonucu PASS
+  - canary allowlist (opsiyonel env)
+  - two-step approval (opsiyonel env)
+- Hard-block reason code'lar deterministic (409 detail).
+
+### H5 Sanity Check sürekli çalışma + gate
+- Sanity check sonucu cache'leniyor (`/tmp/venue_control_plane_sanity.json` default).
+- Yeni endpoint: `GET /api/venues/admin/control-plane-sanity-last`
+- Background scheduler eklendi (`run_venue_sanity_scheduler_loop`) ve startup'ta otomatik çalışıyor.
+- CI/CD gate script eklendi: `/app/scripts/check_venue_sanity_gate.sh` (PASS değilse exit!=0).
+- Global header'a sanity badge eklendi (`PanelLayout`).
+
+### H6 Validation Contract Standardizasyonu
+- Sanity check ve execution validation endpointleri aynı contractı döndürüyor:
+  - root: `net_status`, `reason_codes`, `remediation_suggestions`, `checks`
+  - checks item: `name`, `status`, `reason_code`, `severity`, `remediation_suggestions`
+
+### Test Durumu
+- Testing Agent raporu: `/app/test_reports/iteration_151.json`
+  - Backend: 19/20 PASS (1 skip), Frontend: 100% PASS
+  - Kritik doğrulamalar: secret policy, lifecycle, rotate revoke, unified contract, sanity cache, gate script, live hard-gate, UI password inputları.
+
 ## 2026-03-26 — P0 Venue/Exchange Management Control Plane (Security Hardening)
 
 ### Tamamlanan P0.1 Credential Security
