@@ -42,6 +42,8 @@ from schemas import (
     CapabilityDiscoveryRequest,
     CapabilityMatrixOverrideRequest,
     MarketPolicyLayerUpdateRequest,
+    FailoverPolicyUpsertRequest,
+    FailoverManualOverrideRequest,
     RoutingPolicyUpsertRequest,
     RoutingPreviewRequest,
 )
@@ -520,6 +522,294 @@ def _build_operational_health_payload(db: Session) -> dict:
         "market_availability": summary.get("market_availability") or {},
         "operational_scores": operational_scores,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _normalize_venue_list(values: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    for item in values or []:
+        venue = str(item or "").strip().lower()
+        if venue and venue not in normalized:
+            normalized.append(venue)
+    return normalized
+
+
+def _failover_rule_key(*, user_id: str, strategy_id: str, market_type: str, environment: str) -> str:
+    return f"{user_id}:{strategy_id}:{market_type.lower()}:{environment.lower()}"
+
+
+def _get_failover_policy_config(db: Session) -> dict:
+    return get_control_plane_config(db, config_key="failover_policy", default={"rules": {}})
+
+
+def _get_failover_runtime_config(db: Session) -> dict:
+    return get_control_plane_config(
+        db,
+        config_key="failover_runtime",
+        default={"runtime_state": {}, "transition_logs": [], "routing_decision_logs": []},
+    )
+
+
+def _evaluate_venue_runtime_state(health_effect: dict, thresholds: dict) -> dict:
+    latency_threshold = float(thresholds.get("latency_ms") or 1200)
+    error_threshold = float(thresholds.get("error_rate_pct") or 20)
+    validation_failure_threshold = float(thresholds.get("validation_failure_pct") or 25)
+
+    latency_ms = _safe_float_value(health_effect.get("latency_ms_p95"))
+    validation_success_rate = _safe_float_value(health_effect.get("validation_success_rate"))
+    error_rate_pct = max(0.0, 100.0 - float(validation_success_rate)) if validation_success_rate is not None else 100.0
+    validation_failure_pct = error_rate_pct
+
+    trigger_metrics = []
+    if latency_ms is not None and latency_ms >= latency_threshold:
+        trigger_metrics.append({"metric": "latency", "value": latency_ms, "threshold": latency_threshold})
+    if error_rate_pct >= error_threshold:
+        trigger_metrics.append({"metric": "error_rate", "value": round(error_rate_pct, 2), "threshold": error_threshold})
+    if validation_failure_pct >= validation_failure_threshold:
+        trigger_metrics.append(
+            {
+                "metric": "validation_failure",
+                "value": round(validation_failure_pct, 2),
+                "threshold": validation_failure_threshold,
+            }
+        )
+
+    health_status = str(health_effect.get("health_status") or "unknown").lower()
+    if health_status == "down" or error_rate_pct >= max(70.0, error_threshold * 1.8):
+        runtime_state = "down"
+    elif health_status == "degraded" or trigger_metrics:
+        runtime_state = "degraded"
+    else:
+        runtime_state = "healthy"
+
+    return {
+        "runtime_state": runtime_state,
+        "trigger_metrics": trigger_metrics,
+        "latency_ms_p95": latency_ms,
+        "error_rate_pct": round(error_rate_pct, 2),
+        "validation_failure_pct": round(validation_failure_pct, 2),
+        "health_score": health_effect.get("health_score"),
+        "rate_limit_pressure": health_effect.get("rate_limit_pressure"),
+    }
+
+
+def _resolve_failover_plan(rule: dict, *, health_map: dict) -> dict:
+    primary = str(rule.get("primary_venue") or "").strip().lower()
+    secondary = str(rule.get("secondary_venue") or "").strip().lower()
+    fallback_chain = _normalize_venue_list(rule.get("fallback_chain") or [])
+    chain = _normalize_venue_list([primary, secondary, *fallback_chain])
+
+    thresholds = dict(rule.get("auto_trigger_thresholds") or {})
+    auto_reroute_enabled = bool(rule.get("auto_reroute_enabled", True))
+    manual_override = dict(rule.get("manual_override") or {})
+    forced_route = str(manual_override.get("force_route") or "").strip().lower() or None
+    forced_disable = set(_normalize_venue_list(manual_override.get("force_disable") or []))
+
+    evaluations = {}
+    for venue in chain:
+        health_effect = health_map.get(venue) or {
+            "exchange": venue,
+            "health_status": "unknown",
+            "health_score": 40,
+            "latency_ms_p95": None,
+            "validation_success_rate": None,
+            "rate_limit_pressure": 0,
+        }
+        state = _evaluate_venue_runtime_state(health_effect, thresholds)
+        evaluations[venue] = {**state, "disabled": venue in forced_disable}
+
+    selection_reason = "auto_primary_preferred"
+    active_venue = None
+    reject_reason = None
+
+    if forced_route and forced_route not in forced_disable:
+        active_venue = forced_route
+        selection_reason = "manual_force_route"
+    elif not auto_reroute_enabled:
+        selection_reason = "auto_reroute_disabled"
+        for venue in chain:
+            if venue not in forced_disable:
+                active_venue = venue
+                break
+    else:
+        for target_state in ["healthy", "degraded"]:
+            for venue in chain:
+                venue_state = evaluations.get(venue) or {}
+                if venue in forced_disable:
+                    continue
+                if venue_state.get("runtime_state") == target_state:
+                    active_venue = venue
+                    selection_reason = f"auto_reroute_{target_state}"
+                    break
+            if active_venue:
+                break
+
+    if active_venue is None:
+        reject_reason = "failover_no_available_venue"
+
+    return {
+        "active_venue": active_venue,
+        "fallback_chain": [venue for venue in chain if venue != active_venue],
+        "selection_reason": selection_reason,
+        "forced_route": forced_route,
+        "forced_disable": sorted(list(forced_disable)),
+        "auto_reroute_enabled": auto_reroute_enabled,
+        "runtime_evaluations": evaluations,
+        "reject_reason": reject_reason,
+    }
+
+
+def _record_failover_transition(runtime_config: dict, *, key: str, plan: dict, actor_user_id: str | None = None) -> dict | None:
+    runtime_state = dict(runtime_config.get("runtime_state") or {})
+    transition_logs = list(runtime_config.get("transition_logs") or [])
+
+    previous = dict(runtime_state.get(key) or {})
+    previous_active = previous.get("active_venue")
+    next_active = plan.get("active_venue")
+    selection_reason = str(plan.get("selection_reason") or "auto")
+
+    transition_event = None
+    if previous_active != next_active:
+        transition_event = {
+            "id": str(uuid.uuid4()),
+            "key": key,
+            "from_venue": previous_active,
+            "to_venue": next_active,
+            "selection_reason": selection_reason,
+            "trigger_metrics": (
+                ((plan.get("runtime_evaluations") or {}).get(next_active) or {}).get("trigger_metrics") if next_active else []
+            ),
+            "reason_code": str(plan.get("reject_reason") or selection_reason),
+            "actor_user_id": actor_user_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        transition_logs.insert(0, transition_event)
+        transition_logs = transition_logs[:300]
+
+    runtime_state[key] = {
+        "active_venue": next_active,
+        "selection_reason": selection_reason,
+        "reject_reason": plan.get("reject_reason"),
+        "runtime_evaluations": plan.get("runtime_evaluations") or {},
+        "fallback_chain": plan.get("fallback_chain") or [],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "version": int(previous.get("version") or 0) + 1,
+    }
+
+    runtime_config["runtime_state"] = runtime_state
+    runtime_config["transition_logs"] = transition_logs
+    return transition_event
+
+
+def _append_routing_decision_log(runtime_config: dict, payload: dict) -> dict:
+    logs = list(runtime_config.get("routing_decision_logs") or [])
+    event = {
+        "id": str(uuid.uuid4()),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        **payload,
+    }
+    logs.insert(0, event)
+    runtime_config["routing_decision_logs"] = logs[:500]
+    return event
+
+
+def _build_execution_validation_report(db: Session) -> dict:
+    credentials = execution_credentials_for_adapter(db)
+    smoke = run_exchange_adapter_smoke(credentials_override=credentials)
+    execution_rows = smoke.get("execution_adapter") or []
+
+    real_balance_ok = any(
+        (not bool(row.get("mocked")))
+        and int(((row.get("payload") or {}).get("provider") or {}).get("http_status") or 0) == 200
+        for row in execution_rows
+    )
+    has_mocked_balance = any(bool(row.get("mocked")) for row in execution_rows)
+
+    permission_real_ok = any(
+        (not bool(row.get("mocked"))) and str(row.get("status") or "") in {"SUBMITTED", "CANCELLED"}
+        for row in execution_rows
+    )
+    capability_runtime_ok = all((row.get("precision_validation") or {}).get("status") == "PASS" for row in execution_rows) if execution_rows else False
+    dry_run_ok = all(bool((row.get("payload") or {}).get("normalized")) for row in execution_rows) if execution_rows else False
+    test_order_ok = any(str((row.get("payload") or {}).get("status") or "") in {"SUBMITTED", "MOCKED"} for row in execution_rows)
+    cancel_ok = any(str((row.get("cancel") or {}).get("status") or "") in {"CANCELLED", "MOCKED"} for row in execution_rows)
+    retry_ok = all(str((row.get("retry_behavior") or {}).get("status") or "") == "configured" for row in execution_rows) if execution_rows else False
+
+    rejection_classes = sorted(
+        {
+            str((row.get("payload") or {}).get("reason") or "").strip().lower()
+            for row in execution_rows
+            if str((row.get("payload") or {}).get("reason") or "").strip()
+        }
+    )
+
+    checks = [
+        {
+            "name": "real_balance_fetch",
+            "status": "PASS" if real_balance_ok else ("WARN" if has_mocked_balance else "BLOCK"),
+            "reason_code": "balance_real_ok" if real_balance_ok else ("balance_fetch_mocked" if has_mocked_balance else "balance_fetch_failed"),
+            "severity": "high" if not real_balance_ok and not has_mocked_balance else ("medium" if has_mocked_balance else "low"),
+            "remediation_suggestions": [] if real_balance_ok else ["Venue API credential doğrulaması ve wallet-balance erişimini kontrol edin."],
+        },
+        {
+            "name": "permission_matrix_test",
+            "status": "PASS" if permission_real_ok else ("WARN" if has_mocked_balance else "BLOCK"),
+            "reason_code": "permission_matrix_ok" if permission_real_ok else ("permission_matrix_mocked" if has_mocked_balance else "permission_matrix_failed"),
+            "severity": "high" if not permission_real_ok and not has_mocked_balance else "medium",
+            "remediation_suggestions": [] if permission_real_ok else ["Trade/read permission scope ve credential approval durumunu doğrulayın."],
+        },
+        {
+            "name": "venue_capability_runtime_test",
+            "status": "PASS" if capability_runtime_ok else "WARN",
+            "reason_code": "capability_runtime_ok" if capability_runtime_ok else "capability_runtime_partial",
+            "severity": "medium" if not capability_runtime_ok else "low",
+            "remediation_suggestions": [] if capability_runtime_ok else ["Precision/lot-size metadata senkronunu güncelleyin."],
+        },
+        {
+            "name": "dry_run_execution_simulation",
+            "status": "PASS" if dry_run_ok else "BLOCK",
+            "reason_code": "dry_run_simulation_ok" if dry_run_ok else "dry_run_simulation_failed",
+            "severity": "high" if not dry_run_ok else "low",
+            "remediation_suggestions": [] if dry_run_ok else ["Execution adapter normalizasyon ve payload üretim akışını doğrulayın."],
+        },
+        {
+            "name": "test_order_cancel_retry",
+            "status": "PASS" if test_order_ok and cancel_ok and retry_ok else "WARN",
+            "reason_code": "test_order_cancel_retry_ok" if test_order_ok and cancel_ok and retry_ok else "test_order_cancel_retry_partial",
+            "severity": "medium" if not (test_order_ok and cancel_ok and retry_ok) else "low",
+            "remediation_suggestions": [] if test_order_ok and cancel_ok and retry_ok else ["Submit/cancel/retry senaryolarını venue bazında stabilize edin."],
+        },
+        {
+            "name": "rejection_classification",
+            "status": "PASS" if rejection_classes else "WARN",
+            "reason_code": "rejection_classification_available" if rejection_classes else "rejection_classification_missing",
+            "severity": "medium" if not rejection_classes else "low",
+            "remediation_suggestions": [] if rejection_classes else ["Rejection reason kodlarını sınıflandırmak için adapter mapping genişletin."],
+        },
+    ]
+
+    max_rank = 0
+    for item in checks:
+        status_value = str(item.get("status") or "PASS").upper()
+        max_rank = max(max_rank, 2 if status_value == "BLOCK" else (1 if status_value == "WARN" else 0))
+    net_status = "PASS" if max_rank == 0 else ("WARN" if max_rank == 1 else "BLOCK")
+
+    reason_codes = sorted({item.get("reason_code") for item in checks if item.get("reason_code") and item.get("reason_code") not in {"ok", "balance_real_ok", "permission_matrix_ok", "capability_runtime_ok", "dry_run_simulation_ok", "test_order_cancel_retry_ok", "rejection_classification_available"}})
+    remediation_suggestions = sorted({tip for item in checks for tip in (item.get("remediation_suggestions") or [])})
+
+    return {
+        "net_status": net_status,
+        "reason_codes": reason_codes,
+        "remediation_suggestions": remediation_suggestions,
+        "checks": checks,
+        "report_generated_at": datetime.now(timezone.utc).isoformat(),
+        "classification": {
+            "pass": sum(1 for row in checks if row.get("status") == "PASS"),
+            "warn": sum(1 for row in checks if row.get("status") == "WARN"),
+            "block": sum(1 for row in checks if row.get("status") == "BLOCK"),
+        },
+        "smoke_summary": smoke.get("summary") or {},
+        "adapter_output": smoke,
     }
 
 
@@ -1175,13 +1465,229 @@ def admin_get_routing_policies(_: User = Depends(require_admin), db: Session = D
     return get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
 
 
+@router.put("/admin/failover-policies")
+def admin_upsert_failover_policy(
+    payload: FailoverPolicyUpsertRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    policy_config = _get_failover_policy_config(db)
+    rules = dict(policy_config.get("rules") or {})
+    key = _failover_rule_key(
+        user_id=payload.user_id,
+        strategy_id=payload.strategy_id,
+        market_type=payload.market_type,
+        environment=payload.environment,
+    )
+    old_value = rules.get(key)
+
+    manual_override = payload.manual_override.model_dump() if payload.manual_override else {"force_route": None, "force_disable": [], "reason": None}
+    rules[key] = {
+        "user_id": payload.user_id,
+        "strategy_id": payload.strategy_id,
+        "market_type": payload.market_type.lower(),
+        "environment": payload.environment.lower(),
+        "primary_venue": payload.primary_venue.lower(),
+        "secondary_venue": (payload.secondary_venue or "").lower() or None,
+        "fallback_chain": _normalize_venue_list(payload.fallback_chain),
+        "auto_reroute_enabled": bool(payload.auto_reroute_enabled),
+        "auto_trigger_thresholds": payload.auto_trigger_thresholds.model_dump(),
+        "manual_override": {
+            "force_route": str(manual_override.get("force_route") or "").strip().lower() or None,
+            "force_disable": _normalize_venue_list(manual_override.get("force_disable") or []),
+            "reason": str(manual_override.get("reason") or "").strip() or None,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    policy_config["rules"] = rules
+    upsert_control_plane_config(db, config_key="failover_policy", payload=policy_config, actor_user_id=current_admin.id)
+
+    runtime_config = _get_failover_runtime_config(db)
+    health_payload = _build_operational_health_payload(db)
+    health_map = {item.get("exchange"): item for item in (health_payload.get("operational_scores") or [])}
+    plan = _resolve_failover_plan(rules[key], health_map=health_map)
+    transition = _record_failover_transition(runtime_config, key=key, plan=plan, actor_user_id=current_admin.id)
+    upsert_control_plane_config(db, config_key="failover_runtime", payload=runtime_config, actor_user_id=current_admin.id)
+
+    create_audit_log(
+        db,
+        action="venue_failover_policy_updated",
+        entity_type="venue_failover_policy",
+        entity_id=key,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"old_value": old_value, "new_value": rules[key]},
+    )
+    if transition:
+        create_audit_log(
+            db,
+            action="venue_failover_transition",
+            entity_type="venue_failover_state",
+            entity_id=key,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            details=transition,
+        )
+
+    return {
+        "updated": True,
+        "key": key,
+        "failover_rule": rules[key],
+        "failover_state": (runtime_config.get("runtime_state") or {}).get(key),
+        "transition_event": transition,
+    }
+
+
+@router.post("/admin/failover/manual-override")
+def admin_apply_failover_manual_override(
+    payload: FailoverManualOverrideRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    policy_config = _get_failover_policy_config(db)
+    rules = dict(policy_config.get("rules") or {})
+    key = _failover_rule_key(
+        user_id=payload.user_id,
+        strategy_id=payload.strategy_id,
+        market_type=payload.market_type,
+        environment=payload.environment,
+    )
+    rule = dict(rules.get(key) or {})
+    if not rule:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="failover_policy_not_found")
+
+    old_manual = dict(rule.get("manual_override") or {})
+    if payload.clear_override:
+        rule["manual_override"] = {"force_route": None, "force_disable": [], "reason": None, "updated_at": datetime.now(timezone.utc).isoformat()}
+    else:
+        rule["manual_override"] = {
+            "force_route": str(payload.force_route or "").strip().lower() or None,
+            "force_disable": _normalize_venue_list(payload.force_disable),
+            "reason": str(payload.reason or "").strip() or None,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    rule["updated_at"] = datetime.now(timezone.utc).isoformat()
+    rules[key] = rule
+    policy_config["rules"] = rules
+    upsert_control_plane_config(db, config_key="failover_policy", payload=policy_config, actor_user_id=current_admin.id)
+
+    runtime_config = _get_failover_runtime_config(db)
+    health_payload = _build_operational_health_payload(db)
+    health_map = {item.get("exchange"): item for item in (health_payload.get("operational_scores") or [])}
+    plan = _resolve_failover_plan(rule, health_map=health_map)
+    transition = _record_failover_transition(runtime_config, key=key, plan=plan, actor_user_id=current_admin.id)
+    upsert_control_plane_config(db, config_key="failover_runtime", payload=runtime_config, actor_user_id=current_admin.id)
+
+    create_audit_log(
+        db,
+        action="venue_failover_manual_override_applied",
+        entity_type="venue_failover_policy",
+        entity_id=key,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"old_value": old_manual, "new_value": rule.get("manual_override")},
+    )
+    if transition:
+        create_audit_log(
+            db,
+            action="venue_failover_transition",
+            entity_type="venue_failover_state",
+            entity_id=key,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            details=transition,
+        )
+
+    return {
+        "updated": True,
+        "key": key,
+        "manual_override": rule.get("manual_override"),
+        "failover_state": (runtime_config.get("runtime_state") or {}).get(key),
+        "transition_event": transition,
+    }
+
+
+@router.get("/admin/failover-policies")
+def admin_get_failover_policies(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    user_id: str | None = Query(default=None),
+    strategy_id: str | None = Query(default=None),
+    market_type: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+):
+    policy_config = _get_failover_policy_config(db)
+    runtime_config = _get_failover_runtime_config(db)
+    rules = dict(policy_config.get("rules") or {})
+
+    def _match(key: str) -> bool:
+        parts = key.split(":")
+        if len(parts) < 4:
+            return False
+        k_user, k_strategy, k_market, k_env = parts[0], parts[1], parts[2], parts[3]
+        if user_id and k_user != user_id:
+            return False
+        if strategy_id and k_strategy != strategy_id:
+            return False
+        if market_type and k_market != market_type.lower():
+            return False
+        if environment and k_env != environment.lower():
+            return False
+        return True
+
+    filtered_rules = {key: value for key, value in rules.items() if _match(key)}
+    runtime_state = {key: value for key, value in (runtime_config.get("runtime_state") or {}).items() if key in filtered_rules}
+    transition_logs = [row for row in (runtime_config.get("transition_logs") or []) if row.get("key") in filtered_rules][:120]
+    routing_logs = [row for row in (runtime_config.get("routing_decision_logs") or []) if row.get("key") in filtered_rules][:120]
+
+    return {
+        "rules": filtered_rules,
+        "runtime_state": runtime_state,
+        "transition_logs": transition_logs,
+        "routing_decision_logs": routing_logs,
+    }
+
+
+@router.get("/admin/failover-state")
+def admin_get_failover_state(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    user_id: str = Query(...),
+    strategy_id: str = Query(...),
+    market_type: str = Query(...),
+    environment: str = Query(default="testnet"),
+    log_limit: int = Query(default=20, ge=1, le=200),
+):
+    key = _failover_rule_key(user_id=user_id, strategy_id=strategy_id, market_type=market_type, environment=environment)
+    policy_config = _get_failover_policy_config(db)
+    runtime_config = _get_failover_runtime_config(db)
+    rule = (policy_config.get("rules") or {}).get(key)
+    if rule is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="failover_policy_not_found")
+
+    health_payload = _build_operational_health_payload(db)
+    health_map = {item.get("exchange"): item for item in (health_payload.get("operational_scores") or [])}
+    plan = _resolve_failover_plan(rule, health_map=health_map)
+    transition_logs = [row for row in (runtime_config.get("transition_logs") or []) if row.get("key") == key][:log_limit]
+    routing_logs = [row for row in (runtime_config.get("routing_decision_logs") or []) if row.get("key") == key][:log_limit]
+
+    return {
+        "key": key,
+        "failover_rule": rule,
+        "computed_state": plan,
+        "runtime_state": (runtime_config.get("runtime_state") or {}).get(key),
+        "transition_logs": transition_logs,
+        "routing_decision_logs": routing_logs,
+    }
+
+
 @router.post("/admin/routing-preview-v2")
 def admin_routing_preview_v2(
     payload: RoutingPreviewRequest,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    _ = current_admin
     routing = get_control_plane_config(db, config_key="routing_policy", default={"rules": {}})
     key = f"{payload.user_id}:{payload.strategy_id}"
     rule = (routing.get("rules") or {}).get(key) or {}
@@ -1189,6 +1695,12 @@ def admin_routing_preview_v2(
     default_venue = str(rule.get("default_venue") or "binance").strip().lower()
     preferred_venues = [str(item).strip().lower() for item in (rule.get("preferred_venues") or []) if str(item).strip()]
     blocked_venues = {str(item).strip().lower() for item in (rule.get("blocked_venues") or []) if str(item).strip()}
+    allocation_rows = list(rule.get("capital_allocation") or [])
+    allocation_weights = {
+        str((row or {}).get("venue") or "").strip().lower(): _safe_float_value((row or {}).get("weight") or (row or {}).get("allocation_pct") or 0)
+        for row in allocation_rows
+        if str((row or {}).get("venue") or "").strip()
+    }
 
     market_policy = get_control_plane_config(db, config_key="market_policy", default={"rules": {}})
     market_policy_rules = market_policy.get("rules") or {}
@@ -1196,15 +1708,49 @@ def admin_routing_preview_v2(
     health_payload = _build_operational_health_payload(db)
     health_map = {item.get("exchange"): item for item in (health_payload.get("operational_scores") or [])}
 
+    failover_policy_config = _get_failover_policy_config(db)
+    failover_runtime_config = _get_failover_runtime_config(db)
+    failover_key = _failover_rule_key(
+        user_id=payload.user_id,
+        strategy_id=payload.strategy_id,
+        market_type=payload.market_type,
+        environment=payload.environment,
+    )
+    failover_rule = dict((failover_policy_config.get("rules") or {}).get(failover_key) or {})
+    has_explicit_failover_policy = bool(failover_rule)
+    if not failover_rule:
+        failover_rule = {
+            "user_id": payload.user_id,
+            "strategy_id": payload.strategy_id,
+            "market_type": payload.market_type,
+            "environment": payload.environment,
+            "primary_venue": default_venue,
+            "secondary_venue": preferred_venues[0] if preferred_venues else None,
+            "fallback_chain": preferred_venues[1:] if len(preferred_venues) > 1 else [],
+            "auto_reroute_enabled": True,
+            "auto_trigger_thresholds": {"latency_ms": 1200, "error_rate_pct": 20, "validation_failure_pct": 25},
+            "manual_override": {"force_route": None, "force_disable": [], "reason": None},
+        }
+    failover_plan = _resolve_failover_plan(failover_rule, health_map=health_map)
+    failover_transition = _record_failover_transition(
+        failover_runtime_config,
+        key=failover_key,
+        plan=failover_plan,
+        actor_user_id=current_admin.id,
+    )
+
     exchange_rows = db.query(ExchangeRegistry).order_by(ExchangeRegistry.exchange_code.asc()).all()
     active_exchange_codes = [row.exchange_code for row in exchange_rows if str(row.status or "").lower() == "active"]
     candidate_venues: list[str] = []
-    for venue in [default_venue, *preferred_venues, *active_exchange_codes]:
+    for venue in [failover_plan.get("active_venue"), *(failover_plan.get("fallback_chain") or []), default_venue, *preferred_venues, *active_exchange_codes]:
         normalized = str(venue or "").strip().lower()
         if normalized and normalized not in candidate_venues:
             candidate_venues.append(normalized)
     if not candidate_venues:
         candidate_venues = ["binance"]
+
+    for disabled_venue in failover_plan.get("forced_disable") or []:
+        blocked_venues.add(str(disabled_venue).strip().lower())
 
     resolved: dict[str, Any] = {}
     resolution_error: str | None = None
@@ -1221,11 +1767,7 @@ def admin_routing_preview_v2(
         )
     except Exception as exc:  # noqa: BLE001
         resolution_error = str(exc)
-        resolved = {
-            "exchange": default_venue,
-            "source": "unresolved",
-            "reason_code": resolution_error,
-        }
+        resolved = {"exchange": default_venue, "source": "unresolved", "reason_code": resolution_error}
 
     resolved_exchange = str(resolved.get("exchange") or "").strip().lower()
     if resolved_exchange and resolved_exchange not in candidate_venues:
@@ -1265,6 +1807,13 @@ def admin_routing_preview_v2(
         reason_codes: list[str] = []
         decision_factors: list[dict] = []
 
+        if exchange == failover_plan.get("active_venue"):
+            route_score += 12
+            decision_factors.append({"name": "failover_active_venue", "status": "PASS", "impact": "+", "detail": "Failover active venue seçimi."})
+        elif exchange in (failover_plan.get("fallback_chain") or []):
+            route_score += max(1, 8 - index)
+            decision_factors.append({"name": "failover_fallback_chain", "status": "WARN", "impact": "+", "detail": "Failover fallback chain adayı."})
+
         if exchange == default_venue:
             decision_factors.append({"name": "default_venue", "status": "PASS", "impact": "+", "detail": "Default venue önceliği uygulandı."})
             route_score += 6
@@ -1288,12 +1837,14 @@ def admin_routing_preview_v2(
             route_score -= 90
             for code in policy_effect.get("reason_codes") or []:
                 _add_reason(reason_codes, code)
-            decision_factors.append({
-                "name": "market_policy",
-                "status": "BLOCK",
-                "impact": "-",
-                "detail": f"Policy action={policy_effect.get('symbol_action')} / class={policy_effect.get('symbol_class')}",
-            })
+            decision_factors.append(
+                {
+                    "name": "market_policy",
+                    "status": "BLOCK",
+                    "impact": "-",
+                    "detail": f"Policy action={policy_effect.get('symbol_action')} / class={policy_effect.get('symbol_class')}",
+                }
+            )
         else:
             decision_factors.append({"name": "market_policy", "status": "PASS", "impact": "+", "detail": "Symbol policy allow."})
 
@@ -1340,22 +1891,51 @@ def admin_routing_preview_v2(
             _add_reason(reason_codes, "exchange_rate_limit_pressure_high")
             decision_factors.append({"name": "rate_limit_pressure", "status": "WARN", "impact": "-", "detail": f"pressure={pressure}"})
 
+        allocation_weight = allocation_weights.get(exchange)
+        if allocation_weight is None:
+            route_score -= 4
+            _add_reason(reason_codes, "allocation_state_missing")
+            decision_factors.append({"name": "allocation_state", "status": "WARN", "impact": "-", "detail": "Bu venue için allocation tanımı yok."})
+        else:
+            normalized_weight = float(allocation_weight)
+            if normalized_weight <= 0:
+                route_score -= 24
+                _add_reason(reason_codes, "allocation_weight_zero")
+                decision_factors.append({"name": "allocation_state", "status": "BLOCK", "impact": "-", "detail": "Allocation weight <= 0"})
+            elif normalized_weight < 0.15:
+                route_score -= 8
+                _add_reason(reason_codes, "allocation_weight_low")
+                decision_factors.append({"name": "allocation_state", "status": "WARN", "impact": "-", "detail": f"Allocation weight düşük: {normalized_weight}"})
+            else:
+                bonus = min(14, int(round(normalized_weight * 16)))
+                route_score += bonus
+                decision_factors.append({"name": "allocation_state", "status": "PASS", "impact": "+", "detail": f"Allocation weight: {normalized_weight}"})
+
         route_score = max(0, min(100, int(round(route_score))))
-        has_block_reason = any(code in {
-            "selected_venue_blocked_by_routing_policy",
-            "symbol_policy_blocked",
-            "restricted_symbol_class_blocked",
-            "capability_unsupported",
-            "exchange_operational_down",
-        } for code in reason_codes)
-        has_warn_reason = any(code in {
-            "selected_venue_not_in_preferred",
-            "capability_partial_support",
-            "exchange_operational_degraded",
-            "exchange_latency_high",
-            "exchange_validation_success_low",
-            "exchange_rate_limit_pressure_high",
-        } for code in reason_codes)
+        has_block_reason = any(
+            code in {
+                "selected_venue_blocked_by_routing_policy",
+                "symbol_policy_blocked",
+                "restricted_symbol_class_blocked",
+                "capability_unsupported",
+                "exchange_operational_down",
+                "allocation_weight_zero",
+            }
+            for code in reason_codes
+        )
+        has_warn_reason = any(
+            code in {
+                "selected_venue_not_in_preferred",
+                "capability_partial_support",
+                "exchange_operational_degraded",
+                "exchange_latency_high",
+                "exchange_validation_success_low",
+                "exchange_rate_limit_pressure_high",
+                "allocation_state_missing",
+                "allocation_weight_low",
+            }
+            for code in reason_codes
+        )
         status_value = "BLOCK" if has_block_reason else ("WARN" if has_warn_reason or route_score < 80 else "PASS")
 
         candidates.append(
@@ -1368,10 +1948,18 @@ def admin_routing_preview_v2(
                 "policy_effect": policy_effect,
                 "capability_effect": capability_effect,
                 "health_effect": health_effect,
+                "allocation_state": {"weight": allocation_weight, "source": "routing_policy.capital_allocation"},
             }
         )
 
-    ordered = sorted(candidates, key=lambda item: (_STATUS_RANK.get(str(item.get("status") or "BLOCK"), 2), -int(item.get("route_score") or 0)))
+    ordered = sorted(
+        candidates,
+        key=lambda item: (
+            _STATUS_RANK.get(str(item.get("status") or "BLOCK"), 2),
+            -int(item.get("route_score") or 0),
+            str(item.get("exchange") or ""),
+        ),
+    )
     selected_path = ordered[0] if ordered else {
         "exchange": default_venue,
         "status": "BLOCK",
@@ -1381,14 +1969,25 @@ def admin_routing_preview_v2(
         "policy_effect": {},
         "capability_effect": {},
         "health_effect": {},
+        "allocation_state": {"weight": None, "source": "routing_policy.capital_allocation"},
     }
     alternative_paths = ordered[1:]
+
+    validation_report = _build_execution_validation_report(db)
 
     reason_codes = list(selected_path.get("reason_codes") or [])
     if resolution_error:
         _add_reason(reason_codes, str(resolution_error))
     if resolved_exchange and resolved_exchange != str(selected_path.get("exchange") or ""):
         _add_reason(reason_codes, "credential_resolution_path_differs_from_policy_best_route")
+    if not has_explicit_failover_policy and str(payload.environment).lower() == "live":
+        _add_reason(reason_codes, "failover_policy_missing_live_block")
+    if str(validation_report.get("net_status") or "PASS").upper() == "BLOCK":
+        _add_reason(reason_codes, "validation_engine_blocked")
+    elif str(validation_report.get("net_status") or "PASS").upper() == "WARN":
+        _add_reason(reason_codes, "validation_engine_warn")
+    if failover_plan.get("reject_reason"):
+        _add_reason(reason_codes, str(failover_plan.get("reject_reason")))
 
     remediation_map = {
         "selected_venue_blocked_by_routing_policy": "blocked_venues listesinden venue kaldırın veya default venue değiştirin.",
@@ -1403,6 +2002,13 @@ def admin_routing_preview_v2(
         "exchange_validation_success_low": "Validation başarım oranını iyileştirmek için credential/adapter kontrolü yapın.",
         "exchange_rate_limit_pressure_high": "Rate limit pressure düşene kadar throughput azaltın.",
         "credential_not_found": "Routing preview için user/tenant/global approved credential ekleyin.",
+        "allocation_state_missing": "capital_allocation içinde venue ağırlık tanımlayın.",
+        "allocation_weight_low": "Düşük allocation ağırlığını strateji riskiyle hizalayın.",
+        "allocation_weight_zero": "Ağırlığı sıfır olan venue route zincirinden çıkarılmalı.",
+        "failover_policy_missing_live_block": "Live route için explicit failover policy tanımlayın.",
+        "validation_engine_blocked": "Validation engine BLOCK döndürdüğü için routing engellendi.",
+        "validation_engine_warn": "Validation engine WARN; route canlıya alınmadan önce kontrolleri iyileştirin.",
+        "failover_no_available_venue": "Primary/secondary/fallback zincirinde kullanılabilir venue kalmadı.",
     }
     remediation = []
     for code in reason_codes:
@@ -1410,12 +2016,21 @@ def admin_routing_preview_v2(
             remediation.append(remediation_map[code])
 
     net_status = str(selected_path.get("status") or "BLOCK").upper()
+    if "validation_engine_blocked" in reason_codes or "failover_policy_missing_live_block" in reason_codes or "failover_no_available_venue" in reason_codes:
+        net_status = "BLOCK"
+
+    reject_reason = None
+    if net_status == "BLOCK":
+        reject_reason = reason_codes[0] if reason_codes else "route_blocked"
+
     explainability = (
         f"{selected_path.get('exchange')} venue seçildi; "
         f"score={selected_path.get('route_score')}, "
         f"policy={selected_path.get('policy_effect', {}).get('symbol_action', 'allow')}, "
         f"capability={selected_path.get('capability_effect', {}).get('support_level', 'unknown')}, "
-        f"health={selected_path.get('health_effect', {}).get('health_status', 'unknown')}"
+        f"health={selected_path.get('health_effect', {}).get('health_status', 'unknown')}, "
+        f"allocation={selected_path.get('allocation_state', {}).get('weight')}, "
+        f"failover={failover_plan.get('selection_reason')}"
     )
 
     checks = [
@@ -1451,6 +2066,13 @@ def admin_routing_preview_v2(
             "severity": "high",
             "remediation_suggestions": remediation,
         },
+        {
+            "name": "validation_engine_consistency",
+            "status": str(validation_report.get("net_status") or "PASS").upper(),
+            "reason_code": (validation_report.get("reason_codes") or ["validation_engine_ok"])[0],
+            "severity": "high" if str(validation_report.get("net_status") or "PASS").upper() == "BLOCK" else "medium",
+            "remediation_suggestions": validation_report.get("remediation_suggestions") or [],
+        },
     ]
     if resolution_error:
         checks.append(
@@ -1463,20 +2085,74 @@ def admin_routing_preview_v2(
             }
         )
 
+    decision_log = _append_routing_decision_log(
+        failover_runtime_config,
+        {
+            "key": failover_key,
+            "user_id": payload.user_id,
+            "strategy_id": payload.strategy_id,
+            "market_type": payload.market_type,
+            "environment": payload.environment,
+            "selected_venue": selected_path.get("exchange"),
+            "net_status": net_status,
+            "reason_codes": reason_codes,
+            "fallback_chain": failover_plan.get("fallback_chain") or [],
+            "selection_reason": failover_plan.get("selection_reason"),
+        },
+    )
+    upsert_control_plane_config(db, config_key="failover_runtime", payload=failover_runtime_config, actor_user_id=current_admin.id)
+
+    if failover_transition:
+        create_audit_log(
+            db,
+            action="venue_failover_transition",
+            entity_type="venue_failover_state",
+            entity_id=failover_key,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            details=failover_transition,
+        )
+
+    create_audit_log(
+        db,
+        action="venue_routing_decision_generated",
+        entity_type="venue_routing_decision",
+        entity_id=decision_log.get("id"),
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details=decision_log,
+    )
+
     return {
         "net_status": net_status,
         "reason_codes": reason_codes,
         "remediation_suggestions": remediation,
         "checks": checks,
+        "selected_venue": selected_path.get("exchange"),
+        "fallback_chain": failover_plan.get("fallback_chain") or [],
+        "reject_reason": reject_reason,
         "resolved_execution_path": resolved,
         "selected_path": selected_path,
         "alternative_paths": alternative_paths,
         "decision_factors": selected_path.get("decision_factors") or [],
         "explainability": explainability,
         "routing_rule": rule,
+        "failover_rule": failover_rule,
+        "failover_state": failover_plan,
+        "failover_transition": failover_transition,
+        "failover_transition_logs": [row for row in (failover_runtime_config.get("transition_logs") or []) if row.get("key") == failover_key][:20],
+        "routing_decision_log": decision_log,
+        "routing_decision_trace": ordered,
         "policy_impact": selected_path.get("policy_effect") or {},
         "capability_impact": selected_path.get("capability_effect") or {},
         "health_impact": selected_path.get("health_effect") or {},
+        "allocation_impact": selected_path.get("allocation_state") or {},
+        "validation_report": {
+            "net_status": validation_report.get("net_status"),
+            "reason_codes": validation_report.get("reason_codes") or [],
+            "checks": validation_report.get("checks") or [],
+            "classification": validation_report.get("classification") or {},
+        },
         "capital_allocation": rule.get("capital_allocation") or [],
     }
 
@@ -1612,74 +2288,23 @@ def admin_patch_execution_credentials(
 
 @router.post("/admin/execution-validation")
 def admin_execution_validation(_: User = Depends(require_admin), db: Session = Depends(get_db)):
-    credentials = execution_credentials_for_adapter(db)
-    smoke = run_exchange_adapter_smoke(credentials_override=credentials)
-
-    bybit_ready = smoke["summary"].get("execution_bybit_pass_count", 0) >= 1
-    adapter_ok = smoke["summary"].get("market_fail_count", 0) == 0
-    precision_ok = smoke["summary"].get("precision_pass_count", 0) >= 2
-
-    checks = [
-        {
-            "name": "balance_fetch_test",
-            "status": "PASS" if adapter_ok else "BLOCK",
-            "reason_code": "balance_fetch_failed" if not adapter_ok else "ok",
-            "severity": "high" if not adapter_ok else "low",
-            "remediation_suggestions": ["Credential/venue connectivity ve balance endpoint erişimini doğrulayın."] if not adapter_ok else [],
-        },
-        {
-            "name": "permission_test",
-            "status": "PASS" if bybit_ready else "BLOCK",
-            "reason_code": "permission_or_probe_failed" if not bybit_ready else "ok",
-            "severity": "high" if not bybit_ready else "low",
-            "remediation_suggestions": ["Execution permission scope ve credential approval durumunu doğrulayın."] if not bybit_ready else [],
-        },
-        {
-            "name": "order_submit_test",
-            "status": "PASS" if bybit_ready else "BLOCK",
-            "reason_code": "order_submit_failed" if not bybit_ready else "ok",
-            "severity": "high" if not bybit_ready else "low",
-            "remediation_suggestions": ["Test/sandbox order submit akışını venue tarafında doğrulayın."] if not bybit_ready else [],
-        },
-        {
-            "name": "cancel_test",
-            "status": "PASS" if bybit_ready else "BLOCK",
-            "reason_code": "cancel_failed" if not bybit_ready else "ok",
-            "severity": "high" if not bybit_ready else "low",
-            "remediation_suggestions": ["Submit edilen test order’ın cancel endpoint akışını kontrol edin."] if not bybit_ready else [],
-        },
-        {
-            "name": "precision_lot_validation",
-            "status": "PASS" if precision_ok else "WARN",
-            "reason_code": "precision_validation_partial" if not precision_ok else "ok",
-            "severity": "medium" if not precision_ok else "low",
-            "remediation_suggestions": ["Symbol minQty/stepSize/tickSize metadata senkronunu yenileyin."] if not precision_ok else [],
-        },
-    ]
-
-    highest_rank = 0
-    for item in checks:
-        status_value = str(item.get("status") or "PASS").lower()
-        highest_rank = max(highest_rank, 2 if status_value == "block" else (1 if status_value == "warn" else 0))
-    net_status = "PASS" if highest_rank == 0 else ("WARN" if highest_rank == 1 else "BLOCK")
-
-    reason_codes = sorted({item["reason_code"] for item in checks if item.get("reason_code") and item.get("reason_code") != "ok"})
-    remediation = sorted({suggestion for item in checks for suggestion in (item.get("remediation_suggestions") or [])})
-
+    report = _build_execution_validation_report(db)
+    checks_by_name = {item.get("name"): item for item in (report.get("checks") or [])}
     return {
-        "net_status": net_status,
-        "reason_codes": reason_codes,
-        "remediation_suggestions": remediation,
-        "checks": checks,
+        "net_status": report.get("net_status"),
+        "reason_codes": report.get("reason_codes") or [],
+        "remediation_suggestions": report.get("remediation_suggestions") or [],
+        "checks": report.get("checks") or [],
         "validation": {
-            "adapter_smoke_test": "PASS" if adapter_ok else "BLOCK",
-            "precision_validation": "PASS" if precision_ok else "WARN",
-            "lot_size_validation": "PASS" if precision_ok else "WARN",
-            "order_submit_test": "PASS" if bybit_ready else "BLOCK",
-            "cancel_test": "PASS" if bybit_ready else "BLOCK",
-            "retry_behavior": "PASS",
-            "bybit_testnet_live_ready": "PASS" if bybit_ready else "BLOCK",
+            "adapter_smoke_test": checks_by_name.get("real_balance_fetch", {}).get("status", "WARN"),
+            "precision_validation": checks_by_name.get("venue_capability_runtime_test", {}).get("status", "WARN"),
+            "lot_size_validation": checks_by_name.get("venue_capability_runtime_test", {}).get("status", "WARN"),
+            "order_submit_test": checks_by_name.get("test_order_cancel_retry", {}).get("status", "WARN"),
+            "cancel_test": checks_by_name.get("test_order_cancel_retry", {}).get("status", "WARN"),
+            "retry_behavior": checks_by_name.get("test_order_cancel_retry", {}).get("status", "WARN"),
+            "bybit_testnet_live_ready": checks_by_name.get("permission_matrix_test", {}).get("status", "WARN"),
         },
+        "validation_report": report,
     }
 
 

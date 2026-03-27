@@ -5393,3 +5393,39 @@ class CapabilityMatrixOverrideRequest(BaseModel):
     supports_hedge_mode: bool | None = None
     note: str | None = None
 
+
+class FailoverAutoTriggerThresholds(BaseModel):
+    latency_ms: float = 1200
+    error_rate_pct: float = 20
+    validation_failure_pct: float = 25
+
+
+class FailoverManualOverridePayload(BaseModel):
+    force_route: str | None = None
+    force_disable: list[str] = Field(default_factory=list)
+    reason: str | None = None
+
+
+class FailoverPolicyUpsertRequest(BaseModel):
+    user_id: str
+    strategy_id: str
+    market_type: str
+    environment: str = "testnet"
+    primary_venue: str
+    secondary_venue: str | None = None
+    fallback_chain: list[str] = Field(default_factory=list)
+    auto_reroute_enabled: bool = True
+    auto_trigger_thresholds: FailoverAutoTriggerThresholds = Field(default_factory=FailoverAutoTriggerThresholds)
+    manual_override: FailoverManualOverridePayload | None = None
+
+
+class FailoverManualOverrideRequest(BaseModel):
+    user_id: str
+    strategy_id: str
+    market_type: str
+    environment: str = "testnet"
+    force_route: str | None = None
+    force_disable: list[str] = Field(default_factory=list)
+    reason: str | None = None
+    clear_override: bool = False
+

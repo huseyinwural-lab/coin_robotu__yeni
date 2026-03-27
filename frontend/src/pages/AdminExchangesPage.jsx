@@ -23,6 +23,7 @@ export const AdminExchangesPage = () => {
   const [capabilityMatrixState, setCapabilityMatrixState] = useState({ data: {}, loading: true, error: null });
   const [marketPolicyState, setMarketPolicyState] = useState({ data: null, loading: true, error: null });
   const [routingPolicyState, setRoutingPolicyState] = useState({ data: null, loading: true, error: null });
+  const [failoverPolicyState, setFailoverPolicyState] = useState({ data: { rules: {}, runtime_state: {}, transition_logs: [], routing_decision_logs: [] }, loading: true, error: null });
   const [routingPreviewState, setRoutingPreviewState] = useState(defaultPanelState);
   const [operationalHealthState, setOperationalHealthState] = useState({ data: null, loading: true, error: null });
   const [auditTimelineState, setAuditTimelineState] = useState({ data: { items: [] }, loading: true, error: null });
@@ -76,6 +77,16 @@ export const AdminExchangesPage = () => {
     }
   }, []);
 
+  const loadFailoverPolicies = useCallback(async () => {
+    setFailoverPolicyState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const { data } = await apiClient.get("/venues/admin/failover-policies");
+      setFailoverPolicyState({ data: data || { rules: {}, runtime_state: {}, transition_logs: [], routing_decision_logs: [] }, loading: false, error: null });
+    } catch (error) {
+      setFailoverPolicyState({ data: { rules: {}, runtime_state: {}, transition_logs: [], routing_decision_logs: [] }, loading: false, error: error?.response?.data?.detail || "Failover policy yüklenemedi" });
+    }
+  }, []);
+
   const loadOperationalHealth = useCallback(async () => {
     setOperationalHealthState((prev) => ({ ...prev, loading: true, error: null }));
     try {
@@ -102,9 +113,10 @@ export const AdminExchangesPage = () => {
     loadCapabilityMatrix();
     loadMarketPolicy();
     loadRoutingPolicies();
+    loadFailoverPolicies();
     loadOperationalHealth();
     loadAuditTimeline(defaultAuditFilters);
-  }, [loadBootstrap, loadCapabilityMatrix, loadMarketPolicy, loadRoutingPolicies, loadOperationalHealth, loadAuditTimeline]);
+  }, [loadBootstrap, loadCapabilityMatrix, loadMarketPolicy, loadRoutingPolicies, loadFailoverPolicies, loadOperationalHealth, loadAuditTimeline]);
 
   const runCapabilityDiscovery = useCallback(async (payload) => {
     setCapabilityDiscoveryState({ data: null, loading: true, error: null });
@@ -150,25 +162,46 @@ export const AdminExchangesPage = () => {
     }
   }, [loadAuditTimeline, loadRoutingPolicies, lastAuditFilters]);
 
+  const saveFailoverPolicy = useCallback(async (payload) => {
+    try {
+      await apiClient.put("/venues/admin/failover-policies", payload);
+      toast.success("Failover policy güncellendi");
+      await Promise.all([loadFailoverPolicies(), loadAuditTimeline(lastAuditFilters)]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Failover policy kaydedilemedi");
+    }
+  }, [loadAuditTimeline, loadFailoverPolicies, lastAuditFilters]);
+
+  const applyFailoverManualOverride = useCallback(async (payload) => {
+    try {
+      await apiClient.post("/venues/admin/failover/manual-override", payload);
+      toast.success("Failover manual override uygulandı");
+      await Promise.all([loadFailoverPolicies(), loadAuditTimeline(lastAuditFilters)]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Failover manual override başarısız");
+    }
+  }, [loadAuditTimeline, loadFailoverPolicies, lastAuditFilters]);
+
   const runRoutingPreview = useCallback(async (payload) => {
     setRoutingPreviewState({ data: null, loading: true, error: null });
     try {
       const { data } = await apiClient.post("/venues/admin/routing-preview-v2", payload);
       setRoutingPreviewState({ data: data || null, loading: false, error: null });
       toast.success(`Routing preview sonucu: ${data?.net_status || "UNKNOWN"}`);
+      await loadFailoverPolicies();
     } catch (error) {
       const message = error?.response?.data?.detail || "Routing preview çalıştırılamadı";
       setRoutingPreviewState({ data: null, loading: false, error: message });
       toast.error(message);
     }
-  }, []);
+  }, [loadFailoverPolicies]);
 
   return (
     <section className="space-y-4" data-testid="admin-exchanges-page">
       <header className="rounded-2xl border border-orange-500/30 bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 p-4" data-testid="admin-exchanges-header">
         <h1 className="text-4xl font-black uppercase tracking-tight text-orange-200" data-testid="admin-exchanges-title">Venue / Exchange Control Plane</h1>
         <p className="mt-1 text-sm text-slate-300" data-testid="admin-exchanges-description">
-          P1-C kapanış panelleri: telemetry health, explainable routing, policy yönetimi, capability override ve audit timeline.
+          P2 motoru: failover orchestration, deterministic multi-venue routing ve validation uyumluluğu.
         </p>
         <p className="mt-1 text-xs text-slate-500" data-testid="admin-exchanges-bootstrap-status">bootstrap: {pageLoading ? "yükleniyor" : `hazır · exchanges=${exchangeCodes.length}`}</p>
       </header>
@@ -202,10 +235,14 @@ export const AdminExchangesPage = () => {
           approvedUsers={approvedUsers}
           exchanges={exchanges}
           data={routingPolicyState.data}
-          loading={routingPolicyState.loading}
-          error={routingPolicyState.error}
+          failoverData={failoverPolicyState.data}
+          loading={routingPolicyState.loading || failoverPolicyState.loading}
+          error={routingPolicyState.error || failoverPolicyState.error}
           onRefresh={loadRoutingPolicies}
+          onRefreshFailover={loadFailoverPolicies}
           onSavePolicy={saveRoutingPolicy}
+          onSaveFailoverPolicy={saveFailoverPolicy}
+          onApplyManualOverride={applyFailoverManualOverride}
         />
 
         <CapabilityDiscoveryPanel

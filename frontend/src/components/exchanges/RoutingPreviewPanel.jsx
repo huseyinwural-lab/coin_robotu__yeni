@@ -68,6 +68,9 @@ export const RoutingPreviewPanel = ({ approvedUsers, previewResult, loading, err
           <p data-testid="routing-preview-net-status">net_status: {previewResult.net_status}</p>
           <p data-testid="routing-preview-explainability">explainability: {previewResult.explainability || "-"}</p>
           <p data-testid="routing-preview-selected-path">selected: {previewResult.selected_path?.exchange || "-"} / score: {previewResult.selected_path?.route_score ?? "-"}</p>
+          <p data-testid="routing-preview-selected-venue">selected_venue: {previewResult.selected_venue || "-"}</p>
+          <p data-testid="routing-preview-fallback-chain">fallback_chain: {(previewResult.fallback_chain || []).join(" -> ") || "-"}</p>
+          <p data-testid="routing-preview-reject-reason">reject_reason: {previewResult.reject_reason || "-"}</p>
 
           <div data-testid="routing-preview-decision-factors-list">
             <p className="font-semibold text-slate-100">Decision Factors</p>
@@ -87,6 +90,28 @@ export const RoutingPreviewPanel = ({ approvedUsers, previewResult, loading, err
                 {path.exchange}: {path.status} / score={path.route_score} / reasons={(path.reason_codes || []).join(", ") || "-"}
               </p>
             ))}
+          </div>
+
+          <div data-testid="routing-preview-failover-transition-logs-list">
+            <p className="font-semibold text-slate-100">Failover Transition Logs</p>
+            {(previewResult.failover_transition_logs || []).length === 0 && <p data-testid="routing-preview-failover-transition-logs-empty">Geçiş logu yok.</p>}
+            {(previewResult.failover_transition_logs || []).map((log, index) => (
+              <p key={`${log.id || index}`} data-testid={`routing-preview-failover-transition-log-${index}`}>
+                {log.created_at} · {log.from_venue || "-"} → {log.to_venue || "-"} ({log.selection_reason})
+              </p>
+            ))}
+          </div>
+
+          <div data-testid="routing-preview-validation-report-summary">
+            <p className="font-semibold text-slate-100">Validation Report</p>
+            <p data-testid="routing-preview-validation-net-status">validation_net_status: {previewResult.validation_report?.net_status || "-"}</p>
+            <p data-testid="routing-preview-validation-reasons">validation_reasons: {(previewResult.validation_report?.reason_codes || []).join(", ") || "-"}</p>
+          </div>
+
+          <div data-testid="routing-preview-routing-decision-log-wrapper">
+            <p className="font-semibold text-slate-100">Routing Decision Log</p>
+            <p data-testid="routing-preview-routing-decision-log-id">log_id: {previewResult.routing_decision_log?.id || "-"}</p>
+            <p data-testid="routing-preview-routing-decision-log-time">created_at: {previewResult.routing_decision_log?.created_at || "-"}</p>
           </div>
         </div>
       )}
