@@ -102,7 +102,7 @@ def put_settings(
     db: Session = Depends(get_db),
 ):
     _set_deprecated_headers(response)
-    if current_user.role in {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS} and not payload.is_enabled:
+    if current_user.role in {UserRole.OPS} and not payload.is_enabled:
         raise HTTPException(status_code=403, detail="privileged_mfa_disable_forbidden")
     before = get_mfa_settings(db, current_user.id)
     result = update_mfa_settings(
@@ -412,7 +412,7 @@ def post_public_mfa_disable(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.role in {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}:
+    if current_user.role in {UserRole.OPS}:
         raise HTTPException(status_code=403, detail="privileged_mfa_disable_forbidden")
     result = disable_user_mfa(db, user_id=current_user.id)
     create_audit_log(

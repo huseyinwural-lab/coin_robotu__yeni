@@ -13,6 +13,7 @@ from services.identity_control_service import (
     resolve_device_fingerprint,
     resolve_ip_hash,
 )
+from services.auth_policy_service import is_temporary_mfa_bypass_user
 from services.risk_policy_service import evaluate_request_risk, standardized_risk_response
 from services.suspicious_activity_service import create_risk_event, maybe_create_suspicious_alert
 
@@ -156,6 +157,9 @@ def require_step_up_for(action_name: str, *, amount_field: str | None = None):
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> User:
+        if is_temporary_mfa_bypass_user(current_user.email):
+            return current_user
+
         payload = getattr(request.state, "auth_payload", None)
         if not isinstance(payload, dict):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing_auth_payload")

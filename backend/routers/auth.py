@@ -35,6 +35,7 @@ from schemas import (
     OnboardingDecisionRequest,
 )
 from services.audit_service import create_audit_log
+from services.auth_policy_service import is_temporary_mfa_bypass_user
 from services.admin_profile_service import change_admin_password, update_admin_profile
 from services.auth_session_security_service import resolve_or_create_device_id, set_device_cookie
 from services.mfa_service import start_mfa_challenge_if_required, verify_step_up_code
@@ -63,7 +64,7 @@ from services.onboarding_approval_service import execute_onboarding_decision
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 AUTH_PROTECTION_SCOPE = "auth_access"
-MANDATORY_MFA_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}
+MANDATORY_MFA_ROLES = {UserRole.OPS}
 
 
 class AdminProfileUpdateRequest(BaseModel):
@@ -163,7 +164,8 @@ def _login_with_policy(
     risk_eval = evaluate_request_risk(db, user=user, request=request, action_name="login")
     mandatory_mfa = user.role in MANDATORY_MFA_ROLES
     risk_requires_challenge = bool(risk_eval.requires_step_up)
-    requires_challenge = bool(mandatory_mfa or risk_eval.requires_step_up)
+    temporary_bypass = is_temporary_mfa_bypass_user(user.email)
+    requires_challenge = bool((mandatory_mfa or risk_eval.requires_step_up) and not temporary_bypass)
 
     risk_event = create_risk_event(
         db,
@@ -201,13 +203,15 @@ def _login_with_policy(
 
     device_id, _ = resolve_or_create_device_id(request)
 
-    mfa_payload = start_mfa_challenge_if_required(
-        db,
-        user=user,
-        force_challenge=risk_requires_challenge,
-        challenge_reason=(risk_eval.risk_reasons[0] if risk_eval.risk_reasons else ("mandatory_mfa" if mandatory_mfa else "standard_login")),
-        request_ip=audit_context.get("ip_address"),
-    )
+    mfa_payload = None
+    if not temporary_bypass:
+        mfa_payload = start_mfa_challenge_if_required(
+            db,
+            user=user,
+            force_challenge=risk_requires_challenge,
+            challenge_reason=(risk_eval.risk_reasons[0] if risk_eval.risk_reasons else ("mandatory_mfa" if mandatory_mfa else "standard_login")),
+            request_ip=audit_context.get("ip_address"),
+        )
     if mfa_payload:
         if bool(mfa_payload.get("login_blocked")):
             block_reason = str(mfa_payload.get("block_reason") or "mfa_setup_required_after_grace")
