@@ -545,20 +545,6 @@ def remove_saved_query(
     return {"deleted": True, "query_id": query_id}
 
 
-@router.get("/trading-lifecycle/{correlation_id}")
-def trading_lifecycle_detail(
-    correlation_id: str,
-    _: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-    limit: int = Query(default=800, ge=50, le=3000),
-):
-    payload = get_lifecycle_chain(db, correlation_id, limit=limit)
-    payload = _build_canonical_lifecycle_payload(payload)
-    payload["deprecated_endpoint"] = True
-    payload["primary_endpoint"] = "/api/audit-logs/lifecycle/{correlation_id}"
-    return payload
-
-
 @router.get("/lifecycle/{correlation_id}")
 def lifecycle_detail(
     correlation_id: str,
@@ -569,19 +555,6 @@ def lifecycle_detail(
 ):
     payload = get_lifecycle_chain(db, correlation_id, limit=limit, environment=environment)
     return _build_canonical_lifecycle_payload(payload)
-
-
-@router.get("/trading-lifecycle/{correlation_id}/explain")
-def trading_lifecycle_explain_failure(
-    correlation_id: str,
-    _: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    _enforce_repo_deploy_consistency()
-    payload = _build_lifecycle_explain_payload(db, correlation_id, limit=1200)
-    payload["deprecated_endpoint"] = True
-    payload["primary_endpoint"] = "/api/audit-logs/explain"
-    return payload
 
 
 @router.post("/explain")
